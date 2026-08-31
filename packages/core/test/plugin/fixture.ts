@@ -5,6 +5,7 @@ import { Command } from "@opencode-ai/core/command"
 import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
 import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
+import { AppProcess } from "@opencode-ai/util/process"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -14,13 +15,14 @@ import { Generate } from "@opencode-ai/core/generate"
 import { Integration } from "@opencode-ai/core/integration"
 import { KV } from "@opencode-ai/core/kv"
 import { Location } from "@opencode-ai/core/location"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Npm } from "@opencode-ai/util/npm"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Permission } from "@opencode-ai/core/permission"
 import { Reference } from "@opencode-ai/core/reference"
+import { Rpc } from "@opencode-ai/core/rpc"
 import { Skill } from "@opencode-ai/core/skill"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
@@ -56,6 +58,7 @@ const permissionLayer = Layer.succeed(
 
 export const PluginTestLayer = LayerNode.compile(
   LayerNode.group([
+    AppProcess.node,
     FileSystem.node,
     FSUtil.node,
     Location.node,
@@ -72,14 +75,14 @@ export const PluginTestLayer = LayerNode.compile(
     Command.node,
     Integration.node,
     KV.node,
-    MCP.node,
+    Mcp.node,
     PluginRuntime.node,
     Permission.node,
     PluginHooks.node,
     Reference.node,
+    Rpc.node,
     Skill.node,
     SkillDiscovery.node,
-    PluginHooks.node,
     Tool.node,
     Vcs.node,
     Watcher.node,
@@ -89,7 +92,7 @@ export const PluginTestLayer = LayerNode.compile(
     [Location.node, tempLocationLayer],
     [Npm.node, npmLayer],
     [Config.node, Config.testLayer()],
-    [MCP.node, emptyMcpLayer],
+    [Mcp.node, emptyMcpLayer],
     [Generate.node, generateLayer],
     [Permission.node, permissionLayer],
   ],

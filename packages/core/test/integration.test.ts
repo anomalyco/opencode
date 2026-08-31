@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Cause, Clock, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
-import * as TestClock from "effect/testing/TestClock"
+import { TestClock } from "effect/testing"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
@@ -186,7 +186,7 @@ describe("Integration", () => {
           value: Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
         }),
       ])
-      expect(Array.from(yield* Fiber.join(created), (event) => ({ type: event.type, data: event.data }))).toEqual([
+      expect((yield* Fiber.join(created)).map((event) => ({ type: event.type, data: event.data }))).toEqual([
         { type: Credential.Event.Updated.type, data: {} },
         { type: Credential.Event.Switched.type, data: { credentialID: stored[0]?.id, integrationID } },
       ])

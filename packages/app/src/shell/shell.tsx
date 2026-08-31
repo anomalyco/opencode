@@ -43,12 +43,12 @@ export default function Layout(props: ParentProps) {
         style={{
           "padding-top": "env(safe-area-inset-top, 0px)",
           "padding-bottom": "env(safe-area-inset-bottom, 0px)",
-          // The native Windows titlebar already includes the gap above the content panels.
+          // Native Windows chrome supplies the gap; retain paint clearance for the panels' outer outlines.
           "--shell-top-inset":
             platform.platform === "desktop" &&
             platform.os === "windows" &&
             !(mobile() && preferences.general.mobileTitlebarPosition() === "bottom")
-              ? "0px"
+              ? "1px"
               : "8px",
         }}
       >

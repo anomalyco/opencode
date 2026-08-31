@@ -11,9 +11,8 @@ import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
 
 export const File = lazy(() => import("@opencode-ai/session-ui/file").then((module) => ({ default: module.File })))
-const loadDraftRoute = () => Promise.all([import("@/new-session/route"), File.preload()]).then(([module]) => module)
 const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
-const DraftRoute = lazy(() => loadDraftRoute().then((module) => ({ default: module.DraftRoute })))
+const DraftRoute = lazy(() => import("@/new-session/route").then((module) => ({ default: module.DraftRoute })))
 const TargetSessionRouteContent = lazy(() =>
   loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),
 )

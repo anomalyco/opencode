@@ -24,6 +24,7 @@ test("exposes every standard HTTP API group", () => {
     "file",
     "command",
     "skill",
+    "rpc",
     "event",
     "pty",
     "experimental",
@@ -47,9 +48,11 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "status", "branches", "diff"])
+  expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branches", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
+  expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
+  expect(client.experimental.persistentPty.read).toBeFunction()
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "update", "current"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
@@ -80,6 +83,46 @@ test("config.get returns ordered config entries for a location", async () => {
   expect(await client.config.get({ location: { directory: "/tmp/project" } })).toEqual(entries)
   expect(request?.method).toBe("GET")
   expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+})
+
+test("vcs.base and committed diffs preserve location and explicit base on the wire", async () => {
+  const requests: Request[] = []
+  const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
+  const base = { name: "release", ref: "refs/remotes/origin/release", source: "reflog" }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      return Response.json({ location, data: new URL(request.url).pathname.endsWith("/base") ? base : [] })
+    },
+  })
+  expect(await client.vcs.base({ location: { directory: "/repo" } })).toEqual({ location, data: base })
+  expect(
+    await client.vcs.diff({ location: { directory: "/repo" }, mode: "committed", base: base.ref, context: 1 }),
+  ).toEqual({ location, data: [] })
+  expect(new URL(requests[0].url).pathname).toBe("/api/vcs/base")
+  const query = new URL(requests[1].url).searchParams
+  expect(query.get("location[directory]")).toBe("/repo")
+  expect(query.get("mode")).toBe("committed")
+  expect(query.get("base")).toBe(base.ref)
+  expect(query.get("context")).toBe("1")
+})
+
+test("vcs.diff exposes unavailable comparisons as errors, not empty diffs", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json(
+        { _tag: "ServiceUnavailableError", service: "vcs", message: "No review base available" },
+        { status: 503 },
+      ),
+  })
+  await expect(client.vcs.diff({ mode: "committed" })).rejects.toMatchObject({
+    _tag: "ServiceUnavailableError",
+    service: "vcs",
+    message: "No review base available",
+  })
 })
 
 test("project.update uses the global project contract", async () => {
@@ -633,6 +676,51 @@ test("event.subscribe terminates on malformed Promise SSE data", async () => {
     name: "ClientError",
     reason: "MalformedResponse",
   })
+})
+
+test("native event signals cancel only their listener and close transport after the last listener", async () => {
+  const opened = Promise.withResolvers<Request>()
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    headers: { authorization: "Bearer events" },
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      opened.resolve(request)
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            request.signal.addEventListener("abort", () => controller.error(request.signal.reason), { once: true })
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  const first = new AbortController()
+  const second = new AbortController()
+  const one = client.event.subscribe({ signal: first.signal })[Symbol.asyncIterator]().next()
+  const two = client.event.subscribe({ signal: second.signal })[Symbol.asyncIterator]().next()
+  const request = await opened.promise
+  expect(request.headers.get("authorization")).toBe("Bearer events")
+  first.abort()
+  expect((await one).done).toBe(true)
+  expect(request.signal.aborted).toBe(false)
+  second.abort()
+  expect((await two).done).toBe(true)
+  expect(request.signal.aborted).toBe(true)
+})
+
+test("native pre-aborted event signals do not open a transport", async () => {
+  let requests = 0
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () => {
+      requests++
+      return new Response(null)
+    },
+  })
+  expect((await client.event.subscribe({ signal: AbortSignal.abort() })[Symbol.asyncIterator]().next()).done).toBe(true)
+  expect(requests).toBe(0)
 })
 
 test("event.subscribe accepts a fragmented SSE event below the size limit", async () => {

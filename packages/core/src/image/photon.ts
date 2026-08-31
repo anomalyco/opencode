@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { FileSystem } from "../filesystem.js"
-import { DecodeError, ResizerUnavailableError, SizeError } from "../image.js"
+import { DecodeError, ResizerUnavailableError, SizeError, type Limits } from "../image.js"
 
 const JPEG_QUALITIES = [80, 85, 70, 55, 40]
 
@@ -33,12 +33,7 @@ export const make = Effect.gen(function* () {
   return Effect.fn("Image.Photon.normalize")(function* (
     resource: string,
     content: FileSystem.Content & { readonly encoding: "base64" },
-    limits: {
-      readonly autoResize: boolean
-      readonly maxWidth: number
-      readonly maxHeight: number
-      readonly maxBase64Bytes: number
-    },
+    limits: Readonly<Limits>,
   ) {
     const photon = yield* loadPhoton
     const decoded = yield* Effect.try({
@@ -83,9 +78,15 @@ export const make = Effect.gen(function* () {
             ...JPEG_QUALITIES.map((quality) => ["image/jpeg", () => resized.get_bytes_jpeg(quality)] as const),
           ]
           for (const [mime, encode] of encoders) {
-            const candidate = Buffer.from(encode()).toString("base64")
-            if (Buffer.byteLength(candidate, "utf-8") <= limits.maxBase64Bytes)
-              return { ...content, content: candidate, encoding: "base64" as const, mime }
+            const candidate = encode()
+            // Base64 uses four bytes per three input bytes, including padding.
+            if (Math.ceil(candidate.length / 3) * 4 <= limits.maxBase64Bytes)
+              return {
+                ...content,
+                content: Buffer.from(candidate).toString("base64"),
+                encoding: "base64" as const,
+                mime,
+              }
           }
         } finally {
           resized.free()

@@ -45,6 +45,7 @@ const promiseRemove: Promise<void> = promiseClient.session.instructions.entry.re
   sessionID: "ses_test",
   key: "review-notes",
 })
+const emptyRpcOutput: Awaited<ReturnType<typeof promiseClient.rpc.call>> = {}
 
 void [
   effectSession,
@@ -54,6 +55,7 @@ void [
   promiseList,
   promisePut,
   promiseRemove,
+  emptyRpcOutput,
   exactVersion,
   compatibleVersion,
 ]

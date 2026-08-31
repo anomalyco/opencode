@@ -17,7 +17,7 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Job } from "@opencode-ai/core/job"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Global } from "@opencode-ai/util/global"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
@@ -35,6 +35,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Context, Effect, Layer, Option } from "effect"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
+import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
@@ -100,6 +101,7 @@ function makeRoutes<AuthError, AuthServices>(
   const pluginRuntimeCell = PluginRuntime.makeCell()
   const standard: LayerNode.Replacements = [
     [Database.node, Database.configured(options.database)],
+    [PersistentPty.node, PersistentPty.configured(options.pty)],
     [Bus.node, Bus.configured({ persist: options.events?.persist })],
     [App.node, App.configured(options.app)],
     [ModelsDev.node, ModelsDev.configured(options.models)],
@@ -117,8 +119,8 @@ function makeRoutes<AuthError, AuthServices>(
     [InstructionDiscovery.node, InstructionDiscovery.configured({ project: options.config?.project })],
     [ShellSelect.node, ShellSelect.configured({ gitbash: options.windows?.gitbash })],
     [
-      MCP.node,
-      MCP.configured({
+      Mcp.node,
+      Mcp.configured({
         clientInfo: {
           name: options.app?.name ?? "opencode",
           version: options.app?.version ?? "unknown",
@@ -148,7 +150,7 @@ function makeRoutes<AuthError, AuthServices>(
         ServerInfo.layer(serviceURLs, options.app),
       )
       const api = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
-        Layer.provide(handlers.pipe(Layer.provide(services))),
+        Layer.provide(handlers.pipe(Layer.provide(services), Layer.provide(Layer.succeed(CorsConfig, options)))),
         Layer.provide(formLocationLayer),
         Layer.provide(sessionLocationLayer),
         Layer.provide(layer),

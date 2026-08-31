@@ -21,6 +21,7 @@ import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline, TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode-ai/session-ui/timeline/row"
+import { getReadyMarkdown, preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
 import { containsDirectory, isWorkspaceDirectory, workspaceDirectories } from "@/workspaces/paths"
@@ -316,6 +317,16 @@ type MessageTimelineProps = {
 
 export function MessageTimeline(props: MessageTimelineProps) {
   const controller = createTimelineController({ session: props.session })
+  const tail = props.pinned ? controller.data.projection.rows().at(-1) : undefined
+  if (tail?._tag === "AssistantPart" && tail.group.type === "part") {
+    const message = controller.data.projection.messageByID().get(tail.group.ref.messageID)
+    if (message?.type === "assistant" && message.time.completed !== undefined) {
+      const content = Timeline.resolveContent(message, tail.group.ref.partID)
+      // Start the required worker job while the rest of the selected view is constructed.
+      if (content?.type === "text" && content.text.trim())
+        void preloadMarkdown(content.text, tail.group.ref.partID).catch(() => undefined)
+    }
+  }
   return (
     <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
   )
@@ -400,6 +411,38 @@ function MessageTimelineView(
     onSelectionInteraction: props.onSelectionInteraction,
     onUserScroll: props.onUserScroll,
     onHistoryScroll: props.onHistoryScroll,
+    canRenderImmediately: (row, disclosure) => {
+      if (row._tag === "TurnGap" || row._tag === "TurnDivider") return true
+      if (row._tag === "Notice") {
+        const message = messageByID().get(row.messageID)
+        return (
+          (message?.type === "system" || message?.type === "synthetic") &&
+          (message.description ?? message.text).length <= 1024
+        )
+      }
+      if (row._tag === "UserMessage") {
+        const message = messageByID().get(row.userMessageID)
+        if (message?.type !== "user" || message.text.length > 1024 || message.files?.length || message.agents?.length)
+          return false
+        const presentation = readPromptPresentation(message.metadata)
+        return (
+          (presentation?.displayText ?? message.text).length <= 1024 &&
+          !presentation?.comments?.length &&
+          !parseCommentNote(message.text)
+        )
+      }
+      if (row._tag !== "AssistantPart" || row.group.type !== "part") return false
+      const message = messageByID().get(row.group.ref.messageID)
+      if (message?.type !== "assistant" || message.time.completed === undefined) return false
+      const content = Timeline.resolveContent(message, row.group.ref.partID)
+      if (content?.type === "reasoning")
+        return !(disclosure[row.group.ref.partID] ?? props.data.reasoningMode() === "full")
+      return (
+        content?.type === "text" &&
+        content.text.length <= 1024 &&
+        !!getReadyMarkdown({ raw: content.text, src: content.text }, `${row.group.ref.partID}:0:full`)
+      )
+    },
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
   })
@@ -442,6 +485,7 @@ function MessageTimelineView(
   }
 
   const saveTitleEditor = async () => {
+    if (!title.editing || props.pending.rename()) return
     if (await props.action.rename(title.draft)) setTitle("editing", false)
   }
 
@@ -591,6 +635,7 @@ function MessageTimelineView(
                       onInput={(event) => setTitle("draft", event.currentTarget.value)}
                       onKeyDown={(event) => {
                         event.stopPropagation()
+                        if (event.isComposing || event.keyCode === 229) return
                         if (event.key === "Enter") {
                           event.preventDefault()
                           void saveTitleEditor()
@@ -601,7 +646,7 @@ function MessageTimelineView(
                           closeTitleEditor()
                         }
                       }}
-                      onBlur={closeTitleEditor}
+                      onBlur={() => void saveTitleEditor()}
                     />
                   </Show>
                 </Show>

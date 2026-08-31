@@ -7,18 +7,20 @@ import { HttpTransport } from "./transport/index.js"
 import type { HttpMiddleware, Transport, TransportRuntime, WebSocketChannelExecutor } from "./transport/index.js"
 import type { Protocol } from "./protocol.js"
 import { applyCachePolicy } from "../cache-policy.js"
+import { normalizeToolHistory } from "../tool-history.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
 import type { ProtocolID, ProviderOptions } from "../schema/index.js"
 import {
   AIError,
+  AIErrorReason,
   GenerationOptions,
   HttpOptions,
   LLMRequest,
   LLMResponse,
   LanguageModel,
   LLMEvent,
-  InvalidProviderOutputReason,
+  InvalidProviderOutputError,
   ProviderID,
   mergeGenerationOptions,
   mergeHttpOptions,
@@ -168,17 +170,19 @@ export interface GenerateMethod {
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
 const resolveRequestOptions = (request: LLMRequest) => {
-  const routeDefaults = request.model.route.defaults
-  const modelDefaults = request.model.defaults
-  const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, request.generation)
-  return LLMRequest.update(request, {
+  const messages = normalizeToolHistory(request.messages)
+  const normalized = messages === request.messages ? request : LLMRequest.update(request, { messages })
+  const routeDefaults = normalized.model.route.defaults
+  const modelDefaults = normalized.model.defaults
+  const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, normalized.generation)
+  return LLMRequest.update(normalized, {
     generation: generation ?? new GenerationOptions({}),
     providerOptions: mergeProviderOptions(
       routeDefaults.providerOptions,
       modelDefaults?.providerOptions,
-      request.providerOptions,
+      normalized.providerOptions,
     ),
-    http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, request.http),
+    http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, normalized.http),
   })
 }
 
@@ -227,16 +231,14 @@ export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
 const streamError = (route: string, message: string, cause: Cause.Cause<unknown>) => {
   const failed = cause.reasons.find(Cause.isFailReason)?.error
   if (failed instanceof AIError) return failed
-  return ProviderShared.eventError(route, message, Cause.pretty(cause))
+  return ProviderShared.eventError(route, message, undefined, cause)
 }
 
 const incompleteStreamError = (route: string) =>
   new AIError({
-    module: "LLMClient",
-    method: "stream",
-    reason: new InvalidProviderOutputReason({
-      classification: "incomplete-stream",
+    reason: new InvalidProviderOutputError({
       message: "The provider response ended unexpectedly.",
+      classification: "incomplete-stream",
       route,
     }),
   })
@@ -265,11 +267,12 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
   const decodeEventEffect = Schema.decodeUnknownEffect(protocol.stream.event)
   const decodeEvent = (route: string) => (frame: Frame) =>
     decodeEventEffect(frame).pipe(
-      Effect.mapError(() =>
+      Effect.mapError((cause) =>
         ProviderShared.eventError(
           input.id,
           `Invalid ${route} stream event`,
           typeof frame === "string" ? frame : ProviderShared.encodeJson(frame),
+          cause,
         ),
       ),
     )
@@ -324,19 +327,48 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
         return Stream.unwrap(
           routeInput.transport.execute(prepared, request, runtime, options).pipe(
             Effect.map((execution) => {
+              const terminal = protocol.stream.terminal
+              // Preserve assembled inputs; replace only serialized event fallbacks with their original wire data.
+              const frameError =
+                (frame: Frame, event: Frame | Event = frame) =>
+                (error: AIError) =>
+                  new AIError({
+                    reason: AIErrorReason.make({
+                      ...error.reason,
+                      message: error.reason.message,
+                      cause: error.reason.cause,
+                      body:
+                        error.reason.body !== undefined && error.reason.body !== ProviderShared.encodeJson(event)
+                          ? error.reason.body
+                          : (execution.body?.(frame) ??
+                            (typeof frame === "string" ? frame : ProviderShared.encodeJson(frame))),
+                    }),
+                  })
               const events = execution.frames.pipe(
-                Stream.mapEffect(decodeEvent(route)),
-                protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
+                Stream.mapEffect((frame) =>
+                  decodeEvent(route)(frame).pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.fail(streamError(route, `Failed to decode ${route} event`, cause)),
+                    ),
+                    Effect.map((event) => ({ event, frame })),
+                    Effect.mapError(frameError(frame)),
+                  ),
+                ),
+                terminal ? Stream.takeUntil(({ event }) => terminal(event)) : (stream) => stream,
               )
               const stream = Stream.suspend(() => {
                 let state = protocol.stream.initial(request)
                 const parsed = events.pipe(
-                  Stream.mapEffect((event) =>
+                  Stream.mapEffect(({ event, frame }) =>
                     protocol.stream.step(state, event).pipe(
+                      Effect.catchCause((cause) =>
+                        Effect.fail(streamError(route, `Failed to parse ${route} event`, cause)),
+                      ),
                       Effect.map(([next, output]) => {
                         state = next
                         return output
                       }),
+                      Effect.mapError(frameError(frame, event)),
                     ),
                   ),
                   Stream.flatMap(Stream.fromIterable),
@@ -352,6 +384,17 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
               }).pipe(
                 Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
                 requireTerminalEvent(route),
+                Stream.mapError(
+                  (error) =>
+                    new AIError({
+                      reason: AIErrorReason.make({
+                        ...error.reason,
+                        message: error.reason.message,
+                        cause: error.reason.cause,
+                        http: error.reason.http ?? execution.http,
+                      }),
+                    }),
+                ),
               )
               return execution.complete ? stream.pipe(Stream.onEnd(execution.complete)) : stream
             }),
@@ -406,7 +449,9 @@ export function make<Body, Prepared, Frame, Event, State>(
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
   const original = applyCachePolicy(resolveRequestOptions(request))
-  const resolved = LLMRequest.update(original, sanitizeSurrogates({ ...LLMRequest.input(original), model: undefined }))
+  const sanitized = LLMRequest.update(original, sanitizeSurrogates({ ...LLMRequest.input(original), model: undefined }))
+  const tools = [...new Map(sanitized.tools.map((tool) => [tool.name, tool])).values()]
+  const resolved = tools.length === sanitized.tools.length ? sanitized : LLMRequest.update(sanitized, { tools })
   const route = resolved.model.route
 
   const body = yield* route.body

@@ -3,6 +3,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 
+import type { CustomMacSignOptions } from "app-builder-lib"
 import type { Configuration } from "electron-builder"
 
 const execFileAsync = promisify(execFile)
@@ -27,6 +28,18 @@ async function signWindows(configuration: { path: string }) {
     ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", signScript, configuration.path],
     { cwd: rootDir },
   )
+}
+
+export function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
+  return {
+    ...options,
+    optionsForFile: (file) => {
+      const defaults = options.optionsForFile?.(file)
+      if (file !== path.join(options.app, "Contents/Resources/opencode-cli")) return defaults ?? {}
+      // The Bun CLI loads bun-pty's native library; Electron and its helpers do not need this exception.
+      return { ...defaults, entitlements: path.join(packageDir, "resources/entitlements.cli.plist") }
+    },
+  }
 }
 
 const channel = (() => {
@@ -55,9 +68,24 @@ const getBase = (appId: string): Configuration => ({
   extraMetadata: {
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
-  extraResources: [
-    ...(channel !== "prod"
+  files: [
+    "out/**/*",
+    "resources/**/*",
+    "!resources/opencode-cli*",
+    // Log export imports Zip.js as ESM. Keep index.js and lib, including its inline worker.
+    "!**/node_modules/@zip.js/zip.js/dist{,/**/*}",
+    "!**/node_modules/@zip.js/zip.js/{index.cjs,index.min.js,index-fflate.js,deno.json,eslint.config.mjs}",
+    // These packages execute compiled JavaScript, not their sources or source maps.
+    "!**/node_modules/{electron-updater,builder-util-runtime,lazy-val}/out/**/*.js.map",
+    "!**/node_modules/ajv/lib{,/**/*}",
+    "!**/node_modules/ajv-formats/src{,/**/*}",
+    "!**/node_modules/{ajv,ajv-formats}/dist/**/*.js.map",
+    // Keep js-yaml's CommonJS sources and dist/js-yaml.mjs ESM entry, not browser bundles or its CLI.
+    "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
+    "!**/node_modules/js-yaml/bin{,/**/*}",
+  ],
+  extraResources:
+    channel !== "prod"
       ? [
           {
             from: "resources/",
@@ -65,13 +93,7 @@ const getBase = (appId: string): Configuration => ({
             filter: ["opencode-cli*"],
           },
         ]
-      : []),
-    {
-      from: "native/",
-      to: "native/",
-      filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],
-    },
-  ],
+      : [],
   mac: {
     category: "public.app-category.developer-tools",
     icon: `resources/icons/icon.icns`,
@@ -79,6 +101,10 @@ const getBase = (appId: string): Configuration => ({
     gatekeeperAssess: false,
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
+    sign: async (options) => {
+      const { sign } = await import("app-builder-lib/out/codeSign/macCodeSign")
+      await sign(macSignOptions(options))
+    },
     notarize: true,
     target: ["dmg", "zip"],
   },

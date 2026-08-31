@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/effect"
-import type { IntegrationMethod, IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import type { IntegrationMethod } from "@opencode-ai/plugin/effect/integration"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
@@ -29,6 +29,14 @@ export function host(overrides: Overrides = {}): Plugin.Context {
         },
       }),
     options: {},
+    rpc:
+      overrides.rpc ??
+      Object.assign(
+        () => {
+          throw new Error("unused rpc.client")
+        },
+        { register: () => Effect.die("unused rpc.register") },
+      ),
     agent: overrides.agent ?? {
       get: () => Effect.die("unused agent.get"),
       list: () => Effect.die("unused agent.list"),
@@ -57,6 +65,11 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
+    },
+    experimental: overrides.experimental ?? {
+      terminal: {
+        read: () => Effect.die("unused experimental.terminal.read"),
+      },
     },
     generate: overrides.generate ?? {
       text: () => Effect.die("unused generate.text"),
@@ -124,6 +137,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       hook: () => Effect.die("unused tool.hook"),
     },
     vcs: overrides.vcs ?? {
+      base: () => Effect.die("unused vcs.base"),
       get: () => Effect.die("unused vcs.get"),
       branches: () => Effect.die("unused vcs.branches"),
       status: () => Effect.die("unused vcs.status"),
@@ -439,10 +453,6 @@ export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["w
         })
       }),
   }
-}
-
-function oauthCredential(value: Credential.OAuth) {
-  return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
 
 function internalMethod(value: IntegrationMethod): Integration.Method {

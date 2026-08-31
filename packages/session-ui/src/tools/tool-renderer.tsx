@@ -20,7 +20,6 @@ import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
 import { Accordion } from "@opencode-ai/ui/accordion"
-import { Badge } from "@opencode-ai/ui/badge"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -503,10 +502,10 @@ export function CurrentContextToolGroup(props: {
     ].join(", "),
   )
   const label = createMemo(() => {
-    const tools = names()
-    const text = i18n.t("ui.messagePart.tools.used", { tools })
-    const index = text.indexOf(tools)
-    return { text, before: text.slice(0, index).trim(), after: text.slice(index + tools.length).trim() }
+    const title = `${tools().length} ${names()}`
+    const text = i18n.t("ui.messagePart.tools.used", { tools: title })
+    const index = text.indexOf(title)
+    return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
   })
   const items = createMemo(() =>
     props.parts.reduce<(SessionMessageAssistantTool[] | (SessionMessageAssistantReasoning & { id: string }))[]>(
@@ -555,6 +554,7 @@ export function CurrentContextToolGroup(props: {
         icon="glasses"
         status={pending() ? "running" : "completed"}
         compact
+        hasContent
         allowOpenWhilePending
         open={props.open}
         onOpenChange={change}
@@ -564,11 +564,10 @@ export function CurrentContextToolGroup(props: {
               <Show when={label().before}>
                 {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
               </Show>
-              <span data-slot="basic-tool-tool-title">{names()}</span>
+              <span data-slot="basic-tool-tool-title">{label().title}</span>
               <Show when={label().after}>
                 {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
               </Show>
-              <Badge>{tools().length}</Badge>
             </span>
           </div>
         }
@@ -1477,7 +1476,14 @@ ToolRegistry.register({
       (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true)
     const sawStreaming = streaming()
     const [streamed, setStreamed] = createSignal("")
+    // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
+    const saved = createMemo(() =>
+      props.metadata.status === "exited" || props.metadata.status === "timeout" || props.metadata.status === "killed"
+        ? props.output
+        : undefined,
+    )
     createEffect(() => {
+      if (saved() !== undefined) return
       const id = props.metadata.shellID
       const shellOutput = data.shellOutput
       if (typeof id !== "string" || !shellOutput) return
@@ -1513,7 +1519,7 @@ ToolRegistry.register({
       return ""
     }
     const output = createMemo(() =>
-      stripAnsi((typeof props.metadata.shellID === "string" && streamed()) || props.output || "").replace(
+      stripAnsi(saved() ?? ((typeof props.metadata.shellID === "string" && streamed()) || props.output || "")).replace(
         /\r\n?/g,
         "\n",
       ),
@@ -1562,7 +1568,15 @@ export function SessionShellMessage(props: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
+  const i18n = useI18n()
   const render = ToolRegistry.render("shell") ?? GenericTool
+  const error = createMemo(() => {
+    const message = props.message
+    if (message.status === "timeout") return i18n.t("ui.tool.shell.timeout")
+    if (message.status === "killed") return i18n.t("ui.tool.shell.cancelled")
+    if (message.status !== "exited" || message.exit === undefined || message.exit === 0) return
+    return i18n.t("ui.tool.shell.exit", { code: message.exit })
+  })
   return (
     <div data-component="session-shell-message" data-timeline-part-id={props.message.id}>
       <Dynamic
@@ -1570,6 +1584,7 @@ export function SessionShellMessage(props: {
         tool="shell"
         input={{ command: props.message.command }}
         metadata={{
+          shellID: props.message.shellID,
           status: props.message.status,
           exit: props.message.exit,
           truncated: props.message.output?.truncated,
@@ -1580,6 +1595,9 @@ export function SessionShellMessage(props: {
         open={props.open}
         onOpenChange={props.onOpenChange}
       />
+      <Show when={error()}>
+        {(error) => <ToolErrorCard tool="shell" error={error()} subtitle={props.message.command} />}
+      </Show>
     </div>
   )
 }

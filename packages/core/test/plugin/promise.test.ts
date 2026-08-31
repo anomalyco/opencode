@@ -20,15 +20,96 @@ import { Project } from "@opencode-ai/core/project"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { define } from "@opencode-ai/plugin/promise/plugin"
+import type { Info } from "@opencode-ai/plugin/promise/tool"
 import { Money } from "@opencode-ai/schema/money"
+import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
+import { Pty } from "@opencode-ai/schema/pty"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
-import { host as testHost } from "./host"
+import { host } from "./host"
 
 const it = testEffect(PluginTestLayer)
 
 describe("fromPromise", () => {
+  it.effect("validates and forwards experimental terminal reads through the protocol schema", () =>
+    Effect.gen(function* () {
+      const seen: unknown[] = []
+      const terminal = PersistentPty.ReadResult.make({
+        ptyID: Pty.ID.make("pty_terminal"),
+        title: "Build",
+        cwd: "/workspace",
+        foregroundProcess: "bun",
+        screen: { text: "one\ntwo\nthree", cols: 80, rows: 2, cursor: { x: 3, y: 1 } },
+      })
+      const context = host({
+        experimental: {
+          terminal: {
+            read: (input) => {
+              seen.push(input)
+              return Effect.succeed(terminal)
+            },
+          },
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-terminal-read",
+          setup: async (ctx) => {
+            expect(Object.keys(ctx.experimental)).toEqual(["terminal"])
+            expect(Object.keys(ctx.experimental.terminal)).toEqual(["read"])
+            for (const lines of [0, -1, 1.5, 65536, NaN, Infinity, "3"]) {
+              await expect(
+                Reflect.apply(ctx.experimental.terminal.read, undefined, [{ sessionID: "ses_terminal", lines }]),
+              ).rejects.toBeDefined()
+            }
+            await expect(Reflect.apply(ctx.experimental.terminal.read, undefined, [{ lines: 3 }])).rejects.toBeDefined()
+            expect(seen).toEqual([])
+            expect(await ctx.experimental.terminal.read({ sessionID: "ses_terminal" })).toEqual(terminal)
+            expect(await ctx.experimental.terminal.read({ sessionID: "ses_terminal", lines: 3 })).toEqual(terminal)
+            await ctx.experimental.terminal.read({ sessionID: "ses_terminal", lines: 1 })
+            await ctx.experimental.terminal.read({ sessionID: "ses_terminal", lines: 65535 })
+          },
+        }),
+      ).effect(context)
+
+      expect(seen).toEqual([
+        { sessionID: Session.ID.make("ses_terminal") },
+        { sessionID: Session.ID.make("ses_terminal"), lines: 3 },
+        { sessionID: Session.ID.make("ses_terminal"), lines: 1 },
+        { sessionID: Session.ID.make("ses_terminal"), lines: 65535 },
+      ])
+    }),
+  )
+
+  it.effect("preserves null terminal reads and rejects daemon failures", () =>
+    Effect.gen(function* () {
+      const context = host({
+        experimental: {
+          terminal: {
+            read: (input) =>
+              input.sessionID === Session.ID.make("ses_failure")
+                ? Effect.fail(new Error("terminal daemon unavailable"))
+                : Effect.succeed(null),
+          },
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-terminal-null",
+          setup: async (ctx) => {
+            expect(await ctx.experimental.terminal.read({ sessionID: "ses_empty" })).toBeNull()
+            await expect(ctx.experimental.terminal.read({ sessionID: "ses_failure" })).rejects.toThrow(
+              "terminal daemon unavailable",
+            )
+          },
+        }),
+      ).effect(context)
+    }),
+  )
+
   it.effect("exposes the host location including workspace and project metadata", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
@@ -93,7 +174,7 @@ describe("fromPromise", () => {
   it.effect("adapts session creation through the protocol schema", () =>
     Effect.gen(function* () {
       let seen: unknown
-      const host = testHost({
+      const context = host({
         session: {
           create: (input) => {
             seen = input
@@ -131,7 +212,7 @@ describe("fromPromise", () => {
             })
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual({ title: "Promise title" })
     }),
@@ -139,7 +220,7 @@ describe("fromPromise", () => {
 
   it.effect("forwards transient session generation", () =>
     Effect.gen(function* () {
-      const host = testHost({
+      const context = host({
         session: {
           generate: (input) => Effect.succeed({ text: `${input.sessionID}: ${input.prompt}` }),
         },
@@ -154,14 +235,14 @@ describe("fromPromise", () => {
             })
           },
         }),
-      ).effect(host)
+      ).effect(context)
     }),
   )
 
   it.effect("preserves interrupt results and rejected Promise behavior", () =>
     Effect.gen(function* () {
       const seen: unknown[] = []
-      const host = testHost({
+      const context = host({
         session: {
           interrupt: (input) => {
             if (input.sessionID === Session.ID.make("ses_failure")) {
@@ -200,7 +281,7 @@ describe("fromPromise", () => {
             expect(await ctx.session.wait({ sessionID: "ses_success" })).toBeUndefined()
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual([
         { sessionID: Session.ID.make("ses_success"), agent: Agent.ID.make("build") },
@@ -231,7 +312,7 @@ describe("fromPromise", () => {
         resume: null,
       }
       let seen: unknown
-      const host = testHost({
+      const context = host({
         session: {
           synthetic: (value) => {
             seen = value
@@ -259,7 +340,7 @@ describe("fromPromise", () => {
             await ctx.session.synthetic(input)
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual({
         ...input,
@@ -486,7 +567,7 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("registers a Promise VCS provider and forwards client reads", () =>
+  it.effect("registers a Promise VCS provider and preserves its receiver when forwarding client reads", () =>
     Effect.gen(function* () {
       const vcs = yield* Vcs.Service
       const plugin = yield* Plugin.Service
@@ -502,6 +583,11 @@ describe("fromPromise", () => {
               info: async (_input, request) => {
                 signals.push(request.signal)
                 return { branch: { current: "feature", default: "main" } }
+              },
+              async base(_input, request) {
+                expect(this.id).toBe("custom")
+                signals.push(request.signal)
+                return { name: "main", ref: "refs/heads/main", source: "default" }
               },
               branches: async (input, request) => {
                 signals.push(request.signal)
@@ -523,6 +609,7 @@ describe("fromPromise", () => {
           })
 
           expect((await ctx.vcs.get()).data.branch.current).toBe("feature")
+          expect((await ctx.vcs.base()).data).toEqual({ name: "main", ref: "refs/heads/main", source: "default" })
           expect((await ctx.vcs.branches({ search: "feat" })).data).toEqual(["feature"])
           expect((await ctx.vcs.status()).data).toHaveLength(1)
           expect((await ctx.vcs.diff({ mode: "working", context: 2 })).data[0].patch).toBe("+hello")
@@ -531,7 +618,7 @@ describe("fromPromise", () => {
 
       yield* PluginPromise.fromPromise(promisePlugin).effect(host)
       expect((yield* vcs.info()).branch.current).toBe("feature")
-      expect(signals).toHaveLength(4)
+      expect(signals).toHaveLength(5)
       expect(signals.every((signal) => signal instanceof AbortSignal)).toBeTrue()
     }),
   )
@@ -642,6 +729,76 @@ describe("fromPromise", () => {
         content: [{ type: "text", text: "Hello, world!" }],
       })
       expect(progress).toEqual([{ phase: "greeting" }])
+    }),
+  )
+
+  it.live("adapts listed and retrieved tool executors without invoking them eagerly", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugins)
+      const calls: string[] = []
+      const failure = new Tool.Error({ message: "executor failed" })
+      yield* host.tool.transform((draft) => {
+        draft.add({
+          name: "hello",
+          description: "Hello",
+          options: { namespace: "acme", codemode: false },
+          input: Schema.Struct({ name: Schema.String }),
+          output: Schema.String,
+          execute: ({ name }, context) => {
+            calls.push(name)
+            if (name === "failure") return Effect.fail(failure)
+            return context.progress({ name }).pipe(Effect.as({ output: name }))
+          },
+        })
+      })
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-tool-reads",
+          setup: async (ctx) => {
+            const tools: Info[] = []
+            await ctx.tool.transform((draft) => {
+              expect(draft.list().map((tool) => tool.id)).toEqual(["acme_hello"])
+              tools.push(...draft.list())
+              const tool = draft.get("acme_hello")
+              if (!tool) throw new Error("Tool was not found")
+              expect(tool.id).toBe("acme_hello")
+              tools.push(tool)
+            })
+            expect(tools).toHaveLength(2)
+            expect(calls).toEqual([])
+            await Promise.all(
+              tools.map(async (tool) => {
+                const progress: Tool.Metadata[] = []
+                const context = {
+                  sessionID: Session.ID.make("ses_promise_tool_reads"),
+                  agent: Agent.ID.make("build"),
+                  messageID: SessionMessage.ID.make("msg_promise_tool_reads"),
+                  id: Tool.CallID.make("call_reads"),
+                  progress: async (update: Tool.Metadata) => {
+                    progress.push(update)
+                  },
+                }
+                expect(await tool.execute({ name: "world" }, context)).toEqual({ output: "world" })
+                expect(progress).toEqual([{ name: "world" }])
+                await expect(tool.execute({ name: "failure" }, context)).rejects.toBe(failure)
+                const error = new Error("progress failed")
+                await expect(
+                  tool.execute(
+                    { name: "world" },
+                    {
+                      ...context,
+                      progress: async () => {
+                        throw error
+                      },
+                    },
+                  ),
+                ).rejects.toBe(error)
+              }),
+            )
+          },
+        }),
+      ).effect(host)
     }),
   )
 
@@ -789,7 +946,62 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("returns content-only plugin results through Code Mode", () =>
+  it.live("clears deleted tool options while retaining the namespace", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const host = yield* PluginHost.make(plugins)
+      yield* host.tool.transform((draft) => {
+        draft.add({
+          name: "hello",
+          description: "Hello",
+          options: { namespace: "acme", codemode: false },
+          input: Schema.Struct({}),
+          output: Schema.String,
+          execute: () => Effect.succeed({ output: "Hello" }),
+        })
+      })
+      const original = yield* registry.snapshot()
+      expect(original.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
+      expect(original.codeModeCatalog).toEqual([])
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-tool-options",
+          setup: async (ctx) => {
+            await ctx.tool.transform((draft) => {
+              draft.update("acme_hello", (tool) => {
+                delete tool.options
+              })
+              expect(draft.get("acme_hello")?.options).toEqual({ namespace: "acme" })
+            })
+          },
+        }),
+      ).effect(host)
+
+      const snapshot = yield* registry.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["acme.hello"])
+      expect(original.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
+      expect(
+        yield* snapshot.execute({
+          sessionID: Session.ID.make("ses_promise_tool_options"),
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.make("msg_promise_tool_options"),
+          call: {
+            type: "tool-call",
+            id: "call_options",
+            name: "execute",
+            input: { code: "return await tools.acme.hello({})" },
+          },
+        }),
+      ).toMatchObject({
+        output: { output: "Hello", toolCalls: [{ tool: "acme.hello", status: "completed" }] },
+      })
+    }),
+  )
+
+  it.effect("returns content-only plugin results and rejected Promises through Code Mode", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const registry = yield* Tool.Service
@@ -801,8 +1013,11 @@ describe("fromPromise", () => {
             tools.add({
               name: "demo_status",
               description: "Returns a status string",
-              input: Schema.Struct({}),
-              execute: async () => ({ content: [{ type: "text", text: "hello" }] }),
+              input: Schema.Struct({ fail: Schema.optionalKey(Schema.Boolean) }),
+              execute: async ({ fail }) => {
+                if (fail) await ctx.session.create({ agent: undefined })
+                return { content: [{ type: "text", text: "hello" }] }
+              },
               options: { codemode: true },
             })
           })
@@ -826,6 +1041,22 @@ describe("fromPromise", () => {
       expect(throughCodeMode).toMatchObject({
         output: { output: "hello", toolCalls: [{ tool: "demo_status", status: "completed" }] },
         content: [{ type: "text", text: "hello" }],
+      })
+      expect(
+        yield* toolSet.execute({
+          sessionID: Session.ID.make("ses_content_only_tool"),
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.make("msg_content_only_tool"),
+          call: {
+            type: "tool-call",
+            id: "call_failed_tool",
+            name: "execute",
+            input: { code: "return await tools.demo_status({ fail: true })" },
+          },
+        }),
+      ).toMatchObject({
+        content: [{ type: "text", text: 'Expected string | null\n  at ["agent"]' }],
+        metadata: { error: true },
       })
     }),
   )

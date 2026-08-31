@@ -1,6 +1,5 @@
 export type ServerReadyData = {
   url: string
-  username: string | null
   password: string | null
 }
 

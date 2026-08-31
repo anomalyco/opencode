@@ -831,6 +831,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       const content: AnthropicUserBlock[] = []
       for (const part of message.content) {
         if (part.type === "text") {
+          if (part.text.trim().length === 0) continue
           content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
           continue
         }
@@ -840,7 +841,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         }
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
       }
-      messages.push({ role: "user", content })
+      if (content.length > 0) messages.push({ role: "user", content })
       continue
     }
 
@@ -848,6 +849,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       const content: AnthropicAssistantBlock[] = []
       for (const part of message.content) {
         if (part.type === "text") {
+          if (part.text.trim().length === 0) continue
           content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
           continue
         }
@@ -891,7 +893,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           `Anthropic Messages assistant messages only support text, reasoning, and tool-call content for now`,
         )
       }
-      messages.push({ role: "assistant", content })
+      if (content.length > 0) messages.push({ role: "assistant", content })
       continue
     }
 
@@ -1019,10 +1021,11 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
         )
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
   const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
+  const systemParts = request.system.filter((part) => part.text.length > 0)
   const system =
-    request.system.length === 0
+    systemParts.length === 0
       ? undefined
-      : request.system.map((part) => ({
+      : systemParts.map((part) => ({
           type: "text" as const,
           text: part.text,
           cache_control: cacheControl(breakpoints, part.cache),
@@ -1343,20 +1346,28 @@ const onMessageDelta = (
   event: AnthropicEvent & { readonly delta?: AnthropicStreamDelta },
 ): StepResult => {
   const usage = mergeUsage(state.usage, mapUsage(event.usage, state.providerMetadataKey), state.providerMetadataKey)
+  const pendingFinish = (() => {
+    const stopReason = event.delta?.stop_reason
+    if (stopReason === null || stopReason === undefined) return state.pendingFinish
+
+    const stopSequence = event.delta?.stop_sequence
+    const finishMetadata =
+      stopSequence === null || stopSequence === undefined
+        ? state.pendingFinish?.providerMetadata
+        : providerMetadata(state.providerMetadataKey, { stopSequence })
+    return {
+      reason: {
+        normalized: mapFinishReason(stopReason),
+        raw: stopReason,
+      },
+      providerMetadata: finishMetadata,
+    }
+  })()
   return [
     {
       ...state,
       usage,
-      pendingFinish: {
-        reason: {
-          normalized: mapFinishReason(event.delta?.stop_reason),
-          raw: event.delta?.stop_reason ?? undefined,
-        },
-        providerMetadata:
-          event.delta?.stop_sequence === null || event.delta?.stop_sequence === undefined
-            ? undefined
-            : providerMetadata(state.providerMetadataKey, { stopSequence: event.delta.stop_sequence }),
-      },
+      pendingFinish,
     },
     NO_EVENTS,
   ]
@@ -1367,7 +1378,17 @@ const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (st
   const events: LLMEvent[] = []
   const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
   events.push(...result.events)
-  const finished = Lifecycle.finish(lifecycle, events, {
+  const closed = Object.entries(state.reasoningSignatures).reduce(
+    (current, [index, signature]) =>
+      Lifecycle.reasoningEnd(
+        current,
+        events,
+        `reasoning-${index}`,
+        providerMetadata(state.providerMetadataKey, { signature }),
+      ),
+    lifecycle,
+  )
+  const finished = Lifecycle.finish(closed, events, {
     reason: state.pendingFinish?.reason ?? {
       normalized: "unknown",
       raw: undefined,
@@ -1387,14 +1408,15 @@ const providerErrorMessage = (event: AnthropicEvent): string => {
   return message || type || "Anthropic Messages stream error"
 }
 
-const onError = (event: AnthropicEvent) =>
-  Effect.fail(
+const onError = (event: AnthropicEvent) => {
+  const message = providerErrorMessage(event)
+  const body = ProviderShared.encodeJson(event)
+  return Effect.fail(
     new AIError({
-      module: ADAPTER,
-      method: "stream",
-      reason: classifyProviderFailure({ message: providerErrorMessage(event), code: event.error?.type }),
+      reason: classifyProviderFailure({ message, rawBody: body }),
     }),
   )
+}
 
 const isKnownStreamBlockType = (type: string) =>
   type === "text" ||

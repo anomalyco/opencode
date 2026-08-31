@@ -1,4 +1,4 @@
-export * as MCPStdio from "./stdio.js"
+export * as McpStdio from "./stdio.js"
 
 import { ReadBuffer, serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
@@ -53,13 +53,12 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   let closing: Promise<void> | undefined
   let trailingBytes = 0
 
-  const stop = (handle: ChildProcessHandle) =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.timeoutOption(handle.exitCode, CLOSE_GRACE)
-      if (exit._tag === "Some") return
-      const terminated = yield* Effect.timeoutOption(handle.kill({ killSignal: "SIGTERM" }), FORCE_KILL_AFTER)
-      if (terminated._tag === "None") yield* handle.kill({ killSignal: "SIGKILL" })
-    }).pipe(Effect.ignore)
+  const stop = Effect.fnUntraced(function* (handle: ChildProcessHandle) {
+    // Exit completion can precede descendant cleanup after the capture deadline.
+    yield* Effect.timeoutOption(handle.exitCode, CLOSE_GRACE).pipe(Effect.ignore)
+    const terminated = yield* Effect.timeoutOption(handle.kill({ killSignal: "SIGTERM" }), FORCE_KILL_AFTER)
+    if (terminated._tag === "None") yield* handle.kill({ killSignal: "SIGKILL" })
+  }, Effect.ignore())
 
   const close = () =>
     (closing ??= Effect.runPromise(

@@ -6,18 +6,23 @@ test("formats server and TUI plugins in sections without builtins", () => {
   expect(
     format(
       [
-        { id: "opencode.agent", source: { type: "builtin" }, status: "active", tui: false },
+        { id: "opencode.agent", source: { type: "builtin" }, state: { status: "active" }, features: { server: true } },
         {
           id: "acme.dual",
           source: { type: "package", package: "acme-plugin@1.0.0" },
-          status: "active",
-          tui: true,
+          state: { status: "active" },
+          features: { server: true, tui: true },
         },
         {
           source: { type: "package", package: "broken-plugin" },
-          status: "failed",
-          error: "broken",
-          tui: false,
+          state: { status: "failed", error: "broken" },
+          features: { server: true },
+        },
+        {
+          id: "local.dual",
+          source: { type: "local", path: "/tmp/local/index.ts" },
+          state: { status: "active" },
+          features: { server: true, tui: true },
         },
       ],
       [
@@ -28,6 +33,7 @@ test("formats server and TUI plugins in sections without builtins", () => {
   ).toBe(
     [
       "TUI",
+      "/tmp/local (advertised)",
       "/tmp/local.ts (discovered)",
       "acme-plugin@1.0.0 (advertised)",
       "tui-only (configured)",
@@ -35,12 +41,24 @@ test("formats server and TUI plugins in sections without builtins", () => {
       "Server",
       "acme.dual (active)",
       "broken-plugin (failed)",
+      "local.dual (active)",
     ].join(EOL),
   )
 })
 
 test("includes builtins when requested", () => {
   expect(
-    format([{ id: "opencode.agent", source: { type: "builtin" }, status: "active", tui: false }], [], true),
+    format(
+      [
+        {
+          id: "opencode.agent",
+          source: { type: "builtin" },
+          state: { status: "active" },
+          features: { server: true },
+        },
+      ],
+      [],
+      true,
+    ),
   ).toBe(["Server", "opencode.agent (active)"].join(EOL))
 })

@@ -20,6 +20,38 @@ const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.
 const build = Agent.defaultID
 
 describe("toLLMMessages", () => {
+  test("background user shells enter model context only through their completion notification", () => {
+    const shell = SessionMessage.Shell.make({
+      id: id("background-shell"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_background"),
+      status: "running",
+      command: "pwd",
+      metadata: { background: true },
+      time: { created },
+    })
+    const notification = SessionMessage.Synthetic.make({
+      id: id("shell-completion"),
+      type: "synthetic",
+      text: "User shell pwd completed: /project",
+      metadata: { source: "shell", shellID: shell.shellID, state: "completed" },
+      time: { created },
+    })
+
+    expect(toLLMMessages([shell], model)).toEqual([])
+    const completed = SessionMessage.Shell.make({
+      ...shell,
+      status: "exited",
+      exit: 0,
+      output: { output: "/project", cursor: 8, size: 8, truncated: false },
+      time: { created, completed: created },
+    })
+    expect(toLLMMessages([completed], model)).toEqual([])
+    expect(toLLMMessages([completed, notification], model)).toEqual([
+      Message.make({ id: notification.id, role: "user", content: notification.text }),
+    ])
+  })
+
   test("omits empty assistant turns", () => {
     const assistant = (value: string, content: SessionMessage.Assistant["content"]) =>
       SessionMessage.Assistant.make({

@@ -327,7 +327,6 @@ export const dict = {
   "dialog.server.add.button": "Server hinzufügen",
   "dialog.server.add.name": "Servername (optional)",
   "dialog.server.add.namePlaceholder": "Localhost",
-  "dialog.server.add.username": "Benutzername (optional)",
   "dialog.server.add.password": "Passwort (optional)",
   "dialog.server.edit.title": "Server bearbeiten",
   "dialog.server.default.title": "Standardserver",
@@ -945,9 +944,7 @@ export const dict = {
   "app.server.unreachable": "Konnte {{server}} nicht erreichen",
   "app.server.retrying": "Verbindung wird automatisch erneut hergestellt…",
   "app.server.otherServers": "Andere Server",
-  "dialog.server.add.usernamePlaceholder": "Benutzername",
   "dialog.server.add.passwordPlaceholder": "Passwort",
-  "server.row.noUsername": "Kein Benutzername",
   "session.review.noVcs.createGit.title": "Git-Repository erstellen",
   "session.review.noVcs.createGit.description":
     "Änderungen in diesem Projekt verfolgen, überprüfen und rückgängig machen",

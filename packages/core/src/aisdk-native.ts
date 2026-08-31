@@ -84,10 +84,7 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapAPIKey(input.settings),
           ...(typeof input.settings.location === "string" ? { location: input.settings.location } : {}),
           ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
-          ...mapGoogleOptions(
-            input.settings,
-            isStringRecord(input.settings.labels) ? { labels: input.settings.labels } : {},
-          ),
+          ...mapGoogleOptions(input.settings),
         },
         ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
       }
@@ -109,6 +106,17 @@ export function map(input: MapInput): Mapping | undefined {
             : {}),
         },
         ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+      }
+    case "@ai-sdk/mistral":
+      return {
+        package: "@opencode-ai/ai/providers/mistral",
+        settings: {
+          ...baseSettings,
+          ...mapAPIKey(input.settings),
+          ...mapMistralOptions(input.settings),
+        },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+        ...(isRecord(input.settings.extraBody) ? { body: input.settings.extraBody } : {}),
       }
     case "@ai-sdk/openai":
       return {
@@ -286,6 +294,20 @@ function mapOpenAIOptions(settings: Readonly<Record<string, unknown>>) {
   return { providerOptions: options }
 }
 
+function mapMistralOptions(settings: Readonly<Record<string, unknown>>) {
+  const options = {
+    ...(typeof settings.safePrompt === "boolean" ? { safePrompt: settings.safePrompt } : {}),
+    ...(typeof settings.documentImageLimit === "number" ? { documentImageLimit: settings.documentImageLimit } : {}),
+    ...(typeof settings.documentPageLimit === "number" ? { documentPageLimit: settings.documentPageLimit } : {}),
+    ...(typeof settings.parallelToolCalls === "boolean" ? { parallelToolCalls: settings.parallelToolCalls } : {}),
+    ...(typeof settings.promptCacheKey === "string" ? { promptCacheKey: settings.promptCacheKey } : {}),
+    ...(typeof settings.reasoningEffort === "string" ? { reasoningEffort: settings.reasoningEffort } : {}),
+    ...(settings.promptMode === "reasoning" ? { promptMode: settings.promptMode } : {}),
+  }
+  if (Object.keys(options).length === 0) return {}
+  return { providerOptions: options }
+}
+
 function mapBaseSettings(settings: Readonly<Record<string, unknown>>) {
   return {
     ...(typeof settings.baseURL === "string" ? { baseURL: settings.baseURL } : {}),
@@ -296,7 +318,7 @@ function mapAPIKey(settings: Readonly<Record<string, unknown>>) {
   return typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}
 }
 
-function mapGoogleOptions(settings: Readonly<Record<string, unknown>>, extra: Readonly<Record<string, unknown>> = {}) {
+function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
   const input = settings.thinkingConfig
   const thinkingConfig = {
     ...(isRecord(input) && typeof input.thinkingBudget === "number" ? { thinkingBudget: input.thinkingBudget } : {}),
@@ -311,7 +333,6 @@ function mapGoogleOptions(settings: Readonly<Record<string, unknown>>, extra: Re
     ...(Array.isArray(settings.safetySettings) ? { safetySettings: settings.safetySettings } : {}),
     ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
     ...(Object.keys(thinkingConfig).length > 0 ? { thinkingConfig } : {}),
-    ...extra,
   }
   if (Object.keys(options).length === 0) return {}
   return { providerOptions: options }
@@ -345,28 +366,21 @@ function mapOpenRouter(
 }
 
 function mapOpenRouterOptions(settings: Readonly<Record<string, unknown>>) {
-  const options = Object.fromEntries(
-    Object.entries(settings).filter(
-      ([key]) =>
-        ![
-          "apiKey",
-          "api_keys",
-          "appName",
-          "appUrl",
-          "authToken",
-          "baseURL",
-          "chunkTimeout",
-          "compatibility",
-          "extraBody",
-          "fetch",
-          "headers",
-          "promptCacheKey",
-          "timeout",
-        ].includes(key),
-    ),
-  )
-  if (Object.keys(options).length === 0) return {}
-  return { providerOptions: options }
+  return mapProviderOptions(settings, [
+    "apiKey",
+    "api_keys",
+    "appName",
+    "appUrl",
+    "authToken",
+    "baseURL",
+    "chunkTimeout",
+    "compatibility",
+    "extraBody",
+    "fetch",
+    "headers",
+    "promptCacheKey",
+    "timeout",
+  ])
 }
 
 function isStringRecord(value: unknown): value is Readonly<Record<string, string>> {

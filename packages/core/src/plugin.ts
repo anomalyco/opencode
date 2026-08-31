@@ -1,5 +1,5 @@
 export * as Plugin from "./plugin.js"
-export { Event, ID, Info, Source } from "@opencode-ai/schema/plugin"
+export { Event, ID, Info, Source, State } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
@@ -13,12 +13,13 @@ import { Command } from "./command.js"
 import { Bus } from "./bus.js"
 import { Integration } from "./integration.js"
 import { KV } from "./kv.js"
-import { MCP } from "./mcp/index.js"
+import { Mcp } from "./mcp/index.js"
 import { Location } from "./location.js"
 import { PluginHost } from "./plugin/host.js"
 import { PluginRuntime } from "./plugin/runtime.js"
 import { WebSearch } from "./websearch.js"
 import { Reference } from "./reference.js"
+import { Rpc } from "./rpc.js"
 import { Skill } from "./skill.js"
 import { State } from "./state.js"
 import { Tool } from "./tool.js"
@@ -30,14 +31,17 @@ import { Permission } from "./permission.js"
 export interface Interface {
   readonly activate: (
     plugins: readonly Versioned[],
-    failures?: readonly Extract<Plugin.Info, { readonly status: "failed" }>[],
+    failures?: readonly Failure[],
   ) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Plugin.Info[]>
 }
 
+type Failure = Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
+
 export type Versioned = PluginDefinition & {
   readonly version: string
   readonly source?: Plugin.Source
+  readonly features?: Plugin.Features
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
@@ -80,7 +84,7 @@ const layer = Layer.effect(
 
     const activate = Effect.fn("Plugin.activate")(function* (
       plugins: readonly Versioned[],
-      failures: readonly Extract<Plugin.Info, { readonly status: "failed" }>[] = [],
+      failures: readonly Failure[] = [],
     ) {
       const definitions = plugins.map((plugin) => ({ ...plugin, id: Plugin.ID.make(plugin.id) }))
       const ids = new Set<Plugin.ID>()
@@ -91,16 +95,11 @@ const layer = Layer.effect(
 
       yield* lock.withPermit(
         Effect.gen(function* () {
-          const next = definitions.map((definition) => ({ id: definition.id, version: definition.version }))
-          const current = Array.from(active.values(), (entry) => ({
-            id: entry.plugin.id,
-            version: entry.plugin.version,
-          }))
           if (
-            current.length === next.length &&
-            current.every((definition, index) => {
-              const candidate = next[index]
-              return definition.id === candidate?.id && definition.version === candidate.version
+            active.size === definitions.length &&
+            Array.from(active.values()).every((entry, index) => {
+              const definition = definitions[index]
+              return entry.plugin.id === definition?.id && entry.plugin.version === definition.version
             })
           ) {
             const nextInventory = [...Array.from(active.values(), (entry) => activeInfo(entry.plugin)), ...failures]
@@ -116,7 +115,7 @@ const layer = Layer.effect(
               for (const definition of definitions) {
                 const previous = active.get(definition.id)
                 active.delete(definition.id)
-                if (previous) yield* Scope.close(previous.scope, Exit.void).pipe(Effect.ignore)
+                if (previous) yield* Scope.close(previous.scope, Exit.void)
 
                 const loaded = yield* load(definition)
                 if (loaded.scope !== undefined) {
@@ -127,9 +126,8 @@ const layer = Layer.effect(
                 nextInventory.push({
                   id: definition.id,
                   source: definition.source ?? { type: "builtin" },
-                  status: "failed",
-                  error: loaded.error,
-                  tui: definition.tui ?? false,
+                  state: { status: "failed", error: loaded.error },
+                  features: { server: true, ...definition.features },
                 })
 
                 if (!previous) continue
@@ -147,7 +145,7 @@ const layer = Layer.effect(
                 .filter(([id]) => !ids.has(id))
                 .toReversed()
               removed.forEach(([id]) => active.delete(id))
-              yield* Effect.forEach(removed, ([, entry]) => Scope.close(entry.scope, Exit.void).pipe(Effect.ignore), {
+              yield* Effect.forEach(removed, ([, entry]) => Scope.close(entry.scope, Exit.void), {
                 discard: true,
               })
               inventory = [...nextInventory, ...failures]
@@ -180,8 +178,8 @@ function activeInfo(plugin: Versioned): Plugin.Info {
   return {
     id: Plugin.ID.make(plugin.id),
     source: plugin.source ?? { type: "builtin" },
-    status: "active",
-    tui: plugin.tui ?? false,
+    state: { status: "active" },
+    features: { server: true, ...plugin.features },
   }
 }
 
@@ -197,9 +195,10 @@ export const node = makeLocationNode({
     Command.node,
     Integration.node,
     KV.node,
-    MCP.node,
+    Mcp.node,
     Location.node,
     Reference.node,
+    Rpc.node,
     Skill.node,
     Tool.node,
     Vcs.node,

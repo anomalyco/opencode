@@ -77,7 +77,7 @@ Load terminal plugins in order:
   "plugins": [
     "-opencode.notifications",
     {
-      "package": "./plugins/status.ts",
+      "package": "./plugins/status",
       "options": {
         "compact": true
       }
@@ -86,7 +86,7 @@ Load terminal plugins in order:
 }
 ```
 
-See [Plugins](/cli/plugins) for packages, local files, options, and enablement directives.
+See [Plugins](/cli/plugins) for packages, local plugins, options, and enablement directives.
 
 ## Scroll
 
@@ -141,6 +141,7 @@ Configure diff presentation:
 ```json title="cli.json"
 {
   "diffs": {
+    "source": "branch",
     "wrap": "word",
     "tree": true,
     "single": false,
@@ -149,12 +150,19 @@ Configure diff presentation:
 }
 ```
 
-| Field    | Values                        | Description                                                   |
-| -------- | ----------------------------- | ------------------------------------------------------------- |
-| `wrap`   | `word` or `none`              | Sets line wrapping.                                           |
-| `tree`   | boolean                       | Shows the diff file tree.                                     |
-| `single` | boolean                       | Shows only the selected file patch.                           |
-| `view`   | `auto`, `split`, or `unified` | Sets the layout. `auto` chooses based on the available width. |
+| Field    | Values                              | Description                                                   |
+| -------- | ----------------------------------- | ------------------------------------------------------------- |
+| `source` | `branch`, `committed`, or `working` | Sets the initial review scope. Defaults to `branch`.          |
+| `wrap`   | `word` or `none`                    | Sets line wrapping.                                           |
+| `tree`   | boolean                             | Shows the diff file tree.                                     |
+| `single` | boolean                             | Shows only the selected file patch.                           |
+| `view`   | `auto`, `split`, or `unified`       | Sets the layout. `auto` chooses based on the available width. |
+
+`branch` shows **All** (branch and local changes), `committed` shows **Committed** (branch commits only), and `working` shows **Uncommitted** (staged, unstaged, and untracked changes).
+
+In `/diff`, press `d` to change the scope or choose a comparison branch from **Base**. OpenCode infers the base from local Git history when possible; otherwise it asks you to choose before loading a branch diff.
+
+Your base choice for each branch and last selected scope survive closing and reopening the viewer, but reset when the TUI exits. These selections do not change `cli.json`.
 
 ## Tabs
 

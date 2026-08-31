@@ -102,6 +102,14 @@ test("cramped tabs only show the close button for the active tab", async ({ page
   await expect(page).toHaveURL(new RegExp(`${hrefB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
   await expect(tabA.locator('[data-slot="tab-close"]')).toBeHidden()
   await expect(tabB.locator('[data-slot="tab-close"]')).toBeVisible()
+
+  for (const direction of ["ltr", "rtl"]) {
+    await page.evaluate((direction) => document.documentElement.setAttribute("dir", direction), direction)
+    await page.setViewportSize({ width: 450, height: 720 })
+    await expect(tabA.locator("[data-titlebar-tab]")).toHaveAttribute("data-title-overflow", "true")
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await expect(tabA.locator("[data-titlebar-tab]")).toHaveAttribute("data-title-overflow", "false")
+  }
 })
 
 test("vertical tabs show project details, resize, and navigate", async ({ page }) => {
@@ -209,6 +217,29 @@ test("appearance experimental setting switches tab orientation", async ({ page }
   await page.setViewportSize({ width: 390, height: 360 })
   await version.scrollIntoViewIfNeeded()
   await expect(version).toBeInViewport()
+
+  // Reload the UI-selected preference without seeding settings storage.
+  await page.reload()
+  const href = `/server/${base64Encode(server)}/session/${sessionA.id}`
+  await expect(
+    page
+      .locator('[data-slot="titlebar-tabs"]')
+      .locator(`[data-titlebar-tab-link][href="${href}"]`)
+      .getByText(sessionA.title, { exact: true }),
+  ).toBeVisible()
+  await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toHaveCount(0)
+
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await expect(
+    page
+      .locator('[data-slot="vertical-tabs-sidebar"]')
+      .locator(`[data-titlebar-tab-link][href="${href}"]`)
+      .getByText(sessionA.title, { exact: true }),
+  ).toBeVisible()
+  await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+  await page.keyboard.press("Control+,")
+  await settings.getByRole("tab", { name: "Appearance" }).click()
+  await expect(layout).toContainText("Vertical")
 })
 
 test("vertical tab preference falls back to horizontal on mobile", async ({ page }) => {
@@ -265,11 +296,12 @@ async function mockServer(page: Page) {
     if (currentSessionInfo) return json(route, { data: currentSession(currentSessionInfo) })
     if (sessions.some((item) => url.pathname === `/api/session/${item.id}/message`))
       return json(route, { data: [], cursor: {} })
+    if (sessions.some((item) => url.pathname === `/api/session/${item.id}/inbox`)) return json(route, { data: [] })
     if (["/api/agent", "/api/provider", "/api/model", "/api/command", "/api/reference"].includes(url.pathname))
       return json(route, { location: { directory: sessionA.directory }, data: [] })
     if (url.pathname === "/api/model/default")
       return json(route, { location: { directory: sessionA.directory }, data: null })
-    if (url.pathname === "/api/permission/request" || url.pathname === "/api/question/request")
+    if (url.pathname === "/api/permission/request" || url.pathname === "/api/form/request")
       return json(route, { location: { directory: sessionA.directory }, data: [] })
     if (url.pathname === "/api/mcp") return json(route, { location: { directory: sessionA.directory }, data: [] })
     if (url.pathname === "/api/mcp/resource")

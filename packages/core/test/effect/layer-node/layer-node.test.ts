@@ -201,7 +201,8 @@ describe("layer node", () => {
       Layer.provide(LayerNode.compile(result.hoisted)),
     ) as unknown as Layer.Layer<App>
     const program = Effect.gen(function* () {
-      return yield* (yield* App).run
+      const app = yield* App
+      return yield* app.run
     }).pipe(Effect.provide(layer))
 
     expect(await Effect.runPromise(program)).toEqual(["Alice"])

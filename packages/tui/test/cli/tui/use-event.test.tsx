@@ -11,6 +11,14 @@ import type { LogLevel, LogSink } from "../../../src/context/log"
 
 const projectID = "proj_test"
 
+function acceptsRpcEvent(on: ReturnType<typeof useEvent>["on"]) {
+  on("rpc.acme.updated", (event) => {
+    event.type satisfies `rpc.${string}`
+    event.data satisfies unknown
+  })
+}
+void acceptsRpcEvent
+
 async function wait(fn: () => boolean, timeout = 2000) {
   const start = Date.now()
   while (!fn()) {

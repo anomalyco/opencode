@@ -18,6 +18,8 @@ import { SessionInbox } from "./inbox.js"
 export interface Interface {
   /** Snapshots active execution owned by this process. */
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
+  /** Checks process-local ownership, including interruption cleanup and terminal settlement. */
+  readonly isActive: (sessionID: SessionSchema.ID) => Effect.Effect<boolean>
   /** Starts execution while idle or joins the active execution. */
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
@@ -77,29 +79,29 @@ export const layer = Layer.effect(
     const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
       commit: () => store.release(sessionID),
     })
-    function drain(
+    const drain = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
       force: boolean,
       continuation?: SessionRunner.Continuation,
       promotable: SessionInbox.Promotable = "input",
-    ): Effect.Effect<void, SessionRunner.RunError> {
-      return Effect.gen(function* () {
-        const session = yield* store.get(sessionID)
-        if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
-        const result = yield* SessionRunner.Service.use((runner) =>
-          runner.drain({ sessionID, force, continuation, promotable }),
-        ).pipe(
-          Effect.provide(locations.get(session.location)),
-          Effect.tapCause((cause) =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.void
-              : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
-          ),
-        )
-        if (result._tag === "Complete") return
-        return yield* drain(sessionID, false, result.continuation, promotable)
+    ): Effect.fn.Return<void, SessionRunner.RunError> {
+      const session = yield* store.get(sessionID)
+      if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+      const result = yield* SessionRunner.Service.use((runner) =>
+        runner.drain({ sessionID, force, continuation, promotable }),
+      ).pipe(
+        Effect.provide(locations.get(session.location)),
+        Effect.tapCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
+        ),
+      )
+      return yield* SessionRunner.DrainResult.$match(result, {
+        Complete: () => Effect.void,
+        Moved: (result) => drain(sessionID, false, result.continuation, promotable),
       })
-    }
+    })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
       started: (sessionID) =>
         reportLifecycle(
@@ -142,6 +144,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       active: coordinator.active,
+      isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
           const interrupted = yield* coordinator.interrupt(sessionID, "user")
@@ -178,6 +181,7 @@ export const noopLayer = Layer.succeed(
   Service,
   Service.of({
     active: Effect.succeed(new Set()),
+    isActive: () => Effect.succeed(false),
     resume: () => Effect.void,
     wake: () => Effect.void,
     interrupt: () => Effect.succeed(false),

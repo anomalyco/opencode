@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
+import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode-ai/client"
 import {
+  backgroundToolRowIndex,
   cacheReuseDrop,
   messageBoundaryIDs,
   reduceSessionRows,
+  sessionRowID,
   turnDuration,
   turnTokensPerSecond,
 } from "../../../src/routes/session/rows"
@@ -142,6 +144,83 @@ test("assigns assistant boundaries to the first rendered row instead of the firs
   const rows = reduceSessionRows(messages)
 
   expect(messageBoundaryIDs(rows, messages)).toEqual(["user-1", "assistant-1", undefined, undefined])
+})
+
+test("assigns stable IDs to tool rows for direct navigation", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      { type: "text", text: "Starting a shell" },
+      { type: "tool", id: "shell-1", name: "shell", state: pending(), time: { created: 2 } },
+    ]),
+    assistant("assistant-2", [{ type: "tool", id: "shell-2", name: "shell", state: pending(), time: { created: 3 } }]),
+  ]
+  const rows = reduceSessionRows(messages)
+  const boundaries = messageBoundaryIDs(rows, messages)
+
+  expect(rows.map((row, index) => sessionRowID(row, boundaries[index]))).toEqual([
+    "assistant-1",
+    "session-part:assistant-1:shell-1",
+    "assistant-2",
+  ])
+})
+
+test("finds background tool launch rows for completion navigation", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      {
+        type: "tool",
+        id: "shell-1",
+        name: "shell",
+        state: completed({ shellID: "sh_first", status: "running" }),
+        time: { created: 1 },
+      },
+    ]),
+    assistant("assistant-2", [
+      {
+        type: "tool",
+        id: "subagent-1",
+        name: "subagent",
+        state: completed({ sessionID: "child-1", status: "running" }),
+        time: { created: 2 },
+      },
+    ]),
+    {
+      type: "synthetic",
+      id: "completion-1",
+      text: "First background run completed",
+      description: "First run",
+      time: { created: 3 },
+    },
+    assistant("assistant-3", [
+      {
+        type: "tool",
+        id: "subagent-2",
+        name: "subagent",
+        state: completed({ sessionID: "child-1", status: "running" }),
+        time: { created: 4 },
+      },
+      {
+        type: "tool",
+        id: "subagent-foreground",
+        name: "subagent",
+        state: completed({ sessionID: "child-1", status: "completed" }),
+        time: { created: 5 },
+      },
+    ]),
+    {
+      type: "synthetic",
+      id: "completion-2",
+      text: "Second background run completed",
+      description: "Second run",
+      time: { created: 6 },
+    },
+  ]
+  const rows = reduceSessionRows(messages)
+
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "shell-1" }, "completion-2")).toBe(0)
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_first" }, "completion-2")).toBe(0)
+  expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-1")).toBe(1)
+  expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-2")).toBe(3)
 })
 
 test("groups exploration parts across assistant messages until a delimiter", () => {
@@ -327,17 +406,28 @@ test("completes exploration groups when another row follows", () => {
 
 test("hides synthetic messages without descriptions", () => {
   const messages: SessionMessageInfo[] = [
+    {
+      id: "shell-message",
+      type: "shell",
+      shellID: "sh_user",
+      command: "pwd",
+      status: "exited",
+      time: { created: 0 },
+    },
     assistant("assistant-1", [{ type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } }]),
     {
       type: "synthetic",
       id: "synthetic-1",
       text: "internal context",
+      metadata: { source: "shell", shellID: "sh_user", state: "completed" },
       time: { created: 2 },
     },
     assistant("assistant-2", [{ type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } }]),
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
+  const rows = reduceSessionRows(messages)
+  expect(rows).toEqual([
+    { type: "message", messageID: "shell-message" },
     {
       type: "group",
       kind: "exploration",
@@ -349,6 +439,7 @@ test("hides synthetic messages without descriptions", () => {
       ],
     },
   ])
+  expect(reduceSessionRows(messages, new Set(["synthetic-1"]))).toEqual(rows)
 })
 
 test("renders synthetic messages with descriptions", () => {
@@ -435,4 +526,15 @@ function assistant(id: string, content: SessionMessageAssistant["content"]): Ses
 
 function pending() {
   return { status: "streaming" as const, input: "" }
+}
+
+function completed(
+  metadata: Record<string, string>,
+): Extract<SessionMessageAssistantTool["state"], { status: "completed" }> {
+  return {
+    status: "completed",
+    input: {},
+    content: [{ type: "text", text: "Background" }],
+    metadata,
+  }
 }

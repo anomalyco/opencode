@@ -151,26 +151,25 @@ export const Plugin = define({
       return skills
     })
 
-    const refresh = Effect.fn("ConfigSkillPlugin.refresh")(function* (file?: string) {
-      yield* lock.withPermit(
-        Effect.gen(function* () {
-          yield* FiberMap.clear(watches)
-          const skills = new Map<Skill.ID, Skill.Info>()
-          const current = sources()
-          for (const source of current) {
-            for (const skill of yield* load(source)) skills.set(skill.id, skill)
-          }
-          loaded.skills = Array.from(skills.values())
-          if (file) {
-            yield* Effect.logInfo("skills rescanned", {
-              file,
-              sources: current.map(Skill.Source.key),
-              skills: loaded.skills.map((skill) => skill.id),
-            })
-          }
-        }),
-      )
-    })
+    const refresh = Effect.fn("ConfigSkillPlugin.refresh")(
+      function* (file?: string) {
+        yield* FiberMap.clear(watches)
+        const skills = new Map<Skill.ID, Skill.Info>()
+        const current = sources()
+        for (const source of current) {
+          for (const skill of yield* load(source)) skills.set(skill.id, skill)
+        }
+        loaded.skills = Array.from(skills.values())
+        if (file) {
+          yield* Effect.logInfo("skills rescanned", {
+            file,
+            sources: current.map(Skill.Source.key),
+            skills: loaded.skills.map((skill) => skill.id),
+          })
+        }
+      },
+      (effect, ..._args: [file?: string]) => lock.withPermit(effect),
+    )
 
     yield* Stream.fromPubSub(changes).pipe(
       Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(ctx.skill.reload()))),

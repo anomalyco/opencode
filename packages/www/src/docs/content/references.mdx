@@ -110,10 +110,11 @@ installation, for example, `Effect-TS/effect` is stored at:
 An explicit branch adds an encoded `@<branch>` suffix to the checkout path.
 
 Missing repositories are cloned. When references load or reload, and after a
-user prompt is admitted in their Location, OpenCode checks them in the
-background. Existing checkouts are eligible for one automatic refresh attempt
-every 24 hours. A refresh fetches and resets to the requested branch, or to the
-remote default branch when `branch` is omitted.
+new user prompt is admitted in their Location, OpenCode checks them in the
+background. An existing checkout is eligible when its last refresh attempt was
+at least 24 hours ago, or no attempt has been recorded. A refresh fetches and
+resets to the requested branch, or to the remote default branch when `branch`
+is omitted.
 
 Refresh timestamps persist across service restarts and are shared by Locations
 using the same checkout. Failed refresh attempts are logged and remain subject

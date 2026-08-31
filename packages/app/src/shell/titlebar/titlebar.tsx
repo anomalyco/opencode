@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, Match, createSignal, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, Match, Show, Switch, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useLocation, useNavigate } from "@solidjs/router"
@@ -298,7 +298,7 @@ export function Titlebar(props: {
                 id: "home.toggle",
                 title: language.t("home.title"),
                 category: language.t("command.category.view"),
-                keybind: "mod+b",
+                keybind: windows() ? "alt+home" : "mod+b",
                 hidden: true,
                 onSelect: toggleHome,
               },
@@ -335,8 +335,6 @@ export function Titlebar(props: {
                 },
               ].filter((v) => v !== undefined)
             })
-
-            const [tabsAreOverflowing, setTabsAreOverflowing] = createSignal(false)
 
             return (
               <div
@@ -382,8 +380,6 @@ export function Titlebar(props: {
                       <TitlebarTabStrip
                         tabs={tabsStore}
                         currentTab={currentTab()}
-                        forceTruncate={tabsAreOverflowing()}
-                        onOverflowChange={setTabsAreOverflowing}
                         onNavigate={(tab, el) => {
                           tabs.select(tab)
                           el?.scrollIntoView({ behavior: "instant" })
@@ -424,8 +420,6 @@ export function Titlebar(props: {
                             orientation="vertical"
                             tabs={tabsStore}
                             currentTab={currentTab()}
-                            forceTruncate={false}
-                            onOverflowChange={setTabsAreOverflowing}
                             onNavigate={(tab, el) => {
                               tabs.select(tab)
                               el?.scrollIntoView({ behavior: "instant", block: "nearest" })
