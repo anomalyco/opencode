@@ -20,7 +20,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export const Classification = Schema.Struct({
   isTask: Schema.Boolean,
-  taskType: Schema.optional(Schema.String),
+  taskType: Schema.String,
   taskSubType: Schema.optional(Schema.String),
   taskSubTypes: Schema.optional(Schema.Array(Schema.String)),
   summary: Schema.optional(Schema.String),
@@ -190,7 +190,7 @@ const layer = Layer.effect(
           model as Parameters<typeof LLM.generateObject>[0]["model"],
 
         system:
-          "You are a Task Classifier. Set isTask to true whenever the user asks the agent to write, create, build, add, modify, change, update, fix, debug, refactor, run, test, implement, generate, solve, complete, develop, or make something including any coding problem. Programming requests are tasks. Set isTask to false only for greetings, thanks, explanations, definitions, discussions, or information requests where the user does not ask the agent to perform an action. When uncertain about an actionable request choose true. Return only the existing Classification schema.",
+          "You are an Expert Task Classifier and Domain Taxonomy Specialist. Determine if the user request is an actionable task (isTask: true) or a conversation/greeting/explanation (isTask: false). Programming requests are tasks.\n\nWhen isTask is true, classify taskType into exactly ONE canonical domain niche from this strict taxonomy:\n- 'python_coding': Python scripts, functions, modules, algorithms, data analysis, pytest, pip.\n- 'web_frontend': HTML, CSS, JavaScript, TypeScript UI, React, Vue, Solid, components, layouts, web styling.\n- 'typescript_fullstack': TypeScript, Node.js, Express, Bun, fullstack TS/JS applications, API servers.\n- 'systems_backend': Go, Rust, C/C++, Linux system programming, Docker, databases, kernel, networking.\n- 'data_science_ml': Machine learning, deep learning, PyTorch, pandas, scientific computing, statistics.\n- 'devops_infra': CI/CD, Kubernetes, Dockerfiles, shell scripts, cloud configuration, DevOps automation.\n- 'general': ONLY for universal, language-agnostic coordination tasks where no technical domain applies.\n\nCRITICAL: Never assign 'general' to language-specific or technical programming requests. If the user asks for Python, classify as 'python_coding'.",
 
         prompt,
 
@@ -218,6 +218,7 @@ const layer = Layer.effect(
       return {
         ...llmClassification,
         isTask: llmClassification.isTask || deterministicTask,
+        taskType: llmClassification.taskType || "general",
       }
     })
 

@@ -97,14 +97,38 @@ const layer = Layer.effect(
         .where(
           and(
             eq(harness_task.task_type, candidate.domain_category),
-            inArray(harness_task.task_status, ["completed", "failed"]),
+            eq(harness_task.task_status, "completed"),
           ),
         )
         .all()
         .pipe(Effect.orElseSucceed(() => []))
 
-      if (!heldTasks.length) {
-        // No held tasks — auto-promote: no evidence of regression
+      // 3. Evaluate each task using stored trace from harness_subtask_feedback (concurrent)
+      const taskIDs = heldTasks.map((t) => t.task_id)
+
+      const allFeedback = taskIDs.length > 0
+        ? yield* db
+            .select()
+            .from(harness_subtask_feedback)
+            .where(inArray(harness_subtask_feedback.task_id, taskIDs))
+            .all()
+            .pipe(Effect.orElseSucceed(() => []))
+        : []
+
+      const feedbackByTask = new Map<string, typeof allFeedback>()
+      for (const fb of allFeedback) {
+        const list = feedbackByTask.get(fb.task_id) ?? []
+        list.push(fb)
+        feedbackByTask.set(fb.task_id, list)
+      }
+
+      // Filter strictly to completed benchmarks that have verified subtask execution traces
+      const validHeldTasks = heldTasks.filter(
+        (task) => (feedbackByTask.get(task.task_id)?.length ?? 0) > 0,
+      )
+
+      if (!validHeldTasks.length) {
+        // No verified completed benchmark tasks — auto-promote per RHI: no evidence of regression
         yield* versionSvc.promoteCandidate(versionID)
         return {
           versionID,
@@ -116,22 +140,8 @@ const layer = Layer.effect(
         } satisfies RegressionSummary
       }
 
-      // 3. Evaluate each task using stored trace from harness_subtask_feedback (concurrent)
-      const taskIDs = heldTasks.map((t) => t.task_id)
-
-      const allFeedback = yield* db
-        .select()
-        .from(harness_subtask_feedback)
-        .where(inArray(harness_subtask_feedback.task_id, taskIDs))
-        .all()
-        .pipe(Effect.orElseSucceed(() => []))
-
-      const feedbackByTask = new Map(
-        allFeedback.map((fb) => [fb.task_id, allFeedback.filter((f) => f.task_id === fb.task_id)]),
-      )
-
       const results = yield* Effect.forEach(
-        heldTasks,
+        validHeldTasks,
         (task) =>
           Effect.gen(function* () {
             const taskFeedbacks = feedbackByTask.get(task.task_id) ?? []
@@ -203,9 +213,7 @@ Task Error (if any): ${task.task_error ?? "None"}
       const passRate = results.length > 0 ? passedCount / results.length : 1
 
       // Regression check: any previously-completed task that now fails is a regression
-      const completedTaskIDs = new Set(
-        heldTasks.filter((t) => t.task_status === "completed").map((t) => t.task_id),
-      )
+      const completedTaskIDs = new Set(validHeldTasks.map((t) => t.task_id))
       const hasRegressions = results.some((r) => completedTaskIDs.has(r.taskID) && !r.passed)
 
       const shouldPromote = passRate >= PASS_RATE_THRESHOLD && !hasRegressions

@@ -295,7 +295,7 @@ const layer = Layer.effect(
         if (!fn) continue
         const result = fn(input, output)
         if (Effect.isEffect(result)) {
-          yield* result
+          yield* (result as Effect.Effect<void>).pipe(Effect.orDie)
         } else {
           yield* Effect.promise(async () => result)
         }

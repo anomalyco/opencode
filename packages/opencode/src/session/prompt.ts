@@ -1070,7 +1070,7 @@ const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
-      if (input.noReply === true) return message
+      if (input.noReply === true || (message.info as any).isFeedback === true) return message
       const originalPrompt = input.parts
         .filter((part) => part.type === "text")
         .map((part) => part.text)
@@ -1088,8 +1088,11 @@ const layer = Layer.effect(
       // 2. Classify task and run Judge evaluation in background
       yield* Effect.gen(function* () {
         const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
+        const prov = yield* provider.getProvider(message.info.model.providerID).pipe(Effect.orElseSucceed(() => undefined))
+        const baseURL = (prov?.options?.baseURL as string | undefined) || undefined
+        const apiKey = (prov?.options?.apiKey as string | undefined) || prov?.key || undefined
         const judgeModel = yield* Effect.try({
-          try: () => nativeModel(taskModel),
+          try: () => nativeModel({ model: taskModel, baseURL, apiKey }),
           catch: (error) => error,
         }).pipe(Effect.option)
         if (Option.isNone(judgeModel)) return

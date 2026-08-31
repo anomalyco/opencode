@@ -373,6 +373,10 @@ const layer = Layer.effect(
               if (isFeedback) {
                 // User is replying with feedback to the previous task, NOT starting a new task
                 taskDecisions.set(input.sessionID, false)
+                if (output && output.message) {
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                  ;(output.message as any).isFeedback = true
+                }
               } else {
                 // Normal user message: check if it is a new task
                 const classification =
@@ -457,8 +461,7 @@ const layer = Layer.effect(
                       task_prompt:
                         "Interactive session task",
                       task_type:
-                        domainCategory ||
-                        "general",
+                        domainCategory || "general",
                       task_model:
                         selectedModel,
                       task_status:
@@ -703,13 +706,7 @@ const layer = Layer.effect(
                 return
               }
 
-              // 8. Acknowledge feedback to the user
-              for (const part of output.parts) {
-                if (part.type === "text") {
-                  part.text =
-                    `[Harness Feedback System]: The user provided evaluation feedback on the previous task: "${explanation}". Please briefly acknowledge this feedback in 1-2 sentences, confirm that it has been logged into the Harness Evolution pipeline to extract rules for future runs, and state that you are ready for the next task.`
-                }
-              }
+              // 8. User feedback is processed: keep original user message clean without prompt rewriting
             } catch {
 
             }

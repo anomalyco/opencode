@@ -85,6 +85,22 @@ _Avoid_: Local implementation
 A bounded ordered result containing `items` and opaque `previous` and `next` cursor links for navigating the same query in either direction.
 _Avoid_: Response envelope
 
+**Harness Version**:
+One immutable, version-numbered system prompt and extracted rule snapshot scoped to a domain niche, stored durably in `harness_version` and activated atomically upon passing regression gating.
+_Avoid_: Prompt iteration, system prompt override, harness state
+
+**Domain Niche**:
+The semantic classification tag (e.g. `python_coding`, `web_frontend`, `devops`) partitioning specialized system prompts, extracted lessons, and tool overrides to prevent cross-domain contamination.
+_Avoid_: Category, bucket, task type
+
+**Candidate Proposal**:
+An unpromoted, candidate-status `harness_version` synthesized by the `PromptFinalizer` from subtask feedback traces, pending regression validation.
+_Avoid_: Draft prompt, proposed version
+
+**Subtask Feedback**:
+The durable record in `harness_subtask_feedback` capturing explicit user satisfaction (`Yes` / `No: <reason>`), rating, and requested behavioral modifications for a completed task.
+_Avoid_: User feedback, review comment
+
 ## Relationships
 
 - A **System Context** is an opaque carrier composed from zero or more **Context Sources**.
@@ -197,6 +213,14 @@ _Avoid_: Response envelope
 - Existing tool-managed output paths survive generic bounding. A fallback file retains exactly the complete projected text received by the Tool Registry and never claims to reconstruct output already discarded by tool-specific shaping.
 - **Managed Tool Output Files** use globally unique names in one shared flat directory. Their absolute paths are readable and searchable by ordinary tools; other absolute paths remain outside Location-scoped filesystem authority.
 - Provider-executed tool results remain provider-native transcript facts outside generic Tool Registry bounding. Their context control requires provider-aware pruning or compaction because some providers require exact structured round-trip payloads.
+- `chat.message` partitions incoming user inputs into either feedback replies (`isFeedback: true`) or actionable tasks (`isTask: true`); feedback replies mutate the ledger and trigger prompt evolution, but never start a new task drain.
+- `PromptFinalizer.finalizeAndEvolve` executes on unsatisfied subtask feedback, proposing an evolved **Candidate Proposal** with consolidated and pruned rules (maximum 7–10 rules).
+- `HarnessVersion.proposeCandidate` persists candidate versions in SQLite and verifies row integrity immediately after insertion; empty domain categories or system prompts fail with an explicit defect.
+- `HarnessVersion.promoteCandidate` executes an atomic database transaction: marking existing active versions for that **Domain Niche** as archived (`is_active = false`) and activating the candidate (`is_active = true`).
+- `HarnessVersion.getActiveVersion` queries the active version for the requested **Domain Niche**; if no active version exists, it falls back to read the `general` baseline without overwriting or polluting the `general` domain with language-specific rules.
+- Services called through plugin hooks across detached fibers (such as `PromptFinalizer.finalizeAndEvolve`) must capture `LLMClient.Service` at layer construction time and re-inject it via `Effect.provideService` to avoid fiber context loss.
+- `SessionRunnerModel.resolve(session)` is the authoritative provider model resolver; prompt evolution and judge agents must receive resolved `LLM.Model` instances rather than plain model name strings.
+- The `experimental.text.complete` satisfaction banner is admitted only for turns classified as actionable tasks (`taskDecisions.get(sessionID) === true`); feedback evaluation turns do not emit repeated feedback banners.
 
 ## Client contract architecture
 
@@ -219,7 +243,11 @@ Before stabilizing the client API:
 
 > **Dev:** "The date changed while the session was active. Should the **Mid-Conversation System Message** say what the old date was?"
 > **Domain expert:** "No. Emit the newly effective date so the agent can act on the current **System Context**."
+> 
+> **Dev:** "If the user replies 'No: add type annotations and Google docstrings' to a feedback question, does that start a new task drain?"
+> **Domain expert:** "No. It is parsed as feedback on the completed task, recorded in `harness_subtask_feedback`, and handed to `PromptFinalizer.finalizeAndEvolve` to synthesize the next candidate prompt."
 
 ## Flagged ambiguities
 
 - Legacy `experimental.chat.system.transform` can mutate the assembled baseline system prompt arbitrarily, but V2 plugins do not yet expose an equivalent hook. Decide separately whether to port it, replace dynamic uses with plugin-defined **Context Sources**, or narrow its semantics.
+- Currently, `getActiveVersion` falls back to `general` when a domain niche has no active row. **Decision (2026-08-31)**: The `general` domain is the system's equivalent of `H(0)` in Recursive Harness Self-Improvement (RHI, arXiv:2607.15524) — a read-only seed harness that seeds per-domain evolution but is never written back to by domain-specific feedback. The RHI paper confirms empirically (§6.2.1, Figure 9) that domain clusters emerge naturally from task-isolated evolution; top-down seeding from `general` is correct, but any write back into `general` from a domain-specific task corrupts the shared baseline for all other domains. The 2-tier enforcement (`getActiveVersion` reads `general` only when no domain-niche row exists and never writes domain-specific rules into it) is the correct architecture. See `docs/rhi_paper_insights.md` for the full analysis.

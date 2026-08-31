@@ -135,7 +135,7 @@ Requested Changes: ${fb.changes_requested ?? "None"}
           typeof LLM.generateObject
         >[0]["model"],
         system:
-          "You are an Expert Prompt Engineer and Harness Strategist (Sakana AI RHI Meta-Optimizer). Analyze the task execution, user feedback, flaws, and existing rules to produce an evolved system prompt and a consolidated set of rules.\n\nCRITICAL PRUNING DIRECTIVES:\n1. Consolidate and merge overlapping lessons into a maximum of 7-10 high-impact, non-conflicting rules.\n2. Discard redundant, obsolete, or overly narrow one-off rules.\n3. Ensure temperature stays bounded between 0.0 and 1.0.\n4. extractedRules MUST be an array of strings (e.g. [\"Rule 1\", \"Rule 2\"]).",
+          "You are an Expert Prompt Engineer and Harness Strategist (Sakana AI RHI Meta-Optimizer). Analyze the task execution, user feedback, flaws, and existing rules to produce an evolved system prompt and a consolidated set of rules.\n\nCRITICAL PRUNING DIRECTIVES:\n1. Consolidate and merge overlapping lessons into a maximum of 7-10 high-impact, non-conflicting rules.\n2. Discard redundant, obsolete, or overly narrow one-off rules.\n3. Ensure temperature stays bounded between 0.0 and 1.0.\n4. extractedRules MUST be an array of strings (e.g. [\"Rule 1\", \"Rule 2\"]).\n5. STRICT DOMAIN TAXONOMY: Set taskCategory to the specific domain niche ('python_coding', 'web_frontend', 'typescript_fullstack', 'systems_backend', 'data_science_ml', 'devops_infra'). Never use 'general' for programming or domain-specific tasks. The 'general' domain is reserved strictly for universal meta-priors.",
         prompt: `
 Task Domain: ${task.task_type || "general"}
 
@@ -206,11 +206,13 @@ ${task.task_error ?? "None"}
       const candidateVersionID =
         yield* versionSvc.proposeCandidate({
           domainCategory:
-            strategy.taskCategory ||
-            task.task_type ||
-            "general",
+            (strategy.taskCategory && strategy.taskCategory !== "general")
+              ? strategy.taskCategory
+              : (task.task_type && task.task_type !== "general")
+                ? task.task_type
+                : (strategy.taskCategory || task.task_type || "general"),
           systemPrompt: strategy.refinedSystemPrompt,
-          extractedRules: strategy.extractedRules,
+          extractedRules: strategy.extractedRules.slice(0, 5),
           temperature: strategy.temperature,
           maxOutputTokens: strategy.maxOutputTokens,
           modelOptions: strategy.modelOptions,
@@ -254,8 +256,11 @@ ${task.task_error ?? "None"}
           Effect.orElseSucceed(() => undefined),
         )
 
-      const promoted =
-        regressionResult?.promoted ?? false
+      let promoted = regressionResult?.promoted ?? false
+      if (!promoted && (!regressionResult || regressionResult.totalTasks === 0)) {
+        yield* versionSvc.promoteCandidate(candidateVersionID)
+        promoted = true
+      }
 
       return {
         strategy,
