@@ -1,0 +1,5 @@
+opencode --version
+1.18.23
+repo HEAD 1.18.25
+fix branch 54fc0eb fix(tui): wait for workspace live instead of instant unavailable
+Windows 11 / Windows Terminal / pwsh
