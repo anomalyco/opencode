@@ -71,11 +71,14 @@ export function parse(patchText: string): ReadonlyArray<Hunk> {
 export function derive(path: string, chunks: ReadonlyArray<UpdateFileChunk>, original: string): FileUpdate {
   const source = splitBom(original)
   const lines = source.text.split("\n")
-  if (lines.at(-1) === "") lines.pop()
+  // Remember whether the sentinel from split("\n") was popped: a genuinely blank
+  // last line also leaves "" at the end, so re-checking at(-1) would drop it.
+  const trailing = lines.at(-1) === ""
+  if (trailing) lines.pop()
   const replacements = computeReplacements(lines, path, chunks)
   const updated = [...lines]
   for (const [start, remove, insert] of replacements.toReversed()) updated.splice(start, remove, ...insert)
-  if (updated.at(-1) !== "") updated.push("")
+  if (trailing || updated.at(-1) !== "") updated.push("")
   const next = splitBom(updated.join("\n"))
   return { content: next.text, bom: source.bom || next.bom }
 }

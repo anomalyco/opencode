@@ -313,8 +313,11 @@ export function deriveNewContentsFromChunks(
 
   let originalLines = originalContent.text.split("\n")
 
-  // Drop trailing empty element for consistent line counting
-  if (originalLines.length > 0 && originalLines[originalLines.length - 1] === "") {
+  // Drop trailing empty element for consistent line counting. Remember it was
+  // dropped: a genuinely blank last line also leaves "" at the end, so
+  // re-checking the last element below would drop that blank line instead.
+  const trailing = originalLines.length > 0 && originalLines[originalLines.length - 1] === ""
+  if (trailing) {
     originalLines.pop()
   }
 
@@ -322,7 +325,7 @@ export function deriveNewContentsFromChunks(
   let newLines = applyReplacements(originalLines, replacements)
 
   // Ensure trailing newline
-  if (newLines.length === 0 || newLines[newLines.length - 1] !== "") {
+  if (trailing || newLines.length === 0 || newLines[newLines.length - 1] !== "") {
     newLines.push("")
   }
 
