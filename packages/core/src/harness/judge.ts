@@ -1,15 +1,17 @@
 export * as JudgeAgent from "./judge"
 
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { LLM, LLMError } from "@opencode-ai/llm"
+import { LLM, LLMError, LLMClient } from "@opencode-ai/llm"
 import { Database } from "../database/database"
 import { SessionTodo } from "../session/todo"
 import { PartTable } from "../session/sql"
 import { SessionSchema } from "../session/schema"
 import { Config } from "../config"
 import { makeLocationNode } from "../effect/app-node"
-import { harness_task, harness_subtask_feedback } from "./schema"
-import { QualityGate } from "./quality_gate"
+import { LayerNodePlatform } from "../effect/app-node-platform"
+import { FlexibleNumber, harness_task, harness_subtask_feedback } from "./schema"
+import { QualityGate } from "./quality-gate"
+import { PromptFinalizer } from "./improving_prompt_finalizer"
 import { eq } from "drizzle-orm"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -18,44 +20,50 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export const Classification = Schema.Struct({
   isTask: Schema.Boolean,
-  taskType: Schema.optional(Schema.String),
+  taskType: Schema.String,
   taskSubType: Schema.optional(Schema.String),
   taskSubTypes: Schema.optional(Schema.Array(Schema.String)),
   summary: Schema.optional(Schema.String),
 }).annotate({ identifier: "JudgeAgent.Classification" })
+
 export type Classification = typeof Classification.Type
 
 export const Evaluation = Schema.Struct({
   isSatisfied: Schema.Boolean,
-  score: Schema.Number,
-  codeQualityScore: Schema.optional(Schema.Number),
-  originalityScore: Schema.optional(Schema.Number),
-  completenessScore: Schema.optional(Schema.Number),
-  efficiencyScore: Schema.optional(Schema.Number),
-  robustnessScore: Schema.optional(Schema.Number),
+  score: FlexibleNumber,
+  codeQualityScore: Schema.optional(FlexibleNumber),
+  originalityScore: Schema.optional(FlexibleNumber),
+  completenessScore: Schema.optional(FlexibleNumber),
+  efficiencyScore: Schema.optional(FlexibleNumber),
+  robustnessScore: Schema.optional(FlexibleNumber),
   reasoning: Schema.String,
   critique: Schema.optional(Schema.String),
   flawsIdentified: Schema.optional(Schema.Array(Schema.String)),
   originalityHighlights: Schema.optional(Schema.Array(Schema.String)),
   reflections: Schema.optional(Schema.Array(Schema.String)),
 }).annotate({ identifier: "JudgeAgent.Evaluation" })
+
 export type Evaluation = typeof Evaluation.Type
 
 export const SubtaskItem = Schema.Struct({
   content: Schema.String,
   status: Schema.String,
 }).annotate({ identifier: "JudgeAgent.SubtaskItem" })
+
 export type SubtaskItem = typeof SubtaskItem.Type
 
 export const RegisterTaskInput = Schema.Struct({
   prompt: Schema.String,
   taskType: Schema.optional(Schema.String),
-  taskSubType: Schema.optional(Schema.Union([Schema.String, Schema.Array(Schema.String)])),
+  taskSubType: Schema.optional(
+    Schema.Union([Schema.String, Schema.Array(Schema.String)]),
+  ),
   taskSubTypes: Schema.optional(Schema.Array(Schema.String)),
   taskModel: Schema.optional(Schema.String),
   embedding: Schema.optional(Schema.Unknown),
   sessionID: Schema.optional(Schema.String),
 }).annotate({ identifier: "JudgeAgent.RegisterTaskInput" })
+
 export type RegisterTaskInput = typeof RegisterTaskInput.Type
 
 export const EvaluateInput = Schema.Struct({
@@ -66,21 +74,39 @@ export const EvaluateInput = Schema.Struct({
   toolTraceSummary: Schema.optional(Schema.String),
   userResponse: Schema.optional(Schema.String),
 }).annotate({ identifier: "JudgeAgent.EvaluateInput" })
+
 export type EvaluateInput = typeof EvaluateInput.Type
 
 export interface Interface {
-  readonly classify: (prompt: string, model: unknown) => Effect.Effect<Classification, LLMError>
-  readonly registerTask: (input: RegisterTaskInput) => Effect.Effect<string>
-  readonly evaluate: (input: EvaluateInput, model: unknown) => Effect.Effect<Evaluation, LLMError>
+  readonly classify: (
+    prompt: string,
+    model: unknown,
+  ) => Effect.Effect<Classification, LLMError>
+
+  readonly registerTask: (
+    input: RegisterTaskInput,
+  ) => Effect.Effect<string>
+
+  readonly evaluate: (
+    input: EvaluateInput,
+    model: unknown,
+  ) => Effect.Effect<Evaluation, LLMError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/JudgeAgent") {}
+export class Service extends Context.Service<Service, Interface>()(
+  "@opencode/v2/JudgeAgent",
+) {}
 
 function fetchEmbedding(
   text: string,
-  options?: { baseURL?: string; model?: string; apiKey?: string },
+  options?: {
+    baseURL?: string
+    model?: string
+    apiKey?: string
+  },
 ): Effect.Effect<Float32Array | undefined> {
-  const baseURL = options?.baseURL || "http://localhost:11434/api/embed"
+  const baseURL =
+    options?.baseURL || "http://localhost:11434/api/embed"
   const model = options?.model || "nomic-embed-text"
   const apiKey = options?.apiKey
 
@@ -95,7 +121,10 @@ function fetchEmbedding(
       const res = await fetch(baseURL, {
         method: "POST",
         headers,
-        body: JSON.stringify({ model, input: text }),
+        body: JSON.stringify({
+          model,
+          input: text,
+        }),
         signal: AbortSignal.timeout(3000),
       })
 
@@ -123,14 +152,31 @@ function fetchEmbedding(
   }).pipe(Effect.orElseSucceed(() => undefined))
 }
 
+/**
+ * Deterministic task detection.
+ *
+ * This is intentionally used as a safety net for the LLM classifier.
+ * Explicit action requests are always tasks.
+ */
+function isClearlyActionableTask(prompt: string): boolean {
+  const text = prompt.trim()
+
+  if (!text) return false
+
+  const actionablePattern =
+    /^(?:please\s+)?(?:write|create|build|add|modify|change|update|fix|debug|refactor|run|test|implement|generate|solve|complete|develop|make)\b/i
+
+  return actionablePattern.test(text)
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     const todosSvc = yield* SessionTodo.Service
-
-    // QUALITY GATE: added service
     const qualityGate = yield* QualityGate.Service
+    const finalizerSvc = yield* PromptFinalizer.Service
+    const llmClient = yield* LLMClient.Service
 
     const configOption = yield* Effect.serviceOption(Config.Service)
 
@@ -140,15 +186,40 @@ const layer = Layer.effect(
     ) {
       const res = yield* LLM.generateObject({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-        model: model as Parameters<typeof LLM.generateObject>[0]["model"],
-        system:
-          "You are a Judge Agent. Analyze the user prompt and determine if it is an actionable task. Output taskType (e.g., 'web', 'backend', 'devops', 'refactor', 'bugfix') and taskSubTypes as a list of sub-domain tags (e.g., ['css-theme', 'ui-component', 'type-check']).",
-        prompt,
-        schema: Classification,
-        generation: { temperature: 0 },
-      })
+        model:
+          model as Parameters<typeof LLM.generateObject>[0]["model"],
 
-      return res.object
+        system:
+          "You are an Expert Task Classifier and Domain Taxonomy Specialist. Determine if the user request is an actionable task (isTask: true) or a conversation/greeting/explanation (isTask: false). Programming requests are tasks.\n\nWhen isTask is true, classify taskType into a concise, semantic snake_case domain niche describing the primary technical stack or subject (e.g. 'python_coding', 'web_frontend', 'typescript_fullstack', 'systems_backend', 'data_science_ml', 'devops_infra', 'bioinformatics', 'financial_quant', 'cuda_gpu_kernels', etc.).\n\nCRITICAL: Never assign 'general' to language-specific or technical engineering tasks. The 'general' domain is reserved strictly for universal, domain-agnostic meta-coordination where no technical domain applies.",
+
+        prompt,
+
+        schema: Classification,
+
+        generation: {
+          temperature: 0,
+        },
+      }).pipe(
+        Effect.provideService(LLMClient.Service, llmClient),
+      )
+
+      const llmClassification = res.object
+
+      /*
+       * Important:
+       * If the user clearly requested an action then isTask MUST be true.
+       *
+       * This prevents the LLM from incorrectly returning false for
+       * prompts such as:
+       * "write java code for 2 sum problem"
+       */
+      const deterministicTask = isClearlyActionableTask(prompt)
+
+      return {
+        ...llmClassification,
+        isTask: llmClassification.isTask || deterministicTask,
+        taskType: llmClassification.taskType || "general",
+      }
     })
 
     const registerTask = Effect.fn("JudgeAgent.registerTask")(function* (
@@ -162,8 +233,12 @@ const layer = Layer.effect(
         input.embedding instanceof Float32Array
           ? input.embedding
           : Array.isArray(input.embedding) &&
-              input.embedding.every((v) => typeof v === "number")
-            ? new Float32Array(input.embedding as number[])
+              input.embedding.every(
+                (v) => typeof v === "number",
+              )
+            ? new Float32Array(
+                input.embedding as number[],
+              )
             : yield* fetchEmbedding(input.prompt)
 
       const subTypes = Array.isArray(input.taskSubTypes)
@@ -179,7 +254,11 @@ const layer = Layer.effect(
       const configEntries = Option.isSome(configOption)
         ? yield* configOption.value
             .entries()
-            .pipe(Effect.orElseSucceed(() => [] as Config.Entry[]))
+            .pipe(
+              Effect.orElseSucceed(
+                () => [] as Config.Entry[],
+              ),
+            )
         : []
 
       const selectedModel =
@@ -210,9 +289,6 @@ const layer = Layer.effect(
       input: EvaluateInput,
       model: unknown,
     ) {
-      // QUALITY GATE TEST LOG
-      console.error("🔥 JUDGE EVALUATE CALLED:", input.sessionID)
-
       let subtasks = input.subtasks ?? []
 
       if (!subtasks.length && input.sessionID) {
@@ -250,7 +326,9 @@ const layer = Layer.effect(
             const toolData = data as {
               type: "tool"
               tool: string
-              state: { status: string }
+              state: {
+                status: string
+              }
             }
 
             return `- Tool: ${toolData.tool} | Status: ${toolData.state.status}`
@@ -261,25 +339,57 @@ const layer = Layer.effect(
 
       const subtaskSummary = subtasks.length
         ? subtasks
-            .map((st) => `- [${st.status}] ${st.content}`)
+            .map(
+              (st) =>
+                `- [${st.status}] ${st.content}`,
+            )
             .join("\n")
         : "No explicit subtasks recorded."
 
+      const qualityResult = input.sessionID
+        ? yield* qualityGate.evaluateSession(
+            input.sessionID,
+          )
+        : {
+            passed: false,
+            score: 0,
+            completedTodos: 0,
+            totalTodos: 0,
+            failedTools: [],
+            verificationCommands: [],
+            passedVerificationCommands: [],
+            failedVerificationCommands: [],
+            issues: [
+              "No session ID was provided for Quality Gate evaluation.",
+            ],
+            failureReasons: [
+              "No session ID was provided for Quality Gate evaluation.",
+            ],
+            summary:
+              "Quality Gate could not verify execution evidence.",
+          }
+
       const evalRes = yield* LLM.generateObject({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-        model: model as Parameters<typeof LLM.generateObject>[0]["model"],
+        model:
+          model as Parameters<typeof LLM.generateObject>[0]["model"],
+
         system: `You are an uncompromising AI Code Judge & Software Auditor.
 Evaluate the code generation trace across 5 Critical Dimensions of Quality & Originality, taking into account user feedback, preferences, and user bias:
 
 1. User Alignment & Feedback Satisfaction (isSatisfied):
    - Prioritize explicit user feedback, user bias, and requested subtask behavior above default heuristics.
    - If the user reported dissatisfaction ("No: ..."), score the result as unsatisfied (isSatisfied: false) regardless of technical completion.
+
 2. Code Quality & Architecture (codeQualityScore: 1-5):
    - Strict TypeScript typing, modular composition, clean file organization, zero lint warnings.
+
 3. Originality & Design Excellence (originalityScore: 1-5):
    - Custom tailored component designs, bespoke SVG icons/graphics, cohesive color token palettes, no generic copy-paste templates.
+
 4. Completeness & Correctness (completenessScore: 1-5):
    - All requested subtasks fulfilled according to user expectations.
+
 5. Performance & Robustness (efficiencyScore: 1-5, robustnessScore: 1-5):
    - Clean DOM structures, minimal re-renders, graceful fallback handling, clean error states.
 
@@ -291,6 +401,7 @@ Scoring Rubric:
 - 1 Star (Failed): Unhandled runtime crashes, broken syntax, or failed user requirements.
 
 Do NOT give 5/5 easily. Weight explicit user feedback heavily to ensure the Harness evolves according to the user's bias and standards.`,
+
         prompt: `
 Original Task Prompt:
 ${input.originalPrompt}
@@ -304,48 +415,32 @@ ${toolTrace || "Standard execution trace"}
 User Feedback:
 ${input.userResponse ?? "None"}
         `.trim(),
+
         schema: Evaluation,
-        generation: { temperature: 0 },
-      }).pipe(Effect.map((res) => res.object))
+
+        generation: {
+          temperature: 0,
+        },
+      }).pipe(
+        Effect.provideService(LLMClient.Service, llmClient),
+        Effect.map((res) => res.object),
+      )
 
       // ==================================================
       // QUALITY GATE
       // Existing Judge logic above is unchanged.
       // ==================================================
 
-      console.error("🔥 STARTING QUALITY GATE")
-
-      const qualityResult = input.sessionID
-        ? yield* qualityGate.evaluateSession(input.sessionID)
-        : {
-            passed: false,
-            score: 0,
-            completedTodos: 0,
-            totalTodos: 0,
-            failedTools: [],
-            verificationCommands: [],
-            issues: [
-              "No session ID was provided for Quality Gate evaluation.",
-            ],
-            summary:
-              "Quality Gate could not verify execution evidence.",
-          }
-
-      console.error("🔥 QUALITY GATE RESULT:")
-      console.error(JSON.stringify(qualityResult, null, 2))
-
       // Combine existing LLM Judge decision with Quality Gate.
       const finalSatisfied =
-        evalRes.isSatisfied && qualityResult.passed
+        evalRes.isSatisfied &&
+        qualityResult.passed
 
       const finalScore =
-        Math.min(evalRes.score, qualityResult.score)
-
-      console.error(
-        `🔥 FINAL DECISION: ${
-          finalSatisfied ? "PASSED ✅" : "FAILED ❌"
-        }`,
-      )
+        Math.min(
+          evalRes.score,
+          qualityResult.score,
+        )
 
       const finalEvaluation: Evaluation = {
         ...evalRes,
@@ -358,13 +453,30 @@ ${input.userResponse ?? "None"}
       // Existing evaluation summary, extended with Quality Gate result.
       const evalSummary = [
         `Overall: ${finalEvaluation.score}/5`,
-        `Quality: ${finalEvaluation.codeQualityScore ?? finalEvaluation.score}/5`,
-        `Originality: ${finalEvaluation.originalityScore ?? finalEvaluation.score}/5`,
-        `Completeness: ${finalEvaluation.completenessScore ?? finalEvaluation.score}/5`,
-        `Efficiency: ${finalEvaluation.efficiencyScore ?? finalEvaluation.score}/5`,
-        `Robustness: ${finalEvaluation.robustnessScore ?? finalEvaluation.score}/5`,
+        `Quality: ${
+          finalEvaluation.codeQualityScore ??
+          finalEvaluation.score
+        }/5`,
+        `Originality: ${
+          finalEvaluation.originalityScore ??
+          finalEvaluation.score
+        }/5`,
+        `Completeness: ${
+          finalEvaluation.completenessScore ??
+          finalEvaluation.score
+        }/5`,
+        `Efficiency: ${
+          finalEvaluation.efficiencyScore ??
+          finalEvaluation.score
+        }/5`,
+        `Robustness: ${
+          finalEvaluation.robustnessScore ??
+          finalEvaluation.score
+        }/5`,
         `Quality Gate: ${
-          qualityResult.passed ? "PASSED" : "FAILED"
+          qualityResult.passed
+            ? "PASSED"
+            : "FAILED"
         }`,
         finalEvaluation.reasoning
           ? `Reasoning: ${finalEvaluation.reasoning}`
@@ -393,7 +505,12 @@ ${input.userResponse ?? "None"}
             : "unsatisfied",
           task_error: evalSummary,
         })
-        .where(eq(harness_task.task_id, input.taskID))
+        .where(
+          eq(
+            harness_task.task_id,
+            input.taskID,
+          ),
+        )
         .run()
         .pipe(Effect.orDie)
 
@@ -407,7 +524,9 @@ ${input.userResponse ?? "None"}
 
       if (hasSubFive) {
         const flawNote =
-          finalEvaluation.flawsIdentified?.join("; ") ||
+          finalEvaluation.flawsIdentified?.join(
+            "; ",
+          ) ||
           finalEvaluation.critique ||
           finalEvaluation.reasoning ||
           "Sub-optimal score across quality dimensions."
@@ -434,7 +553,8 @@ ${input.userResponse ?? "None"}
 
         const reqNote =
           `Refinement requested to reach 5/5: Improve ${
-            subFiveDims || "general quality"
+            subFiveDims ||
+            "general quality"
           } to meet 5-star rubric.`
 
         yield* db
@@ -475,5 +595,7 @@ export const node = makeLocationNode({
     Database.node,
     SessionTodo.node,
     QualityGate.node,
+    PromptFinalizer.node,
+    LayerNodePlatform.llmClient,
   ],
 })

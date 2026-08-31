@@ -293,7 +293,12 @@ const layer = Layer.effect(
       for (const hook of s.hooks) {
         const fn = hook[name] as any
         if (!fn) continue
-        yield* Effect.promise(async () => fn(input, output))
+        const result = fn(input, output)
+        if (Effect.isEffect(result)) {
+          yield* (result as Effect.Effect<void>).pipe(Effect.orDie)
+        } else {
+          yield* Effect.promise(async () => result)
+        }
       }
       return output
     })

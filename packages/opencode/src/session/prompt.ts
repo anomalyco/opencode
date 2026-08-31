@@ -56,6 +56,8 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { JudgeAgent, QualityGate } from "@opencode-ai/core/harness"
+import { model as nativeModel } from "./llm/native-request"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -140,6 +142,8 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const judge = yield* JudgeAgent.Service
+    const qualityGate = yield* QualityGate.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1067,7 +1071,117 @@ const layer = Layer.effect(
       }
 
       if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
+      const originalPrompt = input.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n")
+        .trim()
+
+      if ((message.info as any).isFeedback === true) {
+        const ctx = yield* InstanceState.context
+        const feedbackText = originalPrompt
+          .replace(/^(?:no|n|nope|not good|unsatisfied|wrong|different|dislike|failed|needs work)\s*[:\s-]*/i, "")
+          .trim()
+        const acknowledgement = (message.info as any).isSatisfied === true
+          ? "✅ Feedback recorded: Task confirmed as satisfactory. Harness version validated. Ready for your next task!"
+          : `✅ Feedback recorded: "${feedbackText || "Dissatisfaction recorded"}". Lessons extracted and updated harness synthesized in SQLite. Ready for your next task!`
+
+        const assistantMessage: SessionV1.Assistant = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: message.info.id,
+          sessionID: input.sessionID,
+          mode: message.info.agent,
+          agent: message.info.agent,
+          variant: message.info.model.variant,
+          path: { cwd: ctx.directory, root: ctx.worktree },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: message.info.model.modelID,
+          providerID: message.info.model.providerID,
+          time: { created: Date.now() },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantMessage.id,
+          sessionID: assistantMessage.sessionID,
+          type: "text",
+          text: acknowledgement,
+          time: { start: Date.now(), end: Date.now() },
+        })
+        return message
+      }
+
+      // 1. Classify task and register in harness_task BEFORE streaming
+      // so resolveActiveVersion in experimental.chat.system.transform accurately retrieves the matching domain harness (e.g. data_science_ml vs web_frontend)
+      let currentTaskID: string | undefined = undefined
+      let currentJudgeModel: unknown = undefined
+
+      yield* Effect.gen(function* () {
+        const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
+        const prov = yield* provider.getProvider(message.info.model.providerID).pipe(Effect.orElseSucceed(() => undefined))
+        const baseURL = (prov?.options?.baseURL as string | undefined) || undefined
+        const apiKey = (prov?.options?.apiKey as string | undefined) || prov?.key || undefined
+        const judgeModel = yield* Effect.try({
+          try: () => nativeModel({ model: taskModel, baseURL, apiKey }),
+          catch: (error) => error,
+        }).pipe(Effect.option)
+        if (Option.isNone(judgeModel)) return
+        currentJudgeModel = judgeModel.value
+
+        const classification = yield* judge.classify(originalPrompt, judgeModel.value).pipe(
+          Effect.orElseSucceed(() => ({
+            isTask: true,
+            taskType: "general",
+            taskSubType: undefined,
+            taskSubTypes: ["general"],
+            summary: originalPrompt,
+          })),
+        )
+        if (!classification.isTask) return
+
+        currentTaskID = yield* judge.registerTask({
+          prompt: originalPrompt,
+          taskType: classification.taskType || "general",
+          taskSubType: classification.taskSubType,
+          taskSubTypes: classification.taskSubTypes,
+          taskModel: `${message.info.model.providerID}/${message.info.model.modelID}`,
+          sessionID: input.sessionID,
+        })
+      }).pipe(
+        Effect.tapError((error) => Effect.logError("session task classification failed", { error })),
+        Effect.orElseSucceed(() => undefined),
+        Effect.orDie,
+      )
+
+      // 2. Stream assistant execution (resolveActiveVersion will now find the registered domain in SQLite!)
+      const execution = yield* loop({ sessionID: input.sessionID }).pipe(Effect.exit)
+
+      // 3. Completion marker reached: Immediately run deterministic QualityGate
+      yield* qualityGate.evaluateSession(input.sessionID).pipe(
+        Effect.tapError((error) => Effect.logError("quality gate evaluation failed", { error })),
+        Effect.orElseSucceed(() => undefined),
+        Effect.orDie,
+      )
+
+      // 4. Run post-execution Judge evaluation on the completed session output in the background
+      if (currentTaskID && currentJudgeModel) {
+        const taskID = currentTaskID
+        const jModel = currentJudgeModel
+        yield* Effect.gen(function* () {
+          yield* judge.evaluate(
+            { taskID, sessionID: input.sessionID, originalPrompt },
+            jModel,
+          )
+        }).pipe(
+          Effect.tapError((error) => Effect.logError("post-execution judge evaluation failed", { error })),
+          Effect.orElseSucceed(() => undefined),
+          Effect.orDie,
+          Effect.forkIn(scope),
+        )
+      }
+
+      return yield* execution
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1625,6 +1739,8 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    JudgeAgent.node,
+    QualityGate.node,
   ],
 })
 

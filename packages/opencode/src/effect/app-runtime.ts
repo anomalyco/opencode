@@ -55,7 +55,8 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { JudgeAgent } from "@opencode-ai/core/harness"
+import { HarnessPlugin, JudgeAgent } from "@opencode-ai/core/harness"
+import { PromptFinalizer } from "@opencode-ai/core/harness/improving_prompt_finalizer"
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
@@ -105,7 +106,9 @@ export const AppLayer = AppNodeBuilderV1.build(
     Workspace.node,
     Worktree.node,
     Installation.node,
-      JudgeAgent.node,
+    HarnessPlugin.node,
+    JudgeAgent.node,
+    PromptFinalizer.node,
     ShareNext.node,
     SessionShare.node,
     LayerNodePlatform.llmClient,
