@@ -33,6 +33,8 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { HarnessPlugin } from "@opencode-ai/core/harness/plugin"
 import { Database } from "@opencode-ai/core/database/database"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { LLMClient } from "@opencode-ai/llm"
 import { createPersonalizationPlugin } from "@opencode-ai/personalization/plugin"
 
 type State = {
@@ -131,6 +133,7 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const harnessPluginSvc = yield* HarnessPlugin.Service
     const { db } = yield* Database.Service
+    const llmClient = yield* LLMClient.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
@@ -172,7 +175,7 @@ const layer = Layer.effect(
           $: typeof Bun === "undefined" ? undefined : Bun.$,
         }
 
-        const personalization = createPersonalizationPlugin({ db })
+        const personalization = createPersonalizationPlugin({ db, llmClient })
         const personalizationHooks = yield* Effect.promise(() =>
           personalization(input),
         ).pipe(Effect.orElseSucceed(() => ({})))
@@ -330,7 +333,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node, HarnessPlugin.node, Database.node],
+  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node, HarnessPlugin.node, Database.node, LayerNodePlatform.llmClient],
 })
 
 export * as Plugin from "."

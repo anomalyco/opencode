@@ -10,6 +10,8 @@ import { extractSignalsWithLLM, parseStructuredSignals, type ExtractedSignals } 
 import { saveUserProfile, saveMemory, logBehaviorEvent, loadUserProfile, loadMemories } from "./store"
 import { Effect } from "effect"
 
+import { LLMClient } from "@opencode-ai/llm"
+
 export interface PersonalizationPluginState {
   profile: UserProfileData
   memories: MemoryRecord[]
@@ -17,6 +19,7 @@ export interface PersonalizationPluginState {
   embedder?: (text: string) => Promise<Float32Array>
   extractor?: (text: string, model?: unknown) => Promise<ExtractedSignals>
   db?: any
+  llmClient?: any
 }
 
 export function createPersonalizationPlugin(initialState?: Partial<PersonalizationPluginState>) {
@@ -26,6 +29,7 @@ export function createPersonalizationPlugin(initialState?: Partial<Personalizati
   const embedder = initialState?.embedder ?? generateEmbedding
   const customExtractor = initialState?.extractor
   const db = initialState?.db
+  const llmClient = initialState?.llmClient
 
   let isInitialized = false
 
@@ -79,19 +83,22 @@ export function createPersonalizationPlugin(initialState?: Partial<Personalizati
         let signals: ExtractedSignals
         if (customExtractor) {
           signals = await customExtractor(text, input.model)
+        } else if (input.model) {
+          signals = await Effect.runPromise(
+            extractSignalsWithLLM({
+              message: text,
+              model: input.model,
+              currentProfile: profile,
+            }).pipe(
+              llmClient ? Effect.provideService(LLMClient.Service, llmClient) : (e) => e,
+            ),
+          ).catch(() => ({
+            preferenceMemories: [],
+            semanticMemories: [],
+            workingMemories: [],
+          }))
         } else {
-          // 1. Try fast local/natural directive extraction
           signals = parseStructuredSignals(text)
-          // 2. If no signals found and model is present, attempt LLM extraction
-          if (signals.preferenceMemories.length === 0 && !signals.profileDelta && input.model) {
-            signals = await Effect.runPromise(
-              extractSignalsWithLLM({
-                message: text,
-                model: input.model,
-                currentProfile: profile,
-              }),
-            ).catch(() => signals)
-          }
         }
 
         // 1. Apply dynamic profile drift
