@@ -335,7 +335,7 @@
 }
 
 @container settings-screen (max-width: 799px) {
-  .settings-screen > .settings {
+  .settings-screen > .settings[data-component="tabs-v2"] {
     flex-direction: column;
   }
 
