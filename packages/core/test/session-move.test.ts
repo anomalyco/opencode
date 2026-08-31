@@ -39,20 +39,21 @@ const itWithActiveExecution = testEffect(
       Session.node,
     ]),
     [
-      [Project.node, globalProjectNode],
-      [
-        LocationServiceMap.node,
+      Project.node.replace(globalProjectNode),
+      LocationServiceMap.node.replace(
         Layer.effect(
           LocationServiceMap.Service,
           LayerMap.make(
             (ref: Location.Ref) =>
               Layer.merge(
-                LayerNode.compile(Location.boundNode(ref), [[Project.node, globalProjectNode]]),
+                LayerNode.compile(Location.boundNode(ref), {
+                  replacements: [Project.node.replace(globalProjectNode)],
+                }),
                 Layer.succeed(SessionRunner.Service, { drain: () => Effect.never }),
               ) as unknown as Layer.Layer<LocationServices>,
           ),
         ),
-      ],
+      ),
     ],
   ),
 )
