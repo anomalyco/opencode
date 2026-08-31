@@ -16,6 +16,9 @@
 - Put the relevant example immediately after the text that introduces it, following `content/build/plugins/cli.mdx` as the reference pattern.
 - Split long explanations with meaningful headings and examples rather than accumulating caveats in one paragraph.
 - Lead with the common task and working example; place edge cases and supporting details afterward.
+- Do not stack several prose paragraphs without a visual break. After introducing a concept, use an example, list, table, or task-oriented subheading before covering the next concern.
+- Use bullets or tables for independent rules, options, and constraints. Do not hide reference material in narrative paragraphs.
+- Organize workflow documentation in the order readers perform it, with a working example at each major step.
 
 ## Validation
 
