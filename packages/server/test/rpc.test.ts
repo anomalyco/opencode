@@ -304,7 +304,7 @@ it.live("public SSE and generic native plugin subscriptions receive RPC events a
           Effect.gen(function* () {
             const directory = (yield* ctx.agent.list()).location.directory
             // One observer instance should see both locations, just like the public native stream.
-            if (!directory.endsWith("/first")) return
+            if (path.basename(directory) !== "first") return
             yield* ctx.event.subscribe().pipe(
               Stream.filter((event): event is RpcEvent => event.type === "rpc.updates.updated"),
               Stream.take(2),
