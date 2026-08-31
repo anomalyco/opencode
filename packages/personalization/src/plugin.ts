@@ -20,6 +20,7 @@ export interface PersonalizationPluginState {
   extractor?: (text: string, model?: unknown) => Promise<ExtractedSignals>
   db?: any
   llmClient?: any
+  runPromise?: <A>(effect: Effect.Effect<A, any, any>) => Promise<A>
 }
 
 export function createPersonalizationPlugin(initialState?: Partial<PersonalizationPluginState>) {
@@ -30,6 +31,7 @@ export function createPersonalizationPlugin(initialState?: Partial<Personalizati
   const customExtractor = initialState?.extractor
   const db = initialState?.db
   const llmClient = initialState?.llmClient
+  const runPromise = initialState?.runPromise
 
   let isInitialized = false
 
@@ -83,6 +85,18 @@ export function createPersonalizationPlugin(initialState?: Partial<Personalizati
         let signals: ExtractedSignals
         if (customExtractor) {
           signals = await customExtractor(text, input.model)
+        } else if (runPromise && input.model) {
+          signals = await runPromise(
+            extractSignalsWithLLM({
+              message: text,
+              model: input.model,
+              currentProfile: profile,
+            }),
+          ).catch(() => ({
+            preferenceMemories: [],
+            semanticMemories: [],
+            workingMemories: [],
+          }))
         } else if (input.model) {
           signals = await Effect.runPromise(
             extractSignalsWithLLM({

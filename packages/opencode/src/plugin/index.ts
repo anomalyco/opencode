@@ -175,7 +175,7 @@ const layer = Layer.effect(
           $: typeof Bun === "undefined" ? undefined : Bun.$,
         }
 
-        const personalization = createPersonalizationPlugin({ db, llmClient })
+        const personalization = createPersonalizationPlugin({ db, llmClient, runPromise: bridge.promise })
         const personalizationHooks = yield* Effect.promise(() =>
           personalization(input),
         ).pipe(Effect.orElseSucceed(() => ({})))
