@@ -24,6 +24,7 @@ test("exposes every standard HTTP API group", () => {
     "file",
     "command",
     "skill",
+    "rpc",
     "event",
     "pty",
     "experimental",
@@ -675,6 +676,51 @@ test("event.subscribe terminates on malformed Promise SSE data", async () => {
     name: "ClientError",
     reason: "MalformedResponse",
   })
+})
+
+test("native event signals cancel only their listener and close transport after the last listener", async () => {
+  const opened = Promise.withResolvers<Request>()
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    headers: { authorization: "Bearer events" },
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      opened.resolve(request)
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            request.signal.addEventListener("abort", () => controller.error(request.signal.reason), { once: true })
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  const first = new AbortController()
+  const second = new AbortController()
+  const one = client.event.subscribe({ signal: first.signal })[Symbol.asyncIterator]().next()
+  const two = client.event.subscribe({ signal: second.signal })[Symbol.asyncIterator]().next()
+  const request = await opened.promise
+  expect(request.headers.get("authorization")).toBe("Bearer events")
+  first.abort()
+  expect((await one).done).toBe(true)
+  expect(request.signal.aborted).toBe(false)
+  second.abort()
+  expect((await two).done).toBe(true)
+  expect(request.signal.aborted).toBe(true)
+})
+
+test("native pre-aborted event signals do not open a transport", async () => {
+  let requests = 0
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () => {
+      requests++
+      return new Response(null)
+    },
+  })
+  expect((await client.event.subscribe({ signal: AbortSignal.abort() })[Symbol.asyncIterator]().next()).done).toBe(true)
+  expect(requests).toBe(0)
 })
 
 test("event.subscribe accepts a fragmented SSE event below the size limit", async () => {

@@ -30,7 +30,8 @@ import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
 import { createSourceWatcher } from "./watch"
-import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
+import { discoverTuiPlugins, freshSpecifier, localSource, tuiEntrypoint } from "./discovery"
+import { isMissingPath } from "../util/config-directories"
 
 export interface PackageResolver {
   readonly resolve: (spec: string, install?: boolean) => Promise<string | undefined>
@@ -100,7 +101,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const data = useData()
   const [serverPlugins, setServerPlugins] = createSignal<
     ReadonlyArray<
-      Extract<PluginInfo, { readonly status: "active" }> & { readonly source: { readonly type: "package" } }
+      PluginInfo & { readonly state: { readonly status: "active" } } & {
+        readonly source: { readonly type: "package" } | { readonly type: "local" }
+      }
     >
   >([])
   const directory = config.path ? path.dirname(config.path) : process.cwd()
@@ -262,9 +265,19 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const reconcile = async () => {
     await Promise.all(props.directories.map(watcher.wait))
     const entries = [
-      ...(await discoverTuiPlugins(props.directories)).map((entry) => ({ entry, install: true, server: false })),
-      ...serverPlugins().map((plugin) => ({ entry: plugin.source.package, install: false, server: true })),
-      ...(config.data.plugins ?? []).map((entry) => ({ entry, install: true, server: false })),
+      ...(await discoverTuiPlugins(props.directories)).map((entry) => ({
+        entry,
+        install: true,
+        server: false,
+        discovered: true,
+      })),
+      ...serverPlugins().map((plugin) => ({
+        entry: plugin.source.type === "package" ? plugin.source.package : path.dirname(plugin.source.path),
+        install: false,
+        server: true,
+        discovered: false,
+      })),
+      ...(config.data.plugins ?? []).map((entry) => ({ entry, install: true, server: false, discovered: false })),
     ]
 
     // Resolve: fold entries into one desired generation. A source that fails
@@ -288,8 +301,17 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       }
 
       const options = typeof entry === "string" ? undefined : entry.options
-      // Watch even when the resolve below fails so fixing a broken plugin reloads it.
       const local = localSource(target, directory)
+      if (
+        local &&
+        !source.discovered &&
+        (await stat(local).then(
+          (info) => info.isFile(),
+          (error) => (isMissingPath(error) ? false : Promise.reject(error)),
+        ))
+      )
+        continue
+      // Watch even when the resolve below fails so fixing a broken plugin reloads it.
       if (local) await watcher.add(fileURLToPath(local))
       const previous = Object.values(store.registrations).find((registration) => registration.target === target)
       const memo = local ? undefined : npmFailures.get(target)
@@ -485,9 +507,12 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
           response.data.filter(
             (
               plugin,
-            ): plugin is Extract<PluginInfo, { readonly status: "active" }> & {
-              readonly source: { readonly type: "package" }
-            } => plugin.status === "active" && plugin.tui && plugin.source.type === "package",
+            ): plugin is PluginInfo & { readonly state: { readonly status: "active" } } & {
+              readonly source: { readonly type: "package" } | { readonly type: "local" }
+            } =>
+              plugin.state.status === "active" &&
+              plugin.features.tui === true &&
+              (plugin.source.type === "package" || plugin.source.type === "local"),
           ),
         ),
       )
@@ -650,15 +675,8 @@ async function resolveLocal(url: URL) {
   const info = await stat(url)
   if (info.isFile()) return url.href
   if (!info.isDirectory()) return
-  return resolve(pathToFileURL(path.join(fileURLToPath(url), "tui")).href)
-}
-
-function resolve(specifier: string) {
-  try {
-    return import.meta.resolve(specifier)
-  } catch {
-    return undefined
-  }
+  const entrypoint = await tuiEntrypoint(fileURLToPath(url))
+  return entrypoint ? pathToFileURL(entrypoint).href : undefined
 }
 
 function isPlugin(value: unknown): value is Plugin.Definition {

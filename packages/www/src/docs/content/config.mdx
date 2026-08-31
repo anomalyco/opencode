@@ -419,7 +419,7 @@ See the [references guide](/references) for shorthand, visibility, and path reso
 
 ### Plugins
 
-Load plugins from packages or local files. Use the object form when a plugin
+Load plugins from packages or local plugin directories. Use the object form when a plugin
 accepts options.
 
 ```jsonc
@@ -427,7 +427,7 @@ accepts options.
   "plugins": [
     "opencode-example-plugin",
     {
-      "package": "./plugins/local.ts",
+      "package": "./plugins/local",
       "options": {
         "enabled": true,
       },

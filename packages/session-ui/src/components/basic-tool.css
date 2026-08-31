@@ -249,10 +249,13 @@
     flex-shrink: 0;
     color: var(--v2-text-text-faint);
     margin-left: auto;
-    opacity: 0;
     transition:
       opacity 0.15s ease,
       color 0.15s ease;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
   }
 
   [data-component="task-tool-title"] {
@@ -391,11 +394,15 @@
   }
 
   .webfetch-link-icon {
-    display: none;
+    display: inline-flex;
     width: 16px;
     height: 16px;
     flex-shrink: 0;
     color: var(--v2-icon-icon-accent, var(--v2-text-text-accent));
+
+    @media (hover: hover) {
+      display: none;
+    }
   }
 
   &:hover {

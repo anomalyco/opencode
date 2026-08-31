@@ -11,6 +11,7 @@ import { Model } from "@opencode-ai/schema/model"
 import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Reference } from "@opencode-ai/schema/reference"
+import { Rpc } from "@opencode-ai/schema/rpc"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Vcs } from "@opencode-ai/schema/vcs"
 import { WebSearch } from "@opencode-ai/schema/websearch"
@@ -18,6 +19,8 @@ import { WebSearch } from "@opencode-ai/schema/websearch"
 const Plugin = await import("../src/effect/index")
 const PromisePlugin = await import("../src/promise/index")
 const TuiPlugin = await import("../src/tui/index")
+const PromiseEvent = await import("../src/promise/event")
+const PromiseRpc = await import("../src/promise/rpc")
 
 test.each([
   ["effect", Plugin],
@@ -34,6 +37,7 @@ test.each([
   expect(entrypoint.PersistentPty).toBe(PersistentPty)
   expect(entrypoint.Provider).toBe(Provider)
   expect(entrypoint.Reference).toBe(Reference)
+  expect(entrypoint.Rpc).toBe(Rpc)
   expect(entrypoint.Skill).toBe(Skill)
   expect(entrypoint.Vcs).toBe(Vcs)
   expect(entrypoint.WebSearch).toBe(WebSearch)
@@ -50,6 +54,7 @@ test.each([
     "Plugin",
     "Provider",
     "Reference",
+    "Rpc",
     "Skill",
     "Vcs",
     "WebSearch",
@@ -66,4 +71,9 @@ test.each([
 test("tui entrypoint exposes the plugin definition", () => {
   const plugin = TuiPlugin.Plugin.define({ id: "demo", setup() {} })
   expect(plugin.id).toBe("demo")
+})
+
+test("Promise domain modules do not expose Effect adapter internals", () => {
+  expect(Object.keys(PromiseEvent)).toEqual([])
+  expect(Object.keys(PromiseRpc)).toEqual([])
 })

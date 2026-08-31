@@ -198,3 +198,41 @@ test("stale pinned indexes do not produce missing virtual items after count shri
     dispose()
   })
 })
+
+test("snapshots materialize only measured rows and restore their current geometry", () => {
+  const options = {
+    count: 100,
+    getItemKey: (index: number) => `row-${index}`,
+    estimateSize: () => 60,
+    getScrollElement: () => null,
+    scrollToFn: () => {},
+    observeElementRect: () => {},
+    observeElementOffset: () => {},
+  }
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options)
+  expect(virtualizer.getTotalSize()).toBe(6000)
+  virtualizer.resizeItem(4, 100)
+  virtualizer.resizeItem(99, 140)
+  const measurements = virtualizer.getMeasurements()
+  const reads: number[] = []
+  virtualizer.getMeasurements = () =>
+    new Proxy(measurements, {
+      get(target, key, receiver) {
+        if (typeof key === "string" && /^\d+$/.test(key)) reads.push(Number(key))
+        return Reflect.get(target, key, receiver)
+      },
+    })
+
+  const snapshot = virtualizer.takeSnapshot()
+  expect(reads).toEqual([4, 99])
+  expect(snapshot).toEqual([
+    { index: 4, key: "row-4", start: 240, size: 100, end: 340, lane: 0 },
+    { index: 99, key: "row-99", start: 5980, size: 140, end: 6120, lane: 0 },
+  ])
+  const restored = new Virtualizer<HTMLDivElement, HTMLDivElement>({ ...options, initialMeasurementsCache: snapshot })
+  expect(restored.getTotalSize()).toBe(6120)
+  expect(restored.takeSnapshot()).toEqual(snapshot)
+  restored.setOptions({ ...options, count: 10 })
+  restored.resizeItem(4, 80)
+  expect(restored.takeSnapshot()).toEqual([{ index: 4, key: "row-4", start: 240, size: 80, end: 320, lane: 0 }])
+})

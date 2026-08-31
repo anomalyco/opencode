@@ -16,14 +16,14 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
-import { globalProjectLayer } from "./lib/project"
+import { globalProjectNode } from "./lib/project"
 
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       [Bus.node, Bus.configured({ persist: true })],
-      [Project.node, globalProjectLayer],
+      [Project.node, globalProjectNode],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),

@@ -278,16 +278,15 @@ export function createHomeSessionsController(home: HomeController) {
         const directory = project?.worktree ?? session.location.directory
         const ctx = home.server.focusedContext()
         if (!ctx) return
-        ctx.data.session.remember(session)
-        ctx.projects.open(directory)
-        if (options?.background) {
-          tabs.addSessionTab({ server: connKey, sessionId: session.id })
-          return
-        }
-        ctx.projects.touch(directory)
+        if (!options?.background) void ctx.data.session.message.sync(session.id).catch(() => undefined)
+        // Commit cache/project changes with navigation instead of rebuilding
+        // the outgoing Home list before leaving it.
         void startTransition(() => {
           const tab = tabs.addSessionTab({ server: connKey, sessionId: session.id })
-          tabs.select(tab)
+          if (!options?.background) tabs.select(tab)
+          ctx.data.session.remember(session)
+          ctx.projects.open(directory)
+          if (!options?.background) ctx.projects.touch(directory)
         })
       },
       archive: async (session: SessionInfo) => {

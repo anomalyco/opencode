@@ -1,0 +1,26 @@
+@media (max-width: 767px) {
+  [data-component="home-session-row-container"][data-project-name="true"],
+  [data-component="home-session-row-container"][data-project-name="true"] [data-component="home-session-row"],
+  [data-component="home-session-row-container"][data-project-name="true"] [data-slot="home-session-editor"],
+  [data-component="home-session-search-row"][data-project-name="true"] {
+    height: 48px;
+    padding-block: 0;
+  }
+
+  [data-project-name="true"] [data-slot="home-session-labels"] {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    text-align: start;
+  }
+
+  [data-project-name="true"] [data-slot="home-session-labels"] > * {
+    max-width: 100%;
+    flex: none;
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+  }
+}

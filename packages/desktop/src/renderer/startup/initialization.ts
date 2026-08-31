@@ -10,7 +10,6 @@ export function initializationData<A>(state: (() => A | undefined) & { error: un
 export function sidecarHttp(data: SidecarData) {
   return {
     url: data.url,
-    username: data.username ?? undefined,
     password: data.password ?? undefined,
   }
 }
@@ -30,7 +29,7 @@ export function createSidecarResolver(input: {
 }
 
 function sameSidecar(current: SidecarData | undefined, next: SidecarData) {
-  return current?.url === next.url && current.username === next.username && current.password === next.password
+  return current?.url === next.url && current.password === next.password
 }
 
 function markLocalServerStartup(error: unknown) {

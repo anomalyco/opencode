@@ -453,8 +453,6 @@ export const dict = {
   "dialog.server.add.button": "Tambah server",
   "dialog.server.add.name": "Nama server (opsional)",
   "dialog.server.add.namePlaceholder": "Localhost",
-  "dialog.server.add.username": "Nama pengguna (opsional)",
-  "dialog.server.add.usernamePlaceholder": "nama pengguna",
   "dialog.server.add.password": "Kata sandi (opsional)",
   "dialog.server.add.passwordPlaceholder": "kata sandi",
   "dialog.server.edit.title": "Sunting server",
@@ -542,7 +540,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Versi terinstal tidak cocok dengan versi aplikasi desktop.",
   "wsl.onboarding.adding": "Menambahkan...",
 
-  "server.row.noUsername": "tanpa nama pengguna",
 
   "dialog.project.edit.title": "Sunting proyek",
   "dialog.project.edit.name": "Nama",

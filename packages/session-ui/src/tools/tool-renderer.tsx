@@ -554,6 +554,7 @@ export function CurrentContextToolGroup(props: {
         icon="glasses"
         status={pending() ? "running" : "completed"}
         compact
+        hasContent
         allowOpenWhilePending
         open={props.open}
         onOpenChange={change}

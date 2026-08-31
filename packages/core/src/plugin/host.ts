@@ -3,6 +3,7 @@ export * as PluginHost from "./host.js"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import type { Event } from "@opencode-ai/schema/event"
 import { ServerConfig } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
@@ -20,6 +21,7 @@ import { Mcp } from "../mcp/index.js"
 import { PluginRuntime } from "./runtime.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
+import { Rpc } from "../rpc.js"
 import { AbsolutePath, type DeepMutable } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Tool } from "../tool.js"
@@ -32,6 +34,12 @@ import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
+type RpcEvent = Event.Payload & {
+  readonly type: `rpc.${string}`
+  readonly location: Location.Ref
+  readonly data: Readonly<Record<string, unknown>>
+}
+const isRpcEvent = (event: Event.Payload): event is RpcEvent => event.type.startsWith("rpc.")
 export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, pluginID: string = "test") {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
@@ -44,6 +52,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const mcp = yield* Mcp.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
+  const rpc = yield* Rpc.Service
   const skill = yield* Skill.Service
   const tools = yield* Tool.Service
   const vcs = yield* Vcs.Service
@@ -75,6 +84,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     app,
     location: locationInfo(),
     options: {},
+    rpc: Object.assign(rpc.client, { register: rpc.register }),
     agent: {
       get: (input) => {
         const ref = locationRef(input)
@@ -191,7 +201,14 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       transform: commands.transform,
     },
     event: {
-      subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
+      subscribe: () =>
+        bus
+          .subscribe()
+          .pipe(
+            Stream.filter(
+              (event): event is EventManifest.ServerEvent | RpcEvent => EventManifest.isServer(event) || isRpcEvent(event),
+            ),
+          ),
     },
     experimental: {
       terminal: {

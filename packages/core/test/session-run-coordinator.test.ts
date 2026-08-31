@@ -73,22 +73,30 @@ describe("SessionRunCoordinator", () => {
             Effect.andThen(Deferred.await(key === "first" ? firstGate : secondGate)),
           ),
       })
+      const firstActive = coordinator.isActive("first")
 
       expect(Array.from(yield* coordinator.active)).toEqual([])
+      expect(yield* firstActive).toBe(false)
       const first = yield* coordinator.run("first").pipe(Effect.forkChild)
       yield* Deferred.await(firstStarted)
       expect(Array.from(yield* coordinator.active)).toEqual(["first"])
+      expect(yield* firstActive).toBe(true)
+      expect(yield* coordinator.isActive("second")).toBe(false)
 
       const second = yield* coordinator.run("second").pipe(Effect.forkChild)
       yield* Deferred.await(secondStarted)
       expect(Array.from(yield* coordinator.active)).toEqual(["first", "second"])
+      expect(yield* coordinator.isActive("second")).toBe(true)
 
       yield* Deferred.succeed(firstGate, undefined)
       yield* Fiber.join(first)
       expect(Array.from(yield* coordinator.active)).toEqual(["second"])
+      expect(yield* firstActive).toBe(false)
+      expect(yield* coordinator.isActive("second")).toBe(true)
       yield* Deferred.succeed(secondGate, undefined)
       yield* Fiber.join(second)
       expect(Array.from(yield* coordinator.active)).toEqual([])
+      expect(yield* coordinator.isActive("second")).toBe(false)
     }),
   )
 
@@ -105,10 +113,12 @@ describe("SessionRunCoordinator", () => {
       const failed = yield* coordinator.run("failure").pipe(Effect.exit)
       expect(Exit.isFailure(failed) && Cause.hasFails(failed.cause)).toBeTrue()
       expect(Array.from(yield* coordinator.active)).toEqual([])
+      expect(yield* coordinator.isActive("failure")).toBe(false)
 
       const died = yield* coordinator.run("defect").pipe(Effect.exit)
       expect(Exit.isFailure(died) && Cause.hasDies(died.cause)).toBeTrue()
       expect(Array.from(yield* coordinator.active)).toEqual([])
+      expect(yield* coordinator.isActive("defect")).toBe(false)
       expect(settled).toHaveLength(2)
     }),
   )
@@ -612,6 +622,7 @@ describe("SessionRunCoordinator", () => {
       yield* coordinator.interrupt("session", "user")
       expect(settled).toHaveLength(0)
       expect(Array.from(yield* coordinator.active)).toEqual(["session"])
+      expect(yield* coordinator.isActive("session")).toBe(true)
       // Repeating the interrupt during cleanup stays an immediate no-op.
       yield* coordinator.interrupt("session", "user")
 
@@ -621,6 +632,7 @@ describe("SessionRunCoordinator", () => {
 
       expect(settled).toEqual(["user"])
       expect(yield* coordinator.active).toEqual(new Set())
+      expect(yield* coordinator.isActive("session")).toBe(false)
     }),
   )
 
@@ -636,6 +648,7 @@ describe("SessionRunCoordinator", () => {
 
       yield* coordinator.wake("session")
       yield* Deferred.await(settling)
+      expect(yield* coordinator.isActive("session")).toBe(true)
       // The owner has exited; this wake lands on the settling execution's doorbell.
       yield* coordinator.wake("session")
       // The interrupt claims it: settle must not start a successor for the dead intent.
@@ -645,6 +658,7 @@ describe("SessionRunCoordinator", () => {
 
       expect(drains).toBe(1)
       expect(yield* coordinator.active).toEqual(new Set())
+      expect(yield* coordinator.isActive("session")).toBe(false)
     }),
   )
 

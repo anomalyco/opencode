@@ -30,6 +30,7 @@ import { Pty } from "./pty.js"
 import { Shell } from "./shell.js"
 import { ShellSelect } from "./shell/select.js"
 import { Reference } from "./reference.js"
+import { Rpc } from "./rpc.js"
 import { WebSearch } from "./websearch.js"
 import { ReferenceInstructions } from "./reference/instructions.js"
 import { SessionRunnerLLM } from "./session/runner/llm.js"
@@ -45,6 +46,8 @@ import { InstructionBuiltIns } from "./instructions/builtins.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 import { SessionInstructions } from "./session/instructions.js"
 import { SessionGenerateNode } from "./session/generate-node.js"
+import { SessionPromptNode } from "./session/prompt-node.js"
+import { SessionRevertNode } from "./session/revert-node.js"
 import { McpTool } from "./tool/mcp.js"
 import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
@@ -60,6 +63,7 @@ const nodes = [
   Agent.node,
   Command.node,
   Reference.node,
+  Rpc.node,
   WebSearch.node,
   Integration.node,
   Catalog.node,
@@ -92,6 +96,8 @@ const nodes = [
   Form.node,
   Generate.node,
   SessionGenerateNode.node,
+  SessionPromptNode.node,
+  SessionRevertNode.node,
   ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,

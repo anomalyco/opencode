@@ -240,9 +240,12 @@
     position: absolute;
     top: 4px;
     inset-inline-end: 4px;
-    opacity: 0;
     transition: opacity 0.15s ease;
     z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
   }
 
   [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"],

@@ -758,6 +758,8 @@ main {
 .docs-toc {
   position: sticky;
   top: calc(var(--header-height) + 2rem);
+  max-height: calc(100vh - var(--header-height) - 4rem);
+  overflow-y: auto;
 }
 
 .docs-toc .nested {

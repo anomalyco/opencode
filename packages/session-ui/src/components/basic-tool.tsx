@@ -1,4 +1,16 @@
-import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  For,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { createStore } from "solid-js/store"
@@ -26,6 +38,8 @@ export interface BasicToolProps {
   icon: IconProps["name"]
   trigger: TriggerTitle | JSX.Element | ((open: Accessor<boolean>) => JSX.Element)
   children?: JSX.Element
+  /** Declare known content without constructing lazy JSX to test its presence. */
+  hasContent?: boolean
   status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
@@ -93,8 +107,15 @@ export function BasicTool(props: BasicToolProps) {
   const open = () => props.open ?? state.open
   const ready = () => state.ready
   const pending = () => props.status === "streaming" || props.status === "running"
-  const hasChildren = () => (props.defer ? "children" in props : props.children)
-  const dynamicTrigger = typeof props.trigger === "function" ? props.trigger(open) : undefined
+  const hasChildren = () => props.hasContent ?? (props.defer ? "children" in props : props.children)
+  const triggerContent = createMemo(() => {
+    const value = props.trigger
+    return typeof value === "function" ? value(open) : value
+  })
+  const triggerTitle = createMemo(() => {
+    const value = triggerContent()
+    return isTriggerTitle(value) ? value : undefined
+  })
 
   let cancelReady: (() => void) | undefined
 
@@ -193,8 +214,7 @@ export function BasicTool(props: BasicToolProps) {
       <div data-slot="basic-tool-tool-trigger-content">
         <div data-slot="basic-tool-tool-info">
           <Switch>
-            <Match when={dynamicTrigger !== undefined}>{dynamicTrigger}</Match>
-            <Match when={isTriggerTitle(props.trigger) && props.trigger}>
+            <Match when={triggerTitle()}>
               {(title) => (
                 <div data-slot="basic-tool-tool-info-structured">
                   <div data-slot="basic-tool-tool-info-main">
@@ -246,7 +266,7 @@ export function BasicTool(props: BasicToolProps) {
                 </div>
               )}
             </Match>
-            <Match when={true}>{props.trigger as JSX.Element}</Match>
+            <Match when={true}>{triggerContent() as JSX.Element}</Match>
           </Switch>
         </div>
       </div>

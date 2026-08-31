@@ -1,9 +1,11 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
+import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMutation } from "@tanstack/solid-query"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Menu } from "@opencode-ai/ui/menu"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
@@ -28,13 +30,14 @@ export function TabNavItem(props: {
   onClose: () => void
   onNavigate: () => void
   active?: boolean
-  forceTruncate?: boolean
   suppressNavigation?: boolean
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
   orientation?: "horizontal" | "vertical"
 }) {
+  const language = useLanguage()
+  const [menu, setMenu] = createStore({ open: false, rename: false })
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
   let tabRoot!: HTMLDivElement
@@ -78,7 +81,7 @@ export function TabNavItem(props: {
   })
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
-  const previewBlocked = () => !!props.dragging || editing() || !!props.pressed || !props.session
+  const previewBlocked = () => !!props.dragging || editing() || menu.open || !!props.pressed || !props.session
 
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
@@ -98,11 +101,13 @@ export function TabNavItem(props: {
 
   createEffect(() => {
     title()
-    props.forceTruncate
+    props.active
+    props.orientation
     editing()
     scheduleTitleOverflow()
   })
 
+  // The overflow fade changes title padding; observe the stable tab box, not that feedback.
   createResizeObserver(() => tabRoot, scheduleTitleOverflow)
   onCleanup(() => {
     if (measureFrame !== undefined) cancelAnimationFrame(measureFrame)
@@ -140,9 +145,9 @@ export function TabNavItem(props: {
     titleEl.textContent = value
   })
 
-  const openRename = (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
+  const openRename = (event?: MouseEvent) => {
+    event?.preventDefault()
+    event?.stopPropagation()
     if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
     const session = props.session
     if (!session) return
@@ -173,7 +178,7 @@ export function TabNavItem(props: {
     onCleanup(cleanup)
   })
 
-  const tab = (
+  const tab = () => (
     <div
       ref={(el) => {
         tabRoot = el
@@ -199,7 +204,11 @@ export function TabNavItem(props: {
         closeTab(event)
       }}
     >
-      <a
+      <Menu.Context.Trigger
+        as="a"
+        disabled={editing() || props.dragging}
+        aria-haspopup="menu"
+        aria-expanded={menu.open}
         data-slot="tab-link"
         data-titlebar-tab-link
         href={props.href}
@@ -287,7 +296,7 @@ export function TabNavItem(props: {
             </span>
           )}
         </Show>
-      </a>
+      </Menu.Context.Trigger>
 
       <div data-slot="tab-close">
         <IconButton
@@ -300,27 +309,50 @@ export function TabNavItem(props: {
           }}
           onClick={closeTab}
           icon={<Icon name="xmark-small" />}
+          aria-label={language.t("common.closeTab")}
         />
       </div>
     </div>
   )
 
   return (
-    <TabPreviewPopover
-      trigger={tab}
-      orientation={props.orientation}
-      open={popoverOpen() && !previewBlocked()}
-      onOpenChange={(value) => {
-        if (value && previewBlocked()) return
-        setPopoverOpen(value)
+    <Menu.Context
+      onOpenChange={(open) => {
+        setMenu("open", open)
+        if (open) setPopoverOpen(false)
       }}
-      data={{
-        projectName: projectName(),
-        title: props.session?.title,
-        path: previewPath(),
-        serverName: serverLabel(),
-      }}
-    />
+    >
+      <TabPreviewPopover
+        trigger={tab()}
+        orientation={props.orientation}
+        open={popoverOpen() && !previewBlocked()}
+        onOpenChange={(value) => {
+          if (value && previewBlocked()) return
+          setPopoverOpen(value)
+        }}
+        data={{
+          projectName: projectName(),
+          title: props.session?.title,
+          path: previewPath(),
+          serverName: serverLabel(),
+        }}
+      />
+      <Menu.Context.Portal>
+        <Menu.Context.Content
+          onCloseAutoFocus={(event) => {
+            if (!menu.rename) return
+            event.preventDefault()
+            setMenu("rename", false)
+            openRename()
+          }}
+        >
+          <Menu.Item disabled={!props.session || rename.isPending} onSelect={() => setMenu("rename", true)}>
+            {language.t("common.rename")}
+          </Menu.Item>
+          <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
+        </Menu.Context.Content>
+      </Menu.Context.Portal>
+    </Menu.Context>
   )
 }
 

@@ -54,9 +54,8 @@ const layer = Layer.effect(
     })
 
     const file = Effect.fn("Formatter.file")(function* (filepath: string) {
-      const matching = state
-        .get()
-        .formatters.filter((formatter) => formatter.extensions.includes(path.extname(filepath)))
+      const extension = path.extname(filepath)
+      const matching = state.get().formatters.filter((formatter) => formatter.extensions.includes(extension))
 
       for (const formatter of matching) {
         const enabled = yield* command(formatter)

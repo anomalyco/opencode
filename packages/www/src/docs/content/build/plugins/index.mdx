@@ -5,7 +5,7 @@ title: "Overview"
 Plugins can modify OpenCode's behavior and add new features. To change the terminal UI, build a [CLI
 plugin](/build/plugins/cli).
 
-```ts title=".opencode/plugins/example.ts"
+```ts title=".opencode/plugins/example/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -17,7 +17,7 @@ export default Plugin.define({
 ```
 
 Plugins under `.opencode/plugins/` are loaded automatically, like the local example above. To load published packages
-or files from other locations, add them to `plugins` in `opencode.json(c)`:
+or plugin directories from other locations, add them to `plugins` in `opencode.json(c)`:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -26,10 +26,10 @@ or files from other locations, add them to `plugins` in `opencode.json(c)`:
     "opencode-acme-plugin",
     "opencode-acme-plugin@1.2.0",
     "@acme/opencode-plugin",
-    "./plugins/local.ts",
-    "../shared/plugin.ts",
-    "/absolute/path/plugin.ts",
-    "file:///home/me/plugins/local.ts",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
     {
       "package": "@acme/opencode-plugin",
       "options": {
@@ -93,18 +93,18 @@ Pass plugin options with the object form in `opencode.json(c)`.
 {
   "plugins": [
     {
-      "package": "./plugins/company.ts",
+      "package": "./plugins/company",
       "options": {
-        "strict": true
-      }
-    }
-  ]
+        "strict": true,
+      },
+    },
+  ],
 }
 ```
 
 Read those values from `ctx.options` during `setup`.
 
-```ts title="plugins/company.ts"
+```ts title="plugins/company/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -122,7 +122,7 @@ transforms and each builds on the changes made before it.
 
 Say we have a plugin that adds one model to the catalog.
 
-```ts title="plugins/models.ts"
+```ts title="plugins/models/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -140,7 +140,7 @@ export default Plugin.define({
 
 A later plugin can enforce a maximum output price across every model, including models added by earlier plugins.
 
-```ts title="plugins/model-budget.ts"
+```ts title="plugins/model-budget/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -162,7 +162,7 @@ export default Plugin.define({
 Now say the first plugin dynamically fetches can fetch its model list from a
 dynamic source. It can call `reload` when that list changes.
 
-```ts title="plugins/models.ts"
+```ts title="plugins/models/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -468,14 +468,23 @@ interface IntegrationContext {
     key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
   }
   oauth: {
-    connect(input: IntegrationOauthConnectInput, requestOptions?: RequestOptions): Promise<IntegrationOauthConnectOutput>
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
     status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
     complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
     cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
   }
   command: {
-    connect(input: IntegrationCommandConnectInput, requestOptions?: RequestOptions): Promise<IntegrationCommandConnectOutput>
-    status(input: IntegrationCommandStatusInput, requestOptions?: RequestOptions): Promise<IntegrationCommandStatusOutput>
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
     cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
   }
   transform(callback: (draft: IntegrationDraft) => void): Promise<Registration>
@@ -995,21 +1004,28 @@ Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
 
 ```ts
 interface EventContext {
-  subscribe(requestOptions?: RequestOptions): AsyncIterable<OpenCodeEvent>
+  subscribe(options?: { signal?: AbortSignal }): AsyncIterable<OpenCodeEvent>
 }
 ```
 
 ## Hooks
 
-Hooks intercept live operations. Multiple plugins can register the same hook; OpenCode runs them in plugin order so
-later hooks see earlier changes.
+Hooks intercept live operations. Register a hook on its domain and dispose the
+returned registration when it is no longer needed.
 
 ```ts
 const registration = await ctx.session.hook("context", () => {})
 await registration.dispose()
 ```
 
+Multiple plugins can register the same hook. OpenCode runs them in plugin order,
+so later hooks see changes made by earlier hooks.
+
 ### Sessions
+
+Session hooks intercept prompt admission, model calls, native HTTP, and retries.
+
+#### Prompt admission
 
 Intercept incoming user prompts before attachment and skill resolution and durable inbox admission:
 
@@ -1023,20 +1039,35 @@ await ctx.session.hook("prompt", (event) => {
 })
 ```
 
-The hook receives an owned, mutable draft with `text`, `files`, agent mentions (`agents`), and selected `skills`, plus
-`metadata` and `delivery` (`"steer"` by default, or `"queue"`). Files and skills added by hooks use the normal resolution
-and validation path. If you rewrite text, update or remove attachment `mention` offsets that no longer match it. Agent
-mentions do not switch the session's active agent. Session and message IDs are readonly and cannot redirect admission.
+The hook receives an owned, mutable draft:
 
-Hooks run in registration order after the session's location plugins are ready. Edits become the canonical persisted user
-input; unlike `context`, `prompt` does not run on each model call. Commands that submit through `session.prompt` also run
-this hook. Synthetic messages, shell messages, and compaction/move controls do not. Prompt hooks cannot be scoped by model
-provider because admission is separate from model resolution. Use an unscoped registration.
+- `prompt` contains `text`, `files`, agent mentions in `agents`, and selected `skills`.
+- `metadata` contains application-defined admission metadata.
+- `delivery` is `"steer"` by default and can be changed to `"queue"`.
+- Session and message IDs are readonly; a hook cannot redirect admission.
 
-Retries of an ID already pending or delivered return the original admission without rerunning hooks or resolving the
-retried payload. Concurrent submissions can run hooks more than once before either admission commits, but only the first
-successful admission wins. Keep hooks retry-safe; they are not an exactly-once side-effect boundary. A failed or interrupted
-preparation admits no prompt. This hook transforms input and does not expose a typed rejection API.
+Files and skills added by a hook follow the normal resolution and validation
+path. When rewriting text, update or remove attachment `mention` offsets that no
+longer match. Agent mentions do not switch the session's active agent.
+
+Prompt hooks run under these conditions:
+
+- Hooks run in registration order after the session's location plugins are ready.
+- Commands that submit through `session.prompt` run the hook.
+- Synthetic messages, shell messages, compaction controls, and move controls do not.
+- The hook runs once during admission, not before every model call.
+- Provider scoping is unavailable because model resolution happens after admission.
+
+Edits become the canonical persisted user input. If preparation fails or is
+interrupted, OpenCode does not admit the prompt.
+
+Keep prompt hooks retry-safe. They are not an exactly-once side-effect boundary:
+
+- Retrying an ID already pending or delivered returns the original admission without rerunning hooks.
+- Concurrent submissions can run hooks more than once, but only the first successful admission wins.
+- Prompt hooks transform input and do not expose a typed rejection API.
+
+#### Model context
 
 Modify assembled system instructions, messages, tools, generation settings, or provider options immediately before model
 dispatch.
@@ -1050,15 +1081,20 @@ await ctx.session.hook("context", (event) => {
 })
 ```
 
-`generation` and `providerOptions` start as empty request-override objects for each context hook invocation, not resolved
-model settings. Hooks run in registration order and see earlier hooks' overrides. During compilation, request overrides
-take precedence over model defaults, which take precedence over route defaults. Provider option records merge recursively;
-arrays and scalar values replace earlier values. Deleting an override or setting it to `undefined` falls back to defaults;
-it does not remove a configured default. This precedence applies to semantic generation and provider options; explicit raw
-HTTP body overlays are applied after protocol lowering and can override the resulting fields.
+Context changes affect only the outgoing model call, not persisted history or
+configuration. The hook runs again for subsequent calls such as tool-driven
+continuations, but not for title or compaction requests.
 
-These changes affect only the outgoing model call, not persisted session history or configuration. Context hooks also run
-for subsequent calls such as tool-driven continuations, but do not run for title or compaction requests.
+Request overrides follow these rules:
+
+- `generation` and `providerOptions` start empty for each model call; they do not contain resolved model settings.
+- Hooks run in registration order and see overrides made by earlier hooks.
+- Request overrides take precedence over model defaults, which take precedence over route defaults.
+- Provider option objects merge recursively; arrays and scalar values replace earlier values.
+- Deleting an override or setting it to `undefined` falls back to configured defaults rather than removing them.
+- Raw HTTP body overlays apply after protocol lowering and can override the resulting fields.
+
+#### Provider options
 
 Provider options use the selected protocol's semantic option names, not raw HTTP body fields. Scope provider-specific
 settings to the matching provider. For example, OpenAI Responses uses `reasoningEffort`:
@@ -1073,8 +1109,12 @@ await ctx.session.hook(
 )
 ```
 
-`maxTokens` is the semantic output-token limit. Generation settings are supported only where the selected protocol and
-model support them; for example, Gemini supports `topK`, while OpenAI Responses does not expose it.
+Generation options depend on the selected protocol and model:
+
+- `maxTokens` is the semantic output-token limit.
+- Gemini supports `topK`; OpenAI Responses does not expose it.
+
+#### Model request
 
 Modify model request settings and optionally scope the hook to one provider.
 
@@ -1087,6 +1127,8 @@ await ctx.session.hook(
   { providerID: "anthropic" },
 )
 ```
+
+#### Native HTTP
 
 Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
 it.
@@ -1103,6 +1145,8 @@ await ctx.session.hook("http.response", (event) => {
   })
 })
 ```
+
+#### Retry policy
 
 Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
 classifies the failure and proposes its policy, but before any retry is scheduled. It does not expose how OpenCode
@@ -1122,13 +1166,18 @@ await ctx.session.hook("retry", (event) => {
 })
 ```
 
-The initial `decision` is OpenCode's policy, so hooks may make a normally terminal provider failure retryable or veto a
-proposed retry. Multiple hooks run in registration order and later hooks see the current decision. The built-in maximum
-attempt count remains a hard limit. `attempt` is the physical attempt being proposed; the initial request is attempt `1`,
-so the first retry is attempt `2`. Invalid delays (`NaN`, infinity, or negative values) fall back to the computed delay.
-Context-overflow recovery remains separate because it compacts the conversation instead of retrying the same request.
+Retry hooks can change OpenCode's initial `decision` by making a terminal failure
+retryable or vetoing a proposed retry.
 
-#### Reference
+Retry decisions follow these rules:
+
+- Multiple hooks run in registration order, and later hooks see the current decision.
+- The built-in maximum attempt count remains a hard limit.
+- `attempt` is the physical attempt under consideration. The initial request is `1`, so the first retry is `2`.
+- Invalid delays such as `NaN`, infinity, or negative values fall back to the computed delay.
+- Context-overflow recovery is separate because it compacts the conversation instead of retrying the same request.
+
+#### Session reference
 
 ```ts
 import type { SessionPrompt } from "@opencode-ai/plugin/promise/session"
@@ -1184,9 +1233,8 @@ interface SessionHookContext {
 
 ### Permissions
 
-Review permission decisions after configured rules are evaluated and before an action runs or a permission prompt is
-published. Hooks run for `allow` and `ask` decisions. An explicit configured `deny` is final and does not invoke the
-hook.
+Review permission decisions after configured rules are evaluated and before an
+action runs or a permission prompt is published.
 
 ```ts
 await ctx.permission.hook("evaluate", async (event) => {
@@ -1204,8 +1252,12 @@ await ctx.permission.hook("evaluate", async (event) => {
 })
 ```
 
-The hook may set `effect` to `allow`, `ask`, or `deny`. When set, `message` is included in an escalated permission
-request or used as the denial reason.
+Permission hooks follow these rules:
+
+- Hooks run for `allow` and `ask` decisions.
+- An explicit configured `deny` is final and does not invoke the hook.
+- A hook may change `effect` to `allow`, `ask`, or `deny`.
+- `message` appears in an escalated permission request or becomes the denial reason.
 
 #### Reference
 
@@ -1237,10 +1289,7 @@ await ctx.shell.hook("create.before", (event) => {
 
 ```ts
 interface ShellHookContext {
-  hook(
-    name: "create.before",
-    callback: (event: ShellCreateBefore) => Promise<void> | void,
-  ): Promise<Registration>
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
 }
 
 interface ShellCreateBefore {
@@ -1298,13 +1347,18 @@ manifest is:
   "version": "1.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "beta"
   }
 }
 ```
+
+The `./rpc` export is optional; include it when publishing a shared
+[RPC contract](/build/plugins/rpc) for other plugins and clients to import
+without loading your implementation.
 
 Use versions compatible with the OpenCode release you target and test the
 installed package, not only a workspace-linked copy. Because the plugin API is

@@ -297,7 +297,10 @@ describe("ModelsDev Service", () => {
       const context = yield* Layer.build(buildLayer(state, cache, { fetch: true, snapshot: false }))
       const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(context))
       expect(result).toEqual(fixture2Snapshot)
-      expect(cache.values.get(cacheKey)).toMatchObject({ body: JSON.stringify(fixture2) })
+      expect(cache.values.get(cacheKey)).toMatchObject({
+        body: JSON.stringify(fixture2),
+        digest: bodyDigest(JSON.stringify(fixture2)),
+      })
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
     }),
@@ -387,7 +390,10 @@ describe("ModelsDev Service", () => {
       )
       expect(result.before).toEqual(fixtureSnapshot)
       expect(result.after).toEqual(fixture2Snapshot)
-      expect(cache.values.get(cacheKey)).toMatchObject({ body: JSON.stringify(fixture2) })
+      expect(cache.values.get(cacheKey)).toMatchObject({
+        body: JSON.stringify(fixture2),
+        digest: bodyDigest(JSON.stringify(fixture2)),
+      })
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
       expect(final.calls[0].url).toContain("/api.json")
@@ -440,6 +446,10 @@ describe("ModelsDev Service", () => {
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
       expect(after).toEqual(fixture2Snapshot)
+      expect(cache.values.get(cacheKey)).toMatchObject({
+        body: JSON.stringify(fixture2),
+        digest: bodyDigest(JSON.stringify(fixture2)),
+      })
     }),
   )
 

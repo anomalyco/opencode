@@ -216,6 +216,35 @@ describe("pretty signature rendering", () => {
   })
 })
 
+describe("JSON Schema definition scope", () => {
+  test.each(["definitions", "$defs"])("resolves root %s and lets $defs take precedence", (key) => {
+    const schema = { $ref: `#/${key}/Value`, [key]: { Value: { type: "string" } } }
+    expect(jsonSchemaToTypeScript(schema)).toBe("string")
+    expect(jsonSchemaToTypeScript(schema, true)).toBe("string")
+
+    const overridden = { ...schema, $defs: { Value: { type: "number" } } }
+    expect(jsonSchemaToTypeScript(overridden)).toBe("number")
+    expect(jsonSchemaToTypeScript(overridden, true)).toBe("number")
+  })
+
+  test.each(["definitions", "$defs"])("nested %s shadow inherited definitions without affecting siblings", (key) => {
+    const schema = {
+      type: "object",
+      definitions: { Inherited: { type: "string" } },
+      $defs: { Value: { type: "number" } },
+      properties: {
+        nested: { $ref: `#/${key}/Value`, [key]: { Value: { type: "boolean" } } },
+        inherited: { $ref: "#/definitions/Inherited" },
+        sibling: { $ref: "#/$defs/Value" },
+      },
+    }
+    expect(jsonSchemaToTypeScript(schema)).toBe("{ nested?: boolean; inherited?: string; sibling?: number }")
+    expect(jsonSchemaToTypeScript(schema, true)).toBe(
+      ["{", "  nested?: boolean,", "  inherited?: string,", "  sibling?: number,", "}"].join("\n"),
+    )
+  })
+})
+
 describe("non-identifier property names render as quoted keys", () => {
   // MCP-style schemas routinely carry property names that are not bare TS identifiers
   // (`foo-bar`, `@type`, dotted names); the rendered signature must quote them so the

@@ -15,7 +15,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionEnvironment } from "@opencode-ai/core/session/environment"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { testEffect } from "./lib/effect"
-import { globalProjectLayer } from "./lib/project"
+import { globalProjectNode } from "./lib/project"
 import { tmpdirScoped } from "./fixture/tmpdir"
 
 const closed: Session.ID[] = []
@@ -39,7 +39,7 @@ const it = testEffect(
       LocationServiceMap.node,
     ]),
     [
-      [Project.node, globalProjectLayer],
+      [Project.node, globalProjectNode],
       [SessionExecution.node, SessionExecution.noopLayer],
       [SessionModelTransport.node, transport],
     ],

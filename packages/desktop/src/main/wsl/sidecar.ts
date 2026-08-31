@@ -10,7 +10,6 @@ export type WslSidecar = {
   stop: () => Promise<void>
   onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void
   url: string
-  username: string | null
   password: string
 }
 
@@ -23,7 +22,6 @@ export async function spawnWslSidecar(
 
   const port = await allocatePort()
   const password = randomUUID()
-  const username = "opencode"
   const script = [
     "set -euo pipefail",
     'cd "$HOME" || cd /',
@@ -32,7 +30,6 @@ export async function spawnWslSidecar(
     "export WSLENV=",
     "export OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER=true",
     "export OPENCODE_CLIENT=desktop",
-    `export OPENCODE_SERVER_USERNAME=${shellEscape(username)}`,
     `export OPENCODE_SERVER_PASSWORD=${shellEscape(password)}`,
     'export XDG_STATE_HOME="$HOME/.local/state"',
     `exec ${shellEscape(opencode)} --log-level ${app.isPackaged ? "warn" : "info"} serve --hostname 0.0.0.0 --port ${port}`,
@@ -89,7 +86,6 @@ export async function spawnWslSidecar(
     },
     onExit: (cb) => child.once("exit", cb),
     url,
-    username,
     password,
   }
 }

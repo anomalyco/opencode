@@ -25,7 +25,10 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   const definitions = [...pre, ...post]
   const enabled = new Set(definitions.map((plugin) => plugin.id))
   const packages = new Map<string, Plugin.Versioned>()
-  const failures = new Map<string, Extract<Plugin.Info, { readonly status: "failed" }>>()
+  const failures = new Map<
+    string,
+    Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
+  >()
   const plugins = () => [...definitions, ...packages.values()]
 
   for (const operation of operations) {
@@ -58,9 +61,8 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     if ("error" in plugin) {
       failures.set(operation.target, {
         source: pluginSource(operation.target),
-        status: "failed",
-        error: plugin.error,
-        tui: false,
+        state: { status: "failed", error: plugin.error },
+        features: { server: true },
       })
       continue
     }

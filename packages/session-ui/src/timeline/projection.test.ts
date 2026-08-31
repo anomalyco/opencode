@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import type { ModelRef, SessionMessageInfo } from "@opencode-ai/client/promise"
-import { createTimelineProjection, reuseTimelineRows, TimelineRow, type PartGroup } from "./projection"
+import type {
+  ModelRef,
+  SessionMessageAssistant,
+  SessionMessageAssistantTool,
+  SessionMessageInfo,
+} from "@opencode-ai/client/promise"
+import { createStore } from "solid-js/store"
+import { createTimelineProjection, reuseTimelineRows, Timeline, TimelineRow, type PartGroup } from "./projection"
 
 const context = (key: string, partIDs: string[], identity: { userMessageID?: string; messageID?: string } = {}) =>
   new TimelineRow.AssistantPart({
@@ -37,6 +43,62 @@ const part = (key: string, partID: string) =>
 
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
+
+describe("Timeline.resolveContent", () => {
+  const assistant = (content: SessionMessageAssistant["content"]): SessionMessageAssistant => ({
+    id: "assistant",
+    type: "assistant",
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    content,
+    time: { created: 0 },
+  })
+  const tool = (id: string): SessionMessageAssistantTool => ({
+    id,
+    type: "tool",
+    name: "read",
+    state: { status: "running", input: {}, metadata: {} },
+    time: { created: 0 },
+  })
+
+  test("resolves interleaved ordinals and current store references", () => {
+    const [store, setStore] = createStore({
+      message: assistant([
+        { type: "text", text: "" },
+        { type: "reasoning", text: "", time: { created: 0 } },
+        tool("read"),
+        { type: "text", text: "answer" },
+        { type: "reasoning", text: "thought", time: { created: 0 } },
+      ]),
+    })
+    expect(Timeline.resolveContent(store.message, "assistant:text:0")).toBe(store.message.content[0])
+    expect(Timeline.resolveContent(store.message, "assistant:reasoning:0")).toBe(store.message.content[1])
+    expect(Timeline.resolveContent(store.message, "read")).toBe(store.message.content[2])
+    expect(Timeline.resolveContent(store.message, "assistant:text:1")).toBe(store.message.content[3])
+    expect(Timeline.resolveContent(store.message, "assistant:reasoning:1")).toBe(store.message.content[4])
+    const original = store.message.content[3]
+    setStore("message", "content", 3, { type: "text", text: "updated" })
+    expect(Timeline.resolveContent(store.message, "assistant:text:1")).toBe(original)
+    expect(Timeline.resolveContent(store.message, "assistant:text:1")).toMatchObject({ text: "updated" })
+
+    setStore("message", "content", () => [{ type: "text" as const, text: "replacement" }, tool("replacement-tool")])
+    expect(Timeline.resolveContent(store.message, "assistant:text:0")).toBe(store.message.content[0])
+    expect(Timeline.resolveContent(store.message, "replacement-tool")).toBe(store.message.content[1])
+    expect(Timeline.resolveContent(store.message, "read")).toBeUndefined()
+    expect(Timeline.resolveContent(store.message, "assistant:text:1")).toBeUndefined()
+  })
+
+  test("stops reading as soon as the part is found", () => {
+    const message = assistant([tool("first")])
+    message.content.push({
+      get type(): "text" {
+        throw new Error("read past the matching part")
+      },
+      text: "later",
+    })
+    expect(Timeline.resolveContent(message, "first")).toBe(message.content[0])
+  })
+})
 
 describe("reuseTimelineRows", () => {
   test.each([

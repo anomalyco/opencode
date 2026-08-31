@@ -1,4 +1,5 @@
 import path from "node:path"
+import fs from "node:fs/promises"
 import { describe, expect, test } from "bun:test"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -43,6 +44,7 @@ import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import { executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
 
@@ -652,6 +654,47 @@ test("joins concurrent stdio transport closes", async () => {
   )
 })
 
+const testMcpDescendants =
+  process.platform === "win32" ? testEffect(hostEnvironmentLayer).live.skip : testEffect(hostEnvironmentLayer).live
+testMcpDescendants(
+  "terminates MCP descendants after the wrapper exits successfully",
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const pidFile = path.join(tmp.path, "child.pid")
+    yield* Effect.addFinalizer(() =>
+      Effect.tryPromise(async () => process.kill(Number(await fs.readFile(pidFile, "utf8")), "SIGKILL")).pipe(
+        Effect.ignore,
+      ),
+    )
+    const ready = yield* Deferred.make<void>()
+    // Stdin EOF exits the wrapper, but its ready descendant ignores SIGTERM and retains both pipes.
+    const transport = yield* McpStdio.make({
+      server: "held-stdio",
+      command: "node",
+      args: [path.join(import.meta.dir, "fixture/held-stdio.cjs"), "mcp", pidFile],
+      cwd: tmp.path,
+      environment: {},
+    })
+    transport.onmessage = () => {
+      Deferred.doneUnsafe(ready, Exit.void)
+    }
+    yield* Effect.promise(() => transport.start())
+    yield* Deferred.await(ready).pipe(Effect.timeout("3 seconds"))
+    const pid = Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf8")))
+
+    yield* Effect.promise(() => transport.close()).pipe(Effect.timeout("6 seconds"))
+
+    // close() must kill the descendant, not merely observe the wrapper's bounded exitCode.
+    const stopped = yield* Effect.try(() => process.kill(pid, 0)).pipe(
+      Effect.exit,
+      Effect.repeat({ while: Exit.isSuccess, schedule: Schedule.spaced("25 millis") }),
+      Effect.timeout("2 seconds"),
+    )
+    expect(Exit.isFailure(stopped)).toBe(true)
+  }),
+  15_000,
+)
+
 test("closes a stdio process that finishes spawning after close", async () => {
   const spawning = Deferred.makeUnsafe<void>()
   const release = Deferred.makeUnsafe<void>()
@@ -1206,6 +1249,68 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
     ),
   )
 })
+
+testEffect(Layer.empty).live(
+  "merges MCP defaults into the winning configured server without changing runtime overrides",
+  () =>
+    Effect.gen(function* () {
+      const entries = [
+        new Document({
+          type: "document",
+          info: new Info({
+            mcp: new ConfigMCP.Info({
+              timeout: { startup: 10, catalog: 20, execution: 30 },
+              servers: {
+                resources: { type: "local", command: ["earlier"], disabled: true, timeout: { execution: 90 } },
+              },
+            }),
+          }),
+        }),
+        new Document({
+          type: "document",
+          info: new Info({
+            mcp: new ConfigMCP.Info({
+              timeout: { catalog: 40 },
+              servers: {
+                resources: { type: "local", command: ["later"], disabled: true, timeout: { startup: 50 } },
+              },
+            }),
+          }),
+        }),
+      ]
+      const original = JSON.stringify(entries)
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        const check = yield* service.transform((draft) => {
+          expect(draft.get("resources")).toEqual({
+            type: "local",
+            command: ["later"],
+            disabled: true,
+            timeout: { startup: 50, catalog: 40, execution: 30 },
+          })
+        })
+        yield* check.dispose
+        const runtime = {
+          type: "local",
+          command: ["runtime"],
+          disabled: true,
+          timeout: { catalog: 60 },
+        } satisfies ConfigMCP.Local
+        yield* service.add("resources", runtime)
+        yield* service.reload()
+        yield* service.transform((draft) => {
+          expect(draft.get("resources")).toEqual(runtime)
+        })
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer("https://unused.example", undefined, undefined, {
+            entries: () => Effect.succeed(entries),
+          }),
+        ),
+      )
+      expect(JSON.stringify(entries)).toBe(original)
+    }),
+)
 
 testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).live(
   "manages live MCP servers entirely through scoped transforms",
