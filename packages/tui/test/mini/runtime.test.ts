@@ -21,6 +21,7 @@ function ok<T>(data: T) {
 
 function host(): MiniHost {
   return {
+    version: "local",
     terminal: { stdin: process.stdin },
     platform: "linux",
     stdout: { write() {} },

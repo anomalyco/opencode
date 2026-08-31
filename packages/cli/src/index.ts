@@ -17,6 +17,7 @@ import { CpuProfile } from "./cpu-profile"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
+  upgrade: () => import("./commands/handlers/upgrade"),
   acp: () => import("./commands/handlers/acp"),
   api: () => import("./commands/handlers/api"),
   auth: {

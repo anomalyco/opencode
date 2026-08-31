@@ -9,6 +9,8 @@ import {
   type MessageListOutput,
   type OpenCodeClient,
   type PermissionRequest,
+  type SessionInboxInfo,
+  type ToolContent,
 } from "@opencode-ai/client/promise"
 import { createSessionTransport } from "../../src/mini/stream-v2.transport"
 import { entryBody } from "../../src/mini/entry.body"
@@ -97,6 +99,15 @@ function footer() {
 }
 
 type SessionMessages = MessageListOutput["data"]
+
+const image = {
+  data: "cG5n",
+  mime: "image/png",
+  source: { type: "inline" },
+  name: "image.png",
+  description: "Diagram",
+  mention: { start: 5, end: 14, text: "[Image 1]" },
+} as const
 
 function compaction(status: "running" | "completed", summary: string): SessionMessages[number] {
   const message = {
@@ -217,6 +228,175 @@ afterEach(() => {
 })
 
 describe("V2 mini transport", () => {
+  test.each(["before", "after"])("renders materialized prompt images when delivery is %s the ack", async (order) => {
+    const events = feed()
+    events.push(connected())
+    const requested = defer()
+    const ack = defer()
+    const admitted = defer()
+    const idle = defer()
+    const messages: SessionMessages = []
+    const client = sdk({ streams: [events], messages: { ses_1: messages }, wait: () => idle.promise })
+    const ui = footer()
+    const live: StreamCommit[] = []
+    const files = [
+      { ...image, data: "c2VydmVy", name: "remote.png", source: { type: "uri" as const, uri: "file:///remote.png" } },
+      image,
+    ]
+    const pending = {
+      id: "msg_prompt",
+      sessionID: "ses_1",
+      type: "user",
+      payload: { text: "look [Image 1]", files },
+      delivery: "steer",
+      timeCreated: 1,
+    } satisfies SessionInboxInfo
+    const prompt = spyOn(client.session, "prompt").mockImplementation(() => {
+      requested.resolve()
+      return ack.promise.then(() => pending) as never
+    })
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      replay: true,
+      footer: ui.api,
+      onCommit: (commit) => live.push(commit),
+    })
+    ui.api.append({ kind: "user", source: "system", text: pending.payload.text, messageID: pending.id, phase: "start" })
+    const turn = transport.runPromptTurn(
+      {
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: {
+          messageID: pending.id,
+          text: pending.payload.text,
+          parts: [
+            {
+              type: "file",
+              url: "data:image/png;base64,cG5n",
+              filename: image.name,
+              mime: image.mime,
+              description: image.description,
+              source: { type: "file", text: { start: 5, end: 14, value: "[Image 1]" } },
+            },
+          ],
+        },
+        files: [{ type: "file", url: "file:///remote.png", filename: "remote.png", mime: "image/png" }],
+        includeFiles: true,
+      },
+      admitted.resolve,
+    )
+    await requested.promise
+    if (order === "after") {
+      ack.resolve()
+      await admitted.promise
+    }
+    expect(ui.commits.filter((commit) => commit.image)).toEqual([])
+    events.push({
+      id: "evt_delivered",
+      created: 1,
+      type: "session.inbox.delivered",
+      durable: durable("ses_1"),
+      data: { sessionID: "ses_1", inboxID: pending.id },
+    })
+    while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.status === "waiting for assistant"))
+      await Bun.sleep(0)
+    ack.resolve()
+    await admitted.promise
+
+    expect(prompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        files: [
+          { uri: "file:///remote.png", name: "remote.png" },
+          {
+            uri: "data:image/png;base64,cG5n",
+            name: image.name,
+            description: image.description,
+            mention: image.mention,
+          },
+        ],
+      }),
+      expect.anything(),
+    )
+    const images = ui.commits.filter((commit) => commit.image)
+    expect(images).toEqual([
+      {
+        kind: "user",
+        source: "system",
+        text: "remote.png",
+        image: "data:image/png;base64,c2VydmVy",
+        messageID: pending.id,
+        partID: "image:0",
+        phase: "final",
+      },
+      {
+        kind: "user",
+        source: "system",
+        text: image.name,
+        image: "data:image/png;base64,cG5n",
+        messageID: pending.id,
+        partID: "image:1",
+        phase: "final",
+      },
+    ])
+    messages.push({ id: pending.id, type: "user", ...pending.payload, time: { created: 1 } })
+    idle.resolve()
+    await turn
+
+    expect(ui.commits.filter((commit) => commit.image)).toEqual(images)
+    expect(ui.commits.filter((commit) => commit.kind === "user" && !commit.image)).toHaveLength(1)
+    await transport.replayOnResize({
+      localRows: () => live.map((commit) => ({ commit })),
+      reset: async () => {
+        ui.commits.length = 0
+      },
+    })
+    expect(ui.commits.filter((commit) => commit.image)).toEqual(images)
+    await transport.close()
+  })
+
+  test.each([true, false])(
+    "preserves visible image identity and suppresses unreplayed images with replay=%s",
+    async (replay) => {
+      const events = feed()
+      events.push(connected())
+      const ui = footer()
+      const transport = await createSessionTransport({
+        sdk: sdk({
+          streams: [events],
+          messages: {
+            ses_1: [
+              {
+                id: "msg_images",
+                type: "user",
+                text: "",
+                files: [
+                  image,
+                  image,
+                  { ...image, description: "Another diagram" },
+                  { ...image, source: { type: "uri", uri: "file:///image.png" } },
+                ],
+                time: { created: 1 },
+              },
+            ],
+          },
+        }),
+        sessionID: "ses_1",
+        thinking: false,
+        replay,
+        footer: ui.api,
+      })
+
+      await transport.waitForIdle()
+      expect(ui.commits).toHaveLength(replay ? 3 : 0)
+      expect(ui.commits.every((commit) => commit.image === "data:image/png;base64,cG5n")).toBe(true)
+      expect(new Set(ui.commits.map((commit) => commit.partID)).size).toBe(replay ? 3 : 0)
+      await transport.close()
+    },
+  )
+
   test("renders projected compactions as labeled transcript boundaries", async () => {
     const events = feed()
     events.push(connected())
@@ -307,7 +487,7 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("formats footer usage with compact tokens and context percentage", async () => {
+  test("preserves numeric footer tokens, context percentage, and cost-only usage", async () => {
     const events = feed()
     events.push(connected())
     const ui = footer()
@@ -346,7 +526,26 @@ describe("V2 mini transport", () => {
     })
 
     while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.usage)) await Bun.sleep(0)
-    expect(ui.events).toContainEqual({ type: "stream.patch", patch: { usage: "7.5K (5%)" } })
+    expect(ui.events).toContainEqual({ type: "stream.patch", patch: { usage: { tokens: 7_508, percent: 5 } } })
+
+    events.push({
+      id: "evt_cost_only",
+      created: 3,
+      type: "session.step.ended",
+      durable: durable("ses_1", 3),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_cost_only",
+        finish: "stop",
+        cost: 0.1234,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+    })
+    while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.usage?.cost)) await Bun.sleep(0)
+    expect(ui.events).toContainEqual({
+      type: "stream.patch",
+      patch: { usage: { tokens: 0, percent: undefined, cost: 0.1234 } },
+    })
     await transport.close()
   })
 
@@ -669,6 +868,7 @@ describe("V2 mini transport", () => {
             type: "user",
             payload: {
               text: "follow up",
+              files: [image],
               skills: [
                 { id: "effect", name: "Effect", text: "Use Effect services" },
                 { id: "effect", name: "Effect" },
@@ -681,7 +881,7 @@ describe("V2 mini transport", () => {
             sessionID: "ses_1",
             timeCreated: 2,
             type: "user",
-            payload: { text: "remove me" },
+            payload: { text: "remove me", files: [image] },
             delivery: "queue",
           },
         ],
@@ -717,6 +917,7 @@ describe("V2 mini transport", () => {
       expect.objectContaining({ kind: "user", text: "follow up" }),
     ])
     expect(pending()).toEqual([["msg_cancelled", "queue"]])
+    expect(ui.commits.some((commit) => commit.image)).toBe(false)
     events.push({
       id: "evt_queued",
       created: 4,
@@ -746,7 +947,10 @@ describe("V2 mini transport", () => {
       data: { sessionID: "ses_1", inboxID: "msg_queued" },
     })
     while (pending()?.length !== 0) await Bun.sleep(0)
-    expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toHaveLength(2)
+    expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toHaveLength(3)
+    expect(ui.commits.filter((commit) => commit.image)).toEqual([
+      expect.objectContaining({ kind: "user", messageID: "msg_queued", image: "data:image/png;base64,cG5n" }),
+    ])
     const prompt = spyOn(client.session, "prompt").mockImplementation(
       (request) => ok(promptAdmission(request)) as never,
     )
@@ -1277,10 +1481,12 @@ describe("V2 mini transport", () => {
     const second = feed()
     first.push(connected("evt_connected_1"))
     second.push(connected("evt_connected_2"))
+    const idle = defer()
     let running = true
     let projected = false
     const client = sdk({
       streams: [first, second],
+      wait: () => idle.promise,
       active: () => {
         const active: Record<string, { type: "running" }> = {}
         if (running) active.ses_1 = { type: "running" }
@@ -1295,7 +1501,7 @@ describe("V2 mini transport", () => {
                 id: "msg_prompt",
                 type: "user",
                 text: "hello",
-                files: [],
+                files: [image],
                 agents: [],
                 time: { created: 2 },
               },
@@ -1332,9 +1538,16 @@ describe("V2 mini transport", () => {
     projected = true
     running = false
     first.close()
+    while (!ui.commits.some((commit) => commit.image)) await Bun.sleep(0)
+    idle.resolve()
     await turn
 
-    expect(ui.commits.filter((item) => item.kind === "user" && item.messageID === "msg_prompt")).toHaveLength(1)
+    expect(
+      ui.commits.filter((item) => item.kind === "user" && !item.image && item.messageID === "msg_prompt"),
+    ).toHaveLength(1)
+    expect(ui.commits.filter((item) => item.image)).toEqual([
+      expect.objectContaining({ kind: "user", messageID: "msg_prompt", image: "data:image/png;base64,cG5n" }),
+    ])
     await transport.close()
   })
 
@@ -2208,6 +2421,114 @@ describe("V2 mini transport", () => {
     })
     await transport.close()
   })
+
+  test.each(["completed", "error"] as const)(
+    "renders only terminal inline tool images for %s results across resize",
+    async (status) => {
+      const events = feed()
+      events.push(connected())
+      const messages: SessionMessages = []
+      const client = sdk({ streams: [events], messages: { ses_1: messages } })
+      const ui = footer()
+      const live: StreamCommit[] = []
+      const transport = await createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: false,
+        replay: true,
+        footer: ui.api,
+        onCommit: (commit) => live.push(commit),
+      })
+      const content = [
+        { type: "text", text: "Captured screenshot" },
+        { type: "file", mime: "image/png", uri: "data:image/png;base64,cG5n" },
+        { type: "file", mime: "image/png", uri: "https://example.com/remote.png" },
+        { type: "file", mime: "text/plain", uri: "data:text/plain;base64,dGV4dA==" },
+        { type: "file", mime: "application/pdf", uri: "data:image/png;base64,cG5n" },
+      ] satisfies [ToolContent, ...ToolContent[]]
+      const error = { type: "unknown", message: "Tool failed after capturing image" } as const
+      const data = { sessionID: "ses_1", assistantMessageID: "msg_tool", id: "call_image", executed: true, content }
+      const terminal: RunV2Event =
+        status === "completed"
+          ? { id: "evt_result", created: 3, type: "session.tool.success", durable: durable("ses_1", 3, 2), data }
+          : {
+              id: "evt_result",
+              created: 3,
+              type: "session.tool.failed",
+              durable: durable("ses_1", 3, 2),
+              data: { ...data, error },
+            }
+      events.push({
+        id: "evt_input",
+        created: 1,
+        type: "session.tool.input.started",
+        durable: durable("ses_1", 1),
+        data: { sessionID: "ses_1", assistantMessageID: "msg_tool", id: "call_image", name: "read" },
+      })
+      events.push({
+        id: "evt_called",
+        created: 2,
+        type: "session.tool.called",
+        durable: durable("ses_1", 2),
+        data: {
+          sessionID: "ses_1",
+          assistantMessageID: "msg_tool",
+          id: "call_image",
+          input: { file_path: "image.png" },
+          executed: true,
+        },
+      })
+      while (!ui.commits.some((commit) => commit.toolState === "running")) await Bun.sleep(0)
+      expect(ui.commits.some((commit) => commit.image)).toBe(false)
+      events.push(terminal)
+      events.push(terminal)
+      while (!ui.commits.some((commit) => commit.image)) await Bun.sleep(0)
+      const images = ui.commits.filter((commit) => commit.image)
+      expect(images).toEqual([
+        {
+          kind: "tool",
+          source: "tool",
+          text: "[Image 1]",
+          image: "data:image/png;base64,cG5n",
+          messageID: "msg_tool",
+          partID: "prt_call_image:image:0",
+          phase: "final",
+        },
+      ])
+
+      const message = {
+        id: "msg_tool",
+        type: "assistant" as const,
+        agent: "build",
+        model: { providerID: "test", id: "model" },
+        content: [
+          canonicalToolPart(
+            "read",
+            status === "completed" ? { status, input: {}, content } : { status, input: {}, content, error },
+            "call_image",
+          ),
+        ],
+        time: { created: 1 },
+      }
+      messages.push({ ...message, content: [] })
+      await transport.replayOnResize({
+        localRows: () => live.map((commit) => ({ commit })),
+        reset: async () => {
+          ui.commits.length = 0
+        },
+      })
+      expect(ui.commits.filter((commit) => commit.image)).toEqual(images)
+      messages[0] = message
+      await transport.replayOnResize({
+        localRows: () => live.map((commit) => ({ commit })),
+        reset: async () => {
+          ui.commits.length = 0
+        },
+      })
+      expect(ui.commits.filter((commit) => commit.image)).toEqual(images)
+      await transport.close()
+    },
+  )
 
   test("waits for the attempted web search provider before rendering its title", async () => {
     const events = feed()
@@ -3300,7 +3621,10 @@ describe("V2 mini transport", () => {
         id: "call_child_shell",
         error: { type: "unknown", message: "child boom" },
         metadata: { checkpoint: "child" },
-        content: [{ type: "text", text: "child partial" }],
+        content: [
+          { type: "text", text: "child partial" },
+          { type: "file", mime: "image/png", uri: "data:image/png;base64,cG5n" },
+        ],
         executed: true,
       },
     })
@@ -3327,8 +3651,19 @@ describe("V2 mini transport", () => {
     ).toMatchObject({
       status: "error",
       metadata: { checkpoint: "child" },
-      content: [{ type: "text", text: "child partial" }],
+      content: [
+        { type: "text", text: "child partial" },
+        { type: "file", mime: "image/png", uri: "data:image/png;base64,cG5n" },
+      ],
     })
+    expect(commits.filter((commit) => commit.image)).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        messageID: "msg_child_tool",
+        image: "data:image/png;base64,cG5n",
+        phase: "final",
+      }),
+    ])
     expect(
       ui.events.find(
         (event) =>
@@ -3491,7 +3826,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_child",
         inboxID: "msg_child_prompt",
-        item: { type: "user", payload: { text: "actual child prompt" }, delivery: "steer" },
+        item: { type: "user", payload: { text: "actual child prompt", files: [image] }, delivery: "steer" },
       },
     })
     await Bun.sleep(0)
@@ -3517,6 +3852,84 @@ describe("V2 mini transport", () => {
     )
       await Bun.sleep(0)
 
+    expect(
+      states()
+        .at(-1)
+        ?.details.ses_child?.commits.filter((commit) => commit.image),
+    ).toEqual([
+      expect.objectContaining({ kind: "user", messageID: "msg_child_prompt", image: "data:image/png;base64,cG5n" }),
+    ])
+    await transport.close()
+  })
+
+  test("hydrates child images and keeps pending attachments hidden until delivery", async () => {
+    const events = feed()
+    events.push(connected())
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        streams: [events],
+        sessions: [{ id: "ses_child", parentID: "ses_1", time: { updated: 1 } }],
+        messages: {
+          ses_child: [
+            { id: "msg_old_image", type: "user", text: "", files: [image, image], time: { created: 1 } },
+            {
+              id: "msg_child_tool",
+              type: "assistant",
+              agent: "build",
+              model: { providerID: "test", id: "model" },
+              content: [
+                canonicalToolPart("read", {
+                  status: "completed",
+                  input: {},
+                  content: [{ type: "file", mime: "image/png", uri: "data:image/png;base64,cG5n" }],
+                }),
+              ],
+              time: { created: 2 },
+            },
+          ],
+        },
+        pending: {
+          ses_child: [
+            {
+              id: "msg_pending_image",
+              sessionID: "ses_child",
+              type: "user",
+              payload: { text: "", files: [image] },
+              delivery: "queue",
+              timeCreated: 3,
+            },
+          ],
+        },
+      }),
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+    })
+    const images = () =>
+      ui.events
+        .flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+        .at(-1)
+        ?.details.ses_child?.commits.filter((commit) => commit.image) ?? []
+    transport.selectSubagent("ses_child")
+    while (images().length < 2) await Bun.sleep(0)
+    expect(
+      images()
+        .map((commit) => commit.kind)
+        .sort(),
+    ).toEqual(["tool", "user"])
+    expect(images().some((commit) => commit.messageID === "msg_pending_image")).toBe(false)
+    const delivered: RunV2Event = {
+      id: "evt_child_image_delivered",
+      created: 3,
+      type: "session.inbox.delivered",
+      durable: durable("ses_child", 3),
+      data: { sessionID: "ses_child", inboxID: "msg_pending_image" },
+    }
+    events.push(delivered)
+    events.push(delivered)
+    while (images().length < 3) await Bun.sleep(0)
+    expect(images().filter((commit) => commit.messageID === "msg_pending_image")).toHaveLength(1)
     await transport.close()
   })
 
@@ -3555,7 +3968,11 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_child",
         inboxID: "msg_child_race",
-        item: { type: "user", payload: { text: "prompt admitted before hydration" }, delivery: "steer" },
+        item: {
+          type: "user",
+          payload: { text: "prompt admitted before hydration", files: [image] },
+          delivery: "steer",
+        },
       },
     })
     await Bun.sleep(0)
@@ -3581,6 +3998,13 @@ describe("V2 mini transport", () => {
     )
       await Bun.sleep(0)
 
+    expect(
+      states()
+        .at(-1)
+        ?.details.ses_child?.commits.filter((commit) => commit.image),
+    ).toEqual([
+      expect.objectContaining({ kind: "user", messageID: "msg_child_race", image: "data:image/png;base64,cG5n" }),
+    ])
     await transport.close()
   })
 
