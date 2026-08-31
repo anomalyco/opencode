@@ -1,7 +1,7 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
-import { createMemo } from "solid-js"
+import { createMemo, Show } from "solid-js"
 
 const id = "internal:sidebar-context"
 
@@ -34,14 +34,28 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   })
 
+  const progressBar = createMemo(() => {
+    const pct = state().percent ?? 0
+    const totalBlocks = 12
+    const filled = Math.min(totalBlocks, Math.max(0, Math.round((pct / 100) * totalBlocks)))
+    const empty = totalBlocks - filled
+    return "█".repeat(filled) + "░".repeat(empty)
+  })
+
   return (
-    <box>
+    <box gap={0} paddingTop={1}>
       <text fg={theme().text}>
-        <b>Context</b>
+        <b>Context Buffer</b>
       </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
-      <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      <text fg={theme().primary}>
+        <span>[{progressBar()}]</span> <span>{state().percent ?? 0}%</span>
+      </text>
+      <text fg={theme().textMuted}>
+        {state().tokens.toLocaleString()} tokens
+      </text>
+      <Show when={cost() > 0}>
+        <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      </Show>
     </box>
   )
 }

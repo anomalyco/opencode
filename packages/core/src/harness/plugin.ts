@@ -220,18 +220,15 @@ const layer = Layer.effect(
             if (
               output.text &&
               !output.text.includes(
-                "Harness Quality & Evolution Feedback",
+                "QUALITY GATE",
               )
             ) {
               const auditBanner =
-                `\n\n---\n` +
-                `### 📊 Harness Quality & Evolution Feedback\n` +
-                `**Are you satisfied with this subtask result? (Yes/No)**\n` +
-                `*Reply ` +
-                "`Yes`" +
-                ` to confirm or ` +
-                "`No: <your explanation of how you expected it>`" +
-                ` so the Harness can learn and extract rules for future runs.*`
+                `\n\n` +
+                `─────────────────────────────────────────────────────────────────\n` +
+                ` **QUALITY GATE** · Subtask Verification\n` +
+                ` Are you satisfied with this output?  [ \`Yes\` / Accept ]  [ \`No: <feedback>\` / Refine ]\n` +
+                `─────────────────────────────────────────────────────────────────`
 
               output.text += auditBanner
             }

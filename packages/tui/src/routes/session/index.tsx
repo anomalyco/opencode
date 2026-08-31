@@ -1411,6 +1411,14 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
+            <box flexDirection="row" alignItems="center" gap={1} paddingBottom={1}>
+              <text fg={theme.background} bg={color()}>
+                <b>{" YOU "}</b>
+              </text>
+              <Show when={ctx.showTimestamps()}>
+                <text fg={theme.textMuted}>{Locale.todayTimeOrDateTime(props.message.time.created)}</text>
+              </Show>
+            </box>
             <text fg={theme.text}>{text()}</text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
@@ -1543,26 +1551,27 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
           <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
-            <text marginTop={1}>
-              <span
-                style={{
-                  fg:
-                    props.message.error?.name === "MessageAbortedError"
-                      ? theme.textMuted
-                      : local.agent.color(props.message.agent),
-                }}
+            <box flexDirection="row" alignItems="center" gap={1} marginTop={1}>
+              <text
+                fg={theme.background}
+                bg={
+                  props.message.error?.name === "MessageAbortedError"
+                    ? theme.textMuted
+                    : local.agent.color(props.message.agent)
+                }
               >
-                ▣{" "}
-              </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
-              <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
-              </Show>
-              <Show when={props.message.error?.name === "MessageAbortedError"}>
-                <span style={{ fg: theme.textMuted }}> · interrupted</span>
-              </Show>
-            </text>
+                <b>{" ZIQ-CODE "}</b>
+              </text>
+              <text fg={theme.textMuted}>
+                <span>{model()}</span>
+                <Show when={duration()}>
+                  <span> · {Locale.duration(duration())}</span>
+                </Show>
+                <Show when={props.message.error?.name === "MessageAbortedError"}>
+                  <span> · interrupted</span>
+                </Show>
+              </text>
+            </box>
           </box>
         </Match>
       </Switch>
@@ -1657,29 +1666,37 @@ function ReasoningHeader(props: {
   return (
     <Switch>
       <Match when={!props.done}>
-        <box flexDirection="row">
-          <Spinner color={fg()}>{props.title ? "Thinking: " + props.title : "Thinking"}</Spinner>
+        <box flexDirection="row" alignItems="center" gap={1}>
+          <text fg={theme.background} bg={theme.warning}>
+            <b>{" THINK "}</b>
+          </text>
+          <Spinner color={fg()}>{props.title ? "Thinking: " + props.title : "Thinking..."}</Spinner>
         </box>
       </Match>
       <Match when={true}>
-        <text fg={fg()} wrapMode="none">
-          <Show when={props.toggleable}>
-            <span>{props.open ? "- " : "+ "}</span>
-          </Show>
-          <span>Thought</span>
-          <Show when={props.title || props.duration}>
-            <span>: </span>
-          </Show>
-          <Show when={props.title}>
-            <span>{props.title}</span>
-          </Show>
-          <Show when={props.duration}>
-            <span>
-              {props.title ? " · " : ""}
-              {props.duration}
-            </span>
-          </Show>
-        </text>
+        <box flexDirection="row" alignItems="center" gap={1}>
+          <text fg={theme.background} bg={theme.borderActive}>
+            <b>{" THINK "}</b>
+          </text>
+          <text fg={fg()} wrapMode="none">
+            <Show when={props.toggleable}>
+              <span>{props.open ? "▾ " : "▸ "}</span>
+            </Show>
+            <span>Deliberation</span>
+            <Show when={props.title || props.duration}>
+              <span>: </span>
+            </Show>
+            <Show when={props.title}>
+              <span>{props.title}</span>
+            </Show>
+            <Show when={props.duration}>
+              <span>
+                {props.title ? " · " : ""}
+                {props.duration}
+              </span>
+            </Show>
+          </text>
+        </box>
       </Match>
     </Switch>
   )
@@ -1814,7 +1831,7 @@ function GenericTool(props: ToolProps) {
     <Show
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
-        <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
+        <InlineTool badge="TOOL" badgeBg={theme.secondary} pending="Writing command..." complete={true} part={props.part}>
           {props.tool} {input(props.input)}
         </InlineTool>
       }
@@ -1836,8 +1853,10 @@ function GenericTool(props: ToolProps) {
 }
 
 function InlineTool(props: {
-  icon: string
+  icon?: string
   iconColor?: RGBA
+  badge?: string
+  badgeBg?: RGBA
   color?: RGBA
   complete: unknown
   pending: string
@@ -1886,6 +1905,8 @@ function InlineTool(props: {
     <InlineToolRow
       icon={props.icon}
       iconColor={props.iconColor}
+      badge={props.badge}
+      badgeBg={props.badgeBg}
       color={fg()}
       errorColor={theme.error}
       failed={failed()}
@@ -1914,8 +1935,10 @@ function InlineTool(props: {
 }
 
 export function InlineToolRow(props: {
-  icon: string
+  icon?: string
   iconColor?: RGBA
+  badge?: string
+  badgeBg?: RGBA
   color?: RGBA
   errorColor?: RGBA
   failed?: boolean
@@ -1932,6 +1955,7 @@ export function InlineToolRow(props: {
   onMouseOut?: () => void
   onMouseUp?: () => void
 }) {
+  const { theme } = useTheme()
   return (
     <box
       paddingLeft={3}
@@ -1965,14 +1989,26 @@ export function InlineToolRow(props: {
             }
             when={props.complete || props.failed}
           >
-            <box flexDirection="row">
-              <text
-                width={INLINE_TOOL_ICON_WIDTH}
-                fg={props.failed ? props.errorColor : (props.iconColor ?? props.color)}
-                attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+            <box flexDirection="row" alignItems="center" gap={1}>
+              <Show
+                when={props.badge}
+                fallback={
+                  <text
+                    width={INLINE_TOOL_ICON_WIDTH}
+                    fg={props.failed ? props.errorColor : (props.iconColor ?? props.color)}
+                    attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+                  >
+                    {props.icon ?? "›"}
+                  </text>
+                }
               >
-                {props.icon}
-              </text>
+                <text
+                  fg={theme.background}
+                  bg={props.failed ? props.errorColor : (props.badgeBg ?? theme.primary)}
+                >
+                  <b>{` ${props.badge} `}</b>
+                </text>
+              </Show>
               <text
                 flexGrow={1}
                 fg={props.failed ? props.errorColor : props.color}
@@ -2008,39 +2044,24 @@ function BlockTool(props: {
     <box
       ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
       border={["left"]}
-      paddingTop={1}
-      paddingBottom={1}
-      paddingLeft={2}
-      marginTop={1}
-      gap={1}
-      backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
+      borderColor={error() ? theme.error : theme.border}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background}
-      onMouseOver={() => props.onClick && setHover(true)}
-      onMouseOut={() => setHover(false)}
-      onMouseUp={() => {
-        if (renderer.getSelection()?.getSelectedText()) return
-        props.onClick?.()
-      }}
+      marginTop={1}
+      paddingLeft={2}
     >
-      <Show when={props.title}>
-        {(title) => (
-          <Show
-            when={props.spinner}
-            fallback={
-              <text paddingLeft={3} fg={theme.textMuted}>
-                {title()}
-              </text>
-            }
-          >
-            <Spinner color={theme.textMuted}>{title().replace(/^# /, "")}</Spinner>
-          </Show>
-        )}
-      </Show>
-      {props.children}
-      <Show when={error()}>
-        <text fg={theme.error}>{error()}</text>
-      </Show>
+      <box
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={() => {
+          if (renderer.getSelection()?.getSelectedText()) return
+          props.onClick?.()
+        }}
+      >
+        <Show when={props.title}>
+          <text fg={theme.textMuted}>{props.title}</text>
+        </Show>
+        {props.children}
+      </box>
     </box>
   )
 }
@@ -2096,8 +2117,14 @@ function Shell(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="$" pending="Writing command..." complete={stringValue(props.input.command)} part={props.part}>
-          {stringValue(props.input.command)}
+        <InlineTool
+          badge="BASH"
+          badgeBg={theme.success}
+          pending="Writing command..."
+          complete={stringValue(props.input.command)}
+          part={props.part}
+        >
+          <text fg={theme.text}>{stringValue(props.input.command)}</text>
         </InlineTool>
       </Match>
     </Switch>
@@ -2129,12 +2156,13 @@ function Write(props: ToolProps) {
       </Match>
       <Match when={true}>
         <InlineTool
-          icon="←"
+          badge="WRITE"
+          badgeBg={theme.accent}
           pending="Preparing write..."
           complete={stringValue(props.input.filePath)}
           part={props.part}
         >
-          Write {pathFormatter.format(stringValue(props.input.filePath))}
+          <text fg={theme.text}>{pathFormatter.format(stringValue(props.input.filePath))}</text>
         </InlineTool>
       </Match>
     </Switch>
@@ -2142,13 +2170,24 @@ function Write(props: ToolProps) {
 }
 
 function Glob(props: ToolProps) {
+  const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Finding files..." complete={stringValue(props.input.pattern)} part={props.part}>
-      Glob "{stringValue(props.input.pattern)}"{" "}
-      <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
+    <InlineTool
+      badge="GLOB"
+      badgeBg={theme.secondary}
+      pending="Finding files..."
+      complete={stringValue(props.input.pattern)}
+      part={props.part}
+    >
+      <text fg={theme.text}>"{stringValue(props.input.pattern)}"</text>
+      <Show when={stringValue(props.input.path)}>
+        <text fg={theme.textMuted}> in {pathFormatter.format(stringValue(props.input.path))}</text>
+      </Show>
       <Show when={numberValue(props.metadata.count)}>
-        ({numberValue(props.metadata.count)} {numberValue(props.metadata.count) === 1 ? "match" : "matches"})
+        <text fg={theme.textMuted}>
+          {" "}({numberValue(props.metadata.count)} {numberValue(props.metadata.count) === 1 ? "match" : "matches"})
+        </text>
       </Show>
     </InlineTool>
   )
@@ -2168,13 +2207,14 @@ function Read(props: ToolProps) {
   return (
     <>
       <InlineTool
-        icon="→"
+        badge="READ"
+        badgeBg={theme.info}
         pending="Reading file..."
         complete={stringValue(props.input.filePath)}
         spinner={isRunning()}
         part={props.part}
       >
-        Read {pathFormatter.format(stringValue(props.input.filePath))} {input(props.input, ["filePath"])}
+        <text fg={theme.text}>{pathFormatter.format(stringValue(props.input.filePath))} {input(props.input, ["filePath"])}</text>
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
@@ -2190,31 +2230,58 @@ function Read(props: ToolProps) {
 }
 
 function Grep(props: ToolProps) {
+  const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Searching content..." complete={stringValue(props.input.pattern)} part={props.part}>
-      Grep "{stringValue(props.input.pattern)}"{" "}
-      <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
+    <InlineTool
+      badge="GREP"
+      badgeBg={theme.warning}
+      pending="Searching content..."
+      complete={stringValue(props.input.pattern)}
+      part={props.part}
+    >
+      <text fg={theme.text}>"{stringValue(props.input.pattern)}"</text>
+      <Show when={stringValue(props.input.path)}>
+        <text fg={theme.textMuted}> in {pathFormatter.format(stringValue(props.input.path))}</text>
+      </Show>
       <Show when={numberValue(props.metadata.matches)}>
-        ({numberValue(props.metadata.matches)} {numberValue(props.metadata.matches) === 1 ? "match" : "matches"})
+        <text fg={theme.textMuted}>
+          {" "}({numberValue(props.metadata.matches)} {numberValue(props.metadata.matches) === 1 ? "match" : "matches"})
+        </text>
       </Show>
     </InlineTool>
   )
 }
 
 function WebFetch(props: ToolProps) {
+  const { theme } = useTheme()
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={stringValue(props.input.url)} part={props.part}>
-      WebFetch {stringValue(props.input.url)}
+    <InlineTool
+      badge="FETCH"
+      badgeBg={theme.info}
+      pending="Fetching from web..."
+      complete={stringValue(props.input.url)}
+      part={props.part}
+    >
+      <text fg={theme.text}>{stringValue(props.input.url)}</text>
     </InlineTool>
   )
 }
 
 function WebSearch(props: ToolProps) {
+  const { theme } = useTheme()
   return (
-    <InlineTool icon="◈" pending="Searching web..." complete={stringValue(props.input.query)} part={props.part}>
-      {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"{" "}
-      <Show when={numberValue(props.metadata.numResults)}>({numberValue(props.metadata.numResults)} results)</Show>
+    <InlineTool
+      badge="SEARCH"
+      badgeBg={theme.primary}
+      pending="Searching web..."
+      complete={stringValue(props.input.query)}
+      part={props.part}
+    >
+      <text fg={theme.text}>"{stringValue(props.input.query)}"</text>
+      <Show when={numberValue(props.metadata.numResults)}>
+        <text fg={theme.textMuted}> ({numberValue(props.metadata.numResults)} results)</text>
+      </Show>
     </InlineTool>
   )
 }
@@ -2439,8 +2506,16 @@ function Edit(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing edit..." complete={stringValue(props.input.filePath)} part={props.part}>
-          Edit {pathFormatter.format(stringValue(props.input.filePath))} {input({ replaceAll: props.input.replaceAll })}
+        <InlineTool
+          badge="EDIT"
+          badgeBg={theme.accent}
+          pending="Preparing edit..."
+          complete={stringValue(props.input.filePath)}
+          part={props.part}
+        >
+          <text fg={theme.text}>
+            {pathFormatter.format(stringValue(props.input.filePath))} {input({ replaceAll: props.input.replaceAll })}
+          </text>
         </InlineTool>
       </Match>
     </Switch>
