@@ -176,50 +176,102 @@ const retainedItems = [
     role: "user",
     content: [
       { type: "input_image", image_url: "https://example.com/image.png" },
-      { type: "input_file", filename: "report.pdf", file_data: "data:application/pdf;base64,cGRm" },
-      { type: "input_file", filename: "other.pdf", file_url: "https://example.com/report.pdf" },
+      { type: "input_file", filename: "report.pdf", file_data: "data:application/pdf;base64,cGRm", detail: "high" },
+      { type: "input_file", filename: "other.pdf", file_url: "https://example.com/report.pdf", detail: "low" },
     ],
   },
   checkpoint,
 ]
 
-testEffect(
-  dynamicResponse(({ request, text, respond }) =>
-    Effect.sync(() => {
-      if (new URL(request.url).pathname.endsWith("/compact"))
-        return respond(JSON.stringify({ object: "response.compaction", output: retainedItems }))
-      expect(JSON.parse(text).input).toEqual(retainedItems)
-      return respond(sseEvents({ type: "response.completed", response: { id: "resp_1" } }), {
-        headers: { "content-type": "text/event-stream" },
-      })
-    }),
+for (const model of [
+  OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
+  ...[undefined, "custom"].map((providerMetadataKey) =>
+    Route.make({
+      id: providerMetadataKey ?? "default-metadata",
+      provider: "openai",
+      providerMetadataKey,
+      protocol: OpenAIResponses.protocol,
+      compact: OpenAIResponses.route.compact,
+      endpoint: OpenAIResponses.route.endpoint,
+      transport: OpenAIResponses.httpTransport,
+    }).model({ id: "fixture" }),
   ),
-).effect("retained messages, reasoning, and media are ordinary typed conversation parts", () =>
-  Effect.gen(function* () {
-    const request = LLM.request({
-      model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
-      prompt: "hello",
-    })
-    const compacted = yield* LLMClient.compact(request)
-    expect(compacted.messages.map((message) => message.role)).toEqual([
-      "user",
-      "assistant",
-      "assistant",
-      "assistant",
-      "user",
-      "assistant",
-    ])
-    expect(compacted.messages[1]?.content).toEqual([
-      { type: "text", text: "First" },
-      { type: "text", text: "Second" },
-    ])
-    expect(compacted.messages[2]?.content.map((part) => part.type)).toEqual(["reasoning", "reasoning"])
-    expect(compacted.messages[4]?.content.map((part) => part.type)).toEqual(["media", "media", "media"])
-    const codec = Schema.fromJsonString(Schema.Array(Message))
-    const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.messages))
-    yield* LLMClient.generate(LLMRequest.update(request, { messages }))
-  }),
-)
+]) {
+  testEffect(
+    dynamicResponse(({ request, text, respond }) =>
+      Effect.sync(() => {
+        if (new URL(request.url).pathname.endsWith("/compact"))
+          return respond(JSON.stringify({ object: "response.compaction", output: retainedItems }))
+        expect(JSON.parse(text).input).toEqual(retainedItems)
+        return respond(sseEvents({ type: "response.completed", response: { id: "resp_1" } }), {
+          headers: { "content-type": "text/event-stream" },
+        })
+      }),
+    ),
+  ).effect(`${model.route.id} retains messages, reasoning, and media through typed conversation parts`, () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model,
+        prompt: "hello",
+      })
+      const compacted = yield* LLMClient.compact(request)
+      expect(compacted.messages.map((message) => message.role)).toEqual([
+        "user",
+        "assistant",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+      ])
+      expect(compacted.messages[1]?.content).toEqual([
+        { type: "text", text: "First" },
+        { type: "text", text: "Second" },
+      ])
+      expect(compacted.messages[2]?.content.map((part) => part.type)).toEqual(["reasoning", "reasoning"])
+      expect(compacted.messages[4]?.content.map((part) => part.type)).toEqual(["media", "media", "media"])
+      const codec = Schema.fromJsonString(Schema.Array(Message))
+      const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.messages))
+      yield* LLMClient.generate(LLMRequest.update(request, { messages }))
+    }),
+  )
+}
+
+for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: "overridden" }]) {
+  testEffect(
+    dynamicResponse(({ text, respond }) =>
+      Effect.sync(() => {
+        expect(JSON.parse(text)).toEqual({
+          model: "fixture",
+          input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+          service_tier: overlay?.service_tier ?? "flex",
+          prompt_cache_key: overlay?.prompt_cache_key ?? "affinity",
+          prompt_cache_retention: "24h",
+          prompt_cache_options: { mode: "explicit", ttl: "30m" },
+        })
+        return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
+      }),
+    ),
+  ).effect(`compact preserves supported request controls${overlay ? " with HTTP overrides" : ""}`, () =>
+    LLMClient.compact(
+      LLM.request({
+        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        prompt: "hello",
+        promptCacheKey: "affinity",
+        providerOptions: { serviceTier: "flex" },
+        generation: { maxTokens: 100 },
+        http: {
+          body: {
+            stream: true,
+            store: false,
+            prompt_cache_retention: "24h",
+            prompt_cache_options: { mode: "explicit", ttl: "30m" },
+            ...overlay,
+          },
+        },
+      }),
+    ),
+  )
+}
 
 for (const item of [
   { type: "unknown_provider_item", data: "do not hide in a compaction part" },
@@ -235,6 +287,23 @@ for (const item of [
     content: [{ type: "input_image", image_url: "https://example.com/image.png" }],
   },
   { type: "message", role: "user", content: [{ type: "input_file", filename: "missing.pdf" }] },
+  {
+    type: "message",
+    role: "user",
+    content: [{ type: "input_file", filename: "bad.pdf", file_url: "https://example.com/report.pdf", detail: 42 }],
+  },
+  {
+    type: "message",
+    role: "user",
+    content: [
+      {
+        type: "input_file",
+        filename: "both.pdf",
+        file_url: "https://example.com/report.pdf",
+        file_data: "data:application/pdf;base64,cGRm",
+      },
+    ],
+  },
 ]) {
   testEffect(fixedResponse(JSON.stringify({ object: "response.compaction", output: [item, checkpoint] }))).effect(
     `rejects unsupported compact output: ${JSON.stringify(item)}`,

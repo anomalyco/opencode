@@ -41,9 +41,10 @@ export const OpenResponsesInputImage = Schema.Struct({
   image_url: Schema.String,
   detail: Schema.optional(Schema.String),
 })
-const OpenResponsesInputFile = Schema.Struct({
+export const OpenResponsesInputFile = Schema.Struct({
   type: Schema.tag("input_file"),
   filename: Schema.String,
+  detail: Schema.optional(Schema.String),
   file_data: Schema.optional(Schema.String),
   file_url: Schema.optional(Schema.String),
 })
@@ -515,6 +516,9 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   const media = ProviderShared.normalizeMedia(part)
   const providerMedia = adapter.lowerMedia?.({ part, media, request })
   if (providerMedia) return providerMedia
+  const detail = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))(
+    part.providerMetadata?.[metadataKey(request.model)]?.detail,
+  )
   const url =
     typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
       ? part.data
@@ -525,15 +529,14 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
     return {
       type: "input_file" as const,
       filename: part.filename ?? (media.mime === "application/pdf" ? "document.pdf" : "file"),
+      detail,
       ...(url ? { file_url: url } : { file_data: media.dataUrl }),
     }
   }
   return {
     type: "input_image" as const,
     image_url: url ?? media.dataUrl,
-    detail: yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))(
-      part.providerMetadata?.[request.model.route.providerMetadataKey ?? "openresponses"]?.detail,
-    ),
+    detail,
   }
 })
 
@@ -601,7 +604,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   adapter: ProviderAdapter,
 ) {
   const input: LoweredInputItem[] = []
-  const providerMetadataKey = request.model.route.providerMetadataKey ?? "openresponses"
+  const providerMetadataKey = metadataKey(request.model)
 
   for (const message of request.messages) {
     const metadata = yield* ProviderShared.validateWith(
@@ -865,6 +868,8 @@ const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason =
   if (reason === "content_filter") return "content-filter"
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
+
+export const metadataKey = (model: LLMRequest["model"]) => model.route.providerMetadataKey ?? "openresponses"
 
 export const providerMetadata = (state: ParserState, metadata: Record<string, unknown>): ProviderMetadata => ({
   [state.providerMetadataKey]: metadata,
@@ -1512,7 +1517,7 @@ export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADA
   completedCompactions: new Set<string>(),
   id: adapter.id,
   name: adapter.name,
-  providerMetadataKey: request.model.route.providerMetadataKey ?? "openresponses",
+  providerMetadataKey: metadataKey(request.model),
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
   completedTools: new Set<string>(),
