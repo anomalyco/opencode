@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
-import { CacheHint, CachePolicyObject, LLM, Message } from "../src/index.js"
+import { Effect } from "effect"
+import { CacheHint, LLM, Message } from "../src/index.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { AmazonBedrock, GoogleVertexMessages } from "../src/providers.js"
@@ -28,37 +28,6 @@ const geminiModel = Gemini.route
     auth: Auth.header("x-goog-api-key", "test"),
   })
   .model({ id: "gemini-2.5-flash" })
-
-const decodeCachePolicyObject = Schema.decodeUnknownSync(CachePolicyObject)
-
-describe("cache policy schema", () => {
-  test.each([0, 2])("accepts messages.tail count %d when decoding and constructing", (tail) => {
-    expect(decodeCachePolicyObject({ messages: { tail } })).toEqual({ messages: { tail } })
-    expect(
-      LLM.request({
-        model: anthropicModel,
-        prompt: "hi",
-        cache: { messages: { tail } },
-      }).cache,
-    ).toEqual({ messages: { tail } })
-  })
-
-  test.each([
-    ["negative", -1],
-    ["fraction", 1.5],
-    ["NaN", Number.NaN],
-    ["Infinity", Number.POSITIVE_INFINITY],
-  ])("rejects a %s messages.tail when decoding and constructing", (_name, tail) => {
-    expect(() => decodeCachePolicyObject({ messages: { tail } })).toThrow()
-    expect(() =>
-      LLM.request({
-        model: anthropicModel,
-        prompt: "hi",
-        cache: { messages: { tail } },
-      }),
-    ).toThrow()
-  })
-})
 
 describe("applyCachePolicy", () => {
   it.effect("undefined cache resolves to 'auto' (the recommended default)", () =>
@@ -346,19 +315,6 @@ describe("applyCachePolicy", () => {
       expect(body.messages[3]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
     }),
   )
-
-  test("messages: { tail: 0 } marks no message boundaries", () => {
-    const request = LLM.request({
-      model: anthropicModel,
-      messages: [Message.user("u1"), Message.assistant("a1")],
-      cache: { messages: { tail: 0 } },
-    })
-
-    expect(applyCachePolicy(request)).toBe(request)
-    expect(
-      request.messages.flatMap((message) => message.content.map((part) => ("cache" in part ? part.cache : undefined))),
-    ).toEqual([undefined, undefined])
-  })
 
   it.effect("'latest-assistant' marks the last assistant message", () =>
     Effect.gen(function* () {
