@@ -643,6 +643,7 @@ export const dict = {
   "home.empty.description": "Get started by opening a local project",
   "home.title": "Home",
   "home.projects": "Projects",
+  "home.projects.all": "All projects",
   "home.project.add": "Add project",
   "home.recentlyClosed": "Recently closed",
   "home.server.collapse": "Collapse server projects",
@@ -799,6 +800,7 @@ export const dict = {
   "terminal.connectTicket.statusError": "PTY connect ticket failed with {{status}}",
 
   "titlebar.update": "Update",
+  "titlebar.tabs": "Tabs",
   "titlebar.updateVersion": "Update {{version}}",
 
   "common.closeTab": "Close tab",
