@@ -31,7 +31,7 @@ export function SessionComposerRegion(props: {
     <div
       ref={controller.setDockRef}
       data-component="session-composer-dock"
-      class="w-full shrink-0 flex flex-col justify-center items-center pb-3 pointer-events-none bg-v2-background-bg-base"
+      class="w-full shrink-0 flex flex-col justify-center items-center pb-3 pointer-events-none bg-background-base"
     >
       <div
         classList={{
