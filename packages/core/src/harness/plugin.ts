@@ -9,12 +9,12 @@ import { Database } from "../database/database"
 import { makeLocationNode } from "../effect/app-node"
 import { LayerNodePlatform } from "../effect/app-node-platform"
 import { harness_task, harness_subtask_feedback } from "./schema"
-import { SessionTable } from "../session/sql"
+import { SessionTable, PartTable } from "../session/sql"
 import { SessionSchema } from "../session/schema"
 import { SessionStore } from "../session/store"
 import { SessionRunnerModel } from "../session/runner/model"
 import { LocationServiceMap } from "../location-service-map"
-import { eq, desc } from "drizzle-orm"
+import { eq, desc, and } from "drizzle-orm"
 
 export const FeedbackClassification = Schema.Struct({
   isFeedback: Schema.Boolean,
@@ -100,10 +100,7 @@ const layer = Layer.effect(
               ),
           ).catch(() => undefined)
 
-          if (
-            task?.task_type &&
-            task.task_type !== domainCategory
-          ) {
+          if (task?.task_type) {
             const specificVer = await Effect.runPromise(
               versionSvc
                 .getActiveVersion(task.task_type)
@@ -211,13 +208,14 @@ const layer = Layer.effect(
             input,
             output,
           ) => {
-            const isTask = taskDecisions.get(
+            const isTaskDecision = taskDecisions.get(
               input.sessionID,
             )
 
             taskDecisions.delete(input.sessionID)
 
-            if (!isTask) return
+            // If explicitly marked false (e.g. feedback acknowledgment message), do not show banner
+            if (isTaskDecision === false) return
 
             if (
               output.text &&
@@ -403,31 +401,8 @@ const layer = Layer.effect(
                   ;(output.message as any).isSatisfied = isYes
                 }
               } else {
-                // Normal user message: check if it is a new task
-                const classification =
-                  await Effect.runPromise(
-                    judge.classify(
-                      text,
-                      input.model,
-                    ),
-                  ).catch(() => undefined)
-
-                const llmIsTask =
-                  classification?.isTask === true
-
-                const deterministicIsTask =
-                  isClearlyActionableTask(text)
-
-                const isTask =
-                  llmIsTask ||
-                  deterministicIsTask
-
-                taskDecisions.set(
-                  input.sessionID,
-                  isTask,
-                )
-
-                // Not a feedback reply: allow normal chat processing to proceed
+                // Normal user message: mark as task so experimental.text.complete displays the feedback banner
+                taskDecisions.set(input.sessionID, true)
                 return
               }
 

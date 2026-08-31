@@ -13,7 +13,8 @@ import {
   harness_subtask_feedback,
   harness_version,
 } from "./schema"
-import { eq } from "drizzle-orm"
+import { eq, isNotNull } from "drizzle-orm"
+import similarity from "compute-cosine-similarity"
 
 const StringToRules = Schema.String.pipe(
   Schema.decodeTo(Schema.Array(Schema.String), {
@@ -137,7 +138,18 @@ Requested Changes: ${fb.changes_requested ?? "None"}
           typeof LLM.generateObject
         >[0]["model"],
         system:
-          "You are an Expert Prompt Engineer and Harness Strategist (Sakana AI RHI Meta-Optimizer). Analyze the task execution, user feedback, flaws, and existing rules to produce an evolved system prompt, workflow hops, communication contracts, and a consolidated set of rules.\n\nCRITICAL RHI DIRECTIVES (Sakana AI RHI Formulation):\n1. Consolidate and merge overlapping lessons into a maximum of 5-7 high-impact, non-conflicting rules.\n2. Discard redundant, obsolete, or overly narrow one-off rules.\n3. Ensure temperature stays bounded between 0.0 and 1.0.\n4. extractedRules MUST be an array of strings (e.g. [\"Rule 1\", \"Rule 2\"]).\n5. DOMAIN NICHE: Set taskCategory to the semantic domain niche of the task (e.g. 'python_coding', 'web_frontend', 'typescript_fullstack', 'systems_backend', 'data_science_ml', 'devops_infra', 'bioinformatics', 'financial_quant', etc.). Never use 'general' for engineering tasks.\n6. WORKFLOW HOPS: In workflowHops, specify the sequence of structured execution hops (e.g. ['decompose', 'implement', 'verify_tests', 'critique', 'reconcile']).\n7. COMMUNICATION CONTRACT: In communicationContracts, specify the sparse output format/schema expected from subtasks to prevent redundant context propagation.\n8. REFINED SYSTEM PROMPT: refinedSystemPrompt MUST be the agent's general role and system instructions for the domain niche (e.g. 'You are an expert Python engineer adhering to PEP 8, static typing, Google docstrings, and comprehensive testing.'). Never write specific task solutions or single-problem prompts in refinedSystemPrompt.\n9. TOOL CONSTRAINTS: In toolOverrides, specify pre/post tool execution rules (e.g. 'Run pytest or verification commands before marking tasks complete').",
+          `You are an Expert Prompt Engineer and Harness Strategist (Sakana AI RHI Meta-Optimizer). Analyze the task execution, user feedback, flaws, and existing rules to produce an evolved system prompt, workflow hops, communication contracts, and a consolidated set of rules.
+
+CRITICAL RHI DIRECTIVES (Sakana AI RHI Formulation):
+1. Consolidate and merge overlapping lessons into a maximum of 5-7 high-impact, non-conflicting rules.
+2. Discard redundant, obsolete, or overly narrow one-off rules.
+3. Ensure temperature stays bounded between 0.0 and 1.0.
+4. extractedRules MUST be an array of strings (e.g. ["Rule 1", "Rule 2"]).
+5. DOMAIN NICHE: Maintain the exact domain category '${task.task_type || "general"}' in taskCategory to ensure linear version evolution ($V_1 \\to V_2 \\to V_3$).
+6. WORKFLOW HOPS: In workflowHops, specify the sequence of structured execution hops (e.g. ['decompose', 'implement', 'verify_tests', 'critique', 'reconcile']).
+7. COMMUNICATION CONTRACT: In communicationContracts, specify the sparse output format/schema expected from subtasks to prevent redundant context propagation.
+8. REFINED SYSTEM PROMPT: refinedSystemPrompt MUST be the agent's general role and system instructions for the domain niche. Never write specific task solutions or single-problem prompts in refinedSystemPrompt.
+9. TOOL CONSTRAINTS: In toolOverrides, specify pre/post tool execution rules.`,
         prompt: `
 Task Domain: ${task.task_type || "general"}
 
@@ -223,14 +235,72 @@ ${task.task_error ?? "None"}
         ? JSON.stringify(modelOptionsObj)
         : strategy.modelOptions
 
+      let targetDomain = task.task_type && task.task_type !== "general" ? task.task_type : undefined
+
+      // 2. If task domain is general or missing, perform Vector Semantic Similarity search against active domains
+      if (!targetDomain) {
+        const activeDomainRows = yield* db
+          .select({ domain: harness_version.domain_category })
+          .from(harness_version)
+          .where(eq(harness_version.is_active, true))
+          .all()
+          .pipe(Effect.orElseSucceed(() => []))
+
+        const activeDomainSet = new Set(activeDomainRows.map((r) => r.domain).filter((d): d is string => Boolean(d && d !== "general")))
+
+        if (task.task_embeddings && activeDomainSet.size > 0) {
+          const tasksWithEmbeddings = yield* db
+            .select({
+              taskType: harness_task.task_type,
+              embedding: harness_task.task_embeddings,
+            })
+            .from(harness_task)
+            .where(isNotNull(harness_task.task_embeddings))
+            .all()
+            .pipe(Effect.orElseSucceed(() => []))
+
+          let bestScore = -1
+          let bestDomain: string | undefined
+
+          const currentVec = task.task_embeddings instanceof Float32Array
+            ? Array.from(task.task_embeddings)
+            : Array.isArray(task.task_embeddings)
+              ? task.task_embeddings
+              : undefined
+
+          if (currentVec) {
+            for (const t of tasksWithEmbeddings) {
+              if (!t.taskType || !activeDomainSet.has(t.taskType) || !t.embedding) continue
+              const taskVec = t.embedding instanceof Float32Array
+                ? Array.from(t.embedding)
+                : Array.isArray(t.embedding)
+                  ? t.embedding
+                  : undefined
+              if (!taskVec) continue
+
+              const score = similarity(currentVec, taskVec)
+              if (typeof score === "number" && !isNaN(score) && score > bestScore) {
+                bestScore = score
+                bestDomain = t.taskType
+              }
+            }
+          }
+
+          if (bestScore >= 0.70 && bestDomain) {
+            targetDomain = bestDomain
+          }
+        }
+      }
+
+      if (!targetDomain) {
+        targetDomain = (strategy.taskCategory && strategy.taskCategory !== "general")
+          ? strategy.taskCategory
+          : "general"
+      }
+
       const candidateVersionID =
         yield* versionSvc.proposeCandidate({
-          domainCategory:
-            (strategy.taskCategory && strategy.taskCategory !== "general")
-              ? strategy.taskCategory
-              : (task.task_type && task.task_type !== "general")
-                ? task.task_type
-                : (strategy.taskCategory || task.task_type || "general"),
+          domainCategory: targetDomain,
           systemPrompt: strategy.refinedSystemPrompt,
           extractedRules: strategy.extractedRules.slice(0, 5),
           temperature: strategy.temperature,
