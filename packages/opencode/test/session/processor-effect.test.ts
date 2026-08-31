@@ -552,6 +552,7 @@ it.live("session.processor effect tests do not retry unknown json errors", () =>
         expect(value).toBe("stop")
         expect(yield* llm.calls).toBe(1)
         expect(handle.message.error?.name).toBe("APIError")
+        expect(handle.message.finish).toBe("error")
       }),
     { config: (url) => providerCfg(url) },
   ),
