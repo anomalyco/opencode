@@ -14,6 +14,7 @@ import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { PersistentPty } from "@opencode-ai/core/persistent-pty"
 import { Project } from "@opencode-ai/core/project"
 import { Session } from "@opencode-ai/core/session"
+import { Instance } from "@opencode-ai/core/instance/service"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Job } from "@opencode-ai/core/job"
@@ -56,6 +57,7 @@ const applicationServiceNodes = [
   Project.node,
   Worktree.node,
   Session.node,
+  Instance.node,
   SessionTransfer.node,
   PluginRuntime.providerNode,
   SdkPlugins.node,
