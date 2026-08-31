@@ -496,6 +496,108 @@ describe("Task closure boundaries (CP-023 K82 and K9)", () => {
     instance,
   )
 
+  // CP-032 R-08, through PRODUCTION `promptAdmitted`. The coordinator suite proves the refusal
+  // decision; this proves what the refusal COSTS end to end, which is the half that decided the
+  // design. The alternative considered was holding scope ownership across persistence so this case
+  // could succeed instead of refusing. It was rejected on merit: CP-032 B-7 retains typed
+  // pre-admission refusals as sanitized notes, the shipped copy discloses the persisted prompt, and
+  // `ownLatestUser` adopts it on a later scoped run — so nothing is lost — while a hold would add an
+  // indefinite gate-stall surface to core quiescence. This test is what makes that claim checkable.
+  it.instance(
+    "refuses a supplement onto a resolved attachment scope as a disclosed note, not a lost prompt (CP-032 R-08)",
+    () =>
+      Effect.gen(function* () {
+        const boot = yield* bootstrap
+        const child = yield* boot.sessions.create({
+          parentID: boot.caller.id,
+          title: "resolved scope (@general subagent)",
+          agent: "general",
+        })
+        const release = yield* Deferred.make<void>()
+        yield* boot.jobs.start({
+          admission: syntheticAdmission(),
+          id: child.id,
+          type: "task",
+          title: "resolved scope",
+          run: Deferred.await(release).pipe(Effect.as(undefined)),
+        })
+
+        // Force the capture-to-use race through the REAL seam. `executeSupplement` has already made
+        // its borrow decision by the time it calls `ops.prompt`; resolving the scope here, before
+        // delegating to production `promptAdmitted`, reproduces exactly the interleaving that cannot
+        // be ruled out by checking borrowability first — the scope was live at lookup and resolves
+        // before ownership. A never-attached scope takes `result()`'s immediate arm, publishing a
+        // resolution and setting `closed` WITHOUT unregistering.
+        const settled = (sessionID: SessionID) => {
+          const messageID = MessageID.ascending()
+          return {
+            info: {
+              id: messageID,
+              role: "assistant",
+              parentID: MessageID.ascending(),
+              sessionID,
+              mode: "test",
+              agent: "general",
+              path: { cwd: "/tmp", root: "/tmp" },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: ModelV2.ID.make("test-model"),
+              providerID: ProviderV2.ID.make("test"),
+              time: { created: Date.now(), completed: Date.now() },
+              finish: "stop",
+            },
+            parts: [{ id: PartID.ascending(), messageID, sessionID, type: "text", text: "settled answer" }],
+          } as SessionV1.WithParts
+        }
+
+        // The wrapper is the race, and it wraps PRODUCTION rather than replacing it: `promptAdmitted`
+        // still runs underneath, so the refusal, its classification and its note are the shipped
+        // ones. Resolving the scope here also proves the atomic replacement in `open` is not a
+        // sufficient answer on its own — it repairs a scope resolved at LOOKUP, and this one resolves
+        // after the borrow decision has already been made.
+        const raced: TaskPromptOps["prompt"] = (input) =>
+          Effect.gen(function* () {
+            if (input.attachmentScope) yield* input.attachmentScope.result(settled(input.sessionID))
+            return yield* boot.capture.ops.prompt(input)
+          })
+
+        const calls = yield* boot.llm.calls
+        const receipt = yield* boot.task.execute(
+          {
+            description: "supplement onto resolved scope",
+            prompt: "more context",
+            subagent_type: "general",
+            task_id: child.id,
+          },
+          withOps(boot.capture.context, {
+            ...boot.capture.ops,
+            acquireContinuation: quietContinuation,
+            prompt: raced,
+          }),
+        )
+        expect(receipt.output).toContain("task updated")
+
+        yield* Deferred.succeed(release, undefined)
+        const waited = yield* boot.jobs.wait({ id: child.id, timeout: 10_000 })
+
+        // CP-031 R-24: an admission failure never terminalizes the lifetime.
+        expect(waited.info?.status).toBe("completed")
+        const notes = waited.info?.notes ?? []
+        expect(notes).toHaveLength(1)
+        expect(notes[0]).toContain("A supplemental prompt could not be admitted:")
+        expect(notes[0]).toContain("The task's in-flight turn was not interrupted.")
+        // The disclosure is the load-bearing half: the caller is TOLD the prompt may be persisted,
+        // which is what makes a truthful refusal an accepted outcome rather than a silent loss.
+        expect(notes[0]).toContain("The prompt may already be recorded in the task transcript.")
+
+        // No stale filing and no wrong execution: the refused supplement neither reached the
+        // provider nor filed an answer into the position the resolved scope already holds.
+        expect((yield* boot.llm.calls) - calls).toBe(0)
+        expect(waited.info?.output).toBeUndefined()
+      }),
+    instance,
+  )
+
   it.instance(
     "acquires the result continuation on the caller and refuses before an observer exists (K9 result)",
     () =>

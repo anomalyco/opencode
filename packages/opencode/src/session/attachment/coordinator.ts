@@ -329,21 +329,28 @@ export const make = Effect.gen(function* () {
 
     const own: Scope["own"] = (messageID) =>
       apply(() => {
-        // CP-032 R-08. Ownership is REFUSED here, not silently dropped, and the caller learns which.
+        // CP-032 R-08. The refusal keys on a PUBLISHED RESOLUTION, never on `closed`.
         //
-        // A resolved scope reaches this branch (`gate()` sets `closed` at every resolution), and a
-        // borrow check performed earlier cannot have caught it: the admission path yields through
-        // `revert.cleanup` and `createUserMessage` between discovery and this call, so a scope that
-        // was live at lookup can resolve before ownership. Returning `false` — rather than the
-        // former bare `return` — is what lets the admission boundary convert that into the typed
-        // refusal instead of proceeding onto a dead scope and replaying its earlier answer.
+        // Every resolution sets `closed`, so the two are easy to conflate — and conflating them is a
+        // regression, not a nuance. Only a resolved scope carries the hazard: it holds an answer a
+        // later `result()` would replay, so admitting onto it loses the distinct answer silently. A
+        // borrow check earlier cannot rule this out, because admission yields through
+        // `revert.cleanup` and `createUserMessage` between discovery and this call.
         //
-        // The no-op itself is preserved and load-bearing: taking ownership here would `invalidate()`
-        // a settled candidate and let a later `result()` fall through to a different fallback, so a
-        // completed scope's selected answer must stay immutable. Non-admission callers ignore the
-        // result and keep exactly that behaviour.
-        if (state.closed) return false
-        if (state.degraded || state.cancelled || state.resolution) {
+        // A scope merely TORN DOWN has no answer to replay. `finalizeOwnerScope(Exit.void)` closes
+        // and degrades it, and the gate cannot resolve without evidence, so it sits closed and
+        // unresolved. Refusing there fails a run that used to proceed through the ordinary degraded
+        // route — see `closure-task-boundaries.test.ts` "refuses the real Task result notifier
+        // before scheduling its observer (K9 result)". Those scopes keep the historical no-op.
+        //
+        // Refusing is not a lost prompt. The admission boundary converts `false` into the typed
+        // pre-admission `SessionScopeOwnRefused`, which CP-032 B-7 retains as a sanitized note;
+        // `supplementalAdmissionNote` discloses that the prompt may already be in the transcript,
+        // and `ownLatestUser` adopts an unowned latest User message on a later scoped run.
+        // Non-admission callers — the summary path and `ownLatestUser` itself — ignore the boolean.
+        if (state.resolution) return false
+        if (state.closed) return true
+        if (state.degraded || state.cancelled) {
           throw new Error(`Attachment scope ${state.scopeID} cannot own another message`)
         }
         state.messages.add(messageID)
