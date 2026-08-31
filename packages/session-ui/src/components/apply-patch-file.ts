@@ -1,5 +1,5 @@
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import { diffLines } from "diff"
+import { diffLines, formatPatch, parsePatch } from "diff"
 import { completePatchContents, normalize, type ViewDiff } from "./session-diff"
 
 type Kind = "add" | "update" | "delete"
@@ -9,11 +9,12 @@ export type ApplyPatchFile = {
   type: Kind
   additions: number
   deletions: number
+  patch: string
   view: ViewDiff
   contents?: { before: string; after: string }
 }
 
-export type ApplyPatchFileGroup = Omit<ApplyPatchFile, "view" | "contents"> & { views: ViewDiff[] }
+export type ApplyPatchFileGroup = Omit<ApplyPatchFile, "patch" | "view" | "contents"> & { views: ViewDiff[] }
 
 export function changedFileDiff(value: unknown): value is FileDiffInfo {
   if (!value || typeof value !== "object") return false
@@ -33,6 +34,7 @@ export function patchFile(value: unknown): ApplyPatchFile | undefined {
     type: value.status === "added" ? "add" : value.status === "deleted" ? "delete" : "update",
     additions: value.additions,
     deletions: value.deletions,
+    patch: value.patch,
     view: normalize(value),
     contents: completePatchContents(value.patch),
   }
@@ -58,12 +60,14 @@ export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
       (file, index) => !!file.contents && (index === 0 || files[index - 1]?.contents?.after === file.contents.before),
     )
     if (!chained) {
+      const additions = files.reduce((total, file) => total + file.additions, 0)
+      const deletions = files.reduce((total, file) => total + file.deletions, 0)
       return {
         path,
         type,
-        additions: files.reduce((total, file) => total + file.additions, 0),
-        deletions: files.reduce((total, file) => total + file.deletions, 0),
-        views: files.map((file) => file.view),
+        additions,
+        deletions,
+        views: mergePartialViews(path, type, additions, deletions, files),
       }
     }
 
@@ -91,4 +95,25 @@ export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
       ],
     }
   })
+}
+
+function mergePartialViews(path: string, type: Kind, additions: number, deletions: number, files: ApplyPatchFile[]) {
+  try {
+    const patches = files.map((file) => parsePatch(file.patch)[0])
+    if (patches.some((patch) => !patch?.hunks.length)) return files.map((file) => file.view)
+    const hunks = patches
+      .flatMap((patch) => patch?.hunks ?? [])
+      .toSorted((a, b) => Math.min(a.oldStart, a.newStart) - Math.min(b.oldStart, b.newStart))
+    return [
+      normalize({
+        file: path,
+        patch: formatPatch({ oldFileName: path, newFileName: path, oldHeader: "", newHeader: "", hunks }),
+        status: type === "add" ? "added" : type === "delete" ? "deleted" : "modified",
+        additions,
+        deletions,
+      }),
+    ]
+  } catch {
+    return files.map((file) => file.view)
+  }
 }

@@ -71,13 +71,36 @@ describe("apply patch files", () => {
     expect(groups[0]?.deletions).toBe(2)
   })
 
-  test("keeps sequential partial patches under one file", () => {
+  test("merges sequential partial patches under one file", () => {
     const groups = patchFileGroups([
       { file: "src/a.ts", patch: "@@ -1 +1 @@\n-a\n+b", additions: 1, deletions: 1, status: "modified" },
       { file: "src/a.ts", patch: "@@ -2 +2 @@\n-c\n+d", additions: 1, deletions: 1, status: "modified" },
     ])
 
     expect(groups).toHaveLength(1)
-    expect(groups[0]?.views).toHaveLength(2)
+    expect(groups[0]?.views).toHaveLength(1)
+  })
+
+  test("orders partial patch hunks by their position in the file", () => {
+    const groups = patchFileGroups([
+      {
+        file: "src/a.ts",
+        patch: "@@ -10 +10 @@\n-old 10\n+new 10\n@@ -200 +200 @@\n-old 200\n+new 200",
+        additions: 2,
+        deletions: 2,
+        status: "modified",
+      },
+      {
+        file: "src/a.ts",
+        patch: "@@ -50 +50 @@\n-old 50\n+new 50\n@@ -300 +300 @@\n-old 300\n+new 300",
+        additions: 2,
+        deletions: 2,
+        status: "modified",
+      },
+    ])
+
+    expect(groups[0]?.views.flatMap((view) => view.fileDiff.hunks.map((hunk) => hunk.additionStart))).toEqual([
+      10, 50, 200, 300,
+    ])
   })
 })
