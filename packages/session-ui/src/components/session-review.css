@@ -130,19 +130,25 @@
     color: var(--text-base);
     cursor: pointer;
     border-radius: 4px;
-    opacity: 0;
+    opacity: 1;
     will-change: opacity;
     transform: translateZ(0);
     transition: opacity 0.15s ease;
 
-    &:hover {
-      color: var(--text-strong);
-      background: var(--surface-base);
+    @media (hover: hover) {
+      opacity: 0;
+
+      &:hover {
+        color: var(--text-strong);
+        background: var(--surface-base);
+      }
     }
   }
 
-  [data-slot="accordion-trigger"]:hover [data-slot="session-review-view-button"] {
-    opacity: 1;
+  @media (hover: hover) {
+    [data-slot="accordion-trigger"]:hover [data-slot="session-review-view-button"] {
+      opacity: 1;
+    }
   }
 
   [data-slot="session-review-trigger-actions"] {
