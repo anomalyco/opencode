@@ -208,13 +208,14 @@ const layer = Layer.effect(
             input,
             output,
           ) => {
-            const isTask = taskDecisions.get(
+            const isTaskDecision = taskDecisions.get(
               input.sessionID,
             )
 
             taskDecisions.delete(input.sessionID)
 
-            if (!isTask) return
+            // If explicitly marked false (e.g. feedback acknowledgment message), do not show banner
+            if (isTaskDecision === false) return
 
             if (
               output.text &&
@@ -400,31 +401,8 @@ const layer = Layer.effect(
                   ;(output.message as any).isSatisfied = isYes
                 }
               } else {
-                // Normal user message: check if it is a new task
-                const classification =
-                  await Effect.runPromise(
-                    judge.classify(
-                      text,
-                      input.model,
-                    ),
-                  ).catch(() => undefined)
-
-                const llmIsTask =
-                  classification?.isTask === true
-
-                const deterministicIsTask =
-                  isClearlyActionableTask(text)
-
-                const isTask =
-                  llmIsTask ||
-                  deterministicIsTask
-
-                taskDecisions.set(
-                  input.sessionID,
-                  isTask,
-                )
-
-                // Not a feedback reply: allow normal chat processing to proceed
+                // Normal user message: mark as task so experimental.text.complete displays the feedback banner
+                taskDecisions.set(input.sessionID, true)
                 return
               }
 
