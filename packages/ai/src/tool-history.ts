@@ -56,6 +56,7 @@ function normalizeToolMessage(message: Message, pending: Map<string, ToolCallPar
     role: message.role,
     content,
     metadata: message.metadata,
+    providerMetadata: message.providerMetadata,
     native: message.native,
   })
 }

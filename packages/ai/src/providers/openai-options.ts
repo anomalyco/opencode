@@ -1,10 +1,12 @@
 import { mergeProviderOptions, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIServiceTier } from "../protocols/utils/openai-options.js"
 import type { Options } from "../protocols/utils/open-responses-options.js"
+import type { ContextManagement } from "../protocols/openai-responses.js"
 
 export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options.js"
 
 export type OpenAIOptionsInput = Omit<Options, "serviceTier"> & {
+  readonly contextManagement?: ContextManagement
   readonly serviceTier?: OpenAIServiceTier
   readonly [key: string]: unknown
 }

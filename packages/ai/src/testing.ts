@@ -4,6 +4,7 @@ import { LLMClient } from "./route/client.js"
 import {
   LLMEvent,
   LLMResponse,
+  CompactionResponse,
   type FinishReasonDetails,
   type AIError,
   type LLMRequest,
@@ -133,6 +134,16 @@ const make = (options: LayerOptions) =>
         }
       })
     const test = Test.of({
+      compact: (request) =>
+        stream(request).pipe(
+          Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
+          Effect.flatMap((state) => {
+            const response = LLMResponse.complete(state)
+            if (!response?.message.content.some((part) => part.type === "compaction"))
+              return Effect.die("TestLLM compaction response must contain a checkpoint and terminal finish event")
+            return Effect.succeed(new CompactionResponse({ messages: [response.message], usage: response.usage }))
+          }),
+        ),
       stream,
       generate: (request) =>
         stream(request).pipe(

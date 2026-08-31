@@ -4,6 +4,7 @@ import type { LLMRequest } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
+import { ResponsesCompaction } from "./utils/responses-compaction.js"
 
 const ADAPTER = "xai-responses"
 const NAME = "xAI Responses"
@@ -44,6 +45,10 @@ const adapter = {
 
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(XAIResponsesBody))
 const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LLMRequest) {
+  if (request.providerOptions?.contextManagement !== undefined)
+    return yield* ProviderShared.invalidRequest(
+      "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
+    )
   return yield* decodeBody(yield* OpenResponses.fromRequestWithAdapter(request, adapter))
 })
 
@@ -83,5 +88,7 @@ export const protocol = Protocol.make({
     terminal: OpenResponses.terminal,
   },
 })
+
+export const compact = ResponsesCompaction.make(adapter)
 
 export * as XAIResponses from "./xai-responses.js"

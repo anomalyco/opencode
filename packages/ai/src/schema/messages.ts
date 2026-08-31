@@ -9,6 +9,7 @@ import {
   LanguageModelSchema,
   ProviderOptions,
 } from "./options.js"
+import { ProviderID } from "./ids.js"
 
 export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
@@ -186,9 +187,40 @@ export const ReasoningPart = Schema.Struct({
 }).annotate({ identifier: "LLM.Content.Reasoning" })
 export type ReasoningPart = Schema.Schema.Type<typeof ReasoningPart>
 
-export const ContentPart = Schema.Union([TextPart, MediaPart, ToolCallPart, ToolResultPart, ReasoningPart]).pipe(
-  Schema.toTaggedUnion("type"),
-)
+/** A provider-generated context checkpoint, distinct from visible assistant text. */
+type CompactionContent =
+  | { readonly encrypted: string; readonly text?: never }
+  | { readonly text: string | null; readonly encrypted?: never }
+
+const compactionPartSchema = Schema.Struct({
+  type: Schema.Literal("compaction"),
+  provider: ProviderID,
+  id: Schema.optional(Schema.String),
+  encrypted: Schema.optional(Schema.String),
+  /** Null means the provider failed to produce a summary; prior history must be retained. */
+  text: Schema.optional(Schema.NullOr(Schema.String)),
+})
+  .pipe(
+    Schema.refine(
+      (part): part is typeof part & CompactionContent => (part.encrypted !== undefined) !== (part.text !== undefined),
+      { message: "Compaction requires either encrypted content or a summary" },
+    ),
+  )
+  .annotate({ identifier: "LLM.Content.Compaction" })
+export type CompactionPart = typeof compactionPartSchema.Type
+export const CompactionPart = Object.assign(compactionPartSchema, {
+  make: (input: Omit<CompactionPart, "type" | "encrypted" | "text"> & CompactionContent): CompactionPart =>
+    Schema.decodeUnknownSync(compactionPartSchema)({ type: "compaction", ...input }),
+})
+
+export const ContentPart = Schema.Union([
+  TextPart,
+  MediaPart,
+  ToolCallPart,
+  ToolResultPart,
+  ReasoningPart,
+  CompactionPart,
+]).pipe(Schema.toTaggedUnion("type"))
 export type ContentPart = Schema.Schema.Type<typeof ContentPart>
 
 export class Message extends Schema.Class<Message>("LLM.Message")({
@@ -196,6 +228,7 @@ export class Message extends Schema.Class<Message>("LLM.Message")({
   role: MessageRole,
   content: Schema.Array(ContentPart),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerMetadata: Schema.optional(ProviderMetadata),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
