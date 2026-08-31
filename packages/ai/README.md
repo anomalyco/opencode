@@ -241,9 +241,11 @@ Constructing `stream()` or `generate()` does not record a request, invoke a resp
 Each execution does. An exhausted queue without a fallback defects immediately rather than waiting for a
 future reply.
 
-Responses remain canonical event arrays or arbitrary `Stream<LLMEvent, AIError>` values. The client consumes
+Generation responses remain canonical event arrays or arbitrary `Stream<LLMEvent, AIError>` values. The client consumes
 supplied streams directly, preserving failure identity, finalizers, incomplete output, and post-finish tails;
 it does not repair or truncate them.
+
+For explicit compaction, script a `CompactionResponse` through `push`, `always`, or `serve`. The client returns that replacement window directly, including retained user messages and usage, with the same lazy request recording and gates. Generation and compaction reject fixtures for the wrong operation instead of converting between response shapes.
 
 The published legacy `Service`, `layer`, `clientLayer`, and module-level controls remain available as adapters
 over the same implementation, including the legacy live `requests` array. New tests should use `Test` and
@@ -334,6 +336,8 @@ const response = yield * LLMClient.generate(next)
 ```
 
 Replace the prior window with `compacted.messages`. Do not append it to the original transcript or extract only the encrypted item: the provider may retain additional messages in its output. Retained user and assistant messages remain ordinary messages with typed text, media, or reasoning parts, in their original order. Provider-specific message IDs, status, and phase use `providerMetadata`, not a raw output array hidden in an assistant message. Unsupported returned item types fail explicitly. Generation-only body overlays such as `stream` and `store` are not sent to the compact endpoint.
+
+Supported compact controls such as service tier and prompt-cache settings preserve request defaults and HTTP-overlay precedence. Retained image and file detail settings survive serialization and replay.
 
 The input must still fit the model's context window. Explicit compaction is not an overflow-recovery operation. xAI supports this explicit path, not the automatic OpenAI option. Unsupported routes, including Bedrock Mantle, do not inherit an explicit compact endpoint simply because they use a Responses protocol.
 
