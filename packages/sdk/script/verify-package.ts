@@ -105,9 +105,30 @@ import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
 
 export class OpenCodeDO {
   constructor(state) {
+    this.configurations = 0
     this.opencode = state.blockConcurrencyWhile(() => OpenCodeWorkerd.create({
       storage: state.storage,
       app: { version: "packed-workerd" },
+      models: { fetch: false },
+      instances: {
+        key: session => String(session.metadata.thread),
+        configure: key => {
+          this.configurations++
+          return {
+            plugins: [{
+              id: "packed-instance",
+              async setup(ctx) {
+                if (ctx.app.version !== "packed-workerd" || ctx.location.directory !== "/workspace") {
+                  throw new Error("Selected instance did not inherit the host configuration")
+                }
+                await ctx.session.hook("prompt", event => {
+                  event.prompt.text += ":" + key
+                })
+              },
+            }],
+          }
+        },
+      },
     }))
   }
 
@@ -116,6 +137,18 @@ export class OpenCodeDO {
       throw new Error("Packed workerd SHA-256 mismatch")
     }
     const opencode = await this.opencode
+    const sessions = await Promise.all([1, 2].map(() => opencode.sessions.create({
+      location: { directory: "/workspace" },
+      metadata: { thread: "packed-thread" },
+    })))
+    const admitted = await Promise.all(sessions.map(session => opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Packed prompt",
+      resume: false,
+    })))
+    if (this.configurations !== 1 || admitted.some(item => item.payload.text !== "Packed prompt:packed-thread")) {
+      throw new Error("Packed instance configuration did not share or prepare prompts correctly")
+    }
     return Response.json(await opencode.health.get())
   }
 }

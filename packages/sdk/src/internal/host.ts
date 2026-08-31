@@ -11,10 +11,12 @@ import { Context, Effect, Layer, ManagedRuntime, Scope } from "effect"
 import { HttpEffect, HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
 import { context, layer, type LogOptions } from "../logging"
 import { OwnedFetch } from "./fetch"
+import { SdkInstances } from "./instances"
 
 export interface CreateOptions extends Omit<ServerOptions, "hostname" | "port" | "password"> {
   readonly log?: LogOptions
   readonly workspaceProviders?: Readonly<Record<string, WorkspaceDriver.Interface>>
+  readonly instances?: SdkInstances.Options
 }
 
 /** Host hooks for embedding opencode on a non-default runtime profile. */
@@ -26,7 +28,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* (
   options: CreateOptions = {},
   embed: EmbedOptions = {},
 ) {
-  const { log, workspaceProviders, ...server } = options
+  const { log, workspaceProviders, instances, ...server } = options
   const runtime = ManagedRuntime.make(
     createEmbeddedRoutes(
       {
@@ -37,6 +39,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* (
       workspaceProviders
         ? [...(embed.overrides ?? []), WorkspaceDriver.node.replace(WorkspaceDriver.registryNode(workspaceProviders))]
         : embed.overrides,
+      instances ? (replacements) => SdkInstances.node(instances, replacements) : undefined,
     ).pipe(Layer.provide(HttpServer.layerServices), Layer.provideMerge(layer(log))),
   )
 

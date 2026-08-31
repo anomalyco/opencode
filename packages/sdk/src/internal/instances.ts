@@ -1,0 +1,100 @@
+export * as SdkInstances from "./instances"
+
+import { Instance } from "@opencode-ai/core/instance"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { Plugin } from "@opencode-ai/core/plugin"
+import type { InstancePlugins } from "@opencode-ai/core/plugin/instance"
+import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
+import { Location } from "@opencode-ai/schema/location"
+import type { Session } from "@opencode-ai/schema/session"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Duration, Effect, Layer, LayerMap, Scope } from "effect"
+
+export interface Configuration {
+  readonly plugins: InstancePlugins.List
+}
+
+export interface Options {
+  /** Select a sharing key within the Session's current Location. Must not initialize plugins. */
+  readonly key: (session: Session.Info) => string
+  /** Reconstruct configuration on a cache miss. Resources belong to the instance Scope. */
+  readonly configure: (key: string) => Effect.Effect<Configuration, unknown, Scope.Scope>
+}
+
+/** Replaces the host's `Instance.node`; `replacements` resolves lazily so instances inherit the final host graph. */
+export function node(options: Options, replacements: () => LayerNode.Replacements) {
+  return makeGlobalNode({
+    service: Instance.Service,
+    layer: layer(options, replacements),
+    deps: [LocationServiceMap.node, SdkPlugins.node],
+  })
+}
+
+export function layer(options: Options, replacements: () => LayerNode.Replacements) {
+  return Layer.effect(
+    Instance.Service,
+    Effect.gen(function* () {
+      const scope = yield* Effect.scope
+      const locations = yield* LocationServiceMap.Service
+      const sdk = yield* SdkPlugins.Service
+      const key = (session: Session.Info) => ({
+        key: options.key(session),
+        ...LocationServiceMap.canonical(session.location),
+      })
+      const provide = (session: Session.Info) => Effect.provide(instances.get(key(session)))
+      const instances: LayerMap.LayerMap<ReturnType<typeof key>, Instance.Services> = yield* LayerMap.make(
+        (input: ReturnType<typeof key>) =>
+          Layer.unwrap(
+            Effect.gen(function* () {
+              const configuration = yield* options.configure(input.key).pipe(Effect.orDie)
+              // A host/instance ID collision fails the whole plugin generation, which leaves no inventory
+              // trace to check after activation. Reject it before constructing anything.
+              const collisions = configuration.plugins.filter((plugin) =>
+                sdk.all().some((host) => host.id === plugin.id),
+              )
+              if (collisions.length > 0)
+                yield* Effect.die(
+                  new Error(
+                    `Instance plugin IDs collide with host plugins: ${collisions.map((plugin) => plugin.id).join(", ")}`,
+                  ),
+                )
+              return Instance.layer(Location.Ref.make({ directory: input.directory, workspaceID: input.workspaceID }), {
+                plugins: configuration.plugins,
+                replacements: [
+                  ...replacements(),
+                  // Instances borrow this selector and the host's Location map instead of retaining
+                  // their Layer scopes; retaining the selector would block its shutdown on its own entries.
+                  Instance.node.replace(Layer.succeed(Instance.Service, { provide })),
+                  LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, locations)),
+                ],
+              }).pipe(
+                Layer.tap((context) =>
+                  Effect.gen(function* () {
+                    const plugins = yield* Plugin.Service
+                    yield* plugins.awaitActivation
+                    const failed = (yield* plugins.list()).filter(
+                      (plugin) =>
+                        plugin.state.status === "failed" &&
+                        configuration.plugins.some((configured) => configured.id === plugin.id),
+                    )
+                    if (failed.length > 0)
+                      yield* Effect.die(
+                        new Error(`Instance plugin setup failed: ${failed.map((plugin) => plugin.id).join(", ")}`),
+                      )
+                  }).pipe(Effect.provide(context)),
+                ),
+              )
+            }),
+          ).pipe(
+            // Eviction can close the lookup's scope; do not make that fiber wait on itself.
+            Layer.tapCause(() =>
+              instances.invalidate(input).pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid),
+            ),
+          ),
+        { idleTimeToLive: Duration.infinity },
+      )
+      return Instance.Service.of({ provide })
+    }),
+  )
+}

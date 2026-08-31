@@ -6,11 +6,14 @@ import { Context, Effect, Layer } from "effect"
 import type { Config, Scope } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { EmbeddedHost } from "../internal/host"
+import type { SdkInstances } from "../internal/instances"
 
 export type { LogEntry, LogLevel, LogOptions, LogWriter } from "../logging"
 
 export type CreateOptions = EmbeddedHost.CreateOptions
 export type EmbedOptions = EmbeddedHost.EmbedOptions
+export type InstanceOptions = SdkInstances.Options
+export type InstanceConfiguration = SdkInstances.Configuration
 
 export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
   readonly sessions: OpenCodeClient["session"]

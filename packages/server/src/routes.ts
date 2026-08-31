@@ -2,6 +2,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { V1Migration } from "@opencode-ai/core/database/v1-migration"
 import { App } from "@opencode-ai/core/app"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Node } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Bus } from "@opencode-ai/core/bus"
@@ -89,8 +90,16 @@ export function createRoutes(
   )
 }
 
-export function createEmbeddedRoutes(options: ServerOptions = {}, overrides: LayerNode.Replacements = []) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides)
+type InstanceNode = (
+  replacements: () => LayerNode.Replacements,
+) => LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
+
+export function createEmbeddedRoutes(
+  options: ServerOptions = {},
+  overrides: LayerNode.Replacements = [],
+  instances?: InstanceNode,
+) {
+  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, instances)
 }
 
 function makeRoutes<AuthError, AuthServices>(
@@ -99,6 +108,7 @@ function makeRoutes<AuthError, AuthServices>(
   serviceURLs: () => ReadonlyArray<string>,
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
+  instances?: InstanceNode,
 ) {
   const standard: LayerNode.Replacements = [
     Database.node.replace(Database.configured(options.database)),
@@ -127,16 +137,24 @@ function makeRoutes<AuthError, AuthServices>(
       }),
     ),
   ]
-  const replacements: LayerNode.Replacements = [...standard, ...overrides]
+  const build = (overrides: LayerNode.Replacements) => {
+    const replacements: LayerNode.Replacements = [
+      ...standard,
+      // Private instances resolve this list lazily so they inherit the complete host graph, including the selector.
+      ...(instances ? [Instance.node.replace(instances(() => replacements))] : []),
+      ...overrides,
+    ]
+    return AppNodeBuilder.build(applicationServices, replacements)
+  }
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {
           const { simulationReplacements } = yield* Effect.promise(() => import("@opencode-ai/simulation/backend"))
           const simulation = yield* simulationReplacements({ version: App.make(options.app).version })
-          return AppNodeBuilder.build(applicationServices, [...replacements, ...simulation])
+          return build([...overrides, ...simulation])
         }),
       )
-    : AppNodeBuilder.build(applicationServices, replacements)
+    : build(overrides)
   return serviceLayer.pipe(
     Layer.flatMap((context) => {
       const services = Layer.succeedContext(context)
