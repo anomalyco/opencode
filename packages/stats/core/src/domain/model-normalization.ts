@@ -16,7 +16,8 @@ export const MODEL_AUTHOR_RULES = [
 export const EXCLUDED_MODELS = new Set(["alpha-gpt-next"])
 export const FREE_MODELS = new Set(["gpt-5-nano", "grok-code", "big-pickle"])
 export const MODEL_NAME_ALIASES: Record<string, string> = {
-  "x-preview-f": "ox-alpha",
+  "ox-alpha": "glm-5.3-flash",
+  "x-preview-f": "glm-5.3-flash",
   "xiaomi/mimo-v2.5": "mimo-v2.5",
 }
 export const RETIRED_STAT_MODELS = ["big-pickle", ...Object.keys(MODEL_NAME_ALIASES)]
@@ -35,11 +36,8 @@ export function modelAuthor(value: string | undefined) {
 
 export function statModel(model: string | undefined, providerModel: string | undefined) {
   const normalized = normalizeInferenceModel(model)
-  const alias = MODEL_NAME_ALIASES[normalized.toLowerCase()]
-  if (alias) return alias
-  if (RETIRED_STAT_MODELS.includes(normalized.toLowerCase()))
-    return normalizeInferenceModel(providerModel?.split("/").at(-1))
-  return normalized
+  const resolved = normalized === "big-pickle" ? normalizeInferenceModel(providerModel?.split("/").at(-1)) : normalized
+  return MODEL_NAME_ALIASES[resolved.toLowerCase()] ?? resolved
 }
 
 export function statProvider(
