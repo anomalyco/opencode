@@ -213,12 +213,22 @@ const layer = Layer.effect(
        * prompts such as:
        * "write java code for 2 sum problem"
        */
-      const deterministicTask = isClearlyActionableTask(prompt)
+      /*
+       * Explicit User Domain Override:
+       * If the user explicitly specifies a domain (e.g. `[domain: my_domain]` or `domain: my_domain`),
+       * honor the user's direct domain choice over autonomous taxonomy classification.
+       */
+      const explicitDomainMatch = prompt.match(
+        /(?:^|\s)(?:\[domain:\s*([a-z0-9_-]+)\]|@domain:\s*([a-z0-9_-]+)|domain:\s*([a-z0-9_-]+))/i,
+      )
+      const explicitDomain = explicitDomainMatch
+        ? (explicitDomainMatch[1] || explicitDomainMatch[2] || explicitDomainMatch[3])?.toLowerCase()
+        : undefined
 
       return {
         ...llmClassification,
-        isTask: llmClassification.isTask || deterministicTask,
-        taskType: llmClassification.taskType || "general",
+        isTask: llmClassification.isTask || deterministicTask || Boolean(explicitDomain),
+        taskType: explicitDomain || llmClassification.taskType || "general",
       }
     })
 
