@@ -75,12 +75,14 @@ OpenCode Go работает так же, как и любой другой пр
 - **MiniMax M2.7**
 - **Muse Spark 1.2 Contributor** ([доступно в отдельных регионах](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
+- **Qwen3.8 Flash**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
+- **Hy4 preview**
 - **Hy3**
 
 Список моделей может меняться по мере того, как мы тестируем и добавляем новые.
@@ -117,12 +119,14 @@ OpenCode Go включает следующие лимиты:
 | MiniMax M2.7                 | 3,400               | 8,500             | 17,000           |
 | Muse Spark 1.2 Contributor   | 45,300              | 113,300           | 226,600          |
 | Qwen3.8 Max                  | 160                 | 400               | 810              |
+| Qwen3.8 Flash                | 5,400               | 13,500            | 27,000           |
 | Qwen3.7 Max                  | 340                 | 840               | 1,690            |
 | Qwen3.7 Plus                 | 4,300               | 10,800            | 21,600           |
 | Qwen3.6 Plus                 | 3,300               | 8,200             | 16,300           |
 | DeepSeek V4 Pro              | 1,050               | 2,600             | 5,200            |
 | DeepSeek V4 Flash            | 7,600               | 18,900            | 37,800           |
 | DeepSeek V4 Flash Vision Exp | 3,800               | 9,450             | 18,900           |
+| Hy4 preview                  | 1,350               | 3,380             | 6,770            |
 | Hy3                          | 4,300               | 10,750            | 21,500           |
 
 Эти оценки основаны на наблюдаемых показателях запросов:
@@ -141,9 +145,11 @@ OpenCode Go включает следующие лимиты:
 - MiniMax M2.7 — 300 входных, 55,000 кешированных, 125 выходных токенов на запрос
 - Muse Spark 1.2 Contributor — 620 входных, 71,400 кешированных, 300 выходных токенов на запрос
 - Qwen3.8 Max — 420 входных, 66,000 кешированных, 200 выходных токенов на запрос
+- Qwen3.8 Flash — 600 входных, 58,000 кешированных, 200 выходных токенов на запрос
 - Qwen3.7 Max — 420 входных, 66,000 кешированных, 200 выходных токенов на запрос
 - Qwen3.7 Plus — 500 входных, 57,000 кешированных, 190 выходных токенов на запрос
 - Qwen3.6 Plus — 500 входных, 57,000 кешированных, 190 выходных токенов на запрос
+- Hy4 preview — 830 входных, 71,500 кешированных, 295 выходных токенов на запрос
 - Hy3 — 830 входных, 71,500 кешированных, 295 выходных токенов на запрос
 - MiMo-V2.5 — 830 входных, 71,500 кешированных, 295 выходных токенов на запрос
 - MiMo-V2.5-Pro — 790 входных, 86,000 кешированных, 305 выходных токенов на запрос
@@ -171,6 +177,7 @@ OpenCode Go включает следующие лимиты:
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | $60           |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60           |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | $15           |
+| Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | $30           |
 | Qwen3.7 Max                             | $2.50  | $7.50  | $0.50       | $3.125       | $60           |
 | Qwen3.7 Plus (≤ 256K tokens)            | $0.40  | $1.60  | $0.04       | $0.50        | $60           |
 | Qwen3.7 Plus (> 256K tokens)            | $1.20  | $4.80  | $0.12       | $1.50        | $60           |
@@ -182,6 +189,7 @@ OpenCode Go включает следующие лимиты:
 | DeepSeek V4 Flash (Peak)                | $0.44  | $1.32  | $0.014      | -            | $30           |
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15           |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15           |
+| Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30           |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60           |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Часы Peak с понедельника по пятницу: 01:00-04:00 и 06:00-10:00 UTC; все остальные часы, включая выходные, относятся к Off-Peak. [Подробнее](https://api-docs.deepseek.com/quick_start/pricing/).
@@ -244,9 +252,11 @@ OpenCode Go включает следующие лимиты:
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [ID модели](/docs/config/#models) в вашем конфиге OpenCode
@@ -282,6 +292,7 @@ https://opencode.ai/zen/go/v1/models
 | MiMo-V2.5-Pro                | Не используется  | 0 дней          |
 | MiMo-V2.5                    | Не используется  | 0 дней          |
 | Qwen3.8 Max                  | Не используется  | 0 дней          |
+| Qwen3.8 Flash                | Не используется  | 0 дней          |
 | Qwen3.7 Max                  | Не используется  | 0 дней          |
 | Qwen3.7 Plus                 | Не используется  | 0 дней          |
 | Qwen3.6 Plus                 | Не используется  | 0 дней          |
@@ -291,6 +302,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Pro              | Не используется  | 0 дней          |
 | DeepSeek V4 Flash            | Не используется  | 0 дней          |
 | DeepSeek V4 Flash Vision Exp | Не используется  | 0 дней          |
+| Hy4 preview                  | Не используется  | 0 дней          |
 | Hy3                          | Не используется  | 0 дней          |
 
 - **Grok 4.6:** ZDR отключает важные функции API, зависящие от сохраненных данных, включая Responses API с сохранением состояния, Files and Collections и Batch API. [Подробнее](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
