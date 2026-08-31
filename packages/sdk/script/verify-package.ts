@@ -22,6 +22,8 @@ const names = [
 ]
 const temporary = await mkdtemp(join(tmpdir(), "opencode-sdk-package-"))
 const archives = new Map<string, string>()
+// oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the root manifest owns the pinned catalog.
+const catalog = (await Bun.file(join(root, "package.json")).json()).workspaces.catalog as Record<string, string>
 
 try {
   for (const name of names) {
@@ -84,7 +86,15 @@ try {
   const consumer = join(temporary, "consumer")
   await Bun.write(
     join(consumer, "package.json"),
-    JSON.stringify({ name: "opencode-sdk-consumer", private: true, type: "module" }),
+    JSON.stringify({
+      name: "opencode-sdk-consumer",
+      private: true,
+      type: "module",
+      overrides: {
+        effect: catalog.effect,
+        "@effect/platform-node-shared": catalog["@effect/platform-node-shared"],
+      },
+    }),
   )
   await Promise.all([
     Bun.write(
