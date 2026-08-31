@@ -1,4 +1,7 @@
 import { Show, type JSX } from "solid-js"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
@@ -13,7 +16,9 @@ export type SessionComposerRegionViewController = Pick<
   SessionComposerRegionController,
   | "centered"
   | "onResponseSubmit"
+  | "onStop"
   | "openParent"
+  | "working"
   | "setPromptRef"
   | "setDockRef"
   | "parentID"
@@ -68,23 +73,35 @@ export function SessionComposerRegion(props: {
               "relative z-[70]": true,
             }}
           >
-            <Show
-              when={controller.child()}
-              fallback={<Show when={!controller.state.blocked()}>{props.composer}</Show>}
-            >
+            <Show when={controller.child()} fallback={<Show when={!controller.state.blocked()}>{props.composer}</Show>}>
               <div
                 ref={controller.setPromptRef}
-                class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
+                class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak flex items-center justify-between gap-3"
               >
-                <span>{language.t("session.child.promptDisabled")} </span>
-                <Show when={controller.parentID()}>
-                  <button
-                    type="button"
-                    class="text-text-base transition-colors hover:text-text-strong"
-                    onClick={controller.openParent}
-                  >
-                    {language.t("session.child.backToParent")}
-                  </button>
+                <span>
+                  {language.t("session.child.promptDisabled")}{" "}
+                  <Show when={controller.parentID()}>
+                    <button
+                      type="button"
+                      class="text-text-base transition-colors hover:text-text-strong"
+                      onClick={controller.openParent}
+                    >
+                      {language.t("session.child.backToParent")}
+                    </button>
+                  </Show>
+                </span>
+                <Show when={controller.working()}>
+                  <Tooltip placement="top" value={language.t("command.session.subagent.interrupt")}>
+                    <IconButton
+                      type="button"
+                      icon={<Icon name="stop" />}
+                      variant="contrast"
+                      class="size-7 shrink-0 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)]"
+                      aria-label={language.t("command.session.subagent.interrupt")}
+                      aria-keyshortcuts="Control+D"
+                      onClick={controller.onStop}
+                    />
+                  </Tooltip>
                 </Show>
               </div>
             </Show>

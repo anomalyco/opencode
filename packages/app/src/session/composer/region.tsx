@@ -33,6 +33,7 @@ import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
 import { useSettings } from "@/settings/model"
 import { SessionLocationMissing } from "./location-missing"
+import { useServerSDK } from "@/runtime/server/client"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
@@ -221,6 +222,7 @@ export function ActiveSessionComposerRegion(props: {
 }) {
   const settings = useSettings()
   const location = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const missing = createMemo(() => {
     const error = location().error
     const current = props.session.data.info()?.location
@@ -233,7 +235,10 @@ export function ActiveSessionComposerRegion(props: {
     parentID: props.session.data.parentID,
     centered: props.model.region.centered,
     onResponseSubmit: props.onResponseSubmit,
+    onStop: () =>
+      void serverSDK.api.session.interrupt({ sessionID: requireSessionID(props.session) }).catch(() => undefined),
     openParent: props.model.region.openParent,
+    working: props.session.data.working,
     setPromptRef: props.model.region.setPromptRef,
     setDockRef: props.model.region.setDockRef,
   })

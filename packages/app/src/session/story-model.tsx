@@ -202,7 +202,9 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
       setState("request", undefined)
       setState("activity", "Submitted the answer locally")
     },
+    onStop: () => setState("activity", "Requested a local stop"),
     openParent: () => setState("activity", "Opened the parent Session locally"),
+    working: () => props.document.status.type !== "idle",
     setPromptRef() {},
     setDockRef() {},
     parentID: () => props.child?.parentID,

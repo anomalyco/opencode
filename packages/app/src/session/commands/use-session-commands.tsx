@@ -16,7 +16,7 @@ import type { SessionRevert } from "@/session/revert"
 
 type SessionCommandSource = {
   identity: SessionModel["identity"]
-  data: Pick<SessionModel["data"], "info" | "revertMessageID">
+  data: Pick<SessionModel["data"], "info" | "parentID" | "revertMessageID" | "working">
   history: Pick<SessionModel["history"], "visibleUserMessages">
   layout: SessionModel["layout"]
   ownership: SessionModel["ownership"]
@@ -236,6 +236,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     await serverSDK.api.session.compact({ sessionID })
   }
 
+  const interruptSubagent = async () => {
+    const sessionID = actions.session.identity.params.id
+    if (!sessionID) return
+
+    await serverSDK.api.session.interrupt({ sessionID })
+  }
+
   const fork = () => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
@@ -284,6 +291,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       disabled: !actions.background.blocking(),
       onSelect: actions.background.move,
     }),
+    ...(actions.session.data.parentID()
+      ? [
+          sessionCommand({
+            id: "session.subagent.interrupt",
+            title: language.t("command.session.subagent.interrupt"),
+            keybind: "ctrl+d",
+            disabled: !actions.session.data.working(),
+            onSelect: interruptSubagent,
+          }),
+        ]
+      : []),
     sessionCommand({
       id: "session.fork",
       title: language.t("command.session.fork"),

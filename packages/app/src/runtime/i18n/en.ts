@@ -681,6 +681,7 @@ export const dict = {
   "session.background.subagent.one": "{{count}} subagent",
   "session.background.subagent.other": "{{count}} subagents",
   "command.session.background": "Move to background",
+  "command.session.subagent.interrupt": "Stop subagent",
   "session.queue.count.one": "{{count}} queued",
   "session.queue.count.other": "{{count}} queued",
   "session.queue.steer": "Steer",

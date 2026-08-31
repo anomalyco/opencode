@@ -6,7 +6,9 @@ export function createSessionComposerRegionController(input: {
   parentID: Accessor<string | undefined>
   centered: Accessor<boolean>
   onResponseSubmit: () => void
+  onStop: () => void
   openParent: () => void
+  working: Accessor<boolean>
   setPromptRef: (el: HTMLDivElement) => void
   setDockRef: (el: HTMLDivElement) => void
 }) {
@@ -14,7 +16,9 @@ export function createSessionComposerRegionController(input: {
     state: input.state,
     centered: input.centered,
     onResponseSubmit: input.onResponseSubmit,
+    onStop: input.onStop,
     openParent: input.openParent,
+    working: input.working,
     setPromptRef: input.setPromptRef,
     setDockRef: input.setDockRef,
     parentID: input.parentID,
