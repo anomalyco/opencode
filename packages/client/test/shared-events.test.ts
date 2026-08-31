@@ -97,7 +97,11 @@ test("multiple consumers share one source and receive live native and RPC events
   const first = shared.subscribe()[Symbol.asyncIterator]()
   const second = shared.subscribe()[Symbol.asyncIterator]()
 
-  for (const event of [{ type: "server.connected" }, { type: "session.updated" }, { type: "rpc.example.updated", value: 1 }]) {
+  for (const event of [
+    { type: "server.connected" },
+    { type: "session.updated" },
+    { type: "rpc.example.updated", value: 1 },
+  ]) {
     const reads = [first.next(), second.next()]
     events.connections[0].push(event)
     expect(await Promise.all(reads)).toEqual([
