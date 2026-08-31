@@ -502,7 +502,7 @@ describe("OpenAI-compatible Chat route", () => {
 
       expect(error).toMatchObject({
         reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream" },
-        message: "OpenAI Chat stream ended without finish_reason",
+        message: "Stream ended without finish_reason",
       })
     }),
   )

@@ -1106,7 +1106,7 @@ const finishEvents = Effect.fn("OpenAIChat.finishEvents")(function* (state: Pars
   if (state.finishReason === undefined && state.requireFinishReason)
     return yield* new AIError({
       reason: new InvalidProviderOutputError({
-        message: "OpenAI Chat stream ended without finish_reason",
+        message: "Stream ended without finish_reason",
         classification: "incomplete-stream",
         route: ADAPTER,
       }),

@@ -726,7 +726,7 @@ const finishEvents = Effect.fn("MistralChat.finishEvents")(function* (state: Par
   if (!state.finishReason)
     return yield* new AIError({
       reason: new InvalidProviderOutputError({
-        message: "Mistral Chat stream ended without finish_reason",
+        message: "Stream ended without finish_reason",
         classification: "incomplete-stream",
         route: ADAPTER,
       }),
