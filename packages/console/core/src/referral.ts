@@ -475,6 +475,38 @@ export namespace Referral {
     })
   }
 
+  export async function restoreReward(input: { workspaceID: string; referralID: string }) {
+    return Database.transaction(async (tx) => {
+      const reward = await tx
+        .select({ timeApplied: ReferralRewardTable.timeApplied })
+        .from(ReferralRewardTable)
+        .innerJoin(ReferralTable, eq(ReferralTable.id, ReferralRewardTable.referralID))
+        .where(
+          and(
+            eq(ReferralRewardTable.workspaceID, input.workspaceID),
+            eq(ReferralRewardTable.referralID, input.referralID),
+            isNull(ReferralRewardTable.timeDeleted),
+            isNull(ReferralTable.timeDeleted),
+          ),
+        )
+        .then((rows) => rows[0])
+      if (!reward) throw new Error("Referral reward not found")
+
+      await tx
+        .update(ReferralRewardTable)
+        .set({ timeApplied: null })
+        .where(
+          and(
+            eq(ReferralRewardTable.workspaceID, input.workspaceID),
+            eq(ReferralRewardTable.referralID, input.referralID),
+            isNull(ReferralRewardTable.timeDeleted),
+          ),
+        )
+
+      return { restored: reward.timeApplied !== null }
+    })
+  }
+
   export async function completeFromLiteSubscription(input: { workspaceID: string; userID: string }) {
     return Database.transaction(async (tx) => {
       const invitee = await tx
