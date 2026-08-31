@@ -32,7 +32,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { reviewTooltipKeybind } from "../command-tooltip-keybind"
-import { useTitlebarRightMount } from "../titlebar"
+import { useShellRailRightMount, useTitlebarRightMount } from "../titlebar"
 
 const OPEN_APPS = [
   "vscode",
@@ -235,13 +235,21 @@ export function SessionHeader() {
     messageAgentColor(params.id ? sync().data.message[params.id] : undefined, sync().data.agent),
   )
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
+    rail: isDesktop(),
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
     reviewLabel: language.t("command.review.toggle"),
     reviewKeybind: reviewTooltipKeybind(command),
-    reviewVisible: isDesktop(),
     reviewOpened: view().reviewPanel.opened(),
     onReviewToggle: () => view().reviewPanel.toggle(),
+    fileTreeLabel: language.t("command.fileTree.toggle"),
+    fileTreeKeybind: command.keybindParts("fileTree.toggle"),
+    fileTreeOpened: layout.fileTree.opened(),
+    onFileTreeToggle: () => layout.fileTree.toggle(),
+    terminalLabel: language.t("command.terminal.toggle"),
+    terminalKeybind: command.keybindParts("terminal.toggle"),
+    terminalOpened: view().terminal.opened(),
+    onTerminalToggle: toggleTerminal,
   }))
 
   const selectApp = (app: OpenApp) => {
@@ -282,7 +290,9 @@ export function SessionHeader() {
   }
 
   const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)
-  const rightMount = useTitlebarRightMount()
+  const titlebarRightMount = useTitlebarRightMount()
+  const shellRailRightMount = useShellRailRightMount()
+  const rightMount = createMemo(() => (isV2() && isDesktop() ? shellRailRightMount() : titlebarRightMount()))
   onMount(() => {
     setCenterMount(document.getElementById("opencode-titlebar-center"))
   })
@@ -517,29 +527,39 @@ export function SessionHeader() {
 }
 
 type SessionHeaderV2ActionsState = {
+  rail: boolean
   statusVisible: boolean
   statusLabel: string
   reviewLabel: string
   reviewKeybind: string[]
-  reviewVisible: boolean
   reviewOpened: boolean
   onReviewToggle: () => void
+  fileTreeLabel: string
+  fileTreeKeybind: string[]
+  fileTreeOpened: boolean
+  onFileTreeToggle: () => void
+  terminalLabel: string
+  terminalKeybind: string[]
+  terminalOpened: boolean
+  onTerminalToggle: () => void
 }
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
-  const language = useLanguage()
-
   return (
-    <div class="flex items-center gap-2">
-      <Show when={props.state.statusVisible}>
-        <Tooltip placement="bottom" value={props.state.statusLabel}>
-          <StatusPopoverV2 />
-        </Tooltip>
-      </Show>
-      <Show when={props.state.reviewVisible}>
+    <Show
+      when={props.state.rail}
+      fallback={
+        <Show when={props.state.statusVisible}>
+          <Tooltip placement="bottom" value={props.state.statusLabel}>
+            <StatusPopoverV2 />
+          </Tooltip>
+        </Show>
+      }
+    >
+      <div class="flex size-full flex-col items-center gap-1 py-2">
         <TooltipV2
           class="shrink-0"
-          placement="bottom"
+          placement="left"
           value={
             <>
               {props.state.reviewLabel}
@@ -553,16 +573,73 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
             type="button"
             variant="ghost-muted"
             size="large"
-            class="!w-9 shrink-0"
+            class="!size-8 shrink-0"
             state={props.state.reviewOpened ? "pressed" : undefined}
             onClick={props.state.onReviewToggle}
             aria-label={props.state.reviewLabel}
             aria-expanded={props.state.reviewOpened}
             aria-controls="review-panel"
-            icon={<IconV2 name="sidebar-right" />}
+            icon={<IconV2 name="review" />}
           />
         </TooltipV2>
-      </Show>
-    </div>
+        <TooltipV2
+          class="shrink-0"
+          placement="left"
+          value={
+            <>
+              {props.state.fileTreeLabel}
+              <Show when={props.state.fileTreeKeybind.length > 0}>
+                <KeybindV2 keys={props.state.fileTreeKeybind} variant="neutral" />
+              </Show>
+            </>
+          }
+        >
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!size-8 shrink-0"
+            state={props.state.fileTreeOpened ? "pressed" : undefined}
+            onClick={props.state.onFileTreeToggle}
+            aria-label={props.state.fileTreeLabel}
+            aria-expanded={props.state.fileTreeOpened}
+            aria-controls="file-tree-panel"
+            icon={<IconV2 name="filetree" />}
+          />
+        </TooltipV2>
+        <TooltipV2
+          class="shrink-0"
+          placement="left"
+          value={
+            <>
+              {props.state.terminalLabel}
+              <Show when={props.state.terminalKeybind.length > 0}>
+                <KeybindV2 keys={props.state.terminalKeybind} variant="neutral" />
+              </Show>
+            </>
+          }
+        >
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!size-8 shrink-0"
+            state={props.state.terminalOpened ? "pressed" : undefined}
+            onClick={props.state.onTerminalToggle}
+            aria-label={props.state.terminalLabel}
+            aria-expanded={props.state.terminalOpened}
+            aria-controls="terminal-panel"
+            icon={<IconV2 name="monitor" />}
+          />
+        </TooltipV2>
+        <Show when={props.state.statusVisible}>
+          <div class="mt-auto">
+            <TooltipV2 placement="left" value={props.state.statusLabel}>
+              <StatusPopoverV2 />
+            </TooltipV2>
+          </div>
+        </Show>
+      </div>
+    </Show>
   )
 }
