@@ -903,9 +903,18 @@ export function Session() {
           return
         }
 
+        const codeBlockMatch = text.match(/```(?:\w+)?\n([\s\S]*?)```/)
+        const toCopy = codeBlockMatch ? codeBlockMatch[1].trim() : text
+        const isCode = Boolean(codeBlockMatch)
+
         clipboard
-          .write?.(text)
-          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
+          .write?.(toCopy)
+          .then(() =>
+            toast.show({
+              message: isCode ? "✓ Code block copied to clipboard!" : "✓ Message copied to clipboard!",
+              variant: "success",
+            }),
+          )
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
         dialog.clear()
       },
