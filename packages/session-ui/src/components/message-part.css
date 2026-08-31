@@ -292,14 +292,27 @@
 
 [data-component="reasoning-part"] {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   color: var(--v2-text-text-muted);
   line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
 
   [data-component="markdown"] {
     margin-top: 16px;
     font-style: normal;
     font-size: 13px;
     color: var(--v2-text-text-muted);
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+    box-sizing: border-box;
 
     strong,
     b {
@@ -314,6 +327,43 @@
         margin-top: 0;
       }
     }
+
+    /* Code blocks keep horizontal scroll inside, do not stretch the card */
+    pre {
+      white-space: pre;
+      overflow-wrap: normal;
+      word-break: normal;
+      overflow-x: auto;
+      overflow-y: hidden;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    pre code {
+      white-space: pre;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+  }
+
+  /* Scrollable container for collapsible card — only vertical scroll */
+  [data-component="tool-output"][data-scrollable] {
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+  }
+
+  [data-component="tool-output"][data-scrollable] > div {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 }
 

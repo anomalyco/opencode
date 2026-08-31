@@ -1916,7 +1916,14 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
                 tabIndex={0}
                 role="region"
                 aria-label={i18n.t("ui.scrollView.ariaLabel")}
-                style={{ "max-height": "320px", "overflow": "auto" }}
+                style={{
+                  "max-height": "320px",
+                  "overflow-y": "auto",
+                  "overflow-x": "hidden",
+                  "max-width": "100%",
+                  "min-width": "0",
+                  "box-sizing": "border-box",
+                }}
                 onScroll={handleScroll}
               >
                 <div ref={setInnerRef}>
