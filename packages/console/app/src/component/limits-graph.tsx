@@ -49,11 +49,11 @@ export function LimitsGraph(props: { href: string }) {
     { id: "glm-5.3-flash", name: "GLM-5.3-Flash", req: 3160, baseReq: 1580, bonus: "2x usage" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200 },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300 },
+    { id: "hy3", name: "Hy3", req: 4300 },
     { id: "qwen3.8-flash", name: "Qwen3.8 Flash", req: 5400 },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600 },
     { id: "longcat-2.0", name: "LongCat-2.0", req: 11400 },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100 },
-    { id: "hy3", name: "Hy3", req: 34400, baseReq: 4300, bonus: "8x usage" },
     { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", req: 45300, edge: true },
   ].map((model, index) => ({ ...model, d: `${50 + index * 25}ms` }))
   const bonuses = graph.filter((model) => model.baseReq)
