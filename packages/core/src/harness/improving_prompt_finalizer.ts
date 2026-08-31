@@ -223,23 +223,14 @@ ${task.task_error ?? "None"}
         ? JSON.stringify(modelOptionsObj)
         : strategy.modelOptions
 
-      const explicitDomainFeedback = feedbacks
-        .map((fb) => `${fb.changes_requested || ""} ${fb.user_feedback || ""}`)
-        .join(" ")
-        .match(/(?:^|\s)(?:\[domain:\s*([a-z0-9_-]+)\]|@domain:\s*([a-z0-9_-]+)|domain:\s*([a-z0-9_-]+))/i)
-      const explicitFeedbackDomain = explicitDomainFeedback
-        ? (explicitDomainFeedback[1] || explicitDomainFeedback[2] || explicitDomainFeedback[3])?.toLowerCase()
-        : undefined
-
       const candidateVersionID =
         yield* versionSvc.proposeCandidate({
           domainCategory:
-            explicitFeedbackDomain
-              || ((strategy.taskCategory && strategy.taskCategory !== "general")
-                ? strategy.taskCategory
-                : (task.task_type && task.task_type !== "general")
-                  ? task.task_type
-                  : (strategy.taskCategory || task.task_type || "general")),
+            (strategy.taskCategory && strategy.taskCategory !== "general")
+              ? strategy.taskCategory
+              : (task.task_type && task.task_type !== "general")
+                ? task.task_type
+                : (strategy.taskCategory || task.task_type || "general"),
           systemPrompt: strategy.refinedSystemPrompt,
           extractedRules: strategy.extractedRules.slice(0, 5),
           temperature: strategy.temperature,
