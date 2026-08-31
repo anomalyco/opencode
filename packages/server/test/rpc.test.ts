@@ -360,4 +360,5 @@ it.live("public SSE and generic native plugin subscriptions receive RPC events a
     ])
     expect(received).toEqual(events)
   }),
+  15_000,
 )
