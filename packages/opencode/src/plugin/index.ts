@@ -32,7 +32,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { HarnessPlugin } from "@opencode-ai/core/harness/plugin"
-import { PersonalizationPlugin } from "@opencode-ai/personalization/plugin"
+import { Database } from "@opencode-ai/core/database/database"
+import { createPersonalizationPlugin } from "@opencode-ai/personalization/plugin"
 
 type State = {
   hooks: Hooks[]
@@ -80,7 +81,6 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     DigitalOceanAuthPlugin,
     SnowflakeCortexAuthPlugin,
     XaiAuthPlugin,
-    PersonalizationPlugin,
   ]
 }
 
@@ -130,6 +130,7 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const flags = yield* RuntimeFlags.Service
     const harnessPluginSvc = yield* HarnessPlugin.Service
+    const { db } = yield* Database.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
@@ -169,6 +170,14 @@ const layer = Layer.effect(
           },
           // @ts-expect-error
           $: typeof Bun === "undefined" ? undefined : Bun.$,
+        }
+
+        const personalization = createPersonalizationPlugin({ db })
+        const personalizationHooks = yield* Effect.promise(() =>
+          personalization(input),
+        ).pipe(Effect.orElseSucceed(() => ({})))
+        if (personalizationHooks && Object.keys(personalizationHooks).length > 0) {
+          hooks.push(personalizationHooks)
         }
 
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
@@ -321,7 +330,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node, HarnessPlugin.node],
+  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node, HarnessPlugin.node, Database.node],
 })
 
 export * as Plugin from "."

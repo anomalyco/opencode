@@ -42,6 +42,5 @@ export const migrations = (
     import("./migration/20260622202450_simplify_session_input"),
     import("./migration/20260803000000_harness_tables"),
     import("./migration/20260814000000_harness_task_session_id"),
-    import("./migration/20260831000000_personalization_tables"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]
