@@ -973,8 +973,8 @@ export function Prompt(props: PromptProps) {
 
     const workspaceSession = props.sessionID ? sync.session.get(props.sessionID) : undefined
     const workspaceID = workspaceSession?.workspaceID
-    const workspaceStatus = workspaceID ? (project.workspace.status(workspaceID) ?? "error") : undefined
-    if (props.sessionID && workspaceID && workspaceStatus !== "connected") {
+    const status = () => (workspaceID ? project.workspace.status(workspaceID) : undefined)
+    if (status() === "error") {
       dialog.replace(() => (
         <DialogWorkspaceUnavailable
           onRestore={() => {
@@ -984,6 +984,19 @@ export function Prompt(props: PromptProps) {
         />
       ))
       return false
+    }
+    if (status() !== undefined && status() !== "connected") {
+      await new Promise<void>((resolve) => {
+        const interval = setInterval(() => {
+          const s = status()
+          if (s === "connected" || s === "error") {
+            clearInterval(interval)
+            resolve()
+          }
+        }, 100)
+        onCleanup(() => clearInterval(interval))
+      })
+      if (status() !== "connected") return false
     }
 
     const variant = local.model.variant.current()
