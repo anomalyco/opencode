@@ -95,9 +95,9 @@ const locations = (references: Layer.Layer<Reference.Service>) =>
                 Layer.provideMerge(
                   Layer.mergeAll(
                     references,
-                    LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), [
-                      [Bus.node, Layer.succeed(Bus.Service, bus)],
-                    ]),
+                    LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
+                      replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
+                    }),
                     Layer.mock(Image.Service, {
                       normalize: (_resource, content) =>
                         ready
@@ -131,9 +131,9 @@ const sessionLayer = (references = Layer.mock(Reference.Service, { refresh: () =
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [SessionExecution.node, execution],
-      [LocationServiceMap.node, locations(references)],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      SessionExecution.node.replace(execution),
+      LocationServiceMap.node.replace(locations(references)),
     ],
   )
 const it = testEffect(sessionLayer())
@@ -298,13 +298,14 @@ describe("Session.prompt", () => {
         }).pipe(
           Effect.provide(
             AppNodeBuilder.build(Reference.node, [
-              [Global.node, Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") })],
-              [
-                RepositoryCache.node,
+              Global.node.replace(
+                Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") }),
+              ),
+              RepositoryCache.node.replace(
                 Layer.succeed(RepositoryCache.Service, {
                   ensure: (input) => cache.ensure(input).pipe(Effect.tap(() => Queue.offer(completed, undefined))),
                 }),
-              ],
+              ),
             ]),
           ),
         )
@@ -312,7 +313,7 @@ describe("Session.prompt", () => {
         Effect.scoped,
         Effect.provide(
           AppNodeBuilder.build(LayerNode.group([RepositoryCache.node, KV.node, EffectFlock.node]), [
-            [Global.node, Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") })],
+            Global.node.replace(Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") })),
           ]),
         ),
       )

@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { Cause, Effect, Layer, Schema, Context, RcMap, Stream } from "effect"
+import { Cause, Effect, Layer, Schema, Context, Stream } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"
@@ -10,6 +10,7 @@ import { Location } from "./location.js"
 import { SessionMessage } from "./session/message.js"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Bus } from "./bus.js"
+import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
@@ -238,20 +239,16 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
+    const instances = yield* Instance.Service
     const locations = yield* LocationServiceMap.Service
     const fs = yield* FSUtil.Service
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
-    const sessions = yield* Session.make((ref) => locations.get(ref))
+    const sessions = yield* Session.make()
     const admission = yield* SessionInbox.Service
     const closeTransport = Effect.fn("Session.closeTransport")(function* (session: SessionSchema.Info) {
-      const location = Location.Ref.make({
-        directory: session.location.directory,
-        workspaceID: session.location.workspaceID,
-      })
-      if (!(yield* RcMap.has(locations.rcMap, location))) return
       yield* SessionModelTransport.Service.use((transport) => transport.close(session.id)).pipe(
-        Effect.provide(locations.get(location)),
+        instances.provideIfLoaded(session),
       )
     })
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
@@ -403,7 +400,7 @@ const layer = Layer.effect(
       prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const generate = yield* SessionGenerate.Service.pipe(Effect.provide(locations.get(session.location)))
+        const generate = yield* SessionGenerate.Service.pipe(instances.provide(session))
         return yield* generate.generate(input)
       }),
       command: Effect.fn("Session.command")(function* (input) {
@@ -412,7 +409,7 @@ const layer = Layer.effect(
           const plugins = yield* PluginSupervisor.Service
           yield* plugins.flush
           return yield* Command.Service
-        }).pipe(Effect.provide(locations.get(session.location)))
+        }).pipe(instances.provide(session))
         const delivery = input.delivery ?? "steer"
         yield* commands.execute({
           name: input.command,
@@ -535,6 +532,7 @@ export const node = makeGlobalNode({
     Project.node,
     SessionExecution.node,
     SessionStore.node,
+    Instance.byLocationNode,
     SessionInbox.node,
     LocationServiceMap.node,
     SessionProjector.node,

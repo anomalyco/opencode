@@ -15,6 +15,7 @@ import { Bus } from "../src/bus.js"
 import { Database } from "../src/database/database.js"
 import { EventTable } from "../src/event/sql.js"
 import { Image } from "../src/image.js"
+import { Instance } from "../src/instance/service.js"
 import { Location } from "../src/location.js"
 import { PluginHooks } from "../src/plugin/hooks.js"
 import { PluginSupervisor } from "../src/plugin/supervisor-service.js"
@@ -51,10 +52,9 @@ const it = testEffect(
       SessionInbox.node,
       FSUtil.node,
     ]),
-    [
-      [Bus.node, Bus.configured({ persist: true })],
-      [Global.node, tempGlobalLayer],
-    ],
+    {
+      replacements: [Bus.node.replace(Bus.configured({ persist: true })), Global.node.replace(tempGlobalLayer)],
+    },
   ),
 )
 const sessionID = SessionSchema.ID.make("ses_owned")
@@ -130,7 +130,7 @@ const setup = Effect.fnUntraced(function* (options?: {
     Layer.mock(Image.Service, {}),
     options?.shell ?? Layer.mock(Shell.Service, {}),
   )
-  const servicesFor = (ref: Location.Ref): Layer.Layer<Session.Services> => {
+  const servicesFor = (ref: Location.Ref) => {
     locations.push(ref)
     return Layer.merge(SessionRevert.layer, SessionPrompt.layer).pipe(
       Layer.provideMerge(
@@ -159,10 +159,20 @@ const setup = Effect.fnUntraced(function* (options?: {
       Layer.fresh,
     )
   }
-  const sessions = yield* Session.make(servicesFor).pipe(
+  const sessions = yield* Session.make().pipe(
     Effect.satisfiesServicesType<
-      Bus.Service | SessionStore.Service | SessionExecution.Service | SessionInbox.Service | Scope.Scope
+      | Bus.Service
+      | SessionStore.Service
+      | Instance.Service
+      | SessionExecution.Service
+      | SessionInbox.Service
+      | Scope.Scope
     >(),
+    Effect.provideService(Instance.Service, {
+      // This fixture supplies only the instance services exercised by Session.
+      provide: (session) => Effect.provide(servicesFor(session.location) as Layer.Layer<Instance.Services>),
+      provideIfLoaded: () => () => Effect.die("Unexpected loaded-only instance lookup"),
+    }),
     Effect.provideService(SessionExecution.Service, options?.execution ?? execution),
   )
   return { sessions, hooks, locations, flushes, resumes, wakes, db: database.db, bus, store }

@@ -255,7 +255,7 @@ it.live("creates idempotent caller-identified workspaces through the HttpApi", (
   Effect.gen(function* () {
     const handler = yield* ServerFetch.make(options, {
       overrides: [
-        [WorkspaceDriver.node, WorkspaceDriver.registryNode({ fake: workspaceDriver, other: workspaceDriver })],
+        WorkspaceDriver.node.replace(WorkspaceDriver.registryNode({ fake: workspaceDriver, other: workspaceDriver })),
       ],
     })
     const id = Workspace.ID.create()
@@ -340,7 +340,7 @@ it.live("serves the session view operation and missing-session error", () =>
   }),
 )
 
-it.live("does not load a location when reading pending session requests", () =>
+it.live("routes pending requests by Session without loading an instance", () =>
   Effect.gen(function* () {
     const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-pending-read-")))
     const handler = yield* ServerFetch.make({
@@ -368,16 +368,18 @@ it.live("does not load a location when reading pending session requests", () =>
         ),
       )
 
+    // Session routing must ignore the caller's unrelated Location.
+    const headers = { "x-opencode-directory": encodeURIComponent(config.path) }
     expect(yield* loaded()).toEqual([])
     for (const resource of ["permission", "form"]) {
       const response = yield* Effect.promise(() =>
-        handler(new Request(`http://opencode.local/api/session/${created.data.id}/${resource}`)),
+        handler(new Request(`http://opencode.local/api/session/${created.data.id}/${resource}`, { headers })),
       )
       expect(response.status).toBe(200)
       expect(yield* Effect.promise(() => response.json())).toEqual({ data: [] })
 
       const missing = yield* Effect.promise(() =>
-        handler(new Request(`http://opencode.local/api/session/ses_missing_pending/${resource}`)),
+        handler(new Request(`http://opencode.local/api/session/ses_missing_pending/${resource}`, { headers })),
       )
       expect(missing.status).toBe(404)
     }
@@ -396,7 +398,7 @@ it.live("does not load a location when reading pending session requests", () =>
       handler(
         new Request(`http://opencode.local/api/session/${created.data.id}/form`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...headers },
           body: JSON.stringify({ title: "Test form", fields: [{ key: "answer", type: "string" }] }),
         }),
       ),
@@ -404,7 +406,7 @@ it.live("does not load a location when reading pending session requests", () =>
     expect(createdForm.status).toBe(200)
 
     const forms = yield* Effect.promise(() =>
-      handler(new Request(`http://opencode.local/api/session/${created.data.id}/form`)),
+      handler(new Request(`http://opencode.local/api/session/${created.data.id}/form`, { headers })),
     )
     expect(forms.status).toBe(200)
     expect(yield* Effect.promise(() => forms.json())).toMatchObject({
@@ -442,7 +444,7 @@ it.live("does not load a location when reading pending session requests", () =>
       handler(
         new Request(`http://opencode.local/api/session/${created.data.id}/permission`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...headers },
           body: JSON.stringify({ id: "per_pending_read", action: "shell", resources: ["pwd"] }),
         }),
       ),
@@ -453,7 +455,7 @@ it.live("does not load a location when reading pending session requests", () =>
     })
 
     const permissions = yield* Effect.promise(() =>
-      handler(new Request(`http://opencode.local/api/session/${created.data.id}/permission`)),
+      handler(new Request(`http://opencode.local/api/session/${created.data.id}/permission`, { headers })),
     )
     expect(permissions.status).toBe(200)
     expect(yield* Effect.promise(() => permissions.json())).toMatchObject({

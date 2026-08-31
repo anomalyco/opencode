@@ -28,13 +28,13 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
 const staticIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [ConfigPluginSource.node, ConfigPluginSource.empty],
-    [Global.node, tempGlobalLayer],
+    ConfigPluginSource.node.replace(ConfigPluginSource.empty),
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
 const refreshNpm = makeGlobalNode({
@@ -65,10 +65,7 @@ const refreshNpm = makeGlobalNode({
 const refreshIt = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, Global.node]),
-    [
-      [Global.node, tempGlobalLayer],
-      [Npm.node, refreshNpm],
-    ],
+    [Global.node.replace(tempGlobalLayer), Npm.node.replace(refreshNpm)],
   ),
 )
 

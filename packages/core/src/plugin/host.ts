@@ -80,7 +80,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const response = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
 
-  return {
+  // Keep the instance graph's inferred types independent of Session handles.
+  const context: Plugin.Context = {
     app,
     location: locationInfo(),
     options: {},
@@ -206,7 +207,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           .subscribe()
           .pipe(
             Stream.filter(
-              (event): event is EventManifest.ServerEvent | RpcEvent => EventManifest.isServer(event) || isRpcEvent(event),
+              (event): event is EventManifest.ServerEvent | RpcEvent =>
+                EventManifest.isServer(event) || isRpcEvent(event),
             ),
           ),
     },
@@ -449,7 +451,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       wait: (input) => runtime.session.wait(input.sessionID),
       context: (input) => runtime.session.context(input.sessionID),
     },
-  } satisfies Plugin.Context
+  }
+  return context
 })
 
 export function storage(kv: KV.Interface, pluginID: string): Plugin.Context["storage"] {

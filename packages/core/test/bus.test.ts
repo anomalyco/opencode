@@ -100,12 +100,14 @@ const tail = (bus: Bus.Interface, input: { aggregateID: string; after?: number }
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Location.node]), [
-    [Location.node, locationLayer],
-    [Bus.node, Bus.configured({ persist: true })],
+    Location.node.replace(locationLayer),
+    Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
 const itWithoutLocation = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [[Bus.node, Bus.configured({ persist: true })]]),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+    Bus.node.replace(Bus.configured({ persist: true })),
+  ]),
 )
 const itWithoutPersistence = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])))
 
@@ -631,8 +633,7 @@ describe("Bus", () => {
       const continueRead = yield* Deferred.make<void>()
       let pause = true
       const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
-        [
-          Bus.node,
+        Bus.node.replace(
           Bus.configured({
             persist: true,
             beforeAggregateRead: () =>
@@ -640,7 +641,7 @@ describe("Bus", () => {
                 ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))
                 : Effect.void,
           }),
-        ],
+        ),
       ])
 
       yield* Effect.gen(function* () {
@@ -1318,7 +1319,7 @@ describe("Bus", () => {
   it.effect("log replays across configured read pages", () =>
     Effect.gen(function* () {
       const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
-        [Bus.node, Bus.configured({ persist: true, logReadPageSize: 2 })],
+        Bus.node.replace(Bus.configured({ persist: true, logReadPageSize: 2 })),
       ])
 
       yield* Effect.gen(function* () {
@@ -1351,8 +1352,7 @@ describe("Bus", () => {
       const releaseRead = yield* Deferred.make<void>()
       const firstRead = yield* Ref.make(true)
       const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
-        [
-          Bus.node,
+        Bus.node.replace(
           Bus.configured({
             persist: true,
             beforeAggregateRead: () =>
@@ -1363,7 +1363,7 @@ describe("Bus", () => {
                 }),
               ),
           }),
-        ],
+        ),
       ])
 
       yield* Effect.gen(function* () {

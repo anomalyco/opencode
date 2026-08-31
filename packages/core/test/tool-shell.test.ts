@@ -156,17 +156,19 @@ const nodes = LayerNode.group([
   Global.node,
 ])
 const replacements = [
-  [SessionExecution.node, executionNode],
-  [Permission.node, permission],
-  [Global.node, tempGlobalLayer],
+  SessionExecution.node.replace(executionNode),
+  Permission.node.replace(permission),
+  Global.node.replace(tempGlobalLayer),
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
-const it = testEffect(AppNodeBuilder.build(nodes, [...replacements, [PluginSupervisor.node, shellPluginSupervisor]]))
+const it = testEffect(
+  AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
+)
 const permissionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, PermissionSaved.node]), [
-    [SessionExecution.node, executionNode],
-    [Global.node, tempGlobalLayer],
-    [PluginSupervisor.node, shellPluginSupervisor],
+    SessionExecution.node.replace(executionNode),
+    Global.node.replace(tempGlobalLayer),
+    PluginSupervisor.node.replace(shellPluginSupervisor),
   ]),
 )
 

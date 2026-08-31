@@ -378,10 +378,10 @@ const permissions = Layer.mock(Permission.Service, {
 const events = Layer.mock(Bus.Service, { subscribe: () => Stream.never })
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node]), [
-    [Mcp.node, mcp],
-    [Permission.node, permissions],
-    [Bus.node, events],
-    [Image.node, imagePassthrough],
+    Mcp.node.replace(mcp),
+    Permission.node.replace(permissions),
+    Bus.node.replace(events),
+    Image.node.replace(imagePassthrough),
   ]),
 )
 
@@ -1688,8 +1688,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
       Effect.provide(
         Layer.fresh(
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
-            [
-              Mcp.node,
+            Mcp.node.replace(
               Layer.mock(Mcp.Service, {
                 tools: () => Ref.get(catalog),
                 callTool: (input) =>
@@ -1702,9 +1701,9 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
                     }),
                   ),
               }),
-            ],
-            [Permission.node, Layer.mock(Permission.Service, { assert: () => Effect.void })],
-            [Image.node, imagePassthrough],
+            ),
+            Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+            Image.node.replace(imagePassthrough),
           ]),
         ),
       ),
@@ -1731,8 +1730,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
-        [
-          Mcp.node,
+        Mcp.node.replace(
           Layer.mock(Mcp.Service, {
             tools: () =>
               Effect.sync(() => [
@@ -1744,9 +1742,9 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
                 }),
               ]),
           }),
-        ],
-        [Permission.node, Layer.mock(Permission.Service, { assert: () => Effect.void })],
-        [Image.node, imagePassthrough],
+        ),
+        Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+        Image.node.replace(imagePassthrough),
       ]),
     ),
   )
