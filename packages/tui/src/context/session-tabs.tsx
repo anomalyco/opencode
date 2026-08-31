@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
@@ -73,9 +74,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       key: "sessionID",
     })
-    const [preview, updatePreview] = storage.memory<{ global?: string; cwd?: string }>("session-tab-preview", {
-      initial: {},
-    })
+    const [preview, updatePreview] = createStore<{ global?: string; cwd?: string }>({})
     const fallback = empty()
     const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
     let history: SessionTabHistory = { entries: [], index: -1 }
@@ -107,16 +106,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }
 
     const previewID = () => preview[config.tabs.scope]
-    const setPreview = (sessionID: string | undefined) => {
-      const scope = config.tabs.scope
-      updatePreview((draft) => {
-        if (sessionID === undefined) {
-          delete draft[scope]
-          return
-        }
-        draft[scope] = sessionID
-      })
-    }
+    const setPreview = (sessionID: string | undefined) => updatePreview(config.tabs.scope, sessionID)
 
     function update(mutation: (draft: TabsState) => void) {
       const scope = config.tabs.scope
@@ -179,11 +169,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createEffect(() => {
       if (enabled()) return
       promotedSession = undefined
-      if (!preview.global && !preview.cwd) return
-      updatePreview((draft) => {
-        delete draft.global
-        delete draft.cwd
-      })
+      updatePreview({ global: undefined, cwd: undefined })
     })
 
     // Shared storage updates must not re-admit a tab unless this client changes route or scope.
