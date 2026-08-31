@@ -1,6 +1,7 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
+import { Locale } from "../../util/locale"
 import { createMemo } from "solid-js"
 
 const id = "internal:sidebar-context"
@@ -43,8 +44,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         <b>Context</b>
       </text>
       <text fg={theme().textMuted}>
-        {state().tokens.toLocaleString()}
-        {state().contextLimit ? ` / ${state().contextLimit?.toLocaleString()}` : ""} tokens
+        {Locale.number(state().tokens)}
+        {state().contextLimit ? ` / ${Locale.number(state().contextLimit!)}` : ""} tokens
       </text>
       <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
