@@ -9,10 +9,10 @@ import { SessionSchema } from "../session/schema"
 import { Config } from "../config"
 import { makeLocationNode } from "../effect/app-node"
 import { LayerNodePlatform } from "../effect/app-node-platform"
-import { FlexibleNumber, harness_task, harness_subtask_feedback } from "./schema"
+import { FlexibleNumber, harness_task, harness_subtask_feedback, harness_version } from "./schema"
 import { QualityGate } from "./quality-gate"
 import { PromptFinalizer } from "./improving_prompt_finalizer"
-import { eq } from "drizzle-orm"
+import { eq, desc } from "drizzle-orm"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -188,6 +188,8 @@ const layer = Layer.effect(
         .select({ domain: harness_version.domain_category })
         .from(harness_version)
         .where(eq(harness_version.is_active, true))
+        .orderBy(desc(harness_version.version_id))
+        .limit(20)
         .all()
         .pipe(Effect.orElseSucceed(() => []))
 
