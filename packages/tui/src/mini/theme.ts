@@ -25,6 +25,7 @@ export type RunSplashTheme = {
   left: ColorInput
   right: ColorInput
   leftShadow: ColorInput
+  background?: ColorInput
 }
 
 export type RunFooterTheme = {
@@ -178,11 +179,6 @@ function nearestIndexed(indexed: RGBA[], rgba: RGBA): RGBA {
 function paletteColor(colors: TerminalColors, index: number): RGBA {
   const value = colors.palette[index]
   return value ? RGBA.fromHex(value) : ansiToRgba(index)
-}
-
-function splashShadow(indexed: RGBA[], base: RGBA, overlay: RGBA, value: number): RGBA {
-  const mixed = tint(base, overlay, value)
-  return nearestIndexed(indexed, mixed)
 }
 
 export function resolveTheme(theme: ThemeV1Json, pick: "dark" | "light"): ThemeCurrent {
@@ -354,13 +350,17 @@ function quantizeTheme(theme: ThemeCurrent, indexed: RGBA[]): ThemeCurrent {
   }
 }
 
-function splashTheme(theme: ThemeCurrent, indexed: RGBA[]): RunSplashTheme {
+function splashTheme(theme: ThemeCurrent, indexed: RGBA[], background: string | null): RunSplashTheme {
+  if (!background) {
+    return { left: theme.text, right: theme.text, leftShadow: transparent }
+  }
   const left = nearestIndexed(indexed, theme.textMuted)
   const right = nearestIndexed(indexed, theme.text)
   return {
     left,
     right,
-    leftShadow: splashShadow(indexed, theme.background, left, 0.14),
+    leftShadow: alpha(left, 0.25),
+    background: RGBA.defaultBackground(background),
   }
 }
 
@@ -457,10 +457,6 @@ function tone(body: ColorInput, start?: ColorInput): Tone {
   }
 }
 
-const fallbackSplashIndexed = Array.from({ length: 256 }, (_, index) => RGBA.fromIndex(index))
-const fallbackSplashLeft = RGBA.fromIndex(67)
-const fallbackSplashRight = RGBA.fromIndex(110)
-
 export const RUN_THEME_FALLBACK: RunTheme = {
   background: RGBA.fromValues(0, 0, 0, 0),
   footer: {
@@ -488,9 +484,9 @@ export const RUN_THEME_FALLBACK: RunTheme = {
     error: tone(seed.error),
   },
   splash: {
-    left: fallbackSplashLeft,
-    right: fallbackSplashRight,
-    leftShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashLeft, 0.14),
+    left: seed.text,
+    right: seed.text,
+    leftShadow: transparent,
   },
   block: {
     text: seed.text,
@@ -595,7 +591,12 @@ export async function resolveRunTheme(
       ...scrollbackTheme,
       _hasSelectedListItemText: true,
     }
-    return map(footerTheme, scrollbackTheme, splashTheme(scrollbackTheme, indexed), generateSyntax(syntaxTheme))
+    return map(
+      footerTheme,
+      scrollbackTheme,
+      splashTheme(scrollbackTheme, indexed, colors.defaultBackground),
+      generateSyntax(syntaxTheme),
+    )
   } catch {
     return RUN_THEME_FALLBACK
   }

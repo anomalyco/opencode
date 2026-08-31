@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
-import { RGBA, type CliRenderer, type TerminalColors } from "@opentui/core"
+import { CliRenderEvents, RGBA, type CapturedLine, type CliRenderer, type TerminalColors } from "@opentui/core"
+import { createTestRenderer } from "@opentui/core/testing"
+import { entrySplash, exitSplash } from "../../src/mini/splash"
 import { RUN_THEME_MONO, RUN_THEME_FALLBACK, generateSystem, resolveRunTheme, resolveTheme } from "../../src/mini/theme"
 import { DEFAULT_THEMES } from "../../src/theme"
 
@@ -92,7 +94,7 @@ test("resolveTheme preserves Mini indexed color and result shape semantics", () 
   expect("_hasSelectedListItemText" in theme).toBe(false)
 })
 
-test("returns syntax styles and indexed splash colors", async () => {
+test("returns syntax styles and native alpha splash shadows", async () => {
   const theme = await resolveRunTheme(renderer({ themeMode: "dark" }))
 
   try {
@@ -100,13 +102,77 @@ test("returns syntax styles and indexed splash colors", async () => {
     expect([...theme.block.syntax!.getAllStyles()].length).toBeGreaterThan(0)
     expectIndexed(theme.splash.left)
     expectIndexed(theme.splash.right)
-    expectIndexed(theme.splash.leftShadow)
+    const shadow = expectRgba(theme.splash.leftShadow)
+    expect(shadow.intent).toBe("rgb")
+    expect(shadow.a).toBeCloseTo(0.25, 2)
+    expect(shadow.toInts().slice(0, 3)).toEqual(expectRgba(theme.splash.left).toInts().slice(0, 3))
     expectRgba(theme.footer.highlight)
     expectRgba(theme.footer.statusAccent)
     expectRgba(theme.footer.surface)
     expect(expectRgba(theme.footer.statusAccent).toInts()).not.toEqual(expectRgba(theme.footer.status).toInts())
   } finally {
     theme.block.syntax?.destroy()
+  }
+})
+
+test("omits splash shadows without an actual terminal background", async () => {
+  const theme = await resolveRunTheme(renderer({ colors: { ...terminalColors(), defaultBackground: null } }))
+
+  try {
+    expect(expectRgba(theme.splash.leftShadow).a).toBe(0)
+    expect(expectRgba(theme.splash.left).intent).toBe("default")
+    expect(expectRgba(theme.splash.right).intent).toBe("default")
+    expect(expectRgba(theme.splash.left).toInts()).toEqual(expectRgba(theme.footer.text).toInts())
+  } finally {
+    theme.block.syntax?.destroy()
+  }
+})
+
+test("fallback splash uses default foreground without shadows", () => {
+  expect(expectRgba(RUN_THEME_FALLBACK.splash.leftShadow).a).toBe(0)
+  expect(expectRgba(RUN_THEME_FALLBACK.splash.left).intent).toBe("default")
+  expect(expectRgba(RUN_THEME_FALLBACK.splash.right).intent).toBe("default")
+})
+
+test("native scrollback composes splash shadows against the reported background", async () => {
+  for (const background of ["#101820", "#faf0dc", "#0000ff", null]) {
+    const theme = await resolveRunTheme(renderer({ colors: { ...terminalColors(), defaultBackground: background } }))
+    const out = await createTestRenderer({
+      width: 80,
+      screenMode: "split-footer",
+      footerHeight: 6,
+      externalOutputMode: "capture-stdout",
+      consoleMode: "disabled",
+    })
+    out.renderer.setBackgroundColor(theme.background)
+    let lines: CapturedLine[] = []
+    let text = ""
+    out.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, (event) => {
+      lines = event.snapshot.getSpanLines()
+      text = new TextDecoder().decode(event.snapshot.getRealCharBytes(false))
+    })
+
+    try {
+      for (const splash of [entrySplash, exitSplash]) {
+        out.renderer.writeToScrollback(splash({ theme: theme.splash, title: "Test", session_id: "ses-test" }))
+        expect([1, 2, 3].map((row) => text.slice(row * 80, row * 80 + 4))).toEqual(["█▀▀█", "█  █", "▀▀▀▀"])
+        const interior = lines[2]!.spans[lines[2]!.spans[0]!.width > 1 ? 0 : 1]!
+        expect(interior).toBeDefined()
+        if (!background) {
+          expect(interior.bg.a).toBe(0)
+          continue
+        }
+        const foreground = expectRgba(theme.splash.left)
+        const base = RGBA.fromHex(background)
+        expect(interior.bg.a).toBe(1)
+        expect(interior.bg.r).toBeCloseTo(base.r * 0.75 + foreground.r * 0.25, 2)
+        expect(interior.bg.g).toBeCloseTo(base.g * 0.75 + foreground.g * 0.25, 2)
+        expect(interior.bg.b).toBeCloseTo(base.b * 0.75 + foreground.b * 0.25, 2)
+      }
+    } finally {
+      out.renderer.destroy()
+      theme.block.syntax?.destroy()
+    }
   }
 })
 

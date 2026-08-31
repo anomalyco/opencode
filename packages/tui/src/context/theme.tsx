@@ -1,4 +1,4 @@
-import { CliRenderEvents, SyntaxStyle, type TerminalColors } from "@opentui/core"
+import { CliRenderEvents, RGBA, SyntaxStyle, type TerminalColors } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import {
   generateSyntax,
@@ -24,7 +24,7 @@ import {
 import { generateSystem, terminalMode } from "../theme/system"
 import { discoverThemes } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/component"
-import { createEffect, createMemo, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig } from "../config"
@@ -118,6 +118,7 @@ type Themes = {
   set(theme: string): boolean
   onError(handler: ThemeErrorHandler): () => void
   readonly ready: boolean
+  terminalBackgroundKnown: Accessor<boolean>
 }
 
 type ThemeContextValue = {
@@ -140,6 +141,7 @@ const themeContext = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light"; source: ThemeSource }): ThemeContextValue => {
     const renderer = useRenderer()
+    const [terminalBackground, setTerminalBackground] = createSignal<RGBA>()
     const configState = useConfig()
     const config = configState.data
     const themes = props.source
@@ -197,6 +199,7 @@ const themeContext = createSimpleContext({
       return renderer
         .getPalette({ size: 16 })
         .then((colors: TerminalColors) => {
+          setTerminalBackground(colors.defaultBackground ? RGBA.fromHex(colors.defaultBackground) : undefined)
           if (!colors.palette[0]) {
             if (hasResolvedSystemTheme) return
             setSystemTheme(undefined)
@@ -213,6 +216,7 @@ const themeContext = createSimpleContext({
           setSystemTheme(generateSystem(colors, next))
         })
         .catch(() => {
+          setTerminalBackground(undefined)
           if (hasResolvedSystemTheme) return
           setSystemTheme(undefined)
           if (store.active === "system") setStore("active", "opencode")
@@ -320,13 +324,25 @@ const themeContext = createSimpleContext({
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
     const current = createComponentTheme(valuesV2, mode)
 
-    createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
+    createEffect(() => {
+      const background = valuesV2().background.default
+      const terminal = terminalBackground()
+      if (background.a === 0 && terminal) {
+        // Supply the compositor's backdrop without painting over terminal transparency.
+        const transparent = RGBA.clone(terminal)
+        transparent.a = 0
+        renderer.setBackgroundColor(transparent)
+        return
+      }
+      renderer.setBackgroundColor(background)
+    })
 
     const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
     const service: Themes = {
       current,
       currentTokens: valuesV2,
       currentSyntax,
+      terminalBackgroundKnown: () => terminalBackground() !== undefined,
       get selected() {
         return store.active
       },

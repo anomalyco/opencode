@@ -252,6 +252,8 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
     top: 0,
     width,
     height,
+    // Scrollback snapshots have their own buffer, separate from the renderer background.
+    backgroundColor: input.theme.background,
   })
 
   for (const line of lines) {

@@ -84,6 +84,7 @@ async function open(from?: string): Promise<Session> {
   const [failure, setFailure] = createSignal("")
   const [animating, setAnimating] = createSignal(true)
   const [visible, setVisible] = createSignal(true)
+  const [backgroundKnown, setBackgroundKnown] = createSignal(false)
   let resolveOutcome: (() => void) | undefined
   const renderer = await createCliRenderer({
     stdin: process.stdin,
@@ -102,6 +103,16 @@ async function open(from?: string): Promise<Session> {
     consoleMode: "disabled",
   })
   const terminalMode = renderer.waitForThemeMode(1000).catch(() => null)
+  void renderer.getPalette({ size: 16 }).then(
+    (colors) => {
+      if (!colors.defaultBackground || renderer.isDestroyed) return
+      const background = RGBA.fromHex(colors.defaultBackground)
+      background.a = 0
+      renderer.setBackgroundColor(background)
+      setBackgroundKnown(true)
+    },
+    () => {},
+  )
   await render(
     () => (
       <Show when={visible()}>
@@ -112,6 +123,7 @@ async function open(from?: string): Promise<Session> {
           failure={failure}
           animating={animating}
           renderer={renderer}
+          backgroundKnown={backgroundKnown}
           onOutcomeSettled={() => resolveOutcome?.()}
         />
       </Show>
@@ -242,11 +254,7 @@ const phrase = (...segments: ReadonlyArray<readonly [string, RGBA, boolean?]>): 
     ...styled(segment[0], segment[1], segment[2]),
   ])
 
-function Monogram(props: { ink: () => RGBA }) {
-  const shadow = createMemo(() => {
-    const ink = props.ink()
-    return RGBA.fromValues(ink.r * 0.25, ink.g * 0.25, ink.b * 0.25)
-  })
+function Monogram(props: { ink: () => RGBA; backgroundKnown: () => boolean }) {
   return (
     <box flexDirection="column">
       <For each={monogram}>
@@ -255,7 +263,7 @@ function Monogram(props: { ink: () => RGBA }) {
             <For each={Array.from(line)}>
               {(char) =>
                 char === "_" ? (
-                  <text bg={shadow()} selectable={false}>
+                  <text bg={props.ink()} opacity={props.backgroundKnown() ? 0.25 : 0} selectable={false}>
                     {" "}
                   </text>
                 ) : (
@@ -338,6 +346,7 @@ function UpdateFooter(props: {
   failure: () => string
   animating: () => boolean
   renderer: CliRenderer
+  backgroundKnown: () => boolean
   onOutcomeSettled: () => void
 }) {
   const term = useTerminalDimensions()
@@ -448,7 +457,7 @@ function UpdateFooter(props: {
 
   return (
     <box width="100%" height={4} flexDirection="row" gap={1} paddingLeft={1} live={props.animating()}>
-      <Monogram ink={monogramInk} />
+      <Monogram ink={monogramInk} backgroundKnown={props.backgroundKnown} />
       <box flexDirection="column" flexGrow={1} overflow="hidden">
         <CellLine cells={header()} />
         <Show
