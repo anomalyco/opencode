@@ -1068,7 +1068,6 @@ describe("OpenAI Chat route", () => {
             },
           ],
         },
-        { role: "tool", tool_call_id: "call_1", content: "Tool result missing", cache_control: undefined },
       ])
     }),
   )

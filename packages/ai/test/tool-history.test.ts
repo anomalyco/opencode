@@ -7,7 +7,7 @@ const toolResult = (id: string, value: unknown, name = id, resultType?: "text" |
   Message.tool(ToolResultPart.make({ id, name, result: value, resultType }))
 
 describe("tool history normalization", () => {
-  test("fills missing local results at step boundaries", () => {
+  test("fills missing local results before the next step", () => {
     const normalized = normalizeToolHistory([
       Message.assistant([toolCall("first"), toolCall("second")]),
       toolResult("first", "done", "wrong", "text"),
@@ -21,20 +21,12 @@ describe("tool history normalization", () => {
       "tool",
       "user",
       "assistant",
-      "tool",
     ])
     expect(normalized[1]?.content[0]).toMatchObject({ type: "tool-result", id: "first", name: "first" })
     expect(normalized[2]?.content).toEqual([
       { type: "tool-result", id: "second", name: "second", result: { type: "error", value: "Tool result missing" } },
     ])
-    expect(normalized[5]?.content).toEqual([
-      {
-        type: "tool-result",
-        id: "trailing",
-        name: "trailing",
-        result: { type: "error", value: "Tool result missing" },
-      },
-    ])
+    expect(normalized[4]?.content).toEqual([toolCall("trailing")])
   })
 
   test("normalizes empty results without changing whitespace or media", () => {

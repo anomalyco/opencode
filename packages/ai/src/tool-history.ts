@@ -28,7 +28,6 @@ export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
     }
   }
 
-  appendMissingResults()
   return normalized.length === messages.length && normalized.every((message, index) => message === messages[index])
     ? messages
     : normalized

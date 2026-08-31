@@ -218,7 +218,6 @@ describe("Mistral Chat", () => {
           content: "",
           tool_calls: [{ id: "Ab12Cd34E", type: "function", function: { name: "lookup", arguments: "{}" } }],
         },
-        { role: "tool", tool_call_id: "Ab12Cd34E", name: "lookup", content: "Tool result missing" },
       ])
     }),
   )
