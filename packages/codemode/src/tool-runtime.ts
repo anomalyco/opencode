@@ -307,20 +307,23 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
 const canonicalSegments = (path: ReadonlyArray<string>): ReadonlyArray<string> =>
   path.flatMap((segment) => segment.split("."))
 
+type VisibleTool<R> = {
+  readonly path: string
+  readonly tool: Tool<R>
+  readonly descriptions: ReadonlyArray<string>
+}
+
 const flattenTools = <R>(
   node: ToolNode<R>,
   path: ReadonlyArray<string> = [],
-  namespaceDescriptions: ReadonlyArray<string> = [],
-): Array<{ path: string; tool: Tool<R>; namespaceDescriptions: ReadonlyArray<string> }> => [
-  ...(node.tool === undefined ? [] : [{ path: path.join("."), tool: node.tool, namespaceDescriptions }]),
-  ...Array.from(node.children, ([name, child]) =>
-    flattenTools(
-      child,
-      [...path, name],
-      child.description === undefined ? namespaceDescriptions : [...namespaceDescriptions, child.description],
-    ),
-  ).flat(),
-]
+  descriptions: ReadonlyArray<string> = [],
+): Array<VisibleTool<R>> => {
+  const next = node.description === undefined ? descriptions : [...descriptions, node.description]
+  return [
+    ...(node.tool === undefined ? [] : [{ path: path.join("."), tool: node.tool, descriptions: next }]),
+    ...Array.from(node.children).flatMap(([name, child]) => flattenTools(child, [...path, name], next)),
+  ]
+}
 
 const describeTool = <R>(path: string, tool: Tool<R>): ToolDescription => ({
   path,
@@ -332,10 +335,10 @@ const describeTool = <R>(path: string, tool: Tool<R>): ToolDescription => ({
 const visibleTools = <R>(tools: Tools<R>) =>
   flattenTools(toolTrie(tools))
     .sort((left, right) => compareText(left.path, right.path))
-    .map(({ path, tool, namespaceDescriptions }) => ({
+    .map(({ path, tool, descriptions }) => ({
       path,
       tool,
-      namespaceDescriptions,
+      descriptions,
       description: describeTool(path, tool),
     }))
 
@@ -437,13 +440,13 @@ const toSearchEntry = <R>(
   path: string,
   tool: Tool<R>,
   description: ToolDescription,
-  namespaceDescriptions: ReadonlyArray<string>,
+  descriptions: ReadonlyArray<string>,
 ): SearchEntry => ({
   description,
   searchText: [
     path,
     tool.description,
-    ...namespaceDescriptions,
+    ...descriptions,
     ...inputProperties(tool).flatMap(({ name, description: property }) =>
       property === undefined ? [name] : [name, property],
     ),
@@ -453,16 +456,16 @@ const toSearchEntry = <R>(
 })
 
 export const searchIndex = <R>(tools: Tools<R>): ReadonlyArray<SearchEntry> =>
-  visibleTools(tools).map(({ path, tool, description, namespaceDescriptions }) =>
-    toSearchEntry(path, tool, description, namespaceDescriptions),
+  visibleTools(tools).map(({ path, tool, description, descriptions }) =>
+    toSearchEntry(path, tool, description, descriptions),
   )
 
 export const prepare = <R>(tools: Tools<R>): DiscoveryPlan => {
   const visible = visibleTools(tools)
   return {
     catalog: visible.map(({ description }) => description),
-    searchIndex: visible.map(({ path, tool, description, namespaceDescriptions }) =>
-      toSearchEntry(path, tool, description, namespaceDescriptions),
+    searchIndex: visible.map(({ path, tool, description, descriptions }) =>
+      toSearchEntry(path, tool, description, descriptions),
     ),
   }
 }
