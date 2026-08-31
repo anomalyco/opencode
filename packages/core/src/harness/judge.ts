@@ -12,7 +12,8 @@ import { LayerNodePlatform } from "../effect/app-node-platform"
 import { FlexibleNumber, harness_task, harness_subtask_feedback, harness_version } from "./schema"
 import { QualityGate } from "./quality-gate"
 import { PromptFinalizer } from "./improving_prompt_finalizer"
-import { eq, desc } from "drizzle-orm"
+import { eq, desc, isNotNull } from "drizzle-orm"
+import similarity from "compute-cosine-similarity"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -189,13 +190,59 @@ const layer = Layer.effect(
         .from(harness_version)
         .where(eq(harness_version.is_active, true))
         .orderBy(desc(harness_version.version_id))
-        .limit(20)
+        .limit(50)
         .all()
         .pipe(Effect.orElseSucceed(() => []))
 
-      const existingDomains = Array.from(new Set(activeDomainRows.map((r) => r.domain).filter(Boolean)))
-      const existingDomainContext = existingDomains.length > 0
-        ? `\n\nExisting Active Domain Niches in Repository:\n${existingDomains.map((d) => `- ${d}`).join("\n")}\nIf the task matches one of these existing domain niches, reuse that exact domain name. Otherwise, create a new semantic snake_case domain niche for the new technical stack.`
+      const activeDomainSet = new Set(activeDomainRows.map((r) => r.domain).filter(Boolean))
+
+      // 1. Vector Search: Compute embedding for prompt and rank active domains by cosine similarity
+      let rankedDomains: string[] = []
+      const promptEmbedding = yield* fetchEmbedding(prompt).pipe(Effect.orElseSucceed(() => undefined))
+
+      if (promptEmbedding) {
+        const tasksWithEmbeddings = yield* db
+          .select({
+            taskType: harness_task.task_type,
+            embedding: harness_task.task_embeddings,
+          })
+          .from(harness_task)
+          .where(isNotNull(harness_task.task_embeddings))
+          .all()
+          .pipe(Effect.orElseSucceed(() => []))
+
+        const scoredDomains = new Map<string, number>()
+        for (const t of tasksWithEmbeddings) {
+          if (!t.taskType || !activeDomainSet.has(t.taskType) || !t.embedding) continue
+          const taskVec = t.embedding instanceof Float32Array
+            ? Array.from(t.embedding)
+            : Array.isArray(t.embedding)
+              ? t.embedding
+              : undefined
+          if (!taskVec) continue
+
+          const promptVec = Array.from(promptEmbedding)
+          const score = similarity(promptVec, taskVec)
+          if (typeof score === "number" && !isNaN(score)) {
+            const currentMax = scoredDomains.get(t.taskType) ?? -1
+            if (score > currentMax) {
+              scoredDomains.set(t.taskType, score)
+            }
+          }
+        }
+
+        rankedDomains = Array.from(scoredDomains.entries())
+          .sort((a, b) => b[1] - a[1])
+          .map(([d]) => d)
+      }
+
+      // Merge vector-ranked domains with active domains up to top 15
+      const candidateDomains = Array.from(
+        new Set([...rankedDomains, ...Array.from(activeDomainSet)]),
+      ).slice(0, 15)
+
+      const existingDomainContext = candidateDomains.length > 0
+        ? `\n\nExisting Active Domain Niches in Repository (Vector-Ranked):\n${candidateDomains.map((d) => `- ${d}`).join("\n")}\nIf the task matches one of these existing domain niches, reuse that exact domain name. Otherwise, create a new semantic snake_case domain niche for the new technical stack.`
         : ""
 
       const res = yield* LLM.generateObject({
