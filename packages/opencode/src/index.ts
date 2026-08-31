@@ -29,6 +29,8 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { FirecrawlSdkCommand } from "./cli/cmd/firecrawl"
+import { DynamicCrawlerCommand } from "./cli/cmd/dynamic-crawler-cli"
 
 const args = hideBin(process.argv)
 
@@ -100,6 +102,8 @@ const cli = yargs(args)
   .command(PrCommand)
   .command(SessionCommand)
   .command(PluginCommand)
+  .command(FirecrawlSdkCommand)
+  .command(DynamicCrawlerCommand)
   .command(DbCommand)
   .fail((msg, err) => {
     if (

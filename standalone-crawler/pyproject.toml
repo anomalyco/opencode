@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "standalone-crawler"
+version = "0.1.0"
+description = "Standalone, single-page web crawler built on Scrapling. Phase 1: no OpenCode/MCP/search-API integration."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "BSD-3-Clause" }
+dependencies = [
+    "scrapling[fetchers]==0.4.14",
+    "pydantic>=2.6",
+    "ddgs>=9.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.14",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+# Without this, bare `pytest` (run from the repo root, not `python -m
+# pytest`) fails to collect tests/test_cli.py: pytest's default import
+# mode only adds the *test file's* directory (tests/, no __init__.py) to
+# sys.path, not the repo root where crawler_cli.py lives, so
+# `import crawler_cli` raises ModuleNotFoundError. `python -m pytest`
+# happened to work because `python -m` itself prepends cwd to sys.path,
+# masking the issue. Fixed here so both invocations behave identically.
+pythonpath = ["."]
+markers = [
+    "integration: makes a real network request to a stable public page (see test_integration_smoke.py).",
+]
+

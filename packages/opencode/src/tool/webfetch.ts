@@ -3,8 +3,10 @@ import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import * as Tool from "./tool"
 import TurndownService from "turndown"
+import path from "path"
 import DESCRIPTION from "./webfetch.txt"
 import { isImageAttachment } from "@/util/media"
+import { CRAWL_DISABLED_MESSAGE, isCrawlEnabled, isScrapeEnabled, SCRAPE_DISABLED_MESSAGE } from "@/cli/cmd/scrape-state"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -19,19 +21,28 @@ export const Parameters = Schema.Struct({
     })
     .pipe(Schema.withDecodingDefault(Effect.succeed("markdown" as const))),
   timeout: Schema.optional(Schema.Number).annotate({ description: "Optional timeout in seconds (max 120)" }),
+  scroll: Schema.optional(Schema.Boolean).annotate({
+    description: "Auto-scroll the page to load lazy content during Scrapling fallback (default: false)",
+  }),
 })
 
 export const WebFetchTool = Tool.define(
   "webfetch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
-    const httpOk = HttpClient.filterStatusOk(http)
-
     return {
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          if (!isCrawlEnabled()) {
+            return { output: CRAWL_DISABLED_MESSAGE, title: "WebFetch", metadata: {} }
+          }
+
+          if (!isScrapeEnabled()) {
+            return { output: SCRAPE_DISABLED_MESSAGE, title: "WebFetch", metadata: {} }
+          }
+
           if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
             throw new Error("URL must start with http:// or https://")
           }
@@ -76,21 +87,33 @@ export const WebFetchTool = Tool.define(
           const request = HttpClientRequest.get(params.url).pipe(HttpClientRequest.setHeaders(headers))
 
           // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
-          const response = yield* httpOk.execute(request).pipe(
-            Effect.catchIf(
-              (err) =>
-                err.reason._tag === "StatusCodeError" &&
-                err.reason.response.status === 403 &&
-                err.reason.response.headers["cf-mitigated"] === "challenge",
-              () =>
-                httpOk.execute(
-                  HttpClientRequest.get(params.url).pipe(
-                    HttpClientRequest.setHeaders({ ...headers, "User-Agent": "opencode" }),
-                  ),
-                ),
-            ),
+          const initial = yield* http.execute(request).pipe(
             Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error("Request timed out")) }),
           )
+          const response =
+            initial.status === 403 && initial.headers["cf-mitigated"] === "challenge"
+              ? yield* http
+                  .execute(HttpClientRequest.get(params.url).pipe(HttpClientRequest.setHeaders({ ...headers, "User-Agent": "opencode" })))
+                  .pipe(Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error("Request timed out")) }))
+              : initial
+
+          // A 999 response means the primary fetcher was rejected. Decide at
+          // runtime whether the TUI agent may select the Scrapling crawler.
+          if (response.status === 999) {
+            if (!isCrawlEnabled()) {
+              return { output: CRAWL_DISABLED_MESSAGE, title: "WebFetch", metadata: {} }
+            }
+
+            const output = yield* Effect.tryPromise({
+              try: () => crawlWithScrapling(params.url, timeout, params.scroll),
+              catch: (error) => new Error(`Scrapling fallback failed: ${error instanceof Error ? error.message : String(error)}`),
+            })
+            return { output, title: `${params.url} (Scrapling)`, metadata: {} }
+          }
+
+          if (response.status < 200 || response.status >= 300) {
+            throw new Error(`Request failed with status ${response.status}`)
+          }
 
           // Check content length
           const contentLength = response.headers["content-length"]
@@ -177,6 +200,29 @@ function extractTextFromHTML(html: string) {
   parser.end()
 
   return text.trim()
+}
+
+async function crawlWithScrapling(url: string, timeout: number, scroll?: boolean) {
+  const script = path.resolve(import.meta.dirname, "../../../../standalone-crawler/crawler_cli.py")
+  const crawlerRoot = path.dirname(script)
+  const args = ["python", script, url, "--mode", "http", "--timeout", String(timeout / 1000), "--indent", "0"]
+  if (scroll) args.push("--scroll")
+  const child = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+    cwd: crawlerRoot,
+    env: { ...process.env, PYTHONPATH: [path.join(crawlerRoot, "src"), process.env.PYTHONPATH].filter(Boolean).join(path.delimiter) },
+  })
+  const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+  if (exitCode !== 0) throw new Error(stderr.trim() || `crawler exited with code ${exitCode}`)
+
+  const result: unknown = JSON.parse(stdout)
+  if (!isCrawlerResult(result)) throw new Error("crawler returned an invalid response")
+  return result.content?.text ?? JSON.stringify(result)
+}
+
+function isCrawlerResult(value: unknown): value is { content?: { text?: string } } {
+  return typeof value === "object" && value !== null
 }
 
 function convertHTMLToMarkdown(html: string): string {
