@@ -702,22 +702,36 @@ export function replace(content: string, oldString: string, newString: string, r
     ContextAwareReplacer,
     MultiOccurrenceReplacer,
   ]) {
+    const matches = new Map<string, { index: number; search: string }>()
     for (const search of replacer(content, oldString)) {
-      const index = content.indexOf(search)
-      if (index === -1) continue
-      notFound = false
       if (isDisproportionateMatch(search, oldString)) {
         throw new Error(
           "Refusing replacement because the matched span is much larger than oldString. Re-read the file and provide the full exact oldString for the intended replacement.",
         )
       }
-      if (replaceAll) {
-        return content.replaceAll(search, newString)
+      for (const index of searchIndices(content, search)) {
+        matches.set(`${index}:${index + search.length}`, { index, search })
       }
-      const lastIndex = content.lastIndexOf(search)
-      if (index !== lastIndex) continue
-      return content.substring(0, index) + newString + content.substring(index + search.length)
     }
+
+    if (matches.size === 0) continue
+    notFound = false
+    const candidates = Array.from(matches.values())
+
+    if (replaceAll) {
+      return candidates
+        .sort((a, b) => b.index - a.index)
+        .reduce(
+          (next, match) =>
+            next.substring(0, match.index) + newString + next.substring(match.index + match.search.length),
+          content,
+        )
+    }
+    if (candidates.length === 1) {
+      const [match] = candidates
+      return content.substring(0, match.index) + newString + content.substring(match.index + match.search.length)
+    }
+    throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")
   }
 
   if (notFound) {
@@ -726,6 +740,19 @@ export function replace(content: string, oldString: string, newString: string, r
     )
   }
   throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")
+}
+
+function searchIndices(content: string, search: string) {
+  const indices: number[] = []
+  if (search === "") return indices
+  let start = 0
+
+  while (true) {
+    const index = content.indexOf(search, start)
+    if (index === -1) return indices
+    indices.push(index)
+    start = index + search.length
+  }
 }
 
 function isDisproportionateMatch(search: string, oldString: string) {
