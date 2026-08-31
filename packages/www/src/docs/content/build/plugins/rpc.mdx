@@ -1,0 +1,161 @@
+---
+title: "RPC"
+---
+
+Expose typed methods and custom events through a shared RPC definition. Start by
+putting the contract in a browser-safe module, separate from plugin setup and
+server code.
+
+## Define the contract
+
+Use `Rpc.define` to declare the RPC ID, methods, errors, and events. The builder
+is synchronous and independent of Promise or Effect execution.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode-ai/plugin/rpc"
+import { z } from "zod"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: z.object({ query: z.string() }),
+      output: z.object({ text: z.string() }),
+      errors: {
+        not_found: z.object({ query: z.string() }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: z.object({ itemID: z.string(), text: z.string() }),
+    },
+  },
+})
+```
+
+## Choose schemas
+
+Use Standard Schema, such as Zod, when Promise and Effect consumers share the
+contract. It validates at runtime and infers TypeScript types.
+
+Other schema formats have narrower tradeoffs:
+
+- Plain JSON Schema validates at runtime, but its inferred TypeScript value is `unknown`.
+- Plain JSON Schema uses Draft 2020-12 through Effect's JSON Schema importer and decoder.
+- Use Standard Schema when you need another JSON Schema dialect or parser.
+- Effect Schema is supported only by Effect plugins and clients.
+
+Every method declares `input` and `output`. Omit either to represent no value.
+An empty event payload is an object instead:
+
+```ts
+events: {
+  refreshed: { schema: z.object({}) },
+}
+```
+
+Event schemas must produce JSON objects. Scalars, arrays, `null`, and `undefined`
+are invalid event data. Plain JSON Schema events are checked when emitted even
+though their payload type remains `unknown`.
+
+## Declare errors
+
+Add an `errors` map to a method for expected failures. Each key becomes the
+literal error `type`, and its schema validates and transforms the error `data`.
+
+```ts
+errors: {
+  not_found: z.object({ query: z.string() }),
+}
+```
+
+Names beginning with `rpc.` are reserved for framework failures. Contract schemas
+own parsing, transformations, and Effect encoding; RPC does not perform another
+generic JSON validation pass.
+
+## Register the implementation
+
+Register the implementation inside `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async ({ query }, context) => {
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+Promise handlers receive `signal` and a typed `error(type, message, data)`
+constructor in their second argument. Return or throw a constructed error to
+reject callers with `{ type, message, data? }`.
+
+Registration follows these rules:
+
+- RPC IDs are independent of plugin IDs, and one plugin can implement several RPCs.
+- A later registration overrides an earlier registration at the same location.
+- Disposal or plugin unload removes only that registration and reveals the previous one.
+- In-flight calls retain the handler with which they started.
+
+## Call from another plugin
+
+Other server plugins can obtain a handle without implementing the RPC:
+
+```ts
+const acme = ctx.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+The handle is available immediately, and each call finds the current registration.
+Calls stay within the server plugin's location and cannot override it.
+
+## Subscribe to events
+
+Use `events.on` for a callback and unsubscribe when the listener is no longer
+needed:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+For an async iterable, use `events.subscribe("updated")`:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+Event subscriptions have these semantics:
+
+- Event keys use local names such as `updated` when subscribing.
+- Delivered types are prefixed, such as `rpc.acme.updated`.
+- Each event includes `id`, `created`, direct `data`, required `location`, and optional `metadata`.
+- Events use the normal ephemeral Bus path and are live-only; disconnected subscribers miss events.
+- Plugin unload closes its subscriptions. There is no plugin event log or replay API yet.
+- The method name `events` is reserved for the subclient event API.
+
+## Connect external clients
+
+External [clients](/build/client#plugin-rpc) use `client.rpc(Acme)` and receive
+that RPC's events across all locations. The native `/api/event` stream and
+typed subclients observe the same direct `rpc.<rpcID>.<event>` envelope.
+
+Importing the contract or constructing a handle does not load its server
+implementation. Configure the plugin on the server separately.
