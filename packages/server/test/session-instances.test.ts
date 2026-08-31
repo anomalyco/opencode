@@ -52,18 +52,19 @@ it.live(
       const cell = PluginRuntime.makeCell()
       // Host and private instances must reuse the same global layer identities.
       const replacements: LayerNode.Replacements = [
-        [Global.node, tempGlobalLayer],
-        [Database.node, Database.node],
-        [Bus.node, Bus.node],
-        [App.node, App.node],
-        [ModelsDev.node, ModelsDev.configured({ fetch: false })],
-        [Watcher.node, Watcher.configured({ enabled: false })],
-        [PluginRuntime.node, PluginRuntime.layerWithCell(cell)],
-        [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(cell)],
-        [llmClient, Layer.succeed(LLMClient.Service, llm)],
-        [SessionRunnerModel.node, Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) })],
-        [
-          Instance.byLocationNode,
+        Global.node.replace(tempGlobalLayer),
+        Database.node.replace(Database.node),
+        Bus.node.replace(Bus.node),
+        App.node.replace(App.node),
+        ModelsDev.node.replace(ModelsDev.configured({ fetch: false })),
+        Watcher.node.replace(Watcher.configured({ enabled: false })),
+        PluginRuntime.node.replace(PluginRuntime.layerWithCell(cell)),
+        PluginRuntime.providerNode.replace(PluginRuntime.providerNodeWithCell(cell)),
+        llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
+        SessionRunnerModel.node.replace(
+          Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+        ),
+        Instance.byLocationNode.replace(
           Layer.effect(
             Instance.Service,
             Effect.gen(function* () {
@@ -151,7 +152,7 @@ it.live(
               })
             }),
           ),
-        ],
+        ),
       ]
       const context = yield* Layer.build(
         createEmbeddedRoutes({}, replacements).pipe(Layer.provide(HttpServer.layerServices)),
