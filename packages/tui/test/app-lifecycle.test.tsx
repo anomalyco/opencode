@@ -596,7 +596,7 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
   expect(frame).not.toContain("```")
 })
 
-test("keeps assistant footer metrics current after history prepend and same-length replacement", async () => {
+test("keeps assistant footer metrics current after prepend, same-length refresh, and revert", async () => {
   await using state = await tmpdir()
   const session = {
     id: "ses_footer",
@@ -609,6 +609,7 @@ test("keeps assistant footer metrics current after history prepend and same-leng
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 100, updated: 5000 },
   }
+  let refresh = false
   await using setup = await createAppFixture({
     width: 100,
     height: 40,
@@ -634,6 +635,22 @@ test("keeps assistant footer metrics current after history prepend and same-leng
           })
         return json({
           data: [
+            ...(refresh
+              ? [
+                  {
+                    id: "msg_0005",
+                    type: "assistant",
+                    agent: session.agent,
+                    model: session.model,
+                    time: { created: 7000, streamed: 8000, completed: 9000 },
+                    finish: "stop",
+                    cost: 0,
+                    tokens: { ...session.tokens, output: 50 },
+                    content: [{ type: "text", text: "Later answer" }],
+                  },
+                  { id: "msg_0004", type: "user", text: "Later input", time: { created: 6000 } },
+                ]
+              : []),
             {
               id: "msg_0003",
               type: "assistant",
@@ -677,64 +694,35 @@ test("keeps assistant footer metrics current after history prepend and same-leng
   expect(prepended).toContain("Original answer")
   expect(prepended).toContain("4.0s \u00b7 20.0 tok/s")
 
-  // Remove and append in one queue batch: array length is unchanged, but the message ID is new.
+  // Refresh the latest page: length stays four, but the retained assistant moves from index three to one.
+  refresh = true
+  setup.events.disconnect()
+  const refreshed = await setup.waitForFrame(
+    (frame) =>
+      frame.includes("Later input") &&
+      frame.includes("Later answer") &&
+      !frame.includes("Prepended input") &&
+      !frame.includes("Prepended instructions"),
+    { maxPasses: 120 },
+  )
+  expect(refreshed).toContain("Current input")
+  expect(refreshed).toContain("Original answer")
+  expect(refreshed).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(refreshed).toContain("3.0s \u00b7 50.0 tok/s")
+
   setup.events.emit({
     id: "evt_footer_reverted",
-    created: 5500,
+    created: 10000,
     type: "session.revert.committed",
     durable: { aggregateID: session.id, seq: 1, version: 1 },
-    data: { sessionID: session.id, to: "msg_0003" },
+    data: { sessionID: session.id, to: "msg_0004" },
   })
-  setup.events.emit({
-    id: "evt_footer_step_started",
-    created: 6000,
-    type: "session.step.started",
-    durable: { aggregateID: session.id, seq: 2, version: 1 },
-    data: { sessionID: session.id, assistantMessageID: "msg_0004", agent: session.agent, model: session.model },
-  })
-  setup.events.emit({
-    id: "evt_footer_text_started",
-    created: 6500,
-    type: "session.text.started",
-    durable: { aggregateID: session.id, seq: 3, version: 1 },
-    data: { sessionID: session.id, assistantMessageID: "msg_0004", ordinal: 0 },
-  })
-  setup.events.emit({
-    id: "evt_footer_text_ended",
-    created: 7500,
-    type: "session.text.ended",
-    durable: { aggregateID: session.id, seq: 4, version: 1 },
-    data: { sessionID: session.id, assistantMessageID: "msg_0004", ordinal: 0, text: "Replacement answer" },
-  })
-  setup.events.emit({
-    id: "evt_footer_step_streamed",
-    created: 8000,
-    type: "session.step.streamed",
-    durable: { aggregateID: session.id, seq: 5, version: 1 },
-    data: { sessionID: session.id, assistantMessageID: "msg_0004" },
-  })
-  setup.events.emit({
-    id: "evt_footer_step_ended",
-    created: 9000,
-    type: "session.step.ended",
-    durable: { aggregateID: session.id, seq: 6, version: 1 },
-    data: {
-      sessionID: session.id,
-      assistantMessageID: "msg_0004",
-      finish: "stop",
-      cost: 0,
-      tokens: { ...session.tokens, output: 50 },
-    },
-  })
-  const replaced = await setup.waitForFrame(
-    (frame) => frame.includes("Replacement answer") && frame.includes("25.0 tok/s"),
+  const reverted = await setup.waitForFrame(
+    (frame) => frame.includes("Original answer") && !frame.includes("Later input") && !frame.includes("Later answer"),
   )
-  expect(replaced).toContain("Prepended input")
-  expect(replaced).toContain("Prepended instructions")
-  expect(replaced).toContain("Current input")
-  expect(replaced).toContain("8.0s \u00b7 25.0 tok/s")
-  expect(replaced).not.toContain("Original answer")
-  expect(replaced).not.toContain("20.0 tok/s")
+  expect(reverted).toContain("Current input")
+  expect(reverted).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(reverted).not.toContain("50.0 tok/s")
 })
 
 test("session startup prompt is submitted exactly once", async () => {
