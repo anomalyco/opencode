@@ -137,7 +137,18 @@ Requested Changes: ${fb.changes_requested ?? "None"}
           typeof LLM.generateObject
         >[0]["model"],
         system:
-          "You are an Expert Prompt Engineer and Harness Strategist (Sakana AI RHI Meta-Optimizer). Analyze the task execution, user feedback, flaws, and existing rules to produce an evolved system prompt, workflow hops, communication contracts, and a consolidated set of rules.\n\nCRITICAL RHI DIRECTIVES (Sakana AI RHI Formulation):\n1. Consolidate and merge overlapping lessons into a maximum of 5-7 high-impact, non-conflicting rules.\n2. Discard redundant, obsolete, or overly narrow one-off rules.\n3. Ensure temperature stays bounded between 0.0 and 1.0.\n4. extractedRules MUST be an array of strings (e.g. [\"Rule 1\", \"Rule 2\"]).\n5. DOMAIN NICHE: Set taskCategory to the semantic domain niche of the task (e.g. 'python_coding', 'web_frontend', 'typescript_fullstack', 'systems_backend', 'data_science_ml', 'devops_infra', 'bioinformatics', 'financial_quant', etc.). Never use 'general' for engineering tasks.\n6. WORKFLOW HOPS: In workflowHops, specify the sequence of structured execution hops (e.g. ['decompose', 'implement', 'verify_tests', 'critique', 'reconcile']).\n7. COMMUNICATION CONTRACT: In communicationContracts, specify the sparse output format/schema expected from subtasks to prevent redundant context propagation.\n8. REFINED SYSTEM PROMPT: refinedSystemPrompt MUST be the agent's general role and system instructions for the domain niche (e.g. 'You are an expert Python engineer adhering to PEP 8, static typing, Google docstrings, and comprehensive testing.'). Never write specific task solutions or single-problem prompts in refinedSystemPrompt.\n9. TOOL CONSTRAINTS: In toolOverrides, specify pre/post tool execution rules (e.g. 'Run pytest or verification commands before marking tasks complete').",
+          `You are an Expert Prompt Engineer and Harness Strategist (Sakana AI RHI Meta-Optimizer). Analyze the task execution, user feedback, flaws, and existing rules to produce an evolved system prompt, workflow hops, communication contracts, and a consolidated set of rules.
+
+CRITICAL RHI DIRECTIVES (Sakana AI RHI Formulation):
+1. Consolidate and merge overlapping lessons into a maximum of 5-7 high-impact, non-conflicting rules.
+2. Discard redundant, obsolete, or overly narrow one-off rules.
+3. Ensure temperature stays bounded between 0.0 and 1.0.
+4. extractedRules MUST be an array of strings (e.g. ["Rule 1", "Rule 2"]).
+5. DOMAIN NICHE: Maintain the exact domain category '${task.task_type || "general"}' in taskCategory to ensure linear version evolution ($V_1 \\to V_2 \\to V_3$).
+6. WORKFLOW HOPS: In workflowHops, specify the sequence of structured execution hops (e.g. ['decompose', 'implement', 'verify_tests', 'critique', 'reconcile']).
+7. COMMUNICATION CONTRACT: In communicationContracts, specify the sparse output format/schema expected from subtasks to prevent redundant context propagation.
+8. REFINED SYSTEM PROMPT: refinedSystemPrompt MUST be the agent's general role and system instructions for the domain niche. Never write specific task solutions or single-problem prompts in refinedSystemPrompt.
+9. TOOL CONSTRAINTS: In toolOverrides, specify pre/post tool execution rules.`,
         prompt: `
 Task Domain: ${task.task_type || "general"}
 
@@ -223,14 +234,16 @@ ${task.task_error ?? "None"}
         ? JSON.stringify(modelOptionsObj)
         : strategy.modelOptions
 
+      const targetDomain =
+        (task.task_type && task.task_type !== "general")
+          ? task.task_type
+          : (strategy.taskCategory && strategy.taskCategory !== "general")
+            ? strategy.taskCategory
+            : "general"
+
       const candidateVersionID =
         yield* versionSvc.proposeCandidate({
-          domainCategory:
-            (task.task_type && task.task_type !== "general")
-              ? task.task_type
-              : (strategy.taskCategory && strategy.taskCategory !== "general")
-                ? strategy.taskCategory
-                : "general",
+          domainCategory: targetDomain,
           systemPrompt: strategy.refinedSystemPrompt,
           extractedRules: strategy.extractedRules.slice(0, 5),
           temperature: strategy.temperature,
