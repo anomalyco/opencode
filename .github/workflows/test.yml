@@ -79,6 +79,7 @@ jobs:
           node-version: "24"
 
       - name: Setup Bun
+        id: setup-bun
         uses: ./.github/actions/setup-bun
 
       - name: Test Effect simplification rules
@@ -141,7 +142,7 @@ jobs:
           TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify compiled service lifecycle
-        if: always()
+        if: always() && steps.setup-bun.outcome == 'success'
         timeout-minutes: 10
         working-directory: packages/cli
         env:
@@ -157,7 +158,7 @@ jobs:
           node-version: "26.4.0"
 
       - name: Verify Node build
-        if: always()
+        if: always() && steps.setup-bun.outcome == 'success'
         timeout-minutes: 15
         working-directory: packages/cli
         env:
