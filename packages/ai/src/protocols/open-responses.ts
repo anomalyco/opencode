@@ -397,6 +397,8 @@ export interface ParserState {
   readonly lifecycle: Lifecycle.State
   readonly outputItems: Readonly<Record<number, string>>
   readonly message: { readonly id: string; readonly phase: MessagePhase | null | undefined } | undefined
+  // Item ids are response-scoped identities. Keep completed ids tombstoned so
+  // reconnect replay cannot reopen fragments already emitted downstream.
   readonly completedMessages: ReadonlySet<string>
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
 }
@@ -954,15 +956,16 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
   const item = event.item
   if (item?.type === "message" && item.id !== undefined) {
     const itemID = item.id
+    if (state.completedMessages.has(itemID)) return [state, NO_EVENTS]
     const phase = messagePhase(item.phase)
     const completedMessages = new Set(state.completedMessages)
-    completedMessages.delete(itemID)
     if (state.message?.id !== undefined && state.message.id !== itemID) completedMessages.add(state.message.id)
     // A new message closes earlier messages, including ones that never streamed.
     const events: LLMEvent[] = []
     const lifecycle = [...state.lifecycle.text]
       .filter((id) => id !== itemID)
       .reduce((lifecycle, id) => {
+        completedMessages.add(id)
         const openPhase = state.message?.id === id ? state.message.phase : undefined
         return Lifecycle.textEnd(
           lifecycle,
@@ -1094,6 +1097,11 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   if (item.type === "message" && item.id !== undefined) {
     if (state.completedMessages.has(item.id)) return [state, NO_EVENTS] satisfies StepResult
     const message = state.message?.id === item.id ? state.message : undefined
+    if (state.message !== undefined && message === undefined)
+      return [
+        { ...state, completedMessages: new Set([...state.completedMessages, item.id]) },
+        NO_EVENTS,
+      ] satisfies StepResult
     const itemPhase = messagePhase(item.phase)
     const phase = itemPhase === undefined ? message?.phase : itemPhase
     const parts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
@@ -1112,7 +1120,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
         ...state,
         lifecycle: Lifecycle.textEnd(lifecycle, events, item.id, metadata, text),
         completedMessages: new Set([...state.completedMessages, item.id]),
-        message: message ? undefined : state.message,
+        message: undefined,
       },
       events,
     ] satisfies StepResult
