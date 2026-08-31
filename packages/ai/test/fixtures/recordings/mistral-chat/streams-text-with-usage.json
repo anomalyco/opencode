@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "mistral-small-latest",
+    "tags": ["prefix:mistral-chat", "provider:mistral", "protocol:mistral-chat", "text", "usage"],
+    "name": "mistral-chat/streams-text-with-usage",
+    "recordedAt": "2026-08-30T17:18:45.432Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"mistral-small-latest\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly one word: hello\"}],\"stream\":true,\"max_tokens\":40,\"temperature\":0,\"reasoning_effort\":\"none\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"9a4d16bdddb74e5e89c2cf9e9b91e065\",\"object\":\"chat.completion.chunk\",\"created\":1788110325,\"model\":\"mistral-small-latest\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"9a4d16bdddb74e5e89c2cf9e9b91e065\",\"object\":\"chat.completion.chunk\",\"created\":1788110325,\"model\":\"mistral-small-latest\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hi\"},\"finish_reason\":null}],\"p\":\"abcdefghijklmnopqrs\"}\n\ndata: {\"id\":\"9a4d16bdddb74e5e89c2cf9e9b91e065\",\"object\":\"chat.completion.chunk\",\"created\":1788110325,\"model\":\"mistral-small-latest\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":22,\"total_tokens\":24,\"completion_tokens\":2,\"prompt_tokens_details\":{\"cached_tokens\":0},\"service_tier\":\"standard\"},\"p\":\"abcdefghijklmnopqrstuvwxyz0\"}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

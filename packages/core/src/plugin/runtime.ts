@@ -62,7 +62,7 @@ const require = <A, E, R>(cell: Cell, f: (runtime: Interface) => Effect.Effect<A
 
 const defaultCell = makeCell()
 
-export const layerWithCell = (cell: Cell) =>
+export const layerWithCell = (cell: Cell): Layer.Layer<Service> =>
   Layer.succeed(
     Service,
     Service.of({

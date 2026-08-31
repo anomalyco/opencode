@@ -22,6 +22,7 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Permission } from "@opencode-ai/core/permission"
 import { Reference } from "@opencode-ai/core/reference"
+import { Rpc } from "@opencode-ai/core/rpc"
 import { Skill } from "@opencode-ai/core/skill"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
@@ -79,6 +80,7 @@ export const PluginTestLayer = LayerNode.compile(
     Permission.node,
     PluginHooks.node,
     Reference.node,
+    Rpc.node,
     Skill.node,
     SkillDiscovery.node,
     Tool.node,
@@ -86,12 +88,14 @@ export const PluginTestLayer = LayerNode.compile(
     Watcher.node,
     WebSearch.node,
   ]),
-  [
-    [Location.node, tempLocationLayer],
-    [Npm.node, npmLayer],
-    [Config.node, Config.testLayer()],
-    [Mcp.node, emptyMcpLayer],
-    [Generate.node, generateLayer],
-    [Permission.node, permissionLayer],
-  ],
+  {
+    replacements: [
+      Location.node.replace(tempLocationLayer),
+      Npm.node.replace(npmLayer),
+      Config.node.replace(Config.testLayer()),
+      Mcp.node.replace(emptyMcpLayer),
+      Generate.node.replace(generateLayer),
+      Permission.node.replace(permissionLayer),
+    ],
+  },
 ) as unknown as Layer.Layer<unknown, never>

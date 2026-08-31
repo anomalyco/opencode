@@ -363,6 +363,22 @@ export const SettingsGeneral: Component<{
         <ReasoningModeSetting />
 
         <SettingsRow
+          title={language.t("session.review.wrapLines")}
+          description={language.t("settings.general.row.mobileDiffWrap.description")}
+        >
+          <div data-action="settings-mobile-diff-wrap">
+            <Switch
+              aria-label={language.t("session.review.wrapLines")}
+              checked={settings.general.mobileDiffWrap()}
+              onChange={settings.general.setMobileDiffWrap}
+              hideLabel
+            >
+              {language.t("session.review.wrapLines")}
+            </Switch>
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}
           description={language.t("settings.general.row.shellToolPartsExpanded.description")}
         >

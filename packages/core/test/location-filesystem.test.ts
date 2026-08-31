@@ -13,15 +13,16 @@ import { it } from "./lib/effect"
 
 const provide = (directory: string, workspaceID?: Workspace.ID) =>
   Effect.provide(
-    LayerNode.compile(FileSystem.node, [
-      [
-        Location.node,
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of(location({ directory: AbsolutePath.make(directory), workspaceID })),
+    LayerNode.compile(FileSystem.node, {
+      replacements: [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make(directory), workspaceID })),
+          ),
         ),
       ],
-    ]),
+    }),
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>

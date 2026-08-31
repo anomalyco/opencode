@@ -1573,6 +1573,19 @@ export interface SkillApi<E = never> {
   readonly list: SkillListOperation<E>
 }
 
+export type RpcCallInput = {
+  readonly rpcID: string
+  readonly method: string
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly input?: unknown | undefined
+}
+export type RpcCallOutput = { readonly output?: unknown }
+export type RpcCallOperation<E = never> = (input: RpcCallInput) => Effect.Effect<RpcCallOutput, E>
+
+export interface RpcApi<E = never> {
+  readonly call: RpcCallOperation<E>
+}
+
 export type EventSubscribeOutput = OpenCodeEvent
 export type EventSubscribeOperation<E = never> = () => Stream.Stream<EventSubscribeOutput, E>
 
@@ -2073,6 +2086,7 @@ export interface AppApi<E = never> {
   readonly file: FileApi<E>
   readonly command: CommandApi<E>
   readonly skill: SkillApi<E>
+  readonly rpc: RpcApi<E>
   readonly event: EventApi<E>
   readonly pty: PtyApi<E>
   readonly experimental: ExperimentalApi<E>

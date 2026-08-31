@@ -35,7 +35,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* (
         database: { path: ":memory:", ...server.database },
       },
       workspaceProviders
-        ? [...(embed.overrides ?? []), [WorkspaceDriver.node, WorkspaceDriver.registryNode(workspaceProviders)]]
+        ? [...(embed.overrides ?? []), WorkspaceDriver.node.replace(WorkspaceDriver.registryNode(workspaceProviders))]
         : embed.overrides,
     ).pipe(Layer.provide(HttpServer.layerServices), Layer.provideMerge(layer(log))),
   )

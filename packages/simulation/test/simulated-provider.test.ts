@@ -701,7 +701,7 @@ const toolLifecycleLayer = (endpoint: string) => {
   })
   return AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, provider]),
-    [[Config.node, Config.testLayer()]],
+    [Config.node.replace(Config.testLayer())],
   )
 }
 

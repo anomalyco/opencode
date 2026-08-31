@@ -216,6 +216,35 @@ describe("pretty signature rendering", () => {
   })
 })
 
+describe("JSON Schema definition scope", () => {
+  test.each(["definitions", "$defs"])("resolves root %s and lets $defs take precedence", (key) => {
+    const schema = { $ref: `#/${key}/Value`, [key]: { Value: { type: "string" } } }
+    expect(jsonSchemaToTypeScript(schema)).toBe("string")
+    expect(jsonSchemaToTypeScript(schema, true)).toBe("string")
+
+    const overridden = { ...schema, $defs: { Value: { type: "number" } } }
+    expect(jsonSchemaToTypeScript(overridden)).toBe("number")
+    expect(jsonSchemaToTypeScript(overridden, true)).toBe("number")
+  })
+
+  test.each(["definitions", "$defs"])("nested %s shadow inherited definitions without affecting siblings", (key) => {
+    const schema = {
+      type: "object",
+      definitions: { Inherited: { type: "string" } },
+      $defs: { Value: { type: "number" } },
+      properties: {
+        nested: { $ref: `#/${key}/Value`, [key]: { Value: { type: "boolean" } } },
+        inherited: { $ref: "#/definitions/Inherited" },
+        sibling: { $ref: "#/$defs/Value" },
+      },
+    }
+    expect(jsonSchemaToTypeScript(schema)).toBe("{ nested?: boolean; inherited?: string; sibling?: number }")
+    expect(jsonSchemaToTypeScript(schema, true)).toBe(
+      ["{", "  nested?: boolean,", "  inherited?: string,", "  sibling?: number,", "}"].join("\n"),
+    )
+  })
+})
+
 describe("non-identifier property names render as quoted keys", () => {
   // MCP-style schemas routinely carry property names that are not bare TS identifiers
   // (`foo-bar`, `@type`, dotted names); the rendered signature must quote them so the
@@ -315,28 +344,34 @@ describe("union schemas render every alternative", () => {
     expect(outputTypeScript(tool)).toBe("number | boolean")
   })
 
-  test("allOf renders intersections with parenthesized union members", () => {
+  test("allOf keeps siblings and parenthesized union members in order", () => {
     const schema = {
+      properties: { common: { type: "boolean" } },
       allOf: [{ type: "object", properties: { id: { type: "string" } } }, { type: ["string", "null"] }],
     } as const
-    expect(jsonSchemaToTypeScript(schema)).toBe("{ id?: string } & (string | null)")
+    expect(jsonSchemaToTypeScript(schema)).toBe("{ common?: boolean } & { id?: string } & (string | null)")
+    expect(jsonSchemaToTypeScript(schema, true)).toBe(
+      ["{", "    common?: boolean,", "  } & {", "    id?: string,", "  } & (string | null)"].join("\n"),
+    )
   })
 
-  test("allOf does not discard an unresolved constraint", () => {
-    expect(jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { $ref: "https://example.com/external.json" }] })).toBe(
-      "unknown",
-    )
+  test.each([false, true])("allOf does not discard an unresolved constraint (pretty=%s)", (pretty) => {
+    for (const $ref of ["#/$defs/Missing", "#/definitions/Missing", "https://example.com/external.json"]) {
+      expect(jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { $ref }] }, pretty)).toBe("unknown")
+      expect(jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { allOf: [{ $ref }] }] }, pretty)).toBe("unknown")
+      expect(
+        jsonSchemaToTypeScript({ allOf: [{ properties: { nested: { $ref } } }, { type: "string" }] }, pretty),
+      ).toBe("unknown")
+    }
     expect(
-      jsonSchemaToTypeScript({
-        allOf: [{ type: "string" }, { allOf: [{ $ref: "https://example.com/external.json" }] }],
-      }),
-    ).toBe("unknown")
-    expect(
-      jsonSchemaToTypeScript({
-        type: "string",
-        allOf: [{ $ref: "#/$defs/Constraint" }],
-        $defs: { Constraint: { description: "TypeScript-neutral constraint" } },
-      }),
+      jsonSchemaToTypeScript(
+        {
+          type: "string",
+          allOf: [{ $ref: "#/$defs/Constraint" }],
+          $defs: { Constraint: { description: "TypeScript-neutral constraint" } },
+        },
+        pretty,
+      ),
     ).toBe("string")
   })
 })

@@ -38,7 +38,7 @@ export function createSessionReview(input: {
   const location = useWorkspaceLocation()
   const server = useServerSDK()
   const [state, setState] = createStore({
-    mobileTab: "session" as "session" | "changes",
+    mobileTab: "session" as "session" | "changes" | "files" | "usage",
     detailsOpen: false,
     scroll: undefined as HTMLDivElement | undefined,
     pendingFile: undefined as string | undefined,
@@ -66,7 +66,9 @@ export function createSessionReview(input: {
     }
     return list
   })
-  const mobileChanges = createMemo(() => !input.session.isDesktop() && state.mobileTab === "changes")
+  const mobileChanges = createMemo(
+    () => !input.session.isDesktop() && !input.screen.terminal.open() && state.mobileTab === "changes",
+  )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
     const value = mode()
     return value === "git" || value === "branch" ? value : undefined
@@ -407,7 +409,7 @@ export function createSessionReview(input: {
     loadDiff,
     mobile: {
       changes: mobileChanges,
-      setTab: (tab: "session" | "changes") => setState("mobileTab", tab),
+      setTab: (tab: "session" | "changes" | "files" | "usage") => setState("mobileTab", tab),
       tab: () => state.mobileTab,
     },
     mode,

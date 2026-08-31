@@ -1,9 +1,12 @@
-import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { createMemo, createRenderEffect, createSignal, on, onCleanup } from "solid-js"
 import { sessionNotFoundError } from "@/runtime/server/errors"
 
 type SessionStore<T> = {
   get: (id: string) => T | undefined
   sync: (id: string, options?: { children?: boolean }) => Promise<unknown>
+  message: {
+    sync: (id: string) => Promise<unknown>
+  }
 }
 
 type Resolution<T> = { id: string; store: SessionStore<T> } & (
@@ -40,13 +43,17 @@ export function createSessionResolution<T>(
   })
   const [status, setStatus] = createSignal<Resolution<T>>()
 
-  createEffect(
+  // Start independent reads before constructing the selected view, including
+  // when its metadata is cached but its transcript has never been loaded.
+  createRenderEffect(
     on([sessionID, sessions] as const, ([id, store]) => {
       if (!id) return
       let stale = false
       onCleanup(() => {
         stale = true
       })
+      // The timeline owns message errors; metadata resolution stays independent.
+      void store.message.sync(id).catch(() => undefined)
       if (cached() && !options?.children) {
         setStatus({ id, store, state: "settled" })
         return

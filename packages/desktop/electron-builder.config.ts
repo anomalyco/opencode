@@ -3,6 +3,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 
+import type { CustomMacSignOptions } from "app-builder-lib"
 import type { Configuration } from "electron-builder"
 
 const execFileAsync = promisify(execFile)
@@ -27,6 +28,18 @@ async function signWindows(configuration: { path: string }) {
     ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", signScript, configuration.path],
     { cwd: rootDir },
   )
+}
+
+export function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
+  return {
+    ...options,
+    optionsForFile: (file) => {
+      const defaults = options.optionsForFile?.(file)
+      if (file !== path.join(options.app, "Contents/Resources/opencode-cli")) return defaults ?? {}
+      // The Bun CLI loads bun-pty's native library; Electron and its helpers do not need this exception.
+      return { ...defaults, entitlements: path.join(packageDir, "resources/entitlements.cli.plist") }
+    },
+  }
 }
 
 const channel = (() => {
@@ -88,6 +101,10 @@ const getBase = (appId: string): Configuration => ({
     gatekeeperAssess: false,
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
+    sign: async (options) => {
+      const { sign } = await import("app-builder-lib/out/codeSign/macCodeSign")
+      await sign(macSignOptions(options))
+    },
     notarize: true,
     target: ["dmg", "zip"],
   },

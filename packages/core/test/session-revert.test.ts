@@ -18,6 +18,7 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionRevert } from "@opencode-ai/core/session/revert"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Money } from "@opencode-ai/schema/money"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -30,9 +31,9 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, Session.node, LocationServiceMap.node]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [Global.node, tempGlobalLayer],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Global.node.replace(tempGlobalLayer),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
     ],
   ),
 )
@@ -60,6 +61,9 @@ describe("Session.revert files", () => {
         const created = yield* session.create({ location: { directory: AbsolutePath.make(directory) } })
         const prompt = yield* session.prompt({ sessionID: created.id, text: "Rename the file", resume: false })
         yield* SessionInbox.promote(database.db, bus, created.id, "steer")
+        const services = LocationServiceMap.Service.get(created.location)
+        const revert = yield* SessionRevert.Service.pipe(Effect.provide(services))
+        expect(yield* SessionRevert.Service.pipe(Effect.provide(services))).toBe(revert)
 
         yield* Effect.gen(function* () {
           const plugins = yield* PluginSupervisor.Service

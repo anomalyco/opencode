@@ -71,4 +71,25 @@ Environment options:
 
 ## Deployment
 
-You can deploy the `dist` folder to any static host provider (netlify, surge, now, etc.)
+The `deploy` GitHub Actions workflow uses SST to deploy the web app from these branches in `anomalyco/opencode`:
+
+| Branch       | Site                  |
+| ------------ | --------------------- |
+| `dev`        | `app.dev.opencode.ai` |
+| `production` | `app.opencode.ai`     |
+| `beta`       | `beta.opencode.ai`    |
+
+Changes merged into `v2` reach the beta site when they are promoted to `beta`. The beta SST stage deploys
+only the web app, using the same `WebApp` StaticSite definition as production. It sets the build channel
+and Sentry environment to `beta` without deploying the API, console, database, or billing infrastructure.
+
+The hosted app defaults to `http://localhost:49374`, matching the managed V2 service. Saved server selections
+override this default. Connecting still requires the service's credentials.
+
+The workflow reuses the repository's `CLOUDFLARE_API_TOKEN` and web Sentry settings. The Cloudflare token
+must cover SST's R2 state storage, KV assets, Workers, and custom-domain management in the account that
+owns `opencode.ai`. The beta GitHub environment must allow deployments from the `beta` branch; it does not
+need AWS credentials.
+
+SST manages the beta site's custom domain. The first deployment creates its DNS record and TLS certificate.
+Do not create a CNAME for `beta.opencode.ai` first, because it would conflict with the Workers custom domain.

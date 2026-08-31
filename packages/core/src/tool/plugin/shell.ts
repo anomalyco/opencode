@@ -2,6 +2,8 @@ export * as ShellTool from "./shell.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Context } from "@opencode-ai/plugin/effect/plugin"
+import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
+import type { Tool } from "@opencode-ai/schema/tool"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
@@ -107,6 +109,56 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const config = yield* Config.Service
 
+    const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
+      const source = {
+        type: "tool" as const,
+        messageID: context.messageID,
+        id: context.id,
+      }
+      const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
+      invocation.cwd = target.absolute
+      const timeout = invocation.timeout
+      const portable = Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
+      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, { portable })
+      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
+        mutation.resolve({
+          path: LocationMutation.resolvePath(target.absolute, directory),
+          kind: "directory",
+        }),
+      )
+      const external = [target, ...directories]
+        .map((item) => item.externalDirectory)
+        .filter((item) => item !== undefined)
+        .filter((item, index, items) => items.findIndex((other) => other.resource === item.resource) === index)
+      if (external.length > 0)
+        yield* permission.assert({
+          action: "external_directory",
+          resources: external.map((item) => item.resource),
+          save: external.map((item) => item.save),
+          sessionID: context.sessionID,
+          agent: context.agent,
+          source,
+        })
+      if (parsed.commands.length > 0)
+        yield* permission.assert({
+          action: name,
+          resources: parsed.commands.map((command) => command.resource),
+          save: parsed.commands.map((command) => command.save),
+          sessionID: context.sessionID,
+          agent: context.agent,
+          source,
+        })
+      // Approval can outlive the directory, so validate immediately before spawning.
+      const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
+        Effect.catchTag("Environment.NotFound", () =>
+          Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
+        ),
+      )
+      if (workdir !== "directory")
+        return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.absolute}`))
+      return timeout
+    })
+
     const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(
       function* (
         sessionID: SessionSchema.ID,
@@ -151,11 +203,6 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const source = {
-                type: "tool" as const,
-                messageID: context.messageID,
-                id: context.id,
-              }
               const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
               let finalTimeout = timeout
               const info = yield* shell.create(
@@ -168,51 +215,7 @@ export const Plugin = {
                 },
                 (invocation) =>
                   Effect.gen(function* () {
-                    const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
-                    invocation.cwd = target.absolute
-                    finalTimeout = invocation.timeout
-                    const portable =
-                      Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
-                    const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, {
-                      portable,
-                    })
-                    const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-                      mutation.resolve({
-                        path: LocationMutation.resolvePath(target.absolute, directory),
-                        kind: "directory",
-                      }),
-                    )
-                    const external = [target, ...directories]
-                      .map((item) => item.externalDirectory)
-                      .filter((item) => item !== undefined)
-                      .filter(
-                        (item, index, items) => items.findIndex((other) => other.resource === item.resource) === index,
-                      )
-                    if (external.length > 0)
-                      yield* permission.assert({
-                        action: "external_directory",
-                        resources: external.map((item) => item.resource),
-                        save: external.map((item) => item.save),
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      })
-                    if (parsed.commands.length > 0)
-                      yield* permission.assert({
-                        action: name,
-                        resources: parsed.commands.map((command) => command.resource),
-                        save: parsed.commands.map((command) => command.save),
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      })
-                    const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
-                      Effect.catchTag("Environment.NotFound", () =>
-                        Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
-                      ),
-                    )
-                    if (workdir !== "directory")
-                      return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.absolute}`))
+                    finalTimeout = yield* prepare(invocation, context)
                   }),
               )
               yield* context.progress({ shellID: info.id })

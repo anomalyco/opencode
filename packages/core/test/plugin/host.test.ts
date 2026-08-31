@@ -23,11 +23,11 @@ const it = testEffect(
       PluginRuntime.providerNodeWithCell(cell),
     ]),
     [
-      [Global.node, tempGlobalLayer],
-      [Watcher.node, Watcher.configured({ enabled: false })],
-      [SessionExecution.node, SessionExecution.noopLayer],
-      [PluginRuntime.node, PluginRuntime.layerWithCell(cell)],
-      [PersistentPty.node, PersistentPty.configured()],
+      Global.node.replace(tempGlobalLayer),
+      Watcher.node.replace(Watcher.configured({ enabled: false })),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      PluginRuntime.node.replace(PluginRuntime.layerWithCell(cell)),
+      PersistentPty.node.replace(PersistentPty.configured()),
     ],
   ),
 )

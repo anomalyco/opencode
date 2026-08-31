@@ -1,7 +1,45 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { migrateCanonicalLocalServerState, resolveServerList, ServerConnection } from "./registry"
+import {
+  migrateCanonicalLocalServerState,
+  migrateServerAuthState,
+  resolveServerList,
+  ServerConnection,
+} from "./registry"
 import { ServerScope } from "@/runtime/server/scope"
+
+describe("migrateServerAuthState", () => {
+  test("removes legacy usernames without changing passwords or other saved state", () => {
+    const state = {
+      list: [
+        "http://localhost:4096",
+        { url: "https://flat.example", username: "legacy", password: "first" },
+        {
+          type: "http",
+          displayName: "Remote",
+          http: { url: "https://nested.example", username: "legacy", password: "second" },
+        },
+      ],
+      projects: { local: [{ worktree: "/project", expanded: true }] },
+    }
+    expect(migrateServerAuthState(state)).toEqual({
+      ...state,
+      list: [
+        "http://localhost:4096",
+        { url: "https://flat.example", password: "first" },
+        { type: "http", displayName: "Remote", http: { url: "https://nested.example", password: "second" } },
+      ],
+    })
+    expect(state.list[1]).toHaveProperty("username", "legacy")
+    expect(migrateServerAuthState(migrateServerAuthState(state))).toEqual(migrateServerAuthState(state))
+  })
+
+  test("preserves absent or malformed lists", () => {
+    expect(migrateServerAuthState(undefined)).toBeUndefined()
+    expect(migrateServerAuthState({ projects: {} })).toEqual({ projects: {} })
+    expect(migrateServerAuthState({ list: [null, 1, {}] })).toEqual({ list: [null, 1, {}] })
+  })
+})
 
 describe("resolveServerList", () => {
   test("lets startup auth_token credentials override a persisted same-url server", () => {
@@ -13,7 +51,6 @@ describe("resolveServerList", () => {
           authToken: true,
           http: {
             url: "https://server.example.test",
-            username: "opencode",
             password: "secret",
           },
         },
@@ -24,7 +61,6 @@ describe("resolveServerList", () => {
     expect(list[0]?.type).toBe("http")
     expect(list[0]?.http).toEqual({
       url: "https://server.example.test",
-      username: "opencode",
       password: "secret",
     })
     expect(list[0]?.type === "http" ? list[0].authToken : false).toBe(true)
@@ -36,7 +72,6 @@ describe("resolveServerList", () => {
       stored: [
         {
           url: "https://server.example.test",
-          username: "opencode",
           password: "saved",
         },
       ],
@@ -47,7 +82,6 @@ describe("resolveServerList", () => {
     expect(list[0]?.type).toBe("http")
     expect(list[0]?.http).toEqual({
       url: "https://server.example.test",
-      username: "opencode",
       password: "saved",
     })
     expect(list[0]?.type === "http" ? list[0].authToken : true).toBeUndefined()

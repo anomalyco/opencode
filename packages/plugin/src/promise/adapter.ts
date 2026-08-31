@@ -1,14 +1,23 @@
 import { Tool } from "@opencode-ai/schema/tool"
+import type { Rpc } from "@opencode-ai/schema/rpc"
+import type { RpcCallOptions, RpcEventPayload } from "@opencode-ai/client/promise/api"
 import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
 import { define } from "../effect/plugin.js"
-import type { Context, Plugin } from "./plugin.js"
+import type { Plugin } from "./plugin.js"
 import type { Info } from "./tool.js"
+import type { RpcDomain, RpcHandlers } from "./rpc.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
-type PromiseEvent = ReturnType<Context["event"]["subscribe"]> extends AsyncIterable<infer Event> ? Event : never
+type PromiseContext = Parameters<Plugin["setup"]>[0]
+type PromiseEvent = ReturnType<PromiseContext["event"]["subscribe"]> extends AsyncIterable<infer Event> ? Event : never
+type HostRpc = Parameters<Parameters<typeof define>[0]["effect"]>[0]["rpc"]
+type StreamAdapter = <A, E>(
+  stream: Stream.Stream<A, E>,
+  options?: { readonly signal?: AbortSignal },
+) => AsyncIterable<A>
 
 interface CompiledEndpoint {
   readonly decode: ReadonlyArray<(input: unknown) => Effect.Effect<unknown, Schema.SchemaError>>
@@ -17,6 +26,143 @@ interface CompiledEndpoint {
 }
 
 const compiledEndpoints = new WeakMap<object, CompiledEndpoint>()
+
+interface HostRpcCallContext {
+  readonly error: (type: string, message: string, data?: unknown) => unknown
+}
+
+class ReturnedRpcError extends Error {
+  constructor(
+    readonly type: string,
+    message: string,
+    readonly data?: unknown,
+  ) {
+    super(message)
+  }
+}
+
+const makeStreams = Effect.fn("Plugin.Event.makeStreams")(function* () {
+  const context = yield* Effect.context<Scope.Scope>()
+  const subscriptions = new Set<() => Promise<IteratorResult<unknown>>>()
+  // Async iterators own separate scopes, so close them when the plugin unloads.
+  yield* Effect.addFinalizer(() => Effect.promise(() => Promise.all(Array.from(subscriptions, (close) => close()))))
+
+  return (<A, E>(stream: Stream.Stream<A, E>, options?: { readonly signal?: AbortSignal }): AsyncIterable<A> => ({
+    [Symbol.asyncIterator]() {
+      const iterator = Stream.toAsyncIterableWith(stream, context)[Symbol.asyncIterator]()
+      const close = () => {
+        subscriptions.delete(close)
+        options?.signal?.removeEventListener("abort", abort)
+        return iterator.return?.() ?? Promise.resolve({ done: true as const, value: undefined })
+      }
+      const abort = () => {
+        void close()
+      }
+      subscriptions.add(close)
+      options?.signal?.addEventListener("abort", abort, { once: true })
+      if (options?.signal?.aborted) abort()
+      return {
+        next: () =>
+          iterator.next().then(
+            (result) => (result.done ? close().then(() => result) : result),
+            (error: unknown) => close().then(() => Promise.reject(error)),
+          ),
+        return: close,
+      }
+    },
+  })) satisfies StreamAdapter
+})
+
+const rpcFromEffect = Effect.fn("Plugin.Rpc.fromEffect")(function* (host: HostRpc, streams: StreamAdapter) {
+  const context = yield* Effect.context<Scope.Scope>()
+  const run = Effect.runPromiseWith(context)
+
+  const client = (definition: Rpc.PortableDefinition) => {
+    const local = host(definition)
+    const subscribe = (
+      name: string,
+      options?: Pick<RpcCallOptions, "signal">,
+    ): AsyncIterable<RpcEventPayload<Rpc.PortableDefinition>> => streams(local.events.subscribe(name), options)
+    return Object.assign(
+      Object.fromEntries(
+        Object.keys(definition.methods).map((name) => [
+          name,
+          (input: unknown, options?: Pick<RpcCallOptions, "signal">) => {
+            // SAFETY: The local client was built from this definition, so every declared key is an Effect method.
+            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+            const method = local[name] as (input: unknown) => Effect.Effect<unknown, unknown>
+            return run(method(input), { signal: options?.signal })
+          },
+        ]),
+      ),
+      {
+        events: {
+          subscribe,
+          on: (
+            name: string,
+            handler: (event: RpcEventPayload<Rpc.PortableDefinition>) => Promise<void> | void,
+            options?: Pick<RpcCallOptions, "signal">,
+          ) => {
+            const controller = new AbortController()
+            const signal = options?.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal
+            void (async () => {
+              for await (const event of subscribe(name, { signal })) await handler(event)
+            })().catch((error: unknown) => run(Effect.logError(error)))
+            return () => controller.abort()
+          },
+        },
+      },
+    )
+  }
+
+  const register = (definition: Rpc.PortableDefinition, handlers: RpcHandlers<Rpc.PortableDefinition>) =>
+    run(
+      host.register(
+        definition,
+        // SAFETY: Each entry preserves its definition key; Core restores that method's erased schema and error types.
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        Object.fromEntries(
+          Object.entries(handlers).map(([name, handler]) => [
+            name,
+            (input: unknown, context: HostRpcCallContext) =>
+              Effect.tryPromise({
+                try: (signal) => {
+                  // SAFETY: Promise RPC handlers return Promise values before this adapter erases their concrete types.
+                  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+                  return Reflect.apply(handler, undefined, [
+                    input,
+                    {
+                      signal,
+                      error: (type: string, message: string, data?: unknown) =>
+                        new ReturnedRpcError(type, message, data),
+                    },
+                  ]) as Promise<unknown>
+                },
+                catch: (error) => hostRpcError(context, error),
+              }).pipe(
+                Effect.flatMap((result) =>
+                  result instanceof ReturnedRpcError
+                    ? Effect.fail(hostRpcError(context, result))
+                    : Effect.succeed(result),
+                ),
+              ),
+          ]),
+        ) as never,
+      ),
+    ).then((registration) => ({
+      dispose: () => run(registration.dispose),
+      events: { emit: (...args: Rpc.EventInput<Rpc.PortableDefinition>) => run(registration.events.emit(...args)) },
+    }))
+
+  // SAFETY: Client and register implement RpcDomain from the same portable definitions and schema adapters.
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+  return Object.assign(client, { register }) as RpcDomain
+})
+
+function hostRpcError(context: HostRpcCallContext, error: unknown) {
+  if (!(error instanceof ReturnedRpcError)) return error
+  return context.error(error.type, error.message, error.data)
+}
 
 function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
   const cached = compiledEndpoints.get(endpoint)
@@ -68,7 +214,6 @@ function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
 export function fromPromise(plugin: Plugin) {
   return define({
     id: plugin.id,
-    tui: plugin.tui,
     vcs: plugin.vcs,
     effect: (host) =>
       Effect.gen(function* () {
@@ -91,6 +236,7 @@ export function fromPromise(plugin: Plugin) {
         const VcsEndpoints = ClientApi.groups["server.vcs"].endpoints
         const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
         const context = yield* Effect.context<Scope.Scope>()
+        const streams = yield* makeStreams()
 
         // Run a hook registration on the plugin scope and resolve once it is registered.
         const register = (effect: Effect.Effect<HostRegistration, never, Scope.Scope>): Promise<Registration> =>
@@ -135,7 +281,7 @@ export function fromPromise(plugin: Plugin) {
               }),
             )
 
-        const context2: Context = {
+        const context2: PromiseContext = {
           app: host.app,
           location: host.location,
           options: host.options,
@@ -181,12 +327,13 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.command.reload()),
           },
           event: {
-            subscribe: () =>
-              Stream.toAsyncIterable(
+            subscribe: (options) =>
+              streams(
                 host.event.subscribe().pipe(
                   Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
                   Stream.map((event) => event as unknown as PromiseEvent),
                 ),
+                options,
               ),
           },
           experimental: {
@@ -295,6 +442,7 @@ export function fromPromise(plugin: Plugin) {
             transform: transform(host.reference),
             reload: () => run(host.reference.reload()),
           },
+          rpc: yield* rpcFromEffect(host.rpc, streams),
           skill: {
             list: adaptApiMethod(SkillEndpoints["skill.list"], host.skill.list),
             transform: transform(host.skill),

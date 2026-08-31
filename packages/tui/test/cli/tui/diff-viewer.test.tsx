@@ -1,11 +1,14 @@
 /** @jsxImportSource @opentui/solid */
 import { afterAll, expect, test } from "bun:test"
+import { once } from "node:events"
 import { readdir } from "node:fs/promises"
 import path from "node:path"
 import {
   BoxRenderable,
+  CliRenderEvents,
   DiffRenderable,
   ImageRenderable,
+  InputRenderable,
   MouseButton,
   type Renderable,
   ScrollBoxRenderable,
@@ -315,6 +318,9 @@ test.each(["branch", "committed", "working"] as const)(
       expect(viewer.app.captureCharFrame()).toMatch(/●\s+v2/)
       expect(viewer.branchesRequests[0].searchParams.get("location[directory]")).toBe("/repo/session")
       expect(viewer.branchesRequests[0].searchParams.get("limit")).toBe("100")
+      // The picker can paint before its deferred input focus.
+      if (!viewer.app.renderer.currentFocusedEditor) await once(viewer.app.renderer, CliRenderEvents.FOCUSED_EDITOR)
+      expect(viewer.app.renderer.currentFocusedEditor).toBeInstanceOf(InputRenderable)
       await viewer.app.mockInput.typeText("origin/release")
       await Bun.sleep(160)
       await viewer.app.waitFor(() => viewer.branchesRequests.at(-1)?.searchParams.get("search") === "origin/release")

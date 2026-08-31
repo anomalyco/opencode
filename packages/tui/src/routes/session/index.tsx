@@ -141,6 +141,7 @@ const context = createContext<{
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"
   models: () => ModelInfo[]
+  messageIndex: (messageID: string) => number | undefined
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
   pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
@@ -180,6 +181,7 @@ export function Session(props: {
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
+  const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
   const messagesBeforeRevert = () => {
     const messageID = session()?.revert?.messageID
     if (!messageID) return messages()
@@ -1349,6 +1351,7 @@ export function Session(props: {
         groupExploration,
         diffWrapMode,
         models,
+        messageIndex: (messageID) => messageIndexes().get(messageID),
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
@@ -2031,8 +2034,10 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
   )
   const messages = createMemo(() => data.session.message.list(ctx.sessionID))
-  const duration = createMemo(() => turnDuration(props.message, messages()))
-  const tokensPerSecond = createMemo(() => turnTokensPerSecond(props.message, messages()))
+  const duration = createMemo(() => turnDuration(props.message, messages(), ctx.messageIndex(props.message.id)))
+  const tokensPerSecond = createMemo(() =>
+    turnTokensPerSecond(props.message, messages(), ctx.messageIndex(props.message.id)),
+  )
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   return (
     <>
@@ -2211,6 +2216,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
         <box paddingTop={1} paddingLeft={3}>
           <markdown
             syntaxStyle={syntax()}
+            renderNode={plugins.markdown()}
             streaming={true}
             internalBlockMode="top-level"
             content={content()}
@@ -2218,7 +2224,6 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdown.text}
             bg={theme.background.default}
-            renderNode={plugins.markdown()}
           />
         </box>
       </Show>
@@ -2658,9 +2663,10 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText; mes
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
-        {/* Apply content before streaming so completion does not freeze the previous Markdown tokens. */}
+        {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
           syntaxStyle={syntax()}
+          renderNode={plugins.markdown()}
           content={props.part.text.trim()}
           streaming={props.message.time.completed === undefined}
           internalBlockMode="top-level"
@@ -2668,7 +2674,6 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText; mes
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.default}
-          renderNode={plugins.markdown()}
         />
       </box>
     </Show>

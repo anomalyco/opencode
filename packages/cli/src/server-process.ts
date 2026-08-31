@@ -30,12 +30,13 @@ export const run = Effect.fnUntraced(function* (options: Options) {
   return yield* processEffect(options).pipe(
     Effect.provide(Updater.layer),
     Effect.provide(
-      LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), [
-        [
-          Global.node,
-          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+      LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {
+        replacements: [
+          Global.node.replace(
+            Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+          ),
         ],
-      ]),
+      }),
     ),
     Effect.provide(NodeServices.layer),
   )

@@ -127,8 +127,8 @@ const renderSchema = (
     ])
   }
   if (schema.allOf) {
-    const members = schema.allOf.map((item) => renderSchema(item, nested, depth + 1, seen))
     if (schema.allOf.some((item) => hasUnresolvedRef(item, nested.definitions))) return "unknown"
+    const members = schema.allOf.map((item) => renderSchema(item, nested, depth + 1, seen))
     return intersection([renderSchema({ ...schema, allOf: undefined }, nested, depth + 1, seen), ...members])
   }
   if (Array.isArray(schema.type)) {
@@ -180,7 +180,7 @@ export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false
 
 export const jsonSchemaToTypeScript = (schema: JsonSchema, pretty = false): string => {
   try {
-    return renderSchema(schema, { definitions: { ...(schema.definitions ?? {}), ...(schema.$defs ?? {}) }, pretty })
+    return renderSchema(schema, { definitions: {}, pretty })
   } catch {
     return "unknown"
   }

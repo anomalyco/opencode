@@ -1,25 +1,22 @@
 // Entry and exit splash banners for direct interactive mode scrollback.
 //
-// Renders the full opencode entry logo and a compact [O] exit badge, plus
-// session metadata and the resume command. These are scrollback snapshots, so
-// they become immutable terminal history once committed.
-//
-// Both variants use a cell-based renderer. cells() classifies each character
-// in the source template as text, full-block, half-block-mix, or
-// half-block-top, and draw() renders it with foreground/background shadow
-// colors from the theme.
+// The entry header is a single flex row; the exit banner retains its cell-based
+// logo and resume information. Both become immutable terminal history.
 import {
   BoxRenderable,
   type ColorInput,
   TextAttributes,
   TextRenderable,
+  StyledText,
+  fg,
   type ScrollbackRenderContext,
   type ScrollbackSnapshot,
   type ScrollbackWriter,
 } from "@opentui/core"
 import { Locale } from "../util/locale"
+import { stringWidth } from "../util/string-width"
 import { go } from "../logo"
-import { monoTruncate, monoTruncateMiddle } from "./mono"
+import { monoTruncate } from "./mono"
 import type { RunSplashTheme } from "./theme"
 
 const SPLASH_TITLE_LIMIT = 50
@@ -34,7 +31,6 @@ type SplashInput = {
 type SplashWriterInput = SplashInput & {
   theme: RunSplashTheme
   showSession?: boolean
-  detail?: string
 }
 
 export type SplashMeta = {
@@ -173,52 +169,23 @@ function draw(
   }
 }
 
-function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: ScrollbackRenderContext): ScrollbackSnapshot {
+function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): ScrollbackSnapshot {
   const width = Math.max(1, ctx.width)
   const meta = splashMeta(input)
   const lines: Array<{ left: number; top: number; text: string; fg: ColorInput; bg?: ColorInput; attrs?: number }> = []
   const left = input.theme.left
   const right = input.theme.right
   const leftShadow = input.theme.leftShadow
-  let height = 1
+  const mark = input.mono ? ["[O]"] : go.right.slice(1)
+  const top = 1
+  const body_left = (mark[0]?.length ?? 0) + 2
+  const session = "Session  "
+  const label = "Continue "
+  const command = `opencode mini -s ${meta.session_id}`
+  const wide = body_left + stringWidth(label + command) <= width
+  const commandHeight = wide ? 1 : Math.ceil(stringWidth(command) / width)
 
-  if (kind === "entry") {
-    const mark = input.mono ? ["[O]"] : go.right.slice(1)
-    const top = 1
-    const body_left = (mark[0]?.length ?? 0) + 2
-
-    for (let i = 0; i < mark.length; i += 1) {
-      draw(lines, mark[i] ?? "", {
-        left: 0,
-        top: top + i,
-        fg: left,
-        shadow: leftShadow,
-      })
-    }
-
-    push(lines, body_left, top, "OpenCode", right, undefined, TextAttributes.BOLD)
-    if (input.detail) {
-      push(
-        lines,
-        body_left,
-        top + 1,
-        input.mono
-          ? monoTruncateMiddle(input.detail, Math.max(1, width - body_left), true)
-          : Locale.truncateMiddle(input.detail, Math.max(1, width - body_left)),
-        left,
-        undefined,
-      )
-    }
-    height = top + Math.max(mark.length, input.detail ? 2 : 1)
-  }
-
-  if (kind === "exit") {
-    const mark = input.mono ? ["[O]"] : go.right.slice(1)
-    const top = 1
-    const body_left = (mark[0]?.length ?? 0) + 2
-    const session = "Session  "
-    const label = "Continue "
-
+  if (wide) {
     for (let i = 0; i < mark.length; i += 1) {
       draw(lines, mark[i] ?? "", {
         left: 0,
@@ -229,23 +196,13 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
     }
 
     if (input.showSession !== false) {
-      push(lines, body_left, top, session, left, undefined, TextAttributes.DIM)
+      push(lines, body_left, top, session, left)
       push(lines, body_left + session.length, top, meta.title, right, undefined, TextAttributes.BOLD)
     }
-
-    push(lines, body_left, top + 1, label, left, undefined, TextAttributes.DIM)
-    push(
-      lines,
-      body_left + label.length,
-      top + 1,
-      `opencode mini -s ${meta.session_id}`,
-      right,
-      undefined,
-      TextAttributes.BOLD,
-    )
-    height = top + Math.max(mark.length, 2)
+    push(lines, body_left, top + 1, label, left)
   }
 
+  const height = top + (wide ? Math.max(mark.length, 2) : commandHeight)
   const root = new BoxRenderable(ctx.renderContext, {
     position: "absolute",
     left: 0,
@@ -257,6 +214,19 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   for (const line of lines) {
     write(root, ctx, line)
   }
+  root.add(
+    new TextRenderable(ctx.renderContext, {
+      position: "absolute",
+      left: wide ? body_left + label.length : 0,
+      top: wide ? top + 1 : top,
+      width: wide ? width - body_left - label.length : width,
+      height: commandHeight,
+      wrapMode: "char",
+      content: command,
+      fg: right,
+      attributes: TextAttributes.BOLD,
+    }),
+  )
 
   return {
     root,
@@ -275,10 +245,63 @@ export function splashMeta(input: SplashInput): SplashMeta {
   }
 }
 
-export function entrySplash(input: SplashWriterInput): ScrollbackWriter {
-  return (ctx) => build(input, "entry", ctx)
+export function entrySplash(input: {
+  version: string
+  detail?: string
+  mono?: boolean
+  theme: RunSplashTheme
+}): ScrollbackWriter {
+  return (ctx) => {
+    const width = Math.max(1, ctx.width)
+    const layout = entrySplashLayout({ ...input, width })
+    const root = new BoxRenderable(ctx.renderContext, {
+      width,
+      height: 2,
+      paddingTop: 1,
+      flexDirection: "row",
+      overflow: "hidden",
+    })
+    root.add(
+      new TextRenderable(ctx.renderContext, {
+        content: new StyledText([fg(input.theme.right)(layout.label), fg(input.theme.left)(layout.metadata)]),
+        width,
+        height: 1,
+        wrapMode: "none",
+      }),
+    )
+    return { root, width, height: 2, rowColumns: width, startOnNewLine: true, trailingNewline: false }
+  }
+}
+
+export function entrySplashLayout(input: { width: number; version: string; detail?: string; mono?: boolean }) {
+  const detail = input.detail ?? ""
+  const segments = detail.split(/[/\\]/).filter(Boolean)
+  const leaf = segments.at(-1) ?? detail
+  const separator = input.mono ? " - " : " · "
+  const ellipsis = input.mono ? "..." : "…"
+  const slash = detail.includes("\\") ? "\\" : "/"
+  const paths = segments
+    .slice(1)
+    .map((_, index) => ellipsis + slash + segments.slice(index + 1).join(slash))
+    .reverse()
+    .filter((path) => stringWidth(path) < stringWidth(detail))
+  let layout = { label: Locale.takeWidth("oc mini", input.width), version: "", path: "", metadata: "" }
+  const stages = [
+    { label: `${input.mono ? "[O]" : "▪"} oc mini` },
+    ...(leaf ? [{ path: leaf }] : []),
+    ...(input.version ? [{ version: input.version }] : []),
+    ...paths.concat(detail ? [detail] : []).map((path) => ({ path })),
+  ]
+  // Stop at the first non-fitting stage instead of backfilling lower-priority metadata.
+  for (const stage of stages) {
+    const next = { ...layout, ...stage }
+    const metadata = (next.version ? ` v${next.version}` : "") + (next.path ? separator + next.path : "")
+    if (stringWidth(next.label + metadata) > input.width) break
+    layout = { ...next, metadata }
+  }
+  return layout
 }
 
 export function exitSplash(input: SplashWriterInput): ScrollbackWriter {
-  return (ctx) => build(input, "exit", ctx)
+  return (ctx) => buildExit(input, ctx)
 }

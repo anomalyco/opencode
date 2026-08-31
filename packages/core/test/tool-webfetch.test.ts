@@ -42,11 +42,11 @@ const http = Layer.succeed(
 const permission = permissionLayer({ assert: (input) => Effect.sync(() => assertions.push(input)) })
 const toolLayer = (replacements: LayerNode.Replacements = []) =>
   AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
-    [Permission.node, permission],
-    [Image.node, imagePassthrough],
+    Permission.node.replace(permission),
+    Image.node.replace(imagePassthrough),
     ...replacements,
   ])
-const it = testEffect(toolLayer([[LayerNodePlatform.httpClient, http]]))
+const it = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)]))
 const live = testEffect(toolLayer())
 
 const reset = () => {
@@ -126,6 +126,15 @@ describe("WebFetchTool helpers", () => {
     const output = WebFetchTool.convertHTMLToMarkdown("x".repeat(WebFetchTool.MAX_RESPONSE_BYTES))
     expect(WebFetchTool.MAX_RESPONSE_BYTES).toBe(5 * 1024 * 1024)
     expect(output).toHaveLength(WebFetchTool.MAX_RESPONSE_BYTES - 64 * 1024)
+  })
+
+  test.each(["x", "\u00e9", "\u{1f600}"])("preserves UTF-8 boundaries at the content limit for %s", (character) => {
+    const budget = WebFetchTool.MAX_RESPONSE_BYTES - 64 * 1024
+    const fitting = "aa" + character.repeat(Math.floor((budget - 2) / Buffer.byteLength(character)))
+    expect(WebFetchTool.convertHTMLToMarkdown(fitting)).toBe(fitting)
+    const truncated = WebFetchTool.convertHTMLToMarkdown(fitting + character)
+    expect(truncated).toBe(fitting)
+    expect(Buffer.byteLength(truncated)).toBe(Buffer.byteLength(fitting))
   })
 
   test("bounds deeply nested list output and fragmented code fences", () => {

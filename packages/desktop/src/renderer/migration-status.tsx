@@ -52,7 +52,7 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
     const client = OpenCode.make({
       baseUrl: props.server.url,
       headers: props.server.password
-        ? { Authorization: `Basic ${btoa(`${props.server.username ?? "opencode"}:${props.server.password}`)}` }
+        ? { Authorization: `Basic ${btoa(`opencode:${props.server.password}`)}` }
         : undefined,
     })
 

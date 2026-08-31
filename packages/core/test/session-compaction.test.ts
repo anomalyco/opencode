@@ -88,10 +88,7 @@ const it = testEffect(
       SessionCompaction.node,
       SessionModelRequest.node,
     ]),
-    [
-      [Bus.node, Bus.configured({ persist: true })],
-      [llmClient, client],
-    ],
+    [Bus.node.replace(Bus.configured({ persist: true })), llmClient.replace(client)],
   ),
 )
 

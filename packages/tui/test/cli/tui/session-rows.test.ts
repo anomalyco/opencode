@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode-ai/client"
+import { createMemo, createRoot } from "solid-js"
+import { createStore } from "solid-js/store"
 import {
   backgroundToolRowIndex,
   cacheReuseDrop,
@@ -44,6 +46,99 @@ test("omits turn throughput when a stream boundary is unavailable", () => {
   const final = assistant("assistant-1", [])
   final.tokens = { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
   expect(turnTokensPerSecond(final, [final])).toBeUndefined()
+})
+
+test.each([false, true])(
+  "measures historical footers without later inputs or incomplete steps (indexed: %s)",
+  (indexed) => {
+    const step = (id: string, created: number, streamed: number, completed: number, output: number) => ({
+      ...assistant(id, []),
+      time: { created, streamed, completed },
+      tokens: { input: 1, output, reasoning: 2, cache: { read: 0, write: 0 } },
+    })
+    const messages: SessionMessageInfo[] = [
+      step("before-input", 0, 1_000, 2_000, 5),
+      { type: "user", id: "input", text: "Question", time: { created: 3_000 } },
+      step("first-step", 4_000, 5_000, 6_000, 10),
+      { type: "system", id: "system", text: "Instructions", time: { created: 6_500 } },
+      step("second-step", 7_000, 8_000, 9_000, 20),
+      { type: "synthetic", id: "synthetic", text: "Update", time: { created: 10_000 } },
+      step("after-synthetic", 11_000, 13_000, 14_000, 12),
+      { type: "user", id: "later-input", text: "Next question", time: { created: 15_000 } },
+      assistant("incomplete", []),
+    ]
+
+    expect(
+      messages.flatMap((message, index) =>
+        message.type === "assistant"
+          ? [
+              [
+                turnDuration(message, messages, indexed ? index : undefined),
+                turnTokensPerSecond(message, messages, indexed ? index : undefined),
+              ],
+            ]
+          : [],
+      ),
+    ).toEqual([
+      [2_000, 5],
+      [3_000, 10],
+      [6_000, 15],
+      [4_000, 6],
+      [0, undefined],
+    ])
+  },
+)
+
+test("preserves missing-anchor footer fallbacks without including the absent assistant's tokens", () => {
+  const absent = assistant("absent", [])
+  absent.time = { created: 8_000, streamed: 9_000, completed: 10_000 }
+  absent.tokens = { input: 1, output: 900, reasoning: 0, cache: { read: 0, write: 0 } }
+  const stored = assistant("stored", [])
+  stored.time = { created: 6_000, streamed: 8_000, completed: 9_000 }
+  stored.tokens = { input: 1, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+  const input: SessionMessageInfo = { type: "user", id: "input", text: "Question", time: { created: 5_000 } }
+
+  expect(turnDuration(absent, [input, stored])).toBe(5_000)
+  expect(turnTokensPerSecond(absent, [input, stored])).toBe(10)
+  expect(turnDuration(absent, [stored])).toBe(2_000)
+  expect(turnTokensPerSecond(absent, [stored])).toBe(10)
+  expect(turnDuration(absent, [])).toBe(2_000)
+  expect(turnTokensPerSecond(absent, [])).toBeUndefined()
+})
+
+test("indexed tail footer calculations do not subscribe to an unrelated history prefix", () => {
+  createRoot((dispose) => {
+    try {
+      const final = assistant("final", [])
+      final.time = { created: 2_000, streamed: 3_000, completed: 5_000 }
+      final.tokens = { input: 1, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+      const [messages, setMessages] = createStore<SessionMessageInfo[]>([
+        { type: "user", id: "old-input", text: "Old question", time: { created: 0 } },
+        assistant("old-step", []),
+        { type: "user", id: "input", text: "Current question", time: { created: 1_000 } },
+        final,
+      ])
+      let runs = 0
+      const footer = createMemo(() => {
+        runs++
+        const current = messages[3]
+        if (current.type !== "assistant") throw new Error("Expected an assistant")
+        return [turnDuration(current, messages, 3), turnTokensPerSecond(current, messages, 3)]
+      })
+      expect(footer()).toEqual([4_000, 20])
+      setMessages(0, { type: "user", id: "replaced-prefix", text: "Older question", time: { created: 50 } })
+      expect(footer()).toEqual([4_000, 20])
+      expect(runs).toBe(1)
+
+      setMessages(2, "time", "created", 1_500)
+      expect(footer()).toEqual([3_500, 20])
+      setMessages(3, { ...final, time: { ...final.time, streamed: 4_000 }, tokens: { ...final.tokens, output: 60 } })
+      expect(footer()).toEqual([3_500, 30])
+      expect(runs).toBe(3)
+    } finally {
+      dispose()
+    }
+  })
 })
 
 test("filters OpenAI cache quantization from cache reuse drops", () => {

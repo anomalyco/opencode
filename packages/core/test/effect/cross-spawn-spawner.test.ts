@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { Effect, Exit, PlatformError, Stream } from "effect"
+import { Deferred, Effect, Exit, PlatformError, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -217,6 +217,52 @@ describe("cross-spawn spawner", () => {
   })
 
   describe("process control", () => {
+    for (const mode of ["exit", "SIGKILL"] as const) {
+      const test = mode === "SIGKILL" && process.platform === "win32" ? fx.live.skip : fx.live
+      test(
+        `finishes capture after ${mode} while a grandchild holds stdio`,
+        Effect.gen(function* () {
+          const tmp = yield* Effect.acquireRelease(
+            Effect.promise(() => tmpdir()),
+            (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+          )
+          const pidFile = path.join(tmp.path, "child.pid")
+          yield* Effect.addFinalizer(() =>
+            Effect.tryPromise(async () => process.kill(Number(await fs.readFile(pidFile, "utf8")), "SIGKILL")).pipe(
+              Effect.ignore,
+            ),
+          )
+          const ready = yield* Deferred.make<void>()
+          // The grandchild keeps both pipes open independently of the foreground process.
+          const handle = yield* ChildProcess.make(
+            "node",
+            [path.join(import.meta.dir, "../fixture/held-stdio.cjs"), mode, pidFile],
+            { stdin: "ignore", forceKillAfter: 100 },
+          )
+          const [exit, stdout, stderr] = yield* Effect.all(
+            [
+              Effect.exit(handle.exitCode),
+              decodeByteStream(handle.stdout),
+              decodeByteStream(handle.stderr.pipe(Stream.tap(() => Deferred.succeed(ready, undefined)))),
+              mode === "SIGKILL"
+                ? Deferred.await(ready).pipe(Effect.andThen(handle.kill({ killSignal: "SIGKILL" })))
+                : Effect.void,
+            ],
+            { concurrency: "unbounded" },
+          ).pipe(Effect.timeout("3 seconds"))
+
+          // Completion must retain foreground output without waiting for the inherited pipes to close.
+          expect(stdout).toBe("foreground-out")
+          expect(stderr).toBe("foreground-err")
+          expect(Exit.isSuccess(exit)).toBe(mode === "exit")
+          if (Exit.isSuccess(exit)) expect(exit.value).toBe(ChildProcessSpawner.ExitCode(0))
+          expect(yield* handle.isRunning).toBe(false)
+          expect(alive(Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf8"))))).toBe(true)
+        }),
+        10_000,
+      )
+    }
+
     fx.effect(
       "kills a running process",
       Effect.gen(function* () {
@@ -245,7 +291,7 @@ describe("cross-spawn spawner", () => {
       }),
     )
 
-    fx.effect(
+    fx.live(
       "forceKillAfter escalates for stubborn processes",
       Effect.gen(function* () {
         if (process.platform === "win32") return

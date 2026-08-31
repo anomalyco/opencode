@@ -70,8 +70,7 @@ const setup = Effect.gen(function* () {
   )
   const context = yield* Layer.build(
     AppNodeBuilder.build(LayerNode.group([Tool.node, webSearchToolNode]), [
-      [
-        Permission.node,
+      Permission.node.replace(
         permissionLayer({
           assert: (input) =>
             Effect.sync(() => {
@@ -79,10 +78,9 @@ const setup = Effect.gen(function* () {
               fixture.assertions.push(input)
             }),
         }),
-      ],
-      [WebSearch.node, Layer.succeed(WebSearch.Service, websearch)],
-      [
-        Form.node,
+      ),
+      WebSearch.node.replace(Layer.succeed(WebSearch.Service, websearch)),
+      Form.node.replace(
         Layer.mock(Form.Service, {
           ask: (input) =>
             Effect.gen(function* () {
@@ -91,8 +89,8 @@ const setup = Effect.gen(function* () {
               return fixture.formResponses.shift() ?? fixture.formResponse
             }),
         }),
-      ],
-      [Image.node, imagePassthrough],
+      ),
+      Image.node.replace(imagePassthrough),
     ]),
   )
   return Object.assign(fixture, { websearch, kv, registry: Context.get(context, Tool.Service) })

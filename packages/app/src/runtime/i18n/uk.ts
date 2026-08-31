@@ -454,8 +454,6 @@ export const dict = {
   "dialog.server.add.button": "Додати сервер",
   "dialog.server.add.name": "Назва сервера (необов'язково)",
   "dialog.server.add.namePlaceholder": "Localhost",
-  "dialog.server.add.username": "Ім'я користувача (необов'язково)",
-  "dialog.server.add.usernamePlaceholder": "ім'я користувача",
   "dialog.server.add.password": "Пароль (необов'язково)",
   "dialog.server.add.passwordPlaceholder": "пароль",
   "dialog.server.edit.title": "Редагувати сервер",
@@ -543,7 +541,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Встановлена версія не відповідає версії десктопного застосунку.",
   "wsl.onboarding.adding": "Додавання...",
 
-  "server.row.noUsername": "без імені користувача",
 
   "dialog.project.edit.title": "Редагувати проєкт",
   "dialog.project.edit.name": "Назва",

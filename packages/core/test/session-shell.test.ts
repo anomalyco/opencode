@@ -42,6 +42,7 @@ const executionLayer = Layer.effect(
     })
     return SessionExecution.Service.of({
       active: coordinator.active,
+      isActive: coordinator.isActive,
       resume: coordinator.run,
       interrupt: (sessionID) => coordinator.interrupt(sessionID),
       awaitIdle: coordinator.awaitIdle,
@@ -53,8 +54,8 @@ const executionLayer = Layer.effect(
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Bus.node, Session.node, SessionExecution.node, LocationServiceMap.node]), [
-    [Bus.node, Bus.configured({ persist: true })],
-    [SessionExecution.node, executionLayer],
+    Bus.node.replace(Bus.configured({ persist: true })),
+    SessionExecution.node.replace(executionLayer.pipe(Layer.provide(controlLayer))),
   ]).pipe(Layer.provideMerge(controlLayer)),
 )
 

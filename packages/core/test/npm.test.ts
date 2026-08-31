@@ -20,7 +20,7 @@ const writePackage = (dir: string, pkg: Record<string, unknown>) =>
   )
 
 const npmLayer = (cache: string) =>
-  AppNodeBuilder.build(Npm.node, [[Global.node, Global.layerWith({ cache, state: path.join(cache, "state") })]])
+  AppNodeBuilder.build(Npm.node, [Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") }))])
 
 async function createGitFixture(directory: string) {
   const repository = path.join(directory, "repository")

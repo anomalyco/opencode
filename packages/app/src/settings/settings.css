@@ -24,6 +24,13 @@
   min-width: 0;
 }
 
+@media (max-width: 767px) {
+  .settings-screen {
+    --settings-mobile-inner-inset: 8px;
+    padding-block: var(--settings-top-inset, var(--shell-top-inset, 8px)) var(--shell-bottom-inset, 8px);
+  }
+}
+
 .settings-screen
   > .settings[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
   > [data-slot="tabs-v2-list"] {
@@ -49,6 +56,7 @@
 
 .settings-screen .settings-tab-body {
   padding-inline: 0;
+  padding-bottom: var(--settings-bottom-inset, 0px);
 }
 
 .settings-nav {
@@ -57,6 +65,26 @@
   flex-shrink: 0;
   flex-direction: column;
   gap: 16px;
+}
+
+.settings-mobile-nav {
+  display: none;
+}
+
+.settings-mobile-menu-trigger {
+  min-width: 0;
+}
+
+.settings-mobile-menu-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-mobile-menu[data-component="menu-v2-content"] {
+  max-width: calc(100vw - 32px);
+  max-height: var(--kb-popper-content-available-height);
+  overflow-y: auto;
 }
 
 .settings-nav-footer {
@@ -291,36 +319,6 @@
   background-color: var(--v2-background-bg-layer-01);
 }
 
-@media (max-width: 639px) {
-  .settings-screen .settings-nav {
-    width: 100%;
-  }
-
-  .settings-screen > .settings > .settings-panel {
-    padding-inline-end: 16px;
-  }
-
-  .settings-screen .settings-tab-header {
-    padding-top: 24px;
-  }
-
-  .settings[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
-    > [data-slot="tabs-v2-list"] {
-    width: 144px;
-    min-width: 144px;
-    padding-inline: 8px;
-  }
-
-  .settings-screen
-    > .settings[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
-    > [data-slot="tabs-v2-list"] {
-    width: 160px;
-    min-width: 160px;
-    padding-block: 24px;
-    padding-inline: 12px;
-  }
-}
-
 @container settings-screen (min-width: 800px) and (max-width: 1047px) {
   .settings-screen > .settings {
     padding-inline: 24px;
@@ -337,25 +335,60 @@
 }
 
 @container settings-screen (max-width: 799px) {
-  .settings-screen .settings-nav {
-    width: 100%;
+  .settings-screen > .settings[data-component="tabs-v2"] {
+    flex-direction: column;
+  }
+
+  .settings-mobile-nav {
+    position: relative;
+    z-index: 11;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px var(--settings-mobile-inner-inset, 16px);
+    border-bottom: 0.5px solid var(--v2-border-border-muted);
+    background: var(--v2-background-bg-deep);
+  }
+
+  .settings-mobile-nav::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 100%;
+    height: 1px;
+    background: var(--v2-background-bg-deep);
+    pointer-events: none;
+  }
+
+  .settings-mobile-nav .settings-back {
+    flex-shrink: 0;
   }
 
   .settings-screen > .settings > .settings-panel {
-    padding-inline-end: 16px;
+    min-height: 0;
+    max-width: none;
+  }
+
+  .settings-screen .settings-tab-header,
+  .settings-screen .settings-tab-body {
+    padding-inline: var(--settings-mobile-inner-inset, 16px);
   }
 
   .settings-screen .settings-tab-header {
-    padding-top: 24px;
+    padding-top: 12px;
+  }
+
+  .settings-screen .settings-tab-title,
+  .settings-screen .settings-section-title {
+    line-height: var(--line-height-base);
   }
 
   .settings-screen
     > .settings[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
     > [data-slot="tabs-v2-list"] {
-    width: 160px;
-    min-width: 160px;
-    padding-block: 24px;
-    padding-inline: 12px;
+    display: none;
   }
 }
 
@@ -634,6 +667,15 @@
 
 .settings-models [data-slot="settings-row-copy"] {
   gap: 0;
+}
+
+.settings-models [data-component="settings-row"] {
+  flex-wrap: nowrap;
+}
+
+.settings-models [data-slot="settings-row-control"] {
+  width: auto;
+  flex-shrink: 0;
 }
 
 .settings-models [data-slot="settings-row-title"] {
