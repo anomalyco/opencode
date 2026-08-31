@@ -13,6 +13,7 @@ import contextMenu from "electron-context-menu"
 
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
+import { resolveAppUserModelId } from "./app-identity"
 import { CHANNEL } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
@@ -139,7 +140,7 @@ const main = Effect.gen(function* () {
     return root
   })()
   app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
-  app.setAppUserModelId(appId)
+  app.setAppUserModelId(resolveAppUserModelId(appId, app.isPackaged))
   app.setPath(
     "userData",
     onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
