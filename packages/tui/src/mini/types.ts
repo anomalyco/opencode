@@ -40,6 +40,7 @@ export type RunPromptPart =
       url: string
       filename?: string
       mime?: string
+      description?: string
       source?: {
         type: string
         text: { start: number; end: number; value: string }
@@ -394,7 +395,7 @@ export type FormCancel = {
   location?: LocationRef
 }
 
-export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "mini" | "session" | "cursor">
+export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor">
 
 export type MiniSettings = {
   thinking: "show" | "hide"
@@ -424,6 +425,7 @@ type StreamToolState = "running" | "completed" | "error"
 export type StreamCommit = {
   kind: EntryKind
   text: string
+  image?: string
   phase: StreamPhase
   source: StreamSource
   compaction?: true

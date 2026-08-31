@@ -7,9 +7,8 @@ import { SPINNER_FRAMES } from "../component/spinner-frames"
 import { RunEntryContent, separatorRows } from "./scrollback.writer"
 import type { FooterSubagentDetail, FooterSubagentTab } from "./types"
 import type { RunFooterTheme, RunTheme } from "./theme"
-import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
-import { monoTruncate } from "./mono"
+import { footerMenuText } from "./footer.menu"
 
 registerOpencodeSpinner()
 
@@ -63,7 +62,9 @@ export function RunFooterSubagentBody(props: {
   mono?: boolean
 }) {
   const dims = useTerminalDimensions()
-  const [width, setWidth] = createSignal(dims().width)
+  const [size, setSize] = createSignal(dims())
+  const width = () => size().width
+  const compact = () => width() < 56 || size().height < 12
   const theme = createMemo(() => props.theme())
   const footer = createMemo(() => theme().footer)
   const tab = createMemo(() => props.tab())
@@ -107,6 +108,11 @@ export function RunFooterSubagentBody(props: {
     if (tab()?.status !== "running") return undefined
     return props.interrupt?.()
   })
+  const count = () => (props.total() > 1 && props.index() > 0 ? `${props.index()} of ${props.total()}` : "")
+  const headerControlsWidth = () =>
+    (interruptHint() ? stringWidth(`${interruptHint()} interrupt`) + 1 : 0) + (count() ? stringWidth(count()) + 1 : 0)
+  const headerControls = () => !compact() && stringWidth(title()) + 2 + headerControlsWidth() <= width() - 4
+  const titleWidth = () => Math.max(1, width() - (compact() ? 2 : 6) - (headerControls() ? headerControlsWidth() : 0))
 
   useKeyboard((event) => {
     if (!props.active()) {
@@ -150,13 +156,24 @@ export function RunFooterSubagentBody(props: {
       minHeight={0}
       flexDirection="column"
       backgroundColor={footer().surface}
+      paddingTop={compact() ? 0 : 1}
+      paddingLeft={compact() ? 0 : 1}
+      paddingRight={compact() ? 0 : 3}
+      paddingBottom={compact() ? 0 : 1}
       onSizeChange={function () {
-        setWidth(this.width)
+        setSize({ width: this.width, height: this.height })
       }}
     >
       <Show when={tab()}>
         {(current) => (
-          <box width="100%" height={1} flexDirection="row" gap={1} flexShrink={0}>
+          <box
+            width="100%"
+            height={compact() ? 1 : 2}
+            paddingBottom={compact() ? 0 : 1}
+            flexDirection="row"
+            gap={1}
+            flexShrink={0}
+          >
             {current().status === "running" ? (
               <box flexShrink={0}>
                 <spinner
@@ -170,14 +187,28 @@ export function RunFooterSubagentBody(props: {
                 {statusIcon(current().status, props.mono ?? false)}
               </text>
             )}
-            <text fg={footer().text} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
-              {props.mono
-                ? monoTruncate(title(), Math.max(1, width() - 2), true)
-                : Locale.truncate(title(), Math.max(1, width() - 2))}
-              <Show when={subtitle().length > 0 && width() >= stringWidth(title()) + stringWidth(subtitle()) + 5}>
+            <text fg={footer().text} wrapMode="none" flexGrow={1} flexShrink={1}>
+              {footerMenuText(title(), titleWidth(), props.mono)}
+              <Show when={subtitle().length > 0 && titleWidth() >= stringWidth(title()) + stringWidth(subtitle()) + 2}>
                 <span style={{ fg: footer().muted }}>{"  " + subtitle()}</span>
               </Show>
             </text>
+            <Show when={headerControls()}>
+              <Show when={interruptHint()}>
+                {(hint) => (
+                  <text fg={footer().muted} wrapMode="none" flexShrink={0}>
+                    {hint()} interrupt
+                  </text>
+                )}
+              </Show>
+              <Show when={count()}>
+                {(value) => (
+                  <text fg={footer().muted} wrapMode="none" flexShrink={0}>
+                    {value()}
+                  </text>
+                )}
+              </Show>
+            </Show>
           </box>
         )}
       </Show>
@@ -203,34 +234,36 @@ export function RunFooterSubagentBody(props: {
           )}
         </box>
       </scrollbox>
-      <box width="100%" flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
-        <text height={1} fg={footer().actionSecondaryText} wrapMode="none" flexShrink={0} onMouseUp={props.onClose}>
-          esc back
-        </text>
-        <Show when={interruptHint()}>
-          {(hint) => (
-            <text maxWidth="100%" fg={footer().actionSecondaryText} wrapMode="word" flexShrink={0}>
-              {hint()} {width() >= stringWidth(hint()) + 10 ? "interrupt" : "stop"}
-            </text>
-          )}
-        </Show>
-        <Show when={width() >= 56}>
-          <text height={1} fg={footer().muted} wrapMode="none" flexShrink={0}>
-            pgup/pgdn scroll
+      <Show when={!headerControls()}>
+        <box width="100%" flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
+          <text height={1} fg={footer().actionSecondaryText} wrapMode="none" flexShrink={0} onMouseUp={props.onClose}>
+            esc back
           </text>
-          <Show when={props.total() > 1 && props.index() > 0}>
-            <text
-              height={1}
-              fg={footer().actionSecondaryText}
-              wrapMode="none"
-              flexShrink={0}
-              onMouseUp={() => props.onCycle(1)}
-            >
-              tab next {props.index()}/{props.total()}
-            </text>
+          <Show when={interruptHint()}>
+            {(hint) => (
+              <text maxWidth="100%" fg={footer().actionSecondaryText} wrapMode="word" flexShrink={0}>
+                {hint()} {width() >= stringWidth(hint()) + 10 ? "interrupt" : "stop"}
+              </text>
+            )}
           </Show>
-        </Show>
-      </box>
+          <Show when={width() >= 56}>
+            <text height={1} fg={footer().muted} wrapMode="none" flexShrink={0}>
+              pgup/pgdn scroll
+            </text>
+            <Show when={props.total() > 1 && props.index() > 0}>
+              <text
+                height={1}
+                fg={footer().actionSecondaryText}
+                wrapMode="none"
+                flexShrink={0}
+                onMouseUp={() => props.onCycle(1)}
+              >
+                tab next {props.index()}/{props.total()}
+              </text>
+            </Show>
+          </Show>
+        </box>
+      </Show>
     </box>
   )
 }

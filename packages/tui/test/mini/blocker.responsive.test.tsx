@@ -53,6 +53,269 @@ async function settle(app: Pick<Awaited<ReturnType<typeof testRender>>, "renderO
   await app.renderOnce()
 }
 
+async function renderForm(request: MiniFormRequest, width = 80, height = 20) {
+  const replies: FormReply[] = []
+  const app = await testRender(
+    () => (
+      <RunFormBody
+        request={request}
+        theme={RUN_THEME_FALLBACK.footer}
+        onReply={(reply) => {
+          replies.push(reply)
+        }}
+        onCancel={() => {}}
+      />
+    ),
+    { width, height, kittyKeyboard: true },
+  )
+  return { ...app, replies }
+}
+
+test("roomy question forms retain the established spacing and inline descriptions", async () => {
+  const app = await renderForm({
+    ...form,
+    title: "Questions",
+    fields: [
+      {
+        key: "layout",
+        type: "string",
+        title: "Layout",
+        description: "Which footer view?",
+        options: [
+          { value: "form", label: "Form", description: "Inspect canonical form" },
+          { value: "prompt", label: "Prompt", description: "Return to composer" },
+        ],
+      },
+      { key: "extra", type: "boolean", title: "Extra checks" },
+    ],
+  })
+  try {
+    await settle(app)
+    for (const [text, x, y] of [
+      ["Questions", 4, 1],
+      ["1/2", 14, 1],
+      ["Which footer view?", 2, 3],
+      ["Form", 5, 5],
+      ["Inspect canonical form", 10, 5],
+    ] as const) {
+      const node = descendants(app.renderer.root).find(
+        (node) => node instanceof TextRenderable && node.plainText === text,
+      )!
+      expect({ text, x: node.x, y: node.y }).toEqual({ text, x, y })
+    }
+    expect(app.captureCharFrame().split("\n")[18]).toContain("↑↓ select   enter choose   tab next   esc dismiss")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test.each([16, 24, 40])(
+  "complete questions and distinct option details remain readable at %i columns",
+  async (width) => {
+    const content = (app: Awaited<ReturnType<typeof renderForm>>) =>
+      app
+        .captureCharFrame()
+        .split("\n")
+        .map((row) => row.slice(0, width - 1))
+        .join(" ")
+        .replace(/\s+/g, " ")
+    const title = "Delete production database permanently?"
+    const app = await renderForm({ ...form, fields: [{ key: "yes", type: "boolean", title }] }, width, 8)
+    try {
+      await settle(app)
+      app.mockInput.pressKey("\x1b[5~")
+      await settle(app)
+      expect(content(app)).toContain(title)
+      expect(app.replies).toEqual([])
+    } finally {
+      app.renderer.destroy()
+    }
+    const options = await renderForm(
+      {
+        ...form,
+        fields: [
+          {
+            key: "target",
+            type: "string",
+            title: "Target",
+            options: [
+              { value: "stage", label: "Deploy api service to staging", description: "STAGING database" },
+              { value: "prod", label: "Deploy api service to production", description: "PRODUCTION database" },
+            ],
+          },
+        ],
+      },
+      width,
+      12,
+    )
+    try {
+      await settle(options)
+      expect(content(options)).toContain("Deploy api service to staging")
+      expect(content(options)).toContain("STAGING database")
+      options.mockInput.pressArrow("down")
+      await settle(options)
+      expect(content(options)).toContain("Deploy api service to production")
+      expect(content(options)).toContain("PRODUCTION database")
+      options.mockInput.pressEnter()
+      await settle(options)
+      expect(options.replies[0]?.answer).toEqual({ target: "prod" })
+    } finally {
+      options.renderer.destroy()
+    }
+  },
+)
+
+test("advancing fields reveals the new choice without a second Enter", async () => {
+  const app = await renderForm(
+    {
+      ...form,
+      fields: [
+        { key: "confirm", type: "boolean", title: "Continue?" },
+        {
+          key: "target",
+          type: "string",
+          title: "Target",
+          description: "Select your preferred destination for this deployment and double-check it carefully.",
+          options: [
+            { value: "b0", label: "B0" },
+            { value: "b1", label: "B1" },
+          ],
+        },
+      ],
+    },
+    16,
+    8,
+  )
+  try {
+    await settle(app)
+    app.mockInput.pressEnter()
+    await settle(app)
+    expect(app.captureCharFrame()).toContain("B0")
+    expect(app.replies).toEqual([])
+    app.mockInput.pressEnter()
+    await settle(app)
+    expect(app.captureCharFrame()).toContain("Review")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("roomy permission prompts retain their header and padded action bar", async () => {
+  const app = await testRender(
+    () => (
+      <RunPermissionBody
+        request={permission}
+        theme={RUN_THEME_FALLBACK.footer}
+        block={RUN_THEME_FALLBACK.block}
+        onReply={() => {}}
+      />
+    ),
+    { width: 112, height: 20 },
+  )
+  try {
+    await settle(app)
+    const nodes = descendants(app.renderer.root).filter(
+      (node): node is TextRenderable => node instanceof TextRenderable,
+    )
+    const title = nodes.find((node) => node.plainText.includes("Permission required"))!
+    const action = nodes.find((node) => node.plainText === "Allow once")!
+    expect({ x: title.x, y: title.y }).toEqual({ x: 2, y: 1 })
+    expect({ x: action.x, y: action.y }).toEqual({ x: 3, y: 18 })
+    expect(app.captureCharFrame().split("\n")[18]).toContain("⇆ select  enter confirm  esc reject")
+    const scroll = descendants(app.renderer.root).find((node) => node instanceof ScrollBoxRenderable)!
+    expect(scroll.x + scroll.width).toBe(109)
+    app.mockInput.pressEnter()
+    await settle(app)
+    expect(app.captureCharFrame()).toContain("Waiting for permission event...")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("roomy rejection keeps the editor and confirmation hints inline", async () => {
+  const app = await testRender(
+    () => (
+      <Keymap.Provider config={createTuiResolvedConfig()}>
+        <RunPermissionBody
+          request={permission}
+          theme={RUN_THEME_FALLBACK.footer}
+          block={RUN_THEME_FALLBACK.block}
+          onReply={() => {}}
+        />
+      </Keymap.Provider>
+    ),
+    { width: 112, height: 20, kittyKeyboard: true },
+  )
+  try {
+    await settle(app)
+    app.mockInput.pressArrow("right")
+    app.mockInput.pressArrow("right")
+    app.mockInput.pressEnter()
+    await settle(app)
+    const editor = app.renderer.currentFocusedEditor!
+    const confirm = descendants(app.renderer.root).find(
+      (node) => node instanceof TextRenderable && node.plainText === "enter confirm",
+    )!
+    expect(editor.y).toBe(18)
+    expect(confirm.y).toBe(editor.y)
+    expect(confirm.x).toBeGreaterThanOrEqual(editor.x + editor.width)
+    expect(app.captureCharFrame()).toContain("esc cancel")
+    expect(app.captureCharFrame()).toContain("Tell OpenCode what to do differently")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test.each([false, true])("picked options budget their full ordinal and selection marker (mono=%s)", async (mono) => {
+  for (const width of [16, 112]) {
+    const description = width === 16 ? "prod" : "d".repeat(85) + "_END_LAST"
+    const app = await testRender(
+      () => (
+        <RunFormBody
+          request={{
+            ...form,
+            fields: [
+              {
+                key: "target",
+                type: "string",
+                title: "Target",
+                default: "target-12",
+                options: Array.from({ length: 12 }, (_, index) => ({
+                  value: `target-${index + 1}`,
+                  label: "Deploy",
+                  description,
+                })),
+              },
+            ],
+          }}
+          theme={RUN_THEME_FALLBACK.footer}
+          mono={mono}
+          onReply={() => {}}
+          onCancel={() => {}}
+        />
+      ),
+      { width, height: 20, kittyKeyboard: true },
+    )
+    try {
+      await settle(app)
+      for (let index = 0; index < 11; index++) app.mockInput.pressArrow("down")
+      await settle(app)
+      const label = descendants(app.renderer.root).find(
+        (node) => node instanceof TextRenderable && node.plainText === "Deploy *",
+      )!
+      const detail = label
+        .parent!.getChildren()
+        .find((node) => node instanceof TextRenderable && node.plainText === description)!
+      const scroll = descendants(app.renderer.root).find((node) => node instanceof ScrollBoxRenderable)!
+      expect(detail.y).toBeGreaterThan(label.y)
+      expect(detail.x + detail.width).toBeLessThanOrEqual(scroll.viewport.x + scroll.viewport.width - (mono ? 0 : 1))
+      expect(app.captureCharFrame()).toContain(description)
+    } finally {
+      app.renderer.destroy()
+    }
+  }
+})
+
 test.each(sizes)("permission controls fit the allocated $width x $height viewport", async (size) => {
   const replies: PermissionReply[] = []
   const app = await testRender(
@@ -476,7 +739,8 @@ test.each(sizes)("inspector keeps task identity and controls at $width x $height
   try {
     await settle(app)
     expect(app.captureCharFrame()).toContain("Inspect")
-    expect(app.captureCharFrame()).toContain("esc back")
+    if (size.width < 56 || size.height < 12) expect(app.captureCharFrame()).toContain("esc back")
+    else expect(app.captureCharFrame()).toContain("12 of 12")
     expect(app.captureCharFrame()).toContain("ctrl+d interrupt")
     expect(app.captureCharFrame()).toContain("Activity")
     app.mockInput.pressEscape()

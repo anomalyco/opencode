@@ -1,11 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { BoxRenderable, RGBA, type CliRenderer, type RootRenderable } from "@opentui/core"
+import { BoxRenderable, ImageRenderable, RGBA, type CliRenderer, type RootRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import type { FormInfo } from "@opencode-ai/client/promise"
 import { Keymap } from "../../src/context/keymap"
+import type { ClipboardContent, ClipboardService } from "../../src/context/clipboard"
 import {
   RUN_COMMAND_PANEL_ROWS,
   RUN_SUBAGENT_PANEL_ROWS,
@@ -42,6 +43,7 @@ import { selectedCommand } from "../../src/mini/footer.prompt"
 import { RejectField } from "../../src/mini/footer.permission"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { tmpdir } from "../fixture/fixture"
+import { diffImageFixture } from "../fixture/diff-image"
 
 const tuiConfig = createTuiResolvedConfig()
 
@@ -146,6 +148,8 @@ async function renderFooter(
     state?: Partial<FooterState>
     onCycle?: () => void
     onSubmit?: (prompt: RunPrompt) => boolean | Promise<boolean>
+    clipboard?: Pick<ClipboardService, "read">
+    history?: RunPrompt[]
     view?: FooterView
     onFormReply?: (input: unknown) => void
     miniSettings?: MiniSettings
@@ -196,6 +200,8 @@ async function renderFooter(
           mono={input.mono ?? false}
           miniSettings={miniSettings}
           onSubmit={input.onSubmit ?? (() => true)}
+          clipboard={input.clipboard}
+          history={() => input.history ?? []}
           onPermissionReply={() => {}}
           onFormReply={(value) => input.onFormReply?.(value)}
           onFormCancel={() => {}}
@@ -237,6 +243,266 @@ async function renderFooter(
     },
   }
 }
+
+test.each([
+  { width: 80, height: 24, mono: false, preview: true },
+  { width: 24, height: 8, mono: false, preview: true },
+  { width: 80, height: 24, mono: true, preview: true },
+  { width: 80, height: 24, mono: false, preview: false },
+])(
+  "mini pastes, previews, submits, and recalls an image ($width x $height, mono=$mono, preview=$preview)",
+  async (options) => {
+    const submitted: RunPrompt[] = []
+    const data = Buffer.from(diffImageFixture).toString("base64")
+    const app = await renderFooter({
+      ...options,
+      tuiConfig: createTuiResolvedConfig({ prompt: { image_preview: options.preview } }),
+      clipboard: { read: async () => ({ data, mime: "image/png" }) },
+      onSubmit: (prompt) => {
+        submitted.push(prompt)
+        return true
+      },
+    })
+    try {
+      await app.renderOnce()
+      app.mockInput.pressKey("v", { ctrl: true })
+      await app.waitForFrame((frame) => frame.includes("[Image 1]"))
+      const image = app.renderer.root.findDescendantById("mini-prompt-image-0")
+      if (!options.mono && options.preview) {
+        expect(image).toBeInstanceOf(ImageRenderable)
+        if (!(image instanceof ImageRenderable)) throw new Error("Image preview missing")
+        await image.loadPromise
+        expect(image.image?.width).toBe(96)
+        expect(image.fit).toBe("fit")
+        expect(image.width).toBeGreaterThan(0)
+        expect(image.height).toBeGreaterThan(0)
+        expect(image.height).toBeLessThanOrEqual(4)
+        expect(image.x + image.width).toBeLessThanOrEqual(options.width)
+        await app.mockInput.typeText("x")
+        app.mockInput.pressKey("BACKSPACE")
+        await app.renderOnce()
+        expect(app.renderer.root.findDescendantById("mini-prompt-image-0")).toBe(image)
+      }
+      if (options.mono || !options.preview) expect(image).toBeUndefined()
+      app.mockInput.pressEnter()
+      await app.waitFor(() => submitted.length === 1)
+      expect(submitted[0]).toMatchObject({
+        text: "[Image 1] ",
+        parts: [
+          {
+            type: "file",
+            url: `data:image/png;base64,${data}`,
+            filename: "clipboard",
+            mime: "image/png",
+            source: { text: { start: 0, end: 9, value: "[Image 1]" } },
+          },
+        ],
+      })
+      await app.waitFor(() => app.renderer.currentFocusedEditor?.plainText === "")
+      app.mockInput.pressKey("ARROW_UP")
+      await app.waitForFrame((frame) => frame.includes("[Image 1]"))
+      app.mockInput.pressEnter()
+      await app.waitFor(() => submitted.length === 2)
+      expect(submitted[1].parts).toEqual(submitted[0].parts)
+    } finally {
+      app.cleanup()
+    }
+  },
+)
+
+test("mini waits for image paste before submitting and drops a paste after editing the draft", async () => {
+  const pending = Promise.withResolvers<ClipboardContent | undefined>()
+  const submitted: RunPrompt[] = []
+  let reads = 0
+  const app = await renderFooter({
+    clipboard: {
+      read: () => {
+        reads += 1
+        return pending.promise
+      },
+    },
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("inspect ")
+    app.mockInput.pressKey("v", { ctrl: true })
+    await app.waitFor(() => reads === 1)
+    app.mockInput.pressEnter()
+    expect(submitted).toHaveLength(0)
+    pending.resolve({ mime: "image/png", data: Buffer.from(diffImageFixture).toString("base64") })
+    await app.waitFor(() => submitted.length === 1)
+    expect(submitted[0].text).toBe("inspect [Image 1] ")
+    expect(submitted[0].parts).toHaveLength(1)
+  } finally {
+    app.cleanup()
+  }
+
+  const changed = Promise.withResolvers<ClipboardContent | undefined>()
+  const cancelled: RunPrompt[] = []
+  const next = await renderFooter({
+    clipboard: { read: () => changed.promise },
+    onSubmit: (prompt) => {
+      cancelled.push(prompt)
+      return true
+    },
+  })
+  try {
+    await next.renderOnce()
+    await next.mockInput.typeText("old draft")
+    next.mockInput.pressKey("v", { ctrl: true })
+    await next.renderOnce()
+    next.mockInput.pressEnter()
+    next.mockInput.pressKey("c", { ctrl: true })
+    await next.mockInput.typeText("changed draft")
+    changed.resolve({ mime: "image/png", data: Buffer.from(diffImageFixture).toString("base64") })
+    await next.flush()
+    expect(cancelled).toEqual([])
+    expect(next.renderer.currentFocusedEditor?.plainText).toBe("changed draft")
+  } finally {
+    next.cleanup()
+  }
+})
+
+test("mini replaces selected text with a tracked image attachment", async () => {
+  const sent = Promise.withResolvers<RunPrompt>()
+  const app = await renderFooter({
+    clipboard: { read: async () => ({ mime: "image/png", data: Buffer.from(diffImageFixture).toString("base64") }) },
+    onSubmit: (prompt) => {
+      sent.resolve(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("replace me")
+    app.renderer.currentFocusedEditor?.setSelection(0, 10)
+    app.mockInput.pressKey("v", { ctrl: true })
+    app.mockInput.pressEnter()
+    const prompt = await sent.promise
+    expect(prompt.text).toBe("[Image 1] ")
+    expect(prompt.parts).toMatchObject([{ type: "file", source: { text: { start: 0, end: 9, value: "[Image 1]" } } }])
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("mini retains ordinary paste ANSI stripping and newline normalization", async () => {
+  const sent = Promise.withResolvers<RunPrompt>()
+  const app = await renderFooter({
+    onSubmit: (prompt) => {
+      sent.resolve(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.pasteBracketedText("\x1b[31mred\x1b[0m\r\nplain")
+    app.mockInput.pressEnter()
+    expect((await sent.promise).text).toBe("red\nplain")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("a failed clipboard read cancels a waiting submit without losing the draft", async () => {
+  const pending = Promise.withResolvers<ClipboardContent | undefined>()
+  const submitted: RunPrompt[] = []
+  const statuses: string[] = []
+  const app = await renderFooter({
+    clipboard: { read: () => pending.promise },
+    onStatus: (status) => statuses.push(status),
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("inspect this")
+    app.mockInput.pressKey("v", { ctrl: true })
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    pending.reject(new Error("Clipboard unavailable"))
+    await app.waitFor(() => statuses.length > 0)
+    await app.flush()
+    expect(submitted).toEqual([])
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("inspect this")
+    app.mockInput.pressEnter()
+    await app.waitFor(() => submitted.length === 1)
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("mini attaches dropped image paths and removes attachments with their labels", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/one image.png`, diffImageFixture)
+  await Bun.write(`${tmp.path}/two.png`, diffImageFixture)
+  const submitted: RunPrompt[] = []
+  const sent = Promise.withResolvers<void>()
+  const app = await renderFooter({
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      sent.resolve()
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("\u4e2d\u6587 ")
+    await app.mockInput.pasteBracketedText(`'${tmp.path}/one image.png' '${tmp.path}/two.png'`)
+    app.mockInput.pressEnter()
+    await sent.promise
+    expect(submitted[0].text).toBe("\u4e2d\u6587 [Image 1] [Image 2] ")
+    expect(submitted[0].parts).toMatchObject([
+      { type: "file", filename: "one image.png", source: { text: { start: 5, end: 14, value: "[Image 1]" } } },
+      { type: "file", filename: "two.png", source: { text: { start: 15, end: 24, value: "[Image 2]" } } },
+    ])
+    await app.waitFor(() => app.renderer.currentFocusedEditor?.plainText === "")
+    app.mockInput.pressKey("ARROW_UP")
+    await app.waitForFrame((frame) => frame.includes("[Image 2]"))
+    app.renderer.currentFocusedEditor?.setText("no attachments")
+    app.mockInput.pressEnter()
+    await app.waitFor(() => submitted.length === 2)
+    expect(submitted[1].parts).toEqual([])
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("mini preserves mentionless images through draft edits and a rejected submission", async () => {
+  const part = {
+    type: "file" as const,
+    url: `data:image/png;base64,${Buffer.from(diffImageFixture).toString("base64")}`,
+  }
+  const submitted: RunPrompt[] = []
+  const app = await renderFooter({
+    history: [{ text: "", parts: [part] }],
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return submitted.length > 1
+    },
+  })
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("ARROW_UP")
+    await app.renderOnce()
+    await app.mockInput.typeText("look")
+    app.mockInput.pressEnter()
+    await app.waitFor(() => submitted.length === 1)
+    await app.waitFor(() => app.renderer.currentFocusedEditor?.plainText === "look")
+    expect(submitted[0].parts).toEqual([part])
+    app.mockInput.pressEnter()
+    await app.waitFor(() => submitted.length === 2)
+    expect(submitted[1].parts).toEqual([part])
+  } finally {
+    app.cleanup()
+  }
+})
 
 test("direct footer leads with the active agent and default model", async () => {
   const app = await renderFooter({ state: { model: "Default model" } })
@@ -2217,7 +2483,9 @@ test("direct agent panel shows eligible agents and marks the current agent", asy
     expect(selected).toBe("review")
     await app.mockInput.typeText("review")
     await app.renderOnce()
-    const query = app.captureSpans().lines[app.renderer.currentFocusedRenderable!.y].spans.find((span) => span.text.includes("review"))!
+    const query = app
+      .captureSpans()
+      .lines[app.renderer.currentFocusedRenderable!.y].spans.find((span) => span.text.includes("review"))!
     expect(query.fg.toInts()).toEqual((theme.footer.formfieldFocusedText as RGBA).toInts())
     expect(query.bg.toInts()).toEqual((theme.footer.formfieldFocusedBg as RGBA).toInts())
     expect(app.renderer.getCursorState().color.toInts()).toEqual(query.fg.toInts())

@@ -49,6 +49,7 @@ export function RunFormBody(props: {
   const dims = useTerminalDimensions()
   const [size, setSize] = createSignal(dims())
   const [contentHeight, setContentHeight] = createSignal(1)
+  const [viewportHeight, setViewportHeight] = createSignal(0)
   const compact = () => size().width < 56 || size().height < 12
   const [state, setLocalState] = createSignal(props.state ?? createFormBodyState(props.request))
   const setState = (next: FormBodyState | ((previous: FormBodyState) => FormBodyState)) => {
@@ -318,7 +319,7 @@ export function RunFormBody(props: {
         <text fg={unsupported() ? props.theme.warning : props.theme.question} wrapMode="none" flexShrink={0}>
           {props.mono ? "*" : "◆"}
         </text>
-        <text fg={props.theme.text} wrapMode="none" truncate flexGrow={1} minWidth={0}>
+        <text fg={props.theme.text} wrapMode="none" truncate minWidth={0}>
           {props.request.title}
         </text>
         <Show when={!unsupported() && !formSingle(props.request)}>
@@ -334,9 +335,14 @@ export function RunFormBody(props: {
         height={!compact() && editing() ? Math.min(contentHeight(), Math.max(1, size().height - 9)) : undefined}
         flexGrow={!compact() && editing() ? 0 : 1}
         minHeight={0}
-        viewportOptions={{ paddingRight: props.mono ? 0 : 1 }}
+        viewportOptions={{
+          paddingRight: props.mono ? 0 : 1,
+          onSizeChange() {
+            setViewportHeight(this.height)
+          },
+        }}
         verticalScrollbarOptions={{
-          visible: !props.mono,
+          visible: !props.mono && contentHeight() > viewportHeight(),
           trackOptions: { backgroundColor: props.theme.surface, foregroundColor: props.theme.line },
         }}
         onSizeChange={revealChoice}
@@ -349,7 +355,9 @@ export function RunFormBody(props: {
           flexDirection="column"
           flexShrink={0}
           gap={compact() ? 0 : 1}
-          onSizeChange={function () { setContentHeight(this.height) }}
+          onSizeChange={function () {
+            setContentHeight(this.height)
+          }}
         >
           <Show when={message()}>
             {(value) => (
@@ -411,6 +419,15 @@ export function RunFormBody(props: {
                         const value = state().answers[field.key]
                         return Array.isArray(value) ? value.includes(String(row.value)) : value === row.value
                       }
+                      const ordinal = () => (props.mono ? `${active() ? ">" : " "}${index() + 1}.` : `${index() + 1}.`)
+                      const inline = () =>
+                        !!row.description &&
+                        stringWidth(ordinal()) +
+                          2 +
+                          stringWidth(row.label) +
+                          (multiple() ? 4 : picked() ? 2 : 0) +
+                          stringWidth(row.description) <=
+                          size().width - (compact() ? 0 : 5) - (props.mono ? 0 : 1)
                       return (
                         <box
                           ref={(item) => {
@@ -430,30 +447,30 @@ export function RunFormBody(props: {
                             wrapMode="none"
                             flexShrink={0}
                           >
-                            {props.mono ? `${active() ? ">" : " "}${index() + 1}.` : `${index() + 1}.`}
+                            {ordinal()}
                           </text>
                           <box
-                            flexDirection={row.description && stringWidth(row.label) + stringWidth(row.description) + (multiple() ? 9 : 5) <= size().width - (compact() ? 1 : 6) ? "row" : "column"}
-                            gap={row.description && stringWidth(row.label) + stringWidth(row.description) + (multiple() ? 9 : 5) <= size().width - (compact() ? 1 : 6) ? 1 : 0}
+                            flexDirection={inline() ? "row" : "column"}
+                            gap={inline() ? 1 : 0}
                             flexGrow={1}
                             minWidth={0}
                           >
-                          <text
-                            fg={active() ? props.theme.formfieldFocusedText : props.theme.formfieldText}
-                            wrapMode="word"
-                            flexShrink={0}
-                          >
-                            <span style={{ fg: picked() ? props.theme.selection : undefined }}>
-                              {multiple() ? `[${picked() ? "x" : " "}] ` : ""}
-                            </span>
-                            {row.label}
-                            <span style={{ fg: props.theme.selection }}>{!multiple() && picked() ? " *" : ""}</span>
-                          </text>
-                          <Show when={row.description}>
-                            <text fg={props.theme.muted} wrapMode="word" flexShrink={0}>
-                              {row.description}
+                            <text
+                              fg={active() ? props.theme.formfieldFocusedText : props.theme.formfieldText}
+                              wrapMode="word"
+                              flexShrink={0}
+                            >
+                              <span style={{ fg: picked() ? props.theme.selection : undefined }}>
+                                {multiple() ? `[${picked() ? "x" : " "}] ` : ""}
+                              </span>
+                              {row.label}
+                              <span style={{ fg: props.theme.selection }}>{!multiple() && picked() ? " *" : ""}</span>
                             </text>
-                          </Show>
+                            <Show when={row.description}>
+                              <text fg={props.theme.muted} wrapMode="word" flexShrink={0}>
+                                {row.description}
+                              </text>
+                            </Show>
                           </box>
                         </box>
                       )
@@ -565,35 +582,64 @@ export function RunFormBody(props: {
           {state().error}
         </text>
       </Show>
-      <Show when={!compact() && editing()}><box flexGrow={1} minHeight={0} /></Show>
-      <Show when={compact()} fallback={
-        <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
-          <text fg={state().submitting ? props.theme.running : props.theme.muted} wrapMode="none" flexShrink={0}>
-            {state().submitting ? "submitting..." : unsupported() ? "esc dismiss" : confirm() ? "enter submit   esc dismiss" : editing() ? "enter save   esc dismiss" : externalField() ? `enter ${action()}   esc dismiss` : props.mono ? "up/down select   enter choose   tab next   esc dismiss" : "↑↓ select   enter choose   tab next   esc dismiss"}
-          </text>
-          <Show when={state().error}><text fg={props.theme.error} wrapMode="none" truncate flexShrink={1}>{state().error}</text></Show>
+      <Show when={!compact() && editing()}>
+        <box flexGrow={1} minHeight={0} />
+      </Show>
+      <Show
+        when={compact()}
+        fallback={
+          <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
+            <text
+              fg={state().submitting ? props.theme.running : props.theme.muted}
+              wrapMode="word"
+              flexShrink={1}
+              minWidth={0}
+            >
+              {state().submitting
+                ? "submitting..."
+                : unsupported()
+                  ? "esc dismiss"
+                  : confirm()
+                    ? "enter submit   esc dismiss"
+                    : editing()
+                      ? "enter save   esc dismiss"
+                      : externalField()
+                        ? `enter ${action()}   esc dismiss`
+                        : props.mono
+                          ? "up/down select   enter choose   tab next   esc dismiss"
+                          : "↑↓ select   enter choose   tab next   esc dismiss"}
+            </text>
+            <Show when={state().error}>
+              <text fg={props.theme.error} wrapMode="none" truncate flexShrink={1}>
+                {state().error}
+              </text>
+            </Show>
+          </box>
+        }
+      >
+        <box flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
+          <Show when={!unsupported()}>
+            <text
+              height={1}
+              fg={state().submitting ? props.theme.running : props.theme.muted}
+              wrapMode="none"
+              flexShrink={0}
+            >
+              {state().submitting ? "submitting..." : `enter ${action()}`}
+            </text>
+          </Show>
+          <Show when={!state().submitting}>
+            <text height={1} fg={props.theme.muted} wrapMode="none" flexShrink={0}>
+              esc dismiss
+            </text>
+          </Show>
+          <Show when={!state().submitting && size().height >= 10}>
+            <text fg={props.theme.muted} wrapMode="word" maxWidth="100%" flexShrink={0}>
+              {size().width >= 56 && rows().length > 0 && !state().editing ? "up/down select  tab next  " : ""}pgup/pgdn
+              scroll
+            </text>
+          </Show>
         </box>
-      }>
-      <box flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
-        <Show when={!unsupported()}>
-          <text
-            height={1}
-            fg={state().submitting ? props.theme.running : props.theme.muted}
-            wrapMode="none"
-            flexShrink={0}
-          >
-            {state().submitting ? "submitting..." : `enter ${action()}`}
-          </text>
-        </Show>
-        <text height={1} fg={props.theme.muted} wrapMode="none" flexShrink={0}>
-          esc dismiss
-        </text>
-        <Show when={size().height >= 10}>
-          <text height={1} fg={props.theme.muted} wrapMode="none" flexShrink={0}>
-            {rows().length > 0 && !state().editing ? "up/down select  tab next  " : ""}pgup/pgdn scroll
-          </text>
-        </Show>
-      </box>
       </Show>
     </box>
   )

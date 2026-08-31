@@ -110,7 +110,7 @@ test.each(
 test.each([
   { width: 20, mono: false, version: "local", expected: `${marker} oc mini vlocal` },
   { width: 20, mono: false, version: preview, expected: `${marker} oc mini` },
-  { width: 24, mono: false, version: preview, expected: `${marker} oc mini · oc-mini-v2` },
+  { width: 24, mono: false, version: preview, expected: `${marker} oc mini · …/oc-mini-v2` },
   { width: 24, mono: true, version: preview, expected: "[O] oc mini - oc-mini-v2" },
   { width: 32, mono: false, version: preview, expected: `${marker} oc mini · ~/src/wt/oc-mini-v2` },
 ])("entry uses spare columns for the location before the version (%o)", async (input) => {
@@ -124,7 +124,7 @@ test.each([
   { width: 6, normal: "oc min", mono: "oc min" },
   { width: 7, normal: "oc mini", mono: "oc mini" },
   { width: 8, normal: "oc mini", mono: "oc mini" },
-  { width: 9, normal: "oc mini", mono: "oc mini" },
+  { width: 9, normal: `${marker} oc mini`, mono: "oc mini" },
   { width: 10, normal: `${marker} oc mini`, mono: "oc mini" },
   { width: 11, normal: `${marker} oc mini`, mono: "[O] oc mini" },
 ])("entry drops the marker before clipping the app name (%o)", async (input) => {

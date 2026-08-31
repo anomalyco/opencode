@@ -32,6 +32,7 @@ import { RunFormBody } from "./footer.form"
 import { createFormBodyState, type FormBodyState } from "./form.shared"
 import { footerStatuslinePolicy } from "./footer.width"
 import { Keymap } from "../context/keymap"
+import type { ClipboardService } from "../context/clipboard"
 import { modelInfo } from "./variant.shared"
 import { monoShortcut } from "./mono"
 import { stringWidth } from "../util/string-width"
@@ -97,6 +98,7 @@ type RunFooterViewProps = {
   mono: boolean
   miniSettings: () => MiniSettings
   history?: () => RunPrompt[]
+  clipboard?: Pick<ClipboardService, "read">
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onFormReply: (input: FormReply) => void | Promise<void>
@@ -387,6 +389,8 @@ export function RunFooterView(props: RunFooterViewProps) {
     statusRows: () => (menu() ? 0 : statusRows()),
     theme,
     mono: () => props.mono,
+    imagePreview: props.tuiConfig.prompt?.image_preview,
+    clipboard: props.clipboard,
     history: props.history,
     queuedPrompts: queue,
     onQueuedPromptSteer: (inboxID) => queuedPromptAction("steer", inboxID),
@@ -753,6 +757,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                             placeholder={composer.placeholder}
                             onSubmit={composer.onSubmit}
                             onKeyDown={composer.onKeyDown}
+                            onPaste={composer.onPaste}
+                            images={composer.images}
+                            layout={composer.layout}
                             onContentChange={composer.onContentChange}
                             onSizeChange={composer.onSizeChange}
                             bind={composer.bind}

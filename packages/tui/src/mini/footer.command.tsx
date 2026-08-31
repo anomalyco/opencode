@@ -1184,10 +1184,9 @@ export function RunModelSelectBody(props: {
       <RunFooterMenu
         theme={props.theme}
         items={() =>
-          controller.query().trim()
-            ? controller
-                .items()
-                .map((item) => (item.current ? item : { ...item, footer: item.providerName, footerTone: undefined }))
+          controller.query().trim() ||
+          (controller.layout().compact && new Set(controller.items().map((item) => item.providerID)).size > 1)
+            ? controller.items().map((item) => ({ ...item, footer: item.providerName, footerTone: undefined }))
             : controller.items()
         }
         selected={controller.menu.selected}
