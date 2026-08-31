@@ -184,13 +184,25 @@ const layer = Layer.effect(
       prompt: string,
       model: unknown,
     ) {
+      const activeDomainRows = yield* db
+        .select({ domain: harness_version.domain_category })
+        .from(harness_version)
+        .where(eq(harness_version.is_active, true))
+        .all()
+        .pipe(Effect.orElseSucceed(() => []))
+
+      const existingDomains = Array.from(new Set(activeDomainRows.map((r) => r.domain).filter(Boolean)))
+      const existingDomainContext = existingDomains.length > 0
+        ? `\n\nExisting Active Domain Niches in Repository:\n${existingDomains.map((d) => `- ${d}`).join("\n")}\nIf the task matches one of these existing domain niches, reuse that exact domain name. Otherwise, create a new semantic snake_case domain niche for the new technical stack.`
+        : ""
+
       const res = yield* LLM.generateObject({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         model:
           model as Parameters<typeof LLM.generateObject>[0]["model"],
 
         system:
-          "You are an Expert Task Classifier and Domain Taxonomy Specialist. Determine if the user request is an actionable task (isTask: true) or a conversation/greeting/explanation (isTask: false). Programming requests are tasks.\n\nWhen isTask is true, classify taskType into a concise, semantic snake_case domain niche describing the primary technical stack or subject (e.g. 'python_coding', 'web_frontend', 'typescript_fullstack', 'systems_backend', 'data_science_ml', 'devops_infra', 'bioinformatics', 'financial_quant', 'cuda_gpu_kernels', etc.).\n\nCRITICAL: Never assign 'general' to language-specific or technical engineering tasks. The 'general' domain is reserved strictly for universal, domain-agnostic meta-coordination where no technical domain applies.",
+          `You are an Expert Task Classifier and Domain Taxonomy Specialist. Determine if the user request is an actionable task (isTask: true) or a conversation/greeting/explanation (isTask: false). Programming requests are tasks.\n\nWhen isTask is true, classify taskType into a concise, semantic snake_case domain niche describing the primary technical stack or subject (e.g. 'python_coding', 'web_frontend', 'typescript_fullstack', 'systems_backend', 'data_science_ml', 'devops_infra', 'bioinformatics', 'financial_quant', 'cuda_gpu_kernels', etc.).${existingDomainContext}\n\nCRITICAL: Never assign 'general' to language-specific or technical engineering tasks. The 'general' domain is reserved strictly for universal, domain-agnostic meta-coordination where no technical domain applies.`,
 
         prompt,
 
