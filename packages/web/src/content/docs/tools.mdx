@@ -288,6 +288,66 @@ Use `websearch` when you need to find information (discovery), and `webfetch` wh
 
 ---
 
+### recall
+
+Search past conversation transcripts semantically to retrieve facts, decisions, and context from previous sessions.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "recall": "allow"
+  }
+}
+```
+
+:::caution
+This is an **experimental** tool. Enable it with the environment variable `OPENCODE_EXPERIMENTAL_TRANSCRIPT_RECALL=true` (and the umbrella `OPENCODE_EXPERIMENTAL=true`).
+:::
+
+Use when the user references something discussed before ("what did we decide about X?", "find where we fixed Y"), or when earlier context from other sessions would help the current task. Queries are natural language; results come from local sessions across projects with relevance scores and source session ids.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `query` | string | Natural language query to search past sessions. Prefer specific phrases over single keywords. |
+| `limit` | number | Maximum results to return (default: 5) |
+
+#### Returns
+
+An array of recall hits sorted by relevance score (cosine similarity, 0–1):
+
+```typescript
+{
+  sessionID: string   // source session id
+  messageID: string // message within that session
+  partID: string    // specific part that matched
+  text: string      // the matched transcript text
+  score: number     // cosine similarity score
+}
+```
+
+#### How it works
+
+The recall index is built on two layers:
+
+1. **Per-part chunks**: each text part in a session is chunked (~1200 chars) and embedded with a deterministic hash provider (256-dim bag-of-character-trigrams). Chunks are indexed incrementally via durable event subscription — no impact on the LLM turn hot path.
+
+2. **Per-session anchors**: session title + compaction summaries are indexed as a single high-precision anchor chunk, giving aggregate queries a fast entry point.
+
+The index persists across restarts via SQLite. On startup it backfills from the part table.
+
+:::tip
+Prefer specific phrases over single keywords. "how did we configure the git hooks" returns better results than "git hooks".
+:::
+
+:::caution
+Results come from local sessions only — no cloud sync. Sessions from other projects are included if they are on the same machine.
+:::
+
+---
+
 ### question
 
 Ask the user questions during execution.
