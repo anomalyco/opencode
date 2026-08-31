@@ -86,11 +86,11 @@ const OpenAIResponsesBody = Schema.Struct({
 })
 export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
-const extension = {
+const adapter = {
   id: ADAPTER,
   name: NAME,
-  lowerHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
-} satisfies OpenResponses.Extension
+  restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
+} satisfies OpenResponses.ProviderAdapter
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
   const native = tool.native?.openai
@@ -125,9 +125,9 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesBody))
 
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
-  const body = yield* OpenResponses.fromRequestWithExtension(
+  const body = yield* OpenResponses.fromRequestWithAdapter(
     LLMRequest.update(request, { tools: [], toolChoice: undefined }),
-    extension,
+    adapter,
   )
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const parallelToolCalls = OpenResponses.resolveParallelToolCalls(request)
@@ -204,7 +204,7 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: OpenResponses.protocol.stream.event,
-    initial: (request) => OpenResponses.initial(request, extension),
+    initial: (request) => OpenResponses.initial(request, adapter),
     step,
     terminal: OpenResponses.terminal,
   },
