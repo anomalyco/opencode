@@ -103,6 +103,7 @@ import {
 import { switchLabel } from "../../util/model"
 import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
 import { stringWidth } from "../../util/string-width"
+import { sessionDescendants } from "../../util/session"
 import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useSessionTabs } from "../../context/session-tabs"
@@ -111,6 +112,7 @@ import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
+import { selectSessionAttention, type SessionAttention } from "./attention"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { useSessionTerminals } from "../../context/session-terminals"
@@ -202,23 +204,29 @@ export function Session(props: {
     setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
   })
   onCleanup(() => setEpilogue())
-  const descendantSessionIDs = createMemo(() => {
-    if (session()?.parentID) return []
-    return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
-  })
-  const permissions = createMemo(() => {
-    if (session()?.parentID) return []
-    return [route.sessionID, ...descendantSessionIDs()].flatMap(
-      (sessionID) => data.session.permission.list(sessionID) ?? [],
-    )
-  })
+  const descendantSessionIDs = createMemo(() =>
+    session() ? sessionDescendants(data.session.list(), route.sessionID).map((item) => item.id) : [],
+  )
+  const permissions = createMemo(() =>
+    [route.sessionID, ...descendantSessionIDs()].flatMap((sessionID) => data.session.permission.list(sessionID) ?? []),
+  )
   const promptedPermissions = createMemo(() => (local.permission.mode === "auto" ? [] : permissions()))
-  const forms = createMemo(() => {
-    const global = data.session.form.list("global", location()) ?? []
-    if (session()?.parentID) return global
-    return [route.sessionID, ...descendantSessionIDs()]
+  const forms = createMemo(() =>
+    [route.sessionID, ...descendantSessionIDs()]
       .flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
-      .concat(global)
+      .concat(data.session.form.list("global", location()) ?? []),
+  )
+  const attention = createMemo(
+    (previous: SessionAttention | undefined) => selectSessionAttention(promptedPermissions(), forms(), previous),
+    undefined,
+  )
+  const requestCount = createMemo(() => promptedPermissions().length + forms().length)
+  const requestPosition = createMemo(() => {
+    const current = attention()
+    if (!current) return 0
+    if (current.type === "permission")
+      return promptedPermissions().findIndex((item) => item.id === current.request.id) + 1
+    return promptedPermissions().length + forms().findIndex((item) => item.id === current.request.id) + 1
   })
   const pendingUsers = createMemo(() =>
     data.session.pending.list(route.sessionID).flatMap((item) => (item.type === "user" ? [item] : [])),
@@ -235,6 +243,7 @@ export function Session(props: {
     if (props.promptMuted && composer.open) setComposer("open", false)
   })
   const disabled = createMemo(() => promptedPermissions().length > 0 || forms().length > 0)
+  const composerVisible = createMemo(() => !disabled() && (composer.open || !!session()?.parentID))
 
   const lastAssistant = createMemo(() => {
     return messages().findLast((x) => x.type === "assistant")
@@ -324,7 +333,11 @@ export function Session(props: {
     on([descendantSessionIDs, () => client.connection.status()], ([sessionIDs, status]) => {
       if (status !== "connected") return
       void Promise.allSettled(
-        sessionIDs.flatMap((sessionID) => [data.session.permission.sync(sessionID), data.session.form.sync(sessionID)]),
+        sessionIDs.flatMap((sessionID) => [
+          data.session.sync(sessionID, { children: true }),
+          data.session.permission.sync(sessionID),
+          data.session.form.sync(sessionID),
+        ]),
       )
     }),
   )
@@ -1440,7 +1453,7 @@ export function Session(props: {
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
-                open={composer.open || (!!session()?.parentID && forms().length === 0)}
+                open={composerVisible()}
                 defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
                 onClose={() => {
                   const parent = session()?.parentID
@@ -1453,22 +1466,31 @@ export function Session(props: {
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
-                <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
-                <Match when={promptedPermissions().length > 0}>
-                  <Show when={promptedPermissions()[0]?.id} keyed>
+                <Match when={composerVisible()}>{null}</Match>
+                <Match when={attention()?.type === "permission"}>
+                  <Show when={attention()?.request.id} keyed>
                     {(_) => {
-                      const request = promptedPermissions()[0]
-                      return request ? (
-                        <PermissionPrompt request={request} directory={session()?.location.directory} />
+                      const current = attention()
+                      return current?.type === "permission" ? (
+                        <PermissionPrompt
+                          request={current.request}
+                          directory={session()?.location.directory}
+                          pending={{ current: requestPosition(), total: requestCount() }}
+                        />
                       ) : null
                     }}
                   </Show>
                 </Match>
-                <Match when={forms().length > 0}>
-                  <Show when={forms()[0]?.id} keyed>
+                <Match when={attention()?.type === "form"}>
+                  <Show when={attention()?.request.id} keyed>
                     {(_) => {
-                      const form = forms()[0]
-                      return form ? <FormPrompt form={form} /> : null
+                      const current = attention()
+                      return current?.type === "form" ? (
+                        <FormPrompt
+                          form={current.request}
+                          pending={{ current: requestPosition(), total: requestCount() }}
+                        />
+                      ) : null
                     }}
                   </Show>
                 </Match>

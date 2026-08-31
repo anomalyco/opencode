@@ -1,4 +1,4 @@
-import type { ModelInfo, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
+import type { ModelInfo, SessionInfo, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { Locale } from "./locale"
 
 type SessionNode = {
@@ -40,6 +40,31 @@ export function sessionFamily<T extends SessionNode>(sessions: readonly T[], ses
   }
 
   return walk(root(current).id, [])
+}
+
+export function sessionDescendants<T extends SessionNode>(sessions: readonly T[], sessionID: string) {
+  const children = new Map<string, T[]>()
+  sessions.forEach((session) => {
+    if (!session.parentID) return
+    const group = children.get(session.parentID)
+    if (group) group.push(session)
+    else children.set(session.parentID, [session])
+  })
+
+  const visited = new Set([sessionID])
+  function walk(parentID: string): T[] {
+    return (children.get(parentID) ?? []).flatMap((session) => {
+      if (visited.has(session.id)) return []
+      visited.add(session.id)
+      return [session, ...walk(session.id)]
+    })
+  }
+
+  return walk(sessionID)
+}
+
+export function subagentLabel(session: Pick<SessionInfo, "agent" | "title">) {
+  return [Locale.titlecase(session.agent ?? "Subagent"), session.title].filter(Boolean).join(" · ")
 }
 
 export function lastAssistantWithUsage(messages: ReadonlyArray<SessionMessageInfo>, boundary?: string) {
