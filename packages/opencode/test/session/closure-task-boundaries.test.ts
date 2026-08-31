@@ -503,7 +503,13 @@ describe("Task closure boundaries (CP-023 K82 and K9)", () => {
   // pre-admission refusals as sanitized notes, the shipped copy discloses the persisted prompt, and
   // `ownLatestUser` adopts it on a later scoped run — so nothing is lost — while a hold would add an
   // indefinite gate-stall surface to core quiescence. This test is what makes that claim checkable.
-  it.instance(
+  // Declared on `background.instance`, NOT `it.instance`: this oracle drives `executeSupplement`
+  // through `task_id`, which only exists when `experimentalBackgroundSubagents` is on. `it.instance`
+  // does not layer that flag, so the test passed only while the developer's shell happened to export
+  // OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS -- proving nothing in a scrubbed environment. The
+  // `background` layer sets the flag explicitly (see `backgroundReplacements`), which makes the
+  // proof independent of shell state.
+  background.instance(
     "refuses a supplement onto a resolved attachment scope as a disclosed note, not a lost prompt (CP-032 R-08)",
     () =>
       Effect.gen(function* () {
