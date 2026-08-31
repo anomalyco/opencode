@@ -1070,7 +1070,10 @@ const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
-      if (input.noReply === true || (message.info as any).isFeedback === true) return message
+      if (input.noReply === true) return message
+      if ((message.info as any).isFeedback === true && (message.info as any).isSatisfied === true) {
+        return message
+      }
       const originalPrompt = input.parts
         .filter((part) => part.type === "text")
         .map((part) => part.text)
@@ -1086,44 +1089,47 @@ const layer = Layer.effect(
       )
 
       // 2. Classify task and run Judge evaluation in background
-      yield* Effect.gen(function* () {
-        const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
-        const prov = yield* provider.getProvider(message.info.model.providerID).pipe(Effect.orElseSucceed(() => undefined))
-        const baseURL = (prov?.options?.baseURL as string | undefined) || undefined
-        const apiKey = (prov?.options?.apiKey as string | undefined) || prov?.key || undefined
-        const judgeModel = yield* Effect.try({
-          try: () => nativeModel({ model: taskModel, baseURL, apiKey }),
-          catch: (error) => error,
-        }).pipe(Effect.option)
-        if (Option.isNone(judgeModel)) return
-        const classification = yield* judge.classify(originalPrompt, judgeModel.value).pipe(
-          Effect.orElseSucceed(() => ({
-            isTask: true,
-            taskType: "general",
-            taskSubType: undefined,
-            taskSubTypes: ["general"],
-            summary: originalPrompt,
-          })),
+      // Only register a new task if this is NOT an iterative feedback message
+      if (!(message.info as any).isFeedback) {
+        yield* Effect.gen(function* () {
+          const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
+          const prov = yield* provider.getProvider(message.info.model.providerID).pipe(Effect.orElseSucceed(() => undefined))
+          const baseURL = (prov?.options?.baseURL as string | undefined) || undefined
+          const apiKey = (prov?.options?.apiKey as string | undefined) || prov?.key || undefined
+          const judgeModel = yield* Effect.try({
+            try: () => nativeModel({ model: taskModel, baseURL, apiKey }),
+            catch: (error) => error,
+          }).pipe(Effect.option)
+          if (Option.isNone(judgeModel)) return
+          const classification = yield* judge.classify(originalPrompt, judgeModel.value).pipe(
+            Effect.orElseSucceed(() => ({
+              isTask: true,
+              taskType: "general",
+              taskSubType: undefined,
+              taskSubTypes: ["general"],
+              summary: originalPrompt,
+            })),
+          )
+          if (!classification.isTask) return
+          const taskID = yield* judge.registerTask({
+            prompt: originalPrompt,
+            taskType: classification.taskType || "general",
+            taskSubType: classification.taskSubType,
+            taskSubTypes: classification.taskSubTypes,
+            taskModel: `${message.info.model.providerID}/${message.info.model.modelID}`,
+            sessionID: input.sessionID,
+          })
+          yield* judge.evaluate(
+            { taskID, sessionID: input.sessionID, originalPrompt },
+            judgeModel.value,
+          )
+        }).pipe(
+          Effect.tapError((error) => Effect.logError("session task evaluation failed", { error })),
+          Effect.orElseSucceed(() => undefined),
+          Effect.orDie,
+          Effect.forkIn(scope),
         )
-        if (!classification.isTask) return
-        const taskID = yield* judge.registerTask({
-          prompt: originalPrompt,
-          taskType: classification.taskType || "general",
-          taskSubType: classification.taskSubType,
-          taskSubTypes: classification.taskSubTypes,
-          taskModel: `${message.info.model.providerID}/${message.info.model.modelID}`,
-          sessionID: input.sessionID,
-        })
-        yield* judge.evaluate(
-          { taskID, sessionID: input.sessionID, originalPrompt },
-          judgeModel.value,
-        )
-      }).pipe(
-        Effect.tapError((error) => Effect.logError("session task evaluation failed", { error })),
-        Effect.orElseSucceed(() => undefined),
-        Effect.orDie,
-        Effect.forkIn(scope),
-      )
+      }
       return yield* execution
     })
 

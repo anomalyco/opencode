@@ -43,6 +43,8 @@ export const EvolvedStrategy = Schema.Struct({
   taskCategory: Schema.String,
   refinedSystemPrompt: Schema.String,
   extractedRules: ExtractedRulesSchema,
+  workflowHops: Schema.optional(Schema.Array(Schema.String)),
+  communicationContracts: Schema.optional(Schema.String),
   temperature: Schema.optional(FlexibleNumber),
   maxOutputTokens: Schema.optional(FlexibleNumber),
   modelOptions: Schema.optional(Schema.String),
@@ -135,7 +137,7 @@ Requested Changes: ${fb.changes_requested ?? "None"}
           typeof LLM.generateObject
         >[0]["model"],
         system:
-          "You are an Expert Prompt Engineer and Harness Strategist (Sakana AI RHI Meta-Optimizer). Analyze the task execution, user feedback, flaws, and existing rules to produce an evolved system prompt and a consolidated set of rules.\n\nCRITICAL PRUNING DIRECTIVES:\n1. Consolidate and merge overlapping lessons into a maximum of 7-10 high-impact, non-conflicting rules.\n2. Discard redundant, obsolete, or overly narrow one-off rules.\n3. Ensure temperature stays bounded between 0.0 and 1.0.\n4. extractedRules MUST be an array of strings (e.g. [\"Rule 1\", \"Rule 2\"]).\n5. STRICT DOMAIN TAXONOMY: Set taskCategory to the specific domain niche ('python_coding', 'web_frontend', 'typescript_fullstack', 'systems_backend', 'data_science_ml', 'devops_infra'). Never use 'general' for programming or domain-specific tasks. The 'general' domain is reserved strictly for universal meta-priors.",
+          "You are an Expert Prompt Engineer and Harness Strategist (Sakana AI RHI Meta-Optimizer). Analyze the task execution, user feedback, flaws, and existing rules to produce an evolved system prompt, workflow hops, communication contracts, and a consolidated set of rules.\n\nCRITICAL RHI DIRECTIVES (Sakana AI RHI Formulation):\n1. Consolidate and merge overlapping lessons into a maximum of 5-7 high-impact, non-conflicting rules.\n2. Discard redundant, obsolete, or overly narrow one-off rules.\n3. Ensure temperature stays bounded between 0.0 and 1.0.\n4. extractedRules MUST be an array of strings (e.g. [\"Rule 1\", \"Rule 2\"]).\n5. DOMAIN NICHE: Set taskCategory to the semantic domain niche of the task (e.g. 'python_coding', 'web_frontend', 'typescript_fullstack', 'systems_backend', 'data_science_ml', 'devops_infra', 'bioinformatics', 'financial_quant', etc.). Never use 'general' for engineering tasks.\n6. WORKFLOW HOPS: In workflowHops, specify the sequence of structured execution hops (e.g. ['decompose', 'implement', 'verify_tests', 'critique', 'reconcile']).\n7. COMMUNICATION CONTRACT: In communicationContracts, specify the sparse output format/schema expected from subtasks to prevent redundant context propagation.",
         prompt: `
 Task Domain: ${task.task_type || "general"}
 
@@ -203,6 +205,24 @@ ${task.task_error ?? "None"}
         )
       }
 
+      const modelOptionsObj: Record<string, unknown> = {}
+      if (strategy.modelOptions) {
+        try {
+          Object.assign(modelOptionsObj, JSON.parse(strategy.modelOptions))
+        } catch {
+          modelOptionsObj.raw = strategy.modelOptions
+        }
+      }
+      if (strategy.workflowHops?.length) {
+        modelOptionsObj.workflowHops = strategy.workflowHops
+      }
+      if (strategy.communicationContracts) {
+        modelOptionsObj.communicationContracts = strategy.communicationContracts
+      }
+      const modelOptionsSerialized = Object.keys(modelOptionsObj).length
+        ? JSON.stringify(modelOptionsObj)
+        : strategy.modelOptions
+
       const candidateVersionID =
         yield* versionSvc.proposeCandidate({
           domainCategory:
@@ -215,7 +235,7 @@ ${task.task_error ?? "None"}
           extractedRules: strategy.extractedRules.slice(0, 5),
           temperature: strategy.temperature,
           maxOutputTokens: strategy.maxOutputTokens,
-          modelOptions: strategy.modelOptions,
+          modelOptions: modelOptionsSerialized,
           toolOverrides: strategy.toolOverrides,
           parentVersionID: activeVer?.versionID,
         })

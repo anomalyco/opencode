@@ -165,6 +165,29 @@ const layer = Layer.effect(
               )
             }
 
+            const modelOpts = parseRecord(currentVersion.modelOptions)
+            const hops = Array.isArray(modelOpts.workflowHops)
+              ? (modelOpts.workflowHops as unknown[])
+                  .filter((h): h is string => typeof h === "string")
+                  .map((h, i) => `Hop ${i + 1}: ${h}`)
+                  .join(" -> ")
+              : ""
+
+            if (hops) {
+              output.system.push(
+                `WORKFLOW EXECUTION HOPS (${currentVersion.domainCategory}):\n${hops}`,
+              )
+            }
+
+            if (
+              typeof modelOpts.communicationContracts === "string" &&
+              modelOpts.communicationContracts.trim()
+            ) {
+              output.system.push(
+                `COMMUNICATION CONTRACT (${currentVersion.domainCategory}):\n${modelOpts.communicationContracts}`,
+              )
+            }
+
             const rules = Array.isArray(
               currentVersion.extractedRules,
             )
@@ -376,6 +399,8 @@ const layer = Layer.effect(
                 if (output && output.message) {
                   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
                   ;(output.message as any).isFeedback = true
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                  ;(output.message as any).isSatisfied = isYes
                 }
               } else {
                 // Normal user message: check if it is a new task
