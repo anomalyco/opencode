@@ -37,6 +37,25 @@ export type SequenceNote = { readonly note: string }
 /** What a run returns: a detected answer, a notice, or nothing — never a rendered string. */
 export type SequenceOutcome = Detected | SequenceNote | undefined
 
+/**
+ * Per-run announcement capability, provided to each run effect by the registry's own fork.
+ *
+ * A scoped run announces once it has detected its turn result and BEFORE it awaits return
+ * eligibility, so the registry knows a decision is outstanding and withholds later sequences'
+ * answers from delivery until this one settles. Without it, a later sequence that resolves first
+ * would deliver ahead of an earlier sequence still parked on its attachment scope.
+ *
+ * It takes no argument: the capability closes over the announcing run's own ledger AND its own
+ * sequence, so a run belonging to a replaced lifetime can only ever mark its own ledger, never a
+ * replacement's, and it cannot name a sequence other than its own. Announcing is advisory and
+ * self-limiting — a run that never announces is simply never withheld for, `settle` clears the
+ * mark in the same modification that files, and the fork's finalizer covers every path that
+ * cannot reach `settle`, so a stale announcement can never stall delivery.
+ */
+export class Announce extends Context.Service<Announce, () => Effect.Effect<void>>()(
+  "@opencode/BackgroundJob/Announce",
+) {}
+
 /** One filed answer at a position. */
 export type Answer = { readonly index: number; readonly detected: DetectedAnswer; readonly notes: readonly string[] }
 
@@ -80,15 +99,41 @@ export type Info = {
  */
 export namespace AnswerLog {
   export type Key = { readonly position: string; readonly at: number }
-  export type Entry = { readonly position: string; readonly at: number; readonly answer: Answer }
+  /**
+   * `sequence` is the accepted sequence that filed this entry. It exists only so `Observe` can
+   * withhold a later sequence's answer while an earlier one is still unresolved, and it is never
+   * an answer-membership key: the position remains the sole filing guard.
+   *
+   * The floor is keyed on SEQUENCE rather than on the `(at, position)` chronology key the removed
+   * mechanism used, because return eligibility can select a controlling assistant OLDER than the
+   * run-final one it was detected from (a degraded resolution falls through to the retained
+   * fallback). The announced key and the filed key are then different messages, so a chronology
+   * floor compares the wrong thing. A sequence is fixed at admission and cannot drift.
+   */
+  export type Entry = {
+    readonly position: string
+    readonly at: number
+    readonly sequence: number
+    readonly answer: Answer
+  }
   export type State = { readonly baseIndex: number; readonly entries: readonly Entry[] }
 
   export type Action =
-    | { readonly _tag: "Observe"; readonly after: number }
+    | {
+        readonly _tag: "Observe"
+        readonly after: number
+        /**
+         * The lowest accepted sequence that has announced an unresolved eligibility decision.
+         * Entries filed by a LATER sequence are withheld until it clears. Absent means nothing is
+         * unresolved and every retained entry is deliverable.
+         */
+        readonly floor?: number
+      }
     | {
         readonly _tag: "Publish"
         readonly position: string
         readonly at: number
+        readonly sequence: number
         readonly detected: DetectedAnswer
         readonly notes: readonly string[]
       }
@@ -110,6 +155,14 @@ export namespace AnswerLog {
       const offset = clamped - state.baseIndex
       if (offset < state.entries.length) {
         const entry = state.entries[offset]
+        // Withhold while an EARLIER accepted sequence has announced but not resolved its
+        // eligibility: delivering this would put a later sequence's answer ahead of one whose
+        // decision is still outstanding. `>` rather than `>=` because a sequence that filed has
+        // already cleared its own announcement in the same `settle` modification, so the floor can
+        // never name the sequence that produced the entry under inspection.
+        if (action.floor !== undefined && entry.sequence > action.floor) {
+          return { _tag: "miss", state }
+        }
         // Returning answer N advances baseIndex to N+1 — the only release. Entries at or below the
         // observed offset leave the queue.
         return {
@@ -130,11 +183,13 @@ export namespace AnswerLog {
       {
         position: action.position,
         at: action.at,
+        sequence: action.sequence,
         answer: { index: state.baseIndex + at, detected: action.detected, notes: action.notes },
       },
       ...state.entries.slice(at).map((entry, i) => ({
         position: entry.position,
         at: entry.at,
+        sequence: entry.sequence,
         answer: { ...entry.answer, index: state.baseIndex + at + i + 1 },
       })),
     ]
@@ -294,6 +349,13 @@ type Handoff = {
 type Buffered = {
   readonly position: string
   readonly at: number
+  /**
+   * The accepted sequence that filed this answer, carried so a later promotion republishes it into
+   * the log under its real sequence. Without it the promoted drain — an observer-visible route —
+   * would have to invent one, and the delivery floor would order promoted answers against a
+   * fiction.
+   */
+  readonly sequence: number
   readonly detected: DetectedAnswer
   readonly notes: readonly string[]
   /**
@@ -320,6 +382,18 @@ type LifetimeLedger = {
   /** Position identities already filed — the run-final assistant message ids. */
   readonly filed: Set<string>
   buffered: Buffered[]
+  /**
+   * Accepted sequences that announced an eligibility decision they have not yet settled. The log
+   * withholds any entry filed by a LATER sequence, so a live observer cannot deliver a later
+   * answer ahead of an earlier one whose decision is still outstanding.
+   *
+   * Cleared by that sequence's own `settle` — in the same modification that files, so a floor can
+   * never outlive the filing it guards — and, as a net for the paths that cannot reach `settle`
+   * (interruption, a replaced lifetime), by the fork's finalizer. Authoritative terminalization
+   * and `cancelOn` clear the whole set, because nothing can file past the status guard and
+   * withholding for an outstanding decision would then stall retained-answer delivery forever.
+   */
+  readonly announced: Set<number>
   /** Replaced on each log append; the old one is completed after the lock by its publisher. */
   gate: Deferred.Deferred<void>
   /** Undelivered notice lines, drained into the next published answer or into the terminal Info. */
@@ -446,7 +520,8 @@ export type StartInput = {
    * a second filed answer that the blocked caller will not receive.
    */
   outstanding?: { readonly observer: string; readonly inline: string }
-  run: Effect.Effect<SequenceOutcome, unknown>
+  /** May require the announcement capability; the registry's fork provides it. */
+  run: Effect.Effect<SequenceOutcome, unknown, Announce>
   /**
    * The execution admission this start rests on, relayed to the binder for sequence zero.
    *
@@ -465,7 +540,8 @@ export type StartExactResult = ArmOutcome
 
 export type ExtendInput = {
   id: string
-  run: Effect.Effect<SequenceOutcome, unknown>
+  /** May require the announcement capability; the registry's fork provides it. */
+  run: Effect.Effect<SequenceOutcome, unknown, Announce>
   /**
    * Relayed to the binder for the reserved sequence. REQUIRED for the reason `StartInput.admission`
    * gives, and with one addition: an extension is a SEPARATE admission, never a reuse of the one
@@ -477,7 +553,8 @@ export type ExtendInput = {
 
 export type ExtendExactInput = {
   lifetime: Lifetime
-  run: Effect.Effect<SequenceOutcome, unknown>
+  /** May require the announcement capability; the registry's fork provides it. */
+  run: Effect.Effect<SequenceOutcome, unknown, Announce>
   /** Relayed to the binder for the reserved sequence. REQUIRED - see `ExtendInput.admission`. */
   admission: Admission
 }
@@ -622,7 +699,7 @@ export const makeWith = (binder: Binder) =>
     })
 
     const settle = Effect.fn("BackgroundJob.settle")(
-      function* (id: string, token: object, exit: Exit.Exit<SequenceOutcome, unknown>) {
+      function* (id: string, token: object, sequence: number, exit: Exit.Exit<SequenceOutcome, unknown>) {
         const completed_at = yield* Clock.currentTimeMillis
         // Publishing swaps the ledger gate; the fresh gate is made before the lock so the committed
         // modification stays pure.
@@ -635,12 +712,20 @@ export const makeWith = (binder: Binder) =>
             const admissibility = settleAdmissibility({ token: job.token, status: job.info.status }, token)
             if (admissibility === "foreign_token") return [{}, jobs]
             if (admissibility === "not_running") {
-              // A late settle against a terminalized lifetime files nothing.
+              // A late settle against a terminalized lifetime files nothing, but its outstanding
+              // announcement must still clear so retained entries stay deliverable. The fork's
+              // finalizer is the net for the replaced-lifetime arm, where this ledger is no longer
+              // reachable from the map.
+              job.ledger.announced.delete(sequence)
               return [{ info: snapshot(job) }, jobs]
             }
             const ledger = job.ledger
             const pending = job.pending - 1
-            // The gate swaps on every settle so parked observers re-evaluate the log.
+            // This sequence's eligibility decision is no longer outstanding: its filing, if any,
+            // commits in this same modification, so the announcement clears FIRST and a floor can
+            // never outlive the filing it guards. The gate swaps on every settle so parked
+            // observers re-evaluate both the log and the floor.
+            ledger.announced.delete(sequence)
             const gate: Deferred.Deferred<void> | undefined = ledger.gate
             ledger.gate = freshGate
 
@@ -663,6 +748,7 @@ export const makeWith = (binder: Binder) =>
                     _tag: "Publish",
                     position: filing.position,
                     at: filing.at,
+                    sequence,
                     detected: filing.detected,
                     notes,
                   })
@@ -681,6 +767,7 @@ export const makeWith = (binder: Binder) =>
                     {
                       position: filing.position,
                       at: filing.at,
+                      sequence,
                       detected: filing.detected,
                       notes: [],
                       outstandingAtCompletion: pending > 0,
@@ -712,8 +799,11 @@ export const makeWith = (binder: Binder) =>
             if (retainsSecond && ledger.outstanding) ledger.notes.push(ledger.outstanding.inline)
             const notes = ledger.notes.splice(0)
             // Filed identities are retained only until every accepted run settles, and filings are
-            // impossible past the status guard, so the identity set clears here.
+            // impossible past the status guard, so both identity sets clear here. Clearing the
+            // announcements also unblocks the floor: an outstanding decision can never file after
+            // this commit, so withholding for it would stall retained-answer delivery forever.
             ledger.filed.clear()
+            ledger.announced.clear()
             const next = {
               ...job,
               onPromote: undefined,
@@ -765,13 +855,43 @@ export const makeWith = (binder: Binder) =>
       scope: Scope.Scope,
       id: string,
       token: object,
-      run: Effect.Effect<SequenceOutcome, unknown>,
+      sequence: number,
+      ledger: LifetimeLedger,
+      run: Effect.Effect<SequenceOutcome, unknown, Announce>,
     ) {
+      // Closed over this run's own ledger AND its own sequence, so a run belonging to a replaced
+      // lifetime can only ever mark its own floor and can never name another sequence. Announcing
+      // is advisory: it withholds later sequences' answers until this run settles, `settle` clears
+      // it in the same modification that files, and the finalizer below covers every path that
+      // cannot reach `settle` — a replaced lifetime, or interruption before settling — so a stale
+      // announcement can never stall delivery.
+      const announce = () =>
+        SynchronizedRef.update(state.jobs, (jobs) => {
+          if (ledger.state !== "terminal") ledger.announced.add(sequence)
+          return jobs
+        })
+      const clearAnnounce = Effect.gen(function* () {
+        const freshGate = yield* Deferred.make<void>()
+        const gate = yield* SynchronizedRef.modify(
+          state.jobs,
+          (jobs): readonly [Deferred.Deferred<void> | undefined, Map<string, Active>] => {
+            if (!ledger.announced.delete(sequence)) return [undefined, jobs]
+            // Clearing an announcement can unblock the floor, so swap the gate to make parked
+            // observers re-evaluate. A spurious wake costs only one full retry.
+            const old = ledger.gate
+            ledger.gate = freshGate
+            return [old, jobs]
+          },
+        )
+        if (gate) yield* Deferred.succeed(gate, undefined).pipe(Effect.ignore)
+      })
       return yield* run.pipe(
+        Effect.provideService(Announce, announce),
         Effect.matchCauseEffect({
-          onSuccess: (outcome) => settle(id, token, Exit.succeed(outcome)),
-          onFailure: (cause) => settle(id, token, Exit.failCause(cause)),
+          onSuccess: (outcome) => settle(id, token, sequence, Exit.succeed(outcome)),
+          onFailure: (cause) => settle(id, token, sequence, Exit.failCause(cause)),
         }),
+        Effect.ensuring(clearAnnounce),
         Effect.asVoid,
         Effect.forkIn(scope, { startImmediately: true }),
       )
@@ -902,6 +1022,7 @@ export const makeWith = (binder: Binder) =>
                 log: AnswerLog.empty,
                 filed: new Set(),
                 buffered: [],
+                announced: new Set(),
                 gate,
                 notes: [],
                 ...(input.outstanding ? { outstanding: input.outstanding } : {}),
@@ -980,7 +1101,7 @@ export const makeWith = (binder: Binder) =>
 
           if (!armed) return yield* restore(Deferred.await(registration.arm))
 
-          yield* fork(registration.scope, id, registration.token, restore(input.run))
+          yield* fork(registration.scope, id, registration.token, 0, registration.ledger, restore(input.run))
           const outcome: ArmOutcome = { info: armed.info, lifetime, handle: armed.handle }
           yield* Deferred.succeed(registration.arm, outcome).pipe(Effect.ignore)
           return outcome
@@ -1078,12 +1199,16 @@ export const makeWith = (binder: Binder) =>
                     // `settle` keep an interrupt-only exit `cancelled` and a binder defect
                     // `error` with its original cause, instead of laundering either into
                     // success and reporting a fault as a clean finish.
-                    settle(input.lifetime.id, result.token, Exit.failCause(exit.cause)).pipe(Effect.ignore)
+                    settle(input.lifetime.id, result.token, result.sequence, Exit.failCause(exit.cause)).pipe(
+                      Effect.ignore,
+                    )
                   : exit.value.kind === "cancelled"
                     ? // A decision-derived cancellation has no Effect-level cause to forward,
                       // so it is expressed as the interrupts-only cause `settle` already reads
                       // as `cancelled` — no new mapping and no second terminal winner.
-                      settle(input.lifetime.id, result.token, Exit.failCause(Cause.interrupt())).pipe(Effect.ignore)
+                      settle(input.lifetime.id, result.token, result.sequence, Exit.failCause(Cause.interrupt())).pipe(
+                      Effect.ignore,
+                    )
                     : // This reserved coordinate lost admission, so nothing will ever run for it.
                   // Returning `pending` alone left the lifetime `armed`/`running` at `pending: 0`
                   // with nothing remaining to settle it whenever the owner sequence had already
@@ -1102,7 +1227,7 @@ export const makeWith = (binder: Binder) =>
                   // refusal `not_running` — each a no-op. With other sequences still registered,
                   // settle's `pending > 0` branch keeps the lifetime alive exactly as the bare
                   // decrement did.
-                  settle(input.lifetime.id, result.token, Exit.succeed(undefined)).pipe(Effect.ignore),
+                  settle(input.lifetime.id, result.token, result.sequence, Exit.succeed(undefined)).pipe(Effect.ignore),
             ),
           )
 
@@ -1111,7 +1236,7 @@ export const makeWith = (binder: Binder) =>
           // An accepted supplemental run registers and runs without waiting for any previous run's
           // tail: the serial hold is gone, so several runs on one lifetime can be in flight at once
           // and their answers are ordered by position at delivery rather than by execution.
-          yield* fork(result.scope, input.lifetime.id, result.token, restore(input.run))
+          yield* fork(result.scope, input.lifetime.id, result.token, result.sequence, result.ledger, restore(input.run))
           return { extended: true as const, sequence: result.sequence, handle: accepted.handle }
         }),
       )
@@ -1218,6 +1343,7 @@ export const makeWith = (binder: Binder) =>
                 _tag: "Publish",
                 position: entry.position,
                 at: entry.at,
+                sequence: entry.sequence,
                 detected: entry.detected,
                 notes: drainedNotes,
               })
@@ -1278,7 +1404,10 @@ export const makeWith = (binder: Binder) =>
         // state clears at the terminal boundary, because filings are impossible past the status
         // guard.
         const notes = job.ledger.notes.splice(0)
+        // Identity state clears at the terminal boundary: filings are impossible past the status
+        // guard, and an outstanding announcement must not withhold retained-answer delivery.
         job.ledger.filed.clear()
+        job.ledger.announced.clear()
         const next: Active = {
           ...job,
           onPromote: undefined,
@@ -1362,9 +1491,20 @@ export const makeWith = (binder: Binder) =>
             const binding = bindings.get(input.handle)
             if (!binding) return [{}, jobs]
             const ledger = binding.ledger
+            // The floor is the lowest sequence still holding an unresolved eligibility decision.
+            // Entries filed by a LATER sequence are withheld until it clears. No already-filed
+            // check is needed — unlike the removed chronology-keyed floor, which had to skip
+            // announcements whose position had since been filed: `settle` clears an announcement
+            // in the same modification that files, so an announced sequence is by construction one
+            // that has not filed. That is why the position set remains the only membership read.
+            let floor: number | undefined
+            for (const sequence of ledger.announced) {
+              if (floor === undefined || sequence < floor) floor = sequence
+            }
             const observed = AnswerLog.transition(ledger.log, {
               _tag: "Observe",
               after: input.after,
+              ...(floor !== undefined ? { floor } : {}),
             })
             if (observed._tag === "answer") {
               ledger.log = observed.state

@@ -8,6 +8,7 @@ import { BackgroundJobBinder } from "./binder"
 export {
   Service,
   AnswerLog,
+  Announce,
   type Admission,
   type Answer,
   type ArmPermit,

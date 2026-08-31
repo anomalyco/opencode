@@ -37,8 +37,22 @@ const answered = (position: string, at: number, detected: unknown = position) =>
   ({ position, at, detected }) satisfies BackgroundJob.Detected
 
 describe("BackgroundJob.AnswerLog", () => {
-  const publish = (state: BackgroundJob.AnswerLog.State, position: string, at: number) =>
-    BackgroundJob.AnswerLog.transition(state, { _tag: "Publish", position, at, detected: position, notes: [] })
+  const publish = (state: BackgroundJob.AnswerLog.State, position: string, at: number, sequence = 0) =>
+    BackgroundJob.AnswerLog.transition(state, {
+      _tag: "Publish",
+      position,
+      at,
+      sequence,
+      detected: position,
+      notes: [],
+    })
+
+  const observe = (state: BackgroundJob.AnswerLog.State, after: number, floor?: number) =>
+    BackgroundJob.AnswerLog.transition(state, {
+      _tag: "Observe",
+      after,
+      ...(floor !== undefined ? { floor } : {}),
+    })
 
   test("orders by creation time, not by the order filings arrive", () => {
     const later = publish(BackgroundJob.AnswerLog.empty, "m2", 200)
@@ -63,6 +77,51 @@ describe("BackgroundJob.AnswerLog", () => {
     const wrapped = publish(BackgroundJob.AnswerLog.empty, "aaa_wrapped", 500)
     const older = publish(wrapped.state, "zzz_older", 100)
     expect(older.state.entries.map((entry) => entry.position)).toEqual(["zzz_older", "aaa_wrapped"])
+  })
+
+  test("the delivery floor withholds a later sequence and releases an earlier one (CP-032 R-06)", () => {
+    // Sequence 1 is parked at eligibility; 0 and 2 have filed.
+    const first = publish(BackgroundJob.AnswerLog.empty, "m0", 100, 0)
+    const second = publish(first.state, "m2", 200, 2)
+
+    // The earlier sequence still delivers: a parked LATER sequence must not stall answers that
+    // precede it, or one indefinitely parked run would withhold the whole log.
+    const early = observe(second.state, 0, 1)
+    expect(early._tag).toBe("answer")
+    if (early._tag !== "answer") return
+    expect(early.answer.detected).toBe("m0")
+
+    // The later sequence is withheld while 1 remains unresolved.
+    expect(observe(early.state, 1, 1)._tag).toBe("miss")
+
+    // Clearing the announcement releases it.
+    const released = observe(early.state, 1)
+    expect(released._tag).toBe("answer")
+    if (released._tag !== "answer") return
+    expect(released.answer.detected).toBe("m2")
+  })
+
+  test("the floor is keyed on sequence, so an older controlling assistant is still withheld", () => {
+    // THE REASON THE RESTORED FLOOR IS SEQUENCE-KEYED RATHER THAN CHRONOLOGY-KEYED.
+    //
+    // Return eligibility can select a controlling assistant OLDER than the run-final one it was
+    // detected from: a degraded resolution falls through to the retained fallback. Sequence 1
+    // therefore files at t=100 while sequence 0 — which has not filed at all — is still parked.
+    // A chronology floor cannot express this, because the unresolved sequence has no filed key to
+    // compare against. A sequence is fixed at admission, so it can.
+    const filed = publish(BackgroundJob.AnswerLog.empty, "m_old", 100, 1)
+    expect(observe(filed.state, 0, 0)._tag).toBe("miss")
+
+    const released = observe(filed.state, 0)
+    expect(released._tag).toBe("answer")
+    if (released._tag !== "answer") return
+    expect(released.answer.detected).toBe("m_old")
+  })
+
+  test("an absent floor delivers every retained entry", () => {
+    const only = publish(BackgroundJob.AnswerLog.empty, "m1", 100, 7)
+    const delivered = observe(only.state, 0)
+    expect(delivered._tag).toBe("answer")
   })
 
   test("observation is the only release, and it advances the base index", () => {
@@ -1688,7 +1747,7 @@ describe("BackgroundJob", () => {
     }).pipe(Effect.provide(jobsLayer)),
   )
 
-  it.live("keeps no identity machinery beyond the filing guard (T-41)", () =>
+  it.live("keeps one answer-membership guard and exact sequence ordering identity (T-41)", () =>
     Effect.sync(() => {
       const source = readFileSync(new URL("../src/background-job.ts", import.meta.url), "utf8")
       // R-05: FILING is guarded by exactly one membership check, on the position's
@@ -1701,11 +1760,16 @@ describe("BackgroundJob", () => {
       const settleRegion = source.slice(settleStart, settleEnd)
       const filingGuards = settleRegion.match(/ledger\.filed\.has\(/g) ?? []
       expect(filingGuards).toHaveLength(1)
-      // Whole-file census: the filing guard is now the ONLY `filed.has` read in the module.
-      // It was 2 while OBL-1's delivery-floor filter existed in `waitAnswer`; that ordering
-      // machinery was removed once the inversion it guarded was shown to be unconstructible
-      // in production (see OBL-1 in the CP). If this count rises, identity state has grown a
-      // second reader and R-05's single-guard property needs re-establishing.
+      // Whole-file census: the filing guard is the ONLY `filed.has` read in the module, and it
+      // stays that way even though CP-032 RESTORED the delivery floor.
+      //
+      // It was 2 while the original chronology-keyed floor existed, because that floor had to skip
+      // announcements whose position had since been filed. CP-032's floor is keyed on SEQUENCE, and
+      // `settle` clears an announcement in the same modification that files — so an announced
+      // sequence is by construction one that has not filed, and the floor needs no membership read
+      // at all. This count staying at 1 is therefore an independent check on the floor's KEY, not
+      // merely on R-05: if it rises, either identity state grew a second reader or the floor
+      // regressed to chronology keying.
       const everywhere = source.match(/ledger\.filed\.has\(/g) ?? []
       expect(everywhere).toHaveLength(1)
       // No comparison of answer payloads anywhere in the delivery path.
@@ -1719,6 +1783,28 @@ describe("BackgroundJob", () => {
       expect(planted.match(/\.detected\s*===|\.detected\s*!==/g)).toHaveLength(1)
       const plantedGuard = "if (ledger.filed.has(x)) { } else if (ledger.filed.has(y)) { }"
       expect(plantedGuard.match(/ledger\.filed\.has\(/g)).toHaveLength(2)
+
+      // PRESENCE census (CP-032 Passage AK). The absence half above proves no answer-CONTENT
+      // identity exists; this half proves the exact sequence ORDERING identity does. The two are
+      // different kinds of identity and T-41 has to distinguish them, or restoring the floor would
+      // read as the very machinery R-05 forbids.
+      //
+      // Sequence-keyed, not chronology-keyed — the property that keeps `filed.has` at 1 above.
+      expect(source.includes("readonly announced: Set<number>")).toBe(true)
+      expect(source.includes("readonly floor?: number")).toBe(true)
+      expect(source.includes("entry.sequence > action.floor")).toBe(true)
+      // Clear authority, by site. Exact-sequence clears: `settle`'s `not_running` arm, `settle`'s
+      // main arm, and the fork finalizer that nets interruption and replaced lifetimes.
+      const exactClears = source.match(/announced\.delete\(sequence\)/g) ?? []
+      expect(exactClears).toHaveLength(3)
+      // Ledger-wide clears, where nothing can file afterwards: `settle`'s terminalization and
+      // `cancelOn`. A floor surviving either would stall retained-answer delivery forever.
+      const ledgerClears = source.match(/announced\.clear\(\)/g) ?? []
+      expect(ledgerClears).toHaveLength(2)
+      // Positive controls for the presence detectors, so a silent removal cannot pass as a match.
+      const plantedClear = "ledger.announced.delete(sequence); job.ledger.announced.delete(sequence)"
+      expect(plantedClear.match(/announced\.delete\(sequence\)/g)).toHaveLength(2)
+      expect("x.announced.clear()".match(/announced\.clear\(\)/g)).toHaveLength(1)
     }),
   )
 })
