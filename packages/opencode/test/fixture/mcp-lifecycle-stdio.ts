@@ -1,6 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { once } from "node:events"
 
 if (process.argv.includes("--hang")) {
   const pidFile = process.env.MCP_LIFECYCLE_PID_FILE
@@ -19,8 +20,22 @@ server.setRequestHandler(ListToolsRequestSchema, () =>
         description: process.cwd(),
         inputSchema: { type: "object", properties: {} },
       },
+      ...(process.argv.includes("--stderr-flood")
+        ? [
+            {
+              name: "stderr_flood",
+              inputSchema: { type: "object" },
+            },
+          ]
+        : []),
     ],
   }),
 )
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params.name !== "stderr_flood") throw new Error(`Unknown tool: ${request.params.name}`)
+  if (!process.stderr.write("x".repeat(1024 * 1024))) await once(process.stderr, "drain")
+  return { content: [{ type: "text", text: "ok" }] }
+})
 
 await server.connect(new StdioServerTransport())

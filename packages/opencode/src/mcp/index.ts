@@ -355,6 +355,9 @@ const layer = Layer.effect(
           ...mcp.environment,
         },
       })
+      // Piped stderr uses an SDK PassThrough that blocks verbose MCP servers
+      // once its buffer fills unless the caller consumes it.
+      transport.stderr?.on("data", () => {})
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       return yield* connectTransport(transport, connectTimeout).pipe(
