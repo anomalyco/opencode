@@ -385,7 +385,7 @@ export const TaskTool = Tool.define(
           // refusal, because unlike the admission boundary this run has already produced a genuine
           // answer: refusing here would discard it. Truthful too — a resolved scope accepts no new
           // attachments, so this turn has no outstanding work on it to wait for.
-          if (!invocation || invocation.current().resolved) {
+          if (!invocation || invocation.resolved()) {
             return toDetected({ type: "evidence", fallback: result, degraded: false }, result)
           }
           const announce = yield* BackgroundJob.Announce

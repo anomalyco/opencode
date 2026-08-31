@@ -54,6 +54,20 @@ export interface Scope extends AttachmentContract.Scope {
    * recoverable admission failure and is deliberately unchanged.
    */
   readonly own: (messageID: MessageID) => Effect.Effect<boolean>
+  /**
+   * This scope has already published its return-eligibility resolution.
+   *
+   * The gate is ONE-SHOT: it resolves once and latches. A scope outlives the run that resolved it —
+   * R-23 requires an opened scope to stay live through its descendants — so a later, sequential run
+   * on the same session can find a scope that has already spoken. That resolution was computed for a
+   * different turn and cannot speak for this one; a run that consumed it anyway would file at the
+   * earlier turn position, hit the filing guard, and lose its own answer silently.
+   *
+   * A thunk on the coordinator's own `Scope`, NOT a field on `AttachmentContract.Current`: return
+   * eligibility is a Task-boundary concern, while `Current` is the narrow read-only snapshot the
+   * closure observer contract consumes. Same reasoning as the registry entry's `resolved` below.
+   */
+  readonly resolved: () => boolean
   readonly owns: (messageID: MessageID) => boolean
   readonly reserve: (jobID: SessionID) => Effect.Effect<Reservation>
   readonly reject: (reservation: Reservation) => Effect.Effect<void>
@@ -323,10 +337,11 @@ export const make = Effect.gen(function* () {
         undelivered: state.undelivered.size,
         everAttached: state.everAttached,
         candidate: state.candidate !== undefined,
-        failed: state.degraded,
-        cancelled: state.cancelled,
-        resolved: state.resolution !== undefined,
-      }))
+      failed: state.degraded,
+      cancelled: state.cancelled,
+    }))
+
+  const resolved: Scope["resolved"] = () => state.resolution !== undefined
 
     const own: Scope["own"] = (messageID) =>
       apply(() => {
@@ -573,10 +588,11 @@ export const make = Effect.gen(function* () {
 
     const handle: Scope = {
       id: state.scopeID,
-      sessionID,
-      current,
-      own,
-      owns,
+    sessionID,
+    current,
+    resolved,
+    own,
+    owns,
       reserve,
       reject,
       claimObserver,

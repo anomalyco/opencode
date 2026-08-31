@@ -605,7 +605,7 @@ describe("task attachment owner-scope lifetime", () => {
       const located = yield* coordinator.locate(child)
       expect(located).toBeDefined()
       expect(located?.id).toBe(scope.id)
-      expect(scope.current().resolved).toBe(false)
+        expect(scope.resolved()).toBe(false)
 
       // PHASE 4 — the grandchild finishes and reaches the child through the STILL-LIVE attachment
       // route, not the degraded ordinary one. The old oracle canonized `attached: false` here.
