@@ -3,6 +3,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { renderUnicodeCompact } from "uqr"
 import { useClient } from "../context/client"
+import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { errorMessage } from "../util/error"
@@ -20,6 +21,22 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
   const [loadError, setLoadError] = createSignal<unknown>()
   const [showPassword, setShowPassword] = createSignal(false)
   const [passwordHover, setPasswordHover] = createSignal(false)
+  const shortcuts = Keymap.useShortcuts()
+  const togglePassword = () => {
+    setShowPassword((current) => !current)
+  }
+
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    commands: [
+      {
+        id: "dialog.pair.toggle_password",
+        title: showPassword() ? "Hide pairing password" : "Show pairing password",
+        group: "Dialog",
+        run: togglePassword,
+      },
+    ],
+  }))
 
   dialog.setSize("large")
   dialog.setCentered(true)
@@ -72,9 +89,13 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
               wrapMode="word"
               onMouseOver={() => setPasswordHover(true)}
               onMouseOut={() => setPasswordHover(false)}
-              onMouseUp={() => setShowPassword((current) => !current)}
+              onMouseUp={togglePassword}
             >
               {showPassword() ? value.password : "************"}
+            </text>
+            <text fg={theme.text.default} onMouseUp={togglePassword}>
+              {shortcuts.get("dialog.pair.toggle_password")} {" "}
+              <span style={{ fg: theme.text.subdued }}>{showPassword() ? "hide password" : "show password"}</span>
             </text>
           </box>
           <Show when={value.urls.some((url) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname))}>
