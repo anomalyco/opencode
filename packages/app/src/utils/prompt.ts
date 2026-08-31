@@ -60,19 +60,19 @@ export function extractPromptFromParts(parts: Part[], opts?: { directory?: strin
   const directory = opts?.directory
   const attachmentName = opts?.attachmentName ?? "attachment"
 
-  const toRelative = (path: string) => {
-    if (!directory) return path
+  const toRelative = (filepath: string) => {
+    if (!directory) return filepath
 
-    const prefix = directory.endsWith("/") ? directory : directory + "/"
-    if (path.startsWith(prefix)) return path.slice(prefix.length)
+    const path = filepath.replaceAll("\\", "/")
+    const base = directory.replaceAll("\\", "/").replace(/\/+$/, "") || "/"
+    const windows = /^[A-Za-z]:(?:\/|$)/.test(base) || base.startsWith("//")
+    const target = windows ? path.toLowerCase() : path
+    const root = windows ? base.toLowerCase() : base
+    if (target === root) return ""
 
-    if (path.startsWith(directory)) {
-      const next = path.slice(directory.length)
-      if (next.startsWith("/")) return next.slice(1)
-      return next
-    }
-
-    return path
+    const prefix = root.endsWith("/") ? root : root + "/"
+    if (!target.startsWith(prefix)) return filepath
+    return path.slice(prefix.length)
   }
 
   const inline: Inline[] = []
@@ -86,11 +86,12 @@ export function extractPromptFromParts(parts: Part[], opts?: { directory?: strin
         const value = sourceText.value
         const start = sourceText.start
         const end = sourceText.end
-        let path = value
-        if (value.startsWith("@")) path = value.slice(1)
-        if (!value.startsWith("@") && filePart.source && "path" in filePart.source) {
-          path = filePart.source.path
-        }
+        const path =
+          filePart.source && "path" in filePart.source
+            ? filePart.source.path
+            : value.startsWith("@")
+              ? value.slice(1)
+              : value
         inline.push({
           type: "file",
           start,
