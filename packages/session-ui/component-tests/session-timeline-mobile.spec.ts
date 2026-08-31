@@ -32,10 +32,11 @@ story.describe("touch timeline", () => {
     await expect(copy).toHaveCSS("pointer-events", "auto")
   })
 
-  story("keeps error copy visible without hover", async ({ mount }) => {
+  story("keeps error copy visible without hover", async ({ mount, page }) => {
     const errors = await mount("components-tool-error-card--all")
     const patch = errors.locator('[data-kind="tool-error-card"]').filter({ hasText: "Patch" })
     await patch.getByRole("button", { name: /Patch.*Verification failed/ }).tap()
+    await page.touchscreen.tap(385, 800)
     const copy = patch.locator('[data-slot="tool-error-card-copy"]')
     await expect(copy).toHaveCSS("opacity", "1")
     await expect(copy).toHaveCSS("pointer-events", "auto")
