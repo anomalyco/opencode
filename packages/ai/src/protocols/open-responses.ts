@@ -957,7 +957,7 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
     if (state.completedMessages.has(itemID)) return [state, NO_EVENTS]
     const phase = messagePhase(item.phase)
     const completedMessages = new Set(state.completedMessages)
-    if (state.message?.id !== undefined && state.message.id !== itemID) completedMessages.add(state.message.id)
+    if (state.message !== undefined && state.message.id !== itemID) completedMessages.add(state.message.id)
     // A new message closes earlier messages, including ones that never streamed.
     const events: LLMEvent[] = []
     const lifecycle = [...state.lifecycle.text]
@@ -1096,9 +1096,9 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     if (state.completedMessages.has(item.id)) return [state, NO_EVENTS] satisfies StepResult
     const completedMessages = new Set(state.completedMessages)
     completedMessages.add(item.id)
-    const message = state.message?.id === item.id ? state.message : undefined
-    if (state.message !== undefined && message === undefined)
+    if (state.message !== undefined && state.message.id !== item.id)
       return [{ ...state, completedMessages }, NO_EVENTS] satisfies StepResult
+    const message = state.message
     const itemPhase = messagePhase(item.phase)
     const phase = itemPhase === undefined ? message?.phase : itemPhase
     const parts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
