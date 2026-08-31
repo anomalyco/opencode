@@ -214,12 +214,14 @@ function isFork(
 function commitGlyph(commit: GitGraphCommit): string {
   if (commit.type === "REVERSE") return "⊗"
   if (commit.type === "HIGHLIGHT") return "◆"
+  if (commit.type === "CHERRY") return "◌"
   return commit.parents.length > 1 ? "◎" : "●"
 }
 
 function commitStyle(commit: GitGraphCommit): GitGraphCellStyle {
   if (commit.type === "REVERSE") return "reverse"
   if (commit.type === "HIGHLIGHT") return "highlight"
+  if (commit.type === "CHERRY") return "cherry"
   return commit.parents.length > 1 ? "merge" : "commit"
 }
 

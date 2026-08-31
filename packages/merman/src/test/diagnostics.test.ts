@@ -114,7 +114,7 @@ describe("parser diagnostics", () => {
 
   test("reports unsupported GitGraph operations with source diagnostics", () => {
     expect(() => renderGitGraphDiagram("gitGraph\n  cherry-pick id: missing")).toThrow(
-      'Cherry-pick is not supported in gitGraph diagram at line 2: "cherry-pick id: missing"',
+      'cherry-pick references unknown commit "missing" in gitGraph diagram at line 2: "cherry-pick id: missing"',
     )
   })
 
