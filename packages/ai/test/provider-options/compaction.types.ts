@@ -39,23 +39,38 @@ for (const model of [
   LLMClient.compact(LLM.request({ model, prompt: "hello" }))
 }
 
-for (const model of [
-  Anthropic.configure().model("fixture"),
-  OpenAI.configure().chat("fixture"),
-  Azure.configure({ resourceName: "test" }).chat("fixture"),
-  XAI.configure().chat("fixture"),
-  AmazonBedrock.configure().model("fixture"),
-  AmazonBedrock.configure().messages("fixture"),
-  AmazonBedrockMantle.configure().responses("fixture"),
-  OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
-]) {
-  // @ts-expect-error This route does not guarantee an explicit compaction endpoint.
-  LLMClient.compact(LLM.request({ model, prompt: "hello" }))
-  LLMClient.Service.use((client) => {
-    // @ts-expect-error The service enforces the same capability as the convenience function.
-    return client.compact(LLM.request({ model, prompt: "hello" }))
-  })
+const unsupported = {
+  anthropic: LLM.request({ model: Anthropic.configure().model("fixture") }),
+  openaiChat: LLM.request({ model: OpenAI.configure().chat("fixture") }),
+  azureChat: LLM.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture") }),
+  xaiChat: LLM.request({ model: XAI.configure().chat("fixture") }),
+  converse: LLM.request({ model: AmazonBedrock.configure().model("fixture") }),
+  bedrockMessages: LLM.request({ model: AmazonBedrock.configure().messages("fixture") }),
+  mantle: LLM.request({ model: AmazonBedrockMantle.configure().responses("fixture") }),
+  compatible: LLM.request({
+    model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
+  }),
 }
+// @ts-expect-error Anthropic has no standalone compact endpoint.
+LLMClient.compact(unsupported.anthropic)
+// @ts-expect-error Chat does not expose Responses compaction.
+LLMClient.compact(unsupported.openaiChat)
+// @ts-expect-error Azure Chat does not expose Responses compaction.
+LLMClient.compact(unsupported.azureChat)
+// @ts-expect-error xAI Chat does not expose Responses compaction.
+LLMClient.compact(unsupported.xaiChat)
+// @ts-expect-error Converse has no standalone compact endpoint.
+LLMClient.compact(unsupported.converse)
+// @ts-expect-error Bedrock Messages has no standalone compact endpoint.
+LLMClient.compact(unsupported.bedrockMessages)
+// @ts-expect-error Mantle does not inherit the OpenAI compact endpoint.
+LLMClient.compact(unsupported.mantle)
+// @ts-expect-error Protocol compatibility does not guarantee endpoint support.
+LLMClient.compact(unsupported.compatible)
+LLMClient.Service.use((client) => {
+  // @ts-expect-error The service enforces the same capability as the convenience function.
+  return client.compact(unsupported.anthropic)
+})
 
 const request = LLM.request({ model: openai, prompt: "hello" })
 LLMClient.compact(LLMRequest.update(request, { messages: [Message.user("continue")] }))
