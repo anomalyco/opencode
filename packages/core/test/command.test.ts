@@ -1,11 +1,13 @@
 import { describe, expect } from "bun:test"
+import { Bus } from "@opencode-ai/core/bus"
 import { Command } from "@opencode-ai/core/command"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Session } from "@opencode-ai/schema/session"
-import { Effect } from "effect"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Effect, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(Command.node))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Command.node, Bus.node])))
 
 describe("Command", () => {
   it.effect("registers and executes callback commands", () =>
@@ -42,6 +44,31 @@ describe("Command", () => {
       })
 
       expect(yield* command.list()).toEqual([Command.Info.make({ name: "goal", description: "Second" })])
+    }),
+  )
+
+  it.effect("allows synchronous update listeners to mutate the registry", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const command = yield* Command.Service
+      const scope = yield* Scope.Scope
+      let reentered = false
+      const unsubscribe = yield* bus.listen((event) => {
+        if (event.type !== Command.Event.Updated.type || reentered) return Effect.void
+        reentered = true
+        return command
+          .transform((draft) => {
+            draft.add({ name: "listener", execute: () => Effect.void })
+          })
+          .pipe(Scope.provide(scope), Effect.asVoid)
+      })
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      yield* command.transform((draft) => {
+        draft.add({ name: "source", execute: () => Effect.void })
+      })
+
+      expect((yield* command.list()).map((item) => item.name)).toEqual(["source", "listener"])
     }),
   )
 

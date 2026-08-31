@@ -78,9 +78,11 @@ describe("State", () => {
 
   it.effect("disposes a transform once and rebuilds remaining state", () =>
     Effect.gen(function* () {
+      let notified = 0
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
         draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        notify: () => Effect.sync(() => notified++),
       })
       yield* state.transform((editor) => {
         editor.add("first")
@@ -92,9 +94,11 @@ describe("State", () => {
 
       yield* registration.dispose
       expect(state.get().values).toEqual(["first"])
+      expect(notified).toBe(3)
 
       yield* registration.dispose
       expect(state.get().values).toEqual(["first"])
+      expect(notified).toBe(3)
     }),
   )
 
@@ -191,29 +195,137 @@ describe("State", () => {
     }),
   )
 
+  it.effect("commits every batched state before notifying", () =>
+    Effect.gen(function* () {
+      type Registry = State.Interface<
+        { values: string[] },
+        { add: (item: string) => void; list: () => readonly string[] }
+      >
+      const observed: string[][] = []
+      const first: Registry = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({
+          add: (item: string) => draft.values.push(item),
+          list: () => draft.values,
+        }),
+        notify: (draft) => Effect.sync(() => observed.push([...draft.list(), ...second.get().values])),
+      })
+      const second: Registry = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({
+          add: (item: string) => draft.values.push(item),
+          list: () => draft.values,
+        }),
+        notify: (draft) => Effect.sync(() => observed.push([...first.get().values, ...draft.list()])),
+      })
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* first.transform((draft) => {
+            draft.add("first")
+          })
+          yield* second.transform((draft) => {
+            draft.add("second")
+          })
+        }),
+      )
+
+      expect(observed).toEqual([
+        ["first", "second"],
+        ["first", "second"],
+      ])
+    }),
+  )
+
   it.effect("debounces reload bursts", () =>
     Effect.gen(function* () {
-      let finalized = 0
+      let notified = 0
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
         draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
-        finalize: () => Effect.sync(() => finalized++),
+        notify: () => Effect.sync(() => notified++),
       })
       yield* state.transform((draft) => {
         draft.add("value")
       })
-      finalized = 0
+      notified = 0
 
       const first = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
       yield* TestClock.adjust("250 millis")
       const second = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
       yield* TestClock.adjust("499 millis")
-      expect(finalized).toBe(0)
+      expect(notified).toBe(0)
       yield* TestClock.adjust("1 millis")
       yield* Fiber.join(first)
       yield* Fiber.join(second)
 
-      expect(finalized).toBe(1)
+      expect(notified).toBe(1)
+    }),
+  )
+
+  it.effect("allows debounced notifications to synchronously reload", () =>
+    Effect.gen(function* () {
+      let reenter = false
+      let notified = 0
+      const state: State.Interface<{ values: string[] }, { add: (item: string) => void }> = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        notify: () =>
+          Effect.gen(function* () {
+            notified++
+            if (!reenter) return
+            reenter = false
+            yield* state.reload()
+          }),
+      })
+      yield* state.transform((draft) => {
+        draft.add("value")
+      })
+      notified = 0
+      reenter = true
+
+      const reload = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(reload)
+
+      expect(notified).toBe(2)
+    }),
+  )
+
+  it.effect("settles each reload after its own notification", () =>
+    Effect.gen(function* () {
+      const firstStarted = yield* Deferred.make<void>()
+      const releaseFirst = yield* Deferred.make<void>()
+      let block = false
+      let notified = 0
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        notify: () =>
+          Effect.gen(function* () {
+            notified++
+            if (!block || notified !== 1) return
+            yield* Deferred.succeed(firstStarted, undefined)
+            yield* Deferred.await(releaseFirst)
+          }),
+      })
+      yield* state.transform((draft) => {
+        draft.add("value")
+      })
+      notified = 0
+      block = true
+
+      const first = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Deferred.await(firstStarted)
+      const second = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(second)
+
+      expect(first.pollUnsafe()).toBeUndefined()
+      yield* Deferred.succeed(releaseFirst, undefined)
+      yield* Fiber.join(first)
     }),
   )
 })

@@ -103,8 +103,8 @@ const layer = Layer.effect(
               Effect.forkIn(scope),
             )
           }
-          yield* bus.publish(Reference.Event.Updated, {})
         }),
+      notify: () => bus.publish(Reference.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     return Service.of({

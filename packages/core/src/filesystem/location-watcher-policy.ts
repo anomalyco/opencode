@@ -37,7 +37,11 @@ const layer = Layer.effect(
       finalize: (draft) =>
         Effect.sync(() => {
           current = [...draft.list()]
-        }).pipe(Effect.andThen(Effect.forEach(listeners, (listener) => listener(current), { discard: true }))),
+        }),
+      notify: () => {
+        const ignore = current
+        return Effect.forEach(listeners, (listener) => listener(ignore), { discard: true })
+      },
     })
     const observe = Effect.fn("LocationWatcherPolicy.observe")(function* (
       listener: (ignore: readonly string[]) => Effect.Effect<void>,
