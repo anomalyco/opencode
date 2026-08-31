@@ -1,5 +1,5 @@
 import fs from "fs/promises"
-import { realpathSync } from "node:fs"
+import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
@@ -39,7 +39,7 @@ import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { Tool } from "@opencode-ai/core/tool"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -1508,6 +1508,55 @@ describe("ShellTool", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
       ),
     { timeout: 15_000 },
+  )
+
+  const signalTest = isWindows ? it.live.skip : it.live
+  signalTest(
+    "escalates a shell timeout when the ready process ignores SIGTERM",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        const ready = yield* Deferred.make<void>()
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            watch(tmp.path, (_event, filename) => {
+              if (filename === "ready") Deferred.doneUnsafe(ready, Exit.void)
+            }),
+          ),
+          (watcher) => Effect.sync(() => watcher.close()),
+        )
+        yield* withSession(tmp.path, () =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            yield* Effect.acquireUseRelease(
+              // Arm the timeout only after the child announces that SIGTERM is ignored.
+              shell.create({
+                shell: "/bin/sh",
+                command: "trap '' TERM; : > ready; while :; do sleep 60; done",
+                timeout: 0,
+              }),
+              (info) =>
+                Effect.gen(function* () {
+                  yield* Deferred.await(ready).pipe(Effect.timeout("5 seconds"))
+                  yield* shell.timeout(info.id, 1)
+                  // Completion must reap the process, not only mark the command as timed out.
+                  expect((yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).status).toBe("timeout")
+                  const pid = info.pid
+                  if (pid === undefined) throw new Error("Expected shell PID")
+                  expect(() => process.kill(pid, 0)).toThrow()
+                }),
+              (info) =>
+                Effect.try(() => {
+                  if (info.pid !== undefined) process.kill(-info.pid, "SIGKILL")
+                }).pipe(
+                  Effect.catch(() => Effect.void),
+                  Effect.andThen(shell.remove(info.id)),
+                ),
+            )
+          }),
+        )
+      }),
+    { timeout: 30_000 },
   )
 
   it.live("does not retain removed running shells in exit order", () =>
