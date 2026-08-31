@@ -36,6 +36,7 @@ import {
 export type AutocompleteRef = {
   onInput: (value: string) => void
   visible: false | "reference" | "command" | "directory"
+  completeQueueableCommand: () => boolean
 }
 
 export type AutocompleteOption = {
@@ -50,6 +51,7 @@ export type AutocompleteOption = {
   absolute?: string
   destructive?: { id: string; confirm: string; run: () => void }
   kind?: "skill"
+  queueable?: boolean
 }
 
 type AutocompleteResults = {
@@ -542,6 +544,7 @@ export function Autocomplete(props: {
       results.push({
         display: "/" + serverCommand.name,
         description: serverCommand.description,
+        queueable: true,
         onSelect: () => insertSlash(serverCommand.name),
       })
     }
@@ -732,6 +735,7 @@ export function Autocomplete(props: {
     mode: "autocomplete",
     target: props.input,
     enabled: () => Boolean(store.visible),
+    bindings: ["prompt.queue"],
     commands: [
       {
         id: "prompt.autocomplete.prev",
@@ -836,6 +840,11 @@ export function Autocomplete(props: {
     props.ref({
       get visible() {
         return store.visible
+      },
+      completeQueueableCommand() {
+        if (store.visible !== "command" || !options()[store.selected]?.queueable) return false
+        select()
+        return true
       },
       onInput(value) {
         if (dismissedValue() === value) return
