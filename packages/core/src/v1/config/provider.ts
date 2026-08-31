@@ -1,7 +1,7 @@
 export * as ConfigProviderV1 from "./provider"
 
 import { Schema } from "effect"
-import { PositiveInt } from "../../schema"
+import { NonNegativeInt, PositiveInt } from "../../schema"
 
 export const ModelStatus = Schema.Literals(["alpha", "beta", "deprecated", "active"])
 
@@ -117,6 +117,14 @@ export const Info = Schema.Struct({
         chunkTimeout: Schema.optional(PositiveInt).annotate({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
+        }),
+        retry: Schema.optional(NonNegativeInt).annotate({
+          description:
+            "Maximum number of retries for retryable API errors from this provider (default 5). Set to 0 to disable retries.",
+        }),
+        backoffDelay: Schema.optional(PositiveInt).annotate({
+          description:
+            "Initial delay in milliseconds for exponential backoff between retries (default 2000). Ignored when the provider responds with retry-after headers.",
         }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
