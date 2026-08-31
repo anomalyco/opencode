@@ -213,6 +213,8 @@ const layer = Layer.effect(
        * prompts such as:
        * "write java code for 2 sum problem"
        */
+      const deterministicTask = isClearlyActionableTask(prompt)
+
       return {
         ...llmClassification,
         isTask: llmClassification.isTask || deterministicTask,
