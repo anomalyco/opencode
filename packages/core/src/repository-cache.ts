@@ -159,53 +159,55 @@ const layer = Layer.effect(
                 input.refresh === "daily" ? !previous || now - previous.attemptedAt >= refreshInterval : input.refresh
               const status = !reuse ? ("cloned" as const) : refresh ? ("refreshed" as const) : ("cached" as const)
 
-              // Record attempts before network work so offline/auth failures don't retry on every prompt.
-              if (status !== "cached") yield* kv.set(key, { ...previous, attemptedAt: now })
+              if (status !== "cached") {
+                // Record attempts before network work so offline/auth failures don't retry on every prompt.
+                yield* kv.set(key, { ...previous, attemptedAt: now })
 
-              if (status === "cloned") {
-                yield* git.repo
-                  .clone({
-                    remote: input.reference.remote,
-                    directory: AbsolutePath.make(localPath),
-                    branch: input.branch,
-                  })
-                  .pipe(Effect.mapError((error) => new CloneFailedError({ repository, message: error.message })))
-              }
+                if (status === "cloned") {
+                  yield* git.repo
+                    .clone({
+                      remote: input.reference.remote,
+                      directory: AbsolutePath.make(localPath),
+                      branch: input.branch,
+                    })
+                    .pipe(Effect.mapError((error) => new CloneFailedError({ repository, message: error.message })))
+                }
 
-              if (status === "refreshed") {
-                if (!existing) return yield* new FetchFailedError({ repository, message: "Repository is unavailable" })
-                yield* git.sync
-                  .fetchRemotes(existing)
-                  .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })))
-
-                if (input.branch) {
+                if (status === "refreshed") {
+                  if (!existing)
+                    return yield* new FetchFailedError({ repository, message: "Repository is unavailable" })
                   yield* git.sync
-                    .fetchBranch(existing, { branch: input.branch })
+                    .fetchRemotes(existing)
                     .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })))
-                }
 
-                // Checking out the tracked ref before resetting keeps the
-                // checkout self-healing even if it was left on another
-                // branch.
-                const branch = input.branch ?? (yield* git.history.defaultRemoteBranch(existing))
-                if (branch) {
+                  if (input.branch) {
+                    yield* git.sync
+                      .fetchBranch(existing, { branch: input.branch })
+                      .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })))
+                  }
+
+                  // Checking out the tracked ref before resetting keeps the
+                  // checkout self-healing even if it was left on another
+                  // branch.
+                  const branch = input.branch ?? (yield* git.history.defaultRemoteBranch(existing))
+                  if (branch) {
+                    yield* git.sync
+                      .checkoutRemoteBranch(existing, { branch })
+                      .pipe(
+                        Effect.mapError(
+                          (error) => new CheckoutFailedError({ repository, branch, message: error.message }),
+                        ),
+                      )
+                  }
+
+                  const target = branch ?? (yield* git.history.branch(existing))
                   yield* git.sync
-                    .checkoutRemoteBranch(existing, { branch })
-                    .pipe(
-                      Effect.mapError(
-                        (error) => new CheckoutFailedError({ repository, branch, message: error.message }),
-                      ),
-                    )
+                    .resetHard(existing, target ? `origin/${target}` : "HEAD")
+                    .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })))
                 }
 
-                const target = branch ?? (yield* git.history.branch(existing))
-                yield* git.sync
-                  .resetHard(existing, target ? `origin/${target}` : "HEAD")
-                  .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })))
-              }
-
-              if (status !== "cached")
                 yield* kv.set(key, { attemptedAt: now, refreshedAt: yield* Clock.currentTimeMillis })
+              }
 
               const checkout = yield* git.repo.discover(AbsolutePath.make(localPath))
 

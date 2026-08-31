@@ -81,17 +81,14 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           materialized.clear()
           for (const [name, source] of draft.list()) {
+            const info = {
+              name,
+              source,
+              ...(source.description === undefined ? {} : { description: source.description }),
+              ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
+            }
             if (source.type === "local") {
-              materialized.set(
-                name,
-                Info.make({
-                  name,
-                  path: source.path,
-                  ...(source.description === undefined ? {} : { description: source.description }),
-                  ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
-                  source,
-                }),
-              )
+              materialized.set(name, Info.make({ ...info, path: source.path }))
               continue
             }
             const repository = Repository.parse(source.repository)
@@ -106,11 +103,8 @@ const layer = Layer.effect(
             materialized.set(
               name,
               Info.make({
-                name,
+                ...info,
                 path: AbsolutePath.make(Repository.cachePath(global.repos, repository, source.branch)),
-                ...(source.description === undefined ? {} : { description: source.description }),
-                ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
-                source,
               }),
             )
           }
