@@ -195,14 +195,127 @@ ${JSON.stringify(input.currentProfile ?? {}, null, 2)}
 }
 
 /**
- * Parses structured JSON signals into valid ExtractedSignals.
+ * Parses structured JSON signals or natural language developer directives into valid ExtractedSignals.
  */
 export function parseStructuredSignals(data: unknown): ExtractedSignals {
+  if (typeof data === "string") {
+    // If input is a JSON string, try to parse it
+    try {
+      const parsed = JSON.parse(data)
+      const decode = Schema.decodeUnknownOption(ExtractedSignalsSchema)
+      const option = decode(parsed)
+      if (option._tag === "Some") {
+        return transformToSignals(option.value)
+      }
+    } catch {
+      // Continue to natural directive parsing
+    }
+
+    // Natural Language Directive Heuristic Extraction
+    return parseNaturalDirectives(data)
+  }
+
   const decode = Schema.decodeUnknownOption(ExtractedSignalsSchema)
   const option = decode(data)
   if (option._tag === "Some") {
     return transformToSignals(option.value)
   }
+
+  return {
+    preferenceMemories: [],
+    semanticMemories: [],
+    workingMemories: [],
+  }
+}
+
+/**
+ * Extracts developer preferences directly from natural conversational directives
+ * (e.g. "Always use Bun.file()", "Never use any", "Keep responses very concise", etc.)
+ */
+export function parseNaturalDirectives(text: string): ExtractedSignals {
+  const normalized = text.trim()
+  const lower = normalized.toLowerCase()
+
+  const prefMemories: Array<Omit<MemoryItem, "id" | "userId" | "createdAt" | "updatedAt" | "accessCount">> = []
+  const profileDelta: any = {}
+
+  // 1. Strict Typing / Any ban
+  if (/never\s+use\s+any|avoid\s+any|no\s+any\b|strict\s+typ(?:ing|ed)/i.test(lower)) {
+    profileDelta.style = { ...(profileDelta.style ?? {}), typing_rigor: 1.0, explicitness: 1.0 }
+    prefMemories.push({
+      tier: "preference",
+      category: "style",
+      content: "Strict typing: Avoid the 'any' type in TypeScript; use exact types or type inference.",
+      confidence: 1.0,
+    })
+  }
+
+  // 2. Bun APIs / Package Manager
+  if (/bun\.file|use\s+bun\b/i.test(lower)) {
+    profileDelta.tooling = { ...(profileDelta.tooling ?? {}), preferred_package_manager: "bun" }
+    prefMemories.push({
+      tier: "preference",
+      category: "tooling",
+      content: "Prefer Bun runtime APIs such as Bun.file() for file operations.",
+      confidence: 1.0,
+    })
+  }
+
+  // 3. Effect-TS
+  if (/effect-ts|use\s+effect\b/i.test(lower)) {
+    profileDelta.architecture = { ...(profileDelta.architecture ?? {}), paradigm: "functional" }
+    prefMemories.push({
+      tier: "preference",
+      category: "architecture",
+      content: "Use Effect-TS functional paradigms and services.",
+      confidence: 1.0,
+    })
+  }
+
+  // 4. Verbosity / Concision
+  if (/concise|brief|short\s+responses|no\s+filler|to\s+the\s+point/i.test(lower)) {
+    profileDelta.style = { ...(profileDelta.style ?? {}), verbosity: 0.1 }
+    profileDelta.documentation = { ...(profileDelta.documentation ?? {}), comment_density: "minimal" }
+    prefMemories.push({
+      tier: "preference",
+      category: "style",
+      content: "Keep responses concise without unnecessary pleasantries or filler.",
+      confidence: 1.0,
+    })
+  }
+
+  // 5. In-Chat Delivery
+  if (/in-chat|deliver\s+in\s+chat|no\s+file\s+pointers/i.test(lower)) {
+    profileDelta.documentation = { ...(profileDelta.documentation ?? {}), in_chat_full_delivery: true }
+    prefMemories.push({
+      tier: "preference",
+      category: "documentation",
+      content: "Deliver complete code and responses directly in chat.",
+      confidence: 1.0,
+    })
+  }
+
+  // 6. Drizzle / SQLite
+  if (/drizzle|snake_case/i.test(lower)) {
+    profileDelta.architecture = { ...(profileDelta.architecture ?? {}), dependency_pattern: "dependency_injection" }
+    prefMemories.push({
+      tier: "preference",
+      category: "architecture",
+      content: "Use Drizzle ORM with snake_case column names for database schemas.",
+      confidence: 1.0,
+    })
+  }
+
+  // If any directive or memory was matched, return the signals
+  if (prefMemories.length > 0 || Object.keys(profileDelta).length > 0) {
+    return {
+      profileDelta: Object.keys(profileDelta).length > 0 ? profileDelta : undefined,
+      preferenceMemories: prefMemories,
+      semanticMemories: [],
+      workingMemories: [],
+    }
+  }
+
   return {
     preferenceMemories: [],
     semanticMemories: [],

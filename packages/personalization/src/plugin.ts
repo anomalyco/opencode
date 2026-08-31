@@ -79,27 +79,26 @@ export function createPersonalizationPlugin(initialState?: Partial<Personalizati
         let signals: ExtractedSignals
         if (customExtractor) {
           signals = await customExtractor(text, input.model)
-        } else if (input.model) {
-          signals = await Effect.runPromise(
-            extractSignalsWithLLM({
-              message: text,
-              model: input.model,
-              currentProfile: profile,
-            }),
-          ).catch(() => ({
-            preferenceMemories: [],
-            semanticMemories: [],
-            workingMemories: [],
-          }))
         } else {
+          // 1. Try fast local/natural directive extraction
           signals = parseStructuredSignals(text)
+          // 2. If no signals found and model is present, attempt LLM extraction
+          if (signals.preferenceMemories.length === 0 && !signals.profileDelta && input.model) {
+            signals = await Effect.runPromise(
+              extractSignalsWithLLM({
+                message: text,
+                model: input.model,
+                currentProfile: profile,
+              }),
+            ).catch(() => signals)
+          }
         }
 
         // 1. Apply dynamic profile drift
         if (signals.profileDelta) {
           profile = applyProfileDrift(profile, signals.profileDelta, 0.25)
           if (sessionDb) {
-            saveUserProfile(sessionDb, userId, profile).catch(() => {})
+            await saveUserProfile(sessionDb, userId, profile).catch(() => {})
           }
         }
 
@@ -134,8 +133,8 @@ export function createPersonalizationPlugin(initialState?: Partial<Personalizati
             memories.push(record)
 
             if (sessionDb) {
-              saveMemory(sessionDb, record).catch(() => {})
-              logBehaviorEvent(sessionDb, {
+              await saveMemory(sessionDb, record).catch(() => {})
+              await logBehaviorEvent(sessionDb, {
                 userId,
                 sessionId: input.sessionID,
                 eventType: "prompt_correction",
