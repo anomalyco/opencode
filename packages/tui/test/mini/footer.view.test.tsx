@@ -543,10 +543,13 @@ test.each([56, 160])("exit confirmation replaces routine footer details at %i co
     providers: [provider()],
     currentModel: { providerID: "opencode", modelID: "gpt-5" },
     currentVariant: "high",
-    state: { exit: 1, usage: "12K (10%)" },
+    state: { usage: "12K (10%)" },
     queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
   })
   try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("cmd")
+    app.setState((state) => ({ ...state, exit: 1 }))
     await app.renderOnce()
     const frame = app.captureCharFrame()
     expect(frame).toContain("Press ctrl+c again to exit")

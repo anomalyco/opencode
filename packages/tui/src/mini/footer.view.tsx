@@ -541,7 +541,8 @@ export function RunFooterView(props: RunFooterViewProps) {
       ])
     }
     const hints = contextHintCandidates().filter((_, index) => layout.context[index])
-    if (layout.showCommand) hints.push(commandHint()!)
+    const hint = commandHint()
+    if (layout.showCommand && hint) hints.push(hint)
     const actions = hints.map((hint) => [
       { text: hint.key, fg: theme().text },
       { text: ` ${hint.label}`, fg: theme().muted },

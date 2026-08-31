@@ -74,6 +74,25 @@ async function setup(mono = false) {
   }
 }
 
+test.each([56, 160])("production footer confirms exit with visible command hints at %i columns", async (width) => {
+  const app = await setup()
+  try {
+    app.resize(width, 30)
+    app.footer.event({ type: "stream.patch", patch: { phase: "running", usage: "14.1K (1%)" } })
+    await app.settle()
+    expect(app.captureCharFrame()).toContain("cmd")
+    app.footer.requestExit()
+    await app.settle()
+    expect(app.captureCharFrame()).toContain("Press ctrl+c again to exit")
+    expect(app.captureCharFrame()).not.toContain("cmd")
+    expect(app.footer.isClosed).toBe(false)
+    app.footer.requestExit()
+    expect(app.footer.isClosed).toBe(true)
+  } finally {
+    app.cleanup()
+  }
+})
+
 test.each([false, true])("production command menu keeps navigation visible across resizes (mono=%s)", async (mono) => {
   const app = await setup(mono)
   try {
