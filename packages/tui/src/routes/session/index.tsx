@@ -48,6 +48,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
+import { Glyphs } from "../../ui/glyphs"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
@@ -1630,7 +1631,7 @@ function QualityGateBar() {
           paddingRight={1}
         >
           <text fg={hoverAccept() ? theme.background : theme.success}>
-            <b>{" [ Y: Accept & Learn ] "}</b>
+            <b>{` [ ${Glyphs.tick} Y: Accept & Learn ] `}</b>
           </text>
         </box>
         <box
@@ -1642,7 +1643,7 @@ function QualityGateBar() {
           paddingRight={1}
         >
           <text fg={hoverRefine() ? theme.background : theme.error}>
-            <b>{" [ N: Refine & Re-evolve ] "}</b>
+            <b>{` [ ${Glyphs.cross} N: Refine & Re-evolve ] `}</b>
           </text>
         </box>
       </box>
