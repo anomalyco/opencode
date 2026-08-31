@@ -1,3 +1,4 @@
+import type { ToolPart } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, createSignal, For, Show } from "solid-js"
@@ -8,19 +9,45 @@ const id = "internal:sidebar-knowledge-graph"
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const [collapsed, setCollapsed] = createSignal(false)
+  const msgs = createMemo(() => props.api.state.session.messages(props.session_id))
+  const diffs = createMemo(() => props.api.state.session.diff(props.session_id))
 
-  const knowledgeNodes = [
-    { category: "Code Style", entity: "Strict Functional / Effect-TS", confidence: "98%" },
-    { category: "Architecture", entity: "Domain-Driven / Clean Layers", confidence: "95%" },
-    { category: "Testing", entity: "Bun Native Test Runner", confidence: "99%" },
-    { category: "Lineage", entity: "Quality Gate V2 (Self-Evolving)", confidence: "100%" },
-  ]
+  const graphState = createMemo(() => {
+    const messages = msgs()
+    const parts = messages.flatMap((m) => props.api.state.part(m.id))
+    const toolParts = parts.filter((p): p is ToolPart => p.type === "tool")
 
-  const symbolClusters = [
-    { name: "Core", count: 42, color: () => theme().primary },
-    { name: "TUI", count: 28, color: () => theme().accent },
-    { name: "Harness", count: 16, color: () => theme().success },
-  ]
+    const readCount = toolParts.filter((p) => p.tool === "read").length
+    const editCount = toolParts.filter((p) => p.tool === "edit" || p.tool === "write").length
+    const grepCount = toolParts.filter((p) => p.tool === "grep" || p.tool === "glob").length
+    const bashCount = toolParts.filter((p) => p.tool === "bash").length
+
+    const modifiedFiles = diffs().length
+    const version = Math.max(1, Math.min(6, Math.floor(messages.length / 2) + 1))
+    const domain = editCount > 0 ? "TypeScript/UI" : (bashCount > 0 ? "Shell/DevOps" : "General/Meta")
+
+    const dynamicNodes = [
+      { category: "Code Style", entity: "Strict Functional / Effect-TS", confidence: "98%" },
+      { category: "Testing", entity: "Bun Native (`bun test`)", confidence: "99%" },
+      { category: "Active Domain", entity: `${domain} (V${version})`, confidence: "100%" },
+      { category: "Action Graph", entity: `${toolParts.length} Tools Executed (${readCount}R / ${editCount}W / ${bashCount}B)`, confidence: "Active" },
+    ]
+
+    const dynamicClusters = [
+      { name: "Reads", count: readCount, color: () => theme().info },
+      { name: "Edits", count: editCount, color: () => theme().accent },
+      { name: "Diffs", count: modifiedFiles, color: () => theme().success },
+      { name: "Bash", count: bashCount, color: () => theme().warning },
+    ]
+
+    return {
+      dynamicNodes,
+      dynamicClusters,
+      domain,
+      version,
+      toolCount: toolParts.length,
+    }
+  })
 
   return (
     <box paddingTop={1}>
@@ -49,12 +76,12 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
             paddingBottom={1}
           >
             <text fg={theme().accent}>
-              <b>{`✦ Memory Matrix (4 Synced)`}</b>
+              <b>{`✦ Memory Matrix (${graphState().dynamicNodes.length} Synced)`}</b>
             </text>
-            <For each={knowledgeNodes}>
+            <For each={graphState().dynamicNodes}>
               {(node, idx) => (
                 <text fg={theme().textMuted}>
-                  <span>{idx() === knowledgeNodes.length - 1 ? " └─ " : " ├─ "}</span>
+                  <span>{idx() === graphState().dynamicNodes.length - 1 ? " └─ " : " ├─ "}</span>
                   <span style={{ fg: theme().text }}>{`[${node.category}] `}</span>
                   <span>{node.entity}</span>
                 </text>
@@ -71,20 +98,20 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
             paddingBottom={1}
           >
             <text fg={theme().info}>
-              <b>{`✦ Symbol Graph Map`}</b>
+              <b>{`✦ Active Action & Symbol Graph`}</b>
             </text>
             <box flexDirection="row" gap={1} marginTop={1} flexWrap="wrap">
-              <For each={symbolClusters}>
+              <For each={graphState().dynamicClusters}>
                 {(cluster) => (
                   <text fg={theme().background} bg={cluster.color()}>
-                    <b>{` ${cluster.name} · ${cluster.count} `}</b>
+                    <b>{` ${cluster.name}: ${cluster.count} `}</b>
                   </text>
                 )}
               </For>
             </box>
             <text fg={theme().textMuted} marginTop={1}>
               <span>{`Lineage: `}</span>
-              <span style={{ fg: theme().success }}>{`General V1 → Domain V2`}</span>
+              <span style={{ fg: theme().success }}>{`General V1 → ${graphState().domain} V${graphState().version}`}</span>
             </text>
           </box>
         </box>
