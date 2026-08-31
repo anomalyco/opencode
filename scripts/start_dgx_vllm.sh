@@ -34,7 +34,7 @@ ssh "$DGX_HOST" "export PATH=\"/opt/vllm_env/bin:\$PATH\" && \
     --served-model-name $SERVED_MODEL_NAME \
     --host 0.0.0.0 \
     --port $DGX_PORT \
-    --max-model-len 32768 \
+    --max-model-len $MAX_MODEL_LEN \
     --max-num-seqs $MAX_NUM_SEQS \
     --trust-remote-code \
     --enable-auto-tool-choice \
