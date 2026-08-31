@@ -1792,7 +1792,9 @@ body {
 }
 
 [data-page="stats"] [data-slot="retention-heading"] {
+  box-sizing: border-box;
   min-height: 28px;
+  padding: 0 12px;
   color: var(--stats-faint);
   font-size: 11px;
   font-style: normal;

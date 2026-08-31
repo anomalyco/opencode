@@ -5,7 +5,8 @@ import { LLMRequestPrep } from "@/session/llm/request"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { jsonSchema } from "ai"
+import { generateText, jsonSchema, type ModelMessage } from "ai"
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -2360,6 +2361,134 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content).toBe("Hello")
     expect(result[1].content).toHaveLength(1)
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  describe("Bedrock reasoning replay", () => {
+    const model = {
+      ...anthropicModel,
+      id: "amazon-bedrock/anthropic.claude-opus-4-6",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "anthropic.claude-opus-4-6",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    }
+
+    for (const cached of [false, true]) {
+      test(`omits unsigned reasoning before SDK conversion (caching: ${cached})`, async () => {
+        const selected = cached
+          ? model
+          : { ...model, id: "amazon-bedrock/openai.gpt-oss-120b", api: { ...model.api, id: "openai.gpt-oss-120b" } }
+        const messages = ProviderTransform.message(
+          [
+            { role: "user", content: "Think" },
+            { role: "assistant", content: [{ type: "text", text: "Earlier answer" }] },
+            {
+              role: "assistant",
+              content: [
+                { type: "reasoning", text: "Partial thought" },
+                { type: "text", text: "" },
+              ],
+            },
+            { role: "user", content: "Continue" },
+          ],
+          selected,
+          {},
+        )
+        expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
+        expect(messages[1].providerOptions?.bedrock?.cachePoint).toEqual(cached ? { type: "default" } : undefined)
+        const provider = createAmazonBedrock({
+          apiKey: "test-key",
+          region: "us-east-1",
+          fetch: Object.assign(
+            async (...args: Parameters<typeof fetch>) => {
+              const body = JSON.parse(String(args[1]?.body))
+              expect(body.messages).toEqual([
+                { role: "user", content: [{ text: "Think" }] },
+                {
+                  role: "assistant",
+                  content: [{ text: "Earlier answer" }, ...(cached ? [{ cachePoint: { type: "default" } }] : [])],
+                },
+                {
+                  role: "user",
+                  content: [{ text: "Continue" }, ...(cached ? [{ cachePoint: { type: "default" } }] : [])],
+                },
+              ])
+              return Response.json({
+                output: { message: { role: "assistant", content: [{ text: "Recovered" }] } },
+                stopReason: "end_turn",
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              })
+            },
+            { preconnect: () => undefined },
+          ),
+        })
+        const result = await generateText({ model: provider(selected.api.id), messages, maxRetries: 0 })
+        expect(result.text).toBe("Recovered")
+      })
+    }
+
+    for (const namespace of ["bedrock", "amazon-bedrock", "custom-bedrock"]) {
+      for (const field of ["signature", "redactedContent", "redactedData"]) {
+        test(`preserves ${namespace}.${field} on empty reasoning`, () => {
+          const result = ProviderTransform.message(
+            [
+              {
+                role: "assistant",
+                content: [{ type: "reasoning", text: "", providerOptions: { [namespace]: { [field]: "opaque" } } }],
+              },
+            ],
+            namespace === "custom-bedrock" ? { ...model, providerID: namespace } : model,
+            {},
+          )
+          expect(result).toHaveLength(1)
+          expect(result[0].content).toEqual([
+            { type: "reasoning", text: "", providerOptions: { bedrock: { [field]: "opaque" } } },
+          ])
+        })
+      }
+    }
+
+    test("uses stored provider metadata when it will overwrite the SDK namespace", () => {
+      const result = ProviderTransform.message(
+        [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "reasoning",
+                text: "Partial thought",
+                providerOptions: { "amazon-bedrock": {}, bedrock: { signature: "overwritten" } },
+              },
+            ],
+          },
+        ],
+        model,
+        {},
+      )
+      expect(result).toEqual([])
+    })
+
+    test("keeps text and tool calls next to unsigned reasoning", () => {
+      const content: ModelMessage["content"] = [
+        { type: "text", text: "Answer" },
+        { type: "tool-call", toolCallId: "call_1", toolName: "lookup", input: {} },
+      ]
+      const result = ProviderTransform.message(
+        [{ role: "assistant", content: [{ type: "reasoning", text: "Partial thought" }, ...content] }],
+        model,
+        {},
+      )
+      expect(result).toHaveLength(1)
+      expect(result[0].content).toEqual(content)
+    })
+
+    test("does not remove unsigned reasoning for other providers", () => {
+      const content: ModelMessage["content"] = [{ type: "reasoning", text: "Partial thought" }]
+      const result = ProviderTransform.message([{ role: "assistant", content }], anthropicModel, {})
+      expect(result[0].content).toEqual(content)
+    })
   })
 
   test("does not filter for non-anthropic providers", () => {
