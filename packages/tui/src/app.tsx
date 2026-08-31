@@ -47,6 +47,7 @@ import { DialogDebug } from "./component/dialog-debug"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
+import { DialogKnowledgeGraph } from "./component/dialog-knowledge-graph"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
@@ -688,6 +689,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "agents",
         run: () => {
           dialog.replace(() => <DialogAgent />)
+        },
+      },
+      {
+        name: "knowledge.graph",
+        title: "Explore Knowledge Graph & Memory Matrix",
+        category: "System",
+        slashName: "graph",
+        run: () => {
+          dialog.replace(() => <DialogKnowledgeGraph />)
         },
       },
       {
