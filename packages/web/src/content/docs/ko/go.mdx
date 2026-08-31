@@ -72,6 +72,7 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
+- **Hy4 preview**
 - **Hy3**
 
 새로운 모델을 테스트하고 추가함에 따라 이 목록은 변경될 수 있습니다.
@@ -115,6 +116,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | DeepSeek V4 Pro              | 1,050             | 2,600          | 5,200          |
 | DeepSeek V4 Flash            | 7,600             | 18,900         | 37,800         |
 | DeepSeek V4 Flash Vision Exp | 3,800             | 9,450          | 18,900         |
+| Hy4 preview                  | 1,350             | 3,380          | 6,770          |
 | Hy3                          | 4,300             | 10,750         | 21,500         |
 
 이 예상치는 관찰된 요청 패턴을 기준으로 합니다.
@@ -137,6 +139,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 - Qwen3.7 Max — 요청당 입력 420, 캐시 66,000, 출력 토큰 200
 - Qwen3.7 Plus — 요청당 입력 500, 캐시 57,000, 출력 토큰 190
 - Qwen3.6 Plus — 요청당 입력 500, 캐시 57,000, 출력 토큰 190
+- Hy4 preview — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - Hy3 — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - MiMo-V2.5 — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - MiMo-V2.5-Pro — 요청당 입력 790, 캐시 86,000, 출력 토큰 305
@@ -176,6 +179,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | DeepSeek V4 Flash (Peak)                | $0.44  | $1.32  | $0.014      | -            | $30   |
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15   |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15   |
+| Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30   |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak 시간은 월요일부터 금요일까지 01:00-04:00 및 06:00-10:00 UTC이며, 주말을 포함한 그 외 모든 시간은 Off-Peak입니다. [자세히 알아보기](https://api-docs.deepseek.com/quick_start/pricing/).
@@ -240,6 +244,7 @@ Go에서는 월 $10를 지불하며, 저희는 그 6배의 사용량을 제공�
 | Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode config의 [model id](/docs/config/#models)는 `opencode-go/<model-id>` 형식을 사용합니다. 예를 들어 Kimi K3의 경우 config에서 `opencode-go/kimi-k3`를 사용하면 됩니다.
@@ -283,6 +288,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Pro              | 사용되지 않음 | 0일         |
 | DeepSeek V4 Flash            | 사용되지 않음 | 0일         |
 | DeepSeek V4 Flash Vision Exp | 사용되지 않음 | 0일         |
+| Hy4 preview                  | 사용되지 않음 | 0일         |
 | Hy3                          | 사용되지 않음 | 0일         |
 
 - **Grok 4.6:** ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다. [자세히 알아보기](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
