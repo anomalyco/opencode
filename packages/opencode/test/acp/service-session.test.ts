@@ -232,7 +232,15 @@ describe("ACP service sessions", () => {
           }),
         skills: () =>
           Promise.resolve({
-            data: [{ name: "review-skill", description: "Review", location: "/skills/review", content: "review" }],
+            data: [
+              {
+                name: "review-skill",
+                description: "Review",
+                location: "/skills/review",
+                content: "review",
+                enabled: true,
+              },
+            ],
           }),
       },
       command: {
