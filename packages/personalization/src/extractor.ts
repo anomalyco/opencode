@@ -1,5 +1,5 @@
 import { Schema, Effect } from "effect"
-import { LLM, LLMRequest, Message, SystemPart } from "@opencode-ai/llm"
+import { LLM } from "@opencode-ai/llm"
 import type { ProfileDelta, UserProfileData } from "./profile"
 import type { MemoryItem } from "./memory"
 
@@ -154,7 +154,7 @@ export function transformToSignals(schemaOutput: ExtractedSignalsSchema): Extrac
 
 /**
  * Extracts developer preferences, conventions, and memory updates using structured LLM schema generation.
- * Eliminates all manual regex and hardcoded keywords.
+ * Eliminates all manual regex, scratch parsers, and hardcoded keywords.
  */
 export function extractSignalsWithLLM(input: {
   message: string
@@ -162,8 +162,7 @@ export function extractSignalsWithLLM(input: {
   currentProfile?: UserProfileData
 }): Effect.Effect<ExtractedSignals> {
   return Effect.gen(function* () {
-    // 1. Primary path: Native structured tool/schema generation
-    const toolCallResult = yield* LLM.generateObject({
+    const res = yield* LLM.generateObject({
       model: input.model as Parameters<typeof LLM.generateObject>[0]["model"],
       system:
         "You are a Personalization and Developer Preference Extraction Specialist. " +
@@ -181,95 +180,35 @@ ${JSON.stringify(input.currentProfile ?? {}, null, 2)}
       generation: { temperature: 0 },
     }).pipe(
       Effect.map((r) => r.object),
-      Effect.option,
+      Effect.orElseSucceed(() => ({
+        hasUpdates: false,
+        preferenceMemories: [],
+        semanticMemories: [],
+        workingMemories: [],
+      })),
     )
 
-    if (toolCallResult._tag === "Some") {
-      return transformToSignals(toolCallResult.value)
-    }
-
-    // 2. Fallback path for models without function-calling support: Direct JSON generation
-    const jsonGenResult = yield* LLM.generate(
-      new LLMRequest({
-        model: input.model as Parameters<typeof LLM.generate>[0]["model"],
-        system: SystemPart.content(
-          "You are a Personalization and Developer Preference Extraction Specialist. " +
-            "Output ONLY a single raw valid JSON object matching the ExtractedSignals schema. " +
-            "Do not wrap in markdown tags or add conversational text.\n" +
-            "Schema shape: {\n" +
-            '  "hasUpdates": boolean,\n' +
-            '  "profileDelta": { "languages": string[], "frameworks": string[], "style": { "verbosity": number, "typing_rigor": number, "explicitness": number } },\n' +
-            '  "preferenceMemories": [ { "category": string, "content": string, "confidence": number } ],\n' +
-            '  "semanticMemories": [ { "category": string, "content": string, "confidence": number } ],\n' +
-            '  "workingMemories": [ { "category": string, "content": string, "confidence": number } ]\n' +
-            "}",
-        ),
-        messages: [
-          Message.user(`
-Developer Input:
-${input.message}
-
-Current Profile:
-${JSON.stringify(input.currentProfile ?? {}, null, 2)}
-          `.trim()),
-        ],
-        tools: [],
-        generation: { temperature: 0 },
-      }),
-    ).pipe(
-      Effect.map((resp) => {
-        const text = resp.text.trim()
-        const jsonMatch = text.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          try {
-            const parsed = JSON.parse(jsonMatch[0])
-            const decode = Schema.decodeUnknownOption(ExtractedSignalsSchema)
-            const opt = decode(parsed)
-            if (opt._tag === "Some") {
-              return opt.value
-            }
-          } catch {
-            // Ignored
-          }
-        }
-        return null
-      }),
-      Effect.orElseSucceed(() => null),
-    )
-
-    if (jsonGenResult) {
-      return transformToSignals(jsonGenResult)
-    }
-
-    return {
-      preferenceMemories: [],
-      semanticMemories: [],
-      workingMemories: [],
-    }
+    return transformToSignals(res)
   })
 }
 
+const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const decodeSignals = Schema.decodeUnknownOption(ExtractedSignalsSchema)
+
 /**
- * Parses structured JSON signals into valid ExtractedSignals.
+ * Parses structured JSON signals into valid ExtractedSignals using Effect Schema codecs.
  */
 export function parseStructuredSignals(data: unknown): ExtractedSignals {
-  if (typeof data === "string") {
-    try {
-      const parsed = JSON.parse(data)
-      const decode = Schema.decodeUnknownOption(ExtractedSignalsSchema)
-      const option = decode(parsed)
-      if (option._tag === "Some") {
-        return transformToSignals(option.value)
-      }
-    } catch {
-      // Not a JSON string
-    }
-  }
+  const target =
+    typeof data === "string"
+      ? decodeJson(data).pipe((opt) => (opt._tag === "Some" ? opt.value : undefined))
+      : data
 
-  const decode = Schema.decodeUnknownOption(ExtractedSignalsSchema)
-  const option = decode(data)
-  if (option._tag === "Some") {
-    return transformToSignals(option.value)
+  if (target !== undefined) {
+    const opt = decodeSignals(target)
+    if (opt._tag === "Some") {
+      return transformToSignals(opt.value)
+    }
   }
 
   return {
