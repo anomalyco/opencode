@@ -88,7 +88,7 @@ const layer = Layer.effect(
         ) => {
           if (!sessionID) return activeVersion
 
-          const task = await Effect.runPromise(
+          let task = await Effect.runPromise(
             db
               .select()
               .from(harness_task)
@@ -100,10 +100,20 @@ const layer = Layer.effect(
               ),
           ).catch(() => undefined)
 
-          if (
-            task?.task_type &&
-            task.task_type !== domainCategory
-          ) {
+          if (!task) {
+            task = await Effect.runPromise(
+              db
+                .select()
+                .from(harness_task)
+                .orderBy(desc(harness_task.task_id))
+                .get()
+                .pipe(
+                  Effect.orElseSucceed(() => undefined),
+                ),
+            ).catch(() => undefined)
+          }
+
+          if (task?.task_type) {
             const specificVer = await Effect.runPromise(
               versionSvc
                 .getActiveVersion(task.task_type)

@@ -1112,11 +1112,7 @@ const layer = Layer.effect(
         return message
       }
 
-      // 1. Classify task and register in harness_task BEFORE streaming
-      // so resolveActiveVersion in experimental.chat.system.transform accurately retrieves the matching domain harness (e.g. data_science_ml vs web_frontend)
-      let currentTaskID: string | undefined = undefined
-      let currentJudgeModel: unknown = undefined
-
+      // 1. Classify task and register in background fiber so prompt streaming starts instantly without blocking
       yield* Effect.gen(function* () {
         const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
         const prov = yield* provider.getProvider(message.info.model.providerID).pipe(Effect.orElseSucceed(() => undefined))
@@ -1127,7 +1123,6 @@ const layer = Layer.effect(
           catch: (error) => error,
         }).pipe(Effect.option)
         if (Option.isNone(judgeModel)) return
-        currentJudgeModel = judgeModel.value
 
         const classification = yield* judge.classify(originalPrompt, judgeModel.value).pipe(
           Effect.orElseSucceed(() => ({
@@ -1140,7 +1135,7 @@ const layer = Layer.effect(
         )
         if (!classification.isTask) return
 
-        currentTaskID = yield* judge.registerTask({
+        yield* judge.registerTask({
           prompt: originalPrompt,
           taskType: classification.taskType || "general",
           taskSubType: classification.taskSubType,
@@ -1152,9 +1147,10 @@ const layer = Layer.effect(
         Effect.tapError((error) => Effect.logError("session task classification failed", { error })),
         Effect.orElseSucceed(() => undefined),
         Effect.orDie,
+        Effect.forkIn(scope),
       )
 
-      // 2. Stream assistant execution (resolveActiveVersion will now find the registered domain in SQLite!)
+      // 2. Stream assistant execution immediately
       const execution = yield* loop({ sessionID: input.sessionID }).pipe(Effect.exit)
 
       // 3. Completion marker reached: Immediately run deterministic QualityGate
@@ -1163,23 +1159,6 @@ const layer = Layer.effect(
         Effect.orElseSucceed(() => undefined),
         Effect.orDie,
       )
-
-      // 4. Run post-execution Judge evaluation on the completed session output in the background
-      if (currentTaskID && currentJudgeModel) {
-        const taskID = currentTaskID
-        const jModel = currentJudgeModel
-        yield* Effect.gen(function* () {
-          yield* judge.evaluate(
-            { taskID, sessionID: input.sessionID, originalPrompt },
-            jModel,
-          )
-        }).pipe(
-          Effect.tapError((error) => Effect.logError("post-execution judge evaluation failed", { error })),
-          Effect.orElseSucceed(() => undefined),
-          Effect.orDie,
-          Effect.forkIn(scope),
-        )
-      }
 
       return yield* execution
     })
