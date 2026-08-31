@@ -319,7 +319,10 @@ describe("OpenAPI.fromSpec", () => {
               parameters: [{ name: "limit", in: "query", schema: { type: "string" } }],
               get: {
                 operationId: "test",
-                parameters: [{ name: "limit", in: "query", required: true, schema: { type: "number" } }],
+                parameters: [
+                  { name: "limit", in: "query", schema: { type: "boolean" } },
+                  { name: "limit", in: "query", required: true, schema: { type: "number" } },
+                ],
                 responses: { 200: { description: "Success" } },
               },
             },

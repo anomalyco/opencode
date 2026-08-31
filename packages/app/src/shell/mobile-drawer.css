@@ -1,0 +1,90 @@
+[data-slot="mobile-drawer-overlay"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--v2-overlay-simple-overlay-scrim);
+  animation: mobile-drawer-backdrop-in 240ms ease-out;
+}
+
+[data-slot="mobile-drawer-overlay"]:is([data-closing], [data-closed]) {
+  animation: mobile-drawer-backdrop-out 200ms ease-in forwards;
+}
+
+[data-slot="mobile-drawer-content"] {
+  box-sizing: border-box;
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  max-height: min(75dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 16px));
+  padding: 0 12px max(12px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
+  border-radius: 16px 16px 0 0;
+  background: var(--v2-background-bg-deep);
+  color: var(--v2-text-text-base);
+  box-shadow: var(--v2-elevation-overlay);
+  outline: none;
+  app-region: no-drag;
+}
+
+[data-slot="mobile-drawer-content"][data-transitioning] {
+  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+[data-slot="mobile-drawer-content"][data-closing] {
+  transition-duration: 200ms;
+}
+
+[data-slot="mobile-drawer-content"][data-closed] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+[data-slot="mobile-drawer-handle"] {
+  display: flex;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+
+[data-slot="mobile-drawer-handle"] span {
+  width: 32px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--v2-border-border-strong);
+}
+
+@keyframes mobile-drawer-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mobile-drawer-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="mobile-drawer-content"][data-transitioning],
+  [data-slot="mobile-drawer-content"][data-closing] {
+    transition: none;
+  }
+
+  [data-slot="mobile-drawer-overlay"],
+  [data-slot="mobile-drawer-overlay"]:is([data-closing], [data-closed]) {
+    animation: none;
+  }
+}
