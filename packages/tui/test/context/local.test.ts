@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { parseModel, recentModels } from "../../src/context/local"
+import { parseModel } from "../../src/context/local"
+import { recentModels } from "../../src/model-preference"
 
 test("parses model IDs containing slashes", () => {
   expect(parseModel("provider/family/model")).toEqual({
