@@ -1,10 +1,14 @@
 import { Money } from "@opencode-ai/schema/money"
 import { Agent } from "@opencode-ai/schema/agent"
+import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { Session } from "@opencode-ai/schema/session"
 import { OpenAIResponses } from "@opencode-ai/ai/protocols/openai-responses"
 import { describe, expect } from "bun:test"
-import { ConfigProvider, DateTime, Effect } from "effect"
+import { ConfigProvider, DateTime, Effect, Fiber, Layer, Stream } from "effect"
+import { TestClock } from "effect/testing"
+import { Bus } from "@opencode-ai/core/bus"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { Location } from "@opencode-ai/core/location"
@@ -23,7 +27,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
-const it = testEffect(PluginTestLayer)
+const it = testEffect(Layer.merge(PluginTestLayer, Config.testLayer()))
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
@@ -160,6 +164,103 @@ describe("OpenAIPlugin", () => {
       expect(gpt56.enabled).toBe(true)
       expect(gpt56.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(false)
+    }),
+  )
+
+  it.effect("uses OAuth cost estimates only when enabled and reloads the option", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const config = yield* Config.Test
+      const bus = yield* Bus.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(Provider.ID.openai, (draft) => {
+          draft.package = Provider.aisdk("@ai-sdk/openai")
+        })
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), (model) => {
+          model.cost = [
+            {
+              tier: { type: "context", size: 100_000 },
+              input: Money.USDPerMillionTokens.make(1),
+              output: Money.USDPerMillionTokens.make(2),
+              cache: {
+                read: Money.USDPerMillionTokens.make(0.1),
+                write: Money.USDPerMillionTokens.make(0.2),
+              },
+            },
+          ]
+        })
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { accountID: "acct_123" },
+        }),
+      })
+      yield* addPlugin()
+      yield* Effect.yieldNow
+
+      expect((yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))?.cost).toEqual([])
+
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({ providers: { openai: { oauth_cost_estimates: true } } }),
+        }),
+      ])
+      yield* Effect.yieldNow
+      const enabled = yield* bus
+        .subscribe(Catalog.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* bus.publish(Event.Updated, {}, { global: true })
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(enabled)
+      expect((yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))?.cost).toEqual([
+        {
+          tier: { type: "context", size: 100_000 },
+          input: Money.USDPerMillionTokens.make(1),
+          output: Money.USDPerMillionTokens.make(2),
+          cache: {
+            read: Money.USDPerMillionTokens.make(0.1),
+            write: Money.USDPerMillionTokens.make(0.2),
+          },
+        },
+      ])
+
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({ providers: { openai: { oauth_cost_estimates: false } } }),
+        }),
+      ])
+      yield* Effect.yieldNow
+      const disabled = yield* bus
+        .subscribe(Catalog.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* bus.publish(Event.Updated, {}, { global: true })
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(disabled)
+      expect((yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))?.cost).toEqual([])
+
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({ providers: { openai: {} } }),
+        }),
+      ])
+      yield* Effect.yieldNow
+      const omitted = yield* bus
+        .subscribe(Catalog.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* bus.publish(Event.Updated, {}, { global: true })
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(omitted)
+      expect((yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))?.cost).toEqual([])
     }),
   )
 

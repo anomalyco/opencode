@@ -1996,6 +1996,7 @@ export type ConfigEntry =
             name?: string
             env?: Array<string>
             package?: string
+            oauth_cost_estimates?: boolean
             settings?: { [x: string]: JsonValue }
             headers?: { [x: string]: string }
             body?: { [x: string]: JsonValue }

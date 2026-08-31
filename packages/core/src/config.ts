@@ -30,6 +30,19 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
     ?.info[key]
 }
 
+type ProviderInfo = NonNullable<Info["providers"]>[string]
+
+export function latestProviderField<K extends keyof ProviderInfo>(
+  entries: readonly Entry[],
+  providerID: string,
+  key: K,
+): ProviderInfo[K] | undefined {
+  const entry = entries.findLast(
+    (entry): entry is Document => entry.type === "document" && entry.info.providers?.[providerID]?.[key] !== undefined,
+  )
+  return entry?.info.providers?.[providerID]?.[key]
+}
+
 export interface Interface {
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>

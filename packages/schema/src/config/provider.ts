@@ -60,6 +60,9 @@ export class Info extends Schema.Class<Info>("Config.Provider")({
   name: Schema.String.pipe(optional),
   env: Schema.String.pipe(Schema.Array, optional),
   package: Schema.String.pipe(optional),
+  oauth_cost_estimates: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable local API-equivalent cost estimates for ChatGPT and Codex OAuth usage",
+  }),
   ...Overlays,
   models: Schema.Record(Schema.String, Model).pipe(optional),
 }) {}

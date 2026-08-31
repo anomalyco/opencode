@@ -86,6 +86,30 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("does not forward OAuth cost estimate configuration to provider settings", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                oauth_cost_estimates: true,
+                settings: { baseURL: "https://example.test/v1" },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const provider = required(yield* catalog.provider.get(Provider.ID.make("custom")))
+      expect(provider.settings).toEqual({ baseURL: "https://example.test/v1" })
+      expect(provider.settings).not.toHaveProperty("oauth_cost_estimates")
+    }),
+  )
+
   it.effect("preserves catalog capabilities unless config overrides them", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
