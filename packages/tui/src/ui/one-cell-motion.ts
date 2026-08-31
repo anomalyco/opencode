@@ -50,9 +50,10 @@ export const SEED_WORK: OneCellMotion = {
 }
 
 const WORK_PACE = { initial: 1.2, final: 0.96, after: 30_000, duration: 30_000 }
+const lower = [2, 3, 5, 7, 6, 4]
 
 export const BLOCK_LOW_COMET: OneCellMotion = {
-  frames: [2, 3, 5, 7, 6, 4].flatMap((point, index, path) => {
+  frames: lower.flatMap((point, index, path) => {
     const leading = (1 << point) | (1 << path[(index + 5) % 6]!)
     const full = leading | (1 << path[(index + 4) % 6]!)
     return [full, full, full, leading, leading].map(octantGlyph)
@@ -77,6 +78,26 @@ export const WORK_SPINNERS = {
   "block-soft-slide": BLOCK_SOFT_SLIDE,
   "block-soft-sweep": BLOCK_SOFT_SWEEP,
   "block-low-comet": BLOCK_LOW_COMET,
+  "block-low-duet": {
+    frames: lower.slice(0, 3).flatMap((point, index) => {
+      const heads = (1 << point) | (1 << lower[(index + 3) % 6]!)
+      const full = heads | (1 << lower[(index + 2) % 6]!) | (1 << lower[(index + 5) % 6]!)
+      return [full, full, full, heads].map(octantGlyph)
+    }),
+    interval: 60,
+  },
+  "block-shuttle": { frames: [0x14, 0x28].map(octantGlyph), interval: 500 },
+  "block-bridge": { frames: [0x14, 0x14, 0x14, 0x3c, 0x28, 0x28, 0x28, 0x3c].map(octantGlyph), interval: 120 },
+  "block-squeeze": {
+    frames: [0x14, 0x14, 0x14, 0x10, 0x20, 0x28, 0x28, 0x28, 0x20, 0x10].map(octantGlyph),
+    interval: 100,
+  },
+  "small-toggle": { frames: Array.from("\u25ab\u25aa"), interval: 320 },
+  "square-toggle": { frames: Array.from("\u25a1\u25a0"), interval: 500 },
+  "grow-shrink": { frames: Array.from("\u25ab\u25ab\u25aa\u25a0\u25aa"), interval: 180 },
+  "quadrant-orbit": { frames: Array.from("\u2598\u259d\u2597\u2596"), interval: 160 },
+  crosshatch: { frames: Array.from("\u25a7\u25a9\u25a8\u25a9"), interval: 240 },
+  "density-wave": { frames: Array.from("\u2591\u2591\u2591\u2592\u2593\u2588\u2593\u2592"), interval: 160 },
   seed: SEED_WORK,
 } satisfies Record<Config.MiniWorkSpinner, OneCellMotion>
 

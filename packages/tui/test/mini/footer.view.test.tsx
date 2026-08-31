@@ -23,7 +23,7 @@ import { RunFooterView } from "../../src/mini/footer.view"
 import { RunFooter } from "../../src/mini/footer"
 import { RunEntryContent } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, RUN_THEME_FALLBACK_LIGHT, resolveRunTheme, type RunTheme } from "../../src/mini/theme"
-import { BLOCK_SOFT_SLIDE } from "../../src/ui/one-cell-motion"
+import { BLOCK_SOFT_SLIDE, SEED_MONO, WORK_SPINNERS } from "../../src/ui/one-cell-motion"
 import { resolveMiniSettings } from "../../src/mini/runtime.boot"
 import type {
   FooterQueuedPrompt,
@@ -922,11 +922,12 @@ test("direct command panel renders grouped actions without catalog commands", as
   }
 })
 
-test("direct settings panel changes Mini preferences", async () => {
+test.each([false, true])("settings change preferences and preview the work spinner (mono=%s)", async (mono) => {
   const [settings, setSettings] = createSignal(resolveMiniSettings())
+  const [animations, setAnimations] = createSignal(true)
   const app = await testRender(
     () => (
-      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+      <box width="100%" height="100%">
         <RunSettingsBody
           theme={() => RUN_THEME_FALLBACK.footer}
           settings={settings}
@@ -934,7 +935,8 @@ test("direct settings panel changes Mini preferences", async () => {
           onChange={(change) => {
             setSettings((current) => ({ ...current, [change.key]: change.value }))
           }}
-          mono
+          mono={mono}
+          animations={animations()}
         />
       </box>
     ),
@@ -945,7 +947,7 @@ test("direct settings panel changes Mini preferences", async () => {
     await app.renderOnce()
     const frame = app.captureCharFrame()
     expect(frame).toContain("Settings")
-    expect(frame).toMatch(/^ Settings/m)
+    expect(frame).toMatch(/^ +Settings/m)
     expect(frame).toContain("Thinking")
     expect(frame).toContain("Shell")
     expect(frame).toContain("Turn summary")
@@ -953,7 +955,7 @@ test("direct settings panel changes Mini preferences", async () => {
     expect(frame).toContain("Splash")
     expect(frame).toContain("Monochrome UI")
     expect(frame).toContain("left/right change")
-    expect(frame).not.toMatch(/[^\x00-\x7F]/)
+    if (mono) expect(frame).not.toMatch(/[^\x00-\x7F]/)
 
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
@@ -992,11 +994,32 @@ test("direct settings panel changes Mini preferences", async () => {
       ["ARROW_LEFT", "block-soft-slide"],
       ["ARROW_LEFT", "seed"],
       ["ARROW_RIGHT", "block-soft-slide"],
+      ["ARROW_RIGHT", "block-soft-sweep"],
+      ["ARROW_RIGHT", "block-low-comet"],
+      ["ARROW_RIGHT", "block-low-duet"],
     ] as const) {
       app.mockInput.pressKey(key)
       await app.renderOnce()
       expect(settings().work_spinner).toBe(value)
+      const row = app
+        .captureCharFrame()
+        .split("\n")
+        .find((line) => line.includes("Work"))!
+      expect((mono ? SEED_MONO : WORK_SPINNERS[value]).frames).toContain(Array.from(row.trimStart())[0]!)
     }
+    setSettings((current) => ({ ...current, work_spinner: "quadrant-orbit" }))
+    app.resize(24, 8)
+    await app.renderOnce()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("quadrant orbit")
+    setAnimations(false)
+    await app.renderOnce()
+    const row = app
+      .captureCharFrame()
+      .split("\n")
+      .find((line) => line.includes("quadrant orbit"))!
+    expect(row.trimStart()).toStartWith(mono ? "* " : "\u25aa ")
+    await app.renderer.idle()
   } finally {
     app.renderer.destroy()
   }

@@ -1,4 +1,4 @@
-import { SEED_LAUNCH, SEED_WORK, type OneCellMotion } from "../../../ui/one-cell-motion"
+import { SEED_LAUNCH, SEED_WORK, WORK_SPINNERS, type OneCellMotion } from "../../../ui/one-cell-motion"
 import { SUBCELL_SPINNERS } from "./subcell-spinner.fixtures"
 
 export type SpinnerFixture = OneCellMotion & {
@@ -52,9 +52,21 @@ const seedToggle = pulse(
   breathe,
 )
 export const ONE_CELL_SPINNERS: SpinnerFixture[] = [
-  sequence("Small toggle", "A small square opens and closes in an even rhythm.", "\u25ab\u25aa", 320),
-  sequence("Square toggle", "A larger square opens and closes at a slower pace.", "\u25a1\u25a0", 500),
-  sequence("Grow / shrink", "An outline fills, grows, and returns to a seed.", "\u25ab\u25aa\u25a0\u25aa", 180, [2]),
+  {
+    ...WORK_SPINNERS["small-toggle"],
+    name: "Small toggle",
+    description: "A small square opens and closes in an even rhythm.",
+  },
+  {
+    ...WORK_SPINNERS["square-toggle"],
+    name: "Square toggle",
+    description: "A larger square opens and closes at a slower pace.",
+  },
+  {
+    ...WORK_SPINNERS["grow-shrink"],
+    name: "Grow / shrink",
+    description: "An outline fills, grows, and returns to a seed.",
+  },
   sequence(
     "Inset bloom",
     "A square within a square opens into a full bloom.",
@@ -71,16 +83,18 @@ export const ONE_CELL_SPINNERS: SpinnerFixture[] = [
     "\u25f0\u25f3\u25f2\u25f1",
     160,
   ),
-  sequence("Quadrant orbit", "Four corners take their turn, clockwise.", "\u2598\u259d\u2597\u2596", 160),
+  {
+    ...WORK_SPINNERS["quadrant-orbit"],
+    name: "Quadrant orbit",
+    description: "Four corners take their turn, clockwise.",
+  },
   sequence("Half rotation", "Light and shade circle a still square.", "\u25e7\u2b12\u25e8\u2b13", 200),
-  sequence("Crosshatch", "Diagonal threads cross, then change direction.", "\u25a7\u25a9\u25a8\u25a9", 240),
-  sequence(
-    "Density wave",
-    "Grain gathers into a block, then thins. The color stays still.",
-    "\u2591\u2592\u2593\u2588\u2593\u2592",
-    160,
-    [3],
-  ),
+  { ...WORK_SPINNERS.crosshatch, name: "Crosshatch", description: "Diagonal threads cross, then change direction." },
+  {
+    ...WORK_SPINNERS["density-wave"],
+    name: "Density wave",
+    description: "Grain gathers into a block, then thins. The color stays still.",
+  },
   sequence(
     "Fill / drain",
     "A narrow tide rises, then returns.",

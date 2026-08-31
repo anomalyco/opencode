@@ -23,8 +23,8 @@ test("validates mini replay and work spinner settings", () => {
   })
   expect(() => decodeInfo({ mini: { replay_limit: 0 } })).toThrow()
   expect(() => decodeInfo({ mini: { replay_limit: 1.5 } })).toThrow()
-  expect(decodeInfo({ mini: { work_spinner: "block-soft-slide" } })).toEqual({
-    mini: { work_spinner: "block-soft-slide" },
+  expect(decodeInfo({ mini: { work_spinner: "quadrant-orbit" } })).toEqual({
+    mini: { work_spinner: "quadrant-orbit" },
   })
   expect(() => decodeInfo({ mini: { work_spinner: "unknown" } })).toThrow()
 })

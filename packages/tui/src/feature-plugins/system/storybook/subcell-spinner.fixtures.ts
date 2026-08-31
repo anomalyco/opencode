@@ -1,9 +1,14 @@
-import { BLOCK_LOW_COMET, BLOCK_SOFT_SLIDE, BLOCK_SOFT_SWEEP, SEED_LAUNCH } from "../../../ui/one-cell-motion"
+import {
+  BLOCK_LOW_COMET,
+  BLOCK_SOFT_SLIDE,
+  BLOCK_SOFT_SWEEP,
+  SEED_LAUNCH,
+  WORK_SPINNERS,
+} from "../../../ui/one-cell-motion"
 import { octantGlyph } from "../../../ui/subcell"
 import type { SpinnerFixture } from "./one-cell-spinner.fixtures"
 
 const perimeter = [0, 1, 3, 5, 7, 6, 4, 2]
-const lower = [2, 3, 5, 7, 6, 4]
 const patterns = [
   {
     name: "comet",
@@ -54,28 +59,21 @@ const patterns = [
   {
     name: "low duet",
     description: "Two tails recede, then the heads move. The top row stays empty.",
-    interval: 60,
+    motion: WORK_SPINNERS["block-low-duet"],
     blockOnly: true,
-    masks: lower.slice(0, 3).flatMap((point, index) => {
-      const heads = (1 << point) | (1 << lower[(index + 3) % 6]!)
-      const full = heads | (1 << lower[(index + 2) % 6]!) | (1 << lower[(index + 5) % 6]!)
-      return [full, full, full, heads]
-    }),
   },
   // The middle four octants are bits 2-5: left column 0x14, right column 0x28.
   {
     name: "shuttle",
     description: "A narrow bar moves left and right through the middle four.",
-    interval: 500,
+    motion: WORK_SPINNERS["block-shuttle"],
     blockOnly: true,
-    masks: [0x14, 0x28],
   },
   {
     name: "bridge",
     description: "The bar stretches across the middle four, then settles opposite.",
-    interval: 120,
+    motion: WORK_SPINNERS["block-bridge"],
     blockOnly: true,
-    masks: [0x14, 0x14, 0x14, 0x3c, 0x28, 0x28, 0x28, 0x3c],
   },
   {
     name: "soft sweep",
@@ -86,9 +84,8 @@ const patterns = [
   {
     name: "squeeze",
     description: "The middle bar folds, hops sideways, and opens.",
-    interval: 100,
+    motion: WORK_SPINNERS["block-squeeze"],
     blockOnly: true,
-    masks: [0x14, 0x14, 0x14, 0x10, 0x20, 0x28, 0x28, 0x28, 0x20, 0x10],
   },
   {
     name: "soft slide",

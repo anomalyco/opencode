@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, type ColorInput } from "@opentui/core"
-import { useTerminalDimensions } from "@opentui/solid"
+import { useTerminalDimensions, type JSX } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { transparent, type RunFooterTheme } from "./theme"
 import { Locale } from "../util/locale"
@@ -19,6 +19,7 @@ export function footerMenuText(text: string, width: number, mono = false) {
 
 export type RunFooterMenuItem = {
   display: string
+  icon?: (color: ColorInput) => JSX.Element
   current?: boolean
   description?: string
   descriptionTone?: "selection"
@@ -219,6 +220,7 @@ export function RunFooterMenu(props: {
           }
 
           const active = () => row.index === props.selected()
+          const available = () => Math.max(0, width() - (row.item.icon ? 2 : 0))
           const attributes = () =>
             active() ? TextAttributes.BOLD | (props.mono ? TextAttributes.INVERSE : 0) : undefined
           const background = () =>
@@ -227,15 +229,16 @@ export function RunFooterMenu(props: {
             if (!row.item.footer) return
             const title = stringWidth(row.item.display)
             const primary = row.item.footerTone && !(row.item.current && row.item.footerTone === "selection")
-            return (primary ? Math.min(8, title) : title) + 1 + stringWidth(row.item.footer) <= width()
+            return (primary ? Math.min(row.item.icon ? 4 : 8, title) : title) + 1 + stringWidth(row.item.footer) <=
+              available()
               ? row.item.footer
               : undefined
           }
           const description = () => {
             if (!row.item.description) return
-            const available = width() - descriptionColumn() - (footer() ? stringWidth(footer()!) + 1 : 0)
-            if (available < Math.min(12, stringWidth(row.item.description))) return
-            return footerMenuText(row.item.description, available, props.mono)
+            const remaining = available() - descriptionColumn() - (footer() ? stringWidth(footer()!) + 1 : 0)
+            if (remaining < Math.min(12, stringWidth(row.item.description))) return
+            return footerMenuText(row.item.description, remaining, props.mono)
           }
           return (
             <box height={1} flexShrink={0} paddingRight={0} flexDirection="row" backgroundColor={background()}>
@@ -253,6 +256,11 @@ export function RunFooterMenu(props: {
               >
                 <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
                   <box flexDirection="row" gap={0} flexGrow={1} flexShrink={1}>
+                    {row.item.icon ? (
+                      <box width={2} flexShrink={0}>
+                        {row.item.icon(active() ? props.theme().actionFocusedText : props.theme().formfieldText)}
+                      </box>
+                    ) : undefined}
                     <text
                       fg={active() ? props.theme().actionFocusedText : props.theme().formfieldText}
                       attributes={attributes()}
@@ -261,7 +269,7 @@ export function RunFooterMenu(props: {
                     >
                       {footerMenuText(
                         row.item.display,
-                        width() - (footer() ? stringWidth(footer()!) + 1 : 0),
+                        available() - (footer() ? stringWidth(footer()!) + 1 : 0),
                         props.mono,
                       )}
                     </text>

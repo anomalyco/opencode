@@ -5,6 +5,8 @@ import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { Config } from "../config"
+import { OneCellSpinner } from "../component/one-cell-spinner"
+import { SEED_MONO, WORK_SPINNERS } from "../ui/one-cell-motion"
 import {
   FOOTER_COMPACT_WIDTH,
   RunFooterMenu,
@@ -709,6 +711,7 @@ export function RunSettingsBody(props: {
   onClose: () => void
   onChange: (change: MiniSettingChange) => void | Promise<void>
   mono?: boolean
+  animations?: boolean
 }) {
   const [saving, setSaving] = createSignal<keyof MiniSettings>()
   const entries = createMemo<SettingEntry[]>(() => [
@@ -763,6 +766,15 @@ export function RunSettingsBody(props: {
     {
       category: "Terminal",
       display: "Work spinner",
+      icon: (color) => (
+        <OneCellSpinner
+          animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.settings().work_spinner]}
+          color={color}
+          animations={props.animations}
+          glow={!props.mono}
+          still={props.mono ? "*" : undefined}
+        />
+      ),
       footer:
         saving() === "work_spinner"
           ? "saving"

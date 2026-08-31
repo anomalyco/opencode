@@ -899,6 +899,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             onClose={closePanel}
                             onChange={props.onMiniSettingChange}
                             mono={props.mono}
+                            animations={props.tuiConfig.animations}
                           />
                         </Match>
                         <Match when={active().type === "permission"}>
