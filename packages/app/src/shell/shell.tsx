@@ -39,10 +39,17 @@ export default function Layout(props: ParentProps) {
   return (
     <TitlebarRightProvider>
       <div
+        data-slot="app-shell"
         class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
         style={{
-          "padding-top": "env(safe-area-inset-top, 0px)",
+          // Leave clearance for the native iOS PWA status-bar fade beyond the device inset.
+          "padding-top":
+            platform.platform === "web" && "standalone" in navigator && navigator.standalone === true
+              ? "calc(env(safe-area-inset-top, 0px) + 32px)"
+              : "env(safe-area-inset-top, 0px)",
+          "padding-right": "env(safe-area-inset-right, 0px)",
           "padding-bottom": "env(safe-area-inset-bottom, 0px)",
+          "padding-left": "env(safe-area-inset-left, 0px)",
           // Native Windows chrome supplies the gap; retain paint clearance for the panels' outer outlines.
           "--shell-top-inset":
             platform.platform === "desktop" &&
