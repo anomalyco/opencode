@@ -1,8 +1,13 @@
-import { RGBA, TextAttributes } from "@opentui/core"
-import { For, type JSX } from "solid-js"
-import { tint, useTheme } from "../context/theme"
-import { logo } from "../logo"
+import { useTheme } from "../context/theme"
 
 export function Logo() {
-  return null
+  const { theme } = useTheme()
+  return (
+    <box flexDirection="row" alignItems="center" gap={1}>
+      <text fg={theme.primary}>✦</text>
+      <text fg={theme.text}>
+        <b>DevAgent</b>
+      </text>
+    </box>
+  )
 }
