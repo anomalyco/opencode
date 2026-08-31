@@ -1494,6 +1494,176 @@ describe("BackgroundJob", () => {
     ),
   )
 
+  // CP-032 T-032-4. Every nonaccepted extension exit reached one shared finalizer that settled
+  // `Exit.succeed(undefined)`, so the cause that distinguishes an ordinary refusal from a
+  // cancellation was erased before `settle` could read it. `settle` already maps cause correctly
+  // (success -> completed, interrupts-only -> cancelled, otherwise error), so these arms assert the
+  // cause SURVIVES the finalizer rather than asserting any new mapping.
+  //
+  // Each arm puts the extension in the same shape: owner already succeeded, extension is the final
+  // pending reservation. That is the interleaving in which the erased cause let core publish
+  // `completed` while the admission authority held `cancelled`.
+  const nonacceptedExtension = (input: {
+    readonly id: string
+    readonly decide: (request: BackgroundJob.BindRequest) => Effect.Effect<BackgroundJob.BindDecision>
+    readonly interruptInsteadOfReleasing?: boolean
+  }) =>
+    Effect.gen(function* () {
+      const holdOwner = yield* Deferred.make<void>()
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const winners: Array<Exclude<BackgroundJob.Status, "running">> = []
+      const jobs = yield* BackgroundJob.makeWith({
+        bind: (request) =>
+          request.sequence === 0
+            ? BackgroundJob.makePermit(request.lifetime, request.sequence).pipe(
+                Effect.map((made) => ({ kind: "arm_allowed" as const, permit: made.permit })),
+              )
+            : Deferred.succeed(entered, undefined).pipe(
+                Effect.andThen(Deferred.await(release)),
+                Effect.andThen(input.decide(request)),
+              ),
+        // Captures what core tells the admission authority, so an arm can prove core cannot
+        // publish a winner contradicting the authority's own record.
+        terminal: (published) => Effect.sync(() => void winners.push(published.winner)),
+      })
+      const started = yield* jobs.startExact({
+        admission,
+        id: input.id,
+        type: "test",
+        // observerAll, so the owner's filing enters the answer LOG rather than the foreground
+        // buffer. That is what makes retention observable here: a `completed` disposition
+        // consumes the single buffered answer into `Info.output` and slices it away (settle's
+        // inline-slot release), so a foreground shape would report `retained: undefined` in
+        // every arm and assert nothing. The foreground inline slot is already locked by the
+        // CP §12.2.1 test above.
+        metadata: { background: true },
+        run: Deferred.await(holdOwner).pipe(Effect.as(answered("p_a", 1, "owner answer"))),
+      })
+      if (!started.lifetime || !started.handle) return yield* Effect.die("did not arm")
+
+      const extension = yield* jobs
+        .extendWithHandle({ id: input.id, admission, run: Effect.succeed(undefined) })
+        .pipe(Effect.forkScoped)
+      yield* Deferred.await(entered)
+
+      // The owner settles successfully inside the window: pending 2 -> 1, answer buffered, no
+      // disposition yet because a supplement is still registered.
+      yield* Deferred.succeed(holdOwner, undefined)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+
+      if (input.interruptInsteadOfReleasing) yield* Fiber.interrupt(extension)
+      else {
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.await(extension)
+      }
+
+      const settled = yield* jobs.wait({ id: input.id, timeout: 1000 })
+      const retained = yield* jobs.waitAnswer({ handle: started.handle, after: 0 })
+      return { status: settled.info?.status, output: settled.info?.output, retained: retained.answer?.detected, winners }
+    })
+
+  it.live("cancels the lifetime when the last extension is refused because cancellation owns it", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const seen = yield* nonacceptedExtension({
+          id: "job_b2_cancellation_owned",
+          decide: () => Effect.succeed({ kind: "cancellation_owned" as const }),
+        })
+        // `cancellation_owned` means the admission authority already holds this lifetime as
+        // cancelled. Publishing `completed` here is the exact contradiction B-2 describes.
+        // Cancellation carries no inline output, but I-1 retains the owner's filed answer.
+        expect(seen).toEqual({
+          status: "cancelled",
+          output: undefined,
+          retained: "owner answer",
+          winners: ["cancelled"],
+        })
+      }),
+    ),
+  )
+
+  it.live("cancels the lifetime when the last extension's issued permit was revoked", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const seen = yield* nonacceptedExtension({
+          id: "job_b2_revoked_permit",
+          // Revocation wins the permit cell before the registry claims it, so `claim` returns
+          // false. That is a cancellation-driven loss, not an ordinary refusal.
+          decide: (request) =>
+            BackgroundJob.makePermit(request.lifetime, request.sequence).pipe(
+              Effect.flatMap((made) =>
+                made.revoke.pipe(Effect.as({ kind: "arm_allowed" as const, permit: made.permit })),
+              ),
+            ),
+        })
+        expect(seen).toEqual({
+          status: "cancelled",
+          output: undefined,
+          retained: "owner answer",
+          winners: ["cancelled"],
+        })
+      }),
+    ),
+  )
+
+  it.live("cancels the lifetime when the last extension is interrupted while binding", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const seen = yield* nonacceptedExtension({
+          id: "job_b2_interrupted",
+          decide: () => Effect.succeed({ kind: "rejected" as const, reason: "never reached" }),
+          interruptInsteadOfReleasing: true,
+        })
+        expect(seen).toEqual({
+          status: "cancelled",
+          output: undefined,
+          retained: "owner answer",
+          winners: ["cancelled"],
+        })
+      }),
+    ),
+  )
+
+  it.live("keeps the lifetime in error when the last extension's binder defects", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const seen = yield* nonacceptedExtension({
+          id: "job_b2_binder_defect",
+          decide: () => Effect.die(new Error("binder exploded")),
+        })
+        // A defect is neither a refusal nor a cancellation: laundering it into success hid a
+        // real fault, and calling it `cancelled` would claim an authority nobody exercised.
+        expect(seen.status).toBe("error")
+        expect(seen.winners).toEqual(["error"])
+        expect(seen.retained).toBe("owner answer")
+      }),
+    ),
+  )
+
+  it.live("still completes the lifetime when the last extension is refused ordinarily (B-2 control)", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const seen = yield* nonacceptedExtension({
+          id: "job_b2_ordinary_control",
+          decide: () => Effect.succeed({ kind: "rejected" as const, reason: "refused after reserving" }),
+        })
+        // The confusable negative, and the reason B-2 is a cause-preservation fix rather than a
+        // remapping: an ordinary refusal is NOT a cancellation. The follow-up was declined while
+        // the sub-agent's own work succeeded, so the no-output success strand survives exactly as
+        // CP §12.2.1 established it. Only `status`/`winners` separate this arm from the three
+        // cancelling ones, which is precisely the discriminator the shared finalizer erased.
+        expect(seen).toEqual({
+          status: "completed",
+          output: undefined,
+          retained: "owner answer",
+          winners: ["completed"],
+        })
+      }),
+    ),
+  )
+
   it.live("exposes no per-sequence output through observe or observeHandle (T-11b, D-06)", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service

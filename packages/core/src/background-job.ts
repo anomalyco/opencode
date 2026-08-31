@@ -1032,28 +1032,59 @@ export const makeWith = (binder: Binder) =>
             sequence: result.sequence,
             admission: input.admission,
           }
+          // A nonaccepted sequence still has to settle — `reserve` raised `pending` and nothing
+          // will ever run for this coordinate — but WHY it was not accepted decides the winner.
+          // Every arm below used to collapse into one synthetic success, which told core to
+          // publish `completed` for a lifetime whose admission authority already held
+          // `cancelled` (CP-032 B-2). `settle` already maps cause correctly, so the repair is
+          // to carry the cause to it rather than to remap anything there.
+          type Acceptance =
+            | { readonly kind: "admitted"; readonly handle: InvocationHandle }
+            | { readonly kind: "declined" }
+            | { readonly kind: "cancelled" }
           const accepted = yield* Effect.gen(function* () {
             const decision = yield* restore(binder.bind(request))
-            if (decision.kind !== "arm_allowed") return undefined
+            // Cancellation already owns this lifetime; its winner is not ours to soften.
+            if (decision.kind === "cancellation_owned") return { kind: "cancelled" as const }
+            if (decision.kind !== "arm_allowed") return { kind: "declined" as const }
+            // Revocation and the registry claim race on one permit cell, and revocation is
+            // issued by the cancellation path — so losing that race is a cancellation, not an
+            // ordinary refusal.
             const claimed = yield* decision.permit.claim
-            if (!claimed) return undefined
+            if (!claimed) return { kind: "cancelled" as const }
             return yield* SynchronizedRef.modify(
               state.jobs,
-              (jobs): readonly [InvocationHandle | undefined, Map<string, Active>] => {
+              (jobs): readonly [Acceptance, Map<string, Active>] => {
+                // These three are stale or foreign coordinates rather than cancellations, and
+                // `settleAdmissibility` already renders each a no-op. They keep the ordinary
+                // refusal disposition exactly as CP §12.2.1 established it.
                 const job = jobs.get(input.lifetime.id)
-                if (!job || job.token !== input.lifetime.token) return [undefined, jobs]
-                if (job.state !== "armed" || job.info.status !== "running") return [undefined, jobs]
-                if (job.accepted.has(result.sequence) || result.sequence >= job.next) return [undefined, jobs]
+                if (!job || job.token !== input.lifetime.token) return [{ kind: "declined" }, jobs]
+                if (job.state !== "armed" || job.info.status !== "running") return [{ kind: "declined" }, jobs]
+                if (job.accepted.has(result.sequence) || result.sequence >= job.next)
+                  return [{ kind: "declined" }, jobs]
                 const next: Active = { ...job, accepted: new Set([...job.accepted, result.sequence]) }
                 const handle = mint(job.ledger, result.sequence)
-                return [handle, new Map(jobs).set(input.lifetime.id, next)]
+                return [{ kind: "admitted", handle }, new Map(jobs).set(input.lifetime.id, next)]
               },
             )
           }).pipe(
             Effect.onExit((exit) =>
-              Exit.isSuccess(exit) && exit.value !== undefined
-                ? Effect.void
-                : // This reserved coordinate lost admission, so nothing will ever run for it.
+              Exit.isSuccess(exit) && exit.value.kind === "admitted"
+                ? // Accepted: the forked run owns settlement from here.
+                  Effect.void
+                : Exit.isFailure(exit)
+                  ? // A real failure or interruption carries its own cause. Forwarding it lets
+                    // `settle` keep an interrupt-only exit `cancelled` and a binder defect
+                    // `error` with its original cause, instead of laundering either into
+                    // success and reporting a fault as a clean finish.
+                    settle(input.lifetime.id, result.token, Exit.failCause(exit.cause)).pipe(Effect.ignore)
+                  : exit.value.kind === "cancelled"
+                    ? // A decision-derived cancellation has no Effect-level cause to forward,
+                      // so it is expressed as the interrupts-only cause `settle` already reads
+                      // as `cancelled` — no new mapping and no second terminal winner.
+                      settle(input.lifetime.id, result.token, Exit.failCause(Cause.interrupt())).pipe(Effect.ignore)
+                    : // This reserved coordinate lost admission, so nothing will ever run for it.
                   // Returning `pending` alone left the lifetime `armed`/`running` at `pending: 0`
                   // with nothing remaining to settle it whenever the owner sequence had already
                   // settled successfully — a permanent strand. It hung any blocked synchronous
@@ -1075,13 +1106,13 @@ export const makeWith = (binder: Binder) =>
             ),
           )
 
-          if (!accepted) return { extended: false as const }
+          if (accepted.kind !== "admitted") return { extended: false as const }
 
           // An accepted supplemental run registers and runs without waiting for any previous run's
           // tail: the serial hold is gone, so several runs on one lifetime can be in flight at once
           // and their answers are ordered by position at delivery rather than by execution.
           yield* fork(result.scope, input.lifetime.id, result.token, restore(input.run))
-          return { extended: true as const, sequence: result.sequence, handle: accepted }
+          return { extended: true as const, sequence: result.sequence, handle: accepted.handle }
         }),
       )
     })
