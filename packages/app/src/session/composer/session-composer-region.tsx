@@ -11,14 +11,7 @@ type SessionComposerRegionState = Pick<
 
 export type SessionComposerRegionViewController = Pick<
   SessionComposerRegionController,
-  | "centered"
-  | "onResponseSubmit"
-  | "openParent"
-  | "setPromptRef"
-  | "setDockRef"
-  | "parentID"
-  | "child"
-  | "showComposer"
+  "centered" | "onResponseSubmit" | "openParent" | "setPromptRef" | "setDockRef" | "parentID" | "child" | "showComposer"
 > & { state: SessionComposerRegionState }
 
 export function SessionComposerRegion(props: {
@@ -31,7 +24,7 @@ export function SessionComposerRegion(props: {
     <div
       ref={controller.setDockRef}
       data-component="session-composer-dock"
-      class="w-full shrink-0 flex flex-col justify-center items-center pb-3 pointer-events-none bg-background-base"
+      class="w-full shrink-0 flex flex-col justify-center items-center pb-3 pointer-events-none bg-v2-background-bg-base"
     >
       <div
         classList={{
@@ -68,10 +61,7 @@ export function SessionComposerRegion(props: {
               "relative z-[70]": true,
             }}
           >
-            <Show
-              when={controller.child()}
-              fallback={<Show when={!controller.state.blocked()}>{props.composer}</Show>}
-            >
+            <Show when={controller.child()} fallback={<Show when={!controller.state.blocked()}>{props.composer}</Show>}>
               <div
                 ref={controller.setPromptRef}
                 class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
