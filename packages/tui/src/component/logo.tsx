@@ -6,7 +6,7 @@ export function Logo() {
     <box flexDirection="row" alignItems="center" gap={1}>
       <text fg={theme.primary}>✦</text>
       <text fg={theme.text}>
-        <b>DevAgent</b>
+        <b>Ziq-code</b>
       </text>
     </box>
   )

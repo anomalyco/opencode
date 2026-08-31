@@ -7,10 +7,10 @@ export function sessionEpilogue(input: { title: string; sessionID?: string }) {
   const weak = (text: string) => `${dim}${text.padEnd(10, " ")}${reset}`
   return [
     "",
-    `  ${cyan}✦${reset} ${bold}DevAgent${reset}`,
+    `  ${cyan}✦${reset} ${bold}Ziq-code${reset}`,
     "",
     `  ${weak("Session")}${bold}${input.title}${reset}`,
-    `  ${weak("Continue")}${bold}agent -s ${input.sessionID}${reset}`,
+    `  ${weak("Continue")}${bold}ziq-code -s ${input.sessionID}${reset}`,
     "",
   ].join("\n")
 }
