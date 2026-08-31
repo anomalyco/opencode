@@ -660,6 +660,10 @@ export const dict = {
   "home.providerTip": "Connect to 75+ providers to use other models, including Claude, GPT, Gemini, etc",
 
   "session.tab.session": "Session",
+  "session.tab.files": "Files",
+  "session.files.openTabs": "Open files",
+  "session.tab.usage": "Usage",
+  "session.view.select": "Session view",
   "session.tab.review": "Review",
   "session.tab.context": "Context",
   "session.tab.unknown": "Unknown Session",

@@ -38,7 +38,14 @@ type CachedTerminalSurface = {
 }
 
 export function TerminalPanel(
-  props: { stacked?: boolean; fill?: boolean; framed?: boolean; present?: boolean; contentHeight?: string } = {},
+  props: {
+    stacked?: boolean
+    fill?: boolean
+    framed?: boolean
+    present?: boolean
+    contentHeight?: string
+    embedded?: boolean
+  } = {},
 ) {
   const layout = useLayout()
   const terminal = useTerminal()
@@ -223,6 +230,7 @@ export function TerminalPanel(
       opened={opened()}
       present={present()}
       framed={props.framed}
+      embedded={props.embedded}
       desktop={isDesktop()}
       stacked={stacked()}
       height={panelHeight()}
