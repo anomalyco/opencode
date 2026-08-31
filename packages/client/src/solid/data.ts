@@ -618,13 +618,17 @@ export function createData(config: CreateDataInput) {
           })
           .catch((error) => console.error("Failed to load projected model switch message", error))
         return
-      case "session.renamed":
+      case "session.renamed": {
         // Preserve the live title when it races the session's initial read.
-        void result.session.sync(event.data.sessionID).then(() => {
+        const family = sync.pending(`session.family:${event.data.sessionID}`)
+          ? result.session.sync(event.data.sessionID, { children: true })
+          : Promise.resolve()
+        void Promise.all([result.session.sync(event.data.sessionID), family]).then(() => {
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "title", event.data.title)
         })
         return
+      }
       case "session.moved": {
         const current = store.session.info[event.data.sessionID]
         if (current) {

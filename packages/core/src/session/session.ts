@@ -278,7 +278,8 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
     sessionID: SessionSchema.ID,
     input: { id?: SessionMessage.ID; delivery?: SessionInbox.Delivery },
   ) {
-    yield* get(sessionID)
+    const session = yield* get(sessionID)
+    if (session.revert) yield* SessionRevert.commit(bus, session)
     const inputID = input.id ?? SessionMessage.ID.create()
     const admitted = yield* admission
       .admitCompaction({
