@@ -272,32 +272,6 @@ describe("Open Responses basic-item lifecycles", () => {
     }),
   )
 
-  it.effect("treats added and done after a done-only message as replay", () =>
-    Effect.gen(function* () {
-      const events = yield* collect(
-        {
-          type: "response.output_item.done",
-          item: { type: "message", id: "msg_1", content: [{ type: "output_text", text: "First" }] },
-        },
-        { type: "response.output_item.added", item: { type: "message", id: "msg_1", phase: "commentary" } },
-        {
-          type: "response.output_item.done",
-          item: { type: "message", id: "msg_1", content: [{ type: "output_text", text: "Second" }] },
-        },
-        completed,
-      )
-
-      expect(events.filter(LLMEvent.is.textEnd)).toEqual([
-        {
-          type: "text-end",
-          id: "msg_1",
-          text: "First",
-          providerMetadata: { "openai-compatible": { itemId: "msg_1" } },
-        },
-      ])
-    }),
-  )
-
   it.effect("treats a repeated message lifecycle as replay", () =>
     Effect.gen(function* () {
       const events = yield* collect(

@@ -1094,12 +1094,11 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
 
   if (item.type === "message" && item.id !== undefined) {
     if (state.completedMessages.has(item.id)) return [state, NO_EVENTS] satisfies StepResult
+    const completedMessages = new Set(state.completedMessages)
+    completedMessages.add(item.id)
     const message = state.message?.id === item.id ? state.message : undefined
     if (state.message !== undefined && message === undefined)
-      return [
-        { ...state, completedMessages: new Set([...state.completedMessages, item.id]) },
-        NO_EVENTS,
-      ] satisfies StepResult
+      return [{ ...state, completedMessages }, NO_EVENTS] satisfies StepResult
     const itemPhase = messagePhase(item.phase)
     const phase = itemPhase === undefined ? message?.phase : itemPhase
     const parts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
@@ -1117,7 +1116,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
       {
         ...state,
         lifecycle: Lifecycle.textEnd(lifecycle, events, item.id, metadata, text),
-        completedMessages: new Set([...state.completedMessages, item.id]),
+        completedMessages,
         message: undefined,
       },
       events,
