@@ -1,5 +1,5 @@
 export * as Plugin from "./plugin.js"
-export { Event, ID, Info, Source, Status } from "@opencode-ai/schema/plugin"
+export { Event, ID, Info, Source, State } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
@@ -36,7 +36,7 @@ export interface Interface {
   readonly list: () => Effect.Effect<Plugin.Info[]>
 }
 
-type Failure = Plugin.Info & { readonly status: Extract<Plugin.Status, { readonly type: "failed" }> }
+type Failure = Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
 
 export type Versioned = PluginDefinition & {
   readonly version: string
@@ -126,7 +126,7 @@ const layer = Layer.effect(
                 nextInventory.push({
                   id: definition.id,
                   source: definition.source ?? { type: "builtin" },
-                  status: { type: "failed", error: loaded.error },
+                  state: { status: "failed", error: loaded.error },
                   features: { server: true, ...definition.features },
                 })
 
@@ -178,7 +178,7 @@ function activeInfo(plugin: Versioned): Plugin.Info {
   return {
     id: Plugin.ID.make(plugin.id),
     source: plugin.source ?? { type: "builtin" },
-    status: { type: "active" },
+    state: { status: "active" },
     features: { server: true, ...plugin.features },
   }
 }

@@ -268,7 +268,7 @@ describe("Plugin", () => {
         [
           {
             source: { type: "package", package: "broken" },
-            status: { type: "failed", error: "failed to resolve" },
+            state: { status: "failed", error: "failed to resolve" },
             features: { server: true },
           },
         ],
@@ -331,7 +331,7 @@ describe("Plugin", () => {
 
       expect(Exit.isFailure(result)).toBe(true)
       expect(yield* plugins.list()).toEqual([
-        { id: active, source: { type: "builtin" }, status: { type: "active" }, features: { server: true } },
+        { id: active, source: { type: "builtin" }, state: { status: "active" }, features: { server: true } },
       ])
     }),
   )
@@ -347,7 +347,7 @@ describe("Plugin", () => {
         {
           id: Plugin.ID.make("rpc-plugin"),
           source: { type: "builtin" },
-          status: { type: "active" },
+          state: { status: "active" },
           features: { server: true, rpc: true },
         },
       ])
@@ -383,13 +383,13 @@ describe("Plugin", () => {
         {
           id: Plugin.ID.make("good"),
           source: { type: "builtin" },
-          status: { type: "active" },
+          state: { status: "active" },
           features: { server: true },
         },
         {
           id: Plugin.ID.make("bad"),
           source: { type: "builtin" },
-          status: { type: "failed", error: expect.stringContaining("materialization failed") },
+          state: { status: "failed", error: expect.stringContaining("materialization failed") },
           features: { server: true },
         },
       ])
@@ -401,13 +401,13 @@ describe("Plugin", () => {
         {
           id: Plugin.ID.make("good"),
           source: { type: "builtin" },
-          status: { type: "active" },
+          state: { status: "active" },
           features: { server: true },
         },
         {
           id: Plugin.ID.make("bad"),
           source: { type: "builtin" },
-          status: { type: "active" },
+          state: { status: "active" },
           features: { server: true },
         },
       ])
@@ -449,7 +449,7 @@ describe("Plugin", () => {
         {
           id: Plugin.ID.make("partial-tools"),
           source: { type: "builtin" },
-          status: { type: "active" },
+          state: { status: "active" },
           features: { server: true },
         },
       ])
@@ -495,7 +495,7 @@ describe("Plugin", () => {
         {
           id: Plugin.ID.make("managed"),
           source: { type: "builtin" },
-          status: { type: "failed", error: expect.stringContaining("replacement failed") },
+          state: { status: "failed", error: expect.stringContaining("replacement failed") },
           features: { server: true },
         },
       ])
@@ -534,7 +534,7 @@ describe("Plugin", () => {
         {
           id: Plugin.ID.make("managed"),
           source: { type: "builtin" },
-          status: { type: "failed", error: expect.stringContaining("replacement failed") },
+          state: { status: "failed", error: expect.stringContaining("replacement failed") },
           features: { server: true },
         },
       ])

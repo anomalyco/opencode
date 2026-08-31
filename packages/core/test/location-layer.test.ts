@@ -566,14 +566,14 @@ describe("LocationServiceMap", () => {
               ),
             )
             for (let attempt = 0; attempt < 100; attempt++) {
-              if ((yield* registry.list()).some((plugin) => plugin.status.type === "failed")) break
+              if ((yield* registry.list()).some((plugin) => plugin.state.status === "failed")) break
               yield* Effect.sleep("20 millis")
             }
             expect(yield* registry.list()).toEqual([
               {
                 id: Plugin.ID.make("failing-plugin"),
                 source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing/index.ts") },
-                status: { type: "failed", error: expect.stringContaining("plugin failed") },
+                state: { status: "failed", error: expect.stringContaining("plugin failed") },
                 features: { server: true },
               },
             ])

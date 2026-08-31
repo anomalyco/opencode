@@ -22,18 +22,18 @@ export const Features = Schema.Struct({
 }).annotate({ identifier: "Plugin.Features" })
 export type Features = typeof Features.Type
 
-export const Status = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("active") }),
-  Schema.Struct({ type: Schema.Literal("failed"), error: Schema.String }),
-]).annotate({ identifier: "Plugin.Status" })
-export type Status = typeof Status.Type
+export const State = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("active") }),
+  Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }),
+]).annotate({ identifier: "Plugin.State" })
+export type State = typeof State.Type
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID.pipe(optional),
   source: Source,
   features: Features,
-  status: Status,
+  state: State,
 }).annotate({ identifier: "Plugin.Info" })
 
 const Added = ephemeral({

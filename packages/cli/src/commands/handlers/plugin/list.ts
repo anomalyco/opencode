@@ -49,9 +49,9 @@ export function format(
   const server = plugins
     .filter((plugin) => builtin || plugin.source.type !== "builtin")
     .toSorted((a, b) => name(a).localeCompare(name(b)))
-    .map((plugin) => `${name(plugin)} (${plugin.status.type})`)
+    .map((plugin) => `${name(plugin)} (${plugin.state.status})`)
   const advertised = plugins.flatMap((plugin) =>
-    plugin.status.type !== "active" || !plugin.features.tui
+    plugin.state.status !== "active" || !plugin.features.tui
       ? []
       : plugin.source.type === "package"
         ? [{ target: plugin.source.package, source: "advertised" as const }]

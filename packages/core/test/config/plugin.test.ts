@@ -123,7 +123,7 @@ describe("PluginSupervisor config", () => {
             type: "local",
             path: path.join(import.meta.dir, "../plugin/fixtures/config-promise/index.ts"),
           },
-          status: { type: "active" },
+          state: { status: "active" },
           features: { server: true, tui: true },
         })
       }),
@@ -210,7 +210,7 @@ describe("PluginSupervisor config", () => {
           path.join(import.meta.dir, "../plugin/fixtures/invalid/index.ts"),
         ])
         expect(
-          (yield* plugins.list()).filter((plugin) => plugin.status.type === "failed").map((plugin) => plugin.source),
+          (yield* plugins.list()).filter((plugin) => plugin.state.status === "failed").map((plugin) => plugin.source),
         ).toEqual([
           { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts") },
           { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/invalid/index.ts") },

@@ -198,13 +198,13 @@ function source(plugin: PluginInfo, context: Plugin.Context) {
 }
 
 function status(entry: Entry) {
-  if (entry.runtime === "server") return entry.plugin.status.type
+  if (entry.runtime === "server") return entry.plugin.state.status
   return entry.status
 }
 
 function pluginError(entry: Entry | undefined) {
   if (entry?.runtime === "server")
-    return entry.plugin.status.type === "failed" ? entry.plugin.status.error : undefined
+    return entry.plugin.state.status === "failed" ? entry.plugin.state.error : undefined
   return entry?.error
 }
 

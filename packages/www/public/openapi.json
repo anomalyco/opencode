@@ -16566,11 +16566,11 @@
           "features": {
             "$ref": "#/components/schemas/Plugin.Features"
           },
-          "status": {
-            "$ref": "#/components/schemas/Plugin.Status"
+          "state": {
+            "$ref": "#/components/schemas/Plugin.State"
           }
         },
-        "required": ["source", "features", "status"],
+        "required": ["source", "features", "state"],
         "additionalProperties": false
       },
       "Plugin.Source": {
@@ -16627,23 +16627,23 @@
           }
         ]
       },
-      "Plugin.Status": {
+      "Plugin.State": {
         "anyOf": [
           {
             "type": "object",
             "properties": {
-              "type": {
+              "status": {
                 "type": "string",
                 "enum": ["active"]
               }
             },
-            "required": ["type"],
+            "required": ["status"],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
-              "type": {
+              "status": {
                 "type": "string",
                 "enum": ["failed"]
               },
@@ -16651,7 +16651,7 @@
                 "type": "string"
               }
             },
-            "required": ["type", "error"],
+            "required": ["status", "error"],
             "additionalProperties": false
           }
         ]
