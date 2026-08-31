@@ -31,7 +31,7 @@ describe("Aggregator Module (PPlug Input-Aware Engine)", () => {
       updatedAt: 0,
     }
 
-    const attention = computeInputAwareAttention(queryVec, [pref1, pref2], 0.5)
+    const attention = computeInputAwareAttention(queryVec, [pref1, pref2], 0.5, 0.0)
     expect(attention.length).toBe(2)
     // The vector aligned with queryVec should receive a significantly higher attention weight
     expect(attention[0]?.weight).toBeGreaterThan(attention[1]?.weight ?? 0)

@@ -72,46 +72,55 @@ export function rankMemories(
   queryEmbedding?: Float32Array,
   options?: {
     now?: number
-    similarityWeight?: number
     halfLifeDays?: number
     limit?: number
     tier?: MemoryTier
+    minSimilarity?: number
   },
 ): ScoredMemory[] {
   const now = options?.now ?? Date.now()
-  const similarityWeight = options?.similarityWeight ?? 0.75
-  const halfLifeDays = options?.tier === "working" ? 2 : options?.halfLifeDays ?? 30
-  const lambda = Math.LN2 / Math.max(1, halfLifeDays)
   const limit = options?.limit ?? 10
+  const minSimilarity = options?.minSimilarity ?? 0.30
 
   const filtered = options?.tier ? memories.filter((m) => m.tier === options.tier) : memories
   const unexpired = filtered.filter((m) => !m.expiresAt || m.expiresAt > now)
 
-  const scored: ScoredMemory[] = unexpired.map((item) => {
-    let sim = item.confidence
-    if (queryEmbedding && item.embedding) {
-      const calc = similarity(Array.from(queryEmbedding), Array.from(item.embedding))
-      sim = calc === null || Number.isNaN(calc) ? 0 : Math.max(0, Math.min(1, calc))
-    }
+  const scored: ScoredMemory[] = unexpired
+    .map((item) => {
+      let sim = item.confidence
+      if (queryEmbedding && item.embedding) {
+        const calc = similarity(Array.from(queryEmbedding), Array.from(item.embedding))
+        // Clamp cosine similarity to non-negative [0, 1] to prevent negative score distortions
+        sim = calc === null || Number.isNaN(calc) ? 0 : Math.max(0, Math.min(1, calc))
+      }
 
-    const dtDays = Math.max(0, (now - item.updatedAt) / (1000 * 60 * 60 * 24))
-    const temporalScore = Math.exp(-lambda * dtDays)
-    const combinedScore = similarityWeight * sim + (1 - similarityWeight) * temporalScore * item.confidence
+      // Tier-specific half-life and weighting calibration
+      const isWorkingTier = item.tier === "working"
+      const halfLifeDays = isWorkingTier ? 2 : options?.halfLifeDays ?? 30
+      const lambda = Math.LN2 / Math.max(1, halfLifeDays)
+      const simWeight = isWorkingTier ? 0.60 : 0.80
+      const temporalWeight = 1 - simWeight
 
-    return {
-      item,
-      score: Math.round(combinedScore * 1000) / 1000,
-      similarity: Math.round(sim * 1000) / 1000,
-      temporalScore: Math.round(temporalScore * 1000) / 1000,
-    }
-  })
+      const dtDays = Math.max(0, (now - item.updatedAt) / (1000 * 60 * 60 * 24))
+      const temporalScore = Math.exp(-lambda * dtDays)
+      const combinedScore = simWeight * sim + temporalWeight * temporalScore * item.confidence
+
+      return {
+        item,
+        score: Math.round(combinedScore * 1000) / 1000,
+        similarity: Math.round(sim * 1000) / 1000,
+        temporalScore: Math.round(temporalScore * 1000) / 1000,
+      }
+    })
+    .filter((s) => !queryEmbedding || s.similarity >= minSimilarity)
 
   scored.sort((a, b) => b.score - a.score)
   return scored.slice(0, limit)
 }
 
 /**
- * Groups and formats retrieved memories into markdown sections for system context injection.
+ * Groups and formats retrieved memories into clear, authoritative markdown sections for system context injection.
+ * Strips raw numbers and enforces strict per-item length bounding.
  */
 export function formatMemoriesForContext(scored: ScoredMemory[]): string {
   if (scored.length === 0) return ""
@@ -121,7 +130,8 @@ export function formatMemoriesForContext(scored: ScoredMemory[]): string {
   const working: string[] = []
 
   for (const s of scored) {
-    const text = s.item.content.trim()
+    // Strict bounding: cap content length at 250 chars per record to ensure O(1) context bounds
+    const text = s.item.content.trim().slice(0, 250)
     if (!text) continue
     if (s.item.tier === "semantic") {
       semantic.push(`- ${text}`)
@@ -138,10 +148,10 @@ export function formatMemoriesForContext(scored: ScoredMemory[]): string {
     sections.push(`DEVELOPER PREFERENCES:\n${preference.join("\n")}`)
   }
   if (semantic.length > 0) {
-    sections.push(`PROJECT CONTEXT & DECISIONS:\n${semantic.join("\n")}`)
+    sections.push(`PROJECT CONVENTIONS & INVARIANTS:\n${semantic.join("\n")}`)
   }
   if (working.length > 0) {
-    sections.push(`ACTIVE WORKING CONTEXT:\n${working.join("\n")}`)
+    sections.push(`ACTIVE WORKING CONTEXT (Overrides Global Defaults):\n${working.join("\n")}`)
   }
 
   return sections.join("\n\n")

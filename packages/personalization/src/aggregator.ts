@@ -22,6 +22,7 @@ export function computeInputAwareAttention(
   queryEmbedding: Float32Array,
   preferenceMemories: MemoryRecord[],
   temperature: number = 0.5,
+  minSimilarityThreshold: number = 0.35,
 ): AttentionScoredPreference[] {
   if (preferenceMemories.length === 0) return []
 
@@ -36,22 +37,27 @@ export function computeInputAwareAttention(
   }
 
   const queryArr = Array.from(queryEmbedding)
-  const similarities = validItems.map((item) => {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const calc = similarity(queryArr, Array.from(item.embedding!))
-    const sim = calc === null || Number.isNaN(calc) ? 0 : Math.max(0, Math.min(1, calc))
-    return { item, sim }
-  })
+  const scoredItems = validItems
+    .map((item) => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const calc = similarity(queryArr, Array.from(item.embedding!))
+      const sim = calc === null || Number.isNaN(calc) ? 0 : Math.max(0, Math.min(1, calc))
+      return { item, sim }
+    })
+    // Apply absolute similarity threshold filter to prevent irrelevant memories from winning competition
+    .filter((s) => s.sim >= minSimilarityThreshold)
+
+  if (scoredItems.length === 0) return []
 
   // Safe softmax with max subtraction for numerical stability
   const tau = Math.max(0.01, temperature)
-  const maxScaled = Math.max(...similarities.map((s) => s.sim / tau))
-  const expValues = similarities.map((s) => Math.exp(s.sim / tau - maxScaled))
+  const maxScaled = Math.max(...scoredItems.map((s) => s.sim / tau))
+  const expValues = scoredItems.map((s) => Math.exp(s.sim / tau - maxScaled))
   const sumExp = expValues.reduce((sum, val) => sum + val, 0)
 
-  return similarities.map((s, idx) => ({
+  return scoredItems.map((s, idx) => ({
     memory: s.item,
-    weight: sumExp > 0 ? (expValues[idx] ?? 0) / sumExp : 1 / similarities.length,
+    weight: sumExp > 0 ? (expValues[idx] ?? 0) / sumExp : 1 / scoredItems.length,
     similarity: s.sim,
   }))
 }
