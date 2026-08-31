@@ -143,4 +143,5 @@ it.live("updates completed assistant message content through the session HTTP AP
       resource: state.assistant,
     })
   }),
+  30_000,
 )
