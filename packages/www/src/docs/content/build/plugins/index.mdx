@@ -875,7 +875,7 @@ interface ToolContext {
 interface ToolDraft {
   list(): readonly (ToolInfo & { readonly id: string })[]
   get(id: string): (ToolInfo & { readonly id: string }) | undefined
-  namespace(namespace: Tool.Namespace): void
+  namespace(namespace: { name: string; description: string }): void
   add(tool: ToolInfo): void
   update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
   remove(id: string): void

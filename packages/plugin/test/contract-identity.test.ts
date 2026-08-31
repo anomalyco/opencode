@@ -13,7 +13,6 @@ import { Provider } from "@opencode-ai/schema/provider"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Rpc } from "@opencode-ai/schema/rpc"
 import { Skill } from "@opencode-ai/schema/skill"
-import { Tool } from "@opencode-ai/schema/tool"
 import { Vcs } from "@opencode-ai/schema/vcs"
 import { WebSearch } from "@opencode-ai/schema/websearch"
 
@@ -40,7 +39,6 @@ test.each([
   expect(entrypoint.Reference).toBe(Reference)
   expect(entrypoint.Rpc).toBe(Rpc)
   expect(entrypoint.Skill).toBe(Skill)
-  expect(entrypoint.Tool).toBe(Tool)
   expect(entrypoint.Vcs).toBe(Vcs)
   expect(entrypoint.WebSearch).toBe(WebSearch)
   expect(Object.keys(entrypoint).sort()).toEqual([
@@ -58,7 +56,6 @@ test.each([
     "Reference",
     "Rpc",
     "Skill",
-    "Tool",
     "Vcs",
     "WebSearch",
   ])
