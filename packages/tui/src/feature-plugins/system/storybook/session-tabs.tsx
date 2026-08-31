@@ -14,13 +14,24 @@ import {
 import { closeSessionTab, cycleSessionTab, moveSessionTab } from "../../../context/session-tabs-model"
 import { StoryFooter } from "./footer"
 import type { Story } from "./index"
+import { projectName } from "../../../util/project"
 
 type FixtureStatus = ReturnType<SessionTabsController["status"]>
 
 const FIXTURE_TABS = [
   { sessionID: "fixture-1", title: "Implement session tabs", project: "opencode" },
-  { sessionID: "fixture-2", title: "Investigate rendering", project: "opencode" },
-  { sessionID: "fixture-3", title: "A deliberately long session title for truncation", project: "opencode-slack" },
+  {
+    sessionID: "fixture-2",
+    title: "Investigate rendering",
+    canonical: "C:\\",
+    directory: "C:\\Users\\demo\\Desktop\\Prabha",
+  },
+  {
+    sessionID: "fixture-3",
+    title: "A deliberately long session title for truncation",
+    canonical: "D:\\",
+    directory: "D:\\work\\notes",
+  },
   { sessionID: "fixture-4", title: "Fix provider state", project: "opencode" },
   { sessionID: "fixture-5", title: "Review animation", project: "opencode-slack" },
   { sessionID: "fixture-6", title: "Untitled behavior", project: "opencode-drive" },
@@ -117,7 +128,10 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     current: active,
     add: addTab,
     detail(sessionID) {
-      return FIXTURE_TABS.find((tab) => tab.sessionID === sessionID)?.project
+      const tab = FIXTURE_TABS.find((tab) => tab.sessionID === sessionID)
+      if (!tab) return
+      if ("project" in tab) return tab.project
+      return projectName({ canonical: tab.canonical }, tab.directory)
     },
     status(sessionID) {
       return statuses()[sessionID] ?? EMPTY_SESSION_TAB_STATUS
