@@ -126,6 +126,10 @@ for (const create of [false, true]) {
             json: [
               { directory: canonical, strategy: null },
               { directory: "/projects/existing-worktree", strategy: "git" },
+              ...Array.from({ length: 20 }, (_, index) => ({
+                directory: `/projects/worktree-${index}`,
+                strategy: "git",
+              })),
             ],
             headers,
           })
@@ -161,7 +165,9 @@ for (const create of [false, true]) {
     await expect(page.getByText("Recover my worktree", { exact: true })).toBeVisible()
     await expect(page.getByText("Session location unavailable", { exact: true })).toBeVisible()
     listing.resolve()
-    await expect(page.getByRole("menuitem", { name: "existing-worktree", exact: true })).toBeVisible()
+    const existing = page.getByRole("menuitem", { name: "existing-worktree", exact: true })
+    await expect(existing).toBeVisible()
+    await expect(existing).toHaveCSS("height", "28px")
     await page.keyboard.press("Escape")
     await expect(page.getByRole("menu")).toHaveCount(0)
     listing = Promise.withResolvers<void>()
