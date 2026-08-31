@@ -213,25 +213,6 @@ const layer = Layer.effect(
             )
 
             taskDecisions.delete(input.sessionID)
-
-            // If explicitly marked false (e.g. feedback acknowledgment message), do not show banner
-            if (isTaskDecision === false) return
-
-            if (
-              output.text &&
-              !output.text.includes(
-                "QUALITY GATE",
-              )
-            ) {
-              const auditBanner =
-                `\n\n` +
-                `─────────────────────────────────────────────────────────────────\n` +
-                ` **QUALITY GATE** · Subtask Verification\n` +
-                ` Are you satisfied with this output?  [ \`Yes\` / Accept ]  [ \`No: <feedback>\` / Refine ]\n` +
-                `─────────────────────────────────────────────────────────────────`
-
-              output.text += auditBanner
-            }
           },
 
           "tool.execute.before": async (

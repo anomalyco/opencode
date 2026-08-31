@@ -1575,7 +1575,78 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           </box>
         </Match>
       </Switch>
+      <Show when={props.last && final() && !props.message.error}>
+        <QualityGateBar />
+      </Show>
     </>
+  )
+}
+
+function QualityGateBar() {
+  const { theme } = useTheme()
+  const promptRef = usePromptRef()
+  const [hoverAccept, setHoverAccept] = createSignal(false)
+  const [hoverRefine, setHoverRefine] = createSignal(false)
+
+  const handleAccept = () => {
+    promptRef.current?.set({ input: "Yes", parts: [] })
+    promptRef.current?.submit()
+  }
+
+  const handleRefine = () => {
+    promptRef.current?.set({ input: "No: ", parts: [] })
+    promptRef.current?.focus()
+  }
+
+  return (
+    <box
+      ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+      border={["top", "bottom"]}
+      borderColor={theme.border}
+      marginTop={1}
+      marginBottom={1}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      paddingRight={2}
+      backgroundColor={theme.backgroundPanel}
+      flexDirection="row"
+      alignItems="center"
+      justifyContent="space-between"
+    >
+      <box flexDirection="row" alignItems="center" gap={1}>
+        <text fg={theme.background} bg={theme.primary}>
+          <b>{" QUALITY GATE "}</b>
+        </text>
+        <text fg={theme.text}>Are you satisfied with this output?</text>
+      </box>
+      <box flexDirection="row" gap={2}>
+        <box
+          onMouseOver={() => setHoverAccept(true)}
+          onMouseOut={() => setHoverAccept(false)}
+          onMouseUp={handleAccept}
+          backgroundColor={hoverAccept() ? theme.success : theme.backgroundElement}
+          paddingLeft={1}
+          paddingRight={1}
+        >
+          <text fg={hoverAccept() ? theme.background : theme.success}>
+            <b>{" [ Y: Accept & Learn ] "}</b>
+          </text>
+        </box>
+        <box
+          onMouseOver={() => setHoverRefine(true)}
+          onMouseOut={() => setHoverRefine(false)}
+          onMouseUp={handleRefine}
+          backgroundColor={hoverRefine() ? theme.error : theme.backgroundElement}
+          paddingLeft={1}
+          paddingRight={1}
+        >
+          <text fg={hoverRefine() ? theme.background : theme.error}>
+            <b>{" [ N: Refine & Re-evolve ] "}</b>
+          </text>
+        </box>
+      </box>
+    </box>
   )
 }
 
