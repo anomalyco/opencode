@@ -35,8 +35,12 @@ export interface RouteBody<Body> {
   readonly from: (request: LLMRequest) => Effect.Effect<Body, AIError>
 }
 
-export interface Route<Body, Prepared = unknown> {
-  readonly compact?: CompactOperation
+export interface Route<
+  Body,
+  Prepared = unknown,
+  Compact extends CompactOperation | undefined = CompactOperation | undefined,
+> {
+  readonly compact: Compact
   readonly id: string
   readonly provider?: ProviderID
   /** ProviderMetadata namespace emitted and consumed by this route. */
@@ -49,10 +53,10 @@ export interface Route<Body, Prepared = unknown> {
   readonly transport: Transport<Body, Prepared, unknown>
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
-  readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
+  readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared, Compact>
   readonly model: <Options extends ProviderOptions = ProviderOptions>(
     input: RouteMappedLanguageModelInput,
-  ) => LanguageModel<Options>
+  ) => LanguageModel<Options, Compact>
   readonly prepareTransport: (
     body: Body,
     request: LLMRequest,
@@ -70,7 +74,11 @@ export interface Route<Body, Prepared = unknown> {
 // Normal call sites use `OpenAIChat.route`; callers only need body types
 // when preparing a request with a protocol-specific type assertion.
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
-export type AnyRoute = Route<any, any>
+export type AnyRoute<Compact extends CompactOperation | undefined = CompactOperation | undefined> = Route<
+  any,
+  any,
+  Compact
+>
 
 export type HttpOptionsInput = HttpOptions.Input
 
@@ -103,15 +111,15 @@ export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
 
 type RouteMappedLanguageModelInput = RouteLanguageModelInput | RouteRoutedLanguageModelInput
 
-const makeRouteLanguageModel = <Options extends ProviderOptions = ProviderOptions>(
-  route: AnyRoute,
+const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends CompactOperation | undefined>(
+  route: AnyRoute<Compact>,
   mapped: RouteMappedLanguageModelInput,
 ) => {
   const provider = route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
   if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
   if (!endpointBaseURL(route.endpoint))
     throw new Error(`Route.model(${route.id}) requires an endpoint baseURL — configure it on the route first`)
-  return LanguageModel.make<Options>({
+  return LanguageModel.make<Options, Compact>({
     ...mapped,
     provider,
     route,
@@ -155,7 +163,7 @@ export const httpOptions = (input: HttpOptionsInput | undefined) => {
 
 export interface Interface {
   readonly compact: (
-    request: LLMRequest,
+    request: CompactionRequest,
     options?: Pick<StreamOptions, "http">,
   ) => Effect.Effect<CompactionResponse, AIError>
   readonly stream: StreamMethod
@@ -180,6 +188,11 @@ export type CompactOperation = (
   executor: RequestExecutor.Interface,
   options?: Pick<StreamOptions, "http">,
 ) => Effect.Effect<CompactionResponse, AIError>
+
+export type CompactionRequest = LLMRequest<LanguageModel<ProviderOptions, CompactOperation>>
+
+export const canCompact = (request: LLMRequest): request is CompactionRequest =>
+  request.model.route.compact !== undefined
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
@@ -328,7 +341,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
         })
       },
       model: <Options extends ProviderOptions = ProviderOptions>(input: RouteMappedLanguageModelInput) =>
-        makeRouteLanguageModel<Options>(route, input),
+        makeRouteLanguageModel<Options, CompactOperation | undefined>(route, input),
       prepareTransport: (body, request, options) =>
         routeInput.transport.prepare({
           body,
@@ -425,6 +438,12 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
   return build({ ...input, defaults: mergeRouteDefaults(undefined, input.defaults ?? {}) })
 }
 
+export function make<Body, Prepared, Frame, Event, State>(
+  input: MakeTransportInput<Body, Prepared, Frame, Event, State> & { readonly compact: CompactOperation },
+): Route<Body, Prepared, CompactOperation>
+export function make<Body, Frame, Event, State>(
+  input: MakeInput<Body, Frame, Event, State> & { readonly compact: CompactOperation },
+): Route<Body, HttpTransport.HttpPrepared<Frame>, CompactOperation>
 export function make<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
 ): Route<Body, Prepared>
@@ -537,7 +556,7 @@ export function generate(request: LLMRequest, options?: StreamOptions): Effect.E
 }
 
 export const compact = (
-  request: LLMRequest,
+  request: CompactionRequest,
   options?: Pick<StreamOptions, "http">,
 ): Effect.Effect<CompactionResponse, AIError, Service> =>
   Effect.gen(function* () {
@@ -576,6 +595,7 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
 export const Route = { make } as const
 
 export const LLMClient = {
+  canCompact,
   compact,
   Service,
   layer,

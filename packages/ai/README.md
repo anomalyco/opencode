@@ -323,6 +323,8 @@ The corresponding package entrypoint is `@opencode-ai/ai/providers/amazon-bedroc
 
 `LLMClient.compact(request)` performs exactly one HTTP call to `/responses/compact`, using the selected route's endpoint, credentials, query, and HTTP middleware. It returns a `CompactionResponse` containing replacement `messages` and usage, not a normal generation response.
 
+The selected model carries explicit-compaction capability through request construction and updates. Calls using unsupported routes fail type checking. When the model is selected dynamically, narrow the request with `LLMClient.canCompact(request)` before calling `LLMClient.compact`; a model or route switch does not inherit the old capability. Runtime validation still rejects unsupported calls from untyped consumers. Capability describes the route's API, not whether every model or custom deployment supports the operation.
+
 ```ts
 const compacted = yield * LLMClient.compact(request)
 const next = LLMRequest.update(request, {

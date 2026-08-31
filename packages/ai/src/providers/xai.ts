@@ -1,5 +1,5 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route, type RouteDefaultsInput, type CompactOperation } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile.js"
@@ -103,7 +103,10 @@ export const configure = (input: LanguageModelOptions = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings, XAIProviderOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Definition<Settings, XAIProviderOptionsInput, CompactOperation>["model"] = (
+  modelID,
+  settings,
+) =>
   configure({
     apiKey: settings.apiKey,
     baseURL: settings.baseURL,

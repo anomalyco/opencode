@@ -1,12 +1,82 @@
 import { Effect } from "effect"
-import { CompactionPart, LLM, LLMClient, LLMEvent, Message, ProviderID } from "../../src/index.js"
-import { OpenAI, Anthropic, AmazonBedrock } from "../../src/providers.js"
+import {
+  CompactionPart,
+  LanguageModel,
+  LLM,
+  LLMClient,
+  LLMEvent,
+  LLMRequest,
+  Message,
+  ProviderID,
+} from "../../src/index.js"
+import {
+  OpenAI,
+  Azure,
+  XAI,
+  Anthropic,
+  AmazonBedrock,
+  AmazonBedrockMantle,
+  OpenAICompatibleResponses,
+} from "../../src/providers.js"
 
 const openai = OpenAI.configure({
   apiKey: "test",
   providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
 }).responses("gpt-5.3-codex")
 LLMClient.compact(LLM.request({ model: openai, prompt: "hello" }))
+
+for (const model of [
+  OpenAI.configure().responses("fixture"),
+  Azure.configure({ resourceName: "test" }).responses("fixture"),
+  XAI.configure().responses("fixture"),
+  OpenAI.model("fixture", {}),
+  Azure.responsesModel("fixture", { resourceName: "test" }),
+  XAI.model("fixture", {}),
+  openai.route.with({ headers: { "x-test": "test" } }).model({ id: "fixture" }),
+  LanguageModel.update(openai, { defaults: { generation: { maxTokens: 100 } } }),
+  LanguageModel.make(LanguageModel.input(openai)),
+]) {
+  LLMClient.compact(LLM.request({ model, prompt: "hello" }))
+}
+
+for (const model of [
+  Anthropic.configure().model("fixture"),
+  OpenAI.configure().chat("fixture"),
+  Azure.configure({ resourceName: "test" }).chat("fixture"),
+  XAI.configure().chat("fixture"),
+  AmazonBedrock.configure().model("fixture"),
+  AmazonBedrock.configure().messages("fixture"),
+  AmazonBedrockMantle.configure().responses("fixture"),
+  OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
+]) {
+  // @ts-expect-error This route does not guarantee an explicit compaction endpoint.
+  LLMClient.compact(LLM.request({ model, prompt: "hello" }))
+  LLMClient.Service.use((client) => {
+    // @ts-expect-error The service enforces the same capability as the convenience function.
+    return client.compact(LLM.request({ model, prompt: "hello" }))
+  })
+}
+
+const request = LLM.request({ model: openai, prompt: "hello" })
+LLMClient.compact(LLMRequest.update(request, { messages: [Message.user("continue")] }))
+LLMClient.compact(new LLMRequest(LLMRequest.input(request)))
+const switched = LLMRequest.update(request, { model: Anthropic.configure().model("fixture") })
+// @ts-expect-error Switching models replaces, rather than inherits, the capability.
+LLMClient.compact(switched)
+LLMClient.compact(LLMRequest.update(switched, { model: openai }))
+LLMClient.compact(
+  // @ts-expect-error Replacing the route also replaces compaction capability.
+  LLM.request({ model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }) }),
+)
+
+declare const dynamicModel: LanguageModel
+declare const dynamicPatch: Partial<LLMRequest.Input>
+const dynamicRequest = LLM.request({ model: dynamicModel, prompt: "hello" })
+// @ts-expect-error A dynamically selected model must be narrowed first.
+LLMClient.compact(dynamicRequest)
+if (LLMClient.canCompact(dynamicRequest)) LLMClient.compact(dynamicRequest)
+// @ts-expect-error An optional model override cannot retain the old capability statically.
+LLMClient.compact(LLMRequest.update(request, dynamicPatch))
 
 const checkpoint = CompactionPart.make({ provider: ProviderID.make("openai"), id: "cmp_1", encrypted: "opaque" })
 const provider = ProviderID.make("anthropic")

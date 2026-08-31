@@ -306,6 +306,7 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
   const providerID = info.canonical ?? info.providerID
   const optionKey = providerOptionKey(packageName, providerID)
   const route: AnyRoute = {
+    compact: undefined,
     id: `ai-sdk:${packageName}`,
     provider: ProviderID.make(providerID),
     providerMetadataKey: optionKey,

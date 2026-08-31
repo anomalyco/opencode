@@ -357,6 +357,7 @@ for (const model of [
     `${model.route.id} does not inherit an unsupported compact endpoint`,
     () =>
       Effect.gen(function* () {
+        // @ts-expect-error Untyped callers must still receive the runtime capability error.
         const error = yield* LLMClient.compact(LLM.request({ model, prompt: "hello" })).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidRequest")
       }),
