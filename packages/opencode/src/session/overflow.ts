@@ -11,6 +11,13 @@ export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outpu
   const context = input.model.limit.context
   if (context === 0) return 0
 
+  // reserved_ratio (proportional): reserve a fraction of the context window as
+  // headroom, scaling both the overflow trigger and the preserve-recent budget.
+  // Applied uniformly against the context so it takes effect regardless of whether
+  // the model advertises a separate input limit.
+  const reservedRatio = input.cfg.compaction?.reserved_ratio
+  if (reservedRatio !== undefined) return Math.max(0, context - Math.floor(context * reservedRatio))
+
   const reserved =
     input.cfg.compaction?.reserved ??
     Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))

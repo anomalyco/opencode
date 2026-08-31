@@ -2,6 +2,9 @@ export * as ConfigV1 from "./config"
 
 import { Schema } from "effect"
 import { NonNegativeInt, PositiveInt, type DeepMutable } from "../../schema"
+
+// A fraction in [0, 1], used for the opt-in proportional compaction knobs.
+const Ratio = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))
 import { ConfigExperimental } from "../../config/experimental"
 import { ConfigReference } from "../../config/reference"
 import { ConfigAgentV1 } from "./agent"
@@ -163,6 +166,20 @@ export const Info = Schema.Struct({
       }),
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+      }),
+      // Opt-in proportional variants. When a *_ratio is set it overrides its absolute
+      // sibling and scales with the model's context instead of a fixed token count.
+      reserved_ratio: Schema.optional(Ratio).annotate({
+        description:
+          "Fraction of the context window (0-1) to reserve as headroom, overriding 'reserved'. Also sets the proactive compaction trigger: compaction fires once usable context is consumed. E.g. 0.15 reserves 15%.",
+      }),
+      preserve_recent_ratio: Schema.optional(Ratio).annotate({
+        description:
+          "Fraction of usable context (0-1) to keep verbatim as the recent tail, overriding 'preserve_recent_tokens'. The summarized head is the remainder. E.g. 0.6 keeps 60% verbatim and summarizes the oldest 40%.",
+      }),
+      newest_ratio: Schema.optional(Ratio).annotate({
+        description:
+          "Fraction of the scoped conversation (0-1) whose newest activity is shown to the summarizer as a relevance signal in <newest_context>. It is preserved verbatim in the tail, not removed; it only steers what the summary emphasizes. E.g. 0.15.",
       }),
     }),
   ),
