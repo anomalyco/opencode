@@ -226,11 +226,11 @@ ${task.task_error ?? "None"}
       const candidateVersionID =
         yield* versionSvc.proposeCandidate({
           domainCategory:
-            (strategy.taskCategory && strategy.taskCategory !== "general")
-              ? strategy.taskCategory
-              : (task.task_type && task.task_type !== "general")
-                ? task.task_type
-                : (strategy.taskCategory || task.task_type || "general"),
+            (task.task_type && task.task_type !== "general")
+              ? task.task_type
+              : (strategy.taskCategory && strategy.taskCategory !== "general")
+                ? strategy.taskCategory
+                : "general",
           systemPrompt: strategy.refinedSystemPrompt,
           extractedRules: strategy.extractedRules.slice(0, 5),
           temperature: strategy.temperature,
