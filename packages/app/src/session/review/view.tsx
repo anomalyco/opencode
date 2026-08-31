@@ -8,6 +8,7 @@ import { Menu } from "@opencode-ai/ui/menu"
 import { For, Match, Show, Suspense, Switch, lazy, createEffect, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useSettings } from "@/settings/model"
 import { SessionSidePanel } from "../files/session-side-panel"
 import { ReviewPanel } from "./panel"
 import { SessionReviewTab } from "./review-tab"
@@ -179,6 +180,7 @@ export function SessionDesktopReview(props: { review: SessionReviewModel; presen
 }
 
 function ReviewContent(props: { review: SessionReviewModel }) {
+  const settings = useSettings()
   return (
     <Show when={!props.review.deferRender()}>
       <SessionReviewTab
@@ -187,6 +189,13 @@ function ReviewContent(props: { review: SessionReviewModel }) {
         diffs={props.review.diffs()}
         view={props.review.view()}
         diffStyle="unified"
+        changeSummary
+        disableLineNumbers={false}
+        overflow={settings.general.mobileDiffWrap() ? "wrap" : "scroll"}
+        onViewFile={(file) => {
+          props.review.openFile(file)
+          props.review.mobile.setTab("files")
+        }}
         onScrollRef={props.review.setScroll}
         focusedFile={props.review.activeFile()}
         onLineComment={props.review.comments.add}
@@ -197,11 +206,10 @@ function ReviewContent(props: { review: SessionReviewModel }) {
         comments={props.review.comments.all()}
         focusedComment={props.review.comments.focus()}
         onFocusedCommentChange={props.review.comments.setFocus}
-        onViewFile={props.review.openFile}
         classes={{
-          root: "pb-8 [&_[data-slot=session-review-list]]:pb-0",
-          header: "!px-2 !h-10 !pb-0",
-          container: "px-4",
+          root: "[&_[data-slot=session-review-list]]:pb-0 [&_[data-slot=accordion-trigger]]:!rounded-none [&_[data-slot=accordion-trigger]]:!border-x-0 [&_[data-slot=accordion-item]:first-child_[data-slot=accordion-trigger]]:!border-t-0 [&_[data-slot=accordion-item]:last-child:not([data-expanded])_[data-slot=accordion-trigger]]:!border-b-0 [&_[data-slot=accordion-item]:last-child_[data-slot=accordion-content]]:!border-b-0 [&_[data-slot=accordion-item]:last-child_[data-slot=session-review-diff-placeholder]]:!border-b-0 [&_[data-slot=accordion-content]]:!rounded-none [&_[data-slot=accordion-content]]:!border-x-0 [&_[data-slot=session-review-diff-placeholder]]:!rounded-none [&_[data-slot=session-review-diff-placeholder]]:!border-x-0",
+          header: "!px-2 !h-10 !pb-0 relative before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-v2-border-border-base before:content-['']",
+          container: "!px-0",
         }}
       />
     </Show>

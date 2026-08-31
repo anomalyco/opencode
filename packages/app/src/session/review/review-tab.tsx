@@ -23,6 +23,9 @@ export interface SessionReviewTabProps {
   diffs: ReviewDiff[]
   view: ReturnType<ReturnType<typeof useLayout>["view"]>
   diffStyle: DiffStyle
+  changeSummary?: boolean
+  overflow?: "wrap" | "scroll"
+  disableLineNumbers?: boolean
   onDiffStyleChange?: (style: DiffStyle) => void
   onViewFile?: (file: string) => void
   onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; preview?: string }) => void
@@ -122,6 +125,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   createEffect(() => {
     props.diffs.length
     props.diffStyle
+    props.overflow
     if (!layout.ready()) return
     queueRestore()
   })
@@ -156,6 +160,9 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       }}
       diffs={props.diffs}
       diffStyle={props.diffStyle}
+      changeSummary={props.changeSummary}
+      overflow={props.overflow}
+      disableLineNumbers={props.disableLineNumbers}
       onDiffStyleChange={props.onDiffStyleChange}
       onViewFile={props.onViewFile}
       focusedFile={props.focusedFile}
