@@ -1,4 +1,4 @@
-import { expect } from "bun:test"
+import { expect, setDefaultTimeout } from "bun:test"
 import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
 import { Model } from "@opencode-ai/core/model"
@@ -11,6 +11,8 @@ import { Money } from "@opencode-ai/schema/money"
 import { Effect, Layer } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
+
+setDefaultTimeout(30_000)
 
 it.live("updates completed assistant message content through the session HTTP API", () =>
   Effect.gen(function* () {
@@ -143,5 +145,4 @@ it.live("updates completed assistant message content through the session HTTP AP
       resource: state.assistant,
     })
   }),
-  30_000,
 )
