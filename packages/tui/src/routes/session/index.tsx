@@ -3172,7 +3172,7 @@ function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
       </Show>
       {props.children}
       <Show when={error()}>
-        <text fg={theme.text.feedback.error.default}>{error()}</text>
+        <text fg={theme.text.subdued}>{error()}</text>
       </Show>
     </box>
   )
