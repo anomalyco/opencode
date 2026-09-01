@@ -3,7 +3,7 @@ import { createServer } from "node:http"
 import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
-import { Effect } from "effect"
+import { Effect, Schedule } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -59,7 +59,20 @@ function occupy(port: number, cancel = false) {
 }
 
 const ready = (handler: Handler) =>
-  Effect.promise(() => handler(new Request("http://opencode.local/api/model/default")))
+  Effect.promise(async () => {
+    const response = await handler(new Request("http://opencode.local/api/model/default"))
+    const body: unknown = await response.json()
+    if (
+      !response.ok ||
+      typeof body !== "object" ||
+      body === null ||
+      !("data" in body) ||
+      body.data === undefined ||
+      body.data === null
+    )
+      throw new Error("Plugins not ready")
+    return response
+  }).pipe(Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("2 seconds"))
 
 const connectOpenAI = (handler: Handler) =>
   Effect.promise(() =>
