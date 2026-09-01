@@ -1,7 +1,9 @@
+import type { BrowserPaneEvent } from "@opencode-ai/app/desktop"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
+import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
 import type {
   ClipboardImage,
   DirectoryPickerOptions,
@@ -23,6 +25,11 @@ export type UpdaterAPI = {
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(): Promise<ServerReadyData>
+  browserPane: {
+    request(request: BrowserPaneRequest): Promise<void>
+    send(request: BrowserPaneRequest): void
+    onEvent(callback: (value: { readonly bindingID: string; readonly event: BrowserPaneEvent }) => void): () => void
+  }
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks(): Promise<string[]>

@@ -95,6 +95,7 @@ const generalSchema = Persistence.struct({
   mobileDiffWrap: Schema.Boolean,
   terminalPlacement: Schema.Literals(["side", "bottom"]),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
+  experimentalBrowser: Schema.Boolean,
 })
 
 const appearanceSchema = Persistence.struct({
@@ -251,6 +252,7 @@ export const defaultSettings: Settings = {
     mobileDiffWrap: true,
     terminalPlacement: "side",
     followUpBehavior: "steer",
+    experimentalBrowser: true,
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", showProjectName: false },
   keybinds: {},
@@ -357,6 +359,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         followUpBehavior: withFallback(() => store.general?.followUpBehavior, defaultSettings.general.followUpBehavior),
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
+        },
+        experimentalBrowser: withFallback(
+          () => store.general?.experimentalBrowser,
+          defaultSettings.general.experimentalBrowser,
+        ),
+        setExperimentalBrowser(value: boolean) {
+          setStore("general", "experimentalBrowser", value)
         },
       },
       visibility: {

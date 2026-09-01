@@ -32,6 +32,7 @@ export type SessionHeaderActionsState = {
   reviewVisible: boolean
   reviewOpened: boolean
   onReviewToggle: () => void
+  browser?: { label: string; opened: boolean; onToggle: () => void }
 }
 
 export function SessionHeaderActions(props: { state: SessionHeaderActionsState }) {
@@ -63,6 +64,24 @@ export function SessionHeaderActions(props: { state: SessionHeaderActionsState }
             icon={<Icon name="sidebar-right" />}
           />
         </Tooltip>
+      </Show>
+      <Show when={props.state.browser}>
+        {(browser) => (
+          <Tooltip class="shrink-0" placement="bottom" value={browser().label}>
+            <IconButton
+              type="button"
+              variant="ghost-muted"
+              size="large"
+              class="!w-9 shrink-0"
+              state={browser().opened ? "pressed" : undefined}
+              onClick={browser().onToggle}
+              aria-label={browser().label}
+              aria-expanded={browser().opened}
+              aria-controls="browser-panel"
+              icon={<Icon name="window-cursor" size="small" />}
+            />
+          </Tooltip>
+        )}
       </Show>
     </div>
   )
