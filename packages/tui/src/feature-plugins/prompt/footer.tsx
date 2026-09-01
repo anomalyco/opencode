@@ -82,7 +82,7 @@ export function PromptFooter(props: {
               </Show>
             </box>
           </Match>
-          <Match when={dimensions().width >= 44}>
+          <Match when={props.details && dimensions().width >= 44}>
             <text fg={props.context.theme.text.default} flexShrink={0}>
               {shortcut("agent.cycle")} <span style={{ fg: props.context.theme.text.subdued }}>agents</span>
             </text>

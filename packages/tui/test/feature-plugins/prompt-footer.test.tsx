@@ -75,7 +75,11 @@ test("prompt footer can hide details", async () => {
       },
     },
     keymap: {
-      shortcuts: (id: string) => (id === "command.palette.show" ? ["ctrl+p"] : []),
+      shortcuts: (id: string) => {
+        if (id === "command.palette.show") return ["ctrl+p"]
+        if (id === "agent.cycle") return ["shift+tab"]
+        return []
+      },
     },
     data: {
       session: {
@@ -101,12 +105,13 @@ test("prompt footer can hide details", async () => {
     },
   } as unknown as Context
   const [details, setDetails] = createSignal(true)
+  const [sessionID, setSessionID] = createSignal<string | undefined>("session")
   const app = await testRender(
     () => (
       <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
         <PromptFooter
           context={context}
-          sessionID="session"
+          sessionID={sessionID()}
           mode="normal"
           details={details()}
         />
@@ -129,6 +134,10 @@ test("prompt footer can hide details", async () => {
     expect(frame).not.toContain("1.0K (10%)")
     expect(frame).not.toContain("$1.00")
     expect(frame).not.toContain("ctrl+p commands")
+
+    setSessionID(undefined)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("shift+tab agents")
   } finally {
     app.renderer.destroy()
   }
