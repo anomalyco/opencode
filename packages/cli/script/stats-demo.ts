@@ -30,7 +30,13 @@ await Bun.write(
 )
 console.log(`Isolated stats demo: ${directory}`)
 const seed = Bun.spawn(
-  [process.execPath, path.join(root, "packages/core/script/seed-stats.ts"), env.OPENCODE_DB, project],
+  [
+    process.execPath,
+    path.join(root, "packages/core/script/seed-stats.ts"),
+    env.OPENCODE_DB,
+    project,
+    ...(process.argv.includes("--max") ? ["--max"] : []),
+  ],
   {
     cwd: root,
     env,

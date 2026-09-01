@@ -20,9 +20,17 @@ For light mode:
 bun run dev:stats-tui --light
 ```
 
+For a synthetic high-volume fixture with 50x token usage (roughly 1.2T tokens across two years):
+
+```sh
+bun run dev:stats-tui --max
+```
+
+`--max` can be combined with `--light`. It only changes the isolated demo data.
+
 ## Controls
 
-A small `tab` hint sits beside the date range in the header. Click the date range or press `tab` to switch; there are no footer hints or range-toggle command-palette entries.
+Click the date range or press `tab` to switch. Controls are intentionally invisible on the poster; there are no keybind hints or range-toggle command-palette entries.
 
 - `tab`: show this year / show all time.
 - `esc`: return to the previous screen.

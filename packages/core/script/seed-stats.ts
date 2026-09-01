@@ -17,11 +17,12 @@ import path from "node:path"
 const filename = process.argv[2]
 const directory = process.argv[3]
 if (!filename || !directory || !path.isAbsolute(filename) || !path.isAbsolute(directory))
-  throw new Error("Usage: bun seed-stats.ts /absolute/new.db /absolute/project")
+  throw new Error("Usage: bun seed-stats.ts /absolute/new.db /absolute/project [--max]")
 if (await Bun.file(filename).exists()) throw new Error("Refusing to seed an existing database")
 
 const encode = Schema.encodeSync(SessionMessage.Info)
 const now = new Date()
+const scale = process.argv.includes("--max") ? 50 : 1
 const projectID = Project.ID.make("global")
 const models = ["claude-sonnet-4-6", "gpt-5.4", "gemini-3.1-pro"]
 const fixtures = Array.from({ length: 731 }, (_, day) => {
@@ -51,12 +52,12 @@ const fixtures = Array.from({ length: 731 }, (_, day) => {
         agent: Agent.ID.make("build"),
         model,
         content: [{ type: "text", text: "Synthetic demo result. No model was called." }],
-        cost: Money.USD.make(0.04 + step * 0.001),
+        cost: Money.USD.make((0.04 + step * 0.001) * scale),
         tokens: {
-          input: 1800 + step * 120,
-          output: 600 + step * 80,
-          reasoning: 200 + step * 10,
-          cache: { read: 210_000 + day * 500 + step * 2000, write: 4000 },
+          input: (1800 + step * 120) * scale,
+          output: (600 + step * 80) * scale,
+          reasoning: (200 + step * 10) * scale,
+          cache: { read: (210_000 + day * 500 + step * 2000) * scale, write: 4000 * scale },
         },
         time: {
           created: DateTime.makeUnsafe(time),
