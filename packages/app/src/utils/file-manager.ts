@@ -6,7 +6,7 @@ export function fileManagerApp(os: FileManagerOS): {
     | "session.header.reveal.finder"
     | "session.header.reveal.fileExplorer"
     | "session.header.reveal.containingFolder"
-  icon: "finder" | "file-explorer"
+  icon: "finder" | "file-explorer" | "file-manager"
 } {
   if (os === "macos")
     return { label: "session.header.open.finder", actionLabel: "session.header.reveal.finder", icon: "finder" }
@@ -19,6 +19,6 @@ export function fileManagerApp(os: FileManagerOS): {
   return {
     label: "session.header.open.fileManager",
     actionLabel: "session.header.reveal.containingFolder",
-    icon: "finder",
+    icon: "file-manager",
   }
 }
