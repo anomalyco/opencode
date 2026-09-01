@@ -448,6 +448,42 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
     kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
   )
+  const customSlashBindings = createMemo(() =>
+    tuiConfig.keybinds.bindings.filter(
+      (binding): binding is (typeof tuiConfig.keybinds.bindings)[number] & { cmd: string } =>
+        typeof binding.cmd === "string" && binding.cmd.startsWith("/"),
+    ),
+  )
+  const customSlashCommands = createMemo(() =>
+    Array.from(new Set(customSlashBindings().map((binding) => binding.cmd))).map((slash) => ({
+      namespace: "palette",
+      name: slash,
+      title: `Run ${slash}`,
+      category: "Prompt",
+      hidden: true,
+      run: () => {
+        const commandName = slash.slice(1)
+        const exists = sync.data.command.some((item) => item.name === commandName)
+        if (!exists) {
+          toast.show({
+            variant: "error",
+            message: `Command not found: ${commandName}`,
+            duration: 3000,
+          })
+          return
+        }
+
+        const current = promptRef.current
+        if (!current) return
+        const existingInput = current.current.input.trim()
+        current.set({
+          input: existingInput ? `${slash} ${existingInput}` : slash,
+          parts: current.current.parts,
+        })
+        current.submit()
+      },
+    })),
+  )
 
   // Update terminal window title based on current route and session
   createEffect(() => {
@@ -953,10 +989,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.clear()
         },
       },
-    ].map((command) => ({
-      namespace: "palette",
-      ...command,
-    })),
+      ...customSlashCommands(),
+    ].map((command) =>
+      "namespace" in command
+        ? command
+        : {
+            namespace: "palette",
+            ...command,
+          },
+    ),
   )
 
   useBindings(() => ({
@@ -980,6 +1021,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       return current.current.input === ""
     },
     bindings: tuiConfig.keybinds.gather("app_exit", ["app.exit"]),
+  }))
+
+  useBindings(() => ({
+    enabled: command.matcher,
+    bindings: customSlashBindings(),
   }))
 
   event.on("tui.command.execute", (evt, { workspace }) => {
