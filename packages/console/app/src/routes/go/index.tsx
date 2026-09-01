@@ -23,7 +23,7 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
-  { name: "Grok 4.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -70,8 +70,8 @@ function LimitsGraph(props: { href: string }) {
   const baseline = 100
   const graph = [
     { id: "kimi-k3", name: "Kimi K3", req: 110, d: "50ms" },
-    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "75ms" },
     { id: "qwen3.8-max", name: "Qwen3.8 Max", req: 160, d: "90ms" },
+    { id: "grok-4.6", name: "Grok 4.6", req: 169, d: "75ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 2050, d: "290ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
@@ -511,7 +511,7 @@ export default function Home() {
                   </div>
                   <div data-slot="faq-retention-notes">
                     <p>
-                      <strong>Grok 4.5:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
+                      <strong>Grok 4.6:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
                       <a href="https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>

@@ -49,7 +49,7 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 
 現在のモデルリストには以下が含まれます：
 
-- **Grok 4.5**
+- **Grok 4.6**
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
@@ -91,7 +91,7 @@ OpenCode Goには以下の制限が含まれています：
 
 | Model                        | 5時間あたりのリクエスト数 | 週間リクエスト数 | 月間リクエスト数 |
 | ---------------------------- | ------------------------- | ---------------- | ---------------- |
-| Grok 4.5                     | 120                       | 300              | 600              |
+| Grok 4.6                     | 169                       | 423              | 845              |
 | GPT 5.6 Luna                 | 2,050                     | 5,100            | 10,250           |
 | GLM-5.3                      | 220                       | 540              | 1,080            |
 | GLM-5.2                      | 880                       | 2,150            | 4,300            |
@@ -117,7 +117,7 @@ OpenCode Goには以下の制限が含まれています：
 
 推定値は、観測されたリクエストパターンに基づいています：
 
-- Grok 4.5 — リクエストあたり 入力 1,100トークン、キャッシュ 71,500トークン、出力 220トークン
+- Grok 4.6 — リクエストあたり 入力 390トークン、キャッシュ 32,500トークン、出力 120トークン
 - GLM-5.3/5.2/5.1 — リクエストあたり 入力 700トークン、キャッシュ 52,000トークン、出力 150トークン
 - GPT 5.6 Luna — リクエストあたり 入力 1,000トークン、キャッシュ 50,000トークン、出力 220トークン
 - Kimi K3 — リクエストあたり 入力 1,050トークン、キャッシュ 76,500トークン、出力 300トークン
@@ -141,7 +141,8 @@ OpenCode Goには以下の制限が含まれています：
 
 | Model                                   | Input  | Output | Cached Read | Cached Write | Usage |
 | --------------------------------------- | ------ | ------ | ----------- | ------------ | ----- |
-| Grok 4.5                                | $2.00  | $6.00  | $0.30       | -            | $15   |
+| Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | $15   |
+| Grok 4.6 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | $15   |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | $15   |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | $15   |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | $15   |
@@ -212,7 +213,7 @@ Goでは月額$10を支払い、その6倍の利用枠を提供することを�
 
 | Model                        | Model ID                     | Endpoint                                         | AI SDK Package              |
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
-| Grok 4.5                     | grok-4.5                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -255,7 +256,7 @@ https://opencode.ai/zen/go/v1/models
 
 | モデル                       | モデルのトレーニング | データ保持  |
 | ---------------------------- | -------------------- | ----------- |
-| Grok 4.5                     | 使用なし             | 30日        |
+| Grok 4.6                     | 使用なし             | 30日        |
 | GPT 5.6 Luna                 | 使用なし             | 30日        |
 | GLM-5.3                      | 使用なし             | 0日         |
 | GLM-5.2                      | 使用なし             | 0日         |
@@ -279,7 +280,7 @@ https://opencode.ai/zen/go/v1/models
 | Hy3                          | 使用なし             | 0日         |
 | Ox Alpha Free                | 使用なし             | 0日         |
 
-- **Grok 4.5:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
+- **Grok 4.6:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
 - **GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
 - **Muse Spark 1.2 Contributor:** 将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。利用できるのは、Metaの[地域別利用ポリシー](https://ai.developer.meta.com/legal/geographic-use-policy)で許可されている地域に限られます。[詳しく見る](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **DeepSeek V4 Flash:** ZDR契約は毎月更新されます。現在の契約は2026年8月31日まで有効です。
