@@ -12,13 +12,14 @@ import { Plugin } from "../plugin.js"
 import { InstancePlugins } from "./instance.js"
 import { PluginInternal } from "./internal.js"
 import { PluginModule } from "./module.js"
+import { PluginHost } from "./host.js"
 import { SdkPlugins } from "./sdk.js"
 import { Service } from "./supervisor-service.js"
 import { PluginUpdate } from "./update.js"
 
 const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
-  pre: readonly Plugin.Generation[],
-  post: readonly Plugin.Generation[],
+  pre: readonly PluginModule.Definition[],
+  post: readonly PluginModule.Definition[],
   operations: readonly ConfigPluginSource.Operation[],
   install: boolean,
 ) {
@@ -26,7 +27,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
   const definitions = [...pre, ...post]
   const enabled = new Set(definitions.map((plugin) => plugin.id))
-  const packages = new Map<string, Plugin.Generation>()
+  const packages = new Map<string, PluginModule.Definition>()
   const pending = new Set<string>()
   const failures = new Map<
     string,
@@ -102,6 +103,9 @@ export const layer = Layer.effect(
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
     const updates = yield* PluginUpdate.Service
+    // Bind application services here; the registry only runs prepared Effects.
+    const prepare = yield* PluginHost.prepare(registry)
+    const internal = yield* PluginInternal.list()
     const ready = yield* Latch.make()
     let packages = new Set<string>()
     let outdated = new Set<string>()
@@ -110,8 +114,6 @@ export const layer = Layer.effect(
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
       const current = ++generation
-      // Resolve OpenCode's internal plugins with their privileged Location services.
-      const internal = yield* PluginInternal.list()
       // Combine internal plugins with host-contributed plugins in boot order.
       // Instance-bound plugins come last: later activation can override earlier
       // container writes, so the instance's explicit choices win over globals.
@@ -132,7 +134,9 @@ export const layer = Layer.effect(
         source.type === "package" && outdated.has(source.target) ? { ...source, outdated: true as const } : source
       const apply = (resolved: typeof immediate) =>
         registry.activate(
-          resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
+          resolved.plugins.map((plugin) =>
+            prepare(plugin.source ? { ...plugin, source: source(plugin.source) } : plugin),
+          ),
           resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
         )
       yield* apply(immediate)
@@ -204,6 +208,7 @@ const nodeDeps = [
   Bus.node,
   Npm.node,
   PluginInternal.requirements,
+  PluginHost.requirements,
 ] as const
 
 function pluginSource(target: string): Plugin.Source {

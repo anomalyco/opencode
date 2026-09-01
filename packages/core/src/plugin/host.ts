@@ -31,7 +31,9 @@ import { WebSearch } from "../websearch.js"
 import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
-import type { Interface } from "../plugin.js"
+import type { Generation, Interface } from "../plugin.js"
+import type { Definition } from "./module.js"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 type RpcEvent = Event.Payload & {
@@ -40,7 +42,10 @@ type RpcEvent = Event.Payload & {
   readonly data: Readonly<Record<string, unknown>>
 }
 const isRpcEvent = (event: Event.Payload): event is RpcEvent => event.type.startsWith("rpc.")
-export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, pluginID: string = "test") {
+export const make = Effect.fn("PluginHost.make")(function* (
+  plugin: Pick<Interface, "list">,
+  pluginID: string = "test",
+) {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
   const aisdk = yield* AISDK.Service
@@ -454,6 +459,43 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   }
   return context
 })
+
+export const prepare = Effect.fn("PluginHost.prepare")(function* (plugin: Pick<Interface, "list" | "close">) {
+  const context = yield* make(plugin)
+  const kv = yield* KV.Service
+  // Stop prepared plugins before this scope releases the services they use.
+  yield* Effect.addFinalizer(plugin.close)
+  return (definition: Definition): Generation => ({
+    id: definition.id,
+    revision: definition.revision,
+    source: definition.source,
+    features: definition.features,
+    effect: Effect.suspend(() => definition.effect({ ...context, storage: storage(kv, definition.id) })),
+  })
+})
+
+export const requirements = LayerNode.group([
+  App.node,
+  Agent.node,
+  AISDK.node,
+  Catalog.node,
+  Command.node,
+  Bus.node,
+  Integration.node,
+  KV.node,
+  Mcp.node,
+  Location.node,
+  Reference.node,
+  Rpc.node,
+  Skill.node,
+  Tool.node,
+  Vcs.node,
+  WebSearch.node,
+  Generate.node,
+  Permission.node,
+  PluginHooks.node,
+  PluginRuntime.node,
+])
 
 export function storage(kv: KV.Interface, pluginID: string): Plugin.Context["storage"] {
   const namespace = `plugin:${pluginID

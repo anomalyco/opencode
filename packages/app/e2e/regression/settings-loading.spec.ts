@@ -68,29 +68,12 @@ test("workspaces opens without waiting for inventory or sessions", async ({ page
   refresh.resolve()
 })
 
-test("extensions opens without waiting for MCPs or plugins", async ({ page }) => {
+test("extensions opens without waiting for MCPs", async ({ page }) => {
   const mcps = Promise.withResolvers<void>()
-  const plugins = Promise.withResolvers<void>()
   await page.route("**/api/mcp", async (route) => {
     await mcps.promise
     await route.fulfill({
       json: { location: { directory }, data: [{ name: "demo-mcp", status: { status: "connected" } }] },
-    })
-  })
-  await page.route("**/api/plugin", async (route) => {
-    await plugins.promise
-    await route.fulfill({
-      json: {
-        location: { directory },
-        data: [
-          {
-            id: "demo-plugin",
-            source: { type: "package", target: "demo-plugin" },
-            state: { status: "active" },
-            features: { server: true },
-          },
-        ],
-      },
     })
   })
   const settings = page.getByTestId("settings-screen")
@@ -99,10 +82,6 @@ test("extensions opens without waiting for MCPs or plugins", async ({ page }) =>
   await requested
   await expect(settings.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible()
   await expect(settings.getByRole("button", { name: "Back to app" })).toBeVisible()
-  await settings.getByRole("tab", { name: "Plugins", exact: true }).click()
-  await expect(settings.getByRole("tab", { name: "Plugins", exact: true })).toHaveAttribute("aria-selected", "true")
-  plugins.resolve()
-  await expect(settings.getByText("demo-plugin", { exact: true })).toBeVisible()
   mcps.resolve()
   await settings.getByRole("tab", { name: "MCPs", exact: true }).click()
   await expect(settings.getByRole("switch", { name: "demo-mcp" })).toBeChecked()

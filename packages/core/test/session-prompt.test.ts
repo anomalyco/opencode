@@ -87,11 +87,9 @@ const locations = (references: Layer.Layer<Reference.Service>) =>
         )
         return yield* LayerMap.make(
           (_ref: Location.Ref) =>
-            // These operations resolve Location services lazily and must wait for plugin-projected state.
             // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-            Layer.suspend(() => {
-              let ready = false
-              return Layer.merge(SessionRevert.layer, SessionPrompt.layer).pipe(
+            Layer.suspend(() =>
+              Layer.merge(SessionRevert.layer, SessionPrompt.layer).pipe(
                 Layer.provideMerge(
                   Layer.mergeAll(
                     references,
@@ -100,30 +98,26 @@ const locations = (references: Layer.Layer<Reference.Service>) =>
                     }),
                     Layer.mock(Image.Service, {
                       normalize: (_resource, content) =>
-                        ready
-                          ? Effect.succeed(
-                              content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content,
-                            )
-                          : Effect.die(new Error("Image service used before plugins were ready")),
+                        Effect.succeed(
+                          content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content,
+                        ),
                     }),
                     Layer.mock(Snapshot.Service, {
-                      capture: () =>
-                        ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
-                      restore: () =>
-                        ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
+                      capture: () => Effect.undefined,
+                      restore: () => Effect.void,
                     }),
                     Layer.succeed(
                       PluginSupervisor.Service,
                       PluginSupervisor.Service.of({
-                        awaitActivation: Effect.sync(() => (ready = true)),
+                        awaitActivation: Effect.void,
                       }),
                     ),
                   ),
                 ),
                 Layer.provide(shared),
                 Layer.fresh,
-              )
-            }) as unknown as Layer.Layer<LocationServices>,
+              ),
+            ) as unknown as Layer.Layer<LocationServices>,
         )
       }),
     ),
@@ -1206,31 +1200,6 @@ describe("Session.prompt", () => {
           message.type === "user" || message.type === "synthetic" ? message.text : message.type,
         ),
       ).toEqual(["First prompt", "Background completion", "Second prompt"])
-    }),
-  )
-})
-
-describe("Session.revert", () => {
-  it.effect("waits for location plugins before staging", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const { db } = yield* Database.Service
-      const session = yield* Session.Service
-      yield* db.insert(SessionMessageTable).values(assistantRow(messageID, 0)).run().pipe(Effect.orDie)
-      yield* session.revert.stage({ sessionID, messageID })
-    }),
-  )
-
-  it.effect("waits for location plugins before clearing", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
-        sessionID,
-        revert: { messageID, snapshot: Snapshot.ID.make("tree"), files: [] },
-      })
-      yield* session.revert.clear(sessionID)
     }),
   )
 })

@@ -89,98 +89,52 @@ import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
 
-const services = Effect.fn("PluginInternal.services")(function* () {
-  const agent = yield* Agent.Service
-  const processes = yield* AppProcess.Service
-  const catalog = yield* Catalog.Service
-  const command = yield* Command.Service
-  const config = yield* Config.Service
-  const credential = yield* Credential.Service
-  const bus = yield* Bus.Service
-  const environment = yield* Environment.Service
-  const mutation = yield* FileMutation.Service
-  const formatter = yield* Formatter.Service
-  const locationWatcherPolicy = yield* LocationWatcherPolicy.Service
-  const filesystem = yield* FileSystem.Service
-  const fs = yield* FSUtil.Service
-  const global = yield* Global.Service
-  const http = yield* HttpClient.HttpClient
-  const image = yield* Image.Service
-  const instructionDiscovery = yield* InstructionDiscovery.Service
-  const integration = yield* Integration.Service
-  const kv = yield* KV.Service
-  const location = yield* Location.Service
-  const locationMutation = yield* LocationMutation.Service
-  const models = yield* ModelsDev.Service
-  const mcp = yield* Mcp.Service
-  const npm = yield* Npm.Service
-  const permission = yield* Permission.Service
-  const runtime = yield* PluginRuntime.Service
-  const form = yield* Form.Service
-  const read = yield* ReadToolFileSystem.Service
-  const reference = yield* Reference.Service
-  const websearch = yield* WebSearch.Service
-  const ripgrep = yield* Ripgrep.Service
-  const compaction = yield* SessionCompaction.Service
-  const instructions = yield* SessionInstructions.Service
-  const shell = yield* Shell.Service
-  const shellSelect = yield* ShellSelect.Service
-  const snapshot = yield* Snapshot.Service
-  const skill = yield* Skill.Service
-  const skillDiscovery = yield* SkillDiscovery.Service
-  const tools = yield* Tool.Service
-  const toolOutput = yield* ToolOutput.Service
-  const watcher = yield* Watcher.Service
-  const wellknown = yield* WellKnown.Service
-  return Context.mergeAll(
-    Context.make(Agent.Service, agent),
-    Context.make(AppProcess.Service, processes),
-    Context.make(Catalog.Service, catalog),
-    Context.make(Command.Service, command),
-    Context.make(Config.Service, config),
-    Context.make(Credential.Service, credential),
-    Context.make(Bus.Service, bus),
-    Context.make(Environment.Service, environment),
-    Context.make(FileMutation.Service, mutation),
-    Context.make(Formatter.Service, formatter),
-    Context.make(LocationWatcherPolicy.Service, locationWatcherPolicy),
-    Context.make(FileSystem.Service, filesystem),
-    Context.make(FSUtil.Service, fs),
-    Context.make(Global.Service, global),
-    Context.make(HttpClient.HttpClient, http),
-    Context.make(Image.Service, image),
-    Context.make(InstructionDiscovery.Service, instructionDiscovery),
-    Context.make(Integration.Service, integration),
-    Context.make(KV.Service, kv),
-    Context.make(Location.Service, location),
-    Context.make(LocationMutation.Service, locationMutation),
-    Context.make(ModelsDev.Service, models),
-    Context.make(Mcp.Service, mcp),
-    Context.make(Npm.Service, npm),
-    Context.make(Permission.Service, permission),
-    Context.make(PluginRuntime.Service, runtime),
-    Context.make(Form.Service, form),
-    Context.make(ReadToolFileSystem.Service, read),
-    Context.make(Reference.Service, reference),
-    Context.make(WebSearch.Service, websearch),
-    Context.make(Ripgrep.Service, ripgrep),
-    Context.make(SessionCompaction.Service, compaction),
-    Context.make(SessionInstructions.Service, instructions),
-    Context.make(Shell.Service, shell),
-    Context.make(ShellSelect.Service, shellSelect),
-    Context.make(Snapshot.Service, snapshot),
-    Context.make(Skill.Service, skill),
-    Context.make(SkillDiscovery.Service, skillDiscovery),
-    Context.make(Tool.Service, tools),
-    Context.make(ToolOutput.Service, toolOutput),
-    Context.make(Watcher.Service, watcher),
-    Context.make(WellKnown.Service, wellknown),
-  )
-})
+const services = [
+  Agent.Service,
+  AppProcess.Service,
+  Catalog.Service,
+  Command.Service,
+  Config.Service,
+  Credential.Service,
+  Bus.Service,
+  Environment.Service,
+  FileMutation.Service,
+  Formatter.Service,
+  LocationWatcherPolicy.Service,
+  FileSystem.Service,
+  FSUtil.Service,
+  Global.Service,
+  HttpClient.HttpClient,
+  Image.Service,
+  InstructionDiscovery.Service,
+  Integration.Service,
+  KV.Service,
+  Location.Service,
+  LocationMutation.Service,
+  ModelsDev.Service,
+  Mcp.Service,
+  Npm.Service,
+  Permission.Service,
+  PluginRuntime.Service,
+  Form.Service,
+  ReadToolFileSystem.Service,
+  Reference.Service,
+  WebSearch.Service,
+  Ripgrep.Service,
+  SessionCompaction.Service,
+  SessionInstructions.Service,
+  Shell.Service,
+  ShellSelect.Service,
+  Snapshot.Service,
+  Skill.Service,
+  SkillDiscovery.Service,
+  Tool.Service,
+  ToolOutput.Service,
+  Watcher.Service,
+  WellKnown.Service,
+] as const
 
-type ContextServices<A> = A extends Context.Context<infer R> ? R : never
-
-export type Requirements = ContextServices<Effect.Success<ReturnType<typeof services>>>
+export type Requirements = Context.Service.Identifier<(typeof services)[number]>
 
 export const requirements = LayerNode.group([
   Agent.node,
@@ -278,7 +232,8 @@ const post = [
 ] as const satisfies readonly InternalPlugin[]
 
 export const list = Effect.fn("PluginInternal.list")(function* () {
-  const context = yield* services()
+  // Capture only services; activation supplies the child Scope and batching context.
+  const context = Context.pick(...services)(yield* Effect.context<Requirements>())
   const resolve = (plugins: readonly InternalPlugin[]) =>
     plugins.map(
       (plugin): Plugin => ({

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { DateTime, Effect, Stream } from "effect"
+import { Context, DateTime, Effect, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import {
   AbsolutePath,
@@ -133,6 +133,28 @@ test("event.subscribe exposes and decodes the native Effect event stream", async
   if (durable?.type !== "session.model.selected") throw new Error("Expected model event")
   expect(durable.created).toBe(1_717_171_717_000)
   expect(durable.durable).toEqual({ aggregateID: "ses_test", seq: 1, version: 1 })
+})
+
+test("shared event source runs with the Effect context captured by make", async () => {
+  const connected = { id: "evt_connected", type: "server.connected", data: {} }
+  const Token = Context.Reference("test/effect/token", { defaultValue: () => "missing" })
+  const httpClient = HttpClient.make((request) =>
+    Effect.gen(function* () {
+      const token = yield* Token
+      expect(token).toBe("captured")
+      return HttpClientResponse.fromWeb(
+        request,
+        new Response(`data: ${JSON.stringify(connected)}\n\n`, { headers: { "content-type": "text/event-stream" } }),
+      )
+    }),
+  )
+  const client = await Effect.runPromise(
+    OpenCode.make({ baseUrl: "http://localhost:3000" }).pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+      Effect.provideService(Token, "captured"),
+    ),
+  )
+  expect((await Effect.runPromise(Stream.runCollect(client.event.subscribe())))[0]).toEqual(connected)
 })
 
 test("event.subscribe terminates on Effect protocol decode failures", async () => {

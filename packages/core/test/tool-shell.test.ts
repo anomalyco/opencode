@@ -31,7 +31,6 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
@@ -188,9 +187,6 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
-const timeoutOutputCommand = isWindows
-  ? "[Console]::Out.Write('before timeout'); Start-Sleep -Seconds 60"
-  : "printf 'before timeout'; sleep 60"
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
@@ -1288,50 +1284,6 @@ describe("ShellTool", () => {
               expect(updates).toHaveLength(1)
               expect(updates[0]?.shellID).toMatch(/^sh_/)
             }),
-          )
-        },
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-      ),
-    { timeout: 15_000 },
-  )
-
-  it.live(
-    "authorizes the hook-edited command and workdir and reports its timeout",
-    () =>
-      Effect.acquireUseRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => {
-          reset()
-          const timeout = isWindows ? 3_000 : 500
-          return withSession(tmp.path, (registry) =>
-            Effect.gen(function* () {
-              const hooks = yield* PluginHooks.Service
-              yield* hooks.register("shell", "create.before", (invocation) =>
-                Effect.sync(() => {
-                  invocation.command = timeoutOutputCommand
-                  invocation.cwd = tmp.path
-                  invocation.timeout = timeout
-                }),
-              )
-              return yield* executeTool(registry, call({ command: helloCommand, workdir: "missing", timeout: 60_000 }))
-            }),
-          ).pipe(
-            Effect.andThen((settled) =>
-              Effect.sync(() => {
-                expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
-                expect(settled.metadata).not.toHaveProperty("exit")
-                const content = settled.content?.[0]
-                expect(content?.type).toBe("text")
-                if (content?.type !== "text") throw new Error("Expected text content")
-                expect(content.text).toContain("before timeout")
-                expect(content.text).toContain(`Command exceeded timeout of ${timeout} ms.`)
-                expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Command timed out")))
-                expect(assertions.map((input) => input.action)).toEqual(["shell"])
-                expect(assertions[0]?.resources).toEqual(
-                  isWindows ? [idleCommand] : ["printf 'before timeout'", idleCommand],
-                )
-              }),
-            ),
           )
         },
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),

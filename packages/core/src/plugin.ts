@@ -2,46 +2,26 @@ export * as Plugin from "./plugin.js"
 export { Event, ID, Info, Source, State } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
-import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { App } from "./app.js"
 import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope, Semaphore } from "effect"
-import { Agent } from "./agent.js"
-import { AISDK } from "./aisdk.js"
-import { Catalog } from "./catalog.js"
-import { Command } from "./command.js"
 import { Bus } from "./bus.js"
-import { Integration } from "./integration.js"
-import { KV } from "./kv.js"
-import { Mcp } from "./mcp/index.js"
-import { Location } from "./location.js"
-import { PluginHost } from "./plugin/host.js"
-import { PluginRuntime } from "./plugin/runtime.js"
-import { WebSearch } from "./websearch.js"
-import { Reference } from "./reference.js"
-import { Rpc } from "./rpc.js"
-import { Skill } from "./skill.js"
 import { State } from "./state.js"
-import { Tool } from "./tool.js"
-import { Vcs } from "./vcs.js"
-import { PluginHooks } from "./plugin/hooks.js"
-import { Generate } from "./generate.js"
-import { Permission } from "./permission.js"
 
 export interface Interface {
-  readonly activate: (
-    plugins: readonly Generation[],
-    failures?: readonly Failure[],
-  ) => Effect.Effect<void>
+  readonly activate: (plugins: readonly Generation[], failures?: readonly Failure[]) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Plugin.Info[]>
+  readonly close: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
 }
 
 type Failure = Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
 
-export type Generation = PluginDefinition & {
+/** Setup dependencies are bound before activation; the runner supplies the plugin's Scope. */
+export interface Generation {
+  readonly id: string
   readonly revision: string
   readonly source?: Plugin.Source
   readonly features?: Plugin.Features
+  readonly effect: Effect.Effect<void, never, Scope.Scope>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
@@ -50,18 +30,14 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const kv = yield* KV.Service
     const scope = yield* Scope.make()
     const active = new Map<Plugin.ID, { readonly plugin: Generation; readonly scope: Scope.Closeable }>()
     const lock = Semaphore.makeUnsafe(1)
     let inventory: Plugin.Info[] = []
-    let host: Parameters<PluginDefinition["effect"]>[0]
     const load = Effect.fnUntraced(function* (plugin: Generation) {
       const child = yield* Scope.fork(scope)
       const inherit = yield* State.inherit()
-      const loaded = yield* Effect.suspend(() =>
-        plugin.effect({ ...host, storage: PluginHost.storage(kv, plugin.id) }),
-      ).pipe(
+      const loaded = yield* plugin.effect.pipe(
         inherit,
         Effect.updateContext((context: Context.Context<never>) =>
           Context.make(Scope.Scope, child).pipe(
@@ -160,21 +136,22 @@ const layer = Layer.effect(
       )
     })
 
-    yield* Effect.addFinalizer((exit) =>
-      Effect.gen(function* () {
-        active.clear()
-        yield* State.batch(Scope.close(scope, exit), { flush: false })
-      }),
-    )
+    const close = (exit: Exit.Exit<unknown, unknown>) =>
+      lock.withPermit(
+        Effect.gen(function* () {
+          active.clear()
+          yield* State.batch(Scope.close(scope, exit), { flush: false })
+        }),
+      )
+    yield* Effect.addFinalizer(close)
 
-    const service = Service.of({
+    return Service.of({
       activate,
+      close,
       list: Effect.fn("Plugin.list")(function* () {
         return inventory
       }),
     })
-    host = yield* PluginHost.make(service)
-    return service
   }),
 )
 
@@ -190,26 +167,5 @@ function activeInfo(plugin: Generation): Plugin.Info {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [
-    Bus.node,
-    App.node,
-    Agent.node,
-    AISDK.node,
-    Catalog.node,
-    Command.node,
-    Integration.node,
-    KV.node,
-    Mcp.node,
-    Location.node,
-    Reference.node,
-    Rpc.node,
-    Skill.node,
-    Tool.node,
-    Vcs.node,
-    PluginHooks.node,
-    PluginRuntime.node,
-    WebSearch.node,
-    Generate.node,
-    Permission.node,
-  ],
+  deps: [Bus.node],
 })

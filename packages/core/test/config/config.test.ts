@@ -1097,10 +1097,6 @@ describe("Config", () => {
                   sdk: { repository: "github.com/example/sdk", branch: "main" },
                   shorthand: "github.com/example/docs",
                 },
-                plugins: [
-                  "opencode-helicone-session",
-                  { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
-                ],
               }),
             ),
           )
@@ -1191,10 +1187,6 @@ describe("Config", () => {
               sdk: { repository: "github.com/example/sdk", branch: "main" },
               shorthand: "github.com/example/docs",
             })
-            expect(documents[0]?.info.plugins).toEqual([
-              "opencode-helicone-session",
-              { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
-            ])
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
@@ -1259,10 +1251,6 @@ describe("Config", () => {
                     permission: { read: "allow" },
                   },
                 },
-                plugin: [
-                  "opencode-helicone-session",
-                  ["@my-org/audit-plugin", { endpoint: "https://audit.example.com" }],
-                ],
                 skills: { paths: ["./skills"], urls: ["https://example.com/.well-known/skills/"] },
                 references: {
                   docs: { path: "../docs", description: "Use for product documentation", hidden: true },
@@ -1338,10 +1326,6 @@ describe("Config", () => {
               request: { body: { temperature: 0.2 } },
               permissions: [{ action: "read", resource: "*", effect: "allow" }],
             })
-            expect(documents[0]?.info.plugins).toEqual([
-              "opencode-helicone-session",
-              { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
-            ])
             expect(documents[0]?.info.skills).toEqual(["./skills", "https://example.com/.well-known/skills/"])
             expect(documents[0]?.info.references).toEqual({
               docs: { path: "../docs", description: "Use for product documentation", hidden: true },

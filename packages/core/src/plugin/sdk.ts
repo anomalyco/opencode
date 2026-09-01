@@ -4,7 +4,7 @@ import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../bus.js"
-import type { Generation } from "../plugin.js"
+import type { Definition } from "./module.js"
 
 export const Updated = Bus.ephemeral({ type: "sdk.plugin.updated", schema: {} })
 
@@ -21,7 +21,7 @@ export const Updated = Bus.ephemeral({ type: "sdk.plugin.updated", schema: {} })
  */
 export interface Interface {
   readonly register: (plugin: Plugin) => Effect.Effect<void>
-  readonly all: () => readonly Generation[]
+  readonly all: () => readonly Definition[]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SdkPlugins") {}
@@ -30,7 +30,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const plugins = new Map<string, Generation>()
+    const plugins = new Map<string, Definition>()
     let revision = 0
     return Service.of({
       register: (plugin) =>

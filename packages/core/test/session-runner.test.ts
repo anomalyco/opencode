@@ -5,7 +5,6 @@ import {
   LLMRequest,
   Message,
   LanguageModel,
-  SystemPart,
   ToolFailure,
   TransportError,
   InvalidProviderOutputError,
@@ -33,11 +32,9 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionContext } from "@opencode-ai/core/session/context"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
 import { Money } from "@opencode-ai/schema/money"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -64,7 +61,6 @@ import {
   SessionTable,
 } from "@opencode-ai/core/session/sql"
 import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
-import { InstructionState } from "@opencode-ai/core/session/instruction-state"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Instructions } from "@opencode-ai/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
@@ -78,7 +74,6 @@ import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { promptLocationNode } from "./fixture/prompt-location"
@@ -206,7 +201,6 @@ const makeRunnerState = () => {
     systemUnavailable: false,
     systemLoadHook: Effect.void,
     skillBaselines: new Map<Agent.ID, string>(),
-    pluginActivationHook: Effect.void,
     authorizations: new Array<Tool.Context>(),
     executions: new Array<string>(),
     closedTransports: new Array<Session.ID>(),
@@ -390,7 +384,7 @@ const layer = Layer.unwrap(
     const pluginSupervisor = Layer.succeed(
       PluginSupervisor.Service,
       PluginSupervisor.Service.of({
-        awaitActivation: Effect.suspend(() => state.pluginActivationHook),
+        awaitActivation: Effect.void,
       }),
     )
     const promptCatalog = Layer.mock(Catalog.Service, {
@@ -476,9 +470,7 @@ const layer = Layer.unwrap(
         ReferenceInstructions.node,
         Config.node,
         Snapshot.node,
-        SessionContext.node,
         SessionCompaction.node,
-        SessionModelRequest.node,
         SessionRunnerLLM.node,
         SessionExecution.node,
         Session.node,
@@ -557,7 +549,6 @@ const setup = Effect.gen(function* () {
     admit,
     resume,
     context: session.context(sessionID),
-    hooks,
     messages: session.messages({ sessionID }),
     inbox: session.inbox(sessionID),
     runPrompt: Effect.fnUntraced(function* (text: string) {
@@ -1028,137 +1019,6 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[2]?.messages).toContainEqual(Message.user("First prompt"))
     expect(s.requests[4]?.messages).toContainEqual(Message.user("First prompt"))
     expect((yield* s.session.get(sessionID)).title).toBe("Generated title")
-  })
-
-  scenario("applies session context hooks without exposing unavailable tools", function* (s) {
-    const hooks = yield* PluginHooks.Service
-    yield* hooks.register("session", "context", (event) =>
-      Effect.sync(() => {
-        event.system = [SystemPart.make("Hooked system")]
-        event.messages = [Message.user("Hooked message")]
-        delete event.tools.echo
-        event.tools.unregistered = { description: "Unavailable", input: { type: "object" } }
-        event.generation.temperature = 0.2
-        event.generation.topP = 0.9
-        event.generation.topK = 40
-        event.generation.maxTokens = 2048
-        event.providerOptions.reasoningEffort = "high"
-      }),
-    )
-    yield* s.admit("Original message")
-    yield* s.llm.push(TestLLM.tool("call-removed", "echo", { text: "blocked" }))
-
-    yield* s.resume
-
-    // A hook-removed call fails independently and continues while step allowance remains.
-    expect(s.requests).toHaveLength(2)
-    expect(s.requests[0]?.system.map((part) => part.text)).toEqual(["Hooked system"])
-    expect(s.requests[0]?.messages).toEqual([Message.user("Hooked message")])
-    expect(s.requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
-    expect(s.requests[0]?.tools.map((tool) => tool.name)).not.toContain("unregistered")
-    expect(s.requests[0]?.generation).toMatchObject({ temperature: 0.2, topP: 0.9, topK: 40, maxTokens: 2048 })
-    expect(s.requests[0]?.providerOptions).toEqual({ reasoningEffort: "high" })
-    expect(s.executions).toEqual([])
-    expect(yield* s.context).toMatchObject([
-      Expected.user("Original message"),
-      Expected.assistant({}, [Expected.failedTool({ id: "call-removed" }, { error: { type: "tool.execution" } })]),
-    ])
-  })
-
-  scenario("keeps WebSocket eligibility after model request hooks", function* (s) {
-    const hooks = yield* PluginHooks.Service
-    yield* hooks.register("session", "model.request", (event) =>
-      Effect.sync(() => {
-        event.headers["x-model-request-hook"] = "active"
-      }),
-    )
-    yield* hooks.register("session", "http.request", () => Effect.die("Other-provider HTTP hook should not apply"), {
-      providerID: Provider.ID.githubCopilot,
-    })
-    const context = yield* SessionContext.Service
-    const modelRequests = yield* SessionModelRequest.Service
-    const selected = yield* context.select(sessionID)
-
-    yield* InstructionState.prepare(s.db, s.bus, selected.instructions, sessionID)
-    const loaded = yield* context.load(selected)
-
-    const prepared = yield* modelRequests.prepare({
-      scope: {
-        session: loaded.session,
-        agentID: loaded.agent.id,
-        model: loaded.model,
-        tools: loaded.tools,
-      },
-      transcript: { system: [], messages: [] },
-      webSocket: "session",
-    })
-
-    expect(prepared.request.http?.headers?.["x-model-request-hook"]).toBe("active")
-    // No forced HTTP middleware: the other-provider hook must not revoke eligibility.
-    expect(prepared.options.http).toBeUndefined()
-  })
-
-  scenario("forces HTTP and triggers active request and response hooks once", function* (s) {
-    const hooks = yield* PluginHooks.Service
-    let requestTriggers = 0
-    let responseTriggers = 0
-    yield* hooks.register("session", "http.request", (event) =>
-      Effect.sync(() => {
-        requestTriggers++
-        event.request.headers.set("x-request-hook", "active")
-      }),
-    )
-    yield* hooks.register("session", "http.response", (event) =>
-      Effect.sync(() => {
-        responseTriggers++
-        event.response.headers.set("x-response-hook", "active")
-      }),
-    )
-    const context = yield* SessionContext.Service
-    const modelRequests = yield* SessionModelRequest.Service
-    const selected = yield* context.select(sessionID)
-
-    yield* InstructionState.prepare(s.db, s.bus, selected.instructions, sessionID)
-    const loaded = yield* context.load(selected)
-    const prepared = yield* modelRequests.prepare({
-      scope: {
-        session: loaded.session,
-        agentID: loaded.agent.id,
-        model: loaded.model,
-        tools: loaded.tools,
-      },
-      transcript: { system: [], messages: [] },
-      webSocket: "session",
-    })
-    const http = prepared.options.http ?? (yield* Effect.die("Expected Session HTTP middleware"))
-
-    const response = yield* http(HttpClientRequest.post("https://provider.test/responses"), (request) => {
-      expect(request.headers["x-request-hook"]).toBe("active")
-      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("network")))
-    })
-
-    expect(prepared.options.webSocket).toBeUndefined()
-    expect(response.headers["x-response-hook"]).toBe("active")
-    expect(requestTriggers).toBe(1)
-    expect(responseTriggers).toBe(1)
-  })
-
-  scenario("executes a tool renamed by a session context hook", function* (s) {
-    const hooks = yield* PluginHooks.Service
-    yield* hooks.register("session", "context", (event) =>
-      Effect.sync(() => {
-        event.tools.renamed_echo = event.tools.echo!
-        delete event.tools.echo
-      }),
-    )
-    yield* s.admit("Use the renamed tool")
-    yield* s.llm.push(TestLLM.tool("call-renamed", "renamed_echo", { text: "renamed" }), [])
-
-    yield* s.resume
-
-    expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("renamed_echo")
-    expect(s.requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
-    expect(s.executions).toEqual(["renamed"])
   })
 
   scenario("advertises and executes a location registered tool", function* (s) {
@@ -1836,24 +1696,6 @@ describe("SessionRunnerLLM", () => {
       agent: "explore",
     })
     expect(s.requests).toHaveLength(0)
-  })
-
-  scenario("waits for initial plugin readiness before constructing the model request", function* (s) {
-    const release = yield* Deferred.make<void>()
-    s.pluginActivationHook = Deferred.await(release)
-    yield* s.session.prompt({ sessionID, text: "Wait for plugins", resume: false })
-
-    s.requests.length = 0
-    yield* s.llm.push([])
-    const running = yield* s.resume.pipe(Effect.forkChild({ startImmediately: true }))
-    yield* Effect.yieldNow
-
-    expect(s.requests).toHaveLength(0)
-    expect(running.pollUnsafe()).toBeUndefined()
-
-    yield* Deferred.succeed(release, undefined)
-    yield* Fiber.join(running)
-    expect(s.requests).toHaveLength(1)
   })
 
   scenario("updates selected-agent skill instructions after an agent switch", function* (s) {
@@ -4394,77 +4236,6 @@ describe("SessionRunnerLLM", () => {
     ])
     yield* replaySessionProjection(sessionID)
     expect((yield* s.context).filter((message) => message.type === "assistant")).toHaveLength(1)
-  })
-
-  scenario("allows session retry hooks to veto a proposed retry", function* (s) {
-    const failure = providerUnavailable()
-    let observed: PluginHooks.Domains["session"]["retry"] | undefined
-    yield* s.hooks.register("session", "retry", (event) =>
-      Effect.sync(() => {
-        observed = event
-        event.decision = { retry: false }
-      }),
-    )
-    yield* s.llm.push(Stream.fail(failure))
-
-    expect(yield* s.runPrompt("Do not retry transport").pipe(Effect.flip)).toBe(failure)
-    expect(s.requests).toHaveLength(1)
-    expect(observed).toMatchObject({
-      sessionID,
-      agent: "build",
-      model: { providerID: "fake", id: "fake-model" },
-      error: { type: "provider.transport", message: "Provider unavailable" },
-      attempt: 2,
-      decision: { retry: false },
-    })
-    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
-  })
-
-  scenario("allows session retry hooks to retry a terminal provider failure", function* (s) {
-    yield* s.hooks.register("session", "retry", (event) =>
-      Effect.sync(() => {
-        expect(event.decision).toEqual({ retry: false })
-        event.decision = { retry: true, delay: 0 }
-      }),
-    )
-    yield* s.admit("Retry invalid request")
-    yield* s.llm.push(Stream.fail(invalidRequest()), TestLLM.text("Recovered", "forced-retry-success"))
-
-    yield* s.resume
-
-    expect(s.requests).toHaveLength(2)
-    expect(yield* s.context).toMatchObject([
-      Expected.user("Retry invalid request"),
-      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
-    ])
-  })
-
-  scenario("uses the final session retry hook delay", function* (s) {
-    yield* s.hooks.register("session", "retry", (event) =>
-      Effect.sync(() => {
-        event.decision = { retry: true, delay: 10_000 }
-      }),
-    )
-    yield* s.hooks.register("session", "retry", (event) =>
-      Effect.sync(() => {
-        expect(event.decision).toEqual({ retry: true, delay: 10_000 })
-        event.decision = { retry: true, delay: 5_000 }
-      }),
-    )
-    yield* s.admit("Use custom retry delay")
-    yield* s.llm.push(Stream.fail(providerUnavailable()), TestLLM.text("Recovered", "hook-delay-success"))
-    const scheduled = yield* subscribeRetries(s)
-
-    const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* Queue.take(scheduled)
-    yield* TestClock.adjust("4999 millis")
-    expect(s.requests).toHaveLength(1)
-    yield* TestClock.adjust("1 millis")
-    yield* Fiber.join(run)
-
-    expect(s.requests).toHaveLength(2)
-    const assistant = requireAssistant(yield* s.context)
-    expect(assistant.retry).toBeUndefined()
   })
 
   scenario("does not start another physical attempt after interruption during retry backoff", function* (s) {

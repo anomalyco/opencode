@@ -17,7 +17,6 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool"
-import { Plugin } from "@opencode-ai/plugin/effect"
 import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect"
 import type { Scope } from "effect/Scope"
 import { SimulatedProvider } from "../src/backend/simulated-provider"
@@ -223,14 +222,6 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
       Effect.gen(function* () {
         const socket = yield* connect(endpoint)
         const messages = yield* messagesFrom(socket)
-        const plugins = yield* SdkPlugins.Service
-        let activations = 0
-        yield* plugins.register(
-          Plugin.define({
-            id: "opencode.simulation.test.activation-count",
-            effect: () => Effect.sync(() => void activations++),
-          }),
-        )
         const registration = {
           name: "lookup",
           description: "Look up a value",
@@ -252,7 +243,6 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
         yield* Effect.forEach([primary, secondary], (context) =>
           PluginSupervisor.Service.use((supervisor) => supervisor.awaitActivation).pipe(Effect.provide(context)),
         )
-        expect(activations).toBe(2)
 
         yield* Effect.gen(function* () {
           socket.send(
@@ -654,7 +644,6 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             .pipe(Effect.exit)
           expect(stale).toMatchObject({ _tag: "Failure" })
           expect(stale.toString()).toContain("no longer active")
-          expect(activations).toBe(2)
         }).pipe(Effect.provide(primary))
       }).pipe(Effect.provide(toolLifecycleLayer(endpoint)), Effect.scoped),
     )

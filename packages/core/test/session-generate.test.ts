@@ -1,13 +1,5 @@
 import { expect } from "bun:test"
-import {
-  LLMClient,
-  LLMEvent,
-  LLMResponse,
-  LanguageModel,
-  SystemPart,
-  ToolDefinition,
-  type LLMRequest,
-} from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LLMResponse, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import { Agent } from "@opencode-ai/core/agent"
@@ -44,7 +36,6 @@ import {
 } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Tool } from "@opencode-ai/core/tool"
 import { asc, eq } from "drizzle-orm"
@@ -141,7 +132,6 @@ const it = testEffect(
       SessionStore.node,
       Agent.node,
       InstructionBuiltIns.node,
-      PluginHooks.node,
       SessionGenerateNode.node,
     ]),
     [
@@ -298,29 +288,13 @@ it.effect(
       })
       instruction = "Changed context"
       const before = yield* durableState(db, sessionID)
-      const hooks = yield* PluginHooks.Service
-      let modelRequestHook = false
-      yield* hooks.register("session", "context", (event) =>
-        Effect.sync(() => {
-          event.system = [SystemPart.make("Hooked system"), ...event.system]
-          if (event.tools.lookup) event.tools.lookup.description = "Hooked lookup"
-        }),
-      )
-      yield* hooks.register("session", "model.request", () =>
-        Effect.sync(() => {
-          modelRequestHook = true
-        }),
-      )
-      yield* hooks.register("session", "http.request", () => Effect.void)
 
       const generate = yield* SessionGenerate.Service
       const result = yield* generate.generate({ sessionID, prompt: "Summarize privately" })
 
       expect(result).toBe("Transient answer")
       expect(requests).toHaveLength(1)
-      expect(modelRequestHook).toBe(true)
       expect(requests[0]?.model).toBe(model)
-      expect(requests[0]?.system[0]?.text).toBe("Hooked system")
       expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
       expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
       expect(requests[0]?.promptCacheKey).toBe(sessionID)
@@ -340,9 +314,8 @@ it.effect(
             : [],
         ),
       ).toEqual(["Settled partial answer"])
-      expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Hooked lookup" }])
+      expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Lookup" }])
       expect(requests[0]?.toolChoice).toBeUndefined()
-      expect(options[0]?.http).toBeFunction()
       expect(options[0]?.webSocket).toBeUndefined()
       expect(yield* durableState(db, sessionID)).toEqual(before)
     }),

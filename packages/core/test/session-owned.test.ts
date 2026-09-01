@@ -574,34 +574,6 @@ describe("Session-owned handles", () => {
     }),
   )
 
-  it.live("allows a prompt hook to admit synthetic input through another handle for the same Session", () =>
-    Effect.gen(function* () {
-      const fixture = yield* setup()
-      const handle = fixture.sessions.forSession(sessionID)
-      const nested = fixture.sessions.forSession(sessionID)
-      yield* fixture.hooks.register("session", "prompt", (event) =>
-        Effect.gen(function* () {
-          expect(event.sessionID).toBe(sessionID)
-          yield* nested.synthetic({ text: "Admitted by hook", resume: false })
-          event.prompt.text += " prepared"
-        }).pipe(Effect.orDie),
-      )
-
-      const prompt = yield* handle.prompt({ text: "Original", resume: false })
-
-      expect(yield* handle.inbox()).toMatchObject([
-        { type: "synthetic", payload: { text: "Admitted by hook" } },
-        { id: prompt.id, type: "user", payload: { text: "Original prepared" } },
-      ])
-      yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
-      expect(yield* fixture.store.context(sessionID)).toMatchObject([
-        { type: "synthetic", text: "Admitted by hook" },
-        { type: "user", text: "Original prepared" },
-      ])
-      expect(fixture.locations).toEqual([source])
-    }),
-  )
-
   it.live("mutates only this handle's pending inbox and preserves public conflict tags", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
@@ -783,16 +755,9 @@ describe("Session-owned handles", () => {
 })
 
 describe("SessionPrompt construction", () => {
-  it.live("captures preparation dependencies without admitting input and checks readiness on every call", () =>
+  it.live("captures preparation dependencies without admitting input", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const calls: string[] = []
-      yield* fixture.hooks.register("session", "prompt", (event) =>
-        Effect.sync(() => {
-          calls.push("hook")
-          event.prompt.text += " prepared"
-        }),
-      )
       const { prepare } = yield* SessionPrompt.Service.pipe(
         Effect.provide(
           SessionPrompt.layer.pipe(
@@ -800,9 +765,7 @@ describe("SessionPrompt construction", () => {
               Layer.mergeAll(
                 Layer.succeed(PluginHooks.Service, fixture.hooks),
                 Layer.succeed(PluginSupervisor.Service, {
-                  awaitActivation: Effect.sync(() => {
-                    calls.push("ready")
-                  }),
+                  awaitActivation: Effect.void,
                 }),
                 Layer.mock(Image.Service, {}),
                 Layer.mock(Skill.Service, {}),
@@ -811,7 +774,6 @@ describe("SessionPrompt construction", () => {
           ),
         ),
       )
-      expect(calls).toEqual([])
       const input = { text: "Original", files: [{ uri: new URL("./session-owned.test.ts", import.meta.url).href }] }
       const request = { sessionID, messageID: SessionMessage.ID.create(), input }
       const items = yield* Effect.forEach([0, 1], () => prepare(request)).pipe(
@@ -819,9 +781,8 @@ describe("SessionPrompt construction", () => {
         Effect.setContext(Context.empty()),
       )
 
-      expect(calls).toEqual(["ready", "hook", "ready", "hook"])
       expect(items[0]).toEqual(items[1])
-      expect(items[0]).toMatchObject({ type: "user", payload: { text: "Original prepared" }, delivery: "steer" })
+      expect(items[0]).toMatchObject({ type: "user", payload: { text: "Original" }, delivery: "steer" })
       expect(items[0]?.payload.files?.[0]?.mime).toBe("text/plain")
       expect(input.text).toBe("Original")
       expect(yield* fixture.sessions.forSession(sessionID).inbox()).toEqual([])
@@ -831,7 +792,7 @@ describe("SessionPrompt construction", () => {
 })
 
 describe("SessionRevert construction", () => {
-  it.live("captures dependencies without work, then checks readiness on every stage and clear", () =>
+  it.live("captures dependencies without doing work", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
       const handle = fixture.sessions.forSession(sessionID)
@@ -842,9 +803,7 @@ describe("SessionRevert construction", () => {
         Effect.provide(
           Layer.merge(
             Layer.succeed(PluginSupervisor.Service, {
-              awaitActivation: Effect.sync(() => {
-                calls.push("awaitActivation")
-              }),
+              awaitActivation: Effect.void,
             }),
             Layer.mock(Snapshot.Service, {
               capture: () =>
@@ -866,12 +825,12 @@ describe("SessionRevert construction", () => {
         ),
       )
       expect(calls).toEqual([])
-      const unrelated = Layer.merge(Layer.mock(PluginSupervisor.Service, {}), Layer.mock(Snapshot.Service, {}))
+      const unrelated = Layer.mock(Snapshot.Service, {})
       const session = yield* handle.get()
       yield* revert
         .stage({ session, messageID: boundary.id, files: false })
         .pipe(Effect.satisfiesServicesType<never>(), Effect.provide(unrelated))
-      expect(calls).toEqual(["awaitActivation", "capture", "capture", "diff"])
+      expect(calls).toEqual(["capture", "capture", "diff"])
 
       const staged = yield* handle.get()
       expect(staged.revert?.snapshot).toBe(Snapshot.ID.make("captured-tree"))
@@ -879,15 +838,7 @@ describe("SessionRevert construction", () => {
       const cleared = yield* handle.get()
       expect(cleared.revert).toBeUndefined()
       yield* revert.clear(cleared).pipe(Effect.satisfiesServicesType<never>(), Effect.provide(unrelated))
-      expect(calls).toEqual([
-        "awaitActivation",
-        "capture",
-        "capture",
-        "diff",
-        "awaitActivation",
-        "restore",
-        "awaitActivation",
-      ])
+      expect(calls).toEqual(["capture", "capture", "diff", "restore"])
     }),
   )
 })

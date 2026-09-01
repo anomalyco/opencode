@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, SystemPart, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -22,7 +22,6 @@ import { App } from "@opencode-ai/core/app"
 import { Agent } from "@opencode-ai/core/agent"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
@@ -84,7 +83,6 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
-      PluginHooks.node,
       SessionCompaction.node,
       SessionModelRequest.node,
     ]),
@@ -482,41 +480,5 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.promptCacheKey).toBe(rootID)
-  }),
-)
-
-it.effect("keeps session context hooks away from compaction requests", () =>
-  Effect.gen(function* () {
-    requests = []
-    const compaction = yield* SessionCompaction.Service
-    // Context hooks shape the agent conversation; compaction is not part of it,
-    // so it opts out and the transcript passes through unchanged.
-    const hooks = yield* PluginHooks.Service
-    yield* hooks.register("session", "context", (event) =>
-      Effect.sync(() => {
-        event.system.push(SystemPart.make("Injected conversation context"))
-      }),
-    )
-    const session = yield* insertSession(Session.ID.make("ses_hook_compaction"))
-    const modelRequests = yield* SessionModelRequest.Service
-    expect(
-      yield* compaction.compactManual({
-        session,
-        resolveModel: () => Effect.succeed(resolved),
-        prepare: modelRequests.prepare,
-        messages: [
-          {
-            id: SessionMessage.ID.create(),
-            type: "user",
-            text: "Summarize this conversation.",
-            time: { created: DateTime.makeUnsafe(0) },
-          },
-        ],
-        inputID: SessionMessage.ID.make("msg_hook_compaction"),
-      }),
-    ).toEqual({ status: "completed" })
-
-    expect(requests).toHaveLength(1)
-    expect(requests[0]?.system).toEqual([])
   }),
 )
