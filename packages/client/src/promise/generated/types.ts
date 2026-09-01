@@ -18,7 +18,7 @@ export type PluginSource =
 
 export type PluginFeatures = { server?: true; tui?: true; rpc?: true }
 
-export type PluginState = { status: "active" } | { status: "failed"; error: string }
+export type PluginState = { status: "active" } | { status: "failed"; error: string; ref?: string }
 
 export type SessionForkBoundary = { type: "before"; messageID: string } | { type: "through"; messageID: string }
 

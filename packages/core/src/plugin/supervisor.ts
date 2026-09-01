@@ -55,11 +55,13 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     }
 
     const plugin = yield* PluginModule.load(operation, { install }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("failed to load plugin", { target: operation.target, cause }).pipe(
-          Effect.as({ error: Cause.pretty(cause) }),
-        ),
-      ),
+      Effect.catchCause((cause) => {
+        const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+        const error = Cause.squash(cause)
+        return Effect.logWarning("failed to load plugin", { target: operation.target, ref, cause }).pipe(
+          Effect.as({ error: error instanceof PluginModule.LoadError ? error.message : "Plugin failed to load", ref }),
+        )
+      }),
     )
     if ("pending" in plugin) {
       pending.add(operation.target)
@@ -68,7 +70,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     if ("error" in plugin) {
       failures.set(operation.target, {
         source: pluginSource(operation.target),
-        state: { status: "failed", error: plugin.error },
+        state: { status: "failed", error: plugin.error, ref: plugin.ref },
         features: { server: true },
       })
       continue
@@ -127,9 +129,7 @@ export const layer = Layer.effect(
       // Activate everything available locally before waiting on missing package installs.
       const immediate = yield* resolve(pre, post, operations, false)
       const source = (source: Plugin.Source) =>
-        source.type === "package" && outdated.has(source.target)
-          ? { ...source, outdated: true as const }
-          : source
+        source.type === "package" && outdated.has(source.target) ? { ...source, outdated: true as const } : source
       const apply = (resolved: typeof immediate) =>
         registry.activate(
           resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),

@@ -20,7 +20,7 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Effect, Fiber, Layer, Logger, Option, Schedule, Stream } from "effect"
+import { Cause, Effect, Fiber, Layer, Logger, Option, Schedule, Stream } from "effect"
 import { Database } from "../../src/database/database"
 import { tmpdir } from "../fixture/tmpdir"
 import { tempGlobalLayer } from "../fixture/global"
@@ -217,12 +217,15 @@ describe("PluginSupervisor config", () => {
   )
 
   it.live("logs invalid packages and continues loading", () => {
-    const output: string[] = []
+    const output: Array<{ target: string; ref: string; diagnostic: string }> = []
     const logger = Logger.map(Logger.formatStructured, (entry) => {
       if (!Array.isArray(entry.message) || entry.message[0] !== "failed to load plugin") return
       const details = entry.message[1]
-      if (typeof details !== "object" || details === null || !("target" in details)) return
-      if (typeof details.target === "string") output.push(details.target)
+      if (typeof details !== "object" || details === null) return
+      if (!("target" in details) || typeof details.target !== "string") return
+      if (!("ref" in details) || typeof details.ref !== "string") return
+      if (!("cause" in details) || !Cause.isCause(details.cause)) return
+      output.push({ target: details.target, ref: details.ref, diagnostic: Cause.pretty(details.cause) })
     })
     return withLocation(
       {
@@ -230,6 +233,7 @@ describe("PluginSupervisor config", () => {
           "-*",
           path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts"),
           path.join(import.meta.dir, "../plugin/fixtures/invalid"),
+          path.join(import.meta.dir, "../plugin/fixtures/load-failure"),
           {
             package: path.join(import.meta.dir, "../plugin/fixtures/config-promise"),
             options: { description: "Loaded after invalid plugins" },
@@ -243,16 +247,30 @@ describe("PluginSupervisor config", () => {
         expect(yield* agents.get(Agent.ID.make("configured"))).toMatchObject({
           description: "Loaded after invalid plugins",
         })
-        expect(output).toEqual([
+        expect(output.map((entry) => entry.target)).toEqual([
           path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts"),
           path.join(import.meta.dir, "../plugin/fixtures/invalid/index.ts"),
+          path.join(import.meta.dir, "../plugin/fixtures/load-failure/index.ts"),
         ])
-        expect(
-          (yield* plugins.list()).filter((plugin) => plugin.state.status === "failed").map((plugin) => plugin.source),
-        ).toEqual([
+        const failed = (yield* plugins.list()).filter((plugin) => plugin.state.status === "failed")
+        expect(failed.map((plugin) => plugin.source)).toEqual([
           { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts") },
           { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/invalid/index.ts") },
+          { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/load-failure/index.ts") },
         ])
+        expect(failed.map((plugin) => plugin.state)).toEqual([
+          { status: "failed", error: "Plugin failed to load", ref: output[0]?.ref },
+          {
+            status: "failed",
+            error: "Plugin must export a default definition with an id and an effect or setup function.",
+            ref: output[1]?.ref,
+          },
+          { status: "failed", error: "Plugin failed to load", ref: output[2]?.ref },
+        ])
+        output.forEach((entry) => expect(entry.ref).toMatch(/^err_[0-9a-f]{8}$/))
+        expect(new Set(output.map((entry) => entry.ref)).size).toBe(3)
+        expect(output[2]?.diagnostic).toContain("private plugin loader details")
+        expect(JSON.stringify(failed)).not.toContain("private plugin loader details")
       }),
     ).pipe(Effect.provide(Logger.layer([logger])))
   })
@@ -537,7 +555,6 @@ describe("PluginSupervisor config", () => {
       }),
     ),
   )
-
 })
 
 const ready = Effect.fnUntraced(function* () {
@@ -610,12 +627,10 @@ function discoveredPlugin(id: string) {
   return `export default { id: ${JSON.stringify(id)}, setup() {} }`
 }
 
-async function writeDiscoveredPackage(
-  directory: string,
-  name: string,
-  files: Record<string, string>,
-) {
+async function writeDiscoveredPackage(directory: string, name: string, files: Record<string, string>) {
   const plugin = path.join(directory, ".opencode", "plugins", name)
   await fs.mkdir(plugin, { recursive: true })
-  await Promise.all(Object.entries(files).map(([file, id]) => fs.writeFile(path.join(plugin, file), discoveredPlugin(id))))
+  await Promise.all(
+    Object.entries(files).map(([file, id]) => fs.writeFile(path.join(plugin, file), discoveredPlugin(id))),
+  )
 }

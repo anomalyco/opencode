@@ -26,6 +26,11 @@ const Definition = Schema.Struct({
   ]),
 })
 
+export class LoadError extends Schema.TaggedError<LoadError>()("PluginModule.LoadError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+}) {}
+
 export const load = Effect.fn("PluginModule.load")(function* (
   operation: Extract<ConfigPluginSource.Operation, { type: "add" }>,
   options?: { readonly install?: boolean },
@@ -39,13 +44,21 @@ export const load = Effect.fn("PluginModule.load")(function* (
       : yield* npm.add(operation.target, { subpaths: ["server", ""] })
   const entrypoint = installed.entrypoint
   if (!local && options?.install === false && !entrypoint) return { pending: true as const }
-  if (!entrypoint) return yield* Effect.fail(new Error(`Plugin entrypoint not found: ${operation.target}`))
+  if (!entrypoint) return yield* new LoadError({ message: `Plugin entrypoint not found: ${operation.target}` })
   // Bun currently ignores query parameters when caching file:// imports.
   const target = typeof Bun !== "undefined" ? operation.target.replaceAll("\\", "/") : entrypoint
   const source = operation.mtime === undefined ? entrypoint : `${target}?mtime=${operation.mtime}`
   yield* Effect.log({ msg: "loading plugin", id: operation.target, entrypoint: source })
   const mod = yield* Effect.promise(() => importModule(source))
-  const value = (yield* Schema.decodeUnknownEffect(Definition)(mod)).default
+  const value = (yield* Schema.decodeUnknownEffect(Definition)(mod).pipe(
+    Effect.mapError(
+      (cause) =>
+        new LoadError({
+          message: "Plugin must export a default definition with an id and an effect or setup function.",
+          cause,
+        }),
+    ),
+  )).default
   const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
   const features = local
     ? yield* localFeatures(operation.target)
@@ -77,11 +90,11 @@ function localFeatures(entrypoint: string) {
   if (!path.basename(entrypoint).startsWith("index.")) return Effect.succeed({})
   return Effect.promise(() => readdir(path.dirname(entrypoint), { withFileTypes: true })).pipe(
     Effect.map((entries) => {
-      const names = new Set(entries.filter((entry) => entry.isFile() || entry.isSymbolicLink()).map((entry) => entry.name))
+      const names = new Set(
+        entries.filter((entry) => entry.isFile() || entry.isSymbolicLink()).map((entry) => entry.name),
+      )
       const has = (name: string) =>
-        ["ts", "tsx", "js", "jsx", "mts", "mjs", "cts", "cjs"].some((extension) =>
-          names.has(`${name}.${extension}`),
-        )
+        ["ts", "tsx", "js", "jsx", "mts", "mjs", "cts", "cjs"].some((extension) => names.has(`${name}.${extension}`))
       return {
         ...(has("tui") ? { tui: true as const } : {}),
         ...(has("rpc") ? { rpc: true as const } : {}),
