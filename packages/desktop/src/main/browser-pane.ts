@@ -16,7 +16,7 @@ type Entry = {
   abort: AbortController
   registered: PromiseWithResolvers<void>
   requests: Map<string, AbortController>
-  report?: (state: Browser.State | null) => void
+  report?: (event: Extract<BrowserPaneEvent["event"], { type: "state" }>) => void
   cleanup?: () => void
   page?: BrowserPage
 }
@@ -74,9 +74,14 @@ export function createBrowserPane() {
             const rpc = client.rpc(Browser.Definition)
             const connected = yield* Deferred.make<void>()
             const outbound = yield* Queue.unbounded<Effect.Effect<void, unknown>>()
-            // Preserve the state-before-result ordering of the original control channel.
-            entry.report = (state) => {
-              Queue.offerUnsafe(outbound, rpc.state({ ...attachment, state }, options))
+            // Report state before publishing it locally or completing a command.
+            entry.report = (event) => {
+              Queue.offerUnsafe(
+                outbound,
+                rpc
+                  .state({ ...attachment, state: event.state }, options)
+                  .pipe(Effect.tap(() => Effect.sync(() => publish(entry, event)))),
+              )
             }
             const receive = client.event.subscribe().pipe(
               Stream.runForEach((event) =>
@@ -180,12 +185,12 @@ export function createBrowserPane() {
 
   function close(entry: Entry) {
     if (entries.get(entry.bindingID) !== entry) return
+    entry.report = undefined
     closePage(entry, "browser.pane.registration.closed")
     entries.delete(entry.bindingID)
     entry.registered.reject(new Error("browser.pane.registration.closed"))
     entry.cleanup?.()
     entry.abort.abort()
-    entry.report = undefined
   }
 
   function closePage(entry: Entry, error?: string) {
@@ -197,9 +202,13 @@ export function createBrowserPane() {
   }
 
   function publishState(entry: Entry, error?: string) {
-    const state = entry.page?.state() ?? null
-    entry.report?.(state)
-    publish(entry, { type: "state", state, ...(error === undefined ? {} : { error }) })
+    const event = {
+      type: "state" as const,
+      state: entry.page?.state() ?? null,
+      ...(error === undefined ? {} : { error }),
+    }
+    if (entry.report) return entry.report(event)
+    publish(entry, event)
   }
 
   function create(entry: Entry) {
