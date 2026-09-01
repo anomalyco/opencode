@@ -26,7 +26,7 @@ const digits: Record<string, string[]> = {
   T: ["111", "010", "010", "010", "010"],
 }
 
-export function StatsPoster(props: { stats: SessionStatsInfo; onToggle?: () => void }) {
+export function StatsPoster(props: { stats: SessionStatsInfo }) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const width = () => Math.max(12, Math.min(110, dimensions().width - 8))
@@ -45,7 +45,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo; onToggle?: () => v
   const calendar = createMemo(() => statsCalendar(props.stats, width()))
   const shades = createMemo(() => [
     theme.text.subdued,
-    ...[0.3, 0.5, 0.75, 1].map((alpha) => tint(theme.background.default, theme.text.default, alpha)),
+    ...[0.3, 0.5, 0.75, 1].map((alpha) => tint(theme.background.default, theme.text.emphasis, alpha)),
   ])
 
   return (
@@ -54,9 +54,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo; onToggle?: () => v
         <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
           opencode / stats
         </text>
-        <text fg={theme.text.subdued} onMouseUp={props.onToggle}>
-          {dates()}
-        </text>
+        <text fg={theme.text.subdued}>{dates()}</text>
       </box>
       <Show when={!compact()}>
         <Logo />
@@ -125,14 +123,10 @@ export function StatsPoster(props: { stats: SessionStatsInfo; onToggle?: () => v
 }
 
 function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
-  const [period, setPeriod] = createSignal<"all" | "year">("all")
-  const toggle = () => {
-    setPeriod((value) => (value === "all" ? "year" : "all"))
-  }
-  const [result] = createResource(period, (period) => {
+  const [result] = createResource(() => {
     const now = new Date()
     return props.context.client.session.stats({
-      from: period === "year" ? new Date(now.getFullYear(), 0, 1).getTime() : undefined,
+      from: new Date(now.getFullYear(), 0, 1).getTime(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       tools: "none",
     })
@@ -140,14 +134,7 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
   const theme = useTheme()
 
   props.context.keymap.layer(() => ({
-    commands: [
-      { bind: "escape", title: "back", run: props.onClose },
-      {
-        bind: "tab",
-        title: period() === "all" ? "show this year" : "show all time",
-        run: toggle,
-      },
-    ],
+    commands: [{ bind: "escape", title: "back", run: props.onClose }],
   }))
 
   return (
@@ -169,7 +156,7 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
           }
         >
           <Show when={result()} fallback={<text fg={theme.text.subdued}>Gathering your stats...</text>}>
-            {(value) => <StatsPoster stats={value()} onToggle={toggle} />}
+            {(value) => <StatsPoster stats={value()} />}
           </Show>
         </Show>
       </scrollbox>
