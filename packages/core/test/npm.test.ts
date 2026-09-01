@@ -252,7 +252,7 @@ describe("Npm.add", () => {
         }
       }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
 
-      expect(entries.added.entrypoint).toEndWith("/index.js")
+      expect(entries.added.entrypoint).toBe(pathToFileURL(path.join(entries.added.directory, "index.js")).href)
       expect(entries.added.version).toBe(fixture.commit)
       expect(entries.cached).toEqual(entries.added)
       expect(entries.resolved).toEqual(entries.added)

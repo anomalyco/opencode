@@ -293,7 +293,8 @@ const layer = Layer.effect(
           installedNameValue,
           installed?.path ?? path.join(staging, "node_modules", installedNameValue),
           target,
-          subpaths,
+          // Resolve installed entrypoints after rename so Bun cannot hold the staging directory open on Windows.
+          installed ? [] : subpaths,
         )
         if (!installed && !result.entrypoint) return yield* new InstallFailedError({ add: [pkg], dir: staging })
         return { name: installedNameValue, result }
