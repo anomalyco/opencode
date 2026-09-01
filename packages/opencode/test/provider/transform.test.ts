@@ -8,6 +8,7 @@ import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { generateText, jsonSchema, type ModelMessage } from "ai"
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
 import { createAnthropic } from "@ai-sdk/anthropic"
+import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -958,6 +959,52 @@ describe("ProviderTransform.providerOptions", () => {
       expect(result.providerMetadata?.anthropic?.inputTransformations).toEqual([
         { type: "thinking_dropped", path: "messages.1.content.0", reason: "prefix_binding_mismatch" },
       ])
+    })
+
+    test("reaches the vertex anthropic wire as block_binding plus beta header", async () => {
+      const model = claude("@ai-sdk/google-vertex/anthropic", "claude-fable-5-1")
+      let sent: { url: string; headers: Headers; body: any } | undefined
+      const provider = createVertexAnthropic({
+        project: "test-project",
+        location: "global",
+        generateAuthToken: async () => "test-token",
+        fetch: Object.assign(
+          async (...args: Parameters<typeof fetch>) => {
+            sent = {
+              url: String(args[0]),
+              headers: new Headers(args[1]?.headers),
+              body: JSON.parse(String(args[1]?.body)),
+            }
+            return Response.json({
+              type: "message",
+              id: "msg_1",
+              model: "claude-fable-5-1",
+              role: "assistant",
+              content: [{ type: "text", text: "ok" }],
+              stop_reason: "end_turn",
+              usage: { input_tokens: 1, output_tokens: 1 },
+            })
+          },
+          { preconnect: () => undefined },
+        ),
+      })
+      await generateText({
+        model: provider("claude-fable-5-1"),
+        prompt: "hi",
+        providerOptions: ProviderTransform.providerOptions(model, {}),
+      })
+      // Same wire shape Anthropic's own Vertex SDK produces: rawPredict URL, model moved
+      // out of the body, anthropic_version added, betas carried in the anthropic-beta header.
+      expect(sent?.url).toBe(
+        "https://aiplatform.googleapis.com/v1/projects/test-project/locations/global/publishers/anthropic/models/claude-fable-5-1:rawPredict",
+      )
+      expect(sent?.body.model).toBeUndefined()
+      expect(sent?.body.anthropic_version).toBe("vertex-2023-10-16")
+      expect(sent?.body.thinking).toEqual({
+        type: "adaptive",
+        block_binding: { prefix_mismatch_behavior: "drop_block" },
+      })
+      expect(sent?.headers.get("anthropic-beta")?.split(",")).toContain("thinking-binding-controls-2026-08-01")
     })
 
     test("reaches the bedrock wire as additionalModelRequestFields", async () => {
