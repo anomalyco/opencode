@@ -66,7 +66,7 @@ async function createRegistryFixture(directory: string) {
       exports: "./index.js",
     })
     await Bun.write(path.join(root, "package", "index.js"), `export const version = "${version}"\n`)
-    await Bun.$`tar -czf ${path.join(root, "package.tgz")} -C ${root} package`
+    await Bun.$`tar -czf package.tgz package`.cwd(root)
     tarballs.set(version, await Bun.file(path.join(root, "package.tgz")).bytes())
   }
   const state = { latest: "1.0.0" }
