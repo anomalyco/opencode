@@ -75,7 +75,7 @@ export type AutoInput = {
 }
 
 type RequiredInput = Pick<AutoInput, "messages" | "resolved"> & {
-  readonly context?: SessionContext.Loaded
+  readonly context: SessionContext.Loaded
 }
 
 export type ManualInput = {
@@ -137,7 +137,6 @@ export const estimateTokens = (input: RequiredInput) => {
       last.tokens.output +
       last.tokens.reasoning
     )
-  if (!input.context) return added
   const transcript = SessionModelRequest.baseTranscript({
     agent: input.context.agent.info,
     model: input.resolved,

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, SystemPart, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -161,14 +161,13 @@ it.effect("auto compaction estimates current content against the buffered prompt
       time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
       location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
     })
-    const input = (tokens: number, limit: { context: number; input?: number; output: number }) => ({
-      session,
-      resolved: SessionRunnerModel.resolved(model, {
+    const input = (tokens: number, limit: { context: number; input?: number; output: number }) => {
+      const resolved = SessionRunnerModel.resolved(model, {
         capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
         cost: [],
         limit,
-      }),
-      messages: [
+      })
+      const messages = [
         Schema.decodeUnknownSync(SessionMessage.Assistant)({
           id: SessionMessage.ID.make("msg_assistant"),
           type: "assistant",
@@ -178,8 +177,29 @@ it.effect("auto compaction estimates current content against the buffered prompt
           tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, completed: 0 },
         }),
-      ],
-    })
+      ]
+      return {
+        session,
+        resolved,
+        messages,
+        context: {
+          session,
+          model: resolved,
+          messages,
+          agent: {
+            id: Agent.defaultID,
+            info: { ...Agent.Info.default(Agent.defaultID), system: "You are a helpful assistant." },
+          },
+          initial: "Project instructions.",
+          tools: {
+            definitions: [
+              ToolDefinition.make({ name: "read", description: "Read files", inputSchema: { type: "object" } }),
+            ],
+            execute: () => Effect.die("unused"),
+          },
+        },
+      }
+    }
 
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
     expect(compaction.required(input(251_999, inputLimited))).toBe(false)
@@ -207,13 +227,14 @@ it.effect("auto compaction estimates current content against the buffered prompt
 
     const interrupted = { ...assistant, id: SessionMessage.ID.create(), tokens: undefined }
     expect(SessionCompaction.estimateTokens({ ...grown, messages: [...grown.messages, interrupted] })).toBe(80_001)
-    expect(SessionCompaction.estimateTokens({ ...grown, messages: [interrupted] })).toBe(1)
+    // Without provider usage, include 20 tokens for the system prompt, instructions, and tool definition.
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [interrupted] })).toBe(21)
     expect(
       SessionCompaction.estimateTokens({
         ...grown,
         messages: [{ ...interrupted, tokens: input(0, contextLimited).messages[0].tokens }],
       }),
-    ).toBe(1)
+    ).toBe(21)
 
     const media = [
       { type: "file", mime: "image/png", uri: `data:image/png;base64,${"a".repeat(100_000)}` },
@@ -241,7 +262,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
         resolved: { ...grown.resolved, capabilities: { ...grown.resolved.capabilities, input: modalities } },
       }
       expect(SessionCompaction.estimateTokens({ ...selected, messages: [...messages, user] })).toBe(tokens)
-      expect(SessionCompaction.estimateTokens({ ...selected, messages: [user] })).toBe(fallback)
+      expect(SessionCompaction.estimateTokens({ ...selected, messages: [user] })).toBe(fallback + 20)
     }
 
     const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
