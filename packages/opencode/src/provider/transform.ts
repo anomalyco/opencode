@@ -1778,9 +1778,6 @@ function reasoningEffort(model: Provider.Model, effort: string) {
           },
         }
       if (model.api.id.includes("anthropic")) return
-      // The SDK's maxReasoningEffort schema excludes "none".
-      if (effort === "none" && model.api.id.includes("openai.gpt-5.6-"))
-        return { additionalModelRequestFields: { reasoning: { effort } } }
       return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
     case "@ai-sdk/gateway":
       if (model.id.includes("anthropic")) return { thinking: { type: "adaptive", display: "summarized" }, effort }

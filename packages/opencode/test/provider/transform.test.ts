@@ -6,7 +6,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { generateText, jsonSchema, type ModelMessage } from "ai"
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
+import { createAmazonBedrock, type AmazonBedrockLanguageModelOptions } from "@ai-sdk/amazon-bedrock"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 
@@ -3717,7 +3717,7 @@ describe("ProviderTransform.reasoningVariants", () => {
     )
   })
 
-  test.each(["luna", "sol", "terra"])("sends Bedrock GPT-5.6 %s none effort through native fields", async (name) => {
+  test.each(["luna", "sol", "terra"])("serializes Bedrock GPT-5.6 %s none effort", async (name) => {
     const item = target("@ai-sdk/amazon-bedrock", `global.openai.gpt-5.6-${name}`)
     const variants = ProviderTransform.reasoningVariants(
       model([{ type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] }]),
@@ -3726,6 +3726,9 @@ describe("ProviderTransform.reasoningVariants", () => {
     for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
       expect(variants?.[effort]).toEqual({ reasoningConfig: { type: "enabled", maxReasoningEffort: effort } })
     }
+    expect(variants?.none).toEqual({
+      reasoningConfig: { type: "enabled", maxReasoningEffort: "none" },
+    } satisfies AmazonBedrockLanguageModelOptions)
     const sent: unknown[] = []
     const provider = createAmazonBedrock({
       apiKey: "test-key",

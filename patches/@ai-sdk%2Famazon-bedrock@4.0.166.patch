@@ -1,8 +1,16 @@
 diff --git a/dist/index.d.mts b/dist/index.d.mts
-index d194ae227fd1223ba44c8c5157b1bb72b1bab273..2e046db0a365c27659ffcec08782c7c26845c1fa 100644
+index d194ae227fd1223ba44c8c5157b1bb72b1bab273..db7fdb1b6f4e617baa40539ccef718735d2e9e81 100644
 --- a/dist/index.d.mts
 +++ b/dist/index.d.mts
-@@ -61,6 +61,12 @@ declare const amazonBedrockLanguageModelOptions: z.ZodObject<{
+@@ -51,6 +51,7 @@ declare const amazonBedrockLanguageModelOptions: z.ZodObject<{
+         type: z.ZodOptional<z.ZodUnion<readonly [z.ZodLiteral<"enabled">, z.ZodLiteral<"disabled">, z.ZodLiteral<"adaptive">]>>;
+         budgetTokens: z.ZodOptional<z.ZodNumber>;
+         maxReasoningEffort: z.ZodOptional<z.ZodEnum<{
++            none: "none";
+             low: "low";
+             medium: "medium";
+             high: "high";
+@@ -61,6 +62,12 @@ declare const amazonBedrockLanguageModelOptions: z.ZodObject<{
              omitted: "omitted";
              summarized: "summarized";
          }>>;
@@ -16,10 +24,18 @@ index d194ae227fd1223ba44c8c5157b1bb72b1bab273..2e046db0a365c27659ffcec08782c7c2
      anthropicBeta: z.ZodOptional<z.ZodArray<z.ZodString>>;
      serviceTier: z.ZodOptional<z.ZodEnum<{
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index d194ae227fd1223ba44c8c5157b1bb72b1bab273..2e046db0a365c27659ffcec08782c7c26845c1fa 100644
+index d194ae227fd1223ba44c8c5157b1bb72b1bab273..db7fdb1b6f4e617baa40539ccef718735d2e9e81 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
-@@ -61,6 +61,12 @@ declare const amazonBedrockLanguageModelOptions: z.ZodObject<{
+@@ -51,6 +51,7 @@ declare const amazonBedrockLanguageModelOptions: z.ZodObject<{
+         type: z.ZodOptional<z.ZodUnion<readonly [z.ZodLiteral<"enabled">, z.ZodLiteral<"disabled">, z.ZodLiteral<"adaptive">]>>;
+         budgetTokens: z.ZodOptional<z.ZodNumber>;
+         maxReasoningEffort: z.ZodOptional<z.ZodEnum<{
++            none: "none";
+             low: "low";
+             medium: "medium";
+             high: "high";
+@@ -61,6 +62,12 @@ declare const amazonBedrockLanguageModelOptions: z.ZodObject<{
              omitted: "omitted";
              summarized: "summarized";
          }>>;
@@ -33,14 +49,16 @@ index d194ae227fd1223ba44c8c5157b1bb72b1bab273..2e046db0a365c27659ffcec08782c7c2
      anthropicBeta: z.ZodOptional<z.ZodArray<z.ZodString>>;
      serviceTier: z.ZodOptional<z.ZodEnum<{
 diff --git a/dist/index.js b/dist/index.js
-index 2047c91971c23f72dd3cd0c069614f37a30e45f3..9e9ccc26b711eb9ad2722bf1dd4b2e931e528776 100644
+index 2047c91971c23f72dd3cd0c069614f37a30e45f3..ede62d091e3d17fd6130e77a6a209ee0af2a7c20 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -95,7 +95,10 @@ var amazonBedrockLanguageModelOptions = import_v4.z.object({
+@@ -94,8 +94,11 @@ var amazonBedrockLanguageModelOptions = import_v4.z.object({
+       import_v4.z.literal("adaptive")
      ]).optional(),
      budgetTokens: import_v4.z.number().optional(),
-     maxReasoningEffort: import_v4.z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+-    maxReasoningEffort: import_v4.z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
 -    display: import_v4.z.enum(["omitted", "summarized"]).optional()
++    maxReasoningEffort: import_v4.z.enum(["none", "low", "medium", "high", "xhigh", "max"]).optional(),
 +    display: import_v4.z.enum(["omitted", "summarized"]).optional(),
 +    blockBinding: import_v4.z.object({
 +      prefixMismatchBehavior: import_v4.z.enum(["error", "drop_block"])
@@ -88,14 +106,16 @@ index 2047c91971c23f72dd3cd0c069614f37a30e45f3..9e9ccc26b711eb9ad2722bf1dd4b2e93
          };
        }
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 5a669504cb3b21f20788956bc9c22529c1498c35..000114dfe76cba25ddfe693f042232810026c229 100644
+index 5a669504cb3b21f20788956bc9c22529c1498c35..bcbcd768759a4e412657795d6db75e21d4e64c09 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -84,7 +84,10 @@ var amazonBedrockLanguageModelOptions = z.object({
+@@ -83,8 +83,11 @@ var amazonBedrockLanguageModelOptions = z.object({
+       z.literal("adaptive")
      ]).optional(),
      budgetTokens: z.number().optional(),
-     maxReasoningEffort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+-    maxReasoningEffort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
 -    display: z.enum(["omitted", "summarized"]).optional()
++    maxReasoningEffort: z.enum(["none", "low", "medium", "high", "xhigh", "max"]).optional(),
 +    display: z.enum(["omitted", "summarized"]).optional(),
 +    blockBinding: z.object({
 +      prefixMismatchBehavior: z.enum(["error", "drop_block"])
