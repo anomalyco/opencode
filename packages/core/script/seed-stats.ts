@@ -36,7 +36,7 @@ const fixtures = Array.from({ length: 731 }, (_, day) => {
   const scale = !max
     ? 1
     : date.getFullYear() === now.getFullYear()
-      ? 3 + ((day * 73 + Math.floor(day / 7) * 19) % 9)
+      ? (3 + ((day * 73 + Math.floor(day / 7) * 19) % 9)) * 0.7187
       : 1 + ((day * 37) % 4)
   return Array.from({ length: 1 + Math.floor(day / 245) + (day % 3) }, (_, index) => {
     const id = Session.ID.make(`ses_stats_demo_${day}_${index}`)
@@ -59,10 +59,10 @@ const fixtures = Array.from({ length: 731 }, (_, day) => {
         content: [{ type: "text", text: "Synthetic demo result. No model was called." }],
         cost: Money.USD.make((0.04 + step * 0.001) * scale),
         tokens: {
-          input: (1800 + step * 120) * scale,
-          output: (600 + step * 80) * scale,
-          reasoning: (200 + step * 10) * scale,
-          cache: { read: (210_000 + day * 500 + step * 2000) * scale, write: 4000 * scale },
+          input: Math.round((1800 + step * 120) * scale),
+          output: Math.round((600 + step * 80) * scale),
+          reasoning: Math.round((200 + step * 10) * scale),
+          cache: { read: Math.round((210_000 + day * 500 + step * 2000) * scale), write: Math.round(4000 * scale) },
         },
         time: {
           created: DateTime.makeUnsafe(time),
