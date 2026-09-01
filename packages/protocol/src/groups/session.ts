@@ -6,7 +6,7 @@ import { Session } from "@opencode-ai/schema/session"
 import { SessionStats } from "@opencode-ai/schema/session-stats"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, optional, statics } from "@opencode-ai/schema/schema"
 import { Event } from "@opencode-ai/schema/event"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
@@ -343,6 +343,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           metadata: SessionInbox.UserPayload.fields.metadata,
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
+          callbackUrl: Schema.String.pipe(optional).annotate({
+            description:
+              "HTTP(S) URL for best-effort JSON POSTs of execution, rename, permission and form events until execution settles or the session is deleted. Each event includes session and response fields containing the current Session.Info and latest assistant message in HTTP API JSON format, or null when unavailable. Replaces the active callback for this session. Process-local, without retries; the URL is not stored in prompt history.",
+          }),
         }),
         success: Schema.Struct({ data: SessionInbox.User }),
         error: [ConflictError, InvalidRequestError, SessionNotFoundError],

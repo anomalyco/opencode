@@ -804,6 +804,7 @@ test("session methods use the public HTTP contract", async () => {
     sessionID: "ses_test",
     text: "Hello",
     resume: false,
+    callbackUrl: "https://notify.example.test/opencode",
   })
   const generated = await client.session.generate({ sessionID: "ses_test", prompt: "Summarize this session" })
   const synthetic = await client.session.synthetic({
@@ -856,6 +857,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(JSON.parse(body)).toEqual({
     text: "Hello",
     resume: false,
+    callbackUrl: "https://notify.example.test/opencode",
   })
   const syntheticBody = requests.find((request) => request.url.endsWith("/synthetic"))?.init?.body
   if (typeof syntheticBody !== "string") throw new Error("Expected JSON synthetic request body")

@@ -5,7 +5,7 @@ import { Workspace } from "@opencode-ai/core/workspace"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Integration } from "@opencode-ai/schema/integration"
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Queue, Schedule, Schema } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -115,6 +115,73 @@ it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
     const body: unknown = yield* Effect.promise(() => response.json())
     if (typeof body !== "object" || body === null) throw new Error("Expected a health response object")
     expect((body as Record<string, unknown>)["healthy"]).toBe(true)
+  }),
+)
+
+it.live("validates prompt callback URLs and delivers real execution events over HTTP", () =>
+  Effect.gen(function* () {
+    const received = yield* Queue.unbounded<unknown>()
+    const receiver = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          hostname: "127.0.0.1",
+          port: 0,
+          async fetch(request) {
+            Queue.offerUnsafe(received, await request.json())
+            return new Response(null, { status: 204 })
+          },
+        }),
+      ),
+      (server) => Effect.promise(() => server.stop(true)),
+    )
+    const handler = yield* ServerFetch.make(options)
+    const created = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ model: { id: "missing-model", providerID: "missing-provider" } }),
+        }),
+      ).then((response) => response.json()),
+    )
+    const endpoint = `http://opencode.local/api/session/${created.data.id}`
+    yield* Effect.forEach(["not a URL", "ftp://example.test", "https://user:password@example.test"], (callbackUrl) =>
+      Effect.gen(function* () {
+        const response = yield* Effect.promise(() =>
+          handler(
+            new Request(`${endpoint}/prompt`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ text: "Invalid callback", callbackUrl }),
+            }),
+          ),
+        )
+        expect(response.status).toBe(400)
+        expect(yield* Effect.promise(() => response.json())).toMatchObject({
+          _tag: "InvalidRequestError",
+          field: "callbackUrl",
+        })
+      }),
+    )
+    const submitted = yield* Effect.promise(() =>
+      handler(
+        new Request(`${endpoint}/prompt`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: "Notify me", callbackUrl: receiver.url.href }),
+        }),
+      ),
+    )
+    expect(submitted.status).toBe(200)
+    expect(yield* Queue.take(received).pipe(Effect.timeout("5 seconds"))).toMatchObject({
+      type: "session.execution.started",
+      data: { sessionID: created.data.id },
+    })
+    expect(yield* Queue.take(received).pipe(Effect.timeout("5 seconds"))).toMatchObject({
+      type: "session.execution.failed",
+      data: { sessionID: created.data.id },
+      session: { id: created.data.id, outcome: "failed" },
+    })
   }),
 )
 

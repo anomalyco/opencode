@@ -32,10 +32,12 @@ import { SessionPrompt } from "./prompt.js"
 import { SessionRevert } from "./revert.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
+import { SessionWebhook } from "./webhook.js"
 
 type PromptRequest = SessionPrompt.Input & {
   id?: SessionMessage.ID
   resume?: boolean
+  callbackUrl?: string
 }
 
 /**
@@ -49,6 +51,7 @@ export const make = Effect.fn("Session.make")(function* () {
   const execution = yield* SessionExecution.Service
   const admission = yield* SessionInbox.Service
   const scope = yield* Scope.Scope
+  const webhook = yield* SessionWebhook.make()
 
   const get = Effect.fn("Session.get")(function* (sessionID: SessionSchema.ID) {
     const session = yield* store.get(sessionID)
@@ -181,6 +184,7 @@ export const make = Effect.fn("Session.make")(function* () {
         }).pipe(
           Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
         )
+        if (input.callbackUrl) yield* webhook(sessionID, input.callbackUrl)
         if (input.resume !== false) yield* execution.wake(sessionID)
         return admitted
       }),

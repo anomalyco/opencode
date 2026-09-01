@@ -485,6 +485,7 @@ const EndpointSessionPrompt = (raw: RawClient["server.session"]) => (input: Sess
         metadata: input["metadata"],
         delivery: input["delivery"],
         resume: input["resume"],
+        callbackUrl: input["callbackUrl"],
       },
     }).pipe(
       Effect.mapError(mapClientError),

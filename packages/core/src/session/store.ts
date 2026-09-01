@@ -41,6 +41,7 @@ export type ListInput = typeof ListInput.Type
 
 export type MessagesInput = {
   sessionID: Session.ID
+  type?: SessionMessage.Type
   limit?: number
   order?: "asc" | "desc"
   cursor?: {
@@ -156,9 +157,11 @@ const layer = Layer.effect(
             ? gt(SessionMessageTable.seq, anchor.seq)
             : lt(SessionMessageTable.seq, anchor.seq)
           : undefined
-        const where = boundary
-          ? and(eq(SessionMessageTable.session_id, input.sessionID), boundary)
-          : eq(SessionMessageTable.session_id, input.sessionID)
+        const where = and(
+          eq(SessionMessageTable.session_id, input.sessionID),
+          input.type === undefined ? undefined : eq(SessionMessageTable.type, input.type),
+          boundary,
+        )
         const query = db
           .select()
           .from(SessionMessageTable)

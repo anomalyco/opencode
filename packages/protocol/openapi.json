@@ -2143,6 +2143,9 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "callbackUrl": {
+                    "type": "string"
                   }
                 },
                 "required": ["text"],

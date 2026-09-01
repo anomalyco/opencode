@@ -266,6 +266,7 @@ export type SessionPromptInput = {
   readonly metadata?: { readonly [x: string]: unknown } | undefined
   readonly delivery?: SessionInbox.Delivery | undefined
   readonly resume?: boolean | undefined
+  readonly callbackUrl?: string | undefined
 }
 export type SessionPromptOutput = SessionInbox.User
 export type SessionPromptOperation<E = never> = (input: SessionPromptInput) => Effect.Effect<SessionPromptOutput, E>

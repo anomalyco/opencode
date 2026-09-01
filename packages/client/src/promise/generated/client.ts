@@ -688,6 +688,7 @@ export function make(options: ClientOptions) {
               metadata: input["metadata"],
               delivery: input["delivery"],
               resume: input["resume"],
+              callbackUrl: input["callbackUrl"],
             },
             successStatus: 200,
             declaredStatuses: [409, 400, 404, 401],

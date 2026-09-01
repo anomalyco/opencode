@@ -1,14 +1,18 @@
 import { describe, expect } from "bun:test"
 import { and, eq } from "drizzle-orm"
-import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Queue, Scope } from "effect"
+import { HttpClient } from "effect/unstable/http"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Event } from "@opencode-ai/schema/event"
+import { Form } from "@opencode-ai/schema/form"
 import { Model } from "@opencode-ai/schema/model"
 import { Money } from "@opencode-ai/schema/money"
+import { Permission } from "@opencode-ai/schema/permission"
 import { Project } from "@opencode-ai/schema/project"
 import { Provider } from "@opencode-ai/schema/provider"
 import { ID, Info, Output } from "@opencode-ai/schema/shell"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Bus } from "../src/bus.js"
@@ -51,6 +55,7 @@ const it = testEffect(
       SessionStore.node,
       SessionInbox.node,
       FSUtil.node,
+      httpClient,
     ]),
     {
       replacements: [Bus.node.replace(Bus.configured({ persist: true })), Global.node.replace(tempGlobalLayer)],
@@ -166,6 +171,7 @@ const setup = Effect.fnUntraced(function* (options?: {
       | Instance.Service
       | SessionExecution.Service
       | SessionInbox.Service
+      | HttpClient.HttpClient
       | Scope.Scope
     >(),
     Effect.provideService(Instance.Service, {
@@ -284,6 +290,159 @@ describe("Session-owned handles", () => {
       ])
       expect(yield* SessionInbox.find(fixture.db, first.id)).toEqual(first)
       expect(yield* fixture.store.context(sessionID)).toEqual([])
+    }),
+  )
+
+  it.live("forwards enriched session events across scopes and moves without blocking publication", () =>
+    Effect.gen(function* () {
+      const received = yield* Queue.unbounded<unknown>()
+      const response = Promise.withResolvers<void>()
+      const server = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            async fetch(request) {
+              expect(request.method).toBe("POST")
+              expect(request.headers.get("content-type")).toContain("application/json")
+              Queue.offerUnsafe(received, await request.json())
+              await response.promise
+              return new Response(null, { status: 204 })
+            },
+          }),
+        ),
+        (server) => Effect.sync(() => response.resolve()).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+      )
+      const fixture = yield* setup()
+      const handle = fixture.sessions.forSession(sessionID)
+      const callbackUrl = server.url.href
+      yield* handle
+        .prompt({ text: "Notify me", callbackUrl })
+        .pipe(Effect.provideService(Location.Service, location(source)), Effect.scoped)
+      expect(JSON.stringify(yield* handle.inbox())).not.toContain(callbackUrl)
+
+      const started = yield* fixture.bus.publish(SessionEvent.Execution.Started, { sessionID })
+      expect(yield* Queue.take(received).pipe(Effect.timeout("2 seconds"))).toMatchObject({
+        ...started,
+        response: null,
+      })
+      yield* fixture.bus.publish(SessionEvent.Moved, {
+        sessionID,
+        projectID: Project.ID.global,
+        location: Location.Ref.make({ directory: AbsolutePath.make("/project/moved") }),
+        subpath: RelativePath.make("moved"),
+      })
+      yield* fixture.bus.publish(SessionEvent.Renamed, { sessionID: otherID, title: "Unrelated" })
+      const responses = yield* Effect.forEach(["Earlier answer", "The review is ready."], (text) =>
+        Effect.gen(function* () {
+          const assistantMessageID = SessionMessage.ID.create()
+          yield* fixture.bus.publish(SessionEvent.Step.Started, {
+            sessionID,
+            assistantMessageID,
+            agent: Agent.ID.make("build"),
+            model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+          })
+          yield* fixture.bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 0 })
+          yield* fixture.bus.publish(SessionEvent.Text.Ended, { sessionID, assistantMessageID, ordinal: 0, text })
+          yield* fixture.bus.publish(SessionEvent.Step.Ended, {
+            sessionID,
+            assistantMessageID,
+            finish: "stop",
+            cost: Money.USD.zero,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          })
+          return assistantMessageID
+        }),
+      )
+      yield* fixture.bus.publish(SessionEvent.Synthetic, { sessionID, text: "Trailing non-assistant message" })
+      const expected = [
+        yield* fixture.bus.publish(SessionEvent.Renamed, { sessionID, title: "Working" }),
+        yield* fixture.bus.publish(Permission.Event.Asked, {
+          sessionID,
+          id: Permission.ID.create(),
+          action: "shell",
+          resources: ["pwd"],
+        }),
+        yield* fixture.bus.publish(Form.Event.Created, {
+          form: Form.Info.make({
+            id: Form.ID.create(),
+            sessionID,
+            title: "Continue?",
+            fields: [{ key: "continue", type: "boolean" }],
+          }),
+        }),
+        yield* fixture.bus.publish(SessionEvent.Execution.Succeeded, { sessionID }),
+      ]
+      // Session work settles while the receiver still has not acknowledged the first POST.
+      expect((yield* handle.get()).outcome).toBe("succeeded")
+      response.resolve()
+      const delivered = yield* Effect.forEach(expected, () => Queue.take(received)).pipe(Effect.timeout("2 seconds"))
+      expect(delivered).toMatchObject(expected)
+      expect(delivered.at(-1)).toMatchObject({
+        session: {
+          id: sessionID,
+          title: "Working",
+          outcome: "succeeded",
+          location: { directory: "/project/moved" },
+          time: { created: expect.any(Number), updated: expect.any(Number), idle: expect.any(Number) },
+        },
+        response: {
+          id: responses.at(-1),
+          type: "assistant",
+          content: [{ type: "text", text: "The review is ready." }],
+          time: { created: expect.any(Number), completed: expect.any(Number) },
+        },
+      })
+      yield* handle.rename({ title: "After completion" })
+      expect(Option.isNone(yield* Queue.take(received).pipe(Effect.timeoutOption("50 millis")))).toBe(true)
+    }),
+  )
+
+  it.live("replaces callbacks and isolates HTTP failures without following redirects", () =>
+    Effect.gen(function* () {
+      const received = yield* Queue.unbounded<{ path: string; body: unknown }>()
+      const server = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            async fetch(request) {
+              const path = new URL(request.url).pathname
+              Queue.offerUnsafe(received, { path, body: await request.json() })
+              return new Response(null, {
+                status: path === "/redirect" ? 307 : 503,
+                headers: { location: new URL("/unexpected", request.url).href },
+              })
+            },
+          }),
+        ),
+        (server) => Effect.promise(() => server.stop(true)),
+      )
+      const fixture = yield* setup()
+      const handle = fixture.sessions.forSession(sessionID)
+      const prompt = yield* handle.prompt({ text: "First", resume: false, callbackUrl: `${server.url}old` })
+      yield* handle.prompt({ id: prompt.id, text: "Retry", resume: false, callbackUrl: `${server.url}failed` })
+      const started = yield* fixture.bus.publish(SessionEvent.Execution.Started, { sessionID })
+      const failed = yield* fixture.bus.publish(SessionEvent.Execution.Failed, {
+        sessionID,
+        error: { type: "unknown", message: "Run failed" },
+      })
+      expect(yield* Queue.take(received).pipe(Effect.timeout("2 seconds"))).toMatchObject({
+        path: "/failed",
+        body: started,
+      })
+      expect(yield* Queue.take(received).pipe(Effect.timeout("2 seconds"))).toMatchObject({
+        path: "/failed",
+        body: failed,
+      })
+
+      yield* handle.prompt({ text: "Redirect", resume: false, callbackUrl: `${server.url}redirect` })
+      const deleted = yield* fixture.bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(yield* Queue.take(received).pipe(Effect.timeout("2 seconds"))).toEqual({
+        path: "/redirect",
+        body: { ...deleted, session: null, response: null },
+      })
+      expect(Option.isNone(yield* Queue.take(received).pipe(Effect.timeoutOption("50 millis")))).toBe(true)
     }),
   )
 

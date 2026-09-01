@@ -289,6 +289,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.prompt",
         Effect.fn(function* (ctx) {
+          if (ctx.payload.callbackUrl !== undefined) {
+            const url = URL.parse(ctx.payload.callbackUrl)
+            if (!url || !["http:", "https:"].includes(url.protocol) || url.username || url.password)
+              return yield* new InvalidRequestError({
+                message: "Expected an HTTP(S) callback URL without credentials",
+                field: "callbackUrl",
+              })
+          }
           return {
             data: yield* session
               .prompt({
@@ -301,6 +309,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 metadata: ctx.payload.metadata,
                 delivery: ctx.payload.delivery,
                 resume: ctx.payload.resume,
+                callbackUrl: ctx.payload.callbackUrl,
               })
               .pipe(
                 Effect.catchTag("Session.NotFoundError", missingSession),

@@ -3731,6 +3731,7 @@ export type SessionPromptInput = {
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
+    readonly callbackUrl?: string
   }["id"]
   readonly text: {
     readonly id?: string | null
@@ -3752,6 +3753,7 @@ export type SessionPromptInput = {
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
+    readonly callbackUrl?: string
   }["text"]
   readonly files?: {
     readonly id?: string | null
@@ -3773,6 +3775,7 @@ export type SessionPromptInput = {
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
+    readonly callbackUrl?: string
   }["files"]
   readonly agents?: {
     readonly id?: string | null
@@ -3794,6 +3797,7 @@ export type SessionPromptInput = {
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
+    readonly callbackUrl?: string
   }["agents"]
   readonly skills?: {
     readonly id?: string | null
@@ -3815,6 +3819,7 @@ export type SessionPromptInput = {
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
+    readonly callbackUrl?: string
   }["skills"]
   readonly metadata?: {
     readonly id?: string | null
@@ -3836,6 +3841,7 @@ export type SessionPromptInput = {
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
+    readonly callbackUrl?: string
   }["metadata"]
   readonly delivery?: {
     readonly id?: string | null
@@ -3857,6 +3863,7 @@ export type SessionPromptInput = {
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
+    readonly callbackUrl?: string
   }["delivery"]
   readonly resume?: {
     readonly id?: string | null
@@ -3878,7 +3885,30 @@ export type SessionPromptInput = {
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
+    readonly callbackUrl?: string
   }["resume"]
+  readonly callbackUrl?: {
+    readonly id?: string | null
+    readonly text: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: ("steer" | "queue") | null
+    readonly resume?: boolean | null
+    readonly callbackUrl?: string
+  }["callbackUrl"]
 }
 
 export type SessionPromptOutput = { data: SessionInboxUser }["data"]

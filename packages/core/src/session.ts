@@ -41,6 +41,7 @@ import {
   SyntheticConflictError,
 } from "./session/error.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
@@ -525,6 +526,7 @@ export const node = makeGlobalNode({
   service: Service,
   layer,
   deps: [
+    httpClient,
     Job.node,
     SessionEnvironment.node,
     Database.node,
