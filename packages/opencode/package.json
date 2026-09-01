@@ -12,8 +12,8 @@
     "bench:test": "bun run script/bench-test-suite.ts",
     "profile:test": "bun run script/profile-test-files.ts",
     "build": "bun run script/build.ts",
-    "dev": "bun run --conditions=browser ./src/index.ts",
-    "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
+    "dev": "bun run ./src/index.ts",
+    "dev:temporary": "bun run ./src/temporary.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
