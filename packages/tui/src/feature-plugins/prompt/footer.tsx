@@ -8,8 +8,14 @@ const money = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
-export function PromptFooter(props: { context: Plugin.Context; sessionID?: string; mode: "normal" | "shell" }) {
+export function PromptFooter(props: {
+  context: Plugin.Context
+  sessionID?: string
+  mode: "normal" | "shell"
+  interruptArmed: boolean
+}) {
   const dimensions = useTerminalDimensions()
+  const showDetails = () => !props.interruptArmed || dimensions().width >= 80
   const [liveHovered, setLiveHovered] = createSignal(false)
   const subagents = createMemo(() => {
     if (!props.sessionID) return 0
@@ -69,7 +75,7 @@ export function PromptFooter(props: { context: Plugin.Context; sessionID?: strin
                   </text>
                 </box>
               </Show>
-              <Show when={status().length > 0}>
+              <Show when={showDetails() && status().length > 0}>
                 <text fg={props.context.theme.text.subdued} wrapMode="none" truncate flexShrink={1}>
                   <Show when={live()}> · </Show>
                   {status().join(" · ")}
@@ -83,8 +89,8 @@ export function PromptFooter(props: { context: Plugin.Context; sessionID?: strin
             </text>
           </Match>
         </Switch>
-        <Show when={dimensions().width >= 44}>
-          <text fg={props.context.theme.text.default} flexShrink={0}>
+        <Show when={showDetails()}>
+          <text fg={props.context.theme.text.default} wrapMode="none" flexShrink={0}>
             {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
           </text>
         </Show>
@@ -106,7 +112,14 @@ export default Plugin.define({
   setup(context) {
     context.ui.slot({
       append: "prompt.footer",
-      render: (props) => <PromptFooter context={context} sessionID={props.sessionID} mode={props.mode} />,
+      render: (props) => (
+        <PromptFooter
+          context={context}
+          sessionID={props.sessionID}
+          mode={props.mode}
+          interruptArmed={props.interruptArmed}
+        />
+      ),
     })
   },
 })
