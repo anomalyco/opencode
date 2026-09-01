@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { WhisperClient } from "../src/voice/whisper"
 import { SlackDaemon } from "../src/daemon/slack"
 import { HardwareAudioDetector } from "../src/voice/detector"
+import { CommandGuardrails } from "../src/guardrails/command"
 import type { AudioRecordingBuffer } from "../src/voice/types"
 
 describe("Voice STT & Hardware Analysis", () => {
@@ -34,6 +35,41 @@ describe("Voice STT & Hardware Analysis", () => {
     expect(audioBuffer.pcmBuffer.length).toBe(32000)
     expect(audioBuffer.sampleRate).toBe(16000)
     expect(audioBuffer.durationMs).toBe(1000)
+  })
+})
+
+describe("Security Guardrails & Safety Audits", () => {
+  it("blocks privilege escalation commands (sudo, su)", () => {
+    const sudoAudit = CommandGuardrails.audit("sudo apt-get update")
+    expect(sudoAudit.allowed).toBe(false)
+    expect(sudoAudit.riskLevel).toBe("critical")
+
+    const suAudit = CommandGuardrails.audit("su root")
+    expect(suAudit.allowed).toBe(false)
+  })
+
+  it("blocks destructive root/home filesystem deletions (rm -rf /)", () => {
+    const rmAudit = CommandGuardrails.audit("rm -rf /")
+    expect(rmAudit.allowed).toBe(false)
+    expect(rmAudit.riskLevel).toBe("critical")
+
+    const rmHomeAudit = CommandGuardrails.audit("rm -rf ~")
+    expect(rmHomeAudit.allowed).toBe(false)
+  })
+
+  it("blocks private SSH key exfiltration attempts", () => {
+    const sshAudit = CommandGuardrails.audit("cat ~/.ssh/id_rsa")
+    expect(sshAudit.allowed).toBe(false)
+    expect(sshAudit.riskLevel).toBe("critical")
+  })
+
+  it("permits safe development commands", () => {
+    const testAudit = CommandGuardrails.audit("bun test")
+    expect(testAudit.allowed).toBe(true)
+    expect(testAudit.riskLevel).toBe("safe")
+
+    const gitAudit = CommandGuardrails.audit("git status")
+    expect(gitAudit.allowed).toBe(true)
   })
 })
 

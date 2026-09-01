@@ -1,4 +1,5 @@
 import { EventEmitter } from "events"
+import { CommandGuardrails } from "../guardrails/command"
 
 export interface SlackDaemonConfig {
   enabled: boolean
@@ -72,11 +73,38 @@ export class SlackDaemon extends EventEmitter {
             const ev = payload.payload.event
             // Filter out bot's own messages
             if (ev.type === "app_mention" || (ev.type === "message" && !ev.bot_id && ev.channel_type === "im")) {
+              const userId = ev.user as string
+
+              // 🛡️ Guardrail 1: Strict User Whitelisting
+              if (this.config.allowedUsers && this.config.allowedUsers.length > 0) {
+                if (!this.config.allowedUsers.includes(userId)) {
+                  await this.postReply(
+                    ev.channel,
+                    ev.thread_ts ?? ev.ts,
+                    `🛑 *Security Alert*: User <@${userId}> is not in the authorized ZIQ-CODE allowlist. Request rejected.`
+                  )
+                  return
+                }
+              }
+
+              const rawText = ev.text.replace(/<@[A-Z0-9]+>/g, "").trim()
+
+              // 🛡️ Guardrail 2: Command & Code Safety Audit
+              const audit = CommandGuardrails.audit(rawText)
+              if (!audit.allowed) {
+                await this.postReply(
+                  ev.channel,
+                  ev.thread_ts ?? ev.ts,
+                  `🚫 *Execution Blocked by Guardrail* [${audit.riskLevel.toUpperCase()}]: ${audit.reason}`
+                )
+                return
+              }
+
               const msg: SlackMessageEvent = {
                 channelId: ev.channel,
                 threadTs: ev.thread_ts ?? ev.ts,
                 userId: ev.user,
-                text: ev.text.replace(/<@[A-Z0-9]+>/g, "").trim(),
+                text: rawText,
               }
               this.emit("command", msg)
             }
