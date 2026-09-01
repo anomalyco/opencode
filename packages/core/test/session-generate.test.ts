@@ -35,6 +35,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { Money } from "@opencode-ai/schema/money"
 import {
   InstructionBlobTable,
   InstructionStateTable,
@@ -71,7 +72,7 @@ const client = Layer.mock(LLMClient.Service)({
         LLMEvent.stepFinish({
           index: 0,
           reason: { normalized: "stop" },
-          usage: { inputTokens: 100, outputTokens: 10 },
+          usage: { inputTokens: 100, nonCachedInputTokens: 100, outputTokens: 10 },
         }),
         LLMEvent.finish({ reason: { normalized: "stop" } }),
       ])
@@ -344,7 +345,25 @@ it.effect(
       expect(requests[0]?.toolChoice).toBeUndefined()
       expect(options[0]?.http).toBeFunction()
       expect(options[0]?.webSocket).toBeUndefined()
-      expect(yield* durableState(db, sessionID)).toEqual(before)
+      const after = yield* durableState(db, sessionID)
+      expect(after.messages).toEqual(before.messages)
+      expect(after.pending).toEqual(before.pending)
+      expect(after.instructions).toEqual(before.instructions)
+      expect(after.blobs).toEqual(before.blobs)
+      expect(after.bus.slice(0, before.bus.length)).toEqual(before.bus)
+      expect(after.bus).toHaveLength(before.bus.length + 1)
+      const usageRow = after.bus.at(-1)
+      if (!usageRow) throw new Error("Expected usage event row")
+      expect(usageRow.type).toBe(Bus.versionedType(SessionEvent.UsageRecorded.type, 1))
+      const usage = Schema.decodeUnknownSync(SessionEvent.UsageRecorded.data)(usageRow.data)
+      expect(usage.sessionID).toBe(sessionID)
+      expect(usage.source).toBe("generate")
+      expect(usage.tokens).toEqual({ input: 100, output: 10, reasoning: 0, cache: { read: 0, write: 0 } })
+      expect(usage.cost).toBe(Money.USD.zero)
+      expect(after.sequence).toBe(before.sequence + 1)
+      expect(after.session?.cost).toBe(before.session?.cost ?? 0)
+      expect(after.session?.tokens_input).toBe((before.session?.tokens_input ?? 0) + 100)
+      expect(after.session?.tokens_output).toBe((before.session?.tokens_output ?? 0) + 10)
     }),
   { timeout: 15_000 },
 )

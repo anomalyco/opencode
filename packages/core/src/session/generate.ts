@@ -10,7 +10,7 @@ import type { SessionSchema } from "./schema.js"
 export type Error = AgentNotFoundError | Instructions.InitializationBlocked | SessionRunnerModel.Error | AIError
 
 export interface Interface {
-  /** Generates text from current Session context without mutating the Session. */
+  /** Generates text from current Session context without mutating its conversation state; LLM usage is recorded as a Session usage event. */
   readonly generate: (input: {
     readonly sessionID: SessionSchema.ID
     readonly prompt: string
