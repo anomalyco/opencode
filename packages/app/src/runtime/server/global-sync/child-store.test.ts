@@ -5,12 +5,13 @@ import type { State } from "./types"
 import type { QueryOptionsApi } from "../sync"
 import { ServerScope } from "@/runtime/server/scope"
 import type { Data } from "@opencode-ai/client/solid"
+import { Schema } from "effect"
+import type { persisted } from "@/runtime/persistence/storage"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
 const querySingles: Array<() => { queryKey?: unknown[]; enabled?: boolean }> = []
-const persist: typeof import("@/runtime/persistence/storage").persisted = (_target, store) => [
-  store[0],
-  store[1],
+const persist: typeof persisted = (_target, schema, initial) => [
+  ...createStore(initial === undefined ? Schema.decodeUnknownSync(schema)({}) : initial),
   null,
   Object.assign(() => true, { promise: undefined }),
 ]

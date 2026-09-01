@@ -1,13 +1,30 @@
 import { createEffect, createRoot } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { produce } from "solid-js/store"
+import { Schema } from "effect"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
 import { createScopedCache } from "@/runtime/server/scoped-cache"
-import type { FileViewState, SelectedLineRange } from "./types"
+import { SelectedLineRange } from "./types"
 import type { ServerScope } from "@/runtime/server/scope"
 
 const WORKSPACE_KEY = "__workspace__"
 const MAX_FILE_VIEW_SESSIONS = 20
 const MAX_VIEW_FILES = 500
+
+const FileViewSchema = Schema.Struct({
+  scrollTop: Schema.mutableKey(Persistence.defaulted(Schema.optional(Schema.Finite), () => undefined)),
+  scrollLeft: Schema.mutableKey(Persistence.defaulted(Schema.optional(Schema.Finite), () => undefined)),
+  selectedLines: Schema.mutableKey(
+    Persistence.defaulted(Schema.optional(Schema.NullOr(SelectedLineRange)), () => undefined),
+  ),
+})
+
+export const FileViewsSchema = Schema.Struct({
+  file: Persistence.defaulted(
+    Schema.Record(Schema.String, Schema.mutableKey(Persistence.defaulted(FileViewSchema, () => ({})))),
+    () => ({}),
+  ),
+})
 
 function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
   if (range.start <= range.end) return { ...range }
@@ -35,14 +52,7 @@ function equalSelectedLines(a: SelectedLineRange | null | undefined, b: Selected
 }
 
 function createViewSession(scope: ServerScope, dir: string, id: string | undefined) {
-  const [view, setView, _, ready] = persisted(
-    Persist.serverScoped(scope, dir, id, "file-view"),
-    createStore<{
-      file: Record<string, FileViewState>
-    }>({
-      file: {},
-    }),
-  )
+  const [view, setView, _, ready] = persisted(Persist.serverScoped(scope, dir, id, "file-view"), FileViewsSchema)
 
   const meta = { pruned: false }
 

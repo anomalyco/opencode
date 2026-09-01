@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { Skill } from "@opencode-ai/schema/skill"
-import { createMemoryComposerState, DEFAULT_PROMPT, parseComposerStore } from "./state"
+import { Schema, Option } from "effect"
+import { createMemoryComposerState, DEFAULT_PROMPT } from "./state"
+import { ComposerStore } from "./schema"
 
 describe("prompt state initialization", () => {
   test("initializes prompt text, cursor, and model together", () => {
@@ -29,7 +31,7 @@ describe("prompt state initialization", () => {
   })
 
   test("parses persisted state into one trusted current shape", () => {
-    const parsed = parseComposerStore({
+    const parsed = Schema.decodeUnknownSync(ComposerStore)({
       prompt: [
         { type: "text", content: "hello", start: 0, end: 5 },
         { type: "skill", id: "effect", name: "Effect", content: "@effect", start: 5, end: 12 },
@@ -105,6 +107,6 @@ describe("prompt state initialization", () => {
         ],
       },
     })
-    expect(parseComposerStore("not an object")).toBeUndefined()
+    expect(Option.isNone(Schema.decodeUnknownOption(ComposerStore)("not an object"))).toBe(true)
   })
 })

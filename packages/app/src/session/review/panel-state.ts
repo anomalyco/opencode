@@ -5,20 +5,24 @@ import {
   type SessionReviewExpandMode,
 } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { createSignal } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Schema, Struct } from "effect"
 import type { Platform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
+
+const ReviewPanel = Schema.Struct({
+  sidebarOpened: Persistence.defaulted(Schema.Boolean, () => true),
+  sidebarWidth: Persistence.defaulted(
+    Schema.Finite.check(
+      Schema.isBetween({ minimum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, maximum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX }),
+    ),
+    () => SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
+  ),
+  expandMode: Persistence.defaulted(Schema.Literals(["expand", "collapse"]), () => "collapse" as const),
+}).mapFields(Struct.map(Schema.mutableKey))
 
 export function createReviewPanelState(platform?: Platform) {
-  const [store, setStore, , ready] = persisted(
-    Persist.global("review-panel-v2"),
-    createStore({
-      sidebarOpened: true,
-      sidebarWidth: SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
-      expandMode: "collapse" as SessionReviewExpandMode,
-    }),
-    platform,
-  )
+  const [store, setStore, , ready] = persisted(Persist.global("review-panel-v2"), ReviewPanel, undefined, platform)
   // The filter is transient by design: a persisted filter would silently hide
   // files after a reload.
   const [filter, setFilter] = createSignal("")

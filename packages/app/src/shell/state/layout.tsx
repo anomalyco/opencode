@@ -1,4 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
+import { Schema, SchemaGetter, Struct } from "effect"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -7,6 +8,8 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { Project } from "@/runtime/server/types"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
+import { TabStorage } from "@/shell/tabs/schema"
 import { decode64 } from "@/runtime/persistence/base64"
 import { same } from "@/runtime/persistence/equality"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
@@ -44,20 +47,13 @@ export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
   return "gray"
 }
 
-type SessionView = {
-  scroll: Record<string, SessionScroll>
-  reviewOpen?: string[]
-  reviewMode?: ReviewChangeMode
-  reviewFile?: string
-  pendingMessage?: string
-  pendingMessageAt?: number
-}
-
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
-export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
+export type HomeProjectSelection = ReturnType<typeof createLayoutSchema>["Type"]["home"]["selection"]
 
-export type ReviewDiffStyle = "unified" | "split"
-export type ReviewChangeMode = "git" | "branch" | "turn"
+export type ReviewDiffStyle = ReturnType<typeof createLayoutSchema>["Type"]["review"]["diffStyle"]
+export type ReviewChangeMode = NonNullable<
+  ReturnType<typeof createLayoutSchema>["Type"]["sessionView"][string]["reviewMode"]
+>
 export type ReviewPanelSource = "context-button" | "other"
 export type TabPanes = {
   terminalOpened: Accessor<boolean>
@@ -133,6 +129,146 @@ export const useCurrentRoute = () => {
   return createMemo(() => currentRoute(location.pathname, location.search))
 }
 
+export function createLayoutSchema(server: ServerConnection.Key) {
+  const sidebar = Schema.Struct({
+    opened: Persistence.defaulted(Schema.Boolean, () => false),
+    width: Persistence.defaulted(Schema.Finite, () => DEFAULT_SIDEBAR_WIDTH),
+    workspaces: Persistence.defaulted(Schema.Record(Schema.String, Schema.mutableKey(Schema.Boolean)), () => ({})),
+    workspacesDefault: Persistence.defaulted(Schema.Boolean, () => false),
+  }).mapFields(Struct.map(Schema.mutableKey))
+  const review = Schema.Struct({
+    diffStyle: Persistence.defaulted(Schema.Literals(["unified", "split"]), () => "split" as const),
+    panelOpened: Persistence.defaulted(Schema.Boolean, () => DEFAULT_REVIEW_PANEL_OPENED),
+  }).mapFields(Struct.map(Schema.mutableKey))
+  const fileTree = Schema.Struct({
+    opened: Persistence.defaulted(Schema.Boolean, () => false),
+    width: Persistence.defaulted(Schema.Finite, () => DEFAULT_FILE_TREE_WIDTH),
+    tab: Persistence.defaulted(Schema.Literals(["changes", "all"]), () => "changes" as const),
+  }).mapFields(Struct.map(Schema.mutableKey))
+  const tabs = Schema.Struct({
+    all: Persistence.array(Schema.String),
+    active: Schema.optional(Persistence.defaulted(Schema.UndefinedOr(Schema.String), () => undefined)),
+  }).mapFields(Struct.map(Schema.mutableKey))
+  const view = Schema.Struct({
+    scroll: Persistence.defaulted(
+      Schema.Record(Schema.String, Schema.mutableKey(Schema.Struct({ x: Schema.Finite, y: Schema.Finite }))),
+      () => ({}),
+    ),
+    reviewOpen: Schema.optional(Persistence.array(Schema.String)),
+    reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
+    reviewFile: Schema.optional(Schema.String),
+    pendingMessage: Schema.optional(Schema.String),
+    pendingMessageAt: Schema.optional(Schema.Finite),
+  }).mapFields(Struct.map(Schema.mutableKey))
+  const layout = Schema.Struct({
+    sidebar: Persistence.defaulted(sidebar, () => Schema.decodeUnknownSync(sidebar)({})),
+    terminal: Persistence.defaulted(
+      Schema.Struct({
+        height: Persistence.defaulted(Schema.Finite, () => DEFAULT_TERMINAL_HEIGHT),
+        opened: Persistence.defaulted(Schema.Boolean, () => false),
+      }).mapFields(Struct.map(Schema.mutableKey)),
+      () => ({ height: DEFAULT_TERMINAL_HEIGHT, opened: false }),
+    ),
+    review: Persistence.defaulted(review, () => Schema.decodeUnknownSync(review)({})),
+    fileTree: Persistence.defaulted(fileTree, () => Schema.decodeUnknownSync(fileTree)({})),
+    session: Persistence.defaulted(
+      Schema.Struct({ width: Persistence.defaulted(Schema.Finite, () => DEFAULT_SESSION_WIDTH) }).mapFields(
+        Struct.map(Schema.mutableKey),
+      ),
+      () => ({ width: DEFAULT_SESSION_WIDTH }),
+    ),
+    mobileSidebar: Persistence.defaulted(
+      Schema.Struct({ opened: Persistence.defaulted(Schema.Boolean, () => false) }).mapFields(
+        Struct.map(Schema.mutableKey),
+      ),
+      () => ({ opened: false }),
+    ),
+    sessionTabs: Persistence.defaulted(
+      Schema.Record(Schema.String, Schema.mutableKey(Persistence.defaulted(tabs, () => ({ all: [] })))),
+      () => ({}),
+    ),
+    sessionView: Persistence.defaulted(
+      Schema.Record(Schema.String, Schema.mutableKey(Persistence.defaulted(view, () => ({ scroll: {} })))),
+      () => ({}),
+    ),
+    home: Persistence.defaulted(
+      Schema.Struct({
+        selection: Persistence.defaulted(
+          Schema.Struct({
+            server: Persistence.defaulted(TabStorage.ServerKey, () => server),
+            directory: Schema.optional(Schema.String),
+          }).mapFields(Struct.map(Schema.mutableKey)),
+          () => ({ server }),
+        ),
+      }).mapFields(Struct.map(Schema.mutableKey)),
+      () => ({ selection: { server } }),
+    ),
+  }).mapFields(Struct.map(Schema.mutableKey))
+  const legacySidebar = Schema.Struct({
+    ...sidebar.fields,
+    workspaces: Persistence.defaulted(
+      Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Schema.Boolean)]),
+      () => ({}),
+    ),
+  }).pipe(
+    Schema.decodeTo(Schema.toType(sidebar), {
+      decode: SchemaGetter.transform((value) =>
+        typeof value.workspaces === "boolean"
+          ? { ...value, workspaces: {}, workspacesDefault: value.workspaces }
+          : { ...value, workspaces: value.workspaces },
+      ),
+      encode: SchemaGetter.transform((value) => value),
+    }),
+  )
+  return Schema.Struct({
+    ...layout.fields,
+    sidebar: Persistence.defaulted(legacySidebar, () => Schema.decodeUnknownSync(sidebar)({})),
+    review: Persistence.defaulted(
+      Schema.Struct({
+        ...review.fields,
+        panelOpened: Persistence.defaulted(Schema.UndefinedOr(Schema.Boolean), () => undefined),
+      }),
+      () => ({ diffStyle: "split" as const, panelOpened: DEFAULT_REVIEW_PANEL_OPENED }),
+    ),
+    fileTree: Persistence.defaulted(
+      Schema.UndefinedOr(
+        Schema.Struct({
+          ...fileTree.fields,
+          tab: Persistence.defaulted(Schema.UndefinedOr(Schema.Literals(["changes", "all"])), () => undefined),
+        }),
+      ),
+      () => undefined,
+    ),
+  }).pipe(
+    Schema.decodeTo(Schema.toType(layout), {
+      decode: SchemaGetter.transform((value) => ({
+        ...value,
+        review: {
+          ...value.review,
+          panelOpened: value.review.panelOpened ?? value.fileTree?.opened ?? DEFAULT_REVIEW_PANEL_OPENED,
+        },
+        fileTree: !value.fileTree
+          ? Schema.decodeUnknownSync(fileTree)({})
+          : value.fileTree.tab
+            ? { ...value.fileTree, tab: value.fileTree.tab }
+            : {
+                ...value.fileTree,
+                opened: true,
+                width: value.fileTree.width === 260 ? DEFAULT_FILE_TREE_WIDTH : value.fileTree.width,
+                tab: "changes" as const,
+              },
+        sessionTabs: Object.fromEntries(
+          Object.entries(value.sessionTabs)
+            .filter(([key]) => SessionStateKey.is(key))
+            .map(([key, tabs]) => [key, normalizeStoredSessionTabs(key, tabs)]),
+        ),
+        sessionView: Object.fromEntries(Object.entries(value.sessionView).filter(([key]) => SessionStateKey.is(key))),
+      })),
+      encode: SchemaGetter.transform((value) => value),
+    }),
+  )
+}
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   gate: false,
@@ -140,137 +276,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const servers = useServers()
     const platform = usePlatform()
 
-    const isRecord = (value: unknown): value is Record<string, unknown> =>
-      typeof value === "object" && value !== null && !Array.isArray(value)
-
-    const currentSessionState = (value: unknown) => {
-      if (!isRecord(value)) return value
-      const entries = Object.entries(value)
-      if (entries.every(([key]) => SessionStateKey.is(key))) return value
-      return Object.fromEntries(entries.filter(([key]) => SessionStateKey.is(key)))
-    }
-
-    const migrate = (value: unknown) => {
-      if (!isRecord(value)) return value
-
-      const sidebar = value.sidebar
-      const migratedSidebar = (() => {
-        if (!isRecord(sidebar)) return sidebar
-        if (typeof sidebar.workspaces !== "boolean") return sidebar
-        return {
-          ...sidebar,
-          workspaces: {},
-          workspacesDefault: sidebar.workspaces,
-        }
-      })()
-
-      const review = value.review
-      const fileTree = value.fileTree
-      const migratedFileTree = (() => {
-        if (!isRecord(fileTree)) return fileTree
-        if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
-
-        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_FILE_TREE_WIDTH
-        return {
-          ...fileTree,
-          opened: true,
-          width: width === 260 ? DEFAULT_FILE_TREE_WIDTH : width,
-          tab: "changes",
-        }
-      })()
-
-      const migratedReview = (() => {
-        if (!isRecord(review)) return review
-        if (typeof review.panelOpened === "boolean") return review
-
-        const opened =
-          isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : DEFAULT_REVIEW_PANEL_OPENED
-        return {
-          ...review,
-          panelOpened: opened,
-        }
-      })()
-
-      const sessionTabs = currentSessionState(value.sessionTabs)
-      const sessionView = currentSessionState(value.sessionView)
-      const migratedSessionTabs = (() => {
-        if (!isRecord(sessionTabs)) return sessionTabs
-
-        let changed = false
-        const next = Object.fromEntries(
-          Object.entries(sessionTabs).map(([key, tabs]) => {
-            if (!isRecord(tabs) || !Array.isArray(tabs.all)) return [key, tabs]
-
-            const current = {
-              all: tabs.all.filter((tab): tab is string => typeof tab === "string"),
-              active: typeof tabs.active === "string" ? tabs.active : undefined,
-            }
-            const normalized = normalizeStoredSessionTabs(key, current)
-            if (current.all.length !== tabs.all.length) changed = true
-            if (!same(current.all, normalized.all) || current.active !== normalized.active) changed = true
-            if (tabs.active !== undefined && typeof tabs.active !== "string") changed = true
-            return [key, normalized]
-          }),
-        )
-
-        if (!changed) return sessionTabs
-        return next
-      })()
-
-      if (
-        migratedSidebar === sidebar &&
-        migratedReview === review &&
-        migratedFileTree === fileTree &&
-        migratedSessionTabs === value.sessionTabs &&
-        sessionView === value.sessionView
-      ) {
-        return value
-      }
-
-      return {
-        ...value,
-        sidebar: migratedSidebar,
-        review: migratedReview,
-        fileTree: migratedFileTree,
-        sessionTabs: migratedSessionTabs,
-        sessionView,
-      }
-    }
-
     const [store, setStore, _, ready] = persisted(
-      { ...Persist.global("layout"), previousKey: "layout.v6", migrate },
-      createStore({
-        sidebar: {
-          opened: false,
-          width: DEFAULT_SIDEBAR_WIDTH,
-          workspaces: {} as Record<string, boolean>,
-          workspacesDefault: false,
-        },
-        terminal: {
-          height: DEFAULT_TERMINAL_HEIGHT,
-          opened: false,
-        },
-        review: {
-          diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: DEFAULT_REVIEW_PANEL_OPENED,
-        },
-        fileTree: {
-          opened: false,
-          width: DEFAULT_FILE_TREE_WIDTH,
-          tab: "changes" as "changes" | "all",
-        },
-        session: {
-          width: DEFAULT_SESSION_WIDTH,
-        },
-        mobileSidebar: {
-          opened: false,
-        },
-        sessionTabs: {} as Record<string, SessionTabs>,
-        sessionView: {} as Record<string, SessionView>,
-        home: {
-          selection: { server: ServerConnection.key(servers.list[0]) } as HomeProjectSelection,
-        },
-      }),
+      { ...Persist.global("layout"), previousKey: "layout.v6" },
+      createLayoutSchema(ServerConnection.key(servers.list[0])),
     )
     const [ephemeral, setEphemeral] = createStore({
       reviewPanelSource: "other" as ReviewPanelSource,

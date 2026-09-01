@@ -3,10 +3,12 @@ import { ServerScope } from "@/runtime/server/scope"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Persist } from "@/runtime/persistence/storage"
 import type { Platform } from "@/runtime/platform/platform"
+import { Schema } from "effect"
 
 let getWorkspaceTerminalCacheKey: typeof import("./context").getWorkspaceTerminalCacheKey
 let clearWorkspaceTerminals: typeof import("./context").clearWorkspaceTerminals
-let migrateTerminalState: (value: unknown) => unknown
+let decodeTerminalState: (value: unknown) => unknown
+let roundTripTerminalState: (value: unknown) => unknown
 
 beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
@@ -24,7 +26,11 @@ beforeAll(async () => {
   const mod = await import("./context")
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
   clearWorkspaceTerminals = mod.clearWorkspaceTerminals
-  migrateTerminalState = mod.migrateTerminalState
+  decodeTerminalState = Schema.decodeUnknownSync(mod.TerminalState)
+  roundTripTerminalState = (value) =>
+    Schema.decodeUnknownSync(mod.TerminalState)(
+      Schema.encodeSync(mod.TerminalState)(Schema.decodeUnknownSync(mod.TerminalState)(value)),
+    )
 })
 
 describe("getWorkspaceTerminalCacheKey", () => {
@@ -61,10 +67,10 @@ describe("getWorkspaceTerminalCacheKey", () => {
   })
 })
 
-describe("migrateTerminalState", () => {
+describe("TerminalState", () => {
   test("drops invalid terminals and restores a valid active terminal", () => {
     expect(
-      migrateTerminalState({
+      decodeTerminalState({
         active: "missing",
         all: [
           null,
@@ -85,7 +91,7 @@ describe("migrateTerminalState", () => {
 
   test("keeps a valid active id", () => {
     expect(
-      migrateTerminalState({
+      decodeTerminalState({
         active: "two",
         all: [
           { id: "one", title: "Terminal 1" },
@@ -99,5 +105,45 @@ describe("migrateTerminalState", () => {
         { id: "two", title: "shell", titleNumber: 7 },
       ],
     })
+  })
+
+  test("defaults missing and malformed fields without dropping usable terminals", () => {
+    expect(decodeTerminalState({})).toEqual({ active: undefined, all: [] })
+    expect(decodeTerminalState({ active: 2, all: "invalid" })).toEqual({ active: undefined, all: [] })
+    expect(decodeTerminalState({ all: [null, {}, { id: "" }, { id: 2 }] })).toEqual({ active: undefined, all: [] })
+    expect(
+      decodeTerminalState({
+        all: [
+          {
+            id: "one",
+            title: "Terminal 3",
+            titleNumber: Infinity,
+            rows: "24",
+            cols: 80,
+            buffer: false,
+            cursor: NaN,
+            scrollY: 0,
+          },
+          { id: "two", title: null, titleNumber: -1, buffer: "saved", cursor: 0 },
+        ],
+      }),
+    ).toEqual({
+      active: "one",
+      all: [
+        { id: "one", title: "Terminal 3", titleNumber: 3, cols: 80, scrollY: 0 },
+        { id: "two", title: "", titleNumber: 0, buffer: "saved", cursor: 0 },
+      ],
+    })
+  })
+
+  test("round trips normalized terminal state", () => {
+    const value = {
+      active: "two",
+      all: [
+        { id: "one", title: "Terminal 1", titleNumber: 1 },
+        { id: "two", title: "logs", titleNumber: 4, rows: 24, cols: 80, buffer: "output", cursor: 12, scrollY: 3 },
+      ],
+    }
+    expect(roundTripTerminalState(value)).toEqual(value)
   })
 })

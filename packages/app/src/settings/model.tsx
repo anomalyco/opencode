@@ -1,68 +1,20 @@
-import { createStore, reconcile } from "solid-js/store"
+import { reconcile } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
+import { Effect, Option, Schema, SchemaGetter, Struct } from "effect"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { ReasoningMode } from "@opencode-ai/session-ui/timeline/projection"
 import { persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
-export type WorkspaceDefaultDestination = "last-used" | "local" | "new"
-export type WorkspaceLastUsed = "local" | "workspace"
-export type TerminalPlacement = "side" | "bottom"
-export type FollowUpBehavior = "queue" | "steer"
-export type TabLayout = "horizontal" | "vertical"
-
-export interface NotificationSettings {
-  agent: boolean
-  permissions: boolean
-  errors: boolean
-}
-
-export interface SoundSettings {
-  agentEnabled: boolean
-  agent: string
-  permissionsEnabled: boolean
-  permissions: string
-  errorsEnabled: boolean
-  errors: string
-}
-
-export interface Settings {
-  general: {
-    autoSave: boolean
-    releaseNotes: boolean
-    showFileTree: boolean
-    showNavigation: boolean
-    showSearch: boolean
-    showStatus: boolean
-    showProjectIcon: boolean
-    showTerminal: boolean
-    reasoningMode: ReasoningMode
-    shellToolPartsExpanded: boolean
-    editToolPartsExpanded: boolean
-    showCustomAgents: boolean
-    mobileTitlebarPosition: "top" | "bottom"
-    mobileDiffWrap: boolean
-    terminalPlacement: TerminalPlacement
-    followUpBehavior: FollowUpBehavior
-  }
-  appearance: {
-    fontSize: number
-    mono: string
-    sans: string
-    terminal: string
-    tabLayout: TabLayout
-  }
-  keybinds: Record<string, string>
-  permissions: {
-    autoApprove: boolean
-  }
-  workspaces: {
-    defaultDestination: WorkspaceDefaultDestination
-    lastUsed: Record<string, WorkspaceLastUsed>
-  }
-  notifications: NotificationSettings
-  sounds: SoundSettings
-}
+export type Settings = typeof settingsSchema.Type
+export type WorkspaceDefaultDestination = Settings["workspaces"]["defaultDestination"]
+export type WorkspaceLastUsed = Settings["workspaces"]["lastUsed"][string]
+export type TerminalPlacement = Settings["general"]["terminalPlacement"]
+export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
+export type TabLayout = Settings["appearance"]["tabLayout"]
+export type NotificationSettings = Settings["notifications"]
+export type SoundSettings = Settings["sounds"]
 
 export const monoDefault = "IBM Plex Mono"
 export const sansDefault = "Inter"
@@ -116,79 +68,116 @@ export function terminalFontFamily(font: string | undefined) {
   return stack(font, terminalBase)
 }
 
-const defaultSettings: Settings = {
-  general: {
-    autoSave: true,
-    releaseNotes: true,
-    showFileTree: false,
-    showNavigation: false,
-    showSearch: false,
-    showStatus: false,
-    showProjectIcon: false,
-    showTerminal: false,
-    reasoningMode: "compact",
-    shellToolPartsExpanded: false,
-    editToolPartsExpanded: false,
-    showCustomAgents: false,
-    mobileTitlebarPosition: "top",
-    mobileDiffWrap: true,
-    terminalPlacement: "side",
-    followUpBehavior: "steer",
-  },
-  appearance: {
-    fontSize: 14,
-    mono: "",
-    sans: "",
-    terminal: "",
-    tabLayout: "horizontal",
-  },
-  keybinds: {},
-  permissions: {
-    autoApprove: false,
-  },
-  workspaces: {
-    defaultDestination: "last-used",
-    lastUsed: {},
-  },
-  notifications: {
-    agent: true,
-    permissions: true,
-    errors: false,
-  },
-  sounds: {
-    agentEnabled: true,
-    agent: "staplebops-01",
-    permissionsEnabled: true,
-    permissions: "staplebops-02",
-    errorsEnabled: true,
-    errors: "nope-03",
-  },
-}
+const reasoningModeSchema = Schema.Literals(["hidden", "compact", "full"])
+
+const generalSchema = Schema.Struct({
+  autoSave: Persistence.defaulted(Schema.Boolean, () => true),
+  releaseNotes: Persistence.defaulted(Schema.Boolean, () => true),
+  showFileTree: Persistence.defaulted(Schema.Boolean, () => false),
+  showNavigation: Persistence.defaulted(Schema.Boolean, () => false),
+  showSearch: Persistence.defaulted(Schema.Boolean, () => false),
+  showStatus: Persistence.defaulted(Schema.Boolean, () => false),
+  showProjectIcon: Persistence.defaulted(Schema.Boolean, () => false),
+  showTerminal: Persistence.defaulted(Schema.Boolean, () => false),
+  reasoningMode: Persistence.defaulted(reasoningModeSchema, () => "compact" as const),
+  shellToolPartsExpanded: Persistence.defaulted(Schema.Boolean, () => false),
+  editToolPartsExpanded: Persistence.defaulted(Schema.Boolean, () => false),
+  showCustomAgents: Persistence.defaulted(Schema.Boolean, () => false),
+  mobileTitlebarPosition: Persistence.defaulted(Schema.Literals(["top", "bottom"]), () => "top" as const),
+  mobileDiffWrap: Persistence.defaulted(Schema.Boolean, () => true),
+  terminalPlacement: Persistence.defaulted(Schema.Literals(["side", "bottom"]), () => "side" as const),
+  followUpBehavior: Persistence.defaulted(Schema.Literals(["queue", "steer"]), () => "steer" as const),
+}).mapFields(Struct.map(Schema.mutableKey))
+
+const persistedGeneralSchema = Schema.Struct({
+  ...generalSchema.fields,
+  reasoningMode: Schema.optional(reasoningModeSchema).pipe(
+    Schema.catchDecoding(() => Effect.succeed(Option.some("compact" as const))),
+  ),
+  showReasoningSummaries: Schema.optional(Schema.Boolean).pipe(
+    Schema.catchDecoding(() => Effect.succeed(Option.none())),
+  ),
+}).pipe(
+  Schema.decodeTo(Schema.toType(generalSchema), {
+    decode: SchemaGetter.transform((value) => ({
+      ...value,
+      reasoningMode: value.reasoningMode ?? (value.showReasoningSummaries === true ? "full" : "compact"),
+    })),
+    encode: SchemaGetter.transform((value) => value),
+  }),
+)
+
+const appearanceSchema = Schema.Struct({
+  fontSize: Persistence.defaulted(Schema.Number, () => 14),
+  mono: Persistence.defaulted(Schema.String, () => ""),
+  sans: Persistence.defaulted(Schema.String, () => ""),
+  terminal: Persistence.defaulted(Schema.String, () => ""),
+  tabLayout: Persistence.defaulted(Schema.Literals(["horizontal", "vertical"]), () => "horizontal" as const),
+}).mapFields(Struct.map(Schema.mutableKey))
+
+const permissionsSchema = Schema.Struct({
+  autoApprove: Persistence.defaulted(Schema.Boolean, () => false),
+}).mapFields(Struct.map(Schema.mutableKey))
+
+const workspacesSchema = Schema.Struct({
+  defaultDestination: Persistence.defaulted(Schema.Literals(["last-used", "local", "new"]), () => "last-used" as const),
+  lastUsed: Persistence.defaulted(
+    Schema.Record(
+      Schema.String,
+      Schema.Literals(["local", "workspace"]).pipe(
+        Schema.catchDecoding(() => Effect.succeed(Option.none())),
+        Schema.mutableKey,
+      ),
+    ),
+    () => ({}),
+  ),
+}).mapFields(Struct.map(Schema.mutableKey))
+
+const notificationsSchema = Schema.Struct({
+  agent: Persistence.defaulted(Schema.Boolean, () => true),
+  permissions: Persistence.defaulted(Schema.Boolean, () => true),
+  errors: Persistence.defaulted(Schema.Boolean, () => false),
+}).mapFields(Struct.map(Schema.mutableKey))
+
+const soundsSchema = Schema.Struct({
+  agentEnabled: Persistence.defaulted(Schema.Boolean, () => true),
+  agent: Persistence.defaulted(Schema.String, () => "staplebops-01"),
+  permissionsEnabled: Persistence.defaulted(Schema.Boolean, () => true),
+  permissions: Persistence.defaulted(Schema.String, () => "staplebops-02"),
+  errorsEnabled: Persistence.defaulted(Schema.Boolean, () => true),
+  errors: Persistence.defaulted(Schema.String, () => "nope-03"),
+}).mapFields(Struct.map(Schema.mutableKey))
+
+export const settingsSchema = Schema.Struct({
+  general: Persistence.defaulted(persistedGeneralSchema, () => Schema.decodeUnknownSync(generalSchema)({})),
+  appearance: Persistence.defaulted(appearanceSchema, () => Schema.decodeUnknownSync(appearanceSchema)({})),
+  keybinds: Persistence.defaulted(
+    Schema.Record(
+      Schema.String,
+      Schema.String.pipe(
+        Schema.catchDecoding(() => Effect.succeed(Option.none())),
+        Schema.mutableKey,
+      ),
+    ),
+    () => ({}),
+  ),
+  permissions: Persistence.defaulted(permissionsSchema, () => Schema.decodeUnknownSync(permissionsSchema)({})),
+  workspaces: Persistence.defaulted(workspacesSchema, () => Schema.decodeUnknownSync(workspacesSchema)({})),
+  notifications: Persistence.defaulted(notificationsSchema, () => Schema.decodeUnknownSync(notificationsSchema)({})),
+  sounds: Persistence.defaulted(soundsSchema, () => Schema.decodeUnknownSync(soundsSchema)({})),
+}).mapFields(Struct.map(Schema.mutableKey))
+
+const defaultSettings = Schema.decodeUnknownSync(settingsSchema)({})
 
 function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
-}
-
-export function migrateSettings(value: unknown) {
-  if (!value || typeof value !== "object" || !("general" in value)) return value
-  const general = value.general
-  if (!general || typeof general !== "object") return value
-  if ("reasoningMode" in general && general.reasoningMode !== undefined) return value
-  if (!("showReasoningSummaries" in general) || typeof general.showReasoningSummaries !== "boolean") return value
-  return {
-    ...value,
-    general: { ...general, reasoningMode: general.showReasoningSummaries ? "full" : "compact" },
-  }
 }
 
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   gate: false,
   init: () => {
-    const [store, setStore, , ready] = persisted(
-      { key: "settings.v3", migrate: migrateSettings },
-      createStore<Settings>(defaultSettings),
-    )
+    const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsSchema)
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)

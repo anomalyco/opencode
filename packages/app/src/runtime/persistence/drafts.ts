@@ -1,4 +1,5 @@
 import type { AsyncStorage } from "@solid-primitives/storage"
+import { Option, Schema } from "effect"
 
 export type BlobReference = { id: string; url: string }
 
@@ -81,7 +82,11 @@ export function createDraftStore(driver: Driver): DraftStore {
   return {
     getItem: async (key) => {
       const value = await driver.get(key)
-      return value === null ? null : JSON.stringify(await decode(JSON.parse(value)))
+      if (value === null) return null
+      const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(value)
+      // Let the owning persistence codec apply its invalid-document policy.
+      if (Option.isNone(parsed)) return value
+      return JSON.stringify(await decode(parsed.value))
     },
     setItem: async (key, value) => {
       const version = (versions.get(key) ?? 0) + 1
