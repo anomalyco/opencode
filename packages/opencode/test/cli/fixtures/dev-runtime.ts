@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
 import { createComputed, createRoot, createSignal } from "solid-js"
-import { Dynamic } from "@opentui/solid"
 
 const seen: number[] = []
 createRoot((dispose) => {
@@ -11,19 +10,6 @@ createRoot((dispose) => {
   dispose()
 })
 assert.deepEqual(seen, [0, 1])
-
-createRoot((dispose) => {
-  const [changed, setChanged] = createSignal(false)
-  const content: unknown = Dynamic({
-    get component() {
-      return changed() ? () => "second" : () => "first"
-    },
-  })
-  assert.equal(typeof content === "function" ? content() : content, "first")
-  setChanged(true)
-  assert.equal(typeof content === "function" ? content() : content, "second")
-  dispose()
-})
 
 // Synthetic ConverseStream frames: message start, "hello", block stop, finish, usage.
 const frames = [
