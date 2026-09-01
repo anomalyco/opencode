@@ -1644,7 +1644,7 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={true}>
               {props.hint ?? (
-                <Show when={props.sessionID}>
+                <Show when={props.sessionID} fallback={<text />}>
                   <box marginLeft={1}>
                     <text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>
                   </box>
