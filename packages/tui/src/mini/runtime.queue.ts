@@ -172,7 +172,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               break
             }
 
-            if (sent.mode !== "shell") {
+            if (sent.mode !== "shell" && sent.text.trim()) {
               const commit = {
                 kind: "user",
                 text: sent.text,
@@ -252,7 +252,10 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
   }
 
   const submit = (prompt: RunPrompt) => {
-    if (!prompt.text.trim() || state.closed) {
+    if (
+      state.closed ||
+      (!prompt.text.trim() && (prompt.mode === "shell" || !prompt.parts.some((part) => part.type === "file")))
+    ) {
       return
     }
 

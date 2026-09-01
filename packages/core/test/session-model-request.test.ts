@@ -20,9 +20,13 @@ import { testEffect } from "./lib/effect"
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([SessionModelRequest.node, PluginHooks.node]), [
-    [SessionModelTransport.node, SessionModelTransport.makeLayer({ open: () => Effect.die("Unexpected connection") })],
-  ]),
+  LayerNode.compile(LayerNode.group([SessionModelRequest.node, PluginHooks.node]), {
+    replacements: [
+      SessionModelTransport.node.replace(
+        SessionModelTransport.makeLayer({ open: () => Effect.die("Unexpected connection") }),
+      ),
+    ],
+  }),
 )
 
 const requestInput = (model: LanguageModel) => ({

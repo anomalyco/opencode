@@ -2,10 +2,10 @@
 title: "JavaScript"
 ---
 
-`@opencode-ai/client` is the generated TypeScript client for the OpenCode HTTP
+`@opencode-ai/client` is the TypeScript client for the OpenCode HTTP
 API. Use it when your application connects to an OpenCode server over the
-network. Its types and methods are generated from the same contract as the
-[API reference](/api).
+network. Its native types and methods are generated from the same contract as the
+[API reference](/api). Plugin RPC types come from imported RPC definitions.
 
 <Callout type="warning">
   The V2 API and client are beta. Method names, inputs, and outputs may change before the stable release.
@@ -43,7 +43,8 @@ await client.session.prompt({
 Pass default authentication or application headers to `OpenCode.make` with
 `headers`. You can also supply a custom `fetch` implementation. Each operation
 accepts request options as its final argument for an `AbortSignal` or
-per-request headers.
+per-request headers. Event subscriptions are the exception: they accept only
+subscriber-local cancellation and use the base client's headers.
 
 ```ts
 const client = OpenCode.make({
@@ -67,6 +68,75 @@ for await (const event of client.event.subscribe()) {
   console.log(event.type)
 }
 ```
+
+Native and RPC event subscribers share one lazy connection per client. Client,
+handle, and iterable creation open no event connection; consumption starts it.
+Breaking iteration or aborting a subscriber ends only that iterator. The last
+subscriber leaving closes the connection. The shared source waits for active
+subscribers to accept each event; consumers should buffer before performing slow work.
+
+Subscriptions are live-only, with no replay or automatic reconnection. A source
+failure ends current subscriptions; subscribe again after recovery. A late native
+subscriber receives the current `server.connected` marker, not past business events.
+
+## Plugin RPC
+
+Import a plugin's shared contract and pass it to `client.rpc`:
+
+```ts
+import { OpenCode } from "@opencode-ai/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+The second optional method argument holds `location`, `signal`, and `headers`,
+separate from the plugin-defined input. Omitted location follows native request
+defaults: base location headers, then the server's working directory. No location
+is selected when constructing the subclient.
+
+Methods infer arguments and results from the definition. Schema parsing belongs
+to the contract boundary; callers send the accepted input representation, while
+handlers receive parsed values. The Promise client accepts Standard Schema or
+plain JSON Schema definitions and does
+not run schema parsers locally: the server returns already parsed and transformed
+output. Effect Schema definitions require the Effect client.
+
+Declared method errors reject like errors from other Promise client endpoints,
+and caught errors remain untyped. Generic HTTP RPC error wrappers are removed by
+the typed subclient. Reserved `rpc.*` framework failures remain plain RPC failures,
+while unrelated authentication, transport, and protocol errors keep their normal
+client representations.
+
+RPC subscriptions use local names and receive that RPC's events across all
+locations. Inspect the required `event.location` to filter them. `events.subscribe`
+matches the native async iterable API:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on` is a convenience wrapper over the same source. It returns unsubscribe;
+async callbacks are awaited sequentially. Callback or source failures are logged
+and end that listener. Native and typed subscriptions receive the same normal
+`rpc.<rpcID>.<event>` envelope with direct object event data. Live subscriptions
+do not replay missed events.
+
+The server plugin must be configured and implement the RPC; importing a
+definition does not register it. See [plugin RPC](/build/plugins/rpc) for the
+definition and registration API. Any HTTP client can also invoke the generic
+`POST /api/rpc/{rpcID}/{method}` route with `{ "input": ... }` and receive
+`{ "output": ... }`. Omitted input/output fields represent no value.
 
 ## Local background service
 

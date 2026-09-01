@@ -30,6 +30,37 @@ describe("run runtime queue", () => {
     expect(calls).toBe(0)
   })
 
+  test("runs and queues image-only prompts without optimistic image rows", async () => {
+    const ui = createFooterApiFixture()
+    const active = Promise.withResolvers<void>()
+    const queued = Promise.withResolvers<RunPrompt>()
+    const prompt: RunPrompt = {
+      text: "",
+      parts: [{ type: "file", url: "data:image/png;base64,cG5n", mime: "image/png", filename: "image.png" }],
+    }
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input, _signal, admitted) => {
+        expect(input.parts).toEqual(prompt.parts)
+        admitted()
+        await active.promise
+      },
+      admit: async (input, delivery) => {
+        expect(delivery).toBe("queue")
+        queued.resolve(input)
+      },
+      settle: async () => ui.api.close(),
+    })
+
+    ui.submit({ ...prompt, mode: "shell" })
+    ui.submit(prompt)
+    ui.submit(prompt)
+    expect((await queued.promise).parts).toEqual(prompt.parts)
+    expect(ui.commits).toEqual([])
+    active.resolve()
+    await task
+  })
+
   test("treats /exit as a close command", async () => {
     const ui = createFooterApiFixture()
     let calls = 0

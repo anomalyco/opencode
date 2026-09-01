@@ -43,7 +43,7 @@ const imageStore = Layer.mock(Image.Service, {
   },
 })
 const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node, SessionModelRequest.node]), [
-  [Image.node, imageStore],
+  Image.node.replace(imageStore),
 ])
 const it = testEffect(registryLayer)
 const identity = {

@@ -35,7 +35,7 @@ describe("CodeMode", () => {
       Effect.scoped,
       Effect.provide(
         AppNodeBuilder.build(Tool.node, [
-          [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+          Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
         ]),
       ),
     ),

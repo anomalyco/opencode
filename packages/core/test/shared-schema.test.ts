@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Session } from "@opencode-ai/core/session"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
@@ -126,6 +127,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [Session.ID, schemaSession.Session.ID],
     [Session.Info, schemaSession.Session.Info],
     [Session.ListAnchor, schemaSession.Session.ListAnchor],
+    [Session.ListInput, SessionStore.ListInput],
     [coreSessionInbox.Delivery, SessionInbox.Delivery],
     [coreSessionInbox.Item, SessionInbox.Item],
     [coreSessionInbox.User, SessionInbox.User],

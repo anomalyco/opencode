@@ -41,7 +41,7 @@ export const layer = Layer.effect(
     const configuredChanges = yield* PubSub.unbounded<void>()
     const watched = new Set<string>()
 
-    // Configured local plugin files can live outside config roots, where the
+    // Configured local plugin entrypoints can live outside config roots, where the
     // config change feed cannot see them; watch those entrypoints directly.
     // Watches start on first sighting and are never torn down individually:
     // a stale watch after a config edit costs one deduped fs handle and a
@@ -55,9 +55,6 @@ export const layer = Layer.effect(
         if (watched.has(operation.target)) continue
         // The config change feed already covers {plugin,plugins} directories.
         if (isPluginSource(entries, operation.target)) continue
-        // Directory targets can't hot-reload (their stat mtime ignores edits
-        // inside), so don't watch what can't trigger anything.
-        if (yield* fs.isDir(operation.target)) continue
         watched.add(operation.target)
         const updates = yield* watcher.subscribe({ path: operation.target, type: "file" })
         yield* updates.pipe(
@@ -144,8 +141,22 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
         return { ...operation, target }
       }),
     )
+  const resolved = yield* Effect.forEach(configured, (operation) =>
+    Effect.gen(function* () {
+      if (operation.type === "remove" || !path.isAbsolute(operation.target)) return Option.some(operation)
+      if (yield* fs.isFile(operation.target)) {
+        yield* Effect.logWarning("configured plugin path must be a directory", { target: operation.target })
+        return Option.none<Operation>()
+      }
+      if (!(yield* fs.isDir(operation.target))) return Option.some<Operation>(operation)
+      const entrypoint = yield* PluginSourceDirectory.entrypoint(fs, operation.target)
+      if (Option.isSome(entrypoint)) return Option.some<Operation>({ ...operation, target: entrypoint.value })
+      yield* Effect.logWarning("configured plugin directory has no index entrypoint", { target: operation.target })
+      return Option.none<Operation>()
+    }),
+  ).pipe(Effect.map((operations) => operations.flatMap(Option.toArray)))
   // Explicit config is applied last so it can remove auto-discovered packages.
-  return yield* Effect.forEach([...discovered, ...configured], (operation) => {
+  return yield* Effect.forEach([...discovered, ...resolved], (operation) => {
     if (operation.type === "remove" || !path.isAbsolute(operation.target)) return Effect.succeed(operation)
     return fs.stat(operation.target).pipe(
       Effect.map((info) => ({

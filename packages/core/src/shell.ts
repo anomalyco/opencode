@@ -369,9 +369,11 @@ const layer = () =>
                     if (!oldest) break
                     yield* removeCommand(oldest)
                   }
-                  // Cancel a pending timeout once the command exits on its own. Interrupting last avoids
-                  // aborting finish when finish itself runs on the timeout fiber.
-                  if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
+                  // Keep exited history data-only. Interrupt last because finish may run on the timeout fiber.
+                  const timeoutFiber = command.timeoutFiber
+                  command.timeout = undefined
+                  command.timeoutFiber = undefined
+                  if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 })
 
               command.timeout = (duration) =>
@@ -382,7 +384,11 @@ const layer = () =>
                   command.timeoutFiber = runFork(
                     Effect.sleep(Duration.millis(duration)).pipe(
                       Effect.flatMap(() =>
-                        finish("timeout", undefined, handle.kill().pipe(Effect.catch(() => Effect.void))),
+                        finish(
+                          "timeout",
+                          undefined,
+                          handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
+                        ),
                       ),
                     ),
                   )

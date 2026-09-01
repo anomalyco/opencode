@@ -327,7 +327,11 @@ export namespace Timeline {
 
   export function resolveContent(message: SessionMessageInfo | undefined, partID: string): Content | undefined {
     if (message?.type !== "assistant") return undefined
-    return contentEntries(message).find((entry) => entry.id === partID)?.content
+    const ordinals = { text: 0, reasoning: 0 }
+    for (const content of message.content) {
+      const id = content.type === "tool" ? content.id : `${message.id}:${content.type}:${ordinals[content.type]++}`
+      if (id === partID) return content
+    }
   }
 
   export function contentEntries(message: SessionMessageAssistant) {

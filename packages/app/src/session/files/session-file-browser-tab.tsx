@@ -1,4 +1,5 @@
-import { createMemo, createSignal, createUniqueId, Show } from "solid-js"
+import { createMemo, createUniqueId, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { createQuery } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode-ai/session-ui/v2/session-file-panel-v2"
@@ -34,6 +35,7 @@ export function SessionFileBrowserTab(props: {
   onSelect: (path: string) => void
   onSelectPermanent: (path: string) => void
   filterRef?: (element: HTMLInputElement) => void
+  mobile?: boolean
 }) {
   const file = useFile()
   const language = useLanguage()
@@ -42,8 +44,10 @@ export function SessionFileBrowserTab(props: {
   const serverSDK = useServerSDK()
   const { workspaceKey } = useSessionLayout()
   const resultsID = `session-file-browser-results-${createUniqueId()}`
-  const [filter, setFilter] = createSignal("")
-  const [explicitHighlight, setExplicitHighlight] = createSignal<string>()
+  const [store, setStore] = createStore({ filter: "", explicitHighlight: undefined as string | undefined })
+  const filter = () => store.filter
+  const setFilter = (value: string) => setStore("filter", value)
+  const setExplicitHighlight = (value: string) => setStore("explicitHighlight", value)
   const sidebarOpened = () => props.placeholder || props.state.sidebarOpened()
   const query = createMemo(() => filter().trim())
   const search = createQuery(() => {
@@ -61,7 +65,7 @@ export function SessionFileBrowserTab(props: {
   const highlighted = createMemo(() => {
     const values = files()
     if (values.length === 0) return undefined
-    const explicit = explicitHighlight()
+    const explicit = store.explicitHighlight
     if (explicit && values.includes(explicit)) return explicit
     return values[0]
   })
@@ -105,13 +109,13 @@ export function SessionFileBrowserTab(props: {
           filter={filter()}
           onFilterChange={setFilter}
           onFilterKeyDown={onFilterKeyDown}
-          filterAutofocus={props.placeholder}
-          filterRef={props.filterRef}
+          filterAutofocus={props.placeholder && !props.mobile}
+          filterRef={(element) => props.filterRef?.(element)}
           filterControls={resultsID}
           filterActiveDescendant={highlighted() ? optionID(highlighted()!) : undefined}
           filterExpanded={query().length > 0 && files().length > 0}
           width={props.state.sidebarWidth()}
-          onWidthChange={props.state.resizeSidebar}
+          onWidthChange={props.mobile ? undefined : props.state.resizeSidebar}
         >
           <Show
             when={query()}
@@ -119,6 +123,7 @@ export function SessionFileBrowserTab(props: {
               <FileTreeV2
                 active={props.active}
                 kinds={props.kinds}
+                draggable={!props.mobile}
                 onFileClick={(node) => props.onSelect(node.path)}
                 onFileDoubleClick={(node) => props.onSelectPermanent(node.path)}
               />

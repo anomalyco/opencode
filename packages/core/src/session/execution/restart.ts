@@ -157,7 +157,7 @@ export const layer = (options?: Options) =>
           yield* notify(background)
           return
         }
-        if ((yield* execution.active).has(recovery.childSessionID)) return
+        if (yield* execution.isActive(recovery.childSessionID)) return
         if (!(yield* prepareResume(recovery.childSessionID))) {
           yield* notify({ status: "error", error: RESUME_EXHAUSTED.message })
           return

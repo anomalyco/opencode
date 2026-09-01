@@ -44,7 +44,9 @@ describe("ConfigToolOutputPlugin.Plugin", () => {
           }
           yield* Effect.die(new Error("Timed out waiting for tool output config reload"))
         }).pipe(
-          Effect.provide(AppNodeBuilder.build(ToolOutput.node, [[Global.node, Global.layerWith({ data: tmp.path })]])),
+          Effect.provide(
+            AppNodeBuilder.build(ToolOutput.node, [Global.node.replace(Global.layerWith({ data: tmp.path }))]),
+          ),
         ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ).pipe(

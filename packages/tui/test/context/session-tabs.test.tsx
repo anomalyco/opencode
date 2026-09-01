@@ -864,20 +864,32 @@ test("closing a tab is not undone by another TUI viewing the same session", asyn
     clients.push(first)
     const second = await renderSessionTabs("shared", { state: temporary.path })
     clients.push(second)
-    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "shared"))
-    await wait(() => second.tabs.tabs().some((tab) => tab.sessionID === "shared"))
-    first.tabs.close()
-    await wait(() => first.route.data.type === "home")
-    await wait(() => !second.tabs.tabs().some((tab) => tab.sessionID === "shared"))
+    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "shared"), 2_000, "first tab to open")
+    await wait(() => second.tabs.tabs().some((tab) => tab.sessionID === "shared"), 2_000, "second tab to open")
     await Promise.all([first.flush(), second.flush()])
+    first.tabs.close()
+    await wait(() => first.route.data.type === "home", 2_000, "first client to navigate home")
+    await first.flush()
+    await wait(
+      () => !second.tabs.tabs().some((tab) => tab.sessionID === "shared"),
+      2_000,
+      "second client to observe close",
+    )
+    await second.flush()
 
     const stored = await Bun.file(path.join(temporary.path, "test", "tui", "tabs.json")).json()
     expect(stored.cwd[directory].tabs).toEqual([])
 
     second.route.navigate({ type: "home" })
-    await wait(() => second.route.data.type === "home")
+    await wait(() => second.route.data.type === "home", 2_000, "second client to navigate home")
     second.route.navigate({ type: "session", sessionID: "shared" })
-    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "shared"))
+    await wait(() => second.tabs.tabs().some((tab) => tab.sessionID === "shared"), 2_000, "second client to reopen tab")
+    await second.flush()
+    await wait(
+      () => first.tabs.tabs().some((tab) => tab.sessionID === "shared"),
+      2_000,
+      "first client to observe reopen",
+    )
   } finally {
     await Promise.allSettled(clients.map((client) => client.destroy()))
   }

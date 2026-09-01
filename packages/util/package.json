@@ -34,7 +34,8 @@
   "scripts": {
     "build": "bun run script/build.ts",
     "test": "bun test --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "typecheck:dist": "bun run build && bun typecheck --project tsconfig.dist.json"
   },
   "dependencies": {
     "@effect/opentelemetry": "catalog:",

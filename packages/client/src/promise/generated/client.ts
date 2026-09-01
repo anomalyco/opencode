@@ -181,6 +181,8 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
+  RpcCallInput,
+  RpcCallOutput,
   EventSubscribeOutput,
   PtyListInput,
   PtyListOutput,
@@ -1589,6 +1591,21 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    rpc: {
+      call: (input: RpcCallInput, requestOptions?: RequestOptions) =>
+        request<RpcCallOutput>(
+          {
+            method: "POST",
+            path: `/api/rpc/${encodeURIComponent(input.rpcID)}/${encodeURIComponent(input.method)}`,
+            query: { location: input["location"] },
+            body: { input: input["input"] },
+            successStatus: 200,
+            declaredStatuses: [400, 500, 401],
             empty: false,
           },
           requestOptions,

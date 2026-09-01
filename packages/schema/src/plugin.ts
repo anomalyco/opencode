@@ -15,22 +15,26 @@ export const Source = Schema.Union([
 ]).annotate({ identifier: "Plugin.Source" })
 export type Source = typeof Source.Type
 
-export const Info = Schema.Union([
-  Schema.Struct({
-    id: ID,
-    source: Source,
-    status: Schema.Literal("active"),
-    tui: Schema.Boolean,
-  }),
-  Schema.Struct({
-    id: ID.pipe(optional),
-    source: Source,
-    status: Schema.Literal("failed"),
-    error: Schema.String,
-    tui: Schema.Boolean,
-  }),
-]).annotate({ identifier: "Plugin.Info" })
-export type Info = typeof Info.Type
+export const Features = Schema.Struct({
+  server: Schema.Literal(true).pipe(optional),
+  tui: Schema.Literal(true).pipe(optional),
+  rpc: Schema.Literal(true).pipe(optional),
+}).annotate({ identifier: "Plugin.Features" })
+export type Features = typeof Features.Type
+
+export const State = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("active") }),
+  Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }),
+]).annotate({ identifier: "Plugin.State" })
+export type State = typeof State.Type
+
+export interface Info extends Schema.Schema.Type<typeof Info> {}
+export const Info = Schema.Struct({
+  id: ID.pipe(optional),
+  source: Source,
+  features: Features,
+  state: State,
+}).annotate({ identifier: "Plugin.Info" })
 
 const Added = ephemeral({
   type: "plugin.added",

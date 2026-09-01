@@ -6,19 +6,22 @@ import type {
   PermissionRequest,
   SessionMessageAssistantTool,
   SessionMessageInfo,
+  SessionMessageUser,
   SessionInboxInfo,
 } from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { formatContextUsage } from "../util/session"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
+import { toolImageCommits, userImageCommits, type ImageCommit } from "./stream-v2.image"
+import { messagePrompt } from "./session.shared"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import { normalizeTool, toolOutputText } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
 import type {
   FooterApi,
+  FooterPatch,
   FooterView,
   LocalReplayRow,
   MiniPermissionRequest,
@@ -123,12 +126,17 @@ type ToolState = {
   started: boolean
 }
 
+type PendingPrompt = FooterQueuedPrompt & { files: SessionMessageUser["files"] }
+
 type State = {
   permissions: MiniPermissionRequest[]
   forms: MiniFormRequest[]
   globalForms: MiniFormRequest[]
   view: FooterView
   messageIDs: Set<string>
+  // Optimistic text and pending steers can be visible before attachment delivery.
+  promotedMessages: Set<string>
+  imageIDs: Set<string>
   fragments: FragmentReconciler
   tools: Map<string, ToolState>
   toolSources: Map<string, SessionMessageAssistantTool>
@@ -147,13 +155,11 @@ type State = {
   executionEpoch: number
   buffered?: ReplayBuffer
   errors: Set<string>
-  pending: Map<string, FooterQueuedPrompt>
+  pending: Map<string, PendingPrompt>
   admitted: Set<string>
   stepModel: RunInput["model"]
   activeCompaction?: string
 }
-
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
 export function formatUnknownError(error: unknown): string {
   if (typeof error === "string") return error
@@ -184,11 +190,12 @@ function errorMessage(error: { message?: string; _tag?: string }) {
   return error.message || error._tag || "Session execution failed"
 }
 
-function pendingPrompt(item: SessionInboxInfo): FooterQueuedPrompt | undefined {
+function pendingPrompt(item: SessionInboxInfo): PendingPrompt | undefined {
   if (item.type !== "user") return undefined
   return {
     messageID: item.id,
-    prompt: { messageID: item.id, text: item.payload.text, parts: [] },
+    prompt: { messageID: item.id, ...messagePrompt(item.payload) },
+    files: item.payload.files,
     delivery: item.delivery,
     ...(item.payload.skills?.length
       ? { skills: item.payload.skills.map((skill) => ({ id: skill.id, name: skill.name })) }
@@ -253,6 +260,7 @@ function promptFiles(next: SessionTurnInput) {
           {
             uri: part.url,
             name: part.filename,
+            ...(part.description === undefined ? {} : { description: part.description }),
             mention: promptFileMention(part),
           },
         ]
@@ -474,6 +482,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     globalForms: [],
     view: { type: "prompt" },
     messageIDs: new Set(),
+    promotedMessages: new Set(),
+    imageIDs: new Set(),
     fragments: createFragmentReconciler(),
     tools: new Map(),
     toolSources: new Map(),
@@ -532,7 +542,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     write([], { phase: "idle", status })
   }
 
-  const write = (commits: StreamCommit[], patch?: { phase?: "idle" | "running"; status?: string; usage?: string }) => {
+  const write = (commits: StreamCommit[], patch?: Pick<FooterPatch, "phase" | "status" | "usage">) => {
     if (state.closed || controller.signal.aborted || input.footer.isClosed) return
     if (!state.initial && state.buffered === undefined)
       commits.forEach((commit) => {
@@ -562,9 +572,21 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     input.footer.event({ type: "queued.prompts", prompts })
   }
 
+  const freshImages = (commits: ImageCommit[], render = true) =>
+    commits.filter((commit) => {
+      const key = streamPartKey(commit.messageID, commit.partID)
+      if (state.imageIDs.has(key)) return false
+      state.imageIDs.add(key)
+      return render
+    })
+
   const mergePending = (item: SessionInboxInfo) => {
     const prompt = pendingPrompt(item)
-    if (!prompt || state.messageIDs.has(prompt.messageID)) return
+    if (!prompt) return
+    if (state.promotedMessages.has(prompt.messageID)) {
+      write(freshImages(userImageCommits(prompt.messageID, prompt.files)))
+      return
+    }
     state.admitted.add(prompt.messageID)
     state.pending.set(prompt.messageID, prompt)
     syncPending()
@@ -655,12 +677,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     state.finishedTools.add(key)
     state.tools.delete(key)
     if (!sourcePending(key)) state.toolSources.delete(key)
+    const images = freshImages(toolImageCommits(part, messageID), render)
     if (!render) return
     const phase = toolFinalPhase(part)
     if (part.state.status === "error" && delta)
       write([toolCommit(part, messageID, "progress", delta, input.location?.directory, version)])
     write([
       toolCommit(part, messageID, phase, phase === "progress" ? delta : undefined, input.location?.directory, version),
+      ...images,
     ])
   }
 
@@ -671,13 +695,17 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (state.wait && (admitted || (waiting && state.wait.failureMessageID === message.id)))
         promoteWait(state.wait, false, message.id)
       if (state.pending.delete(message.id)) syncPending()
-      if (state.messageIDs.has(message.id)) return
+      const visible = state.messageIDs.has(message.id) || (reuseVisibleWait && waiting)
       state.messageIDs.add(message.id)
+      state.promotedMessages.add(message.id)
+      const images = freshImages(userImageCommits(message.id, message.files), render)
       if (!render) return
-      if (reuseVisibleWait && waiting) return
       write([
-        ...skillCommits(message.id, message.skills),
-        { kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id },
+        ...(!visible ? skillCommits(message.id, message.skills) : []),
+        ...(!visible && message.text.trim()
+          ? [{ kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id } as const]
+          : []),
+        ...images,
       ])
       return
     }
@@ -960,13 +988,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const waiting = state.wait?.messageID === event.data.inboxID
       if (state.wait) promoteWait(state.wait, true, event.data.inboxID)
       state.admitted.delete(event.data.inboxID)
+      state.promotedMessages.add(event.data.inboxID)
       const pending = state.pending.get(event.data.inboxID)
       state.pending.delete(event.data.inboxID)
       syncPending()
       const visible = state.messageIDs.has(event.data.inboxID)
       if (waiting || pending) state.messageIDs.add(event.data.inboxID)
       const commits = pending && !visible ? skillCommits(event.data.inboxID, pending.skills) : []
-      if (!waiting && pending && !visible)
+      if (!waiting && pending && !visible && pending.prompt.text.trim())
         commits.push({
           kind: "user",
           source: "system",
@@ -974,6 +1003,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           phase: "start",
           messageID: event.data.inboxID,
         })
+      if (pending) commits.push(...freshImages(userImageCommits(event.data.inboxID, pending.files)))
       write(commits, { phase: "running", status: "waiting for assistant" })
       return
     }
@@ -1291,9 +1321,15 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         event.data.tokens.cache.write
       const limit = state.stepModel ? input.contextLimit?.(state.stepModel) : undefined
       state.stepModel = undefined
-      const usage = total > 0 ? formatContextUsage(total, limit ? Math.round((total / limit) * 100) : undefined) : ""
       write([], {
-        usage: event.data.cost ? `${usage} · ${money.format(event.data.cost)}` : usage,
+        usage:
+          total > 0 || event.data.cost
+            ? {
+                tokens: total,
+                percent: limit ? Math.round((total / limit) * 100) : undefined,
+                cost: event.data.cost || undefined,
+              }
+            : undefined,
       })
       return
     }
@@ -1583,6 +1619,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!current(attempt)) return false
       reset = true
       state.messageIDs.clear()
+      state.imageIDs.clear()
       state.fragments.clear()
       state.tools.clear()
       state.toolSources.clear()
@@ -1603,6 +1640,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     try {
       if (reset) {
         for (const row of localRows) {
+          if (row.commit.image && row.commit.messageID && row.commit.partID) {
+            const key = streamPartKey(row.commit.messageID, row.commit.partID)
+            if (state.imageIDs.has(key)) continue
+            state.imageIDs.add(key)
+            input.footer.append(row.commit)
+            continue
+          }
           if (
             row.commit.messageID &&
             row.commit.partID &&

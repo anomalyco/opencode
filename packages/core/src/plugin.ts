@@ -1,5 +1,5 @@
 export * as Plugin from "./plugin.js"
-export { Event, ID, Info, Source } from "@opencode-ai/schema/plugin"
+export { Event, ID, Info, Source, State } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
@@ -19,6 +19,7 @@ import { PluginHost } from "./plugin/host.js"
 import { PluginRuntime } from "./plugin/runtime.js"
 import { WebSearch } from "./websearch.js"
 import { Reference } from "./reference.js"
+import { Rpc } from "./rpc.js"
 import { Skill } from "./skill.js"
 import { State } from "./state.js"
 import { Tool } from "./tool.js"
@@ -30,14 +31,17 @@ import { Permission } from "./permission.js"
 export interface Interface {
   readonly activate: (
     plugins: readonly Versioned[],
-    failures?: readonly Extract<Plugin.Info, { readonly status: "failed" }>[],
+    failures?: readonly Failure[],
   ) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Plugin.Info[]>
 }
 
+type Failure = Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
+
 export type Versioned = PluginDefinition & {
   readonly version: string
   readonly source?: Plugin.Source
+  readonly features?: Plugin.Features
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
@@ -80,7 +84,7 @@ const layer = Layer.effect(
 
     const activate = Effect.fn("Plugin.activate")(function* (
       plugins: readonly Versioned[],
-      failures: readonly Extract<Plugin.Info, { readonly status: "failed" }>[] = [],
+      failures: readonly Failure[] = [],
     ) {
       const definitions = plugins.map((plugin) => ({ ...plugin, id: Plugin.ID.make(plugin.id) }))
       const ids = new Set<Plugin.ID>()
@@ -122,9 +126,8 @@ const layer = Layer.effect(
                 nextInventory.push({
                   id: definition.id,
                   source: definition.source ?? { type: "builtin" },
-                  status: "failed",
-                  error: loaded.error,
-                  tui: definition.tui ?? false,
+                  state: { status: "failed", error: loaded.error },
+                  features: { server: true, ...definition.features },
                 })
 
                 if (!previous) continue
@@ -175,8 +178,8 @@ function activeInfo(plugin: Versioned): Plugin.Info {
   return {
     id: Plugin.ID.make(plugin.id),
     source: plugin.source ?? { type: "builtin" },
-    status: "active",
-    tui: plugin.tui ?? false,
+    state: { status: "active" },
+    features: { server: true, ...plugin.features },
   }
 }
 
@@ -195,6 +198,7 @@ export const node = makeLocationNode({
     Mcp.node,
     Location.node,
     Reference.node,
+    Rpc.node,
     Skill.node,
     Tool.node,
     Vcs.node,

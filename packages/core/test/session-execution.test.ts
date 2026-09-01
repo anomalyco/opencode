@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
+import { Instance } from "@opencode-ai/core/instance/service"
 import { Job } from "@opencode-ai/core/job"
 import { KV } from "@opencode-ai/core/kv"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
@@ -26,7 +27,9 @@ import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionStore.node, Job.node, KV.node, Session.node])),
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SessionStore.node, SessionInbox.node, Job.node, KV.node, Session.node]),
+  ),
 )
 
 describe("SessionExecution lifecycle", () => {
@@ -92,6 +95,8 @@ describe("SessionExecution lifecycle", () => {
           : Deferred.succeed(interruptedRunning, undefined).pipe(Effect.andThen(Effect.never)),
       )
       const execution = Context.get(context, SessionExecution.Service)
+      const completedActive = execution.isActive(completed)
+      expect(yield* completedActive).toBe(false)
       yield* execution.resume(interrupted).pipe(Effect.forkScoped)
       const completing = yield* execution.resume(completed).pipe(Effect.forkIn(scope))
       yield* Deferred.await(interruptedRunning)
@@ -99,17 +104,22 @@ describe("SessionExecution lifecycle", () => {
 
       // The write-ahead claim exists WHILE the turns run — no shutdown hook involved.
       expect(yield* claims(database)).toEqual({ [interrupted]: true, [completed]: true })
+      expect(yield* completedActive).toBe(true)
+      expect(yield* execution.isActive(interrupted)).toBe(true)
 
       // A drain that finishes on its own releases its claim.
       yield* Deferred.succeed(release, undefined)
       yield* Fiber.join(completing)
       yield* execution.awaitIdle(completed)
       expect((yield* claims(database))[completed]).toBe(false)
+      expect(yield* completedActive).toBe(false)
+      expect(yield* execution.isActive(interrupted)).toBe(true)
 
       // Teardown interruption (graceful twin of an unclean death) preserves the claim
       // for the next server start.
       yield* Scope.close(scope, Exit.void)
       expect((yield* claims(database))[interrupted]).toBe(true)
+      expect(yield* execution.isActive(interrupted)).toBe(false)
     }),
   )
 
@@ -146,6 +156,7 @@ describe("SessionExecution lifecycle", () => {
 
       expect(yield* execution.interrupt(sessionID)).toBeFalse()
       expect(yield* execution.active).not.toContain(sessionID)
+      expect(yield* execution.isActive(sessionID)).toBe(false)
     }),
   )
 
@@ -897,7 +908,7 @@ describe("SessionRestart background recovery", () => {
   it.effect("retains a subagent completion marker when synthetic admission conflicts", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const bus = yield* Bus.Service
+      const admission = yield* SessionInbox.Service
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
       const parent = Session.ID.make("ses_completion_conflict_parent")
@@ -920,7 +931,7 @@ describe("SessionRestart background recovery", () => {
       yield* jobs.background(child)
       const marker = (yield* jobs.pendingBackground)[0]
       if (!marker) return yield* Effect.die("background record missing")
-      yield* SessionInbox.admit(database.db, bus, {
+      yield* admission.admit({
         id: marker.notificationID,
         sessionID: parent,
         item: { type: "user", payload: { text: "User input" }, delivery: "steer" },
@@ -1361,7 +1372,12 @@ function buildExecution(
         Layer.provide(Layer.succeed(Bus.Service, bus)),
         Layer.provide(Layer.succeed(SessionStore.Service, store)),
         Layer.provide(Layer.succeed(Job.Service, jobs)),
-        Layer.provide(locations),
+        // Do not reuse the outer harness's selector with its already-captured Location map.
+        Layer.provide(
+          LayerNode.compile(Instance.byLocationNode, {
+            replacements: [LocationServiceMap.node.replace(locations)],
+          }).pipe(Layer.fresh),
+        ),
       ),
       scope,
     )

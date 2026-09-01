@@ -65,8 +65,8 @@ test("project Extensions stays inside settings while plugins load", async ({ pag
           data: (project ? ["shared-plugin", "project-plugin"] : ["shared-plugin"]).map((id) => ({
             id,
             source: { type: "package", package: id },
-            status: "active",
-            tui: false,
+            state: { status: "active" },
+            features: { server: true },
           })),
         },
       })

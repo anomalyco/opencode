@@ -28,7 +28,6 @@ type RunningSidecar = {
   stop: () => Promise<void>
   onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void
   url: string
-  username: string | null
   password: string
 }
 
@@ -174,7 +173,6 @@ export const createWslServersController = Effect.fn("WslServers.make")(function*
       setRuntime(id, {
         kind: "ready",
         url: sidecar.url,
-        username: sidecar.username,
         password: sidecar.password,
       })
       sidecar.onExit((code, signal) => {

@@ -22,25 +22,26 @@ import { host } from "./plugin/host"
 
 const provide = (directory: string, input: { git?: boolean; worktree?: string } = {}) =>
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node, FSUtil.node, Git.node]), [
-      [
-        Location.node,
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of(
-            location(
-              { directory: AbsolutePath.make(directory) },
-              {
-                projectDirectory: input.worktree ? AbsolutePath.make(input.worktree) : undefined,
-                ...(input.git
-                  ? { vcs: { type: "git", store: AbsolutePath.make(path.join(input.worktree ?? directory, ".git")) } }
-                  : {}),
-              },
+    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node, FSUtil.node, Git.node]), {
+      replacements: [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(
+                { directory: AbsolutePath.make(directory) },
+                {
+                  projectDirectory: input.worktree ? AbsolutePath.make(input.worktree) : undefined,
+                  ...(input.git
+                    ? { vcs: { type: "git", store: AbsolutePath.make(path.join(input.worktree ?? directory, ".git")) } }
+                    : {}),
+                },
+              ),
             ),
           ),
         ),
       ],
-    ]),
+    }),
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>

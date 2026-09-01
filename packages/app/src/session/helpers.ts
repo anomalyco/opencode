@@ -124,14 +124,10 @@ export const createOpenReviewFile = (input: {
   return (path: string) => {
     batch(() => {
       input.showAllFiles()
-      const maybePromise = input.loadFile(path)
-      const open = () => {
-        const tab = input.tabForPath(path)
-        input.openTab(tab)
-        input.setActive(tab)
-      }
-      if (maybePromise instanceof Promise) void maybePromise.then(open)
-      else open()
+      input.loadFile(path)
+      const tab = input.tabForPath(path)
+      input.openTab(tab)
+      input.setActive(tab)
     })
   }
 }

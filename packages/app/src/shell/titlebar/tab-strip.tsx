@@ -1,6 +1,5 @@
-import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
@@ -26,7 +25,6 @@ function SessionTabSlot(props: {
   id: string
   index: number
   active: boolean
-  forceTruncate: boolean
   orientation: "horizontal" | "vertical"
   session: SessionInfo | undefined
   fallbackTitle?: string
@@ -69,7 +67,6 @@ function SessionTabSlot(props: {
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         active={props.active}
-        forceTruncate={props.forceTruncate}
         dragging={sortable.isDragSource()}
         orientation={props.orientation}
       />
@@ -82,7 +79,6 @@ function SessionTabEntry(props: {
   id: string
   index: number
   active: boolean
-  forceTruncate: boolean
   orientation: "horizontal" | "vertical"
   serverCtx: ServerCtx | undefined
   onVisibleChange: (visible: boolean) => void
@@ -169,7 +165,6 @@ function SessionTabEntry(props: {
         id={props.id}
         index={props.index}
         active={props.active}
-        forceTruncate={props.forceTruncate}
         orientation={props.orientation}
         session={session()}
         fallbackTitle={
@@ -238,19 +233,15 @@ export function TitlebarTabStrip(props: {
   orientation?: "horizontal" | "vertical"
   tabs: Tab[]
   currentTab: Tab | undefined
-  forceTruncate: boolean
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
   onReorder: (keys: string[]) => void
-  onOverflowChange: (overflowing: boolean) => void
 }) {
   const global = useGlobal()
   const language = useLanguage()
   const command = useCommand()
   const vertical = () => props.orientation === "vertical"
-  let scrollRef!: HTMLDivElement
   let listRef!: HTMLDivElement
-  let resizeFrame: number | undefined
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
   const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
   const visibleTabIds = () => visibleTabs().map(tabKey)
@@ -281,38 +272,6 @@ export function TitlebarTabStrip(props: {
     if (next) props.onNavigate(next)
   }
 
-  function refreshOverflow() {
-    if (!scrollRef) return
-    props.onOverflowChange(
-      vertical() ? scrollRef.scrollHeight > scrollRef.clientHeight : scrollRef.scrollWidth > scrollRef.clientWidth,
-    )
-  }
-
-  createResizeObserver(
-    () => [scrollRef, listRef],
-    () => {
-      if (resizeFrame !== undefined) return
-      resizeFrame = requestAnimationFrame(() => {
-        resizeFrame = undefined
-        refreshOverflow()
-      })
-    },
-  )
-
-  onMount(() => {
-    refreshOverflow()
-  })
-
-  onCleanup(() => {
-    if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
-  })
-
-  createEffect(() => {
-    props.tabs.length
-    visibleTabIds()
-    refreshOverflow()
-  })
-
   return (
     <div
       data-slot={vertical() ? "vertical-tabs" : "titlebar-tabs"}
@@ -327,7 +286,6 @@ export function TitlebarTabStrip(props: {
           "flex-row items-center gap-1.5 overflow-x-auto": !vertical(),
           "max-h-full flex-col overflow-y-auto overflow-x-hidden": vertical(),
         }}
-        ref={scrollRef}
       >
         <DragDropProvider
           sensors={[
@@ -398,7 +356,6 @@ export function TitlebarTabStrip(props: {
                       id={id}
                       index={visibleIndex()}
                       active={props.currentTab === tab}
-                      forceTruncate={props.forceTruncate}
                       orientation={vertical() ? "vertical" : "horizontal"}
                       serverCtx={serverCtx()}
                       onVisibleChange={(visible) => setVisibility(id, visible)}

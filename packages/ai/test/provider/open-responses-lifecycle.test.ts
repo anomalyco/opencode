@@ -216,7 +216,63 @@ describe("Open Responses basic-item lifecycles", () => {
       ])
     }),
   )
-  it.effect("allows a message to be registered again without inheriting its previous phase", () =>
+
+  it.effect("preserves non-empty done-only message content without replaying duplicates", () =>
+    Effect.gen(function* () {
+      const text = {
+        type: "message",
+        id: "msg_text",
+        content: [{ type: "output_text", text: "Done-only text." }],
+      }
+      const refusal = {
+        type: "message",
+        id: "msg_refusal",
+        content: [{ type: "refusal", refusal: "Done-only refusal." }],
+      }
+      const events = yield* collect(
+        { type: "response.output_item.done", item: text },
+        { type: "response.output_item.done", item: text },
+        {
+          type: "response.output_item.done",
+          item: { type: "message", id: "msg_empty", content: [{ type: "output_text", text: "" }] },
+        },
+        {
+          type: "response.output_item.done",
+          item: { type: "message", id: "msg_empty", content: [{ type: "output_text", text: "Late" }] },
+        },
+        { type: "response.output_item.done", item: refusal },
+        { type: "response.output_item.done", item: refusal },
+        completed,
+      )
+
+      expect(events.filter((event) => event.type.startsWith("text-"))).toEqual([
+        {
+          type: "text-start",
+          id: "msg_text",
+          providerMetadata: { "openai-compatible": { itemId: "msg_text" } },
+        },
+        {
+          type: "text-end",
+          id: "msg_text",
+          text: "Done-only text.",
+          providerMetadata: { "openai-compatible": { itemId: "msg_text" } },
+        },
+        {
+          type: "text-start",
+          id: "msg_refusal",
+          providerMetadata: { "openai-compatible": { itemId: "msg_refusal" } },
+        },
+        {
+          type: "text-end",
+          id: "msg_refusal",
+          text: "Done-only refusal.",
+          providerMetadata: { "openai-compatible": { itemId: "msg_refusal" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("treats a repeated message lifecycle as replay", () =>
     Effect.gen(function* () {
       const events = yield* collect(
         { type: "response.output_item.added", item: { type: "message", id: "msg_1", phase: "commentary" } },
@@ -233,9 +289,44 @@ describe("Open Responses basic-item lifecycles", () => {
           id: "msg_1",
           providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
         },
-        { type: "text-end", id: "msg_1", providerMetadata: { "openai-compatible": { itemId: "msg_1" } } },
       ])
-      expect(events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["First", "Second"])
+      expect(events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["First"])
+    }),
+  )
+
+  it.effect("ignores a stale done-only message while another message is active", () =>
+    Effect.gen(function* () {
+      const events = yield* collect(
+        { type: "response.output_item.added", item: { type: "message", id: "msg_1", phase: "commentary" } },
+        { type: "response.output_text.delta", item_id: "msg_1", delta: "Draft" },
+        {
+          type: "response.output_item.done",
+          item: { type: "message", id: "msg_2", content: [{ type: "output_text", text: "Recovered" }] },
+        },
+        {
+          type: "response.output_item.done",
+          item: { type: "message", id: "msg_1", content: [{ type: "output_text", text: "Final" }] },
+        },
+        {
+          type: "response.output_item.done",
+          item: { type: "message", id: "msg_2", content: [{ type: "output_text", text: "Late" }] },
+        },
+        completed,
+      )
+      expect(events.filter((event) => event.type.startsWith("text-"))).toEqual([
+        {
+          type: "text-start",
+          id: "msg_1",
+          providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
+        },
+        { type: "text-delta", id: "msg_1", text: "Draft" },
+        {
+          type: "text-end",
+          id: "msg_1",
+          text: "Final",
+          providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
+        },
+      ])
     }),
   )
   ;[undefined, "fc_1"].forEach((id) => {

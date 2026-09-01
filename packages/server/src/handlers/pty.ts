@@ -17,6 +17,7 @@ import {
 } from "@opencode-ai/protocol/groups/pty"
 import { response } from "../location"
 import { PtyEnvironment } from "../pty-environment"
+import { runPtySocket } from "./pty-socket"
 
 const ticketScope = Effect.gen(function* () {
   const location = yield* Location.Service
@@ -209,15 +210,15 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
             }
           })
 
-          yield* Effect.race(
+          yield* runPtySocket(
             drain,
             socket.runRaw((message) => {
               const decoded = PtyProtocol.decodeInput(message)
               if (decoded !== undefined) attachment.write(decoded)
             }),
+            attachment.detach,
           ).pipe(
             Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
-            Effect.ensuring(Effect.sync(() => attachment.detach())),
             Effect.orDie,
           )
           return HttpServerResponse.empty()

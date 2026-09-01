@@ -40,13 +40,12 @@ const it = testEffect(
   Layer.merge(
     config,
     AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, SessionModelRequest.node, Config.node, Bus.node]), [
-      [
-        llmClient,
+      llmClient.replace(
         Layer.mock(LLMClient.Service)({
           stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "summary" })),
         }),
-      ],
-      [Config.node, config],
+      ),
+      Config.node.replace(config),
     ]),
   ),
 )

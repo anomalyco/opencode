@@ -21,6 +21,7 @@ import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline, TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode-ai/session-ui/timeline/row"
+import { getReadyMarkdown, preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
 import { containsDirectory, isWorkspaceDirectory, workspaceDirectories } from "@/workspaces/paths"
@@ -68,7 +69,7 @@ export function BackgroundMoveHint(props: { keybind?: string[] }) {
   )
 }
 
-export function BackgroundWorkSummary(props: { tasks: BackgroundTask[] }) {
+export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?: boolean }) {
   const language = useLanguage()
   const [open, setOpen] = createSignal(false)
   const taskType = (task: BackgroundTask) => {
@@ -80,7 +81,7 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[] }) {
   return (
     <Popover
       open={open()}
-      placement={language.direction() === "rtl" ? "right-end" : "left-end"}
+      placement={props.mobile ? "top-end" : language.direction() === "rtl" ? "right-end" : "left-end"}
       gutter={4}
       onOpenChange={setOpen}
     >
@@ -125,6 +126,7 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[] }) {
 
 function WorkspaceMoveAction(props: {
   variant: "inline" | "panel"
+  mobile?: boolean
   eligible: boolean
   sessionID: string
   project: Project
@@ -149,9 +151,17 @@ function WorkspaceMoveAction(props: {
         sessionID={props.sessionID}
         project={props.project}
         directory={props.directory}
-        placement={inline() ? "bottom-end" : language.direction() === "rtl" ? "right-start" : "left-start"}
-        gutter={inline() ? 4 : -22}
-        contentClass={inline() ? undefined : "relative top-3.5"}
+        placement={
+          props.mobile
+            ? "top-end"
+            : inline()
+              ? "bottom-end"
+              : language.direction() === "rtl"
+                ? "right-start"
+                : "left-start"
+        }
+        gutter={props.mobile || inline() ? 4 : -22}
+        contentClass={props.mobile || inline() ? undefined : "relative top-3.5"}
         class={
           inline()
             ? "flex h-5 w-full items-center gap-1.5 rounded-[4px] pe-6 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed"
@@ -180,7 +190,8 @@ function WorkspaceMoveAction(props: {
   )
 }
 
-function SessionSummaryPanel(props: {
+export function SessionSummaryPanel(props: {
+  mobile?: boolean
   project: Project
   avatar?: JSX.Element
   directory: string
@@ -206,7 +217,7 @@ function SessionSummaryPanel(props: {
     "flex h-7 w-full items-center gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
 
   return (
-    <div data-component="session-summary-panel" class="w-[280px]">
+    <div data-component="session-summary-panel" class={props.mobile ? "w-full" : "w-[280px]"}>
       <div class="relative z-10 flex flex-col gap-1 overflow-hidden rounded-[6px] bg-v2-background-bg-base px-0.5 py-1.5 shadow-[var(--v2-elevation-raised)]">
         <div class={row}>
           {props.avatar ?? (
@@ -216,19 +227,23 @@ function SessionSummaryPanel(props: {
               variant={getProjectAvatarVariant(props.project.icon?.color)}
             />
           )}
-          <span class="min-w-0 flex-1 truncate text-v2-text-text-muted">{displayName(props.project)}</span>
+          <span dir="auto" class="min-w-0 flex-1 truncate text-v2-text-text-muted">
+            {displayName(props.project)}
+          </span>
         </div>
         <SessionWorkspaceMenu
           eligible={props.moveEligible}
           sessionID={props.sessionID}
           project={props.project}
           directory={props.directory}
-          placement={language.direction() === "rtl" ? "right-start" : "left-start"}
-          gutter={-22}
+          placement={props.mobile ? "top-end" : language.direction() === "rtl" ? "right-start" : "left-start"}
+          gutter={props.mobile ? 4 : -22}
           class={`${row} hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed`}
         >
           <Icon name={props.local ? "monitor" : "workspace-isolated"} class="shrink-0 text-v2-icon-icon-muted" />
-          <span class="min-w-0 flex-1 truncate text-start">{location()}</span>
+          <span dir="auto" class="min-w-0 flex-1 truncate text-start">
+            {location()}
+          </span>
           <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
         </SessionWorkspaceMenu>
         <div class={row}>
@@ -251,7 +266,9 @@ function SessionSummaryPanel(props: {
               </span>
             }
           >
-            <span class="min-w-0 truncate">{branch()}</span>
+            <span dir="auto" class="min-w-0 truncate">
+              {branch()}
+            </span>
           </Show>
         </div>
         <button
@@ -271,12 +288,13 @@ function SessionSummaryPanel(props: {
           </Show>
         </button>
         <Show when={props.backgroundTasks.length > 0}>
-          <BackgroundWorkSummary tasks={props.backgroundTasks} />
+          <BackgroundWorkSummary tasks={props.backgroundTasks} mobile={props.mobile} />
         </Show>
       </div>
       <Show when={props.local && props.diffs && props.diffs.length > 0 && props.moveEligible}>
         <WorkspaceMoveAction
           variant="panel"
+          mobile={props.mobile}
           eligible={props.moveEligible}
           sessionID={props.sessionID}
           project={props.project}
@@ -290,6 +308,7 @@ function SessionSummaryPanel(props: {
 }
 
 type MessageTimelineProps = {
+  hideHeader?: boolean
   session: TimelineSessionSource
   background: SessionBackground
   actions?: SessionUserActions
@@ -316,6 +335,16 @@ type MessageTimelineProps = {
 
 export function MessageTimeline(props: MessageTimelineProps) {
   const controller = createTimelineController({ session: props.session })
+  const tail = props.pinned ? controller.data.projection.rows().at(-1) : undefined
+  if (tail?._tag === "AssistantPart" && tail.group.type === "part") {
+    const message = controller.data.projection.messageByID().get(tail.group.ref.messageID)
+    if (message?.type === "assistant" && message.time.completed !== undefined) {
+      const content = Timeline.resolveContent(message, tail.group.ref.partID)
+      // Start the required worker job while the rest of the selected view is constructed.
+      if (content?.type === "text" && content.text.trim())
+        void preloadMarkdown(content.text, tail.group.ref.partID).catch(() => undefined)
+    }
+  }
   return (
     <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
   )
@@ -382,7 +411,7 @@ function MessageTimelineView(
     }),
   )
   const turnPadding = () => "px-4 md:px-5"
-  const showHeader = createMemo(() => props.data.showHeader() || workspaceSession())
+  const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
@@ -400,6 +429,38 @@ function MessageTimelineView(
     onSelectionInteraction: props.onSelectionInteraction,
     onUserScroll: props.onUserScroll,
     onHistoryScroll: props.onHistoryScroll,
+    canRenderImmediately: (row, disclosure) => {
+      if (row._tag === "TurnGap" || row._tag === "TurnDivider") return true
+      if (row._tag === "Notice") {
+        const message = messageByID().get(row.messageID)
+        return (
+          (message?.type === "system" || message?.type === "synthetic") &&
+          (message.description ?? message.text).length <= 1024
+        )
+      }
+      if (row._tag === "UserMessage") {
+        const message = messageByID().get(row.userMessageID)
+        if (message?.type !== "user" || message.text.length > 1024 || message.files?.length || message.agents?.length)
+          return false
+        const presentation = readPromptPresentation(message.metadata)
+        return (
+          (presentation?.displayText ?? message.text).length <= 1024 &&
+          !presentation?.comments?.length &&
+          !parseCommentNote(message.text)
+        )
+      }
+      if (row._tag !== "AssistantPart" || row.group.type !== "part") return false
+      const message = messageByID().get(row.group.ref.messageID)
+      if (message?.type !== "assistant" || message.time.completed === undefined) return false
+      const content = Timeline.resolveContent(message, row.group.ref.partID)
+      if (content?.type === "reasoning")
+        return !(disclosure[row.group.ref.partID] ?? props.data.reasoningMode() === "full")
+      return (
+        content?.type === "text" &&
+        content.text.length <= 1024 &&
+        !!getReadyMarkdown({ raw: content.text, src: content.text }, `${row.group.ref.partID}:0:full`)
+      )
+    },
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
   })
@@ -442,6 +503,7 @@ function MessageTimelineView(
   }
 
   const saveTitleEditor = async () => {
+    if (!title.editing || props.pending.rename()) return
     if (await props.action.rename(title.draft)) setTitle("editing", false)
   }
 
@@ -512,197 +574,200 @@ function MessageTimelineView(
       }}
       renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
       header={
-        <SessionTitleHeader>
-          <div class="h-12 w-full flex items-center justify-between gap-2">
-            <div class="flex items-center gap-1 min-w-0 flex-1">
-              <div class="flex items-center min-w-0 flex-1 w-full">
-                <Show
-                  when={workspaceSession()}
-                  fallback={
-                    <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
-                      <Show when={showProjectIcon()} fallback={<Icon name="monitor" />}>
-                        {projectAvatar()}
-                      </Show>
-                    </span>
-                  }
-                >
-                  <Tooltip
-                    placement="bottom-start"
-                    value={sessionDirectory()}
-                    contentClass="max-w-[calc(100vw-32px)] break-all"
-                  >
-                    <span
-                      tabIndex={0}
-                      aria-label={sessionDirectory()}
-                      classList={{
-                        "flex size-6 shrink-0 items-center justify-center": true,
-                        "text-v2-icon-icon-accent": !showProjectIcon(),
-                      }}
-                    >
-                      <Show when={showProjectIcon()} fallback={<Icon name="workspace-isolated" />}>
-                        {projectAvatar()}
-                      </Show>
-                    </span>
-                  </Tooltip>
-                </Show>
-                <Show when={parentID()}>
-                  <button
-                    type="button"
-                    data-slot="session-title-parent"
-                    class="min-w-0 max-w-[40%] truncate pl-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
-                    onClick={props.action.navigateParent}
-                  >
-                    {parentTitle()}
-                  </button>
-                  <span
-                    data-slot="session-title-separator"
-                    class="-translate-y-[0.5px] pl-2 pr-1 text-[11px] font-medium text-v2-text-text-faint"
-                    aria-hidden="true"
-                  >
-                    /
-                  </span>
-                </Show>
-                <Show when={childTitle() || title.editing}>
+        <Show when={!props.hideHeader}>
+          <SessionTitleHeader>
+            <div class="h-12 w-full flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1 min-w-0 flex-1">
+                <div class="flex items-center min-w-0 flex-1 w-full">
                   <Show
-                    when={title.editing}
+                    when={workspaceSession()}
                     fallback={
-                      <h1
-                        data-slot="session-title-child"
-                        class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover"
-                        onClick={openTitleEditor}
-                      >
-                        {childTitle()}
-                      </h1>
+                      <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
+                        <Show when={showProjectIcon()} fallback={<Icon name="monitor" />}>
+                          {projectAvatar()}
+                        </Show>
+                      </span>
                     }
                   >
-                    <InlineInput
-                      ref={(el) => {
-                        titleRef = el
-                      }}
-                      data-slot="session-title-child"
-                      dir="auto"
-                      value={title.draft}
-                      disabled={props.pending.rename()}
-                      class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content self-start rounded-[6px] px-2 py-1"
-                      style={{
-                        "--inline-input-shadow": "none",
-                        "text-align": "start",
-                      }}
-                      onInput={(event) => setTitle("draft", event.currentTarget.value)}
-                      onKeyDown={(event) => {
-                        event.stopPropagation()
-                        if (event.key === "Enter") {
-                          event.preventDefault()
-                          void saveTitleEditor()
-                          return
-                        }
-                        if (event.key === "Escape") {
-                          event.preventDefault()
-                          closeTitleEditor()
-                        }
-                      }}
-                      onBlur={closeTitleEditor}
-                    />
-                  </Show>
-                </Show>
-              </div>
-            </div>
-            <Show when={sessionID()} keyed>
-              {(id) => (
-                <div class="shrink-0 flex items-center gap-2">
-                  <SessionContextUsage placement="bottom" />
-                  <Show when={!parentID() && project()}>
-                    {(project) => (
-                      <Popover open={summaryOpen()} placement="bottom-end" gutter={6} onOpenChange={setSummary}>
-                        <Popover.Trigger
-                          as={IconButton}
-                          icon={<Icon name="window-analytics" />}
-                          variant="ghost-muted"
-                          size="large"
-                          state={summaryOpen() ? "pressed" : undefined}
-                          aria-label={language.t("session.summary.title")}
-                          aria-expanded={summaryOpen()}
-                        />
-                        <Popover.Portal>
-                          <Popover.Content class="z-50 border-0 bg-transparent p-0 outline-none">
-                            <SessionSummaryPanel
-                              project={project()}
-                              avatar={showProjectIcon() ? projectAvatar() : undefined}
-                              directory={sessionDirectory()}
-                              local={!workspaceSession()}
-                              branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}
-                              baseBranch={data.location.vcs.info({ directory: project().worktree })?.branch.current}
-                              diffs={sessionDiffs()}
-                              sessionID={id}
-                              moveEligible={props.workspaceMoveEligible}
-                              moveDismissed={workspaceSuggestionDismissed()}
-                              onMoveDismiss={() => setWorkspaceSuggestionDismissed(true)}
-                              onReview={() => {
-                                setSummary(false)
-                                props.onReview()
-                              }}
-                              backgroundTasks={props.background.tasks()}
-                            />
-                          </Popover.Content>
-                        </Popover.Portal>
-                      </Popover>
-                    )}
-                  </Show>
-                  <Show when={!parentID()}>
-                    <Menu
-                      gutter={6}
-                      placement="bottom-end"
-                      open={title.menuOpen}
-                      onOpenChange={(open) => {
-                        setTitle("menuOpen", open)
-                        if (open) return
-                      }}
+                    <Tooltip
+                      placement="bottom-start"
+                      value={sessionDirectory()}
+                      contentClass="max-w-[calc(100vw-32px)] break-all"
                     >
-                      <Menu.Trigger
-                        as={IconButton}
-                        icon={<Icon name="outline-dots" />}
-                        variant="ghost-muted"
-                        size="large"
-                        aria-label={language.t("common.moreOptions")}
-                        aria-expanded={title.menuOpen}
-                      />
-                      <Menu.Portal>
-                        <Menu.Content
-                          style={{ width: "120px", "min-width": "120px" }}
-                          onCloseAutoFocus={(event) => {
-                            if (title.pendingRename) {
-                              event.preventDefault()
-                              setTitle("pendingRename", false)
-                              openTitleEditor()
-                              return
-                            }
-                          }}
+                      <span
+                        tabIndex={0}
+                        aria-label={sessionDirectory()}
+                        classList={{
+                          "flex size-6 shrink-0 items-center justify-center": true,
+                          "text-v2-icon-icon-accent": !showProjectIcon(),
+                        }}
+                      >
+                        <Show when={showProjectIcon()} fallback={<Icon name="workspace-isolated" />}>
+                          {projectAvatar()}
+                        </Show>
+                      </span>
+                    </Tooltip>
+                  </Show>
+                  <Show when={parentID()}>
+                    <button
+                      type="button"
+                      data-slot="session-title-parent"
+                      class="min-w-0 max-w-[40%] truncate pl-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
+                      onClick={props.action.navigateParent}
+                    >
+                      {parentTitle()}
+                    </button>
+                    <span
+                      data-slot="session-title-separator"
+                      class="-translate-y-[0.5px] pl-2 pr-1 text-[11px] font-medium text-v2-text-text-faint"
+                      aria-hidden="true"
+                    >
+                      /
+                    </span>
+                  </Show>
+                  <Show when={childTitle() || title.editing}>
+                    <Show
+                      when={title.editing}
+                      fallback={
+                        <h1
+                          data-slot="session-title-child"
+                          class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover"
+                          onClick={openTitleEditor}
                         >
-                          <Menu.Item
-                            onSelect={() => {
-                              setTitle("pendingRename", true)
-                              setTitle("menuOpen", false)
-                            }}
-                          >
-                            {language.t("common.rename")}
-                          </Menu.Item>
-                          <Menu.Item onSelect={() => void props.action.export(id)}>
-                            {language.t("common.export")}...
-                          </Menu.Item>
-                          {/* TODO: Need a session archive API. */}
-                          <Menu.Separator />
-                          <Menu.Item onSelect={() => props.action.showDelete(id)}>
-                            {language.t("common.delete")}...
-                          </Menu.Item>
-                        </Menu.Content>
-                      </Menu.Portal>
-                    </Menu>
+                          {childTitle()}
+                        </h1>
+                      }
+                    >
+                      <InlineInput
+                        ref={(el) => {
+                          titleRef = el
+                        }}
+                        data-slot="session-title-child"
+                        dir="auto"
+                        value={title.draft}
+                        disabled={props.pending.rename()}
+                        class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content self-start rounded-[6px] px-2 py-1"
+                        style={{
+                          "--inline-input-shadow": "none",
+                          "text-align": "start",
+                        }}
+                        onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                          event.stopPropagation()
+                          if (event.isComposing || event.keyCode === 229) return
+                          if (event.key === "Enter") {
+                            event.preventDefault()
+                            void saveTitleEditor()
+                            return
+                          }
+                          if (event.key === "Escape") {
+                            event.preventDefault()
+                            closeTitleEditor()
+                          }
+                        }}
+                        onBlur={() => void saveTitleEditor()}
+                      />
+                    </Show>
                   </Show>
                 </div>
-              )}
-            </Show>
-          </div>
-        </SessionTitleHeader>
+              </div>
+              <Show when={sessionID()} keyed>
+                {(id) => (
+                  <div class="shrink-0 flex items-center gap-2">
+                    <SessionContextUsage placement="bottom" />
+                    <Show when={!parentID() && project()}>
+                      {(project) => (
+                        <Popover open={summaryOpen()} placement="bottom-end" gutter={6} onOpenChange={setSummary}>
+                          <Popover.Trigger
+                            as={IconButton}
+                            icon={<Icon name="window-analytics" />}
+                            variant="ghost-muted"
+                            size="large"
+                            state={summaryOpen() ? "pressed" : undefined}
+                            aria-label={language.t("session.summary.title")}
+                            aria-expanded={summaryOpen()}
+                          />
+                          <Popover.Portal>
+                            <Popover.Content class="z-50 border-0 bg-transparent p-0 outline-none">
+                              <SessionSummaryPanel
+                                project={project()}
+                                avatar={showProjectIcon() ? projectAvatar() : undefined}
+                                directory={sessionDirectory()}
+                                local={!workspaceSession()}
+                                branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}
+                                baseBranch={data.location.vcs.info({ directory: project().worktree })?.branch.current}
+                                diffs={sessionDiffs()}
+                                sessionID={id}
+                                moveEligible={props.workspaceMoveEligible}
+                                moveDismissed={workspaceSuggestionDismissed()}
+                                onMoveDismiss={() => setWorkspaceSuggestionDismissed(true)}
+                                onReview={() => {
+                                  setSummary(false)
+                                  props.onReview()
+                                }}
+                                backgroundTasks={props.background.tasks()}
+                              />
+                            </Popover.Content>
+                          </Popover.Portal>
+                        </Popover>
+                      )}
+                    </Show>
+                    <Show when={!parentID()}>
+                      <Menu
+                        gutter={6}
+                        placement="bottom-end"
+                        open={title.menuOpen}
+                        onOpenChange={(open) => {
+                          setTitle("menuOpen", open)
+                          if (open) return
+                        }}
+                      >
+                        <Menu.Trigger
+                          as={IconButton}
+                          icon={<Icon name="outline-dots" />}
+                          variant="ghost-muted"
+                          size="large"
+                          aria-label={language.t("common.moreOptions")}
+                          aria-expanded={title.menuOpen}
+                        />
+                        <Menu.Portal>
+                          <Menu.Content
+                            style={{ width: "120px", "min-width": "120px" }}
+                            onCloseAutoFocus={(event) => {
+                              if (title.pendingRename) {
+                                event.preventDefault()
+                                setTitle("pendingRename", false)
+                                openTitleEditor()
+                                return
+                              }
+                            }}
+                          >
+                            <Menu.Item
+                              onSelect={() => {
+                                setTitle("pendingRename", true)
+                                setTitle("menuOpen", false)
+                              }}
+                            >
+                              {language.t("common.rename")}
+                            </Menu.Item>
+                            <Menu.Item onSelect={() => void props.action.export(id)}>
+                              {language.t("common.export")}...
+                            </Menu.Item>
+                            {/* TODO: Need a session archive API. */}
+                            <Menu.Separator />
+                            <Menu.Item onSelect={() => props.action.showDelete(id)}>
+                              {language.t("common.delete")}...
+                            </Menu.Item>
+                          </Menu.Content>
+                        </Menu.Portal>
+                      </Menu>
+                    </Show>
+                  </div>
+                )}
+              </Show>
+            </div>
+          </SessionTitleHeader>
+        </Show>
       }
     />
   )

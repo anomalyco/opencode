@@ -240,9 +240,12 @@
     position: absolute;
     top: 4px;
     inset-inline-end: 4px;
-    opacity: 0;
     transition: opacity 0.15s ease;
     z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
   }
 
   [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"],
@@ -280,7 +283,7 @@
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
-    padding: 2px 4px;
+    padding: 0 4px;
     border-radius: 4px;
     background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
   }
