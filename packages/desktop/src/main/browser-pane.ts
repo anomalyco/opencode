@@ -1,6 +1,6 @@
 import type { BrowserPaneCommand, BrowserPaneLayout, BrowserPaneTarget } from "@opencode-ai/app/desktop"
 import { NodeHttpClient } from "@effect/platform-node"
-import { Browser } from "@opencode-ai/browser/rpc"
+import { Browser } from "@opencode-ai/schema/browser"
 import { OpenCode } from "@opencode-ai/client/effect"
 import { SessionID } from "@opencode-ai/schema/session-id"
 import type { BrowserWindow } from "electron"
