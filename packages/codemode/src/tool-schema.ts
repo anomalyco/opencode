@@ -93,25 +93,24 @@ const docLines = (schema: JsonSchema, width: number): Array<string> => {
 const jsdoc = (schema: JsonSchema, pad: string): string => {
   const content = docLines(schema, pad.length)
   const types = typeof schema.type === "string" ? [schema.type] : (schema.type ?? [])
+
+  const append = (label: string, child: JsonSchema) => {
+    docLines(child, pad.length + label.length + 2).forEach((line, index) => {
+      if (index === 0) {
+        content.push(`${label}: ${line}`)
+        return
+      }
+      content.push(line ? `  ${line}` : "")
+    })
+  }
+
   // Document only the immediate contents; recursive labels obscure which level a constraint belongs to.
-  const children = [
-    ["Each item", types.includes("array") ? schema.items : undefined],
-    [
-      Object.keys(schema.properties ?? {}).length > 0 ? "Each additional value" : "Each value",
-      (types.includes("object") || schema.properties) && typeof schema.additionalProperties === "object"
-        ? schema.additionalProperties
-        : undefined,
-    ],
-  ] as const
-  content.push(
-    ...children.flatMap(([label, child]) =>
-      child
-        ? docLines(child, pad.length + label.length + 2).map((line, index) =>
-            index === 0 ? `${label}: ${line}` : line ? `  ${line}` : "",
-          )
-        : [],
-    ),
-  )
+  if (types.includes("array") && schema.items) append("Each item", schema.items)
+  if ((types.includes("object") || schema.properties) && typeof schema.additionalProperties === "object") {
+    const label = Object.keys(schema.properties ?? {}).length > 0 ? "Each additional value" : "Each value"
+    append(label, schema.additionalProperties)
+  }
+
   if (content.length === 0) return ""
   const escaped = content.map((line) => line.replaceAll("*/", "* /"))
   if (escaped.length === 1 && pad.length + escaped[0].length + 7 <= 120) return `${pad}/** ${escaped[0]} */\n`
