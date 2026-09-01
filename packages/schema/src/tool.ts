@@ -43,6 +43,19 @@ export type Options = BaseOptions &
 
 export type ValueSchema<A = unknown> = Schema.Codec<A, any> | StandardSchemaV1<any, A> | JsonSchema.JsonSchema
 
+export const FreeformGrammar = Schema.Struct({
+  dialect: Schema.Literals(["oai-lark", "oai-regex"]),
+  definition: Schema.String,
+})
+export type FreeformGrammar = typeof FreeformGrammar.Type
+
+export const Freeform = Schema.Struct({
+  input: Schema.String,
+  name: Schema.optional(Schema.String),
+  grammars: Schema.optional(Schema.Array(FreeformGrammar)),
+})
+export type Freeform = typeof Freeform.Type
+
 type InputValue<S> = 0 extends 1 & S
   ? any
   : S extends Schema.Codec<infer A, any>
@@ -98,5 +111,6 @@ export type Info<
   readonly description: string
   readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<Result<Output>, Error>
   readonly output?: Output
+  readonly freeform?: Freeform
   readonly options?: Options
 }

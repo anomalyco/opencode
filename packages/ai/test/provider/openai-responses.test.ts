@@ -93,6 +93,23 @@ const request = LLM.request({
   generation: { maxTokens: 20, temperature: 0 },
 })
 
+const freeformModel = LanguageModel.update(model, { compatibility: { supportsFreeformTools: true } })
+const patchTool = ToolDefinition.make({
+  name: "patch",
+  description: "Apply a patch",
+  inputSchema: {
+    type: "object",
+    properties: { patchText: { type: "string" } },
+    required: ["patchText"],
+    additionalProperties: false,
+  },
+  freeform: {
+    input: "patchText",
+    name: "apply_patch",
+    grammars: [{ dialect: "oai-lark", definition: 'start: "*** Begin Patch" /(.|\\n)+/' }],
+  },
+})
+
 const configEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
 
 type OpenAIToolOutput = Extract<
@@ -109,6 +126,212 @@ const expectToolOutput = (body: OpenAIResponses.OpenAIResponsesBody): OpenAITool
 }
 
 describe("OpenAI Responses route", () => {
+  it.effect("lowers supported freeform tools to OpenAI custom tools", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: freeformModel,
+          prompt: "Patch the file.",
+          tools: [patchTool],
+          toolChoice: "patch",
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "custom",
+          name: "apply_patch",
+          description: "Apply a patch",
+          format: {
+            type: "grammar",
+            syntax: "lark",
+            definition: 'start: "*** Begin Patch" /(.|\\n)+/',
+          },
+        },
+      ])
+      expect(prepared.body.tool_choice).toEqual({ type: "custom", name: "apply_patch" })
+    }),
+  )
+
+  it.effect("enables freeform tools for first-party GPT-5 Responses models", () =>
+    Effect.gen(function* () {
+      const toolType = (model: LanguageModel) =>
+        compileRequest(LLM.request({ model, prompt: "Patch the file.", tools: [patchTool] })).pipe(
+          Effect.map((prepared) => prepared.body.tools?.[0]?.type),
+        )
+
+      expect(yield* toolType(OpenAI.configure({ apiKey: "test" }).responses("gpt-5.2"))).toBe("custom")
+      expect(
+        yield* toolType(OpenAI.configure({ apiKey: "test", baseURL: "https://proxy.test/v1" }).responses("gpt-5.2")),
+      ).toBe("function")
+      expect(
+        yield* toolType(
+          OpenAI.configure({ apiKey: "test", baseURL: "https://chatgpt.com/backend-api/codex" }).responses(
+            "gpt-5.2-codex",
+          ),
+        ),
+      ).toBe("custom")
+    }),
+  )
+
+  it.effect("falls back to the canonical function tool when freeform tools are unsupported", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({ model, prompt: "Patch the file.", tools: [patchTool], toolChoice: "patch" }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "patch",
+          description: "Apply a patch",
+          parameters: patchTool.inputSchema,
+          strict: false,
+        },
+      ])
+      expect(prepared.body.tool_choice).toEqual({ type: "function", name: "patch" })
+    }),
+  )
+
+  it.effect("uses custom wire names in allowed tool choices", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: freeformModel,
+          prompt: "Patch the file.",
+          tools: [patchTool],
+          providerOptions: { allowedTools: { toolNames: ["patch"], mode: "required" } },
+        }),
+      )
+
+      expect(prepared.body.tool_choice).toEqual({
+        type: "allowed_tools",
+        mode: "required",
+        tools: [{ type: "custom", name: "apply_patch" }],
+      })
+    }),
+  )
+
+  it.effect("rejects freeform representations that cannot encode the canonical input", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: freeformModel,
+          prompt: "Patch the file.",
+          tools: [
+            ToolDefinition.make({
+              ...patchTool,
+              inputSchema: {
+                type: "object",
+                properties: { patchText: { type: "string" }, dryRun: { type: "boolean" } },
+                required: ["patchText"],
+              },
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("requires exactly one required string input property named patchText")
+    }),
+  )
+
+  it.effect("rejects duplicate model-facing freeform tool names", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: freeformModel,
+          prompt: "Patch the file.",
+          tools: [
+            patchTool,
+            ToolDefinition.make({
+              ...patchTool,
+              name: "other_patch",
+              freeform: { input: "patchText", name: "apply_patch" },
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("multiple tools with model-facing name apply_patch")
+    }),
+  )
+
+  it.effect("replays canonical calls using the selected freeform representation", () =>
+    Effect.gen(function* () {
+      const messages = [
+        Message.assistant([
+          ToolCallPart.make({ id: "call_patch", name: "patch", input: { patchText: "*** Begin Patch" } }),
+        ]),
+        Message.tool(ToolResultPart.make({ id: "call_patch", name: "patch", result: "Success", resultType: "text" })),
+      ]
+      const prepared = yield* compileRequest(LLM.request({ model: freeformModel, tools: [patchTool], messages }))
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "custom_tool_call",
+          call_id: "call_patch",
+          name: "apply_patch",
+          input: "*** Begin Patch",
+        },
+        { type: "custom_tool_call_output", call_id: "call_patch", output: "Success" },
+      ])
+
+      const fallback = yield* compileRequest(LLM.request({ model, tools: [patchTool], messages }))
+      expect(fallback.body.input).toEqual([
+        { type: "function_call", call_id: "call_patch", name: "patch", arguments: '{"patchText":"*** Begin Patch"}' },
+        { type: "function_call_output", call_id: "call_patch", output: "Success" },
+      ])
+    }),
+  )
+
+  it.effect("rejects malformed canonical input when replaying a freeform call", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: freeformModel,
+          tools: [patchTool],
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_patch", name: "patch", input: { patchText: 1 } })]),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("requires string input property patchText")
+    }),
+  )
+
+  it.effect("preserves media in custom tool outputs", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: freeformModel,
+          tools: [patchTool],
+          messages: [
+            Message.tool(
+              ToolResultPart.make({
+                id: "call_patch",
+                name: "patch",
+                resultType: "content",
+                result: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+              }),
+            ),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "custom_tool_call_output",
+          call_id: "call_patch",
+          output: [{ type: "input_image", image_url: "data:image/png;base64,AAAA" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("prepares OpenAI Responses target", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)
@@ -3884,6 +4107,132 @@ describe("OpenAI Responses route", () => {
           name: "lookup",
           arguments: '{"query":"weather"}',
         },
+      ])
+    }),
+  )
+
+  it.effect("normalizes streamed custom tool input to the canonical object", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.added",
+          item: { type: "custom_tool_call", id: "ctc_1", call_id: "call_patch", name: "apply_patch", input: "" },
+        },
+        { type: "response.custom_tool_call_input.delta", item_id: "ctc_1", delta: "*** Begin Patch\n" },
+        { type: "response.custom_tool_call_input.delta", item_id: "ctc_1", delta: "*** End Patch" },
+        {
+          type: "response.output_item.done",
+          item: {
+            type: "custom_tool_call",
+            id: "ctc_1",
+            call_id: "call_patch",
+            name: "apply_patch",
+            input: "*** Begin Patch\n*** End Patch",
+          },
+        },
+        { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+      )
+      const response = yield* LLMClient.generate(
+        LLM.request({ model: freeformModel, prompt: "Patch the file.", tools: [patchTool] }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+      const deltas = response.events.filter(LLMEvent.is.toolInputDelta)
+      const call = response.events.find(LLMEvent.is.toolCall)
+
+      expect(deltas.map((event) => event.text).join("")).toBe(
+        JSON.stringify({ patchText: "*** Begin Patch\n*** End Patch" }),
+      )
+      expect(call).toMatchObject({
+        type: "tool-call",
+        id: "call_patch",
+        name: "patch",
+        input: { patchText: "*** Begin Patch\n*** End Patch" },
+        providerMetadata: { openai: { itemId: "ctc_1" } },
+      })
+      expect(response.finishReason?.normalized).toBe("tool-calls")
+    }),
+  )
+
+  it.effect("finalizes custom input at each completion boundary", () =>
+    Effect.gen(function* () {
+      const added = {
+        type: "response.output_item.added",
+        item: { type: "custom_tool_call", id: "ctc_1", call_id: "call_patch", name: "apply_patch", input: "" },
+      }
+      const scenarios = [
+        {
+          expected: "*** Begin Patch",
+          events: [
+            added,
+            { type: "response.custom_tool_call_input.delta", item_id: "ctc_1", delta: "*** Begin" },
+            { type: "response.custom_tool_call_input.done", item_id: "ctc_1", input: "*** Begin Patch" },
+            { type: "response.completed", response: {} },
+          ],
+        },
+        {
+          expected: "authoritative",
+          events: [
+            {
+              ...added,
+              item: { ...added.item, id: undefined },
+            },
+            { type: "response.custom_tool_call_input.delta", item_id: "call_patch", delta: "partial" },
+            {
+              type: "response.completed",
+              response: {
+                output: [{ ...added.item, input: "authoritative" }],
+              },
+            },
+          ],
+        },
+        { expected: "", events: [added, { type: "response.completed", response: {} }] },
+      ]
+      for (const scenario of scenarios) {
+        const response = yield* LLMClient.generate(
+          LLM.request({ model: freeformModel, prompt: "Patch the file.", tools: [patchTool] }),
+        ).pipe(Effect.provide(fixedResponse(sseEvents(...scenario.events))))
+
+        expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
+          name: "patch",
+          input: { patchText: scenario.expected },
+        })
+        expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
+      }
+    }),
+  )
+
+  it.effect("finalizes and replays a completed function call without an optional item id", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.done",
+                item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            response.message,
+            Message.tool({ id: "call_1", name: "lookup", resultType: "json", result: { forecast: "sunny" } }),
+          ],
+        }),
+      )
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+        { type: "function_call_output", call_id: "call_1", output: '{"forecast":"sunny"}' },
       ])
     }),
   )

@@ -213,9 +213,9 @@ function runtime(
     const child = definition(registration)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
-      input: child.inputSchema,
+      input: child.freeform ? Schema.String : child.inputSchema,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
-      execute: (input) => executeTool(name, registration, input),
+      execute: (input) => executeTool(name, registration, child.freeform ? { [child.freeform.input]: input } : input),
     })
   }
   const tools = renderTools(root)

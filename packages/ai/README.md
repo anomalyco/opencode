@@ -195,6 +195,26 @@ const program = Effect.gen(function* () {
 
 The hosted result is represented as a provider-executed tool call and tool result. Its image is a `file` content item with a data URI, so retaining `response.message` preserves the generated image for continuation.
 
+## Freeform Tools
+
+A tool may declare an alternate string-input representation while retaining one canonical object schema and executor:
+
+```ts
+const patch = Tool.make({
+  description: "Apply a patch",
+  parameters: Schema.Struct({ patchText: Schema.String }),
+  success: Schema.String,
+  freeform: {
+    input: "patchText",
+    name: "apply_patch",
+    grammars: [{ dialect: "oai-lark", definition: patchGrammar }],
+  },
+  execute: ({ patchText }) => applyPatch(patchText),
+})
+```
+
+First-party GPT-5 Responses models lower this to an OpenAI `custom` tool and normalize the returned raw string back to `{ patchText }`. Models and protocols without freeform support receive the normal JSON-schema function tool. Grammars are optional; omit `grammars` for unconstrained text. The supported dialects are the OpenAI grammar formats `oai-lark` and `oai-regex`.
+
 ## Public API
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
