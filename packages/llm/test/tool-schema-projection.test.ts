@@ -49,6 +49,33 @@ describe("tool schema projections", () => {
     })
   })
 
+  test("gemini drops empty-string enum members instead of sending Gemini an empty enum value", () => {
+    expect(
+      ToolSchemaProjection.gemini({
+        type: "object",
+        properties: {
+          // Plain enum using "" as an explicit "unset" sentinel (default "").
+          error_tolerance: { type: "string", default: "", enum: ["", "low", "medium", "high"] },
+          // Nullable enum expressed as anyOf, same "" sentinel inside the string branch.
+          technical_proficiency: {
+            anyOf: [{ type: "string", enum: ["", "novice", "intermediate", "power_user"] }, { type: "null" }],
+          },
+          // An enum that is only the empty-string sentinel collapses to a bare string type.
+          only_empty: { type: "string", enum: [""] },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        error_tolerance: { type: "string", enum: ["low", "medium", "high"] },
+        technical_proficiency: {
+          anyOf: [{ type: "string", enum: ["novice", "intermediate", "power_user"] }, { type: "null" }],
+        },
+        only_empty: { type: "string" },
+      },
+    })
+  })
+
   test("openai keeps one flat object top-level schema", () => {
     expect(
       ToolSchemaProjection.openAI({
