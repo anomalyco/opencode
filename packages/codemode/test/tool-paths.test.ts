@@ -217,6 +217,26 @@ describe("namespace metadata", () => {
     })
     expect(await value(optional, `return await tools.api.read({})`)).toBe("read")
   })
+
+  test("a described namespace may also be callable", async () => {
+    const callable = CodeMode.make({
+      tools: {
+        api: Namespace.make({
+          description: "API operations",
+          tool: echo("Describe the API", "api"),
+          tools: { status: echo("Read API status", "ok") },
+        }),
+      },
+    })
+    expect(callable.catalog().map((tool) => tool.path)).toEqual(["api", "api.status"])
+    expect(await value(callable, `return await tools.api({})`)).toBe("api")
+    expect(await value(callable, `return await tools.api.status({})`)).toBe("ok")
+    const result = await value(callable, `return search({ query: "API operations" })`)
+    expect((result as { items: Array<{ path: string }> }).items.map((item) => item.path)).toEqual([
+      "tools.api",
+      "tools.api.status",
+    ])
+  })
 })
 
 describe("empty segments", () => {

@@ -77,6 +77,20 @@ Namespace descriptions are optional and participate in search matching for every
 from record keys, so the wrapper does not repeat `orders`. Dots in keys create nested paths; other characters use
 bracket notation, such as `tools.context7["resolve-library-id"](...)`.
 
+A namespace may also be callable while containing child tools:
+
+```ts
+const tools = {
+  pricing: Namespace.make({
+    description: "Pricing and sales tools",
+    tool: getPricing,
+    tools: { sales: getSales },
+  }),
+}
+```
+
+This exposes both `tools.pricing(...)` and `tools.pricing.sales(...)`.
+
 ### `CodeMode.execute` and `CodeMode.make`
 
 `CodeMode.execute({ ...options, code })` runs once. `CodeMode.make(options)` creates a reusable runtime:

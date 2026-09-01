@@ -39,6 +39,16 @@ type CollectedFiles = {
   readonly files: Array<typeof ExecuteFile.Type>
 }
 
+type ToolNode = {
+  tool?: Tool.Tool<never>
+  namespace?: ToolNamespace
+  readonly children: Map<string, ToolNode>
+}
+
+type Tools = {
+  readonly [name: string]: Tool.Tool<never> | Namespace.Namespace<never> | Tools
+}
+
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to orchestrate tool calls and compose their results.",
@@ -162,21 +172,45 @@ function runtime(
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>,
   hooks?: CodeMode.ToolCallHooks,
 ) {
-  const tools: Record<string, Tool.Tool<never> | Namespace.Namespace<never>> = {}
+  // A path may carry namespace metadata, a callable tool, child tools, or all three.
+  const root: ToolNode = { children: new Map() }
+  for (const namespace of namespaces.values()) node(root, namespace.name).namespace = namespace
   for (const [name, registration] of registrations) {
     const child = definition(registration)
-    const path = qualifiedName(registration)
-    tools[path] = Tool.make({
+    node(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => executeTool(name, registration, input),
     })
   }
-  for (const namespace of namespaces.values())
-    if (!Object.hasOwn(tools, namespace.name))
-      tools[namespace.name] = Namespace.make({ description: namespace.description, tools: {} })
+  const tools = children(root)
   return CodeMode.make<typeof tools>({ tools, ...hooks })
+}
+
+function node(root: ToolNode, path: string) {
+  return path.split(".").reduce((parent, name) => {
+    const child: ToolNode = parent.children.get(name) ?? { children: new Map() }
+    parent.children.set(name, child)
+    return child
+  }, root)
+}
+
+function children(node: ToolNode): Tools {
+  return Object.fromEntries(Array.from(node.children, ([name, child]) => [name, entry(child)]))
+}
+
+function entry(node: ToolNode): Tools[string] {
+  const tools = children(node)
+  if (node.namespace !== undefined)
+    return Namespace.make({
+      description: node.namespace.description,
+      ...(node.tool === undefined ? {} : { tool: node.tool }),
+      tools,
+    })
+  if (node.tool === undefined) return tools
+  if (node.children.size === 0) return node.tool
+  return Namespace.make({ tool: node.tool, tools })
 }
 
 function qualifiedName(registration: Info) {

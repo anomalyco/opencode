@@ -296,6 +296,7 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
       if (isTool<R>(value)) current.tool = value
       else if (isNamespace<R>(value)) {
         current.namespace = value
+        if (value.tool !== undefined) current.tool = value.tool
         insert(current, value.tools)
       } else insert(current, value)
     }

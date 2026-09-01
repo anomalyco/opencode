@@ -551,24 +551,51 @@ describe("Tool", () => {
       const service = yield* Tool.Service
       yield* service.transform((draft) => {
         draft.namespace({ name: "registry", description: "Package publishing and discovery" })
+        draft.namespace({ name: "registry.search", description: "Pricing operations" })
         draft.add({ ...make(), name: "plain", options: { namespace: "legacy" } })
         draft.add({ ...make(), name: "direct", options: { namespace: "registry", codemode: false } })
         draft.add({ ...make(), name: "search", description: "Search packages", options: { namespace: "registry" } })
+        draft.add({ ...make(), name: "sales", description: "Read sales", options: { namespace: "registry.search" } })
       })
 
       const snapshot = yield* service.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["registry_direct", "execute"])
-      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["legacy.plain", "registry.search"])
+      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual([
+        "legacy.plain",
+        "registry.search",
+        "registry.search.sales",
+      ])
       const result = yield* snapshot.execute({
         ...call("execute"),
         call: {
           type: "tool-call",
           id: "namespace-search",
           name: "execute",
-          input: { code: 'return search({ query: "publishing discovery" })' },
+          input: { code: 'return search({ query: "pricing operations" })' },
         },
       })
       expect(result.output).toMatchObject({ output: expect.stringContaining("tools.registry.search") })
+      const callable = yield* snapshot.execute({
+        ...call("execute"),
+        call: {
+          type: "tool-call",
+          id: "callable-namespace",
+          name: "execute",
+          input: {
+            code: `return await Promise.all([
+              tools.registry.search({ text: "search" }),
+              tools.registry.search.sales({ text: "sales" }),
+            ])`,
+          },
+        },
+      })
+      expect(callable.output).toMatchObject({
+        output: expect.stringContaining('"text": "sales"'),
+        toolCalls: [
+          { tool: "registry.search", status: "completed" },
+          { tool: "registry.search.sales", status: "completed" },
+        ],
+      })
     }),
   )
 
