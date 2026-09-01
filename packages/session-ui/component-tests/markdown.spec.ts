@@ -153,6 +153,19 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
 })
 
+story("keeps inline code backgrounds 18px tall", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "`value` and `src/file.ts`" })
+  }, fixture)
+  const code = page.getByTestId("markdown-fixture").locator(":not(pre) > code")
+  await expect(code).toHaveCount(2)
+  await expect(code.nth(1)).toHaveAttribute("data-inline-code-kind", "path")
+  expect(
+    await code.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height)),
+  ).toEqual([18, 18])
+})
+
 story("shares in-flight Markdown rendering without overwriting a reclaimed cache entry", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, renderCachedMarkdown } = await import(fixture)

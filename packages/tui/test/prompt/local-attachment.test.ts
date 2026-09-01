@@ -96,7 +96,7 @@ describe("prompt local attachments", () => {
     await Bun.write(file, new Uint8Array([1, 2, 3]))
 
     for (const input of [file, `'${file}'`, pathToFileURL(file).href]) {
-      expect(await resolvePastedAttachments(input, "linux")).toEqual([
+      expect(await resolvePastedAttachments(input, process.platform)).toEqual([
         { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png" },
       ])
     }
@@ -112,7 +112,7 @@ describe("prompt local attachments", () => {
       `'${image}' "${pdf}"`,
       `# dropped files\r\n${pathToFileURL(image).href}\r\n${pathToFileURL(pdf).href}`,
     ]) {
-      expect(await resolvePastedAttachments(input, "linux")).toEqual([
+      expect(await resolvePastedAttachments(input, process.platform)).toEqual([
         { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png" },
         { type: "file", uri: "data:application/pdf;base64,BAUG", filename: "two file.pdf" },
       ])
@@ -133,7 +133,7 @@ describe("prompt local attachments", () => {
       `${image} ${text}`,
       `${image} ${path.join(tmp.path, "missing.png")}`,
     ]) {
-      expect(await resolvePastedAttachments(input, "linux")).toBeUndefined()
+      expect(await resolvePastedAttachments(input, process.platform)).toBeUndefined()
     }
   })
 
@@ -143,7 +143,9 @@ describe("prompt local attachments", () => {
     const content = "<svg />\r\n"
     await Bun.write(file, content)
 
-    expect(await resolvePastedAttachments(file, "linux")).toEqual([{ type: "text", content, filename: "image.svg" }])
+    expect(await resolvePastedAttachments(file, process.platform)).toEqual([
+      { type: "text", content, filename: "image.svg" },
+    ])
   })
 
   test("shares the byte budget across binary and SVG attachments", async () => {
@@ -156,15 +158,15 @@ describe("prompt local attachments", () => {
       Bun.write(svg, content),
     ])
 
-    expect(await resolvePastedAttachments(`${image} ${svg}`, "linux")).toMatchObject([
+    expect(await resolvePastedAttachments(`${image} ${svg}`, process.platform)).toMatchObject([
       { type: "file", filename: "image.png" },
       { type: "text", content, filename: "image.svg" },
     ])
     await Bun.write(svg, content + " ")
-    expect(await resolvePastedAttachments(`${image} ${svg}`, "linux")).toBeUndefined()
+    expect(await resolvePastedAttachments(`${image} ${svg}`, process.platform)).toBeUndefined()
 
     await Bun.write(image, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES + 1))
-    expect(await resolvePastedAttachments(image, "linux")).toBeUndefined()
+    expect(await resolvePastedAttachments(image, process.platform)).toBeUndefined()
   })
 
   test("bounds the number of resolved paths", async () => {
@@ -172,7 +174,7 @@ describe("prompt local attachments", () => {
     const file = path.join(tmp.path, "image.png")
     await Bun.write(file, new Uint8Array([1]))
 
-    expect(await resolvePastedAttachments(Array(32).fill(file).join(" "), "linux")).toHaveLength(32)
-    expect(await resolvePastedAttachments(Array(33).fill(file).join(" "), "linux")).toBeUndefined()
+    expect(await resolvePastedAttachments(Array(32).fill(file).join(" "), process.platform)).toHaveLength(32)
+    expect(await resolvePastedAttachments(Array(33).fill(file).join(" "), process.platform)).toBeUndefined()
   })
 })

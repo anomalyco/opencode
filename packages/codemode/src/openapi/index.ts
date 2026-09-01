@@ -53,7 +53,6 @@ export const fromSpec = (options: Options): Result => {
     if (!isRecord(pathValue)) continue
     for (const [method, operationValue] of Object.entries(pathValue)) {
       if (!methods.has(method) || !isRecord(operationValue)) continue
-      const segments = operationPath(method, path, operationValue, used, namespaces)
       const operation: Operation = {
         operationId: nonEmptyString(operationValue.operationId),
         method: method.toUpperCase(),
@@ -99,6 +98,7 @@ export const fromSpec = (options: Options): Result => {
         auth: options.auth,
         headers: options.headers ?? {},
       }
+      const segments = operationPath(method, path, operationValue, used, namespaces)
       used.add(segments.join("."))
       for (const index of segments.slice(0, -1).keys()) namespaces.add(segments.slice(0, index + 1).join("."))
       setTool(

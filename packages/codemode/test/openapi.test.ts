@@ -282,6 +282,30 @@ describe("OpenAPI.fromSpec", () => {
     expect(Tool.isTool(toolAt(result.tools, "group.operation.other"))).toBe(true)
   })
 
+  test("does not reserve names for unsupported operations between duplicate operation IDs", () => {
+    const operation = { operationId: "group.item", responses: { 200: { description: "Success" } } }
+    for (const unsupported of [false, true]) {
+      const result = OpenAPI.fromSpec({
+        baseUrl,
+        spec: {
+          openapi: "3.1.0",
+          paths: {
+            "/first": { get: operation },
+            ...(unsupported ? { "/unsupported": { get: { ...operation, "x-websocket": true } } } : {}),
+            "/last": { get: operation },
+          },
+        },
+      })
+
+      expect(Object.keys(result.tools)).toEqual(["group", "group_item_2"])
+      expect(toolAt(result.tools, "group.item")).toMatchObject({ _tag: "CodeModeTool", description: "GET /first" })
+      expect(toolAt(result.tools, "group_item_2")).toMatchObject({ _tag: "CodeModeTool", description: "GET /last" })
+      expect(result.skipped).toEqual(
+        unsupported ? [{ method: "GET", path: "/unsupported", reason: "WebSocket operations are not supported" }] : [],
+      )
+    }
+  })
+
   test("synthesizes flat operation IDs from methods and paths", () => {
     const response = { responses: { 200: { description: "Success" } } }
     const tools = OpenAPI.fromSpec({
