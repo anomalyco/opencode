@@ -1,5 +1,6 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
+import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useQuery } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
@@ -18,9 +19,16 @@ import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { compareSessionTime, displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { pathKey } from "@/utils/path-key"
+import { sessionRemovalIDs } from "@/utils/session-delete"
+import { publishSession, unpublishSession } from "@/utils/session-share"
 import { showToast } from "@/utils/toast"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { archiveHomeSession } from "../home-session-archive"
+import {
+  fetchSessionExport,
+  downloadSessionExport,
+  sessionExportFilename,
+} from "@/utils/session-export"
 import type { HomeController } from "./home-controller"
 
 const HOME_SESSION_LIMIT = 64
@@ -177,6 +185,7 @@ export function createHomeSessionsController(home: HomeController) {
       showProjectName: () => !home.project.selected(),
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
+      shareEnabled: () => home.server.focusedSync().data.config.share !== "disabled",
       create: home.project.openNewSession,
       open: (session: Session, options?: OpenSessionOptions) => {
         const directoryKey = pathKey(session.directory)
@@ -209,12 +218,11 @@ export function createHomeSessionsController(home: HomeController) {
         const ctx = home.server.focusedContext()
         if (!conn || !ctx) return
         const [, setStore] = ctx.sync.child(session.directory)
-        if ((await ctx.sdk.protocol) !== "v1") return
         await archiveHomeSession({
           server: ServerConnection.key(conn),
           session,
           archive: (sessionID) =>
-            ctx.sdk.client.session.update({
+            ctx.sdk.ensureDirSdkContext(session.directory).client.session.update({
               sessionID,
               directory: session.directory,
               time: { archived: Date.now() },
@@ -234,6 +242,102 @@ export function createHomeSessionsController(home: HomeController) {
               description: errorMessage(cause, language.t("common.requestFailed")),
             }),
         })
+      },
+      rename: async (session: Session, title: string) => {
+        if (!title || title === session.title) return
+        const ctx = home.server.focusedContext()
+        if (!ctx) return
+        try {
+          await ctx.sdk.ensureDirSdkContext(session.directory).client.session.update({
+            sessionID: session.id,
+            title,
+          })
+        } catch (cause) {
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: errorMessage(cause, language.t("common.requestFailed")),
+          })
+        }
+      },
+      share: async (session: Session) => {
+        const ctx = home.server.focusedContext()
+        if (!ctx) return
+        try {
+          return await publishSession(ctx.sdk.ensureDirSdkContext(session.directory).client, session.id)
+        } catch (cause) {
+          showToast({
+            title: language.t("toast.session.share.failed.title"),
+            description: errorMessage(cause, language.t("toast.session.share.failed.description")),
+          })
+        }
+      },
+      unshare: async (session: Session): Promise<boolean> => {
+        const ctx = home.server.focusedContext()
+        if (!ctx) return false
+        try {
+          await unpublishSession(ctx.sdk.ensureDirSdkContext(session.directory).client, session.id)
+          return true
+        } catch (cause) {
+          showToast({
+            title: language.t("toast.session.unshare.failed.title"),
+            description: errorMessage(cause, language.t("toast.session.unshare.failed.description")),
+          })
+          return false
+        }
+      },
+      exportSession: async (session: Session) => {
+        const ctx = home.server.focusedContext()
+        if (!ctx) return
+        try {
+          const data = await fetchSessionExport({
+            sessionID: session.id,
+            client: ctx.sdk.ensureDirSdkContext(session.directory).client,
+          })
+          const filename = sessionExportFilename(data.info)
+          downloadSessionExport(filename, data)
+          showToast({
+            title: language.t("toast.session.export.success.title"),
+            description: language.t("toast.session.export.success.description", { filename }),
+          })
+        } catch (cause) {
+          showToast({
+            title: language.t("toast.session.export.failed.title"),
+            description: errorMessage(cause, language.t("toast.session.export.failed.description")),
+          })
+        }
+      },
+      delete: async (session: Session): Promise<boolean> => {
+        const ctx = home.server.focusedContext()
+        if (!ctx) return false
+        try {
+          await ctx.sdk.ensureDirSdkContext(session.directory).client.session.delete({
+            sessionID: session.id,
+            directory: session.directory,
+          })
+          const [store, setStore] = ctx.sync.child(session.directory)
+          const removed = sessionRemovalIDs(store.session, session.id)
+          setStore(
+            produce((draft) => {
+              draft.session = draft.session.filter((item) => !removed.has(item.id))
+            }),
+          )
+          removed.forEach((id) => {
+            ctx.sync.session.evict(id)
+            homeSessions().remove(id)
+          })
+          notifySessionTabsRemoved({
+            server: home.selection.value().server,
+            directory: session.directory,
+            sessionIDs: [...removed],
+          })
+          return true
+        } catch (cause) {
+          showToast({
+            title: language.t("session.delete.failed.title"),
+            description: errorMessage(cause, language.t("session.delete.failed.title")),
+          })
+          return false
+        }
       },
     },
     tab: {
