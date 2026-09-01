@@ -557,6 +557,7 @@ export const SessionInfo = Schema.Struct({
   model: optional(SessionModel),
   version: Schema.String,
   metadata: optional(Schema.Record(Schema.String, Schema.Any)),
+  ephemeral: optional(Schema.Boolean),
   time: Schema.Struct({
     created: NonNegativeInt,
     updated: NonNegativeInt,

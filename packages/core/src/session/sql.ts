@@ -49,6 +49,7 @@ export const SessionTable = sqliteTable(
     revert: text({ mode: "json" }).$type<Revert.State>(),
     permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
     agent: text(),
+    ephemeral: integer({ mode: "boolean" }).notNull().default(false),
     model: text({ mode: "json" }).$type<{
       id: string
       providerID: string

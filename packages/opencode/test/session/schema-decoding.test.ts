@@ -161,6 +161,7 @@ describe("Session input schemas", () => {
       metadata: { source: "test" },
       permission: [{ action: "ask" as const, pattern: "*", permission: "bash" }],
       workspaceID,
+      ephemeral: true,
     }
     expect(decode(populated)).toEqual(populated)
   })
