@@ -3,7 +3,7 @@ import * as path from "path"
 import { Effect } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./write.txt"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -13,6 +13,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { Snapshot } from "@/snapshot"
 import * as Bom from "@/util/bom"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -58,17 +59,42 @@ export const WriteTool = Tool.define(
             metadata: {
               filepath,
               diff,
+              oldText: contentOld,
+              newText: contentNew,
             },
           })
+          const edited = ctx.extra?.[Tool.EditedContentKey]
+          let finalContent = typeof edited === "string" ? edited : contentNew
 
-          yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
+          yield* fs.writeWithDirs(filepath, Bom.join(finalContent, desiredBom))
           if (yield* format.file(filepath)) {
-            yield* Bom.syncFile(fs, filepath, desiredBom)
+            finalContent = yield* Bom.syncFile(fs, filepath, desiredBom)
           }
+          const finalDiff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, finalContent))
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })
           yield* events.publish(Watcher.Event.Updated, {
             file: filepath,
             event: exists ? "change" : "add",
+          })
+
+          let additions = 0
+          let deletions = 0
+          for (const change of diffLines(contentOld, finalContent)) {
+            if (change.added) additions += change.count || 0
+            if (change.removed) deletions += change.count || 0
+          }
+          const filediff: Snapshot.FileDiff = {
+            file: filepath,
+            patch: finalDiff,
+            additions,
+            deletions,
+          }
+          yield* ctx.metadata({
+            metadata: {
+              diff: finalDiff,
+              filediff,
+              diagnostics: {},
+            },
           })
 
           let output = "Wrote file successfully."
@@ -93,6 +119,8 @@ export const WriteTool = Tool.define(
             title: path.relative(instance.worktree, filepath),
             metadata: {
               diagnostics,
+              diff: finalDiff,
+              filediff,
               filepath,
               exists: exists,
             },

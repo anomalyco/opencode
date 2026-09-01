@@ -45,6 +45,8 @@ export type Context<M extends Metadata = Metadata> = {
   ask(input: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
 }
 
+export const EditedContentKey = "editedContent"
+
 export interface ExecuteResult<M extends Metadata = Metadata> {
   title: string
   metadata: M

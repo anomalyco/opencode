@@ -106,12 +106,17 @@ export const EditTool = Tool.define(
                   metadata: {
                     filepath: filePath,
                     diff,
+                    oldText: contentOld,
+                    newText: contentNew,
                   },
                 })
+                const edited = ctx.extra?.[Tool.EditedContentKey]
+                if (typeof edited === "string") contentNew = edited
                 yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
                 if (yield* format.file(filePath)) {
                   contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
                 }
+                diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
                 yield* events.publish(FileSystem.Event.Edited, { file: filePath })
                 yield* events.publish(Watcher.Event.Updated, {
                   file: filePath,
@@ -149,8 +154,12 @@ export const EditTool = Tool.define(
                 metadata: {
                   filepath: filePath,
                   diff,
+                  oldText: contentOld,
+                  newText: contentNew,
                 },
               })
+              const edited = ctx.extra?.[Tool.EditedContentKey]
+              if (typeof edited === "string") contentNew = edited
 
               yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
               if (yield* format.file(filePath)) {

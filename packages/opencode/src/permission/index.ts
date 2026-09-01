@@ -6,18 +6,19 @@ import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { isConnected as isVscodeConnected, forwardDiff, forwardReply, fetchEditedContent } from "@/server/connection"
 
 export const Event = PermissionV1.Event
 
 export interface Interface {
-  readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
+  readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<string | undefined, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
 }
 
 interface PendingEntry {
   info: PermissionV1.Request
-  deferred: Deferred.Deferred<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>
+  deferred: Deferred.Deferred<string | undefined, PermissionV1.RejectedError | PermissionV1.CorrectedError>
 }
 
 interface State {
@@ -95,9 +96,20 @@ const layer = Layer.effect(
       }
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
 
-      const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
+      const deferred = yield* Deferred.make<
+        string | undefined,
+        PermissionV1.RejectedError | PermissionV1.CorrectedError
+      >()
       pending.set(id, { info, deferred })
       yield* events.publish(Event.Asked, info)
+      if (isVscodeConnected() && info.metadata && typeof info.metadata === "object") {
+        const meta = info.metadata as { filepath?: string; oldText?: string; newText?: string }
+        if (meta.oldText !== undefined && meta.newText !== undefined) {
+          yield* Effect.sync(() =>
+            forwardDiff(String(id), meta.filepath ?? "", meta.oldText as string, meta.newText as string),
+          )
+        }
+      }
       return yield* Effect.ensuring(
         Deferred.await(deferred),
         Effect.sync(() => {
@@ -119,6 +131,7 @@ const layer = Layer.effect(
       })
 
       if (input.reply === "reject") {
+        yield* Effect.sync(() => forwardReply(existing.info.id))
         yield* Deferred.fail(
           existing.deferred,
           input.message
@@ -134,12 +147,17 @@ const layer = Layer.effect(
             requestID: item.info.id,
             reply: "reject",
           })
+          yield* Effect.sync(() => forwardReply(item.info.id))
           yield* Deferred.fail(item.deferred, new PermissionV1.RejectedError())
         }
         return
       }
 
-      yield* Deferred.succeed(existing.deferred, undefined)
+      const content =
+        input.content ??
+        (isVscodeConnected() ? yield* Effect.promise(() => fetchEditedContent(existing.info.id)) : undefined)
+      yield* Deferred.succeed(existing.deferred, content)
+      yield* Effect.sync(() => forwardReply(existing.info.id))
       if (input.reply === "once") return
 
       for (const pattern of existing.info.always) {
@@ -162,6 +180,7 @@ const layer = Layer.effect(
           requestID: item.info.id,
           reply: "always",
         })
+        yield* Effect.sync(() => forwardReply(item.info.id))
         yield* Deferred.succeed(item.deferred, undefined)
       }
     })
