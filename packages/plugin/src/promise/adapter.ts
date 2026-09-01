@@ -258,13 +258,14 @@ export function fromPromise(plugin: Plugin) {
         const adaptApiMethod = <PromiseMethod>(
           endpoint: HttpApiEndpoint.Top,
           method: (input: never) => Effect.Effect<unknown, unknown>,
+          options?: { readonly noContent?: boolean },
         ) => {
           const compiled = compileEndpoint(endpoint)
           return ((input?: unknown) =>
             Effect.gen(function* () {
               const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(input ?? {}))
               const result = yield* method(Object.assign({}, ...decoded) as never)
-              if (compiled.noContent) return undefined
+              if (compiled.noContent || options?.noContent) return undefined
               return yield* compiled.encode(result)
             }).pipe(Effect.runPromiseWith(context))) as PromiseMethod
         }
@@ -427,6 +428,9 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.mcp.reload()),
           },
           permission: {
+            assert: adaptApiMethod(PermissionEndpoints["session.permission.create"], host.permission.assert, {
+              noContent: true,
+            }),
             hook: (name, callback) =>
               register(host.permission.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
             list: adaptApiMethod(PermissionEndpoints["session.permission.list"], host.permission.list),
