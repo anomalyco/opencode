@@ -922,8 +922,9 @@ test("error investigations repeatedly seed editable home drafts without creating
 })
 
 test("shows jump to latest after scrolling one line above the final message", async () => {
+  await using state = await tmpdir()
   const session = {
-    id: "dummy",
+    id: "ses_jump_latest",
     title: "Demo session",
     projectID: "project",
     location: { directory },
@@ -942,18 +943,21 @@ test("shows jump to latest after scrolling one line above the final message", as
   await using setup = await createAppFixture({
     width: 80,
     height: 20,
+    state: state.path,
     config: { animations: false, keybinds: { "session.line.up": "f6", "session.line.down": "f7" } },
-    args: { sessionID: "dummy" },
+    args: { sessionID: "ses_jump_latest" },
     fetch: (url) => {
       if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-      if (url.pathname === "/api/session/dummy") return json({ data: session })
-      if (url.pathname === "/api/session/dummy/message") return json({ data: messages.toReversed(), cursor: {} })
-      if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
-      if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+      if (url.pathname === "/api/session/ses_jump_latest") return json({ data: session })
+      if (url.pathname === "/api/session/ses_jump_latest/message")
+        return json({ data: messages.toReversed(), cursor: {} })
+      if (url.pathname === "/api/session/ses_jump_latest/inbox") return json({ data: [] })
+      if (url.pathname === "/api/session/ses_jump_latest/permission") return json({ data: [] })
     },
   })
 
   await setup.waitForFrame((frame) => frame.includes("Final visible message"))
+  await setup.waitForVisualIdle()
   const findScrollBox = (root: Renderable): ScrollBoxRenderable | undefined =>
     root instanceof ScrollBoxRenderable && root.getRenderable("message-7")
       ? root
