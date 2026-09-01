@@ -95,20 +95,8 @@ export default Plugin.define({
               Effect.gen(function* () {
                 const browser = browsers.get(tool.sessionID)
                 if (!browser) return yield* new Tool.Error({ message: "No desktop browser is connected." })
-                if (action.type !== "open") {
-                  if (!browser.state) return yield* new Tool.Error({ message: "Open the browser first." })
-                  const url = action.type === "navigate" ? action.url : browser.state.url
-                  yield* ctx.permission
-                    .assert({
-                      action: "browser",
-                      resources: [url],
-                      metadata: { type: action.type, url },
-                      sessionID: tool.sessionID,
-                      agent: tool.agent,
-                      source: { type: "tool", messageID: tool.messageID, id: tool.id },
-                    })
-                    .pipe(Effect.mapError((error) => new Tool.Error({ message: "Browser action failed", error })))
-                }
+                if (action.type !== "open" && !browser.state)
+                  return yield* new Tool.Error({ message: "Open the browser first." })
                 const requestID = crypto.randomUUID()
                 const pending = yield* Deferred.make<Browser.Result, Tool.Error>()
                 browser.pending.set(requestID, pending)
