@@ -24,6 +24,7 @@ import { terminalTabLabel } from "@/session/terminal/terminal-label"
 import { createSizing, focusTerminalById } from "@/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/session/handoff"
 import { useSessionLayout } from "@/session/session-layout"
+import { createPaneMotion } from "@/session/pane-motion"
 import { TerminalSurface } from "./surface"
 
 const MAX_CACHED_TERMINAL_WORKSPACES = 20
@@ -52,10 +53,11 @@ export function TerminalPanel(
   const sdk = useWorkspaceLocation()
   const language = useLanguage()
   const command = useCommand()
-  const { workspaceKey, view } = useSessionLayout()
+  const { workspaceKey, view, tabKey } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const opened = createMemo(() => view().terminal.opened())
+  const motion = createPaneMotion(tabKey, opened)
   const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
   const close = () => view().terminal.close()
@@ -238,6 +240,7 @@ export function TerminalPanel(
       pane={pane()}
       max={max()}
       resizing={size.active()}
+      animate={motion.animate()}
       onResizeStart={size.start}
       onResize={(next) => {
         size.touch()

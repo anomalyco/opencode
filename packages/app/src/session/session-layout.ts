@@ -6,7 +6,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { ServerConnection } from "@/runtime/server/registry"
-import { findSessionTab, useTabs } from "@/shell/tabs/tabs"
+import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
 
 export const useSessionKey = () => {
   const params = useParams()
@@ -24,20 +24,24 @@ export const useSessionLayout = () => {
   const tabs = useTabs()
   const { params, sessionKey, workspaceKey } = useSessionKey()
   const serverSDK = useServerSDK()
-  const tab = createMemo(() => {
+  const currentTab = createMemo(() => {
     if (!params.id) return
     return findSessionTab(tabs.store, ServerConnection.key(serverSDK.server), params.id)
   })
   const panes = {
-    terminalOpened: () => tabs.pane(tab(), "terminal"),
-    setTerminalOpened: (opened: boolean) => tabs.setPane(tab(), "terminal", opened),
-    reviewOpened: () => tabs.pane(tab(), "review"),
-    setReviewOpened: (opened: boolean) => tabs.setPane(tab(), "review", opened),
+    terminalOpened: () => tabs.pane(currentTab(), "terminal"),
+    setTerminalOpened: (opened: boolean) => tabs.setPane(currentTab(), "terminal", opened),
+    reviewOpened: () => tabs.pane(currentTab(), "review"),
+    setReviewOpened: (opened: boolean) => tabs.setPane(currentTab(), "review", opened),
   }
   return {
     params,
     sessionKey,
     workspaceKey,
+    tabKey: createMemo(() => {
+      const tab = currentTab()
+      return tab && tabKey(tab)
+    }),
     tabs: createMemo(() => layout.tabs(sessionKey)),
     view: createMemo(() => layout.view(sessionKey, panes)),
   }

@@ -27,6 +27,13 @@ test("keeps review visibility per tab and the pane mounted across tab switches",
   await expectSessionTitle(page, titleA)
 
   await page.getByRole("button", { name: "Toggle review" }).click()
+  await expect
+    .poll(() =>
+      page
+        .locator('[data-slot="session-chat-panel"]')
+        .evaluate((element) => getComputedStyle(element).transitionDuration),
+    )
+    .toContain("0.24s")
   const reviewTab = page.locator("#session-side-panel-review-tab")
   const reviewTabPanel = page.locator("#session-side-panel-review-tabpanel")
   await expect(reviewTab).toHaveAttribute("aria-controls", "session-side-panel-review-tabpanel")
@@ -39,6 +46,13 @@ test("keeps review visibility per tab and the pane mounted across tab switches",
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
   await expect(review).toBeHidden()
+  await expect
+    .poll(() =>
+      page
+        .locator('[data-slot="session-chat-panel"]')
+        .evaluate((element) => getComputedStyle(element).transitionDuration),
+    )
+    .toBe("0s")
   expect(await readProbe(page)).toBe(PROBE)
 
   await switchTab(page, titleA)

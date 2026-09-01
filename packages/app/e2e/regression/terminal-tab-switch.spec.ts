@@ -27,6 +27,7 @@ test("keeps terminal visibility per tab and the PTY alive across tab switches", 
   await page.keyboard.press("Control+Backquote")
   const terminal = page.locator('[data-component="terminal"]')
   await expect(terminal).toBeVisible()
+  await expect(page.locator('[data-component="terminal-panel"]')).toHaveAttribute("data-size-animated", "true")
   await expect.poll(() => connections.length).toBe(1)
   const connection = new URL(connections[0]!)
   expect(connection.pathname).toBe(`/api/pty/${ptyID}/connect`)
@@ -37,6 +38,7 @@ test("keeps terminal visibility per tab and the PTY alive across tab switches", 
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
   await expect(terminal).toBeHidden()
+  await expect(page.locator('[data-component="terminal-panel"]')).toHaveAttribute("data-size-animated", "false")
   expect(await readProbe(page)).toBe(PROBE)
   expect(connections.length).toBe(1)
 
