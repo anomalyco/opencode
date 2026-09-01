@@ -108,6 +108,24 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const hidden = createMemo(() => Math.max(0, Math.min(1, collapse())))
   const optionsOff = createMemo(() => hidden() > 0.98)
 
+  // Pre-fill the custom textarea with a question's proposed content (e.g. a
+  // review/edit workflow) so the user can revise it before submitting. This runs
+  // at most once per tab (Prefilled latch) so clearing the field — or toggling
+  // the "type your own" box, which resets customOn — can never re-insert the
+  // proposal. Bail when the question forbids custom answers, so a hidden field
+  // is not silently marked as an active submitted answer.
+  const prefilled = new Set<number>()
+  createEffect(() => {
+    const current = question()
+    const tab = store.tab
+    if (!current?.default) return
+    if (current.custom === false) return
+    if (prefilled.has(tab)) return
+    prefilled.add(tab)
+    setStore("custom", tab, current.default)
+    setStore("customOn", tab, true)
+  })
+
   const customUpdate = (value: string, selected: boolean = on()) => {
     const prev = input().trim()
     const next = value.trim()

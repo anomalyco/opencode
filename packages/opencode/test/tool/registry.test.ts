@@ -17,6 +17,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Question } from "@/question"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
@@ -567,6 +568,76 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("cowsay")
+    }),
+  )
+
+  // Captures what the plugin `question()` bridge forwards to Question.Service.ask,
+  // covering both the with- and without-callID tool contexts.
+  const askedInputs: unknown[] = []
+  const compileReplacements: any[] = [
+    ...(replacements as unknown as Array<unknown>),
+    [Question.node, Layer.mock(Question.Service, {
+      ask: (input: unknown): any =>
+        Effect.sync(() => {
+          askedInputs.push(input)
+          return [["A"]]
+        }),
+    })],
+  ]
+  const withQuestion = testEffect(
+    LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node]), compileReplacements),
+  )
+
+  withQuestion.instance("bridges plugin question() to Question.Service.ask (exact payload, with and without callID)", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      const tools = path.join(test.directory, ".opencode", "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "ask.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'asker',",
+            "  args: {},",
+            "  execute: async (args: any, ctx: any) => {",
+            "    await ctx.question({ questions: [{ question: 'Q?', header: 'H', options: [{ label: 'A', description: 'D' }], default: 'prefill' }] })",
+            "    return 'asked'",
+            "  },",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "ask")
+      if (!loaded) throw new Error("ask plugin tool was not loaded")
+      const agent = (yield* agents.defaultInfo()).name
+      const ctx: any = {
+        sessionID: SessionID.make("ses_q"),
+        messageID: MessageID.make("msg_q"),
+        agent,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      yield* loaded.execute({}, ctx)
+      const noCallID = askedInputs[0] as { sessionID: string; tool?: unknown; questions: unknown[] }
+      expect(noCallID.sessionID).toBe("ses_q")
+      expect(noCallID.tool).toBeUndefined()
+      expect(noCallID.questions).toMatchObject([
+        { question: "Q?", header: "H", options: [{ label: "A", description: "D" }], default: "prefill" },
+      ])
+
+      yield* loaded.execute({}, { ...ctx, callID: "call_1" })
+      const withCallID = askedInputs[1] as { tool?: { messageID: string; callID: string } }
+      expect(withCallID.tool).toEqual({ messageID: "msg_q", callID: "call_1" })
     }),
   )
 })
