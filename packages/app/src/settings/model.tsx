@@ -71,85 +71,128 @@ export function terminalFontFamily(font: string | undefined) {
 const reasoningModeSchema = Schema.Literals(["hidden", "compact", "full"])
 
 const generalSchema = Persistence.struct({
-  autoSave: Persistence.fallback(Schema.Boolean, () => true),
-  releaseNotes: Persistence.fallback(Schema.Boolean, () => true),
-  showFileTree: Persistence.fallback(Schema.Boolean, () => false),
-  showNavigation: Persistence.fallback(Schema.Boolean, () => false),
-  showSearch: Persistence.fallback(Schema.Boolean, () => false),
-  showStatus: Persistence.fallback(Schema.Boolean, () => false),
-  showProjectIcon: Persistence.fallback(Schema.Boolean, () => false),
-  showTerminal: Persistence.fallback(Schema.Boolean, () => false),
-  reasoningMode: Persistence.fallback(reasoningModeSchema, () => "compact" as const),
-  shellToolPartsExpanded: Persistence.fallback(Schema.Boolean, () => false),
-  editToolPartsExpanded: Persistence.fallback(Schema.Boolean, () => false),
-  showCustomAgents: Persistence.fallback(Schema.Boolean, () => false),
-  mobileTitlebarPosition: Persistence.fallback(Schema.Literals(["top", "bottom"]), () => "top" as const),
-  mobileDiffWrap: Persistence.fallback(Schema.Boolean, () => true),
-  terminalPlacement: Persistence.fallback(Schema.Literals(["side", "bottom"]), () => "side" as const),
-  followUpBehavior: Persistence.fallback(Schema.Literals(["queue", "steer"]), () => "steer" as const),
+  autoSave: Schema.Boolean,
+  releaseNotes: Schema.Boolean,
+  showFileTree: Schema.Boolean,
+  showNavigation: Schema.Boolean,
+  showSearch: Schema.Boolean,
+  showStatus: Schema.Boolean,
+  showProjectIcon: Schema.Boolean,
+  showTerminal: Schema.Boolean,
+  reasoningMode: reasoningModeSchema,
+  shellToolPartsExpanded: Schema.Boolean,
+  editToolPartsExpanded: Schema.Boolean,
+  showCustomAgents: Schema.Boolean,
+  mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
+  mobileDiffWrap: Schema.Boolean,
+  terminalPlacement: Schema.Literals(["side", "bottom"]),
+  followUpBehavior: Schema.Literals(["queue", "steer"]),
 })
 
-const persistedGeneralSchema = Schema.Struct({
-  ...generalSchema.fields,
-  reasoningMode: Schema.optional(reasoningModeSchema).pipe(
-    Schema.catchDecoding(() => Effect.succeed(Option.some("compact" as const))),
-  ),
-  showReasoningSummaries: Persistence.optional(Schema.Boolean),
-}).pipe(
-  Schema.decodeTo(Schema.toType(generalSchema), {
-    decode: SchemaGetter.transform((value) => ({
-      ...value,
-      reasoningMode: value.reasoningMode ?? (value.showReasoningSummaries === true ? "full" : "compact"),
-    })),
-    encode: SchemaGetter.transform((value) => value),
-  }),
-)
-
 const appearanceSchema = Persistence.struct({
-  fontSize: Persistence.fallback(Schema.Number, () => 14),
-  mono: Persistence.fallback(Schema.String, () => ""),
-  sans: Persistence.fallback(Schema.String, () => ""),
-  terminal: Persistence.fallback(Schema.String, () => ""),
-  tabLayout: Persistence.fallback(Schema.Literals(["horizontal", "vertical"]), () => "horizontal" as const),
+  fontSize: Schema.Number,
+  mono: Schema.String,
+  sans: Schema.String,
+  terminal: Schema.String,
+  tabLayout: Schema.Literals(["horizontal", "vertical"]),
 })
 
 const permissionsSchema = Persistence.struct({
-  autoApprove: Persistence.fallback(Schema.Boolean, () => false),
+  autoApprove: Schema.Boolean,
 })
 
 const workspacesSchema = Persistence.struct({
-  defaultDestination: Persistence.fallback(Schema.Literals(["last-used", "local", "new"]), () => "last-used" as const),
+  defaultDestination: Schema.Literals(["last-used", "local", "new"]),
   lastUsed: Persistence.record(
     Schema.Literals(["local", "workspace"]).pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
   ),
 })
 
 const notificationsSchema = Persistence.struct({
-  agent: Persistence.fallback(Schema.Boolean, () => true),
-  permissions: Persistence.fallback(Schema.Boolean, () => true),
-  errors: Persistence.fallback(Schema.Boolean, () => false),
+  agent: Schema.Boolean,
+  permissions: Schema.Boolean,
+  errors: Schema.Boolean,
 })
 
 const soundsSchema = Persistence.struct({
-  agentEnabled: Persistence.fallback(Schema.Boolean, () => true),
-  agent: Persistence.fallback(Schema.String, () => "staplebops-01"),
-  permissionsEnabled: Persistence.fallback(Schema.Boolean, () => true),
-  permissions: Persistence.fallback(Schema.String, () => "staplebops-02"),
-  errorsEnabled: Persistence.fallback(Schema.Boolean, () => true),
-  errors: Persistence.fallback(Schema.String, () => "nope-03"),
+  agentEnabled: Schema.Boolean,
+  agent: Schema.String,
+  permissionsEnabled: Schema.Boolean,
+  permissions: Schema.String,
+  errorsEnabled: Schema.Boolean,
+  errors: Schema.String,
 })
 
 export const settingsSchema = Persistence.struct({
-  general: Persistence.fallback(persistedGeneralSchema, () => Schema.decodeUnknownSync(generalSchema)({})),
-  appearance: Persistence.fallback(appearanceSchema, () => Schema.decodeUnknownSync(appearanceSchema)({})),
+  general: generalSchema,
+  appearance: appearanceSchema,
   keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
-  permissions: Persistence.fallback(permissionsSchema, () => Schema.decodeUnknownSync(permissionsSchema)({})),
-  workspaces: Persistence.fallback(workspacesSchema, () => Schema.decodeUnknownSync(workspacesSchema)({})),
-  notifications: Persistence.fallback(notificationsSchema, () => Schema.decodeUnknownSync(notificationsSchema)({})),
-  sounds: Persistence.fallback(soundsSchema, () => Schema.decodeUnknownSync(soundsSchema)({})),
+  permissions: permissionsSchema,
+  workspaces: workspacesSchema,
+  notifications: notificationsSchema,
+  sounds: soundsSchema,
 })
 
-const defaultSettings = Schema.decodeUnknownSync(settingsSchema)({})
+export const settingsPersistence = Persistence.migrate(
+  settingsSchema,
+  Schema.Struct({
+    general: Persistence.optional(
+      Schema.Struct({
+        reasoningMode: Schema.optional(Schema.Unknown),
+        showReasoningSummaries: Persistence.optional(Schema.Boolean),
+      }),
+    ),
+  }).pipe(
+    Schema.decode({
+      decode: SchemaGetter.transform((value) => {
+        if (value.general?.reasoningMode !== undefined || value.general?.showReasoningSummaries === undefined)
+          return value
+        return {
+          ...value,
+          general: {
+            ...value.general,
+            reasoningMode: value.general.showReasoningSummaries ? "full" : "compact",
+          },
+        }
+      }),
+      encode: SchemaGetter.transform((value) => value),
+    }),
+  ),
+)
+
+export const defaultSettings: Settings = {
+  general: {
+    autoSave: true,
+    releaseNotes: true,
+    showFileTree: false,
+    showNavigation: false,
+    showSearch: false,
+    showStatus: false,
+    showProjectIcon: false,
+    showTerminal: false,
+    reasoningMode: "compact",
+    shellToolPartsExpanded: false,
+    editToolPartsExpanded: false,
+    showCustomAgents: false,
+    mobileTitlebarPosition: "top",
+    mobileDiffWrap: true,
+    terminalPlacement: "side",
+    followUpBehavior: "steer",
+  },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
+  keybinds: {},
+  permissions: { autoApprove: false },
+  workspaces: { defaultDestination: "last-used", lastUsed: {} },
+  notifications: { agent: true, permissions: true, errors: false },
+  sounds: {
+    agentEnabled: true,
+    agent: "staplebops-01",
+    permissionsEnabled: true,
+    permissions: "staplebops-02",
+    errorsEnabled: true,
+    errors: "nope-03",
+  },
+}
 
 function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
@@ -159,7 +202,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   name: "Settings",
   gate: false,
   init: () => {
-    const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsSchema)
+    const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)

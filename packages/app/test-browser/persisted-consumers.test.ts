@@ -11,12 +11,17 @@ test("persisted model selection hydrates, updates and serializes the schema shap
   )
   createRoot((dispose) => {
     try {
-      const [state, setState] = persisted(key, ModelSelectionSchema, undefined, {
-        platform: "web",
-        openExternal: () => {},
-        restart: async () => {},
-        notify: async () => {},
-      })
+      const [state, setState] = persisted(
+        key,
+        ModelSelectionSchema,
+        { session: {} },
+        {
+          platform: "web",
+          openExternal: () => {},
+          restart: async () => {},
+          notify: async () => {},
+        },
+      )
       expect(state.session.session1?.agent).toBe("plan")
       setState("session", "session1", { agent: "build", variant: null })
       expect(state.session.session1?.agent).toBe("build")

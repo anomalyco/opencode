@@ -47,7 +47,9 @@ function equalSelectedLines(a: SelectedLineRange | null | undefined, b: Selected
 }
 
 function createViewSession(scope: ServerScope, dir: string, id: string | undefined) {
-  const [view, setView, _, ready] = persisted(Persist.serverScoped(scope, dir, id, "file-view"), FileViewsSchema)
+  const [view, setView, _, ready] = persisted(Persist.serverScoped(scope, dir, id, "file-view"), FileViewsSchema, {
+    file: {},
+  })
 
   const meta = { pruned: false }
 

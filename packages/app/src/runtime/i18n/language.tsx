@@ -163,11 +163,9 @@ export function normalizeLocale(value: string): Locale {
   return Option.getOrElse(Schema.decodeUnknownOption(LocaleSchema)(value), () => "en")
 }
 
-export function languageSchema(initial: Locale) {
-  return Persistence.struct({
-    locale: Persistence.fallback(StoredLocaleSchema.fields.locale, () => initial),
-  })
-}
+export const languageSchema = Persistence.struct({
+  locale: StoredLocaleSchema.fields.locale,
+})
 
 function readStoredLocale() {
   if (typeof localStorage !== "object") return
@@ -200,7 +198,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
   gate: false,
   init: (props: { locale?: Locale; onNativeTranslations?: (bundle: DesktopNativeBundle) => void }) => {
     const initial = props.locale ?? readStoredLocale() ?? detectLocale()
-    const [store, setStore, _, ready] = persisted(Persist.global("language"), languageSchema(initial))
+    const [store, setStore, _, ready] = persisted(Persist.global("language"), languageSchema, { locale: initial })
 
     const locale = createMemo(() => store.locale)
     const intl = createMemo(() => INTL[locale()])

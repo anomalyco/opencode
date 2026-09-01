@@ -2,12 +2,27 @@ import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { Schema } from "effect"
 import { ServerConnection } from "@/runtime/server/registry"
-import { createLayoutSchema } from "./layout"
+import { Persistence } from "@/runtime/persistence/schema"
+import { initialLayout, layoutPersistence, layoutSchema } from "./layout"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 
 describe("layout persistence", () => {
-  const schema = createLayoutSchema(ServerConnection.Key.make("local"))
+  const schema = Persistence.withInitial(layoutPersistence, initialLayout(ServerConnection.Key.make("local")))
   const decode = Schema.decodeUnknownSync(schema)
+
+  test("uses supplied initial preferences after legacy migration", () => {
+    const initial = initialLayout(ServerConnection.Key.make("remote"))
+    initial.sidebar.width = 420
+    initial.fileTree.width = 300
+    initial.review.panelOpened = true
+    const restore = Schema.decodeUnknownSync(Persistence.withInitial(layoutPersistence, initial))
+    expect(restore({})).toEqual(initial)
+    expect(restore({ sidebar: { width: "bad" } }).sidebar.width).toBe(420)
+    expect(restore({ fileTree: { width: 260 } }).fileTree.width).toBe(200)
+    expect(restore({ fileTree: {} }).fileTree.width).toBe(300)
+    expect(restore({ review: {}, fileTree: { opened: false } }).review.panelOpened).toBe(false)
+    expect(() => Schema.decodeUnknownSync(layoutSchema)({})).toThrow()
+  })
 
   test("restores shipped defaults for missing and invalid fields", () => {
     const defaults = decode({})

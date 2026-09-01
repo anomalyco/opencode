@@ -36,17 +36,23 @@ const SessionsSchema = Schema.Record(
   Schema.mutableKey(Persistence.fallback(Schema.UndefinedOr(StateSchema), () => undefined)),
 )
 
-export const ModelSelectionSchema = Schema.Struct({
-  session: Persistence.optional(SessionsSchema),
-  pick: Persistence.optional(SessionsSchema),
-}).pipe(
-  Schema.decodeTo(Schema.Struct({ session: SessionsSchema }), {
-    decode: SchemaGetter.transform((value) => ({
-      session:
-        value.session ?? Object.fromEntries(Object.entries(value.pick ?? {}).filter(([key]) => key !== WORKSPACE_KEY)),
-    })),
-    encode: SchemaGetter.transform((value) => value),
-  }),
+const Current = Persistence.struct({ session: SessionsSchema })
+
+export const ModelSelectionSchema = Persistence.migrate(
+  Current,
+  Schema.Struct({
+    session: Persistence.optional(Schema.Record(Schema.String, Schema.Unknown)),
+    pick: Persistence.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  }).pipe(
+    Schema.decode({
+      decode: SchemaGetter.transform((value) => ({
+        session:
+          value.session ??
+          Object.fromEntries(Object.entries(value.pick ?? {}).filter(([key]) => key !== WORKSPACE_KEY)),
+      })),
+      encode: SchemaGetter.transform((value) => value),
+    }),
+  ),
 )
 
 const WORKSPACE_KEY = "__workspace__"
@@ -85,6 +91,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const [saved, setSaved, , savedReady] = persisted(
       Persist.serverWorkspace(serverSDK.scope, sdk().directory, "model-selection"),
       ModelSelectionSchema,
+      { session: {} },
     )
 
     const [store, setStore] = createStore<{

@@ -5,8 +5,7 @@ import { ServerScope } from "@/runtime/server/scope"
 import type { Platform } from "@/runtime/platform/platform"
 import { clonePrompt } from "./prompt-parts"
 import {
-  type ComposerStore,
-  composerStore,
+  ComposerStore,
   DEFAULT_PROMPT,
   contextItemKey,
   type ContextItem,
@@ -158,8 +157,7 @@ function createPersistedComposer(
   initial?: InitialPrompt,
   platform?: Platform,
 ) {
-  const defaults = initialComposerStore(initial)
-  const [store, setStore, _, ready] = persisted(target, composerStore(defaults), defaults, platform)
+  const [store, setStore, _, ready] = persisted(target, ComposerStore, initialComposerStore(initial), platform)
   return { ready, ...createComposerStateValue(store, setStore) }
 }
 

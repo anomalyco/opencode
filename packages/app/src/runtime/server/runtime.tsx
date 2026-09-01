@@ -99,7 +99,11 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
 })
 
 function createGlobalModels() {
-  const [store, setStore, _, ready] = persisted(Persist.global("model"), ModelState)
+  const [store, setStore, _, ready] = persisted(Persist.global("model"), ModelState, {
+    user: [],
+    recent: [],
+    variant: {},
+  })
   const [recent] = createResource(
     async () => {
       const value = store.recent

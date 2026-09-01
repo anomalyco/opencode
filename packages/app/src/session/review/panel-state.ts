@@ -11,18 +11,20 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 
 const ReviewPanel = Persistence.struct({
-  sidebarOpened: Persistence.fallback(Schema.Boolean, () => true),
-  sidebarWidth: Persistence.fallback(
-    Schema.Finite.check(
-      Schema.isBetween({ minimum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, maximum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX }),
-    ),
-    () => SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
+  sidebarOpened: Schema.Boolean,
+  sidebarWidth: Schema.Finite.check(
+    Schema.isBetween({ minimum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, maximum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX }),
   ),
-  expandMode: Persistence.fallback(Schema.Literals(["expand", "collapse"]), () => "collapse" as const),
+  expandMode: Schema.Literals(["expand", "collapse"]),
 })
 
 export function createReviewPanelState(platform?: Platform) {
-  const [store, setStore, , ready] = persisted(Persist.global("review-panel-v2"), ReviewPanel, undefined, platform)
+  const [store, setStore, , ready] = persisted(
+    Persist.global("review-panel-v2"),
+    ReviewPanel,
+    { sidebarOpened: true, sidebarWidth: SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT, expandMode: "collapse" },
+    platform,
+  )
   // The filter is transient by design: a persisted filter would silently hide
   // files after a reload.
   const [filter, setFilter] = createSignal("")

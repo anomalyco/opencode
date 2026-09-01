@@ -16,10 +16,10 @@ const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
 
 export const GoUpsellState = Persistence.struct({
-  [GO_UPSELL_FREE_TIER_LAST_SEEN_AT]: Persistence.fallback(Schema.NullOr(Schema.Finite), () => null),
-  [GO_UPSELL_FREE_TIER_DONT_SHOW]: Persistence.fallback(Schema.NullOr(Schema.Finite), () => null),
-  [GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT]: Persistence.fallback(Schema.NullOr(Schema.Finite), () => null),
-  [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: Persistence.fallback(Schema.NullOr(Schema.Finite), () => null),
+  [GO_UPSELL_FREE_TIER_LAST_SEEN_AT]: Schema.NullOr(Schema.Finite),
+  [GO_UPSELL_FREE_TIER_DONT_SHOW]: Schema.NullOr(Schema.Finite),
+  [GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT]: Schema.NullOr(Schema.Finite),
+  [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: Schema.NullOr(Schema.Finite),
 })
 
 function goUpsellKeys(status: SessionStatus) {
@@ -47,7 +47,12 @@ export function useUsageExceededDialogs() {
   const { t, locale } = useI18n()
   const isEnglish = () => locale() === "en"
 
-  const [goUpsellState, setGoUpsellState] = persisted(Persist.global("go-upsell"), GoUpsellState)
+  const [goUpsellState, setGoUpsellState] = persisted(Persist.global("go-upsell"), GoUpsellState, {
+    [GO_UPSELL_FREE_TIER_LAST_SEEN_AT]: null,
+    [GO_UPSELL_FREE_TIER_DONT_SHOW]: null,
+    [GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT]: null,
+    [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: null,
+  })
 
   onCleanup(
     sdk().event.on("session.status", (evt) => {

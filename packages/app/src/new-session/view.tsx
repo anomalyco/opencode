@@ -26,11 +26,11 @@ import type { NewSessionWorkspaceController } from "./workspace/controller"
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
 export const WorkspaceOnboardingSchema = Persistence.struct({
-  used: Persistence.fallback(Schema.Boolean, () => false),
+  used: Schema.Boolean,
 })
 
 export const ProviderTipSchema = Persistence.struct({
-  dismissedAt: Persistence.fallback(Schema.Finite, () => 0),
+  dismissedAt: Schema.Finite,
 })
 
 export function NewSessionView(props: {
@@ -41,6 +41,7 @@ export function NewSessionView(props: {
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
     WorkspaceOnboardingSchema,
+    { used: false },
   )
   const select = (value: string) => {
     props.workspace.selection.set(value)
@@ -120,6 +121,7 @@ function ProviderTip() {
   const [persistedState, setPersistedState, , persistedReady] = persisted(
     Persist.global("new-session.provider-tip"),
     ProviderTipSchema,
+    { dismissedAt: 0 },
   )
   const visible = createMemo(
     () =>

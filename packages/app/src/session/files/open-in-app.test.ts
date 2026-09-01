@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { OPEN_APPS, OpenAppPreferences } from "./open-in-app"
+import { Persistence } from "@/runtime/persistence/schema"
 
-const decode = Schema.decodeUnknownSync(OpenAppPreferences)
+const decode = Schema.decodeUnknownSync(Persistence.withInitial(OpenAppPreferences, { app: "finder" }))
 
 describe("open app preferences", () => {
   test.each([...OPEN_APPS])("preserves the %s preference", (app) => {

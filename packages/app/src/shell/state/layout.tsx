@@ -48,12 +48,10 @@ export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
-export type HomeProjectSelection = ReturnType<typeof createLayoutSchema>["Type"]["home"]["selection"]
+export type HomeProjectSelection = typeof layoutSchema.Type.home.selection
 
-export type ReviewDiffStyle = ReturnType<typeof createLayoutSchema>["Type"]["review"]["diffStyle"]
-export type ReviewChangeMode = NonNullable<
-  ReturnType<typeof createLayoutSchema>["Type"]["sessionView"][string]["reviewMode"]
->
+export type ReviewDiffStyle = typeof layoutSchema.Type.review.diffStyle
+export type ReviewChangeMode = NonNullable<(typeof layoutSchema.Type.sessionView)[string]["reviewMode"]>
 export type ReviewPanelSource = "context-button" | "other"
 export type TabPanes = {
   terminalOpened: Accessor<boolean>
@@ -129,121 +127,88 @@ export const useCurrentRoute = () => {
   return createMemo(() => currentRoute(location.pathname, location.search))
 }
 
-export function createLayoutSchema(server: ServerConnection.Key) {
-  const sidebar = Persistence.struct({
-    opened: Persistence.fallback(Schema.Boolean, () => false),
-    width: Persistence.fallback(Schema.Finite, () => DEFAULT_SIDEBAR_WIDTH),
+const sessionTabsSchema = Persistence.struct({
+  all: Persistence.array(Schema.String),
+  active: Persistence.optional(Schema.String),
+})
+const sessionViewSchema = Persistence.struct({
+  scroll: Persistence.record(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
+  reviewOpen: Schema.optional(Persistence.array(Schema.String)),
+  reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
+  reviewFile: Schema.optional(Schema.String),
+  pendingMessage: Schema.optional(Schema.String),
+  pendingMessageAt: Schema.optional(Schema.Finite),
+})
+
+export const layoutSchema = Persistence.struct({
+  sidebar: Persistence.struct({
+    opened: Schema.Boolean,
+    width: Schema.Finite,
     workspaces: Persistence.record(Schema.Boolean),
-    workspacesDefault: Persistence.fallback(Schema.Boolean, () => false),
-  })
-  const review = Persistence.struct({
-    diffStyle: Persistence.fallback(Schema.Literals(["unified", "split"]), () => "split" as const),
-    panelOpened: Persistence.fallback(Schema.Boolean, () => DEFAULT_REVIEW_PANEL_OPENED),
-  })
-  const fileTree = Persistence.struct({
-    opened: Persistence.fallback(Schema.Boolean, () => false),
-    width: Persistence.fallback(Schema.Finite, () => DEFAULT_FILE_TREE_WIDTH),
-    tab: Persistence.fallback(Schema.Literals(["changes", "all"]), () => "changes" as const),
-  })
-  const tabs = Persistence.struct({
-    all: Persistence.array(Schema.String),
-    active: Persistence.optional(Schema.String),
-  })
-  const view = Persistence.struct({
-    scroll: Persistence.record(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
-    reviewOpen: Schema.optional(Persistence.array(Schema.String)),
-    reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
-    reviewFile: Schema.optional(Schema.String),
-    pendingMessage: Schema.optional(Schema.String),
-    pendingMessageAt: Schema.optional(Schema.Finite),
-  })
-  const layout = Persistence.struct({
-    sidebar: Persistence.fallback(sidebar, () => Schema.decodeUnknownSync(sidebar)({})),
-    terminal: Persistence.fallback(
-      Persistence.struct({
-        height: Persistence.fallback(Schema.Finite, () => DEFAULT_TERMINAL_HEIGHT),
-        opened: Persistence.fallback(Schema.Boolean, () => false),
-      }),
-      () => ({ height: DEFAULT_TERMINAL_HEIGHT, opened: false }),
-    ),
-    review: Persistence.fallback(review, () => Schema.decodeUnknownSync(review)({})),
-    fileTree: Persistence.fallback(fileTree, () => Schema.decodeUnknownSync(fileTree)({})),
-    session: Persistence.fallback(
-      Persistence.struct({ width: Persistence.fallback(Schema.Finite, () => DEFAULT_SESSION_WIDTH) }),
-      () => ({ width: DEFAULT_SESSION_WIDTH }),
-    ),
-    mobileSidebar: Persistence.fallback(
-      Persistence.struct({ opened: Persistence.fallback(Schema.Boolean, () => false) }),
-      () => ({ opened: false }),
-    ),
-    sessionTabs: Persistence.record(Persistence.fallback(tabs, () => ({ all: [] }))),
-    sessionView: Persistence.record(Persistence.fallback(view, () => ({ scroll: {} }))),
-    home: Persistence.fallback(
-      Persistence.struct({
-        selection: Persistence.fallback(
-          Persistence.struct({
-            server: Persistence.fallback(TabStorage.ServerKey, () => server),
-            directory: Schema.optional(Schema.String),
-          }),
-          () => ({ server }),
-        ),
-      }),
-      () => ({ selection: { server } }),
-    ),
-  })
-  const legacySidebar = Schema.Struct({
-    ...sidebar.fields,
-    workspaces: Persistence.fallback(
-      Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Schema.Boolean)]),
-      () => ({}),
-    ),
-  }).pipe(
-    Schema.decodeTo(Schema.toType(sidebar), {
-      decode: SchemaGetter.transform((value) =>
-        typeof value.workspaces === "boolean"
-          ? { ...value, workspaces: {}, workspacesDefault: value.workspaces }
-          : { ...value, workspaces: value.workspaces },
-      ),
-      encode: SchemaGetter.transform((value) => value),
+    workspacesDefault: Schema.Boolean,
+  }),
+  terminal: Persistence.struct({ height: Schema.Finite, opened: Schema.Boolean }),
+  review: Persistence.struct({
+    diffStyle: Schema.Literals(["unified", "split"]),
+    panelOpened: Schema.Boolean,
+  }),
+  fileTree: Persistence.struct({
+    opened: Schema.Boolean,
+    width: Schema.Finite,
+    tab: Schema.Literals(["changes", "all"]),
+  }),
+  session: Persistence.struct({ width: Schema.Finite }),
+  mobileSidebar: Persistence.struct({ opened: Schema.Boolean }),
+  sessionTabs: Persistence.record(Persistence.fallback(sessionTabsSchema, () => ({ all: [] }))),
+  sessionView: Persistence.record(Persistence.fallback(sessionViewSchema, () => ({ scroll: {} }))),
+  home: Persistence.struct({
+    selection: Persistence.struct({
+      server: TabStorage.ServerKey,
+      directory: Schema.optional(Schema.String),
     }),
-  )
-  return Schema.Struct({
-    ...layout.fields,
-    sidebar: Persistence.fallback(legacySidebar, () => Schema.decodeUnknownSync(sidebar)({})),
-    review: Persistence.fallback(
+  }),
+})
+
+export const layoutPersistence = Persistence.migrate(
+  layoutSchema,
+  Schema.Struct({
+    sidebar: Persistence.optional(
       Schema.Struct({
-        ...review.fields,
-        panelOpened: Persistence.fallback(Schema.UndefinedOr(Schema.Boolean), () => undefined),
+        workspaces: Persistence.optional(Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Schema.Boolean)])),
+        workspacesDefault: Persistence.optional(Schema.Boolean),
       }),
-      () => ({ diffStyle: "split" as const, panelOpened: DEFAULT_REVIEW_PANEL_OPENED }),
     ),
-    fileTree: Persistence.fallback(
-      Schema.UndefinedOr(
-        Schema.Struct({
-          ...fileTree.fields,
-          tab: Persistence.fallback(Schema.UndefinedOr(Schema.Literals(["changes", "all"])), () => undefined),
-        }),
-      ),
-      () => undefined,
+    review: Persistence.optional(Schema.Struct({ panelOpened: Persistence.optional(Schema.Boolean) })),
+    fileTree: Persistence.optional(
+      Schema.Struct({
+        opened: Persistence.optional(Schema.Boolean),
+        width: Persistence.optional(Schema.Finite),
+        tab: Persistence.optional(Schema.Literals(["changes", "all"])),
+      }),
     ),
+    sessionTabs: layoutSchema.fields.sessionTabs,
+    sessionView: layoutSchema.fields.sessionView,
   }).pipe(
-    Schema.decodeTo(Schema.toType(layout), {
+    Schema.decode({
       decode: SchemaGetter.transform((value) => ({
         ...value,
-        review: {
-          ...value.review,
-          panelOpened: value.review.panelOpened ?? value.fileTree?.opened ?? DEFAULT_REVIEW_PANEL_OPENED,
-        },
-        fileTree: !value.fileTree
-          ? Schema.decodeUnknownSync(fileTree)({})
-          : value.fileTree.tab
-            ? { ...value.fileTree, tab: value.fileTree.tab }
-            : {
+        sidebar:
+          typeof value.sidebar?.workspaces === "boolean"
+            ? { ...value.sidebar, workspaces: {}, workspacesDefault: value.sidebar.workspaces }
+            : value.sidebar,
+        // Only an existing review section inherits the old file-tree panel flag.
+        review: value.review
+          ? { ...value.review, panelOpened: value.review.panelOpened ?? value.fileTree?.opened }
+          : value.review,
+        fileTree:
+          value.fileTree && !value.fileTree.tab
+            ? {
                 ...value.fileTree,
                 opened: true,
                 width: value.fileTree.width === 260 ? DEFAULT_FILE_TREE_WIDTH : value.fileTree.width,
                 tab: "changes" as const,
-              },
+              }
+            : value.fileTree,
         sessionTabs: Object.fromEntries(
           Object.entries(value.sessionTabs)
             .filter(([key]) => SessionStateKey.is(key))
@@ -253,7 +218,21 @@ export function createLayoutSchema(server: ServerConnection.Key) {
       })),
       encode: SchemaGetter.transform((value) => value),
     }),
-  )
+  ),
+)
+
+export function initialLayout(server: ServerConnection.Key): typeof layoutSchema.Type {
+  return {
+    sidebar: { opened: false, width: DEFAULT_SIDEBAR_WIDTH, workspaces: {}, workspacesDefault: false },
+    terminal: { height: DEFAULT_TERMINAL_HEIGHT, opened: false },
+    review: { diffStyle: "split", panelOpened: DEFAULT_REVIEW_PANEL_OPENED },
+    fileTree: { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" },
+    session: { width: DEFAULT_SESSION_WIDTH },
+    mobileSidebar: { opened: false },
+    sessionTabs: {},
+    sessionView: {},
+    home: { selection: { server } },
+  }
 }
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
@@ -265,7 +244,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const [store, setStore, _, ready] = persisted(
       { ...Persist.global("layout"), previousKey: "layout.v6" },
-      createLayoutSchema(ServerConnection.key(servers.list[0])),
+      layoutPersistence,
+      initialLayout(ServerConnection.key(servers.list[0])),
     )
     const [ephemeral, setEphemeral] = createStore({
       reviewPanelSource: "other" as ReviewPanelSource,

@@ -29,7 +29,7 @@ export type OpenApp = (typeof OPEN_APPS)[number]
 export type OpenAppOS = "macos" | "windows" | "linux" | "unknown"
 
 export const OpenAppPreferences = Persistence.struct({
-  app: Persistence.fallback(Schema.Literals(OPEN_APPS), () => "finder" as const),
+  app: Schema.Literals(OPEN_APPS),
 })
 
 export const MAC_OPEN_APPS = [
@@ -169,7 +169,7 @@ export function useOpenInApp(input: { directory: () => string }) {
     ] as const
   })
 
-  const [prefs, setPrefs] = persisted(Persist.global("open.app"), OpenAppPreferences)
+  const [prefs, setPrefs] = persisted(Persist.global("open.app"), OpenAppPreferences, { app: "finder" })
   const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore({
     app: undefined as OpenApp | undefined,

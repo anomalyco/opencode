@@ -3,6 +3,68 @@ import { Effect, Schema, SchemaGetter } from "effect"
 import { Persistence } from "./schema"
 
 describe("persistence schemas", () => {
+  test("initial state supplies nested defaults without hiding valid siblings", () => {
+    const schema = Persistence.withInitial(
+      Persistence.struct({
+        enabled: Schema.Boolean,
+        appearance: Persistence.struct({ width: Schema.Number, font: Schema.String }),
+        variant: Schema.optional(Schema.NullOr(Schema.String)),
+      }),
+      { enabled: true, appearance: { width: 240, font: "default" }, variant: "high" },
+    )
+    const decode = Schema.decodeUnknownSync(schema)
+    expect(decode({ appearance: { width: 300 } })).toEqual({
+      enabled: true,
+      appearance: { width: 300, font: "default" },
+      variant: "high",
+    })
+    expect(decode({ enabled: "false", appearance: { width: "wide", font: "saved" }, variant: null })).toEqual({
+      enabled: true,
+      appearance: { width: 240, font: "saved" },
+      variant: null,
+    })
+    expect(decode({ appearance: null })).toEqual({
+      enabled: true,
+      appearance: { width: 240, font: "default" },
+      variant: "high",
+    })
+  })
+
+  test("legacy migration observes missing fields before initial defaults are applied", () => {
+    const current = Persistence.struct({ mode: Schema.Literals(["compact", "full"]), enabled: Schema.Boolean })
+    const stored = Schema.Struct({
+      mode: Schema.optional(Schema.Unknown),
+      expanded: Schema.optional(Schema.Boolean),
+    }).pipe(
+      Schema.decode({
+        decode: SchemaGetter.transform((value) =>
+          value.mode !== undefined || value.expanded === undefined
+            ? value
+            : { ...value, mode: value.expanded ? "full" : "compact" },
+        ),
+        encode: SchemaGetter.passthrough(),
+      }),
+    )
+    const schema = Persistence.withInitial(Persistence.migrate(current, stored), { mode: "compact", enabled: true })
+    const decode = Schema.decodeUnknownSync(schema)
+    expect(decode({ expanded: true, enabled: false })).toEqual({ mode: "full", enabled: false })
+    expect(decode({ expanded: true, mode: "compact" })).toEqual({ mode: "compact", enabled: true })
+    expect(decode({ expanded: true, mode: "invalid" })).toEqual({ mode: "compact", enabled: true })
+    expect(Schema.encodeSync(schema)(decode({ expanded: true }))).toEqual({ mode: "full", enabled: true })
+  })
+
+  test("initial merging preserves field codecs and replaces arrays rather than merging indexes", () => {
+    const current = Persistence.struct({
+      amount: Schema.NumberFromString.check(Schema.isFinite()),
+      items: Schema.mutable(Schema.Array(Schema.String)),
+    })
+    const schema = Persistence.withInitial(current, { amount: 7, items: ["initial"] })
+    const decode = Schema.decodeUnknownSync(schema)
+    expect(decode({ amount: "12", items: [] })).toEqual({ amount: 12, items: [] })
+    expect(decode({ amount: "invalid", items: ["saved"] })).toEqual({ amount: 7, items: ["saved"] })
+    expect(Schema.encodeSync(schema)(decode({}))).toEqual({ amount: "7", items: ["initial"] })
+  })
+
   test("built-in defaults only recover absent values, not invalid ones", () => {
     const schema = Persistence.struct({
       enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),

@@ -6,6 +6,7 @@ import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Option, Schema } from "effect"
 import { pathKey } from "@/workspaces/path-key"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
+import { Persistence } from "./schema"
 
 type InitType = Promise<string> | string | null
 type PersistedWithReady<T> = [
@@ -472,25 +473,22 @@ export function removePersisted(
 
 export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
   target: string | PersistTarget,
-  schema: S,
-  initial?: NoInfer<S["Type"]>,
+  schema: S | Persistence.Migrated<S>,
+  initial: NoInfer<S["Type"]>,
   platformOverride?: Platform,
 ): PersistedWithReady<S["Type"]> {
   const platform = platformOverride ?? usePlatform()
   const config = resolveTarget(typeof target === "string" ? { key: target } : target, platform)
 
-  const json = Schema.fromJsonString(schema)
+  const initialized = Persistence.withInitial(schema, initial)
+  const json = Schema.fromJsonString(initialized)
   const decode = Schema.decodeUnknownOption(json)
   const serialize = Schema.encodeSync(json)
   const normalize = (raw: string) => {
     const value = decode(raw)
     if (Option.isSome(value)) return serialize(value.value)
   }
-  const store = createStore<S["Type"]>(
-    initial === undefined
-      ? Schema.decodeUnknownSync(schema)({})
-      : Schema.decodeUnknownSync(Schema.toType(schema))(initial),
-  )
+  const store = createStore<S["Type"]>(Schema.decodeUnknownSync(Schema.toType(initialized))(initial))
   const isDesktop = platform.platform === "desktop" && !!platform.storage
   const draft = config.draft ? platform.draftStore : undefined
 

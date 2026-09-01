@@ -3,13 +3,14 @@ import { Schema } from "effect"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { Tab } from "@/shell/tabs/tabs"
 import { NotificationStore, openNotificationSession, type Notification } from "./notification"
+import { Persistence } from "@/runtime/persistence/schema"
 
 test("notification persistence validates and salvages individual notifications", () => {
   const valid: Notification[] = [
     { type: "turn-complete", time: 123, viewed: false, session: "session-1" },
     { type: "error", time: 124, viewed: true, error: { type: "api", message: "failed", status: 500 } },
   ]
-  const decode = Schema.decodeUnknownSync(NotificationStore)
+  const decode = Schema.decodeUnknownSync(Persistence.withInitial(NotificationStore, { list: [] }))
   const store = decode({
     list: [valid[0], null, { type: "unknown", time: 123, viewed: false }, { ...valid[1], error: "invalid" }, valid[1]],
   })

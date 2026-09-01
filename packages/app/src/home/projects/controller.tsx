@@ -27,7 +27,7 @@ export function createHomeProjectsController(home: HomeController) {
   const openSettings = useSettingsCommand()
   const serverManagement = useServerActionsController()
   const global = useGlobal()
-  const [_state, setState, _, ready] = persisted(Persist.global("home.servers"), HomeServersSchema)
+  const [_state, setState, _, ready] = persisted(Persist.global("home.servers"), HomeServersSchema, { collapsed: {} })
   const [state] = createResource(
     () => ready.promise ?? Promise.resolve(),
     (promise) => promise.then(() => _state),

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Schema, Option } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import { createMemoryComposerState, DEFAULT_PROMPT } from "./state"
 import { ComposerStore } from "./schema"
 
@@ -31,7 +32,9 @@ describe("prompt state initialization", () => {
   })
 
   test("parses persisted state into one trusted current shape", () => {
-    const parsed = Schema.decodeUnknownSync(ComposerStore)({
+    const parsed = Schema.decodeUnknownSync(
+      Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
+    )({
       prompt: [
         { type: "text", content: "hello", start: 0, end: 5 },
         { type: "skill", id: "effect", name: "Effect", content: "@effect", start: 5, end: 12 },

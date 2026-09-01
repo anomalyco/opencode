@@ -4,10 +4,17 @@ import { IconState, ModelState, ProjectState, VcsState, serverState } from "./pe
 import { createRoot } from "solid-js"
 import { isServer } from "solid-js/web"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
+
+const initial = { list: [], hidden: {}, projects: {}, lastProject: {}, recentlyClosed: {} }
+
+function serverSchema(canonical?: () => string | undefined) {
+  return Persistence.withInitial(serverState(canonical), initial)
+}
 
 describe("server persistence schema", () => {
   test("migrates legacy auth and writes only current server objects", () => {
-    const schema = serverState()
+    const schema = serverSchema()
     const input = {
       list: [
         "http://localhost:4096",
@@ -47,7 +54,7 @@ describe("server persistence schema", () => {
   })
 
   test("defaults missing or malformed fields and drops invalid entries independently", () => {
-    const decode = Schema.decodeUnknownSync(serverState())
+    const decode = Schema.decodeUnknownSync(serverSchema())
     const empty = { list: [], hidden: {}, projects: {}, lastProject: {}, recentlyClosed: {} }
     expect(decode({})).toEqual(empty)
     expect(decode({ list: null, hidden: [], projects: false, lastProject: 1, recentlyClosed: "bad" })).toEqual(empty)
@@ -66,7 +73,7 @@ describe("server persistence schema", () => {
   })
 
   test("moves canonical project buckets without changing server keys or unrelated scopes", () => {
-    const schema = serverState(() => "https://opencode.example.com")
+    const schema = serverSchema(() => "https://opencode.example.com")
     const state = Schema.decodeUnknownSync(schema)({
       list: ["https://opencode.example.com"],
       hidden: { "https://opencode.example.com": true },
@@ -99,7 +106,7 @@ describe("server persistence schema", () => {
 
   test("reads the latest canonical local prop on each decode", () => {
     const props: { canonicalLocalServer?: string } = {}
-    const schema = serverState(() => props.canonicalLocalServer)
+    const schema = serverSchema(() => props.canonicalLocalServer)
     const decode = Schema.decodeUnknownSync(schema)
     const input = {
       projects: { remote: [{ worktree: "/project", expanded: true }] },
@@ -115,7 +122,7 @@ describe("server persistence schema", () => {
   })
 
   test("migrates a last project without a project list", () => {
-    expect(Schema.decodeUnknownSync(serverState(() => "remote"))({ lastProject: { remote: "/project" } })).toEqual({
+    expect(Schema.decodeUnknownSync(serverSchema(() => "remote"))({ lastProject: { remote: "/project" } })).toEqual({
       list: [],
       hidden: {},
       projects: {},
@@ -127,7 +134,7 @@ describe("server persistence schema", () => {
 
 describe("model persistence schema", () => {
   test("defaults missing state and keeps valid entries beside malformed entries", () => {
-    const decode = Schema.decodeUnknownSync(ModelState)
+    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ModelState, { user: [], recent: [], variant: {} }))
     expect(decode({})).toEqual({ user: [], recent: [], variant: {} })
     expect(decode({ user: null, recent: 1, variant: [] })).toEqual({ user: [], recent: [], variant: {} })
     const state = decode({
@@ -154,7 +161,7 @@ describe("model persistence schema", () => {
 
 describe("directory cache schemas", () => {
   test("defaults missing and malformed VCS caches but retains optional branch metadata", () => {
-    const decode = Schema.decodeUnknownSync(VcsState)
+    const decode = Schema.decodeUnknownSync(Persistence.withInitial(VcsState, { value: undefined }))
     expect(decode({})).toEqual({ value: undefined })
     expect(decode({ value: null })).toEqual({ value: undefined })
     expect(decode({ value: { branch: 1 } })).toEqual({ value: undefined })
@@ -165,7 +172,7 @@ describe("directory cache schemas", () => {
   })
 
   test("validates project name, icon overrides and startup commands", () => {
-    const decode = Schema.decodeUnknownSync(ProjectState)
+    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ProjectState, { value: undefined }))
     expect(decode({})).toEqual({ value: undefined })
     expect(decode({ value: [] })).toEqual({ value: undefined })
     expect(decode({ value: { icon: { override: 1 } } })).toEqual({ value: undefined })
@@ -187,7 +194,7 @@ describe("directory cache schemas", () => {
   })
 
   test("validates optional icon strings", () => {
-    const decode = Schema.decodeUnknownSync(IconState)
+    const decode = Schema.decodeUnknownSync(Persistence.withInitial(IconState, { value: undefined }))
     expect(decode({})).toEqual({ value: undefined })
     expect(decode({ value: 42 })).toEqual({ value: undefined })
     expect(decode({ value: null })).toEqual({ value: undefined })
@@ -216,7 +223,7 @@ test.skipIf(isServer)(
       state: persisted(
         { ...Persist.global("server"), previousKey: "server.v3" },
         serverState(() => "https://remote.example"),
-        undefined,
+        initial,
         {
           platform: "desktop",
           windowID: "test",
@@ -248,7 +255,7 @@ test.skipIf(isServer)(
       const stored = values.get("opencode.global.dat:server")
       expect(stored).toBeDefined()
       if (!stored) throw new Error("server state was not written")
-      const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(serverState()))(stored)
+      const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(serverSchema()))(stored)
       expect(decoded.projects.local).toEqual([{ worktree: "/project", expanded: true }])
       expect(stored).not.toContain("username")
       expect(decoded.list).toEqual(root.state[0].list)

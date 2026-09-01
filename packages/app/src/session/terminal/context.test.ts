@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, mock, test } from "bun:test"
 import { ServerScope } from "@/runtime/server/scope"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Persist } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
 import type { Platform } from "@/runtime/platform/platform"
 import { Schema } from "effect"
 
@@ -20,11 +21,10 @@ beforeAll(async () => {
   const mod = await import("./context")
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
   clearWorkspaceTerminals = mod.clearWorkspaceTerminals
-  decodeTerminalState = Schema.decodeUnknownSync(mod.TerminalState)
+  const schema = Persistence.withInitial(mod.TerminalState, { all: [] })
+  decodeTerminalState = Schema.decodeUnknownSync(schema)
   roundTripTerminalState = (value) =>
-    Schema.decodeUnknownSync(mod.TerminalState)(
-      Schema.encodeSync(mod.TerminalState)(Schema.decodeUnknownSync(mod.TerminalState)(value)),
-    )
+    Schema.decodeUnknownSync(schema)(Schema.encodeSync(schema)(Schema.decodeUnknownSync(schema)(value)))
 })
 
 describe("getWorkspaceTerminalCacheKey", () => {

@@ -1,9 +1,20 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { settingsSchema, monoDefault, monoFontFamily, sansDefault, sansFontFamily, terminalFontFamily } from "./model"
+import { Persistence } from "@/runtime/persistence/schema"
+import {
+  settingsSchema,
+  settingsPersistence,
+  defaultSettings,
+  monoDefault,
+  monoFontFamily,
+  sansDefault,
+  sansFontFamily,
+  terminalFontFamily,
+} from "./model"
 
-const decode = Schema.decodeUnknownSync(settingsSchema)
-const encode = Schema.encodeSync(settingsSchema)
+const schema = Persistence.withInitial(settingsPersistence, defaultSettings)
+const decode = Schema.decodeUnknownSync(schema)
+const encode = Schema.encodeSync(schema)
 
 describe("settings reasoning mode migration", () => {
   test.each([
@@ -50,13 +61,26 @@ describe("settings reasoning mode migration", () => {
     const encoded = encode(settings)
     expect(encoded).toEqual(settings)
     expect(encoded).not.toHaveProperty("obsolete")
-    expect(encoded.general).not.toHaveProperty("obsolete")
-    expect(encoded.general).not.toHaveProperty("showReasoningSummaries")
+    expect(encoded).not.toHaveProperty("general.obsolete")
+    expect(encoded).not.toHaveProperty("general.showReasoningSummaries")
     expect(decode(encoded)).toEqual(settings)
   })
 })
 
 describe("settings schema", () => {
+  test("uses the supplied initial values independently of the current schema", () => {
+    const initial = {
+      ...defaultSettings,
+      general: { ...defaultSettings.general, reasoningMode: "hidden" as const, autoSave: false },
+      appearance: { ...defaultSettings.appearance, fontSize: 20 },
+    }
+    const restore = Schema.decodeUnknownSync(Persistence.withInitial(settingsPersistence, initial))
+    expect(restore({})).toEqual(initial)
+    expect(restore({ general: { reasoningMode: "invalid", showReasoningSummaries: true } })).toEqual(initial)
+    expect(restore({ general: { showReasoningSummaries: true } }).general.reasoningMode).toBe("full")
+    expect(() => Schema.decodeUnknownSync(settingsSchema)({})).toThrow()
+  })
+
   test("supplies the existing defaults for an empty document", () => {
     expect(decode({})).toEqual({
       general: {

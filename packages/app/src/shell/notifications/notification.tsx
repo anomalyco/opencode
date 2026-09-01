@@ -124,6 +124,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   const [store, setStore, _, ready] = persisted(
     Persist.serverGlobal(input.sdk.scope, "notification"),
     NotificationStore,
+    { list: [] },
   )
   const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
 

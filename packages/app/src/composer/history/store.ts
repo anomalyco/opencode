@@ -39,10 +39,12 @@ export function createComposerHistory() {
   const [normal, setNormal, normalInit] = persisted(
     Persist.prompt(Persist.global("prompt-history")),
     PromptHistoryState,
+    { entries: [] },
   )
   const [shell, setShell, shellInit] = persisted(
     Persist.prompt(Persist.global("prompt-history-shell")),
     PromptHistoryState,
+    { entries: [] },
   )
   const history = createComposerHistoryStore(normal, setNormal, shell, setShell)
   return {

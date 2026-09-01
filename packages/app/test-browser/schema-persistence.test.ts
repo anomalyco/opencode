@@ -6,14 +6,20 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 
 const Current = Schema.Struct({
-  enabled: Persistence.fallback(Schema.Boolean, () => true),
-  label: Persistence.fallback(Schema.String, () => "default"),
+  enabled: Schema.Boolean,
+  label: Schema.String,
 })
-const Stored = Schema.Union([Schema.Struct({ oldLabel: Schema.String }), Current]).pipe(
-  Schema.decodeTo(Schema.toType(Current), {
-    decode: SchemaGetter.transform((value) => ("oldLabel" in value ? { enabled: true, label: value.oldLabel } : value)),
-    encode: SchemaGetter.passthrough(),
-  }),
+const initial = { enabled: true, label: "default" }
+const Stored = Persistence.migrate(
+  Current,
+  Schema.Struct({ oldLabel: Schema.optional(Schema.String), label: Schema.optional(Schema.String) }).pipe(
+    Schema.decode({
+      decode: SchemaGetter.transform((value) =>
+        value.oldLabel === undefined ? value : { ...value, label: value.oldLabel },
+      ),
+      encode: SchemaGetter.passthrough(),
+    }),
+  ),
 )
 
 const web: Platform = {
@@ -45,7 +51,7 @@ describe("schema-backed persistence", () => {
     const key = `${target.storage}:${target.key}`
     localStorage.setItem(key, JSON.stringify({ oldLabel: "saved" }))
     createRoot((dispose) => {
-      const [state, setState, , ready] = persisted(target, Stored, undefined, web)
+      const [state, setState, , ready] = persisted(target, Stored, initial, web)
       expect(ready.promise).toBeUndefined()
       expect(state).toEqual({ enabled: true, label: "saved" })
       expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ enabled: true, label: "saved" })
@@ -62,7 +68,7 @@ describe("schema-backed persistence", () => {
       JSON.stringify({ enabled: "false", label: "kept", extra: 1 }),
     )
     createRoot((dispose) => {
-      const [state] = persisted(target, Stored, undefined, web)
+      const [state] = persisted(target, Stored, initial, web)
       expect(state).toEqual({ enabled: true, label: "kept" })
       dispose()
     })
@@ -87,7 +93,7 @@ describe("schema-backed persistence", () => {
       state: persisted(
         { ...Persist.global("schema-desktop"), previousKey: "old-schema" },
         Stored,
-        undefined,
+        initial,
         storage.platform,
       ),
     }))
@@ -120,7 +126,7 @@ describe("schema-backed persistence", () => {
     })
     const root = createRoot((dispose) => ({
       dispose,
-      state: persisted(Persist.global("schema-late"), Stored, undefined, storage.platform),
+      state: persisted(Persist.global("schema-late"), Stored, initial, storage.platform),
     }))
     try {
       root.state[1]("label", "new edit")
@@ -138,7 +144,7 @@ describe("schema-backed persistence", () => {
     const received = Promise.withResolvers<void>()
     const values: unknown[] = []
     const root = createRoot((dispose) => {
-      const [state] = persisted(target, Stored, undefined, web)
+      const [state] = persisted(target, Stored, initial, web)
       createComputed(() => {
         values.push({ enabled: state.enabled, label: state.label })
         if (state.label === "from another window") received.resolve()

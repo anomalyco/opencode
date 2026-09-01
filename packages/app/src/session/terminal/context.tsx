@@ -101,7 +101,7 @@ function createWorkspaceTerminalSession(
 ) {
   const location = { directory: sdk.directory }
 
-  const [store, setStore, _, ready] = persisted(terminalPersistTarget(scope, dir), TerminalState)
+  const [store, setStore, _, ready] = persisted(terminalPersistTarget(scope, dir), TerminalState, { all: [] })
   const [ui, setUi] = createStore({
     focus: undefined as { request: number; id?: string; pending: boolean } | undefined,
   })

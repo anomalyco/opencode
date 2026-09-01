@@ -62,11 +62,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   init: () => {
     const servers = useServers()
     const platform = usePlatform()
-    const [store, setStore, _, ready] = persisted(Persist.window("tabs"), TabStorage.Tabs)
-    const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), TabStorage.Recent)
-    const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos)
-    const [panes, setPanes, , panesReady] = persisted(Persist.window("tabs.panes"), TabStorage.Panes)
-    const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed)
+    const [store, setStore, _, ready] = persisted(Persist.window("tabs"), TabStorage.Tabs, [])
+    const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), TabStorage.Recent, {
+      key: undefined,
+    })
+    const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos, {})
+    const [panes, setPanes, , panesReady] = persisted(Persist.window("tabs.panes"), TabStorage.Panes, {})
+    const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
     const [pending, setPending] = createStore<Record<string, PendingSession | undefined>>({})
 
     const params = useParams()

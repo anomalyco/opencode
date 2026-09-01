@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { WorkspaceOnboardingSchema, ProviderTipSchema } from "@/new-session/view"
 import { ModelSelectionSchema } from "@/providers/models/selection"
+import { Persistence } from "@/runtime/persistence/schema"
 import { FileViewsSchema } from "@/workspaces/files/view-cache"
 import { languageSchema } from "@/runtime/i18n/language"
 import { HomeServersSchema } from "@/home/projects/controller"
@@ -9,8 +10,8 @@ import { ModelProvidersSchema } from "@/settings/models/models"
 
 describe("persisted consumer schemas", () => {
   test("onboarding and provider tip retain defaults and validate stored values", () => {
-    const onboarding = Schema.decodeUnknownSync(WorkspaceOnboardingSchema)
-    const tip = Schema.decodeUnknownSync(ProviderTipSchema)
+    const onboarding = Schema.decodeUnknownSync(Persistence.withInitial(WorkspaceOnboardingSchema, { used: false }))
+    const tip = Schema.decodeUnknownSync(Persistence.withInitial(ProviderTipSchema, { dismissedAt: 0 }))
     expect(onboarding({})).toEqual({ used: false })
     expect(onboarding({ used: "true" })).toEqual({ used: false })
     expect(onboarding({ used: true })).toEqual({ used: true })
@@ -22,7 +23,7 @@ describe("persisted consumer schemas", () => {
 
   test("collapse records recover malformed entries without losing valid siblings", () => {
     for (const schema of [HomeServersSchema, ModelProvidersSchema]) {
-      const decode = Schema.decodeUnknownSync(schema)
+      const decode = Schema.decodeUnknownSync(Persistence.withInitial(schema, { collapsed: {} }))
       expect(decode({})).toEqual({ collapsed: {} })
       expect(decode({ collapsed: [] })).toEqual({ collapsed: {} })
       expect(decode({ collapsed: { open: false, closed: true, invalid: "false" } })).toEqual({
@@ -32,19 +33,21 @@ describe("persisted consumer schemas", () => {
   })
 
   test("model selection migrates legacy picks and omits workspace state", () => {
-    const decode = Schema.decodeUnknownSync(ModelSelectionSchema)
+    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))
     expect(decode({})).toEqual({ session: {} })
     const state = decode({ pick: { __workspace__: { agent: "plan" }, session1: { agent: "build" } } })
     expect(state.session.session1?.agent).toBe("build")
     expect(state.session.__workspace__).toBeUndefined()
-    const encoded = Schema.encodeSync(Schema.fromJsonString(ModelSelectionSchema))(state)
+    const encoded = Schema.encodeSync(
+      Schema.fromJsonString(Persistence.withInitial(ModelSelectionSchema, { session: {} })),
+    )(state)
     expect(JSON.parse(encoded)).toEqual({ session: { session1: { agent: "build" } } })
     expect(decode(JSON.parse(encoded))).toEqual(state)
   })
 
   test("current model selections take precedence over legacy picks", () => {
     expect(
-      Schema.decodeUnknownSync(ModelSelectionSchema)({
+      Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))({
         session: {},
         pick: { session1: { agent: "plan" } },
       }),
@@ -52,7 +55,7 @@ describe("persisted consumer schemas", () => {
   })
 
   test("model selection validates nested model keys and preserves explicit null variants", () => {
-    const state = Schema.decodeUnknownSync(ModelSelectionSchema)({
+    const state = Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))({
       session: {
         good: { agent: "build", model: { providerID: "provider", modelID: "model", variant: "high" }, variant: null },
         partial: { agent: "plan", model: { providerID: "provider", modelID: 42 }, variant: false },
@@ -71,7 +74,7 @@ describe("persisted consumer schemas", () => {
   })
 
   test("file views validate scroll positions and line sides independently", () => {
-    const decode = Schema.decodeUnknownSync(FileViewsSchema)
+    const decode = Schema.decodeUnknownSync(Persistence.withInitial(FileViewsSchema, { file: {} }))
     expect(decode({})).toEqual({ file: {} })
     const state = decode({
       file: {
@@ -98,7 +101,7 @@ describe("persisted consumer schemas", () => {
   })
 
   test("language preserves runtime defaults and normalizes unsupported locales to English", () => {
-    const decode = Schema.decodeUnknownSync(languageSchema("fr"))
+    const decode = Schema.decodeUnknownSync(Persistence.withInitial(languageSchema, { locale: "fr" }))
     expect(decode({})).toEqual({ locale: "fr" })
     expect(decode({ locale: undefined })).toEqual({ locale: "fr" })
     expect(decode({ locale: 42 })).toEqual({ locale: "fr" })

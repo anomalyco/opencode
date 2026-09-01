@@ -6,7 +6,7 @@ import { pathKey } from "@/workspaces/path-key"
 import { ServerScope } from "@/runtime/server/scope"
 import { ServerHttp, ServerHttpBase, ServerKey, serverState } from "./persistence"
 
-type ServerState = ReturnType<typeof serverState>["Type"]
+type ServerState = ReturnType<typeof serverState>["current"]["Type"]
 // The store retains more history than is displayed. Consumers filter recently closed entries
 // against the live project list (dropping deleted projects) and then cap the visible count via
 // RECENTLY_CLOSED_DISPLAY_LIMIT. Retaining extra history ensures entries that are temporarily
@@ -205,6 +205,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
         previousKey: "server.v3",
       },
       serverState(() => props.canonicalLocalServer),
+      { list: [], hidden: {}, projects: {}, lastProject: {}, recentlyClosed: {} },
     )
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {

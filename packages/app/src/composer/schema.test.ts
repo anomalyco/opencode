@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import {
   CommentStore,
@@ -23,7 +24,9 @@ const comment = { id: "comment", path: "src/app.ts", selection: { start: 1, end:
 
 describe("composer persistence schemas", () => {
   test("defaults missing or invalid fields independently and normalizes the cursor", () => {
-    const decode = Schema.decodeUnknownSync(ComposerStore)
+    const decode = Schema.decodeUnknownSync(
+      Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
+    )
     expect(decode({})).toEqual({ prompt: DEFAULT_PROMPT, context: { items: [] } })
     const value = decode({
       prompt: [null, { type: "unknown" }],
@@ -51,7 +54,9 @@ describe("composer persistence schemas", () => {
   })
 
   test("drops invalid parts without losing valid mentions or optional field recovery", () => {
-    const value = Schema.decodeUnknownSync(ComposerStore)({
+    const value = Schema.decodeUnknownSync(
+      Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
+    )({
       prompt: [
         text,
         { type: "agent", content: "@build", start: 5, end: 11, name: "build" },
@@ -88,7 +93,11 @@ describe("composer persistence schemas", () => {
       providerID: "provider",
       modelID: "model",
     })
-    expect(Schema.decodeUnknownSync(ComposerStore)(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
+    expect(
+      Schema.decodeUnknownSync(
+        Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
+      )(Schema.encodeSync(ComposerStore)(value)),
+    ).toEqual(value)
   })
 
   test("preserves file source variants through canonical round trips", () => {
@@ -105,7 +114,9 @@ describe("composer persistence schemas", () => {
         text: sourceText,
       },
     ]
-    const value = Schema.decodeUnknownSync(ComposerStore)({
+    const value = Schema.decodeUnknownSync(
+      Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
+    )({
       prompt: sources.map((source) => ({
         type: "file",
         path: "src/app.ts",
@@ -118,11 +129,17 @@ describe("composer persistence schemas", () => {
     })
     expect(value.prompt).toHaveLength(3)
     expect(value.prompt.map((part) => part.type === "file" && part.source)).toEqual(sources)
-    expect(Schema.decodeUnknownSync(ComposerStore)(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
+    expect(
+      Schema.decodeUnknownSync(
+        Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
+      )(Schema.encodeSync(ComposerStore)(value)),
+    ).toEqual(value)
   })
 
   test("migrates inline images but never encodes dataUrl or unresolved references", () => {
-    const value = Schema.decodeUnknownSync(ComposerStore)({
+    const value = Schema.decodeUnknownSync(
+      Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
+    )({
       prompt: [
         { ...image, dataUrl: "data:image/png;base64,YQ==", sourcePath: "/image.png" },
         { ...image, blob: { id: "data:image/png;base64,Yg==" } },
@@ -140,11 +157,15 @@ describe("composer persistence schemas", () => {
     })
     const encoded = Schema.encodeSync(ComposerStore)(value)
     expect(JSON.stringify(encoded)).not.toContain("dataUrl")
-    expect(Schema.decodeUnknownSync(ComposerStore)(encoded)).toEqual(value)
+    expect(
+      Schema.decodeUnknownSync(
+        Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
+      )(encoded),
+    ).toEqual(value)
   })
 
   test("migrates legacy history arrays and recovers entries, parts, and comments independently", () => {
-    const value = Schema.decodeUnknownSync(PromptHistoryState)({
+    const value = Schema.decodeUnknownSync(Persistence.withInitial(PromptHistoryState, { entries: [] }))({
       entries: [
         [text, null, { ...image, dataUrl: "data:image/png;base64,YQ==" }],
         null,
@@ -162,8 +183,12 @@ describe("composer persistence schemas", () => {
     const encoded = Schema.encodeSync(PromptHistoryState)(value)
     expect(encoded.entries?.every((entry) => !Array.isArray(entry))).toBe(true)
     expect(JSON.stringify(encoded)).not.toContain("dataUrl")
-    expect(Schema.decodeUnknownSync(PromptHistoryState)(encoded)).toEqual(value)
-    expect(Schema.decodeUnknownSync(PromptHistoryState)({ entries: "invalid" })).toEqual({ entries: [] })
+    expect(Schema.decodeUnknownSync(Persistence.withInitial(PromptHistoryState, { entries: [] }))(encoded)).toEqual(
+      value,
+    )
+    expect(
+      Schema.decodeUnknownSync(Persistence.withInitial(PromptHistoryState, { entries: [] }))({ entries: "invalid" }),
+    ).toEqual({ entries: [] })
   })
 
   test("recovers comments per file and entry without discarding healthy siblings", () => {
@@ -174,7 +199,7 @@ describe("composer persistence schemas", () => {
       comment: "note",
       time: 1,
     }
-    const value = Schema.decodeUnknownSync(CommentStore)({
+    const value = Schema.decodeUnknownSync(Persistence.withInitial(CommentStore, { comments: {} }))({
       comments: {
         "src/app.ts": [line, null, { ...line, time: "bad" }, { ...line, selection: { start: 2, end: 4, side: "bad" } }],
         "broken.ts": { invalid: true },
@@ -184,8 +209,16 @@ describe("composer persistence schemas", () => {
     expect(value.comments["src/app.ts"]).toEqual([line, { ...line, selection: { start: 2, end: 4 } }])
     expect(value.comments["broken.ts"]).toEqual([])
     expect(value.comments["healthy.ts"]).toEqual([{ ...line, file: "healthy.ts" }])
-    expect(Schema.decodeUnknownSync(CommentStore)(Schema.encodeSync(CommentStore)(value))).toEqual(value)
-    expect(Schema.decodeUnknownSync(CommentStore)({})).toEqual({ comments: {} })
-    expect(Schema.decodeUnknownSync(CommentStore)({ comments: [] })).toEqual({ comments: {} })
+    expect(
+      Schema.decodeUnknownSync(Persistence.withInitial(CommentStore, { comments: {} }))(
+        Schema.encodeSync(CommentStore)(value),
+      ),
+    ).toEqual(value)
+    expect(Schema.decodeUnknownSync(Persistence.withInitial(CommentStore, { comments: {} }))({})).toEqual({
+      comments: {},
+    })
+    expect(Schema.decodeUnknownSync(Persistence.withInitial(CommentStore, { comments: {} }))({ comments: [] })).toEqual(
+      { comments: {} },
+    )
   })
 })

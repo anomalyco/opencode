@@ -156,20 +156,20 @@ export function createChildStoreManager(input: {
     if (!key) console.error("No directory provided")
     if (!children[key]) {
       const vcs = runWithOwner(input.owner, () =>
-        input.persist(Persist.serverWorkspace(input.scope, directory, "vcs"), VcsState),
+        input.persist(Persist.serverWorkspace(input.scope, directory, "vcs"), VcsState, { value: undefined }),
       )
       if (!vcs) throw new Error(input.translate("error.childStore.persistedCacheCreateFailed"))
       const vcsStore = vcs[0]
       vcsCache.set(key, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
 
       const meta = runWithOwner(input.owner, () =>
-        input.persist(Persist.serverWorkspace(input.scope, directory, "project"), ProjectState),
+        input.persist(Persist.serverWorkspace(input.scope, directory, "project"), ProjectState, { value: undefined }),
       )
       if (!meta) throw new Error(input.translate("error.childStore.persistedProjectMetadataCreateFailed"))
       metaCache.set(key, { store: meta[0], setStore: meta[1], ready: meta[3] })
 
       const icon = runWithOwner(input.owner, () =>
-        input.persist(Persist.serverWorkspace(input.scope, directory, "icon"), IconState),
+        input.persist(Persist.serverWorkspace(input.scope, directory, "icon"), IconState, { value: undefined }),
       )
       if (!icon) throw new Error(input.translate("error.childStore.persistedProjectIconCreateFailed"))
       iconCache.set(key, { store: icon[0], setStore: icon[1], ready: icon[3] })

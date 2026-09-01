@@ -6,9 +6,10 @@ import { findSessionTab, sessionIDHasOpenTab, tabHref, tabKey, type SessionTab, 
 import { Schema } from "effect"
 import { TabStorage } from "./schema"
 import type { ServerConnection } from "@/runtime/server/registry"
+import { Persistence } from "@/runtime/persistence/schema"
 
 const server = "local\nhttp://localhost:4096" as ServerConnection.Key
-const decodeTabs = Schema.decodeUnknownSync(TabStorage.Tabs)
+const decodeTabs = Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Tabs, []))
 
 function sessionTab(sessionId: string): SessionTab {
   return { type: "session", server, sessionId }
@@ -56,7 +57,7 @@ describe("tab migration", () => {
 
   test("salvages valid closed session tabs", () => {
     expect(
-      Schema.decodeUnknownSync(TabStorage.Closed)([
+      Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Closed, []))([
         { tab: sessionTab("a"), index: 1 },
         { tab: sessionTab("b"), index: -1 },
         { tab: { type: "draft", server, draftID: "d", directory: "/project" }, index: 0 },
@@ -66,7 +67,9 @@ describe("tab migration", () => {
   })
 
   test("validates auxiliary tab state", () => {
-    expect(Schema.decodeUnknownSync(TabStorage.Recent)({ key: 1 })).toEqual({ key: undefined })
+    expect(
+      Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Recent, { key: undefined }))({ key: 1 }),
+    ).toEqual({ key: undefined })
     expect(Schema.decodeUnknownSync(TabStorage.Infos)({})).toEqual({})
     expect(Schema.decodeUnknownSync(TabStorage.Panes)({})).toEqual({})
     expect(Schema.decodeUnknownSync(TabStorage.Infos)({ tab: { title: "Title", directory: "/project" } })).toEqual({

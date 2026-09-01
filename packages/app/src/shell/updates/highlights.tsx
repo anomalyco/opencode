@@ -12,7 +12,7 @@ import { DialogReleaseNotes, type Highlight } from "@/shell/updates/release-note
 const CHANGELOG_URL = "https://opencode.ai/changelog.json"
 
 export const HighlightsStore = Persistence.struct({
-  version: Persistence.fallback(Schema.UndefinedOr(Schema.String), () => undefined),
+  version: Schema.UndefinedOr(Schema.String),
 })
 
 type ParsedRelease = {
@@ -146,7 +146,7 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
     const platform = usePlatform()
     const dialog = useDialog()
     const settings = useSettings()
-    const [store, setStore, _, ready] = persisted("highlights.v1", HighlightsStore)
+    const [store, setStore, _, ready] = persisted("highlights.v1", HighlightsStore, { version: undefined })
 
     const [range, setRange] = createStore({
       from: undefined as string | undefined,
