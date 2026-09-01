@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -13,6 +13,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Session } from "@opencode-ai/core/session"
@@ -150,7 +151,7 @@ test("compaction points an existing summary to the following history", () => {
   expect(prompt).not.toContain("conversation history above")
 })
 
-it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
+it.effect("auto compaction estimates current content against the buffered prompt ceiling", () =>
   Effect.gen(function* () {
     const compaction = yield* SessionCompaction.Service
     const session = Session.Info.make({
@@ -173,8 +174,8 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
           id: SessionMessage.ID.make("msg_assistant"),
           type: "assistant",
           agent: Agent.defaultID,
-          model: { id: "test-model", providerID: "test-provider" },
-          content: [],
+          model: resolved.ref,
+          content: [{ type: "text", text: "Done" }],
           tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, completed: 0 },
         }),
@@ -192,6 +193,65 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
     const outputLimited = { context: 100_000, output: 30_000 }
     expect(compaction.required(input(69_999, outputLimited))).toBe(false)
     expect(compaction.required(input(70_000, outputLimited))).toBe(true)
+
+    const assistant = input(79_000, contextLimited).messages[0]
+    const tool = SessionMessage.AssistantTool.make({
+      type: "tool",
+      id: "call_read",
+      name: "read",
+      state: { status: "completed", input: {}, content: [{ type: "text", text: "x".repeat(4_000) }] },
+      time: { created: DateTime.makeUnsafe(0) },
+    })
+    const grown = { ...input(79_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
+    expect(SessionCompaction.estimateTokens(grown)).toBe(80_000)
+    expect(compaction.required(grown)).toBe(true)
+
+    const interrupted = { ...assistant, id: SessionMessage.ID.create(), tokens: undefined }
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [...grown.messages, interrupted] })).toBe(80_001)
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [interrupted] })).toBe(1)
+    expect(
+      SessionCompaction.estimateTokens({
+        ...grown,
+        messages: [{ ...interrupted, tokens: input(0, contextLimited).messages[0].tokens }],
+      }),
+    ).toBe(1)
+
+    const request = {
+      system: [SystemPart.make("s".repeat(40))],
+      tools: [{ name: "read", description: "d".repeat(40), inputSchema: {} }],
+      messages: [Message.user("u".repeat(40))],
+    }
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [], request })).toBe(32)
+    expect(SessionCompaction.estimateTokens({ ...grown, request })).toBe(32)
+    expect(
+      compaction.required({
+        ...grown,
+        messages: [],
+        request: { ...request, system: [SystemPart.make("s".repeat(320_000))] },
+      }),
+    ).toBe(true)
+
+    const media = [
+      { type: "file", mime: "image/png", uri: `data:image/png;base64,${"a".repeat(100_000)}` },
+      { type: "file", mime: "application/pdf", uri: `data:application/pdf;base64,${"a".repeat(100_000)}` },
+    ] as const
+    const messages = [
+      { ...assistant, content: [{ ...tool, state: { status: "completed" as const, input: {}, content: media } }] },
+    ]
+    expect(SessionCompaction.estimateTokens({ ...grown, messages })).toBe(82_500)
+    const prepared = { ...request, system: [], tools: [], messages: toLLMMessages(messages, resolved.ref) }
+    prepared.messages.push(
+      Message.user(media.map((file) => ({ type: "media" as const, mediaType: file.mime, data: file.uri }))),
+    )
+    expect(SessionCompaction.estimateTokens({ ...grown, messages, request: prepared })).toBe(86_000)
+
+    const switched = SessionMessage.ModelSelected.make({
+      id: SessionMessage.ID.create(),
+      type: "model-switched",
+      model: resolved.ref,
+      time: { created: DateTime.makeUnsafe(0) },
+    })
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [assistant, switched] })).toBe(1)
   }),
 )
 

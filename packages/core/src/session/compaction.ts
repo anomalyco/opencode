@@ -1,6 +1,6 @@
 export * as SessionCompaction from "./compaction.js"
 
-import { LLMClient, LLMEvent, Message } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, Message, type ContentPart, type LLMRequest } from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/schema/agent"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
@@ -17,6 +17,7 @@ import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
 import { SessionUsage } from "./usage.js"
 import { State } from "../state.js"
+import { toLLMMessages } from "./runner/to-llm-message.js"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 15_000
@@ -71,7 +72,9 @@ export type AutoInput = {
   readonly prepare: SessionModelRequest.Interface["prepare"]
 }
 
-type RequiredInput = Pick<AutoInput, "messages" | "resolved">
+type RequiredInput = Pick<AutoInput, "messages" | "resolved"> & {
+  readonly request?: Pick<LLMRequest, "system" | "tools" | "messages">
+}
 
 export type ManualInput = {
   readonly session: SessionSchema.Info
@@ -106,6 +109,67 @@ export interface Interface extends State.Transformable<Draft> {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
+
+export const estimateTokens = (input: RequiredInput) => {
+  const request = input.request ?? {
+    system: [],
+    tools: [],
+    messages: toLLMMessages(input.messages, input.resolved.ref),
+  }
+  const estimates = request.messages.map((message) =>
+    message.content.reduce((sum, part) => sum + estimatePart(part), 0),
+  )
+  const full =
+    request.system.reduce((sum, part) => sum + Token.estimate(part.text), 0) +
+    request.tools.reduce(
+      (sum, tool) => sum + Token.estimate(tool.name + tool.description + JSON.stringify(tool.inputSchema)),
+      0,
+    ) +
+    estimates.reduce((sum, tokens) => sum + tokens, 0)
+  const boundary = input.messages.findLastIndex(
+    (message) =>
+      message.type === "model-switched" ||
+      message.type === "agent-switched" ||
+      (message.type === "compaction" && message.status === "completed"),
+  )
+  const last = input.messages
+    .slice(boundary + 1)
+    .findLast(
+      (message) =>
+        message.type === "assistant" &&
+        !message.error &&
+        message.model.providerID === input.resolved.ref.providerID &&
+        message.model.id === input.resolved.ref.id &&
+        message.tokens !== undefined &&
+        message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
+    )
+  if (last?.type !== "assistant" || !last.tokens) return full
+  const index = request.messages.findLastIndex((message) => message.role === "assistant" && message.id === last.id)
+  if (index < 0) return full
+  // Local tool results follow their assistant in the model request and are not covered by its usage.
+  const used =
+    last.tokens.input + last.tokens.cache.read + last.tokens.cache.write + last.tokens.output + last.tokens.reasoning
+  return Math.max(full, used + estimates.slice(index + 1).reduce((sum, tokens) => sum + tokens, 0))
+}
+
+const estimateMedia = (mime: string) => {
+  const type = mime.toLowerCase()
+  return type.startsWith("image/") ? 1_500 : type === "application/pdf" ? 2_000 : 0
+}
+
+const estimatePart = (part: ContentPart): number => {
+  if (part.type === "text" || part.type === "reasoning") return Token.estimate(part.text)
+  if (part.type === "media") return estimateMedia(part.mediaType)
+  if (part.type === "tool-call") return Token.estimate(part.name + (JSON.stringify(part.input) ?? ""))
+  if (part.result.type === "content")
+    return part.result.value.reduce(
+      (sum, content) => sum + (content.type === "text" ? Token.estimate(content.text) : estimateMedia(content.mime)),
+      0,
+    )
+  return Token.estimate(
+    typeof part.result.value === "string" ? part.result.value : (JSON.stringify(part.result.value) ?? ""),
+  )
+}
 
 export const truncateToolOutput = (value: string) => {
   if (value.length <= TOOL_OUTPUT_MAX_CHARS) return value
@@ -367,24 +431,12 @@ export const layer = Layer.effect(
       const limit = input.resolved.limit
       const context = limit.context
       if (context <= 0) return false
-      const last = input.messages.findLast(
-        (message): message is SessionMessage.Assistant & { tokens: NonNullable<SessionMessage.Assistant["tokens"]> } =>
-          message.type === "assistant" && message.tokens !== undefined,
-      )
-      if (!last) return false
       const output = Math.min(limit.output, OUTPUT_TOKEN_MAX)
       const promptCeiling = Math.min(
         limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,
         context - Math.max(output, config.buffer),
       )
-      const used =
-        last.tokens.input +
-        last.tokens.output +
-        last.tokens.reasoning +
-        last.tokens.cache.read +
-        last.tokens.cache.write
-      if (used <= 0) return false
-      return used >= promptCeiling
+      return estimateTokens(input) >= promptCeiling
     }
     const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
       const content = planContent(input.messages, state.get().tokens)
