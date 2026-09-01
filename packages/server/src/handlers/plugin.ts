@@ -17,7 +17,7 @@ export const PluginHandler = HttpApiBuilder.group(Api, "server.plugin", (handler
     .handle("plugin.update", (ctx) =>
       Effect.gen(function* () {
         const supervisor = yield* PluginSupervisor.Service
-        yield* supervisor.flush
+        yield* supervisor.awaitActivation
         const plugins = yield* Plugin.Service
         if (
           !(yield* plugins.list()).some(

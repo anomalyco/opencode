@@ -206,7 +206,7 @@ const makeRunnerState = () => {
     systemUnavailable: false,
     systemLoadHook: Effect.void,
     skillBaselines: new Map<Agent.ID, string>(),
-    pluginFlushHook: Effect.void,
+    pluginActivationHook: Effect.void,
     authorizations: new Array<Tool.Context>(),
     executions: new Array<string>(),
     closedTransports: new Array<Session.ID>(),
@@ -390,7 +390,7 @@ const layer = Layer.unwrap(
     const pluginSupervisor = Layer.succeed(
       PluginSupervisor.Service,
       PluginSupervisor.Service.of({
-        flush: Effect.suspend(() => state.pluginFlushHook),
+        awaitActivation: Effect.suspend(() => state.pluginActivationHook),
       }),
     )
     const promptCatalog = Layer.mock(Catalog.Service, {
@@ -1840,7 +1840,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("waits for initial plugin readiness before constructing the model request", function* (s) {
     const release = yield* Deferred.make<void>()
-    s.pluginFlushHook = Deferred.await(release)
+    s.pluginActivationHook = Deferred.await(release)
     yield* s.session.prompt({ sessionID, text: "Wait for plugins", resume: false })
 
     s.requests.length = 0

@@ -38,7 +38,7 @@ export const make = Effect.fn("SessionRevert.make")(function* () {
   const snapshot = yield* Snapshot.Service
 
   const stage: Interface["stage"] = Effect.fn("SessionRevert.stage")(function* (input) {
-    yield* plugins.flush
+    yield* plugins.awaitActivation
     const original = input.session.revert?.snapshot
       ? Snapshot.ID.make(input.session.revert.snapshot)
       : yield* snapshot.capture()
@@ -66,7 +66,7 @@ export const make = Effect.fn("SessionRevert.make")(function* () {
   })
 
   const clear: Interface["clear"] = Effect.fn("SessionRevert.clear")(function* (session) {
-    yield* plugins.flush
+    yield* plugins.awaitActivation
     if (!session.revert) return
     const original = session.revert.snapshot ? Snapshot.ID.make(session.revert.snapshot) : undefined
     if (original)

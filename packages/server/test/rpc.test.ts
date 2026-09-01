@@ -48,7 +48,7 @@ const fixture = Effect.fn(function* (plugins: readonly Plugin.Plugin[]) {
     boot: (directory: string) =>
       Effect.gen(function* () {
         const supervisor = yield* PluginSupervisor.Service
-        yield* supervisor.flush
+        yield* supervisor.awaitActivation
       }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory) })))),
     call: (
       route: string,

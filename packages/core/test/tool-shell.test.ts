@@ -129,7 +129,7 @@ const shellPluginSupervisor = makeLocationNode({
   service: PluginSupervisor.Service,
   layer: Layer.effect(
     PluginSupervisor.Service,
-    registerToolPlugin(ShellTool.Plugin).pipe(Effect.as(PluginSupervisor.Service.of({ flush: Effect.void }))),
+    registerToolPlugin(ShellTool.Plugin).pipe(Effect.as(PluginSupervisor.Service.of({ awaitActivation: Effect.void }))),
   ),
   deps: [
     Config.node,
@@ -220,7 +220,7 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
     const locationLayer = locations.get(location)
     return yield* Effect.gen(function* () {
       const plugins = yield* PluginSupervisor.Service
-      yield* plugins.flush
+      yield* plugins.awaitActivation
       const registry = yield* Tool.Service
       return yield* body(registry)
     }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))

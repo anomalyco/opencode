@@ -107,7 +107,9 @@ const subagentPluginSupervisor = makeLocationNode({
   service: PluginSupervisor.Service,
   layer: Layer.effect(
     PluginSupervisor.Service,
-    registerToolPlugin(SubagentTool.Plugin).pipe(Effect.as(PluginSupervisor.Service.of({ flush: Effect.void }))),
+    registerToolPlugin(SubagentTool.Plugin).pipe(
+      Effect.as(PluginSupervisor.Service.of({ awaitActivation: Effect.void })),
+    ),
   ),
   deps: [Agent.node, Config.node, Permission.node, PluginRuntime.node, Tool.node],
 })
@@ -155,7 +157,9 @@ const completionIt = testEffect(
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
-    yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(locations.get(location)))
+    yield* PluginSupervisor.Service.use((supervisor) => supervisor.awaitActivation).pipe(
+      Effect.provide(locations.get(location)),
+    )
     yield* Agent.Service.use((agents) =>
       agents.transform((draft) => {
         // The caller identity used by executeTool; subagent permission asserts against it.

@@ -250,7 +250,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           Layer.build(locations.get(Location.Ref.make({ directory: AbsolutePath.make(secondDirectory) }))),
         ])
         yield* Effect.forEach([primary, secondary], (context) =>
-          PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context)),
+          PluginSupervisor.Service.use((supervisor) => supervisor.awaitActivation).pipe(Effect.provide(context)),
         )
         expect(activations).toBe(2)
 

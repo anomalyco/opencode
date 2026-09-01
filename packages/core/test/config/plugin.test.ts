@@ -490,7 +490,7 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
-  it.live("unblocks flush when plugin activation fails", () =>
+  it.live("unblocks awaitActivation when plugin activation fails", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
       yield* sdk.register(define({ id: "duplicate-id", effect: () => Effect.void }))
@@ -530,9 +530,9 @@ describe("PluginSupervisor config", () => {
         const plugins = yield* Plugin.Service
         expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toContain("opencode.provider.openai")
         const supervisor = yield* PluginSupervisor.Service
-        expect(Option.isNone(yield* supervisor.flush.pipe(Effect.timeoutOption("20 millis")))).toBeTrue()
+        expect(Option.isNone(yield* supervisor.awaitActivation.pipe(Effect.timeoutOption("20 millis")))).toBeTrue()
         yield* Effect.promise(() => Bun.write(path.join(global.tmp, "cold-plugin", "release"), ""))
-        yield* supervisor.flush.pipe(Effect.timeout("2 seconds"))
+        yield* supervisor.awaitActivation.pipe(Effect.timeout("2 seconds"))
         expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toContain("cold-plugin")
       }),
     ),
@@ -542,7 +542,7 @@ describe("PluginSupervisor config", () => {
 
 const ready = Effect.fnUntraced(function* () {
   const supervisor = yield* PluginSupervisor.Service
-  yield* supervisor.flush
+  yield* supervisor.awaitActivation
 })
 
 const waitForFile = (file: string) =>

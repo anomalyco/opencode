@@ -77,7 +77,7 @@ describe("Instance vanilla", () => {
           const read = (ref: Location.Ref) =>
             Effect.gen(function* () {
               const supervisor = yield* PluginSupervisor.Service
-              yield* supervisor.flush
+              yield* supervisor.awaitActivation
               const config = yield* Config.Service
               const discovery = yield* InstructionDiscovery.Service
               const tools = yield* Tool.Service
@@ -145,7 +145,7 @@ describe("Instance vanilla", () => {
           const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
           yield* Effect.gen(function* () {
             const supervisor = yield* PluginSupervisor.Service
-            yield* supervisor.flush
+            yield* supervisor.awaitActivation
             const config = yield* Config.Service
             // Only the pathless host-injected document; nothing file-backed.
             const entries = yield* config.entries()

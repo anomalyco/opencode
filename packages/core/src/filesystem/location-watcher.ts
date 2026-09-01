@@ -93,7 +93,7 @@ const layer = Layer.effect(
     )
     yield* policy.observe(reconcile)
     yield* Effect.gen(function* () {
-      yield* plugins.flush
+      yield* plugins.awaitActivation
       yield* reconcile(policy.current())
     }).pipe(
       Effect.catchCauseIf(
