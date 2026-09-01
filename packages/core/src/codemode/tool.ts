@@ -51,7 +51,7 @@ type Tools = {
 
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
-  readonly namespaces: ReadonlyMap<string, ToolNamespace>
+  readonly namespaces?: ReadonlyMap<string, ToolNamespace>
 }
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
@@ -173,7 +173,7 @@ function runtime(
 ) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
-  for (const namespace of inventory.namespaces.values()) getNode(root, namespace.name).namespace = namespace
+  for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
     const child = definition(registration)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
