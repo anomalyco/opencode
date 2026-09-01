@@ -283,7 +283,7 @@
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
-    padding: 2px 4px;
+    padding: 0 4px;
     border-radius: 4px;
     background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
   }
