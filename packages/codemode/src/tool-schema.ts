@@ -83,7 +83,7 @@ const jsdoc = (description: string | undefined, summary: string, pad: string): s
   const lines = (description ?? "").split("\n").map((line) => line.replace(/\s+$/, ""))
   while (lines.length > 0 && lines[0]!.trim() === "") lines.shift()
   while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()
-  const inline = `${lines[0]}${/[.!?:;]$/.test(lines[0] ?? "") ? " " : ". "}${summary}`
+  const inline = lines.length === 1 ? `${lines[0]}${lines[0].endsWith(".") ? "" : "."} ${summary}` : summary
   const content =
     summary && lines.length === 1 && !summary.includes("\n") && pad.length + inline.length + 7 <= 120
       ? [inline]

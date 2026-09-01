@@ -240,19 +240,18 @@ describe("pretty signature rendering", () => {
     )
   })
 
-  test.each(["Maximum attempts", "Maximum attempts.", "Maximum attempts!"])(
-    "combines a short description (%s) with its summary",
-    (description) => {
-      expect(
-        jsonSchemaToTypeScript(
-          { properties: { attempts: { description, type: "integer", minimum: 1, default: 3 } } },
-          true,
-        ),
-      ).toContain(
-        `  /** ${description}${description === "Maximum attempts" ? "." : ""} @default 3 @integer @minimum 1 */\n`,
-      )
-    },
-  )
+  test.each([
+    ["Maximum attempts", "Maximum attempts."],
+    ["Maximum attempts.", "Maximum attempts."],
+    ["Maximum attempts!", "Maximum attempts!."],
+  ])("combines a short description (%s) with its summary", (description, expected) => {
+    expect(
+      jsonSchemaToTypeScript(
+        { properties: { attempts: { description, type: "integer", minimum: 1, default: 3 } } },
+        true,
+      ),
+    ).toContain(`  /** ${expected} @default 3 @integer @minimum 1 */\n`)
+  })
 
   test("keeps multiline descriptions intact and appends a compact summary", () => {
     expect(
