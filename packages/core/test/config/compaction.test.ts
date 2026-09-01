@@ -153,7 +153,7 @@ const input = (tokens: number) => ({
       id: SessionMessage.ID.make("msg_compaction_config"),
       type: "assistant",
       agent: Agent.defaultID,
-      model: resolved.ref,
+      model: { id: "test-model", providerID: "test-provider" },
       content: [],
       tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 0, completed: 0 },

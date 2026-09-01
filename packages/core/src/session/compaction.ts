@@ -111,19 +111,10 @@ export interface Interface extends State.Transformable<Draft> {
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
 export const estimateTokens = (input: RequiredInput) => {
-  const boundary = input.messages.findLastIndex(
-    (message) =>
-      message.type === "model-switched" ||
-      message.type === "agent-switched" ||
-      (message.type === "compaction" && message.status === "completed"),
-  )
   const index = input.messages.findLastIndex(
-    (message, index) =>
-      index > boundary &&
+    (message) =>
       message.type === "assistant" &&
       !message.error &&
-      message.model.providerID === input.resolved.ref.providerID &&
-      message.model.id === input.resolved.ref.id &&
       message.tokens !== undefined &&
       message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
   )

@@ -173,7 +173,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
           id: SessionMessage.ID.make("msg_assistant"),
           type: "assistant",
           agent: Agent.defaultID,
-          model: resolved.ref,
+          model: { id: "test-model", providerID: "test-provider" },
           content: [{ type: "text", text: "Done" }],
           tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, completed: 0 },
@@ -232,13 +232,6 @@ it.effect("auto compaction estimates current content against the buffered prompt
     })
     expect(SessionCompaction.estimateTokens({ ...grown, messages: [...messages, user] })).toBe(86_000)
 
-    const switched = SessionMessage.ModelSelected.make({
-      id: SessionMessage.ID.create(),
-      type: "model-switched",
-      model: resolved.ref,
-      time: { created: DateTime.makeUnsafe(0) },
-    })
-    expect(SessionCompaction.estimateTokens({ ...grown, messages: [assistant, switched] })).toBe(1)
     const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
       id: SessionMessage.ID.create(),
       type: "compaction",
