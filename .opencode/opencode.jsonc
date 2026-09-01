@@ -14,7 +14,7 @@
             "reasoning": true
           },
           "interleaved": {
-            "field": "reasoning_content"
+            "field": "reasoning"
           }
         },
       },
