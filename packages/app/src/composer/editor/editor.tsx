@@ -114,10 +114,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
       <form
         data-component="composer"
         data-dock-border-underlay={props.borderUnderlay ? "true" : undefined}
-        class="group/composer relative min-h-[96px] w-full overflow-clip rounded-xl"
+        class="group/composer relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
         classList={{
-          "bg-v2-background-bg-layer-01": props.borderUnderlay,
-          "bg-v2-background-bg-base": !props.borderUnderlay,
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
           "border border-v2-icon-icon-info border-dashed": state.drag === "active",
         }}
