@@ -1,4 +1,4 @@
-import type { Browser } from "@opencode-ai/browser/rpc"
+import type { Browser } from "@opencode-ai/schema/browser"
 import electron, { type BrowserWindow } from "electron"
 
 type AXNode = {
