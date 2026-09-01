@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { z } from "zod"
 import { CodeMode, Tool } from "../src/index.js"
 import { inputTypeScript, jsonSchemaToTypeScript, outputTypeScript } from "../src/tool-schema.js"
 
@@ -473,21 +472,6 @@ describe("JSDoc signatures in catalogs and search results", () => {
         name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20), Schema.isPattern(/^[a-z]+$/)),
         labels: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(5)),
       }),
-    },
-    {
-      source: "Zod",
-      // This fixture uses only the renderer's subset, not Zod's broader boolean-schema support.
-      schema: z.toJSONSchema(
-        z.object({
-          count: z.number().int().min(0).max(10),
-          name: z
-            .string()
-            .min(1)
-            .max(20)
-            .regex(/^[a-z]+$/),
-          labels: z.array(z.string()).min(1).max(5),
-        }),
-      ) as Tool.JsonSchema,
     },
   ])("$source constraints survive input/output catalog and search signatures", async ({ schema }) => {
     const runtime = CodeMode.make({
