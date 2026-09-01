@@ -30,6 +30,33 @@ export function createDesktopPlatform(
     windowID: windowState.id,
     ...createDesktopFiles(api, os, ACCEPTED_FILE_EXTENSIONS),
     ...createDesktopStorage(api),
+    browserPane: {
+      register(target, onEvent) {
+        const bindingID = crypto.randomUUID()
+        let closed = false
+        const dispose = api.browserPane.onEvent((value) => {
+          if (!closed && value.bindingID === bindingID) onEvent(value.event)
+        })
+        const ready = api.browserPane.request({ type: "register", bindingID, target })
+        return {
+          setLayout(layout) {
+            if (!closed)
+              void ready
+                .then(() =>
+                  api.browserPane.send({ type: "layout", bindingID, ...(layout === undefined ? {} : { layout }) }),
+                )
+                .catch(() => undefined)
+          },
+          command: (command) => ready.then(() => api.browserPane.request({ type: "command", bindingID, command })),
+          close() {
+            if (closed) return
+            closed = true
+            dispose()
+            void ready.then(() => api.browserPane.request({ type: "close", bindingID })).catch(() => undefined)
+          },
+        }
+      },
+    },
     updater,
     exportDebugLogs: () => api.exportDebugLogs(),
     setForceFocus: (enabled) => api.setForceFocus(enabled),
