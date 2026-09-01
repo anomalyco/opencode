@@ -625,3 +625,62 @@ test("content-filter finish preserves partial streamed text and never ends the s
     error: { type: "provider.content-filter" },
   })
 })
+
+test("reasoning-only length finish retains evidence and fails step closeout", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.reasoningStart({ id: "reasoning" }),
+        LLMEvent.reasoningDelta({ id: "reasoning", text: "Thinking without an answer" }),
+        LLMEvent.reasoningEnd({ id: "reasoning" }),
+        LLMEvent.stepFinish({ index: 0, reason: { normalized: "length", raw: "max_tokens" } }),
+      ],
+      (event) => publisher.publish(event),
+      { discard: true },
+    ),
+  )
+
+  expect(publisher.record()).toMatchObject({
+    outputStarted: true,
+    providerFailed: true,
+    failure: {
+      type: "provider.invalid-output",
+      message: "The model reached its output limit before producing text or a tool call",
+    },
+    finish: { finish: "length", rawFinish: "max_tokens" },
+  })
+  await Effect.runPromise(publisher.publishStepFailure())
+  expect(published.find((event) => event.type === "session.reasoning.ended.1")?.data).toMatchObject({
+    text: "Thinking without an answer",
+  })
+  expect(published.find((event) => event.type === "session.step.failed.1")?.data).toMatchObject({
+    rawFinish: "max_tokens",
+    error: { type: "provider.invalid-output" },
+  })
+})
+
+test("length finish remains successful after partial text", async () => {
+  const { publisher } = capture()
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text" }),
+        LLMEvent.textDelta({ id: "text", text: "Partial answer" }),
+        LLMEvent.textEnd({ id: "text" }),
+        LLMEvent.stepFinish({ index: 0, reason: { normalized: "length", raw: "max_tokens" } }),
+      ],
+      (event) => publisher.publish(event),
+      { discard: true },
+    ),
+  )
+
+  expect(publisher.record()).toMatchObject({
+    outputStarted: true,
+    providerFailed: false,
+    finish: { finish: "length", rawFinish: "max_tokens" },
+  })
+  expect(publisher.record().failure).toBeUndefined()
+})

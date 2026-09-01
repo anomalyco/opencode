@@ -28,7 +28,7 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 
 /** Immutable fold of the durable facts a step's writer has recorded so far. */
 export interface StepRecord {
-  /** The model produced visible output this attempt, which bars transparent retries and overflow recovery. */
+  /** The model produced durable output this attempt, which bars transparent retries and overflow recovery. */
   readonly outputStarted: boolean
   readonly providerFailed: boolean
   /** The step's recorded assistant failure, if any. */
@@ -93,6 +93,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   let stepFailed = false
   let providerFailed = false
   let outputStarted = false
+  let usefulOutput = false
   let stepStreamed = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
@@ -400,9 +401,11 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         })
         return
       case "text-delta":
+        if (event.text.length > 0) usefulOutput = true
         yield* text.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "text-end":
+        if (event.text && event.text.length > 0) usefulOutput = true
         yield* text.end(event.id, providerState(event.providerMetadata), event.text)
         return
       case "reasoning-start":
@@ -443,6 +446,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         return
       case "tool-call": {
         outputStarted = true
+        usefulOutput = true
         const tool = tools.get(event.id) ?? (yield* startToolInput(event))
         if (toolInput.has(event.id)) yield* endToolInput(event)
         if (tool.name !== event.name)
@@ -530,6 +534,14 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         if (event.reason.normalized === "content-filter") {
           providerFailed = true
           yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })
+          return
+        }
+        if (event.reason.normalized === "length" && !usefulOutput) {
+          providerFailed = true
+          yield* failAssistant({
+            type: "provider.invalid-output",
+            message: "The model reached its output limit before producing text or a tool call",
+          })
           return
         }
         return
