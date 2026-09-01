@@ -93,6 +93,8 @@ async function setup(
 
   return {
     renderer: out.renderer,
+    renderOnce: out.renderOnce,
+    externalOutput: out.externalOutput,
     scrollback: new RunScrollbackStream(out.renderer, input.theme ?? RUN_THEME_FALLBACK, {
       treeSitterClient,
       wrote: input.wrote ?? false,
@@ -220,28 +222,22 @@ test.each([false, true])("monochrome switches preserve printed blocks and open f
     await out.scrollback.setMono(mono)
     out.scrollback.setTheme(mono ? RUN_THEME_MONO : RUN_THEME_FALLBACK)
     await out.scrollback.append(assistant('Printed block\n\n```ts\nconst arrow = "'))
-    const printed = claim(out.renderer)
-    try {
-      expect(render(printed)).toContain("Printed block")
-      expect(render(printed)).not.toContain("const arrow")
-      await out.scrollback.setMono(!mono)
-      out.scrollback.setTheme(mono ? RUN_THEME_FALLBACK : RUN_THEME_MONO)
-      expect(render(claim(out.renderer))).toBe("")
-      await out.scrollback.append(assistant('\u2192"\n```\n\nNext block'))
-      await out.scrollback.complete()
-      const next = claim(out.renderer)
-      try {
-        expect(render(next)).toContain(mono ? 'const arrow = "\u2192"' : 'const arrow = "->"')
-        expect(render(next)).toContain("Next block")
-        expect(render(next)).not.toContain("Printed block")
-        expect(render(next)).not.toContain("```")
-        expect(render(printed)).toContain("Printed block")
-      } finally {
-        destroy(next)
-      }
-    } finally {
-      destroy(printed)
-    }
+    await out.renderOnce()
+    const printed = out.externalOutput.takeText()
+    expect(printed).toContain("Printed block")
+    expect(printed).not.toContain("const arrow")
+    await out.scrollback.setMono(!mono)
+    out.scrollback.setTheme(mono ? RUN_THEME_FALLBACK : RUN_THEME_MONO)
+    expect(out.externalOutput.takeText()).toBe("")
+    await out.scrollback.append(assistant('\u2192"\n```\n\nNext block'))
+    // A frame can flush the code block while completion is awaiting highlighting.
+    await out.renderOnce()
+    await out.scrollback.complete()
+    const next = out.externalOutput.takeText()
+    expect(next).toContain(mono ? 'const arrow = "\u2192"' : 'const arrow = "->"')
+    expect(next).toContain("Next block")
+    expect(next).not.toContain("Printed block")
+    expect(next).not.toContain("```")
   } finally {
     out.scrollback.destroy()
     destroy(claim(out.renderer))
