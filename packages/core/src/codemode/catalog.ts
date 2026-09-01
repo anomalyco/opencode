@@ -1,15 +1,20 @@
 export * as CodeModeCatalog from "./catalog.js"
 
-import { Schema } from "effect"
 import type { Namespace } from "@opencode-ai/schema/tool"
+import { Schema } from "effect"
 
-export const Entry = Schema.Struct({
+export const Tool = Schema.Struct({
   path: Schema.String,
   description: Schema.String,
   signature: Schema.String,
   pinned: Schema.optionalKey(Schema.Boolean),
 })
-export type Entry = typeof Entry.Type
+export type Tool = typeof Tool.Type
+
+export type Inventory = {
+  readonly tools: ReadonlyArray<Tool>
+  readonly namespaces?: ReadonlyMap<string, Namespace>
+}
 
 const Listing = Schema.Struct({
   path: Schema.String,
@@ -32,7 +37,6 @@ export type Summary = typeof Summary.Type
 
 export type Options = {
   readonly budget?: number
-  readonly namespaces?: ReadonlyMap<string, Namespace>
 }
 
 const DESCRIPTION_LIMIT = 120
@@ -41,16 +45,16 @@ const INLINE_BUDGET = 2_000
 
 // Keep every namespace visible, then select full listings one per namespace per round,
 // considering shorter listings first until the inline budget is exhausted.
-export function summarize(entries: ReadonlyArray<Entry>, options: Options = {}): Summary {
+export function summarize(inventory: Inventory, options: Options = {}): Summary {
   const budget = options.budget ?? INLINE_BUDGET
-  const namespaces = [...Map.groupBy(entries, (entry) => entry.path.split(".", 1)[0] ?? entry.path)]
+  const namespaces = [...Map.groupBy(inventory.tools, (tool) => tool.path.split(".", 1)[0] ?? tool.path)]
     .sort(([left], [right]) => {
       if (left < right) return -1
       if (left > right) return 1
       return 0
     })
     .map(([name, namespaceEntries]) => {
-      const description = options.namespaces?.get(name)?.description
+      const description = inventory.namespaces?.get(name)?.description
       const listings = namespaceEntries
         .map((entry) => {
           const firstLine = entry.description.split("\n", 1)[0]?.trim() ?? ""
@@ -122,7 +126,7 @@ export function summarize(entries: ReadonlyArray<Entry>, options: Options = {}):
     entries: namespace.listings.filter((listing) => namespace.selectedListings.has(listing)),
   }))
   return {
-    total: entries.length,
+    total: inventory.tools.length,
     shown: namespaceSummaries.reduce((total, namespace) => total + namespace.entries.length, 0),
     namespaces: namespaceSummaries,
   }

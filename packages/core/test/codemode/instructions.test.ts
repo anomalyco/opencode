@@ -9,13 +9,13 @@ import { Effect, Schema } from "effect"
 import { it } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
 
-const echo: CodeModeCatalog.Entry = {
+const echo: CodeModeCatalog.Tool = {
   path: "notes.echo",
   description: "Echo text",
   signature: "tools.notes.echo(input: {\n  text: string,\n}): Promise<string>",
 }
 
-const lookup: CodeModeCatalog.Entry = {
+const lookup: CodeModeCatalog.Tool = {
   path: "orders.lookup",
   description: "Look up an order",
   signature: "tools.orders.lookup(input: {\n  id: string,\n}): Promise<unknown>",
@@ -24,16 +24,16 @@ const lookup: CodeModeCatalog.Entry = {
 describe("CodeModeInstructions", () => {
   it.effect("instructs the model not to call execute while the catalog is empty", () =>
     Effect.gen(function* () {
-      const initialized = yield* readInitial(CodeModeInstructions.make([]))
+      const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [] }))
       expect(initialized.text).toBe(
         "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
       )
 
-      const added = yield* readUpdate(CodeModeInstructions.make([echo]), initialized)
+      const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), initialized)
       expect(added.text).toContain("New tools are available in addition to those previously listed:")
       expect(added.text).toContain(echo.signature)
 
-      expect(yield* readUpdate(CodeModeInstructions.make([]), { values: added.values })).toMatchObject({
+      expect(yield* readUpdate(CodeModeInstructions.make({ tools: [] }), { values: added.values })).toMatchObject({
         text:
           "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.\n\n" +
           "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
@@ -43,7 +43,7 @@ describe("CodeModeInstructions", () => {
 
   it.effect("renders the initial catalog, semantic deltas, and removal", () =>
     Effect.gen(function* () {
-      const initialized = yield* readInitial(CodeModeInstructions.make([echo]))
+      const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [echo] }))
       expect(initialized.text).toContain(
         "This catalog is the complete set of tools available within Code Mode. Tools presented elsewhere are not available in this runtime.",
       )
@@ -51,13 +51,13 @@ describe("CodeModeInstructions", () => {
       expect(initialized.text).not.toContain("## Search")
       expect(initialized.text).toContain(`  - ${echo.signature} // Echo text`)
 
-      const added = yield* readUpdate(CodeModeInstructions.make([echo, lookup]), initialized)
+      const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo, lookup] }), initialized)
       expect(added.text).toContain("The Code Mode tool catalog has changed.")
       expect(added.text).toContain("New tools are available in addition to those previously listed:")
       expect(added.text).toContain(`  - ${lookup.signature} // Look up an order`)
       expect(added.text).not.toContain("## Available tools")
 
-      const removed = yield* readUpdate(CodeModeInstructions.make([echo]), { values: added.values })
+      const removed = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), { values: added.values })
       expect(removed.text).toBe(
         "The Code Mode tool catalog has changed.\n\n" +
           "The following tools are no longer available and must not be called: tools.orders.lookup.",
@@ -98,7 +98,7 @@ describe("CodeModeInstructions", () => {
             draft.add({ ...alpha, options: { namespace: "tools" } })
           })
           const snapshot = yield* tools.snapshot()
-          return yield* readInitial(CodeModeInstructions.make(snapshot.codeModeCatalog, snapshot.codeModeNamespaces))
+          return yield* readInitial(CodeModeInstructions.make(snapshot.codeModeCatalog))
         }),
       )
       const reordered = yield* Effect.scoped(
@@ -109,10 +109,7 @@ describe("CodeModeInstructions", () => {
             draft.add({ ...zeta, options: { namespace: "tools" } })
           })
           const snapshot = yield* tools.snapshot()
-          return yield* readUpdate(
-            CodeModeInstructions.make(snapshot.codeModeCatalog, snapshot.codeModeNamespaces),
-            initialized,
-          )
+          return yield* readUpdate(CodeModeInstructions.make(snapshot.codeModeCatalog), initialized)
         }),
       )
 

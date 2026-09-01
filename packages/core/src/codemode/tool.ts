@@ -12,6 +12,7 @@ import type {
 } from "@opencode-ai/schema/tool"
 import { Effect, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
+import { CodeModeCatalog } from "./catalog.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -161,9 +162,12 @@ export const catalog = (inventory: Inventory) => {
       .filter((registration) => registration.options?.pinned === true)
       .map(qualifiedName),
   )
-  return runtime(inventory, () => Effect.fail(toolError("Execute context is unavailable")))
-    .catalog()
-    .map((entry) => ({ ...entry, pinned: pinned.has(entry.path) }))
+  return {
+    tools: runtime(inventory, () => Effect.fail(toolError("Execute context is unavailable")))
+      .catalog()
+      .map((tool) => ({ ...tool, pinned: pinned.has(tool.path) })),
+    ...(inventory.namespaces === undefined ? {} : { namespaces: inventory.namespaces }),
+  } satisfies CodeModeCatalog.Inventory
 }
 
 function runtime(

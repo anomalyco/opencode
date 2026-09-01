@@ -4,7 +4,6 @@ import { searchSignature, toolExpression } from "@opencode-ai/codemode"
 import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
-import type { Namespace } from "@opencode-ai/schema/tool"
 
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.
@@ -129,11 +128,8 @@ ${render(current)}`
 const key = Instructions.Key.make("core/codemode")
 const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
 
-export const make = (
-  entries?: ReadonlyArray<CodeModeCatalog.Entry>,
-  namespaces?: ReadonlyMap<string, Namespace>,
-): Instructions.List => {
-  const catalog = entries === undefined ? Instructions.removed : CodeModeCatalog.summarize(entries, { namespaces })
+export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List => {
+  const catalog = inventory === undefined ? Instructions.removed : CodeModeCatalog.summarize(inventory)
   return Instructions.make({
     key,
     codec,

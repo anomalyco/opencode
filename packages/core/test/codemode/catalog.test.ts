@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { CodeModeCatalog } from "@opencode-ai/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 
-const entry = (path: string, description: string, signature?: string, pinned = false): CodeModeCatalog.Entry => ({
+const entry = (path: string, description: string, signature?: string, pinned = false): CodeModeCatalog.Tool => ({
   path,
   description,
   signature: signature ?? `tools.${path}(input: {\n  q: string,\n}): Promise<string>`,
@@ -15,23 +15,23 @@ const lookup = entry(
   "tools.orders.lookup(input: {\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
 )
 
-const render = (entries: ReadonlyArray<CodeModeCatalog.Entry>, budget?: number) =>
-  CodeModeInstructions.render(CodeModeCatalog.summarize(entries, budget === undefined ? {} : { budget }))
+const render = (tools: ReadonlyArray<CodeModeCatalog.Tool>, budget?: number) =>
+  CodeModeInstructions.render(CodeModeCatalog.summarize({ tools }, budget === undefined ? {} : { budget }))
 
 const update = (
-  previous: ReadonlyArray<CodeModeCatalog.Entry>,
-  current: ReadonlyArray<CodeModeCatalog.Entry>,
+  previous: ReadonlyArray<CodeModeCatalog.Tool>,
+  current: ReadonlyArray<CodeModeCatalog.Tool>,
   budget?: number,
 ) =>
   CodeModeInstructions.update(
-    CodeModeCatalog.summarize(previous, budget === undefined ? {} : { budget }),
-    CodeModeCatalog.summarize(current, budget === undefined ? {} : { budget }),
+    CodeModeCatalog.summarize({ tools: previous }, budget === undefined ? {} : { budget }),
+    CodeModeCatalog.summarize({ tools: current }, budget === undefined ? {} : { budget }),
   )
 
 describe("CodeModeCatalog.summarize", () => {
   test("retains namespace inventory without retaining tools outside the inline budget", () => {
     const catalog = CodeModeCatalog.summarize(
-      Array.from({ length: 10_000 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`)),
+      { tools: Array.from({ length: 10_000 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`)) },
       { budget: 0 },
     )
     expect(catalog).toEqual({
@@ -43,7 +43,7 @@ describe("CodeModeCatalog.summarize", () => {
 
   test("retains every namespace when no full tool listing fits", () => {
     const catalog = CodeModeCatalog.summarize(
-      [entry("alpha.one", "One"), entry("beta.two", "Two"), entry("gamma.three", "Three")],
+      { tools: [entry("alpha.one", "One"), entry("beta.two", "Two"), entry("gamma.three", "Three")] },
       { budget: 0 },
     )
     expect(catalog.namespaces.map((namespace) => namespace.name)).toEqual(["alpha", "beta", "gamma"])
@@ -52,7 +52,10 @@ describe("CodeModeCatalog.summarize", () => {
 
   test("always retains pinned tools beyond the inline budget", () => {
     const pinned = [entry("alpha.first", "First", undefined, true), entry("beta.second", "Second", undefined, true)]
-    const catalog = CodeModeCatalog.summarize([...pinned, entry("alpha.unpinned", "Unpinned")], { budget: 0 })
+    const catalog = CodeModeCatalog.summarize(
+      { tools: [...pinned, entry("alpha.unpinned", "Unpinned")] },
+      { budget: 0 },
+    )
 
     expect(catalog.shown).toBe(2)
     expect(catalog.namespaces.flatMap((namespace) => namespace.entries.map((item) => item.path))).toEqual([
@@ -72,20 +75,24 @@ describe("CodeModeCatalog.summarize", () => {
     ].reduce((total, namespace) => total + Math.round(CodeModeCatalog.namespaceLine(namespace).length / 4), 0)
 
     expect(
-      CodeModeCatalog.summarize([pinned, unpinned], { budget: namespaceCost + pinCost + unpinnedCost }).shown,
+      CodeModeCatalog.summarize({ tools: [pinned, unpinned] }, { budget: namespaceCost + pinCost + unpinnedCost })
+        .shown,
     ).toBe(2)
     expect(
-      CodeModeCatalog.summarize([pinned, unpinned], { budget: namespaceCost + pinCost + unpinnedCost - 1 }).shown,
+      CodeModeCatalog.summarize({ tools: [pinned, unpinned] }, { budget: namespaceCost + pinCost + unpinnedCost - 1 })
+        .shown,
     ).toBe(1)
   })
 
   test("retains only the rendered portion of inline descriptions", () => {
-    const catalog = CodeModeCatalog.summarize([entry("alpha.one", `Summary\n${"detail".repeat(10_000)}`)])
+    const catalog = CodeModeCatalog.summarize({
+      tools: [entry("alpha.one", `Summary\n${"detail".repeat(10_000)}`)],
+    })
     expect(catalog.namespaces[0]?.entries[0]?.line).toEndWith("// Summary")
   })
 
   test("limits inline descriptions to 120 characters", () => {
-    const catalog = CodeModeCatalog.summarize([entry("alpha.one", "x".repeat(121))])
+    const catalog = CodeModeCatalog.summarize({ tools: [entry("alpha.one", "x".repeat(121))] })
     const description = catalog.namespaces[0]?.entries[0]?.line.split(" // ")[1]
     expect(description).toHaveLength(120)
     expect(description).toEndWith("...")
@@ -98,8 +105,8 @@ describe("CodeModeCatalog.summarize", () => {
     const description = "A namespace description that stays visible beyond the available tool budget"
     const namespaces = new Map([["alpha", { name: "alpha", description }]])
 
-    expect(CodeModeCatalog.summarize([tool], { budget: namespaceCost + listingCost }).shown).toBe(1)
-    const catalog = CodeModeCatalog.summarize([tool], { budget: namespaceCost + listingCost, namespaces })
+    expect(CodeModeCatalog.summarize({ tools: [tool] }, { budget: namespaceCost + listingCost }).shown).toBe(1)
+    const catalog = CodeModeCatalog.summarize({ tools: [tool], namespaces }, { budget: namespaceCost + listingCost })
     expect(catalog.shown).toBe(0)
     expect(catalog.namespaces[0]?.description).toBe(description)
     expect(CodeModeInstructions.render(catalog)).toContain(`- alpha (1 tool, none shown) // ${description}`)
@@ -200,10 +207,12 @@ describe("CodeModeInstructions.update", () => {
   })
 
   test("restates namespace descriptions when they change", () => {
-    const previous = CodeModeCatalog.summarize([echo], {
+    const previous = CodeModeCatalog.summarize({
+      tools: [echo],
       namespaces: new Map([["notes", { name: "notes", description: "Old description" }]]),
     })
-    const current = CodeModeCatalog.summarize([echo], {
+    const current = CodeModeCatalog.summarize({
+      tools: [echo],
       namespaces: new Map([["notes", { name: "notes", description: "New description" }]]),
     })
     const text = CodeModeInstructions.update(previous, current)
