@@ -651,7 +651,7 @@ function openaiCompatibleReasoningEfforts(id: string) {
   return gpt5CodexReasoningEfforts(apiId) ?? versionedGpt5ReasoningEfforts(apiId) ?? OPENAI_EFFORTS
 }
 
-function anthropicUsesModernAdaptiveThinking(apiId: string) {
+export function anthropicUsesModernAdaptiveThinking(apiId: string) {
   if (!apiId.toLowerCase().includes("claude-")) return false
   // Covers family-first IDs such as claude-opus-4.7 and version-first IDs such as claude-4.7-opus.
   // Limit minors to two digits so release dates in IDs such as claude-opus-4-20250514 are not versions.

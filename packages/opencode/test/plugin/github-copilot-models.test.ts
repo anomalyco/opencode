@@ -446,6 +446,49 @@ test("clears existing variants so refreshed models calculate provider-specific v
   expect(models["claude-opus-4.7"].variants).toBeUndefined()
 })
 
+test("summarizes adaptive thinking display for modern claude models beyond opus-4.7", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "claude-sonnet-5",
+              name: "Claude Sonnet 5",
+              version: "claude-sonnet-5-2026-06-01",
+              supported_endpoints: ["/v1/messages"],
+              capabilities: {
+                family: "claude-sonnet",
+                limits: {
+                  max_context_window_tokens: 200000,
+                  max_output_tokens: 64000,
+                  max_prompt_tokens: 176000,
+                },
+                supports: {
+                  adaptive_thinking: true,
+                  reasoning_effort: ["low", "medium", "high"],
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const model = (await CopilotModels.get("https://api.githubcopilot.com")).models["claude-sonnet-5"]
+  const variant = model.variants?.high as { thinking?: { display?: string } } | undefined
+
+  // Anthropic omits thinking content by default for adaptive-only models newer
+  // than opus-4.7. Without display: "summarized" the API returns no thinking
+  // text, so it never reaches opencode's UI even though thinking is enabled.
+  expect(variant?.thinking?.display).toBe("summarized")
+})
+
 test("remaps fallback oauth model urls to the enterprise host", async () => {
   globalThis.fetch = mock(() => Promise.reject(new Error("timeout"))) as unknown as typeof fetch
 
