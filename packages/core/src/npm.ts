@@ -1,4 +1,4 @@
-export * as Npm from "./npm"
+﻿export * as Npm from "./npm"
 
 import path from "path"
 import npa from "npm-package-arg"
@@ -40,6 +40,19 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Npm") {}
 
+async function fetchRegistryVersion(name: string): Promise<string | undefined> {
+  const encoded = name.replace("/", "%2F")
+  const url = `https://registry.npmjs.org/${encoded}`
+  try {
+    const response = await fetch(url, { headers: { Accept: "application/json" } })
+    if (!response.ok) return undefined
+    const data = (await response.json()) as { "dist-tags"?: { latest?: string } }
+    return data?.["dist-tags"]?.latest
+  } catch {
+    return undefined
+  }
+}
+
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
 
 export function sanitize(pkg: string) {
@@ -77,6 +90,19 @@ const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
     const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
+    const cleanupTempResidues = Effect.fnUntraced(function* (nodeModulesPath: string) {
+      const entries = yield* fs.readDirectory(nodeModulesPath).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+      const tempPattern = /^\.[a-z0-9-]+-[a-zA-Z0-9]{8,}$/
+      for (const entry of entries) {
+        if (tempPattern.test(entry)) {
+          const fullPath = path.join(nodeModulesPath, entry)
+          const stat = yield* fs.stat(fullPath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (stat?.type === "Directory") {
+            yield* fs.remove(fullPath, { recursive: true }).pipe(Effect.ignore)
+          }
+        }
+      }
+    })
     const reify = (input: { dir: string; add?: string[] }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
@@ -122,11 +148,31 @@ const layer = Layer.effect(
         }
       })()
 
+      const isLatest = pkg.includes("@latest")
+
       if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        const installed = yield* afs
+          .readJson(path.join(dir, "node_modules", name, "package.json"))
+          .pipe(Effect.option)
+        if (isLatest && Option.isSome(installed)) {
+          const current = (installed.value as { version?: string })?.version
+          if (current) {
+            const registryVersion = yield* Effect.tryPromise({
+              try: () => fetchRegistryVersion(name),
+              catch: () => Option.none<string>(),
+            }).pipe(Effect.option)
+            if (Option.isSome(registryVersion) && registryVersion.value !== current) {
+              yield* fs.remove(dir, { recursive: true }).pipe(Effect.ignore)
+            }
+          }
+        }
+        if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
+          return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        }
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
+      yield* cleanupTempResidues(path.join(dir, "node_modules")).pipe(Effect.ignore)
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
         const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
