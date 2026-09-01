@@ -92,19 +92,19 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
     namespaces.reduce(
       (total, namespace) =>
         total +
-        Math.round(
+        cost(
           namespaceLine({
             name: namespace.name,
             ...(namespace.description === undefined ? {} : { description: namespace.description }),
             count: namespace.listings.length,
             entries: [],
-          }).length / CHARACTERS_PER_TOKEN,
+          }),
         ),
       0,
     ) -
     namespaces
       .flatMap((namespace) => namespace.listings.filter((listing) => namespace.selectedListings.has(listing)))
-      .reduce((total, listing) => total + Math.round(listing.line.length / CHARACTERS_PER_TOKEN), 0)
+      .reduce((total, listing) => total + cost(listing.line), 0)
   while (active.size > 0) {
     for (const namespace of active) {
       const candidate = namespace.selectionOrder[namespace.selectionIndex]
@@ -145,11 +145,15 @@ export function namespaceLine(namespace: typeof NamespaceSummary.Type) {
 
 function rankListings(listings: ReadonlyArray<typeof Listing.Type>) {
   return listings
-    .map((listing) => ({ listing, cost: Math.round(listing.line.length / CHARACTERS_PER_TOKEN) }))
+    .map((listing) => ({ listing, cost: cost(listing.line) }))
     .toSorted((left, right) => {
       if (left.cost !== right.cost) return left.cost - right.cost
       if (left.listing.path < right.listing.path) return -1
       if (left.listing.path > right.listing.path) return 1
       return 0
     })
+}
+
+function cost(text: string) {
+  return Math.round(text.length / CHARACTERS_PER_TOKEN)
 }
