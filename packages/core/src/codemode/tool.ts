@@ -49,8 +49,9 @@ type Tools = {
   [name: string]: Tool.Tool<never> | Namespace.Namespace<never> | Tools
 }
 
-type RegistryOptions = {
-  readonly namespaces?: ReadonlyMap<string, ToolNamespace>
+export type Inventory = {
+  readonly tools: ReadonlyMap<string, Info>
+  readonly namespaces: ReadonlyMap<string, ToolNamespace>
 }
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
@@ -64,9 +65,8 @@ const description = [
 ].join("\n")
 
 export const create = (
-  registrations: ReadonlyMap<string, Info>,
+  inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: Context) => Effect.Effect<Result, Error>,
-  options: RegistryOptions = {},
 ) => {
   return {
     name: "execute",
@@ -84,8 +84,7 @@ export const create = (
             Ref.updateAndGet(calls, update).pipe(Effect.flatMap((toolCalls) => context.progress({ toolCalls }))),
           )
         const result = yield* runtime(
-          registrations,
-          options.namespaces ?? new Map(),
+          inventory,
           (name, tool, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
@@ -156,29 +155,26 @@ export const create = (
   } satisfies Info
 }
 
-export const catalog = (registrations: ReadonlyMap<string, Info>, options: RegistryOptions = {}) => {
+export const catalog = (inventory: Inventory) => {
   const pinned = new Set(
-    Array.from(registrations.values())
+    Array.from(inventory.tools.values())
       .filter((registration) => registration.options?.pinned === true)
       .map(qualifiedName),
   )
-  return runtime(registrations, options.namespaces ?? new Map(), () =>
-    Effect.fail(toolError("Execute context is unavailable")),
-  )
+  return runtime(inventory, () => Effect.fail(toolError("Execute context is unavailable")))
     .catalog()
     .map((entry) => ({ ...entry, pinned: pinned.has(entry.path) }))
 }
 
 function runtime(
-  registrations: ReadonlyMap<string, Info>,
-  namespaces: ReadonlyMap<string, ToolNamespace>,
+  inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>,
   hooks?: CodeMode.ToolCallHooks,
 ) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
-  for (const namespace of namespaces.values()) getNode(root, namespace.name).namespace = namespace
-  for (const [name, registration] of registrations) {
+  for (const namespace of inventory.namespaces.values()) getNode(root, namespace.name).namespace = namespace
+  for (const [name, registration] of inventory.tools) {
     const child = definition(registration)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,

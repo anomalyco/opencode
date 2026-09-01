@@ -223,18 +223,16 @@ const layer = Layer.effect(
           const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
           const namespaces = state.get().namespaces
+          const codeModeInventory = { tools: codeModeTools, namespaces }
           const codeModeEnabled = !whollyDisabled("execute", rules)
           const codeModeTool = codeModeEnabled
-            ? CodeModeTool.create(
-                codeModeTools,
-                (name, tool, input, context) =>
-                  beforeExecute(name, input, context).pipe(
-                    Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
-                  ),
-                { namespaces },
+            ? CodeModeTool.create(codeModeInventory, (name, tool, input, context) =>
+                beforeExecute(name, input, context).pipe(
+                  Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
+                ),
               )
             : undefined
-          const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeTools, { namespaces }) : undefined
+          const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeInventory) : undefined
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
