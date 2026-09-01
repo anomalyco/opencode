@@ -133,10 +133,13 @@ const resolveEntryPoint = (name: string, dir: string, subpaths: readonly string[
 interface ArboristNode {
   name: string
   path: string
+  realpath: string
+  isLink: boolean
 }
 
 interface ArboristTree {
   edgesOut: Map<string, { to?: ArboristNode }>
+  inventory: { values(): IterableIterator<ArboristNode> }
 }
 
 const PackageJson = Schema.Struct({
@@ -297,7 +300,13 @@ const layer = Layer.effect(
           installed ? [] : subpaths,
         )
         if (!installed && !result.entrypoint) return yield* new InstallFailedError({ add: [pkg], dir: staging })
-        return { name: installedNameValue, result }
+        const links =
+          process.platform === "win32"
+            ? Array.from(tree.inventory.values()).filter(
+                (node) => node.isLink && FSUtil.contains(staging, node.path) && FSUtil.contains(staging, node.realpath),
+              )
+            : []
+        return { name: installedNameValue, result, links }
       }).pipe(Effect.onError(() => remove(staging, dir).pipe(Effect.ignore)))
 
       if (active) {
@@ -311,6 +320,22 @@ const layer = Layer.effect(
       const completedAt = yield* Clock.currentTimeMillis
       const newest = Number((yield* generations(dir)).at(-1) ?? 0)
       const generation = path.join(dir, String(Math.max(completedAt, newest + 1)))
+      // Windows junctions use absolute targets, so rebase internal links before publishing the generation.
+      if (staged.links.length > 0) {
+        const { unlink, symlink } = yield* Effect.promise(() => import("node:fs/promises"))
+        yield* Effect.forEach(
+          staged.links,
+          (link) =>
+            Effect.tryPromise({
+              try: async () => {
+                await unlink(link.path)
+                await symlink(path.join(generation, path.relative(staging, link.realpath)), link.path, "junction")
+              },
+              catch: (cause) => new InstallFailedError({ dir, cause }),
+            }),
+          { discard: true },
+        ).pipe(Effect.onError(() => remove(staging, dir).pipe(Effect.ignore)))
+      }
       yield* rename(staging, generation, dir)
       return yield* entry(
         generation,
