@@ -2,7 +2,7 @@ import { expect, mock, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode-ai/util/global"
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises"
+import { mkdir, readFile, symlink, utimes, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
@@ -367,8 +367,10 @@ export default {
   )
 
   // Duplicate notifications for unchanged contents must not retry the broken
-  // generation and cycle the restored plugin again.
-  await writeFile(source, broken)
+  // generation and cycle the restored plugin again. Rewriting the file can
+  // expose truncated contents to the watcher, so change only its metadata.
+  const touched = new Date(Date.now() + 1000)
+  await utimes(source, touched, touched)
   await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b2"))
   expect(await until(readB, (value) => value?.includes("b2:setup") ?? false)).toBe("b1:setup\nb1:cleanup\nb2:setup\n")
   expect(await read()).toBe("a1:setup\na1:cleanup\na1:setup\n")
