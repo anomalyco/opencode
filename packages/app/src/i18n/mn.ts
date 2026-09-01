@@ -1165,4 +1165,12 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} сессийг архивлах болно.",
   "workspace.reset.note": "Энэ нь ажлын талбарыг анхдагч салбартай тааруулахын тулд дахин тохируулах болно.",
   "dialog.usageExceeded.dontShowAgain": "Дахин бүү харуул",
+  "settings.general.row.customTheme.title": "Custom theme URL",
+  "settings.general.row.customTheme.description":
+    "Load a private theme from a URL. Make sure the URL serves the theme JSON with permissive CORS headers.",
+  "settings.general.row.customTheme.placeholder": "https://example.com/theme.json",
+  "settings.general.row.customTheme.load": "Load",
+  "settings.general.row.customTheme.remove": "Remove",
+  "settings.general.row.customTheme.error.network": "Couldn't reach that URL.",
+  "settings.general.row.customTheme.error.invalid": "That URL didn't return a valid theme.",
 }

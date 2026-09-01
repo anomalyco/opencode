@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, createSignal, onMount, type JSX } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
@@ -122,6 +122,21 @@ export const SettingsGeneral: Component = () => {
   const desktop = createMemo(() => platform.platform === "desktop")
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
+
+  const [customThemeInput, setCustomThemeInput] = createSignal(settings.general.customThemeUrl() ?? "")
+  const customThemeActive = createMemo(() => {
+    const cache = settings.general.customThemeCache()
+    return !!cache && theme.themeId() === cache.id
+  })
+  const handleLoadCustomTheme = async () => {
+    const url = customThemeInput().trim()
+    if (!url) return
+    await settings.general.loadCustomTheme(url)
+  }
+  const handleRemoveCustomTheme = () => {
+    settings.general.removeCustomTheme()
+    setCustomThemeInput("")
+  }
 
   const serverSync = useServerSync()
   const serverSdk = useServerSDK()
@@ -500,6 +515,63 @@ export const SettingsGeneral: Component = () => {
             size="small"
             triggerVariant="settings"
           />
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.customTheme.title")}
+          description={language.t("settings.general.row.customTheme.description")}
+        >
+          <div class="flex w-full flex-col items-end gap-8 sm:w-[320px]">
+            <div class="flex w-full items-center gap-8">
+              <TextField
+                data-action="settings-custom-theme-url"
+                label={language.t("settings.general.row.customTheme.title")}
+                hideLabel
+                type="text"
+                value={customThemeInput()}
+                onChange={setCustomThemeInput}
+                placeholder={language.t("settings.general.row.customTheme.placeholder")}
+                spellcheck={false}
+                autocorrect="off"
+                autocomplete="off"
+                autocapitalize="off"
+                disabled={customThemeActive()}
+                class="text-12-regular"
+              />
+              <Show
+                when={customThemeActive()}
+                fallback={
+                  <Button
+                    data-action="settings-custom-theme-load"
+                    variant="secondary"
+                    size="small"
+                    disabled={settings.general.customThemeLoading() || !customThemeInput().trim()}
+                    onClick={handleLoadCustomTheme}
+                  >
+                    {language.t("settings.general.row.customTheme.load")}
+                  </Button>
+                }
+              >
+                <Button
+                  data-action="settings-custom-theme-remove"
+                  variant="secondary"
+                  size="small"
+                  onClick={handleRemoveCustomTheme}
+                >
+                  {language.t("settings.general.row.customTheme.remove")}
+                </Button>
+              </Show>
+            </div>
+            <Show when={settings.general.customThemeError()}>
+              <span class="text-12-regular text-text-danger-base">
+                {language.t(
+                  settings.general.customThemeError() === "network"
+                    ? "settings.general.row.customTheme.error.network"
+                    : "settings.general.row.customTheme.error.invalid",
+                )}
+              </span>
+            </Show>
+          </div>
         </SettingsRow>
 
         <SettingsRow
