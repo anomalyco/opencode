@@ -233,35 +233,32 @@ describe("Npm.add", () => {
     expect(entries.fallback.entrypoint).toEndWith("/index.js")
   })
 
-  test("installs and resolves named and unnamed Git packages with dependencies", async () => {
+  test.each(["unnamed", "named"])("installs and resolves %s Git packages with dependencies", async (kind) => {
     await using tmp = await tmpdir()
     const fixture = await createGitFixture(tmp.path)
-    const cache = path.join(tmp.path, "cache")
-    const specs = [
-      `git+file://${fixture.repository}#${fixture.commit}`,
-      `fixture-named-plugin@git+file://${fixture.repository}#fixture-branch`,
-    ]
+    const spec =
+      kind === "unnamed"
+        ? `git+file://${fixture.repository}#${fixture.commit}`
+        : `fixture-named-plugin@git+file://${fixture.repository}#fixture-branch`
 
-    for (const spec of specs) {
-      const entries = await Effect.gen(function* () {
-        const npm = yield* Npm.Service
-        return {
-          added: yield* npm.add(spec),
-          cached: yield* npm.add(spec),
-          resolved: yield* npm.resolve(spec),
-        }
-      }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+    const entries = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return {
+        added: yield* npm.add(spec),
+        cached: yield* npm.add(spec),
+        resolved: yield* npm.resolve(spec),
+      }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
 
-      expect(entries.added.entrypoint).toBe(pathToFileURL(path.join(entries.added.directory, "index.js")).href)
-      expect(entries.added.version).toBe(fixture.commit)
-      expect(entries.cached).toEqual(entries.added)
-      expect(entries.resolved).toEqual(entries.added)
-      expect(
-        await fs.stat(path.join(path.dirname(entries.added.directory), "fixture-dependency", "package.json")),
-      ).toBeTruthy()
-      expect(entries.added.directory).toContain(path.join("npm", await Npm.cacheKey(spec)))
-      expect(entries.added.directory).toContain("node_modules")
-    }
+    expect(entries.added.entrypoint).toBe(pathToFileURL(path.join(entries.added.directory, "index.js")).href)
+    expect(entries.added.version).toBe(fixture.commit)
+    expect(entries.cached).toEqual(entries.added)
+    expect(entries.resolved).toEqual(entries.added)
+    expect(
+      await fs.stat(path.join(path.dirname(entries.added.directory), "fixture-dependency", "package.json")),
+    ).toBeTruthy()
+    expect(entries.added.directory).toContain(path.join("npm", await Npm.cacheKey(spec)))
+    expect(entries.added.directory).toContain("node_modules")
   })
 
   test("installs a Git package from an npm ::path: subdirectory", async () => {
@@ -354,23 +351,19 @@ describe("Npm.resolve", () => {
 })
 
 describe("Npm.check and Npm.update", () => {
-  test("checks registry targets without mutation and explicitly updates mutable targets", async () => {
+  test("checks a mutable registry target without mutation and explicitly updates it", async () => {
     await using tmp = await tmpdir()
     await using registry = await createRegistryFixture(tmp.path)
     const cache = path.join(tmp.path, "cache")
     const mutable = "@fixture/registry-plugin@latest"
-    const pinned = "@fixture/registry-plugin@1.0.0"
     const root = await registry.configure(cache, mutable)
-    await registry.configure(cache, pinned)
 
     const result = await Effect.gen(function* () {
       const npm = yield* Npm.Service
       const installed = yield* npm.add(mutable)
-      yield* npm.add(pinned)
       const current = yield* npm.check(mutable)
       registry.state.latest = "1.1.0"
       const outdated = yield* npm.check(mutable)
-      const pinnedOutdated = yield* npm.check(pinned)
       const before = yield* Effect.promise(() => Bun.file(path.join(installed.directory, "index.js")).text())
       yield* Effect.promise(() => Promise.all([fs.mkdir(path.join(root, "1")), fs.mkdir(path.join(root, "2"))]))
       const updated = yield* npm.update(mutable)
@@ -378,7 +371,6 @@ describe("Npm.check and Npm.update", () => {
       return {
         current,
         outdated,
-        pinnedOutdated,
         before,
         after: yield* Effect.promise(() => Bun.file(path.join(updated.directory, "index.js")).text()),
         version: updated.version,
@@ -391,7 +383,6 @@ describe("Npm.check and Npm.update", () => {
 
     expect(result.current).toBeFalse()
     expect(result.outdated).toBeTrue()
-    expect(result.pinnedOutdated).toBeFalse()
     expect(result.before).toContain('version = "1.0.0"')
     expect(result.after).toContain('version = "1.1.0"')
     expect(result.version).toBe("1.1.0")
@@ -400,5 +391,22 @@ describe("Npm.check and Npm.update", () => {
     expect(result.generations).not.toContain("1")
     expect(result.generations).not.toContain("2")
     expect(result.updated).toBeFalse()
+  })
+
+  test("never reports a pinned registry target as outdated", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const pinned = "@fixture/registry-plugin@1.0.0"
+    await registry.configure(cache, pinned)
+
+    const outdated = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      yield* npm.add(pinned)
+      registry.state.latest = "1.1.0"
+      return yield* npm.check(pinned)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(outdated).toBeFalse()
   })
 })
