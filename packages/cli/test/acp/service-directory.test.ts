@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { McpServer, SessionConfigOption } from "@agentclientprotocol/sdk"
 import { makeACPFixture, makeSession, secondModel } from "./service-fixture"
+import { flattenSelectOptions, requireSelectOption } from "./subprocess"
 
 describe("acp service directory behavior", () => {
   test("creates sessions from a catalog shared by concurrent callers in the same cwd", async () => {
@@ -71,6 +72,41 @@ describe("acp service directory behavior", () => {
       ["review", "verify"],
     ])
   })
+
+  test.each(["empty", "missing the default"])(
+    "retries when the model list is %s but the default is ready",
+    async (initial) => {
+      await using fixture = makeACPFixture({
+        fetch(request, context) {
+          if (
+            request.path === "/api/model" &&
+            context.requests.filter((request) => request.path === "/api/model").length === 1
+          ) {
+            return Response.json({
+              location: {
+                directory: "/workspace",
+                project: { id: "global", directory: "/workspace", canonical: "/workspace" },
+              },
+              data: initial === "empty" ? [] : [secondModel],
+            })
+          }
+          if (request.method === "POST" && request.path === "/api/session") {
+            return Response.json({ data: makeSession("ses_ready") })
+          }
+          return undefined
+        },
+      })
+
+      const session = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+      const model = requireSelectOption(session.configOptions, "model")
+      const choices = flattenSelectOptions(model).map((option) => option.value)
+
+      expect(choices).toContain("test/second-model")
+      expect(choices).toContain("test/test-model")
+      expect(model.currentValue).toBe("test/test-model")
+      expect(fixture.requests.filter((request) => request.path === "/api/model")).toHaveLength(2)
+    },
+  )
 
   test("does not cache a failed catalog load", async () => {
     let modelCalls = 0

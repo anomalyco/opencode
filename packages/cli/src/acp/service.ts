@@ -412,7 +412,11 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
       client.skill.list({ location }),
     ])
     const models = modelResult.data.filter((model) => model.enabled)
-    const defaultModel = defaultResult.data ?? models[0]
+    const preferred = defaultResult.data
+    // Parallel reads can straddle initialization; select only from this model list.
+    const defaultModel = preferred
+      ? models.find((model) => model.providerID === preferred.providerID && model.id === preferred.id)
+      : models[0]
     const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
     const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
     if (defaultModel && defaultAgent) {
