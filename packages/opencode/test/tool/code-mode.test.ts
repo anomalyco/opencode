@@ -25,14 +25,15 @@ const ctx: Tool.Context = {
 
 function mcpTool(
   name: string,
-  handler: (args: Record<string, unknown>) => unknown,
+  handler: (args: Record<string, unknown>, meta?: Record<string, unknown>) => unknown,
   inputSchema: Record<string, unknown> = { type: "object", properties: {} },
   outputSchema?: Record<string, unknown>,
 ): MCP.McpTool {
   return {
     def: { name, description: name, inputSchema, ...(outputSchema ? { outputSchema } : {}) } as MCPToolDef,
     client: {
-      callTool: async (params: { arguments?: Record<string, unknown> }) => handler(params.arguments ?? {}),
+      callTool: async (params: { arguments?: Record<string, unknown>; _meta?: Record<string, unknown> }) =>
+        handler(params.arguments ?? {}, params._meta),
     } as unknown as MCP.McpTool["client"],
   }
 }
@@ -424,6 +425,39 @@ describe("code mode execute", () => {
     expect(before!.output).toEqual({ args: { x: 1 } })
     expect(after!.input.args).toEqual({ x: 1 })
     expect(after!.output).toEqual({ content: [{ type: "text", text: "one" }] })
+  })
+
+  test("child calls forward plugin metadata independently", async () => {
+    const received: Array<Record<string, unknown> | undefined> = []
+    const trigger = ((name: unknown, input: { callID: string }, output: { _meta?: Record<string, unknown> }) =>
+      Effect.sync(() => {
+        if (name === "tool.execute.before") output._meta = { "com.example/call-id": input.callID }
+        return output
+      })) as Plugin.Interface["trigger"]
+    const tool = await build(
+      {
+        a_tool: mcpTool("a", (_args, meta) => {
+          received.push(meta)
+          return { content: [{ type: "text", text: "one" }] }
+        }),
+        b_tool: mcpTool("b", (_args, meta) => {
+          received.push(meta)
+          return { content: [{ type: "text", text: "two" }] }
+        }),
+      },
+      undefined,
+      undefined,
+      trigger,
+    )
+
+    await Effect.runPromise(
+      tool.execute({ code: "await tools.a.tool({}); await tools.b.tool({}); return 'done'" }, ctx),
+    )
+
+    expect(received).toEqual([
+      { "com.example/call-id": "call_code_mode/1" },
+      { "com.example/call-id": "call_code_mode/2" },
+    ])
   })
 
   test("a failing before hook fails only that child call as a catchable in-program error", async () => {

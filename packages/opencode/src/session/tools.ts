@@ -399,14 +399,17 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
+          const hook: { args: typeof args; _meta?: Record<string, unknown> } = { args }
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
-            { args },
+            hook,
           )
           const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
             yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            return yield* Effect.promise(() => execute(args, opts))
+            return yield* Effect.promise(() =>
+              McpCatalog.callTool(entry.def, entry.client, args, opts, entry.timeout, hook._meta),
+            )
           }).pipe(
             Effect.withSpan("Tool.execute", {
               attributes: {
