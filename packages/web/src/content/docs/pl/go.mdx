@@ -69,12 +69,14 @@ Obecna lista modeli obejmuje:
 - **MiniMax M2.7**
 - **Muse Spark 1.2 Contributor** ([ograniczone regiony](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
+- **Qwen3.8 Flash**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
+- **Hy4 preview**
 - **Hy3**
 
 Lista modeli może ulec zmianie w miarę testowania i dodawania nowych.
@@ -111,12 +113,14 @@ Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych 
 | MiniMax M2.7                 | 3,400               | 8,500              | 17,000             |
 | Muse Spark 1.2 Contributor   | 45,300              | 113,300            | 226,600            |
 | Qwen3.8 Max                  | 160                 | 400                | 810                |
+| Qwen3.8 Flash                | 5,400               | 13,500             | 27,000             |
 | Qwen3.7 Max                  | 340                 | 840                | 1,690              |
 | Qwen3.7 Plus                 | 4,300               | 10,800             | 21,600             |
 | Qwen3.6 Plus                 | 3,300               | 8,200              | 16,300             |
 | DeepSeek V4 Pro              | 1,050               | 2,600              | 5,200              |
 | DeepSeek V4 Flash            | 7,600               | 18,900             | 37,800             |
 | DeepSeek V4 Flash Vision Exp | 3,800               | 9,450              | 18,900             |
+| Hy4 preview                  | 1,350               | 3,380              | 6,770              |
 | Hy3                          | 4,300               | 10,750             | 21,500             |
 
 Szacunki te opierają się na zaobserwowanych wzorcach żądań:
@@ -135,9 +139,11 @@ Szacunki te opierają się na zaobserwowanych wzorcach żądań:
 - MiniMax M2.7 — 300 tokenów wejściowych, 55 000 w pamięci podręcznej, 125 tokenów wyjściowych na żądanie
 - Muse Spark 1.2 Contributor — 620 tokenów wejściowych, 71 400 w pamięci podręcznej, 300 tokenów wyjściowych na żądanie
 - Qwen3.8 Max — 420 tokenów wejściowych, 66 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
+- Qwen3.8 Flash — 600 tokenów wejściowych, 58 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
 - Qwen3.7 Max — 420 tokenów wejściowych, 66 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
 - Qwen3.7 Plus — 500 tokenów wejściowych, 57 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
 - Qwen3.6 Plus — 500 tokenów wejściowych, 57 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
+- Hy4 preview — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
 - Hy3 — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
 - MiMo-V2.5 — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
 - MiMo-V2.5-Pro — 790 tokenów wejściowych, 86 000 w pamięci podręcznej, 305 tokenów wyjściowych na żądanie
@@ -165,6 +171,7 @@ Szacunki opierają się również na następujących cenach za 1M tokenów oraz 
 | MiniMax M2.5                            | $0.30   | $1.20   | $0.06          | $0.375         | $60    |
 | Muse Spark 1.2 Contributor              | $0.10   | $0.20   | $0.002         | -              | $60    |
 | Qwen3.8 Max                             | $2.00   | $6.00   | $0.25          | $2.50          | $15    |
+| Qwen3.8 Flash                           | $0.15   | $0.47   | $0.016         | $0.20          | $30    |
 | Qwen3.7 Max                             | $2.50   | $7.50   | $0.50          | $3.125         | $60    |
 | Qwen3.7 Plus (≤ 256K tokens)            | $0.40   | $1.60   | $0.04          | $0.50          | $60    |
 | Qwen3.7 Plus (> 256K tokens)            | $1.20   | $4.80   | $0.12          | $1.50          | $60    |
@@ -176,6 +183,7 @@ Szacunki opierają się również na następujących cenach za 1M tokenów oraz 
 | DeepSeek V4 Flash (Peak)                | $0.44   | $1.32   | $0.014         | -              | $30    |
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22   | $0.66   | $0.007         | -              | $15    |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44   | $1.32   | $0.014         | -              | $15    |
+| Hy4 preview                             | $0.834  | $2.501  | $0.042         | -              | $30    |
 | Hy3                                     | $0.14   | $0.58   | $0.035         | -              | $60    |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Godziny Peak to 01:00-04:00 i 06:00-10:00 UTC od poniedziałku do piątku; wszystkie pozostałe godziny, w tym weekendy, to Off-Peak. [Dowiedz się więcej](https://api-docs.deepseek.com/quick_start/pricing/).
@@ -236,9 +244,11 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [ID modelu](/docs/config/#models) w Twojej konfiguracji OpenCode
@@ -274,6 +284,7 @@ https://opencode.ai/zen/go/v1/models
 | MiMo-V2.5-Pro                | Niewykorzystywane | 0 dni           |
 | MiMo-V2.5                    | Niewykorzystywane | 0 dni           |
 | Qwen3.8 Max                  | Niewykorzystywane | 0 dni           |
+| Qwen3.8 Flash                | Niewykorzystywane | 0 dni           |
 | Qwen3.7 Max                  | Niewykorzystywane | 0 dni           |
 | Qwen3.7 Plus                 | Niewykorzystywane | 0 dni           |
 | Qwen3.6 Plus                 | Niewykorzystywane | 0 dni           |
@@ -283,6 +294,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Pro              | Niewykorzystywane | 0 dni           |
 | DeepSeek V4 Flash            | Niewykorzystywane | 0 dni           |
 | DeepSeek V4 Flash Vision Exp | Niewykorzystywane | 0 dni           |
+| Hy4 preview                  | Niewykorzystywane | 0 dni           |
 | Hy3                          | Niewykorzystywane | 0 dni           |
 
 - **Grok 4.6:** ZDR wyłącza ważne funkcje API zależne od przechowywanych danych, w tym stanowy Responses API, Files and Collections oraz Batch API. [Dowiedz się więcej](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
