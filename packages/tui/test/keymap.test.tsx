@@ -5,7 +5,13 @@ import { testRender, useRenderer } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onCleanup } from "solid-js"
 import { TuiKeybind } from "../src/config/keybind"
-import { getOpencodeModeStack, OPENCODE_BASE_MODE, OpencodeKeymapProvider, registerOpencodeKeymap } from "../src/keymap"
+import {
+  COMMAND_PALETTE_COMMAND,
+  getOpencodeModeStack,
+  OPENCODE_BASE_MODE,
+  OpencodeKeymapProvider,
+  registerOpencodeKeymap,
+} from "../src/keymap"
 
 function createResolvedKeymapConfig(input: TuiKeybind.KeybindOverrides = {}) {
   const keybinds = TuiKeybind.parse(input)
@@ -73,12 +79,14 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
     const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
     const offGlobal = keymap.registerLayer({
       commands: [
+        { name: COMMAND_PALETTE_COMMAND, run() {} },
         { name: "session.list", run() {} },
         { name: "session.new", run() {} },
         { name: "session.page.up", run() {} },
         { name: "session.first", run() {} },
       ],
       bindings: config.keybinds.gather("test.global", [
+        COMMAND_PALETTE_COMMAND,
         "session.list",
         "session.new",
         "session.page.up",
@@ -95,7 +103,14 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
         Array.from(
           keymap.getCommandBindings({
             visibility: "active",
-            commands: ["session.list", "session.new", "session.page.up", "session.first", "model.list"],
+            commands: [
+              COMMAND_PALETTE_COMMAND,
+              "session.list",
+              "session.new",
+              "session.page.up",
+              "session.first",
+              "model.list",
+            ],
           }),
           ([command, bindings]) => [command, bindings.length],
         ),
@@ -125,9 +140,24 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
   const app = await testRender(() => <Harness />)
   try {
     expect(counts).toEqual({
-      base: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 1 },
-      question: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 0 },
+      base: {
+        [COMMAND_PALETTE_COMMAND]: 1,
+        "session.list": 1,
+        "session.new": 1,
+        "session.page.up": 2,
+        "session.first": 2,
+        "model.list": 1,
+      },
+      question: {
+        [COMMAND_PALETTE_COMMAND]: 1,
+        "session.list": 1,
+        "session.new": 1,
+        "session.page.up": 2,
+        "session.first": 2,
+        "model.list": 0,
+      },
       autocomplete: {
+        [COMMAND_PALETTE_COMMAND]: 1,
         "session.list": 1,
         "session.new": 1,
         "session.page.up": 2,
