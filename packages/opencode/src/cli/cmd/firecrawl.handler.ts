@@ -92,6 +92,7 @@ export const firecrawlScrapeHandler = Effect.fn("Cli.firecrawl.scrape")(function
 
   UI.println(UI.Style.TEXT_DIM + "  Initializing Firecrawl SDK..." + UI.Style.TEXT_NORMAL)
 
+  // @ts-ignore
   const FirecrawlApp = (yield* Effect.promise(() => import("@mendable/firecrawl-js"))).default
   const app = new FirecrawlApp({ apiKey })
 
@@ -220,6 +221,7 @@ export const firecrawlCrawlHandler = Effect.fn("Cli.firecrawl.crawl")(function* 
 
   UI.println(UI.Style.TEXT_DIM + "  Initializing Firecrawl SDK..." + UI.Style.TEXT_NORMAL)
 
+  // @ts-ignore
   const FirecrawlApp = (yield* Effect.promise(() => import("@mendable/firecrawl-js"))).default
   const app = new FirecrawlApp({ apiKey })
 
