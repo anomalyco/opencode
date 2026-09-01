@@ -136,8 +136,8 @@ describe("CodeModeInstructions.render", () => {
     )
     expect(partial).not.toContain("surrounding top-level agent tools")
     expect(partial).toContain("- search(input: {")
-    expect(partial).toContain("  /**\n   * @integer\n   * @exclusiveMinimum 0\n   */\n  limit?: number,")
-    expect(partial).toContain("  /**\n   * @integer\n   * @minimum 0\n   */\n  offset?: number,")
+    expect(partial).toContain("  /** Integer > 0 */\n  limit?: number,")
+    expect(partial).toContain("  /** Integer >= 0 */\n  offset?: number,")
     expect(partial).not.toContain("tools.orders.lookup(input:")
   })
 
