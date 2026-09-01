@@ -60,19 +60,25 @@ function occupy(port: number, cancel = false) {
 
 const ready = (handler: Handler) =>
   Effect.promise(async () => {
-    const response = await handler(new Request("http://opencode.local/api/plugin"))
-    const body: unknown = await response.json()
-    if (!response.ok || typeof body !== "object" || body === null || !("data" in body) || !Array.isArray(body.data))
-      throw new Error("Expected a plugin list response")
-    const ids = new Set(
-      body.data.flatMap((plugin) =>
-        typeof plugin === "object" && plugin !== null && "id" in plugin && typeof plugin.id === "string"
-          ? [plugin.id]
-          : [],
-      ),
+    const integration = await handler(new Request("http://opencode.local/api/integration/openai"))
+    const agent = await handler(new Request("http://opencode.local/api/agent/build"))
+    const body: unknown = await integration.json()
+    if (
+      !integration.ok ||
+      !agent.ok ||
+      typeof body !== "object" ||
+      body === null ||
+      !("data" in body) ||
+      typeof body.data !== "object" ||
+      body.data === null ||
+      !("methods" in body.data) ||
+      !Array.isArray(body.data.methods) ||
+      !body.data.methods.some(
+        (method) => typeof method === "object" && method !== null && "id" in method && method.id === "chatgpt-browser",
+      )
     )
-    if (!ids.has("opencode.agent") || !ids.has("opencode.provider.openai")) throw new Error("Plugins not ready")
-    return response
+      throw new Error("Plugins not ready")
+    return integration
   }).pipe(Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("2 seconds"))
 
 const connectOpenAI = (handler: Handler) =>
