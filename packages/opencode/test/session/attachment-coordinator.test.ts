@@ -1453,5 +1453,311 @@ describe("attachment coordinator", () => {
         }),
       )
     })
+
+    /**
+     * THE RELEASE POINT — E1..E6.
+     *
+     * `publishResolution` copies `members` into `publishedMembers` and then clears `members`, at
+     * publication. These six arms pin the two halves of that one statement: the copy must not alias,
+     * and the clear must not run before the copy exists. Both failure modes are silent — they empty
+     * the frozen snapshot, every covered Assistant reads as uncovered, and the coordinator answers
+     * "fresh" to everyone. Nothing throws and no text changes; only the STRUCTURAL evidence differs.
+     *
+     * So every arm here pairs a covered ID against a distinct one and asserts on structure
+     * (`candidate` / `observed` / `degraded`), never on selected text alone. An always-fresh
+     * coordinator hands back the caller's own Assistant, whose text is frequently identical to the
+     * one the resolution would have selected; text equality is satisfied by the bug.
+     */
+    // E1. Close is not a release point, and must leave the frozen snapshot readable. `close()` runs
+    // AFTER publication here, so it has nothing left to clear -- publication already released the
+    // mutable set. The arm that would catch an ALIASING copy is any covered-member arm at all, since
+    // the clear now empties an aliased snapshot immediately; this one adds the close.
+    test("E1: a closed scope still consumes its frozen member and keeps a distinct ID fresh", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          const reservation = yield* scope.reserve(SessionID.create())
+          yield* owner(scope, reservation)
+          yield* scope.settleTerminal(yield* markTerminal(scope, reservation))
+          const a1 = assistant(scope.sessionID, "covered clean answer")
+          yield* scope.observeTurn({ assistant: a1, clean: true })
+          yield* scope.finishContinuation()
+          // Published while open, then closed. Nothing about the close may reach the snapshot.
+          yield* scope.close()
+
+          const covered = yield* scope.result(a1)
+          expect(covered.type).toBe("evidence")
+          if (covered.type !== "evidence") return
+          expect(covered.degraded).toBe(false)
+          // THE ORACLE. Text cannot separate the two outcomes -- a fresh return hands back this same
+          // Assistant as its own fallback and reads identically. A CONSUMED resolution carries the
+          // published candidate; a fresh one carries only the caller's fallback.
+          expect(covered.candidate).toBeDefined()
+          expect(covered.candidate?.assistant.info.id).toBe(a1.info.id)
+
+          const distinct = assistant(scope.sessionID, "never a member")
+          const fresh = yield* scope.result(distinct)
+          expect(fresh.type).toBe("evidence")
+          if (fresh.type !== "evidence") return
+          expect(fresh.candidate).toBeUndefined()
+          expect(selectedText(fresh)).toBe("never a member")
+        }),
+      )
+    })
+
+    // E2. THE ORDERING ARM. `close()` lands BEFORE any publication and cannot be the release point:
+    // the owner's live continuation keeps the degraded gate parked, so `closeNow` degrades and
+    // returns while the snapshot still does not exist. Only `finishContinuation()` -- one `apply`
+    // later -- publishes. A release performed unconditionally inside `closeNow` would therefore
+    // freeze an EMPTY membership here, and the covered Assistant below would come back fresh.
+    test("E2: a close-triggered degraded publication freezes the membership close could not see", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          const reservation = yield* scope.reserve(SessionID.create())
+          // Owner claim, deliberately left in flight: `active === 1` parks both gates, so nothing can
+          // publish until this test says so.
+          yield* owner(scope, reservation)
+          const a1 = assistant(scope.sessionID, "observed before close")
+          yield* scope.observeTurn({ assistant: a1, clean: true })
+
+          yield* scope.close()
+          // The precondition the arm rests on: closed, degraded, and STILL UNRESOLVED. Without this
+          // the test would silently degenerate into E1's publish-then-close ordering.
+          expect(scope.current().failed).toBe(true)
+          expect(yield* coordinator.locate(scope.sessionID)).toBeUndefined()
+          const probeSettled = yield* Deferred.make<void>()
+          yield* scope
+            .result(assistant(scope.sessionID, "probe while unresolved"))
+            .pipe(Effect.ensuring(Deferred.succeed(probeSettled, undefined)), Effect.forkChild)
+          yield* Effect.yieldNow
+          // Still PARKED, which is the precondition stated as an assertion: no resolution exists yet,
+          // so the close that already ran had no snapshot to release and must have released nothing.
+          expect(yield* Deferred.isDone(probeSettled)).toBe(false)
+
+          // One `apply` later, the degraded gate resolves and the snapshot is taken.
+          yield* scope.finishContinuation()
+          yield* Deferred.await(probeSettled)
+
+          const covered = yield* scope.result(a1)
+          expect(covered.type).toBe("evidence")
+          if (covered.type !== "evidence") return
+          expect(covered.degraded).toBe(true)
+          expect(covered.candidate).toBeDefined()
+          expect(covered.candidate?.assistant.info.id).toBe(a1.info.id)
+
+          const fresh = yield* scope.result(assistant(scope.sessionID, "arrived after publication"))
+          expect(fresh.type).toBe("evidence")
+          if (fresh.type !== "evidence") return
+          // Fresh evidence is non-degraded and structure-free; a consumed degraded one is neither.
+          expect(fresh.degraded).toBe(false)
+          expect(fresh.candidate).toBeUndefined()
+        }),
+      )
+    })
+
+    // E3. EVERY unresolved entrant enrols, not just the one whose fallback latches. W2 shares W1's
+    // resolution through the Deferred without needing membership, so the shared-waiter arm above
+    // cannot see whether W2 was enrolled. Presenting W2's Assistant AGAIN, after publication, is
+    // what reads the frozen snapshot directly.
+    test("E3: a later waiter's Assistant is enrolled even though the first fallback latched", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          // Blocks the never-attached immediate mint so both callers genuinely park.
+          yield* scope.reserve(SessionID.create())
+          const park = (value: SessionV1.WithParts) =>
+            Effect.gen(function* () {
+              const done = yield* Deferred.make<void>()
+              yield* scope.result(value).pipe(Effect.ensuring(Deferred.succeed(done, undefined)), Effect.forkChild)
+              return done
+            })
+
+          const w1 = assistant(scope.sessionID, "first waiter")
+          const w2 = assistant(scope.sessionID, "second waiter")
+          const first = yield* park(w1)
+          const second = yield* park(w2)
+          yield* Effect.yieldNow
+          expect(yield* Deferred.isDone(first)).toBe(false)
+          expect(yield* Deferred.isDone(second)).toBe(false)
+
+          yield* scope.degrade()
+          yield* Deferred.await(first)
+          yield* Deferred.await(second)
+
+          // W2 latched nothing: the retained fallback is W1's. If enrolment rode the latch, W2 would
+          // be absent from the snapshot and this would hand W2 its own Assistant back as fresh.
+          const covered = yield* scope.result(w2)
+          expect(covered.type).toBe("evidence")
+          if (covered.type !== "evidence") return
+          expect(covered.degraded).toBe(true)
+          expect(selectedText(covered)).toBe("first waiter")
+
+          const fresh = yield* scope.result(assistant(scope.sessionID, "third, never parked"))
+          expect(fresh.type).toBe("evidence")
+          if (fresh.type !== "evidence") return
+          expect(fresh.degraded).toBe(false)
+          expect(selectedText(fresh)).toBe("third, never parked")
+        }),
+      )
+    })
+
+    // E4. The `observeTurn` refusal guard, held as a standing assertion. Every publication sets
+    // `closed`, so an observation arriving afterwards is refused outright -- it enrols nothing and,
+    // equally, leaves the scope's visible evidence alone. The freshness half below is a CONTROL
+    // (membership already governs it); the state half is the oracle, and it fails the moment the
+    // guard is removed and a post-publication turn starts writing candidate evidence into a scope
+    // whose answer is already frozen.
+    test("E4: an observation arriving after publication neither enrols nor changes the scope", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const { scope, first } = yield* publishedDegraded({})
+          const before = scope.current()
+          expect(before.candidate).toBe(false)
+
+          const late = assistant(scope.sessionID, "observed after publication")
+          yield* scope.observeTurn({ assistant: late, clean: true })
+          expect(scope.current()).toEqual(before)
+
+          const fresh = yield* scope.result(late)
+          expect(fresh.type).toBe("evidence")
+          if (fresh.type !== "evidence") return
+          expect(fresh.degraded).toBe(false)
+          expect(fresh.candidate).toBeUndefined()
+          expect(selectedText(fresh)).toBe("observed after publication")
+
+          // Control: the frozen cohort still governs, so a real member still consumes.
+          const covered = yield* scope.result(first)
+          expect(covered.type).toBe("evidence")
+          if (covered.type !== "evidence") return
+          expect(covered.degraded).toBe(true)
+          expect(selectedText(covered)).toBe("frozen first fallback")
+        }),
+      )
+    })
+
+    // E5a. CP-032 §9.2 row 1, OBSERVED-SELECTED half. The candidate-selected half is the CLEAN arm
+    // near the top of this block; this one publishes a clean resolution whose selection is a
+    // non-clean observed turn released by a wake. `observed` rather than `candidate` is the
+    // structure that separates consumption from freshness here -- the texts are identical.
+    test("E5a: a wake-released OBSERVED selection is consumed by its own frozen member", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          const reservation = yield* scope.reserve(SessionID.create())
+          yield* owner(scope, reservation)
+          yield* scope.settleTerminal(yield* markTerminal(scope, reservation))
+          const dirty = assistant(scope.sessionID, "observed non-clean turn")
+          yield* scope.observeTurn({ assistant: dirty, clean: false })
+          expect(scope.current().candidate).toBe(false)
+          expect(yield* scope.beginWake()).toBe(true)
+          yield* scope.endWake()
+          yield* scope.exhaustWake()
+          yield* scope.finishContinuation()
+
+          const covered = yield* scope.result(dirty)
+          expect(covered.type).toBe("evidence")
+          if (covered.type !== "evidence") return
+          // A clean resolution, selected through `observed`, and NOT degraded by the exhausted wake.
+          expect(covered.degraded).toBe(false)
+          expect(covered.observed).toBeDefined()
+          expect(covered.observed?.assistant.info.id).toBe(dirty.info.id)
+          expect(selectedText(covered)).toBe("observed non-clean turn")
+
+          const fresh = yield* scope.result(assistant(scope.sessionID, "distinct after publication"))
+          expect(fresh.type).toBe("evidence")
+          if (fresh.type !== "evidence") return
+          expect(fresh.observed).toBeUndefined()
+          expect(fresh.candidate).toBeUndefined()
+        }),
+      )
+    })
+
+    // E5b. CP-032 §9.2 row 4, DEGRADED half. The clean half is the displaced-observed arm above.
+    // Membership is history, so an Assistant displaced out of the candidate slot by a later `own()`
+    // must still consume the resolution that eventually publishes -- whether that resolution is
+    // clean or degraded. Trio-matching and clear-on-invalidate both revive A1 as fresh here.
+    test("E5b: a displaced Assistant consumes a DEGRADED later selection rather than filing itself", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          const reservation = yield* scope.reserve(SessionID.create())
+          yield* owner(scope, reservation)
+          // Taken before the displacement, for the reason the clean sibling records: `own()` moves
+          // the epoch and a later marker would never settle.
+          const marker = yield* markTerminal(scope, reservation)
+
+          const a1 = assistant(scope.sessionID, "displaced yield")
+          yield* scope.observeTurn({ assistant: a1, clean: true })
+          expect(scope.current().candidate).toBe(true)
+          yield* scope.own(MessageID.ascending())
+          expect(scope.current().candidate).toBe(false)
+
+          const a2 = assistant(scope.sessionID, "later degraded answer")
+          yield* scope.observeTurn({ assistant: a2, clean: true })
+          yield* scope.settleTerminal(marker)
+          yield* scope.degrade()
+          yield* scope.finishContinuation()
+
+          const covered = yield* scope.result(a1)
+          expect(covered.type).toBe("evidence")
+          if (covered.type !== "evidence") return
+          expect(covered.degraded).toBe(true)
+          expect(covered.candidate?.assistant.info.id).toBe(a2.info.id)
+          // A1's own text is the stale progress this must never file.
+          expect(selectedText(covered)).toBe("later degraded answer")
+
+          const fresh = yield* scope.result(assistant(scope.sessionID, "still producing"))
+          expect(fresh.type).toBe("evidence")
+          if (fresh.type !== "evidence") return
+          expect(fresh.degraded).toBe(false)
+          expect(fresh.candidate).toBeUndefined()
+        }),
+      )
+    })
+
+    // E6. THE IMMEDIATE-MINT SITE. `result()`'s never-attached arm publishes inline, so it is the one
+    // publication point where the caller's own Assistant is both the enrolling entrant and the
+    // arriving comparand -- and therefore the one place a copy/clear ORDER SWAP is invisible to
+    // every other arm. The observation before the mint is what makes the oracle discriminating: it
+    // gives the published resolution a `candidate`, so a consumed second arrival is structurally
+    // distinct from a fresh one even though both carry the same text.
+    test("E6: an immediate never-attached mint covers its own caller, and only its own caller", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          const a = assistant(scope.sessionID, "immediate answer")
+          // Never attached, so this cannot publish yet; it only enrols and fills the candidate slot.
+          yield* scope.observeTurn({ assistant: a, clean: true })
+
+          const minted = yield* scope.result(a)
+          expect(minted.type).toBe("evidence")
+          if (minted.type !== "evidence") return
+          expect(minted.degraded).toBe(false)
+          expect(minted.candidate?.assistant.info.id).toBe(a.info.id)
+
+          // Same ID again, now post-publication. Copy-then-clear makes this a member; clear-then-copy
+          // freezes an empty set and hands back bare fresh evidence with the SAME text.
+          const again = yield* scope.result(a)
+          expect(again.type).toBe("evidence")
+          if (again.type !== "evidence") return
+          expect(again.degraded).toBe(false)
+          expect(again.candidate).toBeDefined()
+          expect(again.candidate?.assistant.info.id).toBe(a.info.id)
+
+          const fresh = yield* scope.result(assistant(scope.sessionID, "distinct arrival"))
+          expect(fresh.type).toBe("evidence")
+          if (fresh.type !== "evidence") return
+          expect(fresh.candidate).toBeUndefined()
+          expect(selectedText(fresh)).toBe("distinct arrival")
+        }),
+      )
+    })
   })
 })

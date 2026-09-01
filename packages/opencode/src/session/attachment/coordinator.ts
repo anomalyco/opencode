@@ -183,18 +183,27 @@ type State = {
     /**
      * CP-032 §3.3.2 — every Assistant a future resolution would legitimately speak for.
      *
-     * Monotonic and append-only before publication: an accepted `observeTurn` enrols its Assistant,
+     * Monotonic and append-only WHILE UNRESOLVED: an accepted `observeTurn` enrols its Assistant,
      * and so does every `result()` call that enters while unresolved, including waiters whose
      * fallback never latches. `invalidate()` deliberately does NOT clear it. Candidate and observed
      * are single replaceable slots, so a superseded or yielded Assistant disappears from them while
      * remaining something the eventual resolution speaks for; membership is the history those slots
      * cannot keep.
+     *
+     * Released at publication by `publishResolution`, and nowhere else. Once a resolution exists
+     * this set answers nothing — every later arrival is compared against the frozen snapshot — so
+     * retaining it past that point would leave a mutable duplicate of a frozen fact in reach of any
+     * future edit that forgot which of the two it was holding.
      */
     readonly members: Set<MessageID>
     /**
      * The membership frozen at evidence publication: a new non-aliasing set, never mutated
      * afterwards, so a delayed fiber reading it after `close` still sees what the resolution covered.
      * Cancellation publishes none — it has no controlling Assistant to speak for.
+     *
+     * `publishResolution` copies into this and then clears `members`, in that order. The order is
+     * the whole guarantee: aliasing instead of copying, or clearing before copying, both leave this
+     * snapshot empty and turn every covered Assistant into a falsely fresh answer.
      */
     publishedMembers?: ReadonlySet<MessageID>
     resolution?: Resolution
@@ -273,32 +282,52 @@ export const make = Effect.gen(function* () {
       state.degraded = true
     }
 
+    /**
+     * The ONE publication point — CP-032 §3.3.2 rules 3 and 4 applied where both are decidable.
+     *
+     * Copy, then clear, in that order, inside the one synchronous transition. The copy is what this
+     * resolution speaks for and must never alias the mutable set; the clear is rule 4's
+     * post-publication non-enrolment, taken at the instant publication makes the mutable set
+     * meaningless rather than deferred to `close`.
+     *
+     * Deferring it to `close` cannot express both orders, which is why that arrangement was
+     * replaced. `apply` runs `gate()` AFTER the transition body, so a close that degrades an
+     * unresolved scope publishes after `closeNow` has already returned: a clear conditioned on
+     * `state.resolution` there sees no resolution yet and skips — leaving the mutable set alive past
+     * a publication — while an unconditional clear there freezes an EMPTY membership and makes every
+     * later caller falsely fresh. Publication is the only site that sees the snapshot exist.
+     *
+     * Cancellation freezes no cohort: it has no controlling Assistant to speak for and is consumed
+     * unconditionally. It is still a publication, so it releases the mutable set on the same rule.
+     */
+    const publishResolution = (resolution: Resolution) => {
+      state.resolution = resolution
+      if (resolution.type === "evidence") state.publishedMembers = new Set(state.members)
+      state.members.clear()
+      state.closed = true
+    }
+
     const gate = () => {
       if (state.resolution) return
       if (state.cancelled) {
         if (state.active > 0 || state.wakes > 0) return
-        state.resolution = {
+        publishResolution({
           type: "cancelled",
           taskID: state.sessionID,
           status: state.cancellationStatus ?? "unknown",
-        }
-        state.closed = true
+        })
         return
       }
       if (state.degraded) {
         if (state.active > 0 || state.wakes > 0) return
         if (!state.candidate && !state.observed && !state.fallback) return
-        state.resolution = {
+        publishResolution({
           type: "evidence",
           candidate: state.candidate,
           observed: state.observed,
-            degraded: true,
-          }
-          // A new set, never aliased to the mutable history, so `close` cannot reach back into what
-          // this resolution covered.
-          state.publishedMembers = new Set(state.members)
-          state.closed = true
-          return
+          degraded: true,
+        })
+        return
       }
       if (!state.everAttached) return
       if (!state.candidate && !(state.observed && state.wakeEpoch === state.epoch)) return
@@ -308,15 +337,13 @@ export const make = Effect.gen(function* () {
       if (state.wakes > 0) return
       if (state.candidate && state.candidate.epoch !== state.epoch) return
       if (state.observed && state.observed.epoch !== state.epoch) return
-      state.resolution = {
+      publishResolution({
         type: "evidence",
         candidate: state.candidate,
         observed: state.observed,
-          degraded: false,
-        }
-        state.publishedMembers = new Set(state.members)
-        state.closed = true
-      }
+        degraded: false,
+      })
+    }
 
     const closeNow = () => {
       if (registry.scopes.get(sessionID)?.scope.id === state.scopeID) registry.scopes.delete(sessionID)
@@ -325,14 +352,14 @@ export const make = Effect.gen(function* () {
       state.fence = undefined
       state.jobs.clear()
       state.observers.clear()
-        state.undelivered.clear()
-        state.messages.clear()
-        // Only once the snapshot is frozen. `closeNow` can itself degrade an unresolved scope, and
-        // `apply` runs `gate()` AFTER this body, so clearing unconditionally would let that
-        // publication freeze an empty membership and make every later caller falsely fresh. The
-        // frozen `publishedMembers` is never touched here: delayed exact-scope fibers still read it.
-        if (state.resolution) state.members.clear()
-      }
+      state.undelivered.clear()
+      state.messages.clear()
+      // Membership is deliberately untouched here, in BOTH directions. `apply` runs `gate()` after
+      // this body, so a close that degrades an unresolved scope publishes afterwards and must still
+      // find the real membership to freeze; and once a publication has happened it has already
+      // released the set itself. The frozen `publishedMembers` is never touched here either —
+      // delayed exact-scope fibers still read it after close.
+    }
 
     const apply = <A>(fn: () => A) =>
       Effect.uninterruptible(
@@ -627,11 +654,12 @@ export const make = Effect.gen(function* () {
               observed: state.observed,
               degraded: state.degraded,
             }
-            state.resolution = resolution
             // The third evidence publication point, alongside the two in `gate()`. This one mints
-            // immediately for a never-attached scope, so its membership is usually just this caller.
-            state.publishedMembers = new Set(state.members)
-            state.closed = true
+            // immediately for a never-attached scope, so its membership is usually just this caller
+            // — which is precisely why it goes through the shared `publishResolution` rather than
+            // inlining the two writes. Swapping copy and clear here would freeze an empty snapshot
+            // and make this same caller's own next arrival read as a distinct fresh answer.
+            publishResolution(resolution)
             return complete(resolution, state.fallback)
           }
           return undefined

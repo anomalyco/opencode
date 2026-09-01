@@ -802,4 +802,294 @@ describe("Task closure boundaries (CP-023 K82 and K9)", () => {
       }),
     instance,
   )
+
+  /**
+   * ADMISSION FRESHNESS AT THE PRODUCTION RUNNER SEAM — P1 and P2.
+   *
+   * The coordinator suite drives `Scope.result()` directly, which proves the decision but not that
+   * the chain feeding it exists in production. Every Task-attachment fixture elsewhere stubs
+   * `ops.prompt` and hand-calls `own()`/`observeTurn()`, so those rows would keep passing even if
+   * `SessionPrompt` stopped enrolling turns altogether — the membership under test would be the
+   * membership the fixture wrote. These two arms remove that gap: `ops.prompt` DELEGATES to the
+   * captured production capability, so each child turn runs
+   * `promptAdmitted` -> durable `own()` -> `runLoop` -> production `observeTurn` before Task's
+   * `eligible`/`result` ever sees it, and the Assistant identity compared inside the coordinator is
+   * the one the real Runner produced.
+   *
+   * Only the PARENT ingress is intercepted. Delivery is a prompt into the caller session, and
+   * replacing it with a recorder is what turns "which answers reached the caller, in what order"
+   * into a directly readable list; the child side is untouched production throughout.
+   *
+   * The oracle is delivery COUNT and payload identity, because the filing guard keys on the
+   * controlling selected position: consuming a resolution files the position that resolution already
+   * holds and is deduplicated into silence, while returning fresh evidence files a distinct position
+   * and delivers again. One answer versus two is therefore the visible shadow of covered versus
+   * uncovered, at the seam where it actually decides a caller's result.
+   */
+  describe("Admission Freshness at the production Runner seam (CP-032 §3.3.2)", () => {
+    const injectedText = (parts: Parameters<TaskPromptOps["prompt"]>[0]["parts"]) =>
+      parts.map((part) => (part.type === "text" ? part.text : "")).join("")
+
+    const acknowledged = (sessionID: SessionID): SessionV1.WithParts => {
+      const messageID = MessageID.ascending()
+      return {
+        info: {
+          id: messageID,
+          role: "assistant",
+          parentID: MessageID.ascending(),
+          sessionID,
+          mode: "test",
+          agent: "build",
+          path: { cwd: "/tmp", root: "/tmp" },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: ModelV2.ID.make("test-model"),
+          providerID: ProviderV2.ID.make("test"),
+          time: { created: Date.now(), completed: Date.now() },
+          finish: "stop",
+        },
+        parts: [{ id: PartID.ascending(), messageID, sessionID, type: "text", text: "parent acknowledged" }],
+      } as SessionV1.WithParts
+    }
+
+    /**
+     * P1 — COVERED HISTORY SURVIVES DISPLACEMENT.
+     *
+     * R1's real Runner produces and observes A1; its Task fiber is paused at the provider return,
+     * BEFORE `eligible`, so it has announced nothing and filed nothing. A supplemental prompt then
+     * admits through production `promptAdmitted`, whose `own()` invalidates the candidate slot A1
+     * occupied, runs its own turn, and publishes a clean resolution selecting A2. A1 is gone from
+     * every slot the resolution carries — it survives only in the frozen membership. Releasing R1
+     * makes it arrive as a covered ID, so it consumes A2's selection and files A2's position, which
+     * the guard already holds.
+     *
+     * KILLS, at the production seam: omitting `observeTurn`'s enrolment, clearing history on
+     * `invalidate()`, and matching the frozen {fallback, candidate, observed} trio instead of
+     * membership. Under each, A1 is uncovered, comes back as fresh evidence, files its own distinct
+     * position, and the caller receives a SECOND answer carrying the superseded yield.
+     */
+    background.instance(
+      "P1: a displaced yield consumes the later selection and files nothing of its own",
+      () =>
+        Effect.gen(function* () {
+          const boot = yield* bootstrap
+          yield* boot.llm.reset
+          acquired.length = 0
+
+          const deliveries: string[] = []
+          const firstDelivery = yield* Deferred.make<void>()
+          const observed = yield* Deferred.make<void>()
+          const detected = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const childRuns = { value: 0 }
+
+          const ops: TaskPromptOps = {
+            ...boot.capture.ops,
+            // Wraps rather than replaces: the production acquisition, lease and observation all run.
+            // The only addition is a completion signal, so the final counts are read after the
+            // observer has finished its whole drain rather than at an arbitrary moment.
+            acquireContinuation: (input) =>
+              boot.capture.ops.acquireContinuation(input).pipe(
+                Effect.map((held) => ({
+                  ...held,
+                  observe: <A, E, R>(body: Effect.Effect<A, E, R>) =>
+                    held.observe(body).pipe(Effect.ensuring(Deferred.succeed(observed, undefined))),
+                })),
+              ),
+            prompt: (input) =>
+              Effect.gen(function* () {
+                if (input.sessionID === boot.caller.id) {
+                  deliveries.push(injectedText(input.parts))
+                  yield* Deferred.succeed(firstDelivery, undefined)
+                  return acknowledged(boot.caller.id)
+                }
+                const position = ++childRuns.value
+                // PRODUCTION. Returns only after the real Runner has recorded this turn on the exact
+                // attachment generation, so the pause below sits between a genuine `observeTurn` and
+                // Task's `eligible` — the exact window §3.3.2 exists to decide.
+                const result = yield* boot.capture.ops.prompt(input)
+                if (position === 1) {
+                  yield* Deferred.succeed(detected, undefined)
+                  yield* Deferred.await(release)
+                }
+                return result
+              }),
+          }
+
+          yield* boot.llm.text("A1 yield")
+          yield* boot.llm.text("A2 final")
+
+          const receipt = yield* boot.task.execute(
+            { description: "displaced yield", prompt: "run", subagent_type: "general", async: true },
+            withOps(boot.capture.context, ops),
+          )
+          expect(receipt.output).toContain("Async task started")
+          const child = receipt.metadata.sessionId
+          if (!child) return yield* Effect.die("async Task receipt omitted its child Session")
+          yield* Deferred.await(detected)
+
+          // PRECONDITION. R1 is paused before eligibility, so the scope is still live and unresolved
+          // and the supplement below genuinely BORROWS it rather than opening its own.
+          expect(yield* boot.attachments.locateBorrowable(SessionID.make(child))).toBeDefined()
+
+          const supplement = yield* boot.task.execute(
+            { description: "displacing run", prompt: "more context", subagent_type: "general", task_id: child },
+            withOps(boot.capture.context, ops),
+          )
+          expect(supplement.output).toContain("task updated")
+
+          // A2 publishes and delivers while R1 is still paused — R1 announced nothing, so no ordering
+          // floor withholds this.
+          yield* Deferred.await(firstDelivery)
+          expect(deliveries).toHaveLength(1)
+          expect(deliveries[0]).toContain("A2 final")
+
+          yield* Deferred.succeed(release, undefined)
+          const waited = yield* boot.jobs.wait({ id: child, timeout: 10_000 })
+          expect(waited.timedOut).toBe(false)
+          expect(waited.info?.status).toBe("completed")
+          yield* Deferred.await(observed)
+
+          // NOT VACUOUS: both runs really executed against the real Runner and left their Assistants
+          // in the child transcript. Without this, "one delivery" would also describe a supplement
+          // that never ran.
+          const transcript = yield* boot.sessions.messages({ sessionID: SessionID.make(child) })
+          const answers = transcript
+            .filter((message) => message.info.role === "assistant")
+            .flatMap((message) => message.parts.filter((part) => part.type === "text").map((part) => part.text))
+          expect(answers).toContain("A1 yield")
+          expect(answers).toContain("A2 final")
+
+          // THE ORACLE. Exactly one answer reached the caller, and it is A2's. A1 was covered, so it
+          // consumed A2's selection and filed A2's already-held position.
+          expect(deliveries).toHaveLength(1)
+          expect(deliveries[0]).toContain("A2 final")
+          expect(deliveries.join("\n")).not.toContain("A1 yield")
+        }),
+      instance,
+    )
+
+    /**
+     * P2 — A STILL-PRODUCING RUN IS NOT COVERED.
+     *
+     * The mirror image, and the reason freshness cannot be a degraded-only rule. R2 admits for real
+     * — `own()` has run, so the candidate slot is invalidated — but its provider stream is held open,
+     * so it has produced nothing when R1 is released and publishes a CLEAN resolution. R2's later
+     * observation arrives after publication and is refused outright, so it never enrols; its
+     * `result(A2)` therefore finds an uncovered ID and returns fresh evidence, which files a distinct
+     * position and reaches the caller as a second answer.
+     *
+     * KILLS: consuming any pre-published evidence unconditionally, applying freshness only to
+     * degraded resolutions, and enrolling the arriving ID before comparing it. Under each, R2
+     * consumes R1's resolution, files R1's already-held position, and its answer disappears into the
+     * filing guard — one delivery where there must be two.
+     */
+    background.instance(
+      "P2: a run still producing at publication files its own distinct answer",
+      () =>
+        Effect.gen(function* () {
+          const boot = yield* bootstrap
+          yield* boot.llm.reset
+          acquired.length = 0
+
+          const deliveries: string[] = []
+          const firstDelivery = yield* Deferred.make<void>()
+          const observed = yield* Deferred.make<void>()
+          const detected = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const admitted = yield* Deferred.make<void>()
+          const childRuns = { value: 0 }
+          // The provider-side latch: `hold` streams the role chunk, awaits this, then streams the
+          // text and finish. R2 is therefore past admission and inside its turn, with no Assistant
+          // content yet, for exactly as long as this stays pending.
+          let releaseStream: (() => void) | undefined
+          const stream = new Promise<void>((resolve) => {
+            releaseStream = resolve
+          })
+
+          const ops: TaskPromptOps = {
+            ...boot.capture.ops,
+            acquireContinuation: (input) =>
+              boot.capture.ops.acquireContinuation(input).pipe(
+                Effect.map((held) => ({
+                  ...held,
+                  observe: <A, E, R>(body: Effect.Effect<A, E, R>) =>
+                    held.observe(body).pipe(Effect.ensuring(Deferred.succeed(observed, undefined))),
+                })),
+              ),
+            prompt: (input) =>
+              Effect.gen(function* () {
+                if (input.sessionID === boot.caller.id) {
+                  deliveries.push(injectedText(input.parts))
+                  yield* Deferred.succeed(firstDelivery, undefined)
+                  return acknowledged(boot.caller.id)
+                }
+                const position = ++childRuns.value
+                if (position === 2) {
+                  // Signals AFTER production's own callback, so "admitted" means the User message is
+                  // durable and `own()` has already invalidated the turn's prior evidence.
+                  return yield* boot.capture.ops.prompt({
+                    ...input,
+                    onAdmitted: (input.onAdmitted ?? Effect.void).pipe(
+                      Effect.andThen(Deferred.succeed(admitted, undefined)),
+                    ),
+                  })
+                }
+                const result = yield* boot.capture.ops.prompt(input)
+                yield* Deferred.succeed(detected, undefined)
+                yield* Deferred.await(release)
+                return result
+              }),
+          }
+
+          yield* boot.llm.text("A1 final")
+          yield* boot.llm.hold("A2 final", stream)
+
+          const receipt = yield* boot.task.execute(
+            { description: "clean mint race", prompt: "run", subagent_type: "general", async: true },
+            withOps(boot.capture.context, ops),
+          )
+          expect(receipt.output).toContain("Async task started")
+          const child = receipt.metadata.sessionId
+          if (!child) return yield* Effect.die("async Task receipt omitted its child Session")
+          yield* Deferred.await(detected)
+
+          const supplement = yield* boot.task.execute(
+            { description: "still producing", prompt: "more context", subagent_type: "general", task_id: child },
+            withOps(boot.capture.context, ops),
+          )
+          expect(supplement.output).toContain("task updated")
+          // R2 owns the scope but has produced nothing. This ordering is the whole test: publication
+          // must happen while a genuinely admitted run is still outstanding.
+          yield* Deferred.await(admitted)
+
+          yield* Deferred.succeed(release, undefined)
+          yield* Deferred.await(firstDelivery)
+          expect(deliveries).toHaveLength(1)
+          expect(deliveries[0]).toContain("A1 final")
+
+          // Only now may R2 produce. Its observation lands on a resolved, closed scope and is refused,
+          // so nothing enrols it retroactively.
+          yield* Effect.sync(() => releaseStream?.())
+          const waited = yield* boot.jobs.wait({ id: child, timeout: 10_000 })
+          expect(waited.timedOut).toBe(false)
+          expect(waited.info?.status).toBe("completed")
+          yield* Deferred.await(observed)
+
+          const transcript = yield* boot.sessions.messages({ sessionID: SessionID.make(child) })
+          const answers = transcript
+            .filter((message) => message.info.role === "assistant")
+            .flatMap((message) => message.parts.filter((part) => part.type === "text").map((part) => part.text))
+          expect(answers).toContain("A1 final")
+          expect(answers).toContain("A2 final")
+
+          // THE ORACLE. Two distinct answers, in sequence order, neither suppressed. A2 was never a
+          // member, so it spoke for itself instead of vanishing behind A1's filed position.
+          expect(deliveries).toHaveLength(2)
+          expect(deliveries[0]).toContain("A1 final")
+          expect(deliveries[1]).toContain("A2 final")
+        }),
+      instance,
+    )
+  })
 })
