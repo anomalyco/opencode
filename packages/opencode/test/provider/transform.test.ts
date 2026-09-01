@@ -3717,6 +3717,39 @@ describe("ProviderTransform.reasoningVariants", () => {
     )
   })
 
+  test.each(["luna", "sol", "terra"])("sends Bedrock GPT-5.6 %s none effort through native fields", async (name) => {
+    const item = target("@ai-sdk/amazon-bedrock", `global.openai.gpt-5.6-${name}`)
+    const variants = ProviderTransform.reasoningVariants(
+      model([{ type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] }]),
+      item,
+    )
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+      expect(variants?.[effort]).toEqual({ reasoningConfig: { type: "enabled", maxReasoningEffort: effort } })
+    }
+    const sent: unknown[] = []
+    const provider = createAmazonBedrock({
+      apiKey: "test-key",
+      region: "us-east-1",
+      fetch: Object.assign(
+        async (...args: Parameters<typeof fetch>) => {
+          sent.push(JSON.parse(String(args[1]?.body)))
+          return Response.json({
+            output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+            stopReason: "end_turn",
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          })
+        },
+        { preconnect: () => undefined },
+      ),
+    })
+    await generateText({
+      model: provider(item.api.id),
+      prompt: "hi",
+      providerOptions: ProviderTransform.providerOptions(item, variants?.none ?? {}),
+    })
+    expect(sent).toEqual([expect.objectContaining({ additionalModelRequestFields: { reasoning: { effort: "none" } } })])
+  })
+
   test("combines effort with extended thinking for Claude Opus 4.5", () => {
     expect(
       ProviderTransform.reasoningVariants(
