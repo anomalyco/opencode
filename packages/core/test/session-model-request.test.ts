@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { LanguageModel, Message, ToolResultPart } from "@opencode-ai/ai"
+import { AmazonBedrock } from "@opencode-ai/ai/providers"
 import { Gemini } from "@opencode-ai/ai/protocols/gemini"
 import { OpenAIResponses } from "@opencode-ai/ai/protocols/openai-responses"
 import { compileRequest } from "@opencode-ai/ai/route/client"
@@ -67,8 +68,11 @@ describe("SessionModelRequest.context options", () => {
           },
         })
       const baseline = yield* requests.prepare(requestInput(model))
-      expect(baseline.request.generation).toBeUndefined()
+      expect(baseline.request.generation).toEqual({ maxTokens: 100 })
       expect(baseline.request.providerOptions).toBeUndefined()
+      expect((yield* compileRequest(baseline.request)).body).toMatchObject({
+        generationConfig: { maxOutputTokens: 100 },
+      })
       const first = yield* hooks.register("session", "context", (event) =>
         Effect.sync(() => {
           expect(event.generation).toEqual({})
@@ -112,7 +116,7 @@ describe("SessionModelRequest.context options", () => {
       yield* first.dispose
       yield* second.dispose
       const unhooked = yield* requests.prepare(requestInput(model))
-      expect(unhooked.request.generation).toBeUndefined()
+      expect(unhooked.request.generation).toEqual({ maxTokens: 100 })
       expect(unhooked.request.providerOptions).toBeUndefined()
       expect((yield* compileRequest(unhooked.request)).body).toEqual((yield* compileRequest(baseline.request)).body)
       expect(model.defaults?.generation).toEqual({ temperature: 0.8 })
@@ -120,6 +124,35 @@ describe("SessionModelRequest.context options", () => {
       expect(model.defaults?.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 512 } })
       expect(model.route.defaults.providerOptions).toEqual({
         thinkingConfig: { includeThoughts: true, thinkingBudget: 256 },
+      })
+    }),
+  )
+
+  it.effect("projects the catalog output limit into Bedrock while preserving hook overrides", () =>
+    Effect.gen(function* () {
+      const requests = yield* SessionModelRequest.Service
+      const hooks = yield* PluginHooks.Service
+      const model = AmazonBedrock.configure({
+        apiKey: "test-bearer",
+        baseURL: "https://bedrock-runtime.test",
+      }).model("global.anthropic.claude-sonnet-4-5-v1:0")
+      const input = requestInput(model)
+
+      const baseline = yield* requests.prepare(input)
+      expect(baseline.request.generation).toEqual({ maxTokens: 32_000 })
+      expect((yield* compileRequest(baseline.request)).body).toMatchObject({
+        inferenceConfig: { maxTokens: 32_000 },
+      })
+
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          event.generation.maxTokens = 8_000
+        }),
+      )
+      const overridden = yield* requests.prepare(input)
+      expect(overridden.request.generation).toEqual({ maxTokens: 8_000 })
+      expect((yield* compileRequest(overridden.request)).body).toMatchObject({
+        inferenceConfig: { maxTokens: 8_000 },
       })
     }),
   )
@@ -152,7 +185,7 @@ describe("SessionModelRequest.context options", () => {
         include: ["reasoning.encrypted_content"],
       })
       const excluded = yield* requests.prepare({ ...input, contextHooks: false })
-      expect(excluded.request.generation).toBeUndefined()
+      expect(excluded.request.generation).toEqual({ maxTokens: 32_000 })
       expect(excluded.request.providerOptions).toBeUndefined()
     }).pipe(
       Effect.provide(
