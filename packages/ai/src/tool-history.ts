@@ -37,7 +37,13 @@ function missingToolResults(calls: Iterable<ToolCallPart>) {
   return new Message({
     role: "tool",
     content: [...calls].map((call) =>
-      ToolResultPart.make({ id: call.id, name: call.name, result: MISSING_TOOL_RESULT, resultType: "error" }),
+      ToolResultPart.make({
+        id: call.id,
+        name: call.name,
+        namespace: call.namespace,
+        result: MISSING_TOOL_RESULT,
+        resultType: "error",
+      }),
     ),
   })
 }
@@ -47,7 +53,7 @@ function normalizeToolMessage(message: Message, pending: Map<string, ToolCallPar
     if (part.type !== "tool-result" || part.providerExecuted === true) return part
     const call = pending.get(part.id)
     if (call) pending.delete(part.id)
-    return normalizeToolResult(part, call?.name ?? part.name)
+    return normalizeToolResult(part, call)
   })
   if (content.length === 0) return undefined
   if (content.every((part, index) => part === message.content[index])) return message
@@ -61,8 +67,10 @@ function normalizeToolMessage(message: Message, pending: Map<string, ToolCallPar
   })
 }
 
-function normalizeToolResult(part: ToolResultPart, name: string): ToolResultPart {
-  const named = part.name === name ? part : { ...part, name }
+function normalizeToolResult(part: ToolResultPart, call: ToolCallPart | undefined): ToolResultPart {
+  const name = call?.name ?? part.name
+  const namespace = call === undefined ? part.namespace : call.namespace
+  const named = part.name === name && part.namespace === namespace ? part : { ...part, name, namespace }
   if (named.result.type === "text" && named.result.value === "")
     return { ...named, result: { type: "text", value: EMPTY_TOOL_OUTPUT } }
   if (named.result.type === "error" && named.result.value === "")

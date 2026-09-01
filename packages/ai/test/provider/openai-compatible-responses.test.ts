@@ -171,6 +171,39 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("rejects tool namespaces", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const error = yield* compileRequest(
+        LLM.request({ model, tools: [{ type: "namespace", name: "crm", tools: [] }] }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("does not support tool namespaces")
+    }),
+  )
+
+  it.effect("rejects tool namespaces in history", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant({ type: "tool-call", id: "call_1", name: "lookup", namespace: "crm", input: {} }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("does not support tool namespaces in message history")
+    }),
+  )
+
   it.effect("lowers canonical parallel tool control", () =>
     Effect.gen(function* () {
       const model = configure({

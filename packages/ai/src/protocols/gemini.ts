@@ -465,7 +465,9 @@ function mapSafetySettings(value: unknown) {
 }
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
+  yield* ProviderShared.requireFlatToolHistory("Gemini", request.messages)
   const hasTools = request.tools.length > 0
+  const tools = yield* ProviderShared.requireFlatTools("Gemini", request.tools)
   const generation = request.generation
   const options = resolveOptions(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
@@ -491,7 +493,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     tools: hasTools
       ? [
           {
-            functionDeclarations: request.tools.map((tool) =>
+            functionDeclarations: tools.map((tool) =>
               lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
             ),
           },

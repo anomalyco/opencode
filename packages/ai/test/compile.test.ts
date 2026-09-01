@@ -1,8 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLM, LLMRequest, Message, ToolCallPart, ToolDefinition, mergeProviderOptions } from "../src/index.js"
-import { AnthropicMessages, OpenAIChat } from "../src/protocols.js"
+import {
+  LLM,
+  LLMRequest,
+  Message,
+  ToolCallPart,
+  ToolDefinition,
+  ToolNamespace,
+  mergeProviderOptions,
+} from "../src/index.js"
+import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
@@ -101,6 +109,58 @@ describe("request option precedence", () => {
         {
           type: "function",
           function: { name: "search", description: "search", parameters: { type: "object" }, strict: false },
+        },
+      ])
+    }),
+  )
+
+  it.effect("deduplicates tools within each namespace", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAIResponses.route.model({ id: "gpt-5.4" }),
+          tools: [
+            ToolDefinition.make({ name: "crm", description: "Top-level CRM tool", inputSchema: {} }),
+            ToolNamespace.make({
+              name: "crm",
+              description: "CRM tools",
+              tools: [
+                ToolDefinition.make({ name: "lookup", description: "old", inputSchema: {} }),
+                ToolDefinition.make({ name: "search", description: "search", inputSchema: {} }),
+                ToolDefinition.make({ name: "lookup", description: "new", inputSchema: {} }),
+              ],
+            }),
+            ToolNamespace.make({
+              name: "support",
+              description: "Support tools",
+              tools: [ToolDefinition.make({ name: "lookup", description: "support", inputSchema: {} })],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "crm",
+          description: "Top-level CRM tool",
+          parameters: {},
+          strict: false,
+        },
+        {
+          type: "namespace",
+          name: "crm",
+          description: "CRM tools",
+          tools: [
+            { type: "function", name: "lookup", description: "new", parameters: {}, strict: false },
+            { type: "function", name: "search", description: "search", parameters: {}, strict: false },
+          ],
+        },
+        {
+          type: "namespace",
+          name: "support",
+          description: "Support tools",
+          tools: [{ type: "function", name: "lookup", description: "support", parameters: {}, strict: false }],
         },
       ])
     }),

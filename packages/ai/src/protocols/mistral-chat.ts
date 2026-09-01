@@ -396,6 +396,7 @@ const lowerTool = (tool: ToolDefinition): MistralTool => ({
 })
 
 export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (request: LLMRequest) {
+  yield* ProviderShared.requireFlatToolHistory("Mistral Chat", request.messages)
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(MistralOptions))(
     request.providerOptions ?? {},
   )
@@ -414,10 +415,11 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
         tool: (name) => ({ type: "function" as const, function: { name } }),
       })
     : undefined
+  const tools = yield* ProviderShared.requireFlatTools("Mistral Chat", request.tools)
   return {
     model: request.model.id,
     messages: yield* lowerMessages(request),
-    tools: request.tools.length > 0 ? request.tools.map(lowerTool) : undefined,
+    tools: tools.length > 0 ? tools.map(lowerTool) : undefined,
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: request.generation?.maxTokens,

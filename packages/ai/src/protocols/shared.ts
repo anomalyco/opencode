@@ -9,11 +9,14 @@ import {
   UnsupportedOperationError,
   AIError,
   HttpContext,
+  LLMRequest,
+  Message,
+  ToolDefinition,
   type ContentPart,
-  type LLMRequest,
   type MediaPart,
   type ProviderID,
   type TextPart,
+  type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
 import { isRecord } from "../utils/record.js"
@@ -46,6 +49,7 @@ export const promptCacheKey = (request: LLMRequest): string | undefined => {
 export interface ToolAccumulator {
   readonly id: string
   readonly name: string
+  readonly namespace?: string
   readonly input: string
 }
 
@@ -278,6 +282,39 @@ export const unsupportedOperation = (input: {
       cause: input.cause,
     }),
   })
+
+export const requireFlatTools = Effect.fn("ProviderShared.requireFlatTools")(function* (
+  protocol: string,
+  tools: ReadonlyArray<ToolEntry>,
+) {
+  return yield* Effect.forEach(tools, (tool): Effect.Effect<ToolDefinition, AIError> => {
+    if (tool.type === "namespace") return Effect.fail(invalidRequest(`${protocol} does not support tool namespaces`))
+    return Effect.succeed(tool)
+  })
+})
+
+export const flattenToolRequest = (request: LLMRequest) => {
+  const flatten = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string>): ReadonlyArray<ToolDefinition> =>
+    tools.flatMap((tool) => {
+      if (tool.type === "namespace") return flatten(tool.tools, [...path, tool.name])
+      if (path.length === 0) return [tool]
+      return [new ToolDefinition({ ...tool, name: [...path, tool.name].join("_") })]
+    })
+  const tools = Array.from(new Map(flatten(request.tools, []).map((tool) => [tool.name, tool])).values())
+  const messages = request.messages.map((message) => {
+    const content = message.content.map((part) => {
+      if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
+      return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
+    })
+    return content.every((part, index) => part === message.content[index]) ? message : new Message({ ...message, content })
+  })
+  return {
+    tools,
+    request: messages.every((message, index) => message === request.messages[index])
+      ? request
+      : LLMRequest.update(request, { messages }),
+  }
+}
 
 export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function* (
   route: string,

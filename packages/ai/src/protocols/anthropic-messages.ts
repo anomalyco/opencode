@@ -1067,10 +1067,12 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
+  const flattened = ProviderShared.flattenToolRequest(request)
+  const definitions = flattened.tools
   const tools =
-    request.tools.length === 0
+    definitions.length === 0
       ? undefined
-      : request.tools.map((tool) =>
+      : definitions.map((tool) =>
           lowerTool(
             breakpoints,
             tool,
@@ -1088,7 +1090,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
           text: part.text,
           cache_control: cacheControl(breakpoints, part.cache),
         }))
-  const messages = yield* lowerMessages(request, breakpoints)
+  const messages = yield* lowerMessages(flattened.request, breakpoints)
   if (breakpoints.dropped > 0) {
     yield* Effect.logWarning(
       `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,

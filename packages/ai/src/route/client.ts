@@ -487,10 +487,22 @@ export function make<Body, Prepared, Frame, Event, State>(
 }
 
 const prepareRequest = (request: LLMRequest) => {
-  const original = applyCachePolicy(resolveRequestOptions(request))
+  const original = resolveRequestOptions(request)
   const sanitized = LLMRequest.update(original, sanitizeSurrogates({ ...LLMRequest.input(original), model: undefined }))
-  const tools = [...new Map(sanitized.tools.map((tool) => [tool.name, tool])).values()]
-  const resolved = tools.length === sanitized.tools.length ? sanitized : LLMRequest.update(sanitized, { tools })
+  const dedupe = (tools: LLMRequest["tools"]): LLMRequest["tools"] => {
+    const result = Array.from(
+      new Map(
+        tools.map((tool) => [
+          `${tool.type}:${tool.name}`,
+          tool.type === "tool" ? tool : { ...tool, tools: dedupe(tool.tools) },
+        ]),
+      ).values(),
+    )
+    return result.length === tools.length && result.every((tool, index) => tool === tools[index]) ? tools : result
+  }
+  const tools = dedupe(sanitized.tools)
+  const deduplicated = tools === sanitized.tools ? sanitized : LLMRequest.update(sanitized, { tools })
+  const resolved = applyCachePolicy(deduplicated)
   const headers = resolved.model.route.headers?.({ request: resolved })
   return headers === undefined
     ? resolved

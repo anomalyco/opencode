@@ -5,7 +5,7 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import type { LLMRequest, JsonSchema, ToolDefinition } from "../schema/index.js"
+import { LLMRequest, type AIError, type JsonSchema, type ToolDefinition, type ToolEntry } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
@@ -75,7 +75,18 @@ const OpenAIResponsesHostedToolItem = Schema.Union([
   ),
 ])
 
-const OpenAIResponsesTools = Schema.Union([OpenResponses.Tool, OpenAIResponsesImageGenerationTool])
+const OpenAIResponsesNamespace = Schema.Struct({
+  type: Schema.tag("namespace"),
+  name: Schema.String,
+  description: Schema.String,
+  tools: Schema.Array(OpenResponses.Tool),
+})
+
+const OpenAIResponsesTools = Schema.Union([
+  OpenResponses.Tool,
+  OpenAIResponsesNamespace,
+  OpenAIResponsesImageGenerationTool,
+])
 
 const OpenAIResponsesToolChoice = Schema.Union([
   OpenResponses.ToolChoice,
@@ -106,6 +117,7 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 const adapter = {
   id: ADAPTER,
   name: NAME,
+  toolNamespaces: true,
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
@@ -128,13 +140,37 @@ const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDe
   return yield* OpenResponses.lowerTool(NAME, tool, inputSchema)
 })
 
-const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolDefinition>) =>
+const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (
+  tool: ToolEntry,
+  compatibility: Parameters<typeof ToolSchemaProjection.modelCompatibility>[1],
+) {
+  if (tool.type === "tool")
+    return yield* lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility))
+  if (tool.description === undefined)
+    return yield* ProviderShared.invalidRequest("OpenAI Responses tool namespaces require a description")
+  return {
+    type: "namespace" as const,
+    name: tool.name,
+    description: tool.description,
+    tools: yield* Effect.forEach(tool.tools, (child) => {
+      if (child.type === "namespace")
+        return Effect.fail(ProviderShared.invalidRequest("OpenAI Responses does not support nested tool namespaces"))
+      return OpenResponses.lowerTool(
+        NAME,
+        child,
+        ToolSchemaProjection.modelCompatibility(child.inputSchema, compatibility),
+      )
+    }),
+  }
+})
+
+const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolEntry>) =>
   ProviderShared.matchToolChoice(NAME, toolChoice, {
     auto: () => "auto" as const,
     none: () => "none" as const,
     required: () => "required" as const,
     tool: (name) =>
-      tools.some((tool) => tool.name === name && nativeImageTool(tool) !== undefined)
+      tools.some((tool) => tool.type === "tool" && tool.name === name && nativeImageTool(tool) !== undefined)
         ? ({ type: "image_generation" } as const)
         : { type: "function" as const, name },
   })
@@ -153,9 +189,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     tools:
       request.tools.length === 0
         ? undefined
-        : yield* Effect.forEach(request.tools, (tool) =>
-            lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
-          ),
+        : yield* Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, toolSchemaCompatibility)),
     tool_choice:
       OpenResponses.allowedToolChoice(request) ??
       (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),

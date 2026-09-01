@@ -727,6 +727,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   request: LLMRequest,
   options: LoweringOptions = {},
 ) {
+  yield* ProviderShared.requireFlatToolHistory("OpenAI Chat", request.messages)
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
   const reasoningField = request.model.compatibility?.reasoningField
@@ -736,6 +737,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     )
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
+  const tools = yield* ProviderShared.requireFlatTools("OpenAI Chat", request.tools)
   const provider = String(request.model.provider)
   const baseURL = request.model.route.endpoint.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
@@ -757,7 +759,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
         ? hasHistory
           ? []
           : undefined
-        : request.tools.map((tool) =>
+        : tools.map((tool) =>
             lowerTool(
               tool,
               ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
