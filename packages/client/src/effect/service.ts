@@ -103,16 +103,12 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         return yield* Effect.fail(new Error("Background service failed to start"))
       if (compatible) return Option.none<LocalService>()
       yield* announce("version-mismatch", service.version)
-      if (!service.legacy && service.state === "ready")
-        yield* Effect.tryPromise(() =>
-          PtyHandoff.prepare(options.file ?? fallback(), service.info, timing.requestTimeout),
-        )
-      else {
-        if (!service.legacy)
-          yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
-        yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-      }
-      yield* terminate(service.info, options, timing).pipe(Effect.ignore)
+      if (!service.legacy && service.state !== "ready")
+        yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
+      yield* stop({
+        file: options.file,
+        pty: !service.legacy && service.state === "ready" ? "handoff" : "clear",
+      }).pipe(Effect.ignore)
       lastSpawn = 0
       return Option.none<LocalService>()
     } else if (lastSpawn === 0 && info !== undefined) lastSpawn = Date.now()
@@ -145,8 +141,12 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
-  yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
   const info = yield* read(options.file)
+  if (options.pty === "handoff" && info !== undefined)
+    yield* Effect.tryPromise(() =>
+      PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout),
+    )
+  else yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
   if (info !== undefined) yield* terminate(info, options, defaultEnsureTiming)
 })
 
