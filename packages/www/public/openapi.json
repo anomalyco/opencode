@@ -16898,6 +16898,9 @@
               },
               "error": {
                 "type": "string"
+              },
+              "ref": {
+                "type": "string"
               }
             },
             "required": ["status", "error"],
