@@ -61,8 +61,6 @@ export function SessionScreen(props: { session: SessionModel }) {
   })
   const [elements, setElements] = createStore<{
     side?: HTMLDivElement
-    region?: HTMLDivElement
-    sideTerminal?: HTMLDivElement
     bottomTerminal?: HTMLDivElement
   }>({})
   const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
@@ -73,25 +71,34 @@ export function SessionScreen(props: { session: SessionModel }) {
     () => elements.side ?? null,
     session.layout.tabKey,
   )
-  const regionPresence = createAnimatedPresence(
-    () => screen.side.region.open() || undefined,
-    () => elements.region ?? null,
-    session.layout.tabKey,
-  )
-  const sideTerminalPresence = createAnimatedPresence(
-    () => sideTerminalVisible() || undefined,
-    () => elements.sideTerminal ?? null,
-    session.layout.tabKey,
-  )
   const bottomTerminalPresence = createAnimatedPresence(
     () => bottomTerminalVisible() || undefined,
     () => elements.bottomTerminal ?? null,
     session.layout.tabKey,
   )
+  const sideMotion = createMemo<{
+    key?: string
+    region: boolean
+    terminal: boolean
+    animateRegion: boolean
+    animateTerminal: boolean
+  }>((previous) => {
+    const key = session.layout.tabKey()
+    const region = screen.side.region.open()
+    const terminal = sideTerminalVisible()
+    const sameTab = previous?.key === key
+    return {
+      key,
+      region,
+      terminal,
+      animateRegion: !!previous && sameTab && previous.region !== region,
+      animateTerminal: !!previous && sameTab && previous.terminal !== terminal,
+    }
+  })
   const paneAnimating = () =>
     sidePresence.animate() ||
-    regionPresence.animate() ||
-    sideTerminalPresence.animate() ||
+    sideMotion().animateRegion ||
+    sideMotion().animateTerminal ||
     bottomTerminalPresence.animate()
   createEffect(() => {
     if (sideTerminalVisible()) setStore("sideTerminalPresent", true)
@@ -338,9 +345,8 @@ export function SessionScreen(props: { session: SessionModel }) {
                 >
                   <Show when={store.sideRegionPresent}>
                     <div
-                      ref={(element) => setElements("region", element)}
                       data-slot="session-side-region-presence"
-                      data-opened={regionPresence.animate() ? regionPresence.show() : undefined}
+                      data-opened={sideMotion().animateRegion ? sideMotion().region : undefined}
                       class="absolute inset-0"
                       onAnimationEnd={(event) => {
                         if (event.currentTarget !== event.target) return
@@ -394,9 +400,8 @@ export function SessionScreen(props: { session: SessionModel }) {
                   >
                     <Show when={store.sideTerminalPresent}>
                       <div
-                        ref={(element) => setElements("sideTerminal", element)}
                         data-slot="side-terminal-panel-presence"
-                        data-opened={sideTerminalPresence.animate() ? sideTerminalPresence.show() : undefined}
+                        data-opened={sideMotion().animateTerminal ? sideMotion().terminal : undefined}
                         class="absolute inset-0 rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
                       >
                         <div data-slot="side-terminal-panel-clip" class="size-full overflow-clip rounded-[10px]">
