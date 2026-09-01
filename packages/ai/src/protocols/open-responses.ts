@@ -189,7 +189,7 @@ export const InputItem = Schema.Union([
     id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     name: Schema.String,
-    namespace: Schema.optionalKey(Schema.String),
+    namespace: Schema.optionalKey(Schema.UndefinedOr(Schema.String)),
     arguments: Schema.String,
   }),
   Schema.Struct({
@@ -491,7 +491,7 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
     ...(id === undefined ? {} : { id }),
     call_id: part.id,
     name: part.name,
-    ...(part.namespace === undefined ? {} : { namespace: part.namespace }),
+    namespace: part.namespace,
     arguments: ProviderShared.encodeJson(part.input),
   }
 }

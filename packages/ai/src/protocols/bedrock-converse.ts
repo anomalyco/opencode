@@ -423,9 +423,8 @@ const lowerSystem = (breakpoints: BedrockCache.Breakpoints, system: ReadonlyArra
 }
 
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
-  yield* ProviderShared.requireFlatToolHistory("Bedrock Converse", request.messages)
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
-  const tools = yield* ProviderShared.requireFlatTools("Bedrock Converse", request.tools)
+  const tools = yield* ProviderShared.requireFlatToolRequest("Bedrock Converse", request)
   const generation = request.generation
   // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.

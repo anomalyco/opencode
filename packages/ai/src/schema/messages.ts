@@ -319,14 +319,14 @@ export const ToolNamespace: Schema.Codec<ToolNamespace> & {
   Schema.Struct({
     type: Schema.Literal("namespace"),
     name: Schema.String,
-    description: Schema.optional(Schema.String),
+    description: Schema.optional(Schema.UndefinedOr(Schema.String)),
     tools: Schema.Array(Schema.suspend((): Schema.Codec<ToolEntry> => ToolEntry)),
   }).annotate({ identifier: "LLM.ToolNamespace" }),
   {
     make: (input: ToolNamespace | ToolNamespaceInput): ToolNamespace => ({
       type: "namespace",
       name: input.name,
-      ...(input.description === undefined ? {} : { description: input.description }),
+      description: input.description,
       tools: input.tools.map((tool) => ToolEntry.make(tool)),
     }),
   },

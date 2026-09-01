@@ -465,9 +465,8 @@ function mapSafetySettings(value: unknown) {
 }
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
-  yield* ProviderShared.requireFlatToolHistory("Gemini", request.messages)
   const hasTools = request.tools.length > 0
-  const tools = yield* ProviderShared.requireFlatTools("Gemini", request.tools)
+  const tools = yield* ProviderShared.requireFlatToolRequest("Gemini", request)
   const generation = request.generation
   const options = resolveOptions(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
