@@ -12,7 +12,7 @@ export function PromptFooter(props: {
   context: Plugin.Context
   sessionID?: string
   mode: "normal" | "shell"
-  showDetails: boolean
+  details: boolean
 }) {
   const dimensions = useTerminalDimensions()
   const [liveHovered, setLiveHovered] = createSignal(false)
@@ -74,7 +74,7 @@ export function PromptFooter(props: {
                   </text>
                 </box>
               </Show>
-              <Show when={props.showDetails && status().length > 0}>
+              <Show when={props.details && status().length > 0}>
                 <text fg={props.context.theme.text.subdued} wrapMode="none" truncate flexShrink={1}>
                   <Show when={live()}> · </Show>
                   {status().join(" · ")}
@@ -88,7 +88,7 @@ export function PromptFooter(props: {
             </text>
           </Match>
         </Switch>
-        <Show when={props.showDetails}>
+        <Show when={props.details}>
           <text fg={props.context.theme.text.default} wrapMode="none" flexShrink={0}>
             {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
           </text>
@@ -116,7 +116,7 @@ export default Plugin.define({
           context={context}
           sessionID={props.sessionID}
           mode={props.mode}
-          showDetails={props.showDetails}
+          details={props.details}
         />
       ),
     })
