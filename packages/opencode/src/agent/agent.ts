@@ -163,6 +163,7 @@ const layer = Layer.effect(
                 question: "allow",
                 plan_exit: "allow",
                 task: {
+                  self: "deny",
                   general: "deny",
                 },
                 external_directory: {
@@ -179,8 +180,8 @@ const layer = Layer.effect(
             mode: "primary",
             native: true,
           },
-          general: {
-            name: "general",
+          self: {
+            name: "self",
             description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
             permission: Permission.merge(
               defaults,
@@ -193,8 +194,8 @@ const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
-          explore: {
-            name: "explore",
+          research: {
+            name: "research",
             permission: Permission.merge(
               defaults,
               Permission.fromConfig({
@@ -212,6 +213,92 @@ const layer = Layer.effect(
             ),
             description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
             prompt: PROMPT_EXPLORE,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "code-reviewer": {
+            name: "code-reviewer",
+            description: `Senior code reviewer. Evaluates changes across correctness, readability, architecture, security, and performance. Use before merging significant changes.`,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                read: "allow",
+                bash: "allow",
+                skill: "allow",
+                external_directory: readonlyExternalDirectory,
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "security-auditor": {
+            name: "security-auditor",
+            description: `Security engineer focused on threat modeling, injection vectors, input handling, and sensitive data/authentication best practices.`,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                read: "allow",
+                bash: "allow",
+                skill: "allow",
+                webfetch: "allow",
+                external_directory: readonlyExternalDirectory,
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "test-engineer": {
+            name: "test-engineer",
+            description: `QA / test engineer. Specializes in test suite design, edge cases, coverage analysis, and regression testing.`,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                read: "allow",
+                bash: "allow",
+                skill: "allow",
+                external_directory: readonlyExternalDirectory,
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "web-performance-auditor": {
+            name: "web-performance-auditor",
+            description: `Web performance specialist focused on Core Web Vitals (LCP, CLS, INP), loading, rendering, and network bottlenecks.`,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                read: "allow",
+                bash: "allow",
+                skill: "allow",
+                webfetch: "allow",
+                external_directory: readonlyExternalDirectory,
+              }),
+              user,
+            ),
             options: {},
             mode: "subagent",
             native: true,
@@ -262,6 +349,18 @@ const layer = Layer.effect(
             ),
             prompt: PROMPT_SUMMARY,
           },
+        }
+
+        // Backward-compatible aliases: old names map to new canonical agents
+        const aliases: Record<string, string> = {
+          general: "self",
+          explore: "research",
+        }
+        for (const [alias, target] of Object.entries(aliases)) {
+          const source = agents[target]
+          if (source && !agents[alias]) {
+            agents[alias] = { ...source, name: alias, native: true }
+          }
         }
 
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {

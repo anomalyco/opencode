@@ -50,11 +50,18 @@ it.instance("returns default native agents when no config", () =>
     const names = agents.map((a) => a.name)
     expect(names).toContain("build")
     expect(names).toContain("plan")
-    expect(names).toContain("general")
-    expect(names).toContain("explore")
+    expect(names).toContain("self")
+    expect(names).toContain("research")
+    expect(names).toContain("code-reviewer")
+    expect(names).toContain("security-auditor")
+    expect(names).toContain("test-engineer")
+    expect(names).toContain("web-performance-auditor")
     expect(names).toContain("compaction")
     expect(names).toContain("title")
     expect(names).toContain("summary")
+    // Backward-compatible aliases
+    expect(names).toContain("general")
+    expect(names).toContain("explore")
   }),
 )
 
@@ -117,6 +124,72 @@ it.instance("explore agent denies edit and write", () =>
     expect(evalPerm(explore, "edit")).toBe("deny")
     expect(evalPerm(explore, "write")).toBe("deny")
     expect(evalPerm(explore, "todowrite")).toBe("deny")
+  }),
+)
+
+it.instance("research agent is identical to explore alias", () =>
+  Effect.gen(function* () {
+    const research = yield* load((svc) => svc.get("research"))
+    const explore = yield* load((svc) => svc.get("explore"))
+    expect(research).toBeDefined()
+    expect(explore).toBeDefined()
+    expect(research?.description).toBe(explore?.description)
+    expect(research?.mode).toBe("subagent")
+    expect(evalPerm(research, "edit")).toBe("deny")
+    expect(evalPerm(research, "write")).toBe("deny")
+  }),
+)
+
+it.instance("self agent is identical to general alias", () =>
+  Effect.gen(function* () {
+    const self = yield* load((svc) => svc.get("self"))
+    const general = yield* load((svc) => svc.get("general"))
+    expect(self).toBeDefined()
+    expect(general).toBeDefined()
+    expect(self?.description).toBe(general?.description)
+    expect(self?.mode).toBe("subagent")
+    expect(evalPerm(self, "edit")).toBe("allow")
+  }),
+)
+
+it.instance("code-reviewer agent is read-only subagent", () =>
+  Effect.gen(function* () {
+    const reviewer = yield* load((svc) => svc.get("code-reviewer"))
+    expect(reviewer).toBeDefined()
+    expect(reviewer?.mode).toBe("subagent")
+    expect(evalPerm(reviewer, "edit")).toBe("deny")
+    expect(evalPerm(reviewer, "write")).toBe("deny")
+    expect(evalPerm(reviewer, "read")).toBe("allow")
+  }),
+)
+
+it.instance("security-auditor agent is read-only subagent", () =>
+  Effect.gen(function* () {
+    const auditor = yield* load((svc) => svc.get("security-auditor"))
+    expect(auditor).toBeDefined()
+    expect(auditor?.mode).toBe("subagent")
+    expect(evalPerm(auditor, "edit")).toBe("deny")
+    expect(evalPerm(auditor, "read")).toBe("allow")
+  }),
+)
+
+it.instance("test-engineer agent is read-only subagent", () =>
+  Effect.gen(function* () {
+    const qa = yield* load((svc) => svc.get("test-engineer"))
+    expect(qa).toBeDefined()
+    expect(qa?.mode).toBe("subagent")
+    expect(evalPerm(qa, "edit")).toBe("deny")
+    expect(evalPerm(qa, "read")).toBe("allow")
+  }),
+)
+
+it.instance("web-performance-auditor agent is read-only subagent", () =>
+  Effect.gen(function* () {
+    const perf = yield* load((svc) => svc.get("web-performance-auditor"))
+    expect(perf).toBeDefined()
+    expect(perf?.mode).toBe("subagent")
+    expect(evalPerm(perf, "edit")).toBe("deny")
+    expect(evalPerm(perf, "read")).toBe("allow")
   }),
 )
 
