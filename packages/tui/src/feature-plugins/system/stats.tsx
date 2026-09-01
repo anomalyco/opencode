@@ -1,12 +1,13 @@
 import type { SessionStatsInfo } from "@opencode-ai/client"
 import { Plugin } from "@opencode-ai/plugin/tui"
+import { activityCalendar } from "@opencode-ai/util/activity-calendar"
 import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { Logo } from "../../component/logo"
 import { useTheme } from "../../context/theme"
 import { tint } from "../../theme/color"
-import { statsCalendar, statsMetrics, statsNumber } from "./stats-data"
+import { statsMetrics, statsNumber } from "./stats-data"
 
 const digits: Record<string, string[]> = {
   "0": ["111", "101", "101", "101", "111"],
@@ -42,7 +43,14 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
   const letters = createMemo(() => Array.from(number()).map((char) => digits[char]))
   const large = () =>
     letters().every(Boolean) && letters().reduce((sum, char) => sum + char[0].length * 2 + 2, -2) <= width()
-  const calendar = createMemo(() => statsCalendar(props.stats, width()))
+  const calendar = createMemo(() =>
+    activityCalendar({
+      activity: props.stats.activity,
+      from: props.stats.range.from,
+      to: props.stats.range.to,
+      maxWeeks: Math.floor((width() - 4) / 2),
+    }),
+  )
   const shades = createMemo(() => [
     theme.text.subdued,
     ...[0.3, 0.5, 0.75, 1].map((alpha) => tint(theme.background.default, theme.text.emphasis, alpha)),
@@ -83,7 +91,12 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
         <text fg={theme.text.subdued}>TOKENS</text>
       </box>
       <box alignItems="center">
-        <text fg={theme.text.subdued}>{"    " + calendar().months}</text>
+        <text fg={theme.text.subdued}>
+          {"    " +
+            calendar()
+              .months.map((month) => (month.label.length <= month.span * 2 ? month.label : "").padEnd(month.span * 2))
+              .join("")}
+        </text>
         <For each={["M", "T", "W", "T", "F", "S", "S"]}>
           {(day, index) => (
             <box flexDirection="row" height={1}>
