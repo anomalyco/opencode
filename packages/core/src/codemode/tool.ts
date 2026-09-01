@@ -49,6 +49,10 @@ type Tools = {
   [name: string]: Tool.Tool<never> | Namespace.Namespace<never> | Tools
 }
 
+type RegistryOptions = {
+  readonly namespaces?: ReadonlyMap<string, ToolNamespace>
+}
+
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to orchestrate tool calls and compose their results.",
@@ -62,7 +66,7 @@ const description = [
 export const create = (
   registrations: ReadonlyMap<string, Info>,
   executeTool: (name: string, tool: Info, input: unknown, context: Context) => Effect.Effect<Result, Error>,
-  namespaces: ReadonlyMap<string, ToolNamespace> = new Map(),
+  options: RegistryOptions = {},
 ) => {
   return {
     name: "execute",
@@ -81,7 +85,7 @@ export const create = (
           )
         const result = yield* runtime(
           registrations,
-          namespaces,
+          options.namespaces ?? new Map(),
           (name, tool, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
@@ -152,16 +156,15 @@ export const create = (
   } satisfies Info
 }
 
-export const catalog = (
-  registrations: ReadonlyMap<string, Info>,
-  namespaces: ReadonlyMap<string, ToolNamespace> = new Map(),
-) => {
+export const catalog = (registrations: ReadonlyMap<string, Info>, options: RegistryOptions = {}) => {
   const pinned = new Set(
     Array.from(registrations.values())
       .filter((registration) => registration.options?.pinned === true)
       .map(qualifiedName),
   )
-  return runtime(registrations, namespaces, () => Effect.fail(toolError("Execute context is unavailable")))
+  return runtime(registrations, options.namespaces ?? new Map(), () =>
+    Effect.fail(toolError("Execute context is unavailable")),
+  )
     .catalog()
     .map((entry) => ({ ...entry, pinned: pinned.has(entry.path) }))
 }
@@ -174,21 +177,21 @@ function runtime(
 ) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
-  for (const namespace of namespaces.values()) node(root, namespace.name).namespace = namespace
+  for (const namespace of namespaces.values()) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of registrations) {
     const child = definition(registration)
-    node(root, qualifiedName(registration)).tool = Tool.make({
+    getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => executeTool(name, registration, input),
     })
   }
-  const tools = render(root)
+  const tools = renderTools(root)
   return CodeMode.make<typeof tools>({ tools, ...hooks })
 }
 
-function node(root: ToolNode, path: string) {
+function getNode(root: ToolNode, path: string) {
   return path.split(".").reduce((parent, name) => {
     const child: ToolNode = parent.children.get(name) ?? { children: new Map() }
     parent.children.set(name, child)
@@ -196,30 +199,34 @@ function node(root: ToolNode, path: string) {
   }, root)
 }
 
-function render(root: ToolNode) {
+function renderTools(root: ToolNode) {
   const callables = new Map<string, Tool.Tool<never>>()
-  const tools = children(root, [], callables)
+  const tools = renderChildren(root, [], callables)
   for (const [path, tool] of callables) tools[path] = tool
   return tools
 }
 
-function children(node: ToolNode, path: ReadonlyArray<string>, callables: Map<string, Tool.Tool<never>>): Tools {
+function renderChildren(node: ToolNode, path: ReadonlyArray<string>, callables: Map<string, Tool.Tool<never>>): Tools {
   return Object.fromEntries(
     Array.from(node.children).flatMap(([name, child]) => {
       const next = [...path, name]
       // A record cannot hold both a top-level tool and namespace under the same key.
       if (path.length === 0 && child.tool !== undefined && (child.namespace !== undefined || child.children.size > 0)) {
         const tools: Tools = {}
-        flatten(child, next, tools)
+        flattenTools(child, next, tools)
         return Object.entries(tools)
       }
-      return [[name, entry(child, next, callables)]]
+      return [[name, renderEntry(child, next, callables)]]
     }),
   )
 }
 
-function entry(node: ToolNode, path: ReadonlyArray<string>, callables: Map<string, Tool.Tool<never>>): Tools[string] {
-  const tools = children(node, path, callables)
+function renderEntry(
+  node: ToolNode,
+  path: ReadonlyArray<string>,
+  callables: Map<string, Tool.Tool<never>>,
+): Tools[string] {
+  const tools = renderChildren(node, path, callables)
   // CodeMode merges this dotted tool path with the nested namespace entry.
   if (node.tool !== undefined && (node.namespace !== undefined || node.children.size > 0))
     callables.set(path.join("."), node.tool)
@@ -233,9 +240,9 @@ function entry(node: ToolNode, path: ReadonlyArray<string>, callables: Map<strin
   return tools
 }
 
-function flatten(node: ToolNode, path: ReadonlyArray<string>, tools: Tools) {
+function flattenTools(node: ToolNode, path: ReadonlyArray<string>, tools: Tools) {
   if (node.tool !== undefined) tools[path.join(".")] = node.tool
-  for (const [name, child] of node.children) flatten(child, [...path, name], tools)
+  for (const [name, child] of node.children) flattenTools(child, [...path, name], tools)
 }
 
 function qualifiedName(registration: Info) {

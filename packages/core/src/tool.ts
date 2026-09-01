@@ -221,26 +221,27 @@ const layer = Layer.effect(
             active.set(name, tool)
           }
           const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
-          const codemode = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
-          const codemodeEnabled = !whollyDisabled("execute", rules)
-          const codemodeTool = codemodeEnabled
+          const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
+          const namespaces = state.get().namespaces
+          const codeModeEnabled = !whollyDisabled("execute", rules)
+          const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
-                codemode,
+                codeModeTools,
                 (name, tool, input, context) =>
                   beforeExecute(name, input, context).pipe(
                     Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
                   ),
-                state.get().namespaces,
+                { namespaces },
               )
             : undefined
-          const codeModeCatalog = codemodeEnabled ? CodeModeTool.catalog(codemode, state.get().namespaces) : undefined
+          const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeTools, { namespaces }) : undefined
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
                 .map(([, tool]) => definition(tool)),
-              ...(codemodeTool ? [definition(codemodeTool)] : []),
+              ...(codeModeTool ? [definition(codeModeTool)] : []),
             ],
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const context: Tool.Context = {
@@ -253,11 +254,11 @@ const layer = Layer.effect(
               const event = yield* beforeExecute(input.call.name, input.call.input, context)
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codemodeTool?.name === event.tool))
+              if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codemodeTool)
-                return yield* executeTool(codemodeTool, name, event.input, context)
+              if (name === "execute" && codeModeTool)
+                return yield* executeTool(codeModeTool, name, event.input, context)
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
               return yield* new Tool.Error({ message: `Unknown tool: ${name}` })
