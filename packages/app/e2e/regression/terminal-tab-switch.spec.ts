@@ -27,9 +27,8 @@ test("keeps terminal visibility per tab and the PTY alive across tab switches", 
   await page.keyboard.press("Control+Backquote")
   const terminal = page.locator('[data-component="terminal"]')
   const terminalPanel = page.locator('[data-component="terminal-panel"]')
-  const sidePresence = page.locator('[data-slot="session-side-panel-presence"]')
   await expect(terminal).toBeVisible()
-  await expect(sidePresence).toHaveAttribute("data-opened", "true")
+  await expect(terminalPanel).toHaveAttribute("data-size-animated", "true")
   await expect(terminalPanel).toHaveCSS("height", "300px")
   await expect.poll(() => connections.length).toBe(1)
   const connection = new URL(connections[0]!)
@@ -41,7 +40,7 @@ test("keeps terminal visibility per tab and the PTY alive across tab switches", 
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
   await expect(terminal).toBeHidden()
-  await expect(sidePresence).not.toHaveAttribute("data-opened")
+  await expect(terminalPanel).toHaveAttribute("data-size-animated", "false")
   expect(await readProbe(page)).toBe(PROBE)
   expect(connections.length).toBe(1)
 
@@ -146,7 +145,10 @@ async function setup(page: Page) {
         "opencode.window.browser.dat:tabs",
         JSON.stringify(sessions.map((sessionId: string) => ({ type: "session", server, sessionId }))),
       )
-      localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify(panes))
+      if (!localStorage.getItem("opencode.window.browser.dat:tabs.panes")) {
+        localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify(panes))
+      }
+      localStorage.setItem("settings.v3", JSON.stringify({ general: { terminalPlacement: "bottom" } }))
     },
     {
       directory,

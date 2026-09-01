@@ -149,7 +149,9 @@ async function setup(page: Page) {
         "opencode.window.browser.dat:tabs",
         JSON.stringify(sessions.map((sessionId: string) => ({ type: "session", server, sessionId }))),
       )
-      localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify(panes))
+      if (!localStorage.getItem("opencode.window.browser.dat:tabs.panes")) {
+        localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify(panes))
+      }
     },
     {
       directory,
