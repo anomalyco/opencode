@@ -103,7 +103,7 @@ Review files`,
                 transform: command.transform,
                 reload: command.reload,
               },
-              event: { subscribe: () => Stream.fromPubSub(updates) },
+              event: { subscribe: () => Stream.fromPubSub(updates), subscribeGlobal: () => Stream.empty },
               session: {
                 prompt: (input) =>
                   Effect.sync(() => {
@@ -275,7 +275,7 @@ Review files`,
             transform: command.transform,
             reload: () => command.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
           },
-          event: { subscribe: () => bus.subscribe(Event.Updated) },
+          event: { subscribe: () => bus.subscribe(Event.Updated), subscribeGlobal: () => Stream.empty },
         }),
       )
 

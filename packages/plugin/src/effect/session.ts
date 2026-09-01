@@ -1,4 +1,4 @@
-import type { SessionApi } from "@opencode-ai/client/effect/api"
+import type { SessionApi, FormApi } from "@opencode-ai/client/effect/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode-ai/ai"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
@@ -7,7 +7,7 @@ import type { Session } from "@opencode-ai/schema/session"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import type { SessionError } from "@opencode-ai/schema/session-error"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { JsonSchema, Types } from "effect"
+import { Effect, type JsonSchema, type Types } from "effect"
 import type { ModelHooks } from "./registration.js"
 
 export interface SessionPrompt {
@@ -82,6 +82,21 @@ export interface SessionHooks {
   readonly retry: SessionRetry
 }
 
+/** Intentional subset of SessionApi["list"]: in-process only, no cursor/pagination. */
+export interface SessionList {
+  /** Filter to sessions created in this directory. Must be absolute. */
+  readonly directory?: string
+  readonly search?: string
+  readonly order?: "asc" | "desc"
+  /** Maximum sessions to return. Truncates without a cursor; there is no pagination. */
+  readonly limit?: number
+}
+
+/** In-process session listing — data layer shape, without HTTP cursor encoding. Truncated at `limit`. */
+export type SessionListResult = {
+  readonly data: Session.Info[]
+}
+
 export type SessionDomain = Pick<
   SessionApi<unknown>,
   | "create"
@@ -96,7 +111,12 @@ export type SessionDomain = Pick<
   | "rename"
   | "move"
   | "wait"
+  | "compact"
+  | "skill"
+  | "revert"
   | "context"
 > & {
+  readonly list: (input?: SessionList) => Effect.Effect<SessionListResult>
   readonly hook: ModelHooks<SessionHooks>
+  readonly form: Pick<FormApi<unknown>, "list" | "get" | "state" | "reply" | "cancel">
 }

@@ -11,6 +11,7 @@ import { Location } from "./location.js"
 import { SessionMessage } from "./session/message.js"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Bus } from "./bus.js"
+import { Form } from "./form.js"
 import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
@@ -210,6 +211,26 @@ export interface Interface {
     readonly clear: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error>
     readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError>
   }
+  readonly form: {
+    readonly list: (input: { readonly sessionID: string }) => Effect.Effect<readonly Form.Info[], NotFoundError>
+    readonly get: (input: {
+      readonly sessionID: string
+      readonly formID: Form.ID
+    }) => Effect.Effect<Form.Info, NotFoundError | Form.NotFoundError>
+    readonly state: (input: {
+      readonly sessionID: string
+      readonly formID: Form.ID
+    }) => Effect.Effect<Form.State, NotFoundError | Form.NotFoundError>
+    readonly reply: (input: {
+      readonly sessionID: string
+      readonly formID: Form.ID
+      readonly answer: Form.Answer
+    }) => Effect.Effect<void, NotFoundError | Form.NotFoundError | Form.AlreadySettledError | Form.InvalidAnswerError>
+    readonly cancel: (input: {
+      readonly sessionID: string
+      readonly formID: Form.ID
+    }) => Effect.Effect<void, NotFoundError | Form.NotFoundError | Form.AlreadySettledError>
+  }
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
@@ -232,6 +253,26 @@ const layer = Layer.effect(
     const environments = yield* SessionEnvironment.Service
     const sessions = yield* Session.make()
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
+
+    // Forms are created by tools running under the session's instance, so the
+    // ambient Form.Service here is NOT where they live. Resolve the session's
+    // location and route through that location's Form.Service instead. The
+    // lookup-then-route is best-effort: a session that moves between the two
+    // steps resolves against the pre-move location and may report NotFound.
+    const formFor = <A, E>(
+      sessionID: string,
+      run: (form: Form.Interface) => Effect.Effect<A, E>,
+    ) => {
+      const id = SessionSchema.ID.descending(sessionID)
+      return store.get(id).pipe(
+        Effect.flatMap(
+          (session): Effect.Effect<A, NotFoundError | E> =>
+            session === undefined
+              ? Effect.fail(new NotFoundError({ sessionID: id }))
+              : instances.provide(session)(Form.Service.use(run)),
+        ),
+      )
+    }
 
     const result = Service.of({
       create: Effect.fn("Session.create")(function* (input) {
@@ -426,6 +467,13 @@ const layer = Layer.effect(
         stage: (input) => sessions.forSession(input.sessionID).revert.stage(input),
         clear: (sessionID) => sessions.forSession(sessionID).revert.clear(),
         commit: (sessionID) => sessions.forSession(sessionID).revert.commit(),
+      },
+      form: {
+        list: (input) => formFor(input.sessionID, (f) => f.list({ sessionID: input.sessionID })),
+        get: (input) => formFor(input.sessionID, (f) => f.get(input.formID)),
+        state: (input) => formFor(input.sessionID, (f) => f.state(input.formID)),
+        reply: (input) => formFor(input.sessionID, (f) => f.reply({ id: input.formID, answer: input.answer })),
+        cancel: (input) => formFor(input.sessionID, (f) => f.cancel(input.formID)),
       },
     })
 

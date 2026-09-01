@@ -383,7 +383,7 @@ describe("LocationWatcher subscriptions", () => {
 
             entries.current = [new Document({ type: "document", info: new Info({ watcher: { ignore: [".git"] } }) })]
             yield* ConfigLocationWatcherPlugin.Plugin.effect(
-              host({ event: { subscribe: () => bus.subscribe(Event.Updated) } }),
+              host({ event: { subscribe: () => bus.subscribe(Event.Updated), subscribeGlobal: () => Stream.empty } }),
             )
             yield* Effect.sync(() => counts.active).pipe(
               Effect.filterOrFail((count) => count === 0),

@@ -2,6 +2,10 @@ export * as ServerProcess from "./process"
 
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode-ai/core/bus"
+import { Location } from "@opencode-ai/core/location"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { Plugin } from "@opencode-ai/core/plugin"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
@@ -103,6 +107,49 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )
+
+    // Eagerly build the server's default location so its plugins activate at
+    // boot rather than on the first location-scoped request. This is what lets
+    // always-on in-process plugins (e.g. the Telegram bot) come up immediately
+    // and keeps the instance alive for the server's whole lifetime.
+    //
+    // We deliberately boot against `process.cwd()` (the directory the serve
+    // command was launched from) rather than `options.config.directory`: that
+    // field is the *global* config store (OPENCODE_CONFIG_DIR, ~/.config/opencode),
+    // not a project, so binding the always-on plugins there would be wrong. The
+    // eager boot is just a default that comes up at startup; any project can
+    // still be targeted per-request via the `x-opencode-directory` header, which
+    // bootstraps that location's instance on demand. cwd is the only directory
+    // we know at boot before any request identifies a project.
+    yield* Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      const services = locations.get(
+        Location.Ref.make({ directory: AbsolutePath.make(process.cwd()) }),
+      )
+      const instance = yield* Layer.build(services).pipe(
+        Effect.provideService(Scope.Scope, applicationScope),
+      )
+      // Wait (tolerantly) for the initial plugin generation to settle so the
+      // bot's long-poll loop is running before the server reports ready.
+      yield* Context.get(instance, Plugin.Service).awaitActivation.pipe(
+        Effect.timeoutOrElse({
+          duration: "10 seconds",
+          orElse: () => Effect.void,
+        }),
+      )
+    }).pipe(
+      Effect.provideService(
+        LocationServiceMap.Service,
+        Context.get(context, LocationServiceMap.Service),
+      ),
+      // The default location is best-effort: a plugin init defect here must not
+      // take down the whole server when lazy per-request boot would only fail
+      // one request.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("Failed to eagerly boot default location, continuing without it", { cause }),
+      ),
+    )
+
     if (lifecycle) {
       yield* installRestartContinuity(Context.get(context, SessionRestart.Service)).pipe(
         Effect.provideService(Scope.Scope, applicationScope),

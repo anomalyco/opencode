@@ -65,6 +65,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
+      subscribeGlobal: () => Stream.empty,
     },
     experimental: overrides.experimental ?? {
       terminal: {
@@ -161,6 +162,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     session: {
       hook: overrides.session?.hook ?? (() => Effect.die("unused session.hook")),
+      list: overrides.session?.list ?? (() => Effect.die("unused session.list")),
       create: overrides.session?.create ?? (() => Effect.die("unused session.create")),
       get: overrides.session?.get ?? (() => Effect.die("unused session.get")),
       switchAgent: overrides.session?.switchAgent ?? (() => Effect.die("unused session.switchAgent")),
@@ -173,7 +175,21 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
       wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),
+      skill: overrides.session?.skill ?? (() => Effect.die("unused session.skill")),
+      compact: overrides.session?.compact ?? (() => Effect.die("unused session.compact")),
+      revert: overrides.session?.revert ?? {
+        stage: () => Effect.die("unused session.revert.stage"),
+        clear: () => Effect.die("unused session.revert.clear"),
+        commit: () => Effect.die("unused session.revert.commit"),
+      },
       context: overrides.session?.context ?? (() => Effect.die("unused session.context")),
+      form: overrides.session?.form ?? {
+        list: () => Effect.die("unused session.form.list"),
+        get: () => Effect.die("unused session.form.get"),
+        state: () => Effect.die("unused session.form.state"),
+        reply: () => Effect.die("unused session.form.reply"),
+        cancel: () => Effect.die("unused session.form.cancel"),
+      },
     },
   }
 }

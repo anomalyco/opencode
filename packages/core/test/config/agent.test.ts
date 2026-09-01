@@ -513,7 +513,7 @@ Use native v2 fields.`,
             ...agentHost(agents),
             reload: () => agents.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
           },
-          event: { subscribe: () => bus.subscribe(Event.Updated) },
+          event: { subscribe: () => bus.subscribe(Event.Updated), subscribeGlobal: () => Stream.empty },
         }),
       )
 
