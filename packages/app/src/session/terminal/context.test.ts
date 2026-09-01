@@ -17,12 +17,6 @@ beforeAll(async () => {
     useLocation: () => ({}),
     useSearchParams: () => [{}, () => undefined],
   }))
-  mock.module("@opencode-ai/ui/context", () => ({
-    createSimpleContext: () => ({
-      use: () => undefined,
-      provider: () => undefined,
-    }),
-  }))
   const mod = await import("./context")
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
   clearWorkspaceTerminals = mod.clearWorkspaceTerminals
