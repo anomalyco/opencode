@@ -341,7 +341,14 @@ export const layer = Layer.effect(
           messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
           tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
           toolChoice: input.toolChoice,
-          generation: Object.keys(context.generation).length === 0 ? undefined : context.generation,
+          generation: {
+            ...context.generation,
+            maxTokens:
+              context.generation.maxTokens ??
+              model.defaults?.generation?.maxTokens ??
+              model.route.defaults.generation?.maxTokens ??
+              resolved.limit.output,
+          },
           providerOptions: Object.keys(context.providerOptions).length === 0 ? undefined : context.providerOptions,
         }),
       )
