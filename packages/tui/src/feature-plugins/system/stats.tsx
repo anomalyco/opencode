@@ -56,9 +56,6 @@ export function StatsPoster(props: { stats: SessionStatsInfo; onToggle?: () => v
         </text>
         <text fg={theme.text.subdued} onMouseUp={props.onToggle}>
           {dates()}
-          <Show when={props.onToggle}>
-            <span style={{ fg: theme.text.action.secondary.default }}>{"  tab"}</span>
-          </Show>
         </text>
       </box>
       <Show when={!compact()}>

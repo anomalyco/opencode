@@ -56,7 +56,7 @@ test("stats toggles all time and this year and returns to the original route aft
         .captureCharFrame()
         .split("\n")
         .find((line) => line.includes("opencode / stats")),
-    ).toContain("tab")
+    ).not.toContain("tab")
     setup.mockInput.pressKey("TAB")
     await setup.waitForFrame((frame) => frame.includes("TOKENS") && frame.includes("123"))
     expect(Number(requests[2].searchParams.get("from"))).toBe(new Date(new Date().getFullYear(), 0, 1).getTime())
