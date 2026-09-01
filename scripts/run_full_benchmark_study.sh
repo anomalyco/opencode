@@ -27,7 +27,7 @@ INSTANCES=(
   pallets__flask-5063
 )
 
-DGX_IP="10.169.20.183"
+DGX_IP="${DGX_IP:-${DGX_HOST:-localhost}}"
 DGX_PORT="8080"
 MODEL="${1:-dgx/qwen3.8-27b}"
 RUN_ID_VANILLA="vanilla-qwen-10"

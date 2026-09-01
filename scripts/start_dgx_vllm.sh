@@ -7,7 +7,7 @@ export PYTHONUNBUFFERED=1
 # =========================================================================
 
 DGX_HOST="${DGX_HOST:-Nvidiadgx}"
-DGX_IP="${DGX_IP:-10.169.20.183}"
+DGX_IP="${DGX_IP:-${DGX_HOST:-localhost}}"
 DGX_PORT="${DGX_PORT:-8080}"
 MODEL_PATH="${MODEL_PATH:-/home/root-ziq/Qwen3.8-27B-FP8}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-qwen3.8-27b}"

@@ -1,0 +1,129 @@
+name: Build & Release Cross-Platform
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+      - feature/*
+  pull_request:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-linux:
+    name: Build Linux (x64 & arm64 + .deb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck
+        run: |
+          bun --cwd packages/opencode typecheck
+          bun --cwd packages/tui typecheck
+
+      - name: Run Unit Tests
+        run: bun --cwd packages/opencode test
+
+      - name: Compile Linux x64 Binary
+        run: |
+          bun --cwd packages/opencode build --single --skip-install
+          mkdir -p dist/linux-x64
+          cp packages/opencode/dist/opencode dist/linux-x64/ziq-code
+          chmod +x dist/linux-x64/ziq-code
+          tar -czvf ziq-code-linux-x64.tar.gz -C dist/linux-x64 ziq-code
+
+      - name: Build Debian (.deb) Package
+        run: |
+          mkdir -p pkg-deb/DEBIAN pkg-deb/usr/local/bin
+          cp dist/linux-x64/ziq-code pkg-deb/usr/local/bin/ziq-code
+          chmod 755 pkg-deb/usr/local/bin/ziq-code
+
+          cat > pkg-deb/DEBIAN/control << 'EOF'
+          Package: ziq-code
+          Version: 1.0.0
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Zenteiq AI <dev@zenteiq.ai>
+          Description: ZIQ-CODE Autonomous Engineering Agent CLI
+          EOF
+
+          dpkg-deb --build pkg-deb ziq-code_1.0.0_amd64.deb
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ziq-code-linux
+          path: |
+            ziq-code-linux-x64.tar.gz
+            ziq-code_1.0.0_amd64.deb
+
+  build-macos:
+    name: Build macOS (Apple Silicon & Intel)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Compile macOS Binary
+        run: |
+          bun --cwd packages/opencode build --single --skip-install
+          mkdir -p dist/macos
+          cp packages/opencode/dist/opencode dist/macos/ziq-code
+          chmod +x dist/macos/ziq-code
+          tar -czvf ziq-code-darwin-arm64.tar.gz -C dist/macos ziq-code
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ziq-code-macos
+          path: ziq-code-darwin-arm64.tar.gz
+
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Compile Windows Binary
+        run: |
+          bun --cwd packages/opencode build --single --skip-install
+          mkdir -p dist\windows
+          cp packages\opencode\dist\opencode.exe dist\windows\ziq-code.exe
+          Compress-Archive -Path dist\windows\ziq-code.exe -DestinationPath ziq-code-windows-x64.zip
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ziq-code-windows
+          path: ziq-code-windows-x64.zip

@@ -5,7 +5,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "Remote vLLM",
       "options": {
-        "baseURL": "http://10.169.20.183:8080/v1",
+        "baseURL": "http://localhost:8080/v1",
       },
       "models": {
         "qwen3.8-27b": {
