@@ -1,7 +1,7 @@
 import { Plugin, Session, Tool } from "@opencode-ai/plugin/effect"
 import type { RpcRegistration } from "@opencode-ai/plugin/effect/rpc"
 import { Deferred, Effect, Encoding, Stream } from "effect"
-import { Browser } from "./rpc.js"
+import { Browser } from "@opencode-ai/schema/browser"
 
 type Attachment = {
   connectionID: string
