@@ -510,3 +510,24 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Lumify
+
+Add the [Lumify](https://lumify.ai) MCP server for sports schedules, live scores, odds, betting splits, and AI bet confidence.
+
+```json title="opencode.json" {4-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "lumify": {
+      "type": "remote",
+      "url": "https://lumify.ai/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:LUMIFY_API_KEY}"
+      }
+    }
+  }
+}
