@@ -20,6 +20,7 @@ import {
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
+  normalizePickerPath,
 } from "./directory-picker-domain"
 
 test("maps server directory entries into Pierre paths", () => {
@@ -95,9 +96,7 @@ test("preserves POSIX case while matching Windows drives case-insensitively", ()
 })
 
 test("displays paths using the selected server path format", () => {
-  expect(displayPickerPath("C:/Users/luke/repos", "C:/Users/luke/repos", "C:/Users/luke")).toBe(
-    "C:\\Users\\luke\\repos",
-  )
+  expect(displayPickerPath("C:/Users/luke/repos", "C:/Users/luke/repos", "C:/Users/luke")).toBe("C:/Users/luke/repos")
   expect(displayPickerPath("C:/Users/luke/repos", "C:\\Users\\luke\\repos", "C:/Users/luke")).toBe(
     "C:\\Users\\luke\\repos",
   )
@@ -307,4 +306,53 @@ test("returns absolute directories and relative files", () => {
   expect(selectedTreePath("/home/luke/repo", "src/index.ts", "file")).toBe("src/index.ts")
   expect(selectedTreePath("/home/luke/repo/src", "index.ts", "file", "/home/luke/repo")).toBe("src/index.ts")
   expect(selectedTreePath("/home/luke/repo", "src/", "file")).toBeUndefined()
+})
+
+test("preserves forward-slash input style on Windows paths", () => {
+  // User typed forward slashes → display preserves them
+  expect(displayPickerPath("C:/Users/luke/projects", "C:/Users/luke/pro", "C:/Users/luke")).toBe(
+    "C:/Users/luke/projects",
+  )
+  expect(displayPickerPath("C:/Users/luke/projects", "C:/Users/luke/projects", "C:/Users/luke")).toBe(
+    "C:/Users/luke/projects",
+  )
+})
+
+test("preserves backslash input style on Windows paths", () => {
+  // User typed backslashes → display preserves them
+  expect(displayPickerPath("C:/Users/luke/projects", "C:\\Users\\luke\\pro", "C:/Users/luke")).toBe(
+    "C:\\Users\\luke\\projects",
+  )
+  expect(displayPickerPath("C:/Users/luke/projects", "C:\\Users\\luke\\projects", "C:/Users/luke")).toBe(
+    "C:\\Users\\luke\\projects",
+  )
+})
+
+test("defaults to backslash display for empty input on Windows", () => {
+  // Empty input (initial navigation) → backslash on Windows
+  expect(displayPickerPath("C:/Users/luke/projects", "", "C:/Users/luke")).toBe("C:\\Users\\luke\\projects")
+})
+
+test("preserves UNC path separator style from input", () => {
+  // UNC paths without a tilde-convertible home keep their separators
+  expect(displayPickerPath("//Server/Share/repo", "//Server/Share/repo", "//Other")).toBe("//Server/Share/repo")
+  expect(displayPickerPath("//Server/Share/repo", "\\\\Server\\Share\\repo", "//Other")).toBe(
+    "\\\\Server\\Share\\repo",
+  )
+})
+
+test("normalizes backslash input to forward slash for internal search", () => {
+  // normalizePickerPath always converts \ to /
+  expect(normalizePickerPath("C:\\Users\\luke\\projects")).toBe("C:/Users/luke/projects")
+  expect(normalizePickerPath("C:/Users/luke/projects")).toBe("C:/Users/luke/projects")
+  expect(normalizePickerPath("\\\\Server\\Share\\repo")).toBe("//Server/Share/repo")
+})
+
+test("pickerAbsoluteInput resolves Windows backslash relative paths", () => {
+  expect(pickerAbsoluteInput("src\\components", "C:/Users/luke", "C:/Users/luke/repo")).toBe(
+    "C:/Users/luke/repo/src/components",
+  )
+  expect(pickerAbsoluteInput("C:\\Users\\luke\\projects", "C:/Users/luke", "C:/Users/luke/repo")).toBe(
+    "C:/Users/luke/projects",
+  )
 })

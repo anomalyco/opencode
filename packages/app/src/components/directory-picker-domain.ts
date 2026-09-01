@@ -317,7 +317,17 @@ function pickerTilde(absolute: string, home: string) {
 
 export function displayPickerPath(path: string, input: string, home: string) {
   const value = trimPickerPath(path)
-  if (/^[A-Za-z]:\//.test(trimPickerPath(home)) || /^[A-Za-z]:\//.test(value)) return value.replaceAll("/", "\\")
+  const isWindows =
+    /^[A-Za-z]:\//.test(trimPickerPath(home)) ||
+    /^[A-Za-z]:\//.test(value) ||
+    value.startsWith("//")
+  if (isWindows) {
+    // Preserve the user's separator style from their input so completion
+    // does not silently replace displayed separators. Empty input defaults
+    // to backslash (existing Windows behaviour for initial navigation).
+    if (input.length > 0 && !input.includes("\\")) return value
+    return value.replaceAll("/", "\\")
+  }
   return pickerTilde(value, home) || value
 }
 
