@@ -26,7 +26,7 @@ const digits: Record<string, string[]> = {
   T: ["111", "010", "010", "010", "010"],
 }
 
-export function StatsPoster(props: { stats: SessionStatsInfo }) {
+export function StatsPoster(props: { stats: SessionStatsInfo; period: "all" | "year" }) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const width = () => Math.max(12, Math.min(110, dimensions().width - 8))
@@ -116,7 +116,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
         </For>
       </box>
       <box width="100%" flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text.subdued}>All time. All projects.</text>
+        <text fg={theme.text.subdued}>{props.period === "all" ? "All time" : "This year"}. All projects.</text>
         <text fg={theme.text.default}>opencode.ai</text>
       </box>
     </box>
@@ -124,16 +124,24 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
 }
 
 function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
-  const [result] = createResource(() =>
-    props.context.client.session.stats({
+  const [period, setPeriod] = createSignal<"all" | "year">("all")
+  const toggle = () => setPeriod((value) => (value === "all" ? "year" : "all"))
+  const [result] = createResource(period, async (period) => {
+    const now = new Date()
+    const stats = await props.context.client.session.stats({
+      from: period === "year" ? new Date(now.getFullYear(), 0, 1).getTime() : undefined,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       tools: "none",
-    }),
-  )
+    })
+    return { stats, period }
+  })
   const theme = useTheme()
 
   props.context.keymap.layer(() => ({
-    commands: [{ bind: "escape", title: "Back", run: props.onClose }],
+    commands: [
+      { bind: "escape", title: "Back", run: props.onClose },
+      { bind: "tab", title: period() === "all" ? "Show this year" : "Show all time", run: toggle },
+    ],
   }))
 
   return (
@@ -155,12 +163,15 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
           }
         >
           <Show when={result()} fallback={<text fg={theme.text.subdued}>Gathering your stats...</text>}>
-            {(value) => <StatsPoster stats={value()} />}
+            {(value) => <StatsPoster stats={value().stats} period={value().period} />}
           </Show>
         </Show>
       </scrollbox>
-      <box height={2} alignItems="center" flexShrink={0}>
-        <text fg={theme.text.subdued}>esc back</text>
+      <box height={2} justifyContent="center" flexDirection="row" gap={3} flexShrink={0}>
+        <text fg={theme.text.subdued} onMouseUp={toggle}>
+          {result.loading ? "Loading stats..." : `tab ${period() === "all" ? "Show this year" : "Show all time"}`}
+        </text>
+        <text fg={theme.text.subdued}>esc Back</text>
       </box>
     </box>
   )

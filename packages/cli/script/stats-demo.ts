@@ -39,7 +39,7 @@ const seed = Bun.spawn(
   },
 )
 if ((await seed.exited) !== 0) process.exit(1)
-console.log("Open /stats to see two years of usage. Press esc to go back.")
+console.log("Open /stats to see two years of usage. Press tab to show this year, or esc to go back.")
 const child = Bun.spawn([process.execPath, "run", "--conditions=browser", "src/index.ts", "--standalone", project], {
   cwd: path.join(root, "packages/cli"),
   env,

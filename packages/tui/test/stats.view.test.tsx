@@ -6,7 +6,7 @@ import { statsFixture } from "../src/feature-plugins/system/storybook/stats"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
-test("stats loads all-time tokens and returns to the original route after errors or success", async () => {
+test("stats toggles all time and this year and returns to the original route after errors or success", async () => {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 34, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
@@ -15,7 +15,7 @@ test("stats loads all-time tokens and returns to the original route after errors
     if (url.pathname !== "/api/session/stats") return undefined
     requests.push(url)
     if (requests.length === 1) return json({ message: "offline" }, { status: 503 })
-    return json({ data: statsFixture })
+    return json({ data: { ...statsFixture, sessions: url.searchParams.has("from") ? 123 : statsFixture.sessions } })
   }, createEventStream())
   const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
   const { run } = await import("../src/app")
@@ -49,10 +49,18 @@ test("stats loads all-time tokens and returns to the original route after errors
     expect(requests[1].searchParams.has("from")).toBe(false)
     expect(requests[1].searchParams.has("to")).toBe(false)
     expect(setup.captureCharFrame()).toContain("All time. All projects.")
+    expect(setup.captureCharFrame()).toContain("tab Show this year")
+    setup.mockInput.pressKey("TAB")
+    await setup.waitForFrame((frame) => frame.includes("This year. All projects.") && frame.includes("123"))
+    expect(Number(requests[2].searchParams.get("from"))).toBe(new Date(new Date().getFullYear(), 0, 1).getTime())
+    expect(setup.captureCharFrame()).toContain("tab Show all time")
+    setup.mockInput.pressKey("TAB")
+    await setup.waitForFrame((frame) => frame.includes("All time. All projects.") && frame.includes("685"))
+    expect(requests[3].searchParams.has("from")).toBe(false)
     await setup.mockInput.typeText("rhp")
     setup.mockInput.pressKey("RIGHT")
     await setup.waitForVisualIdle()
-    expect(requests).toHaveLength(2)
+    expect(requests).toHaveLength(4)
     expect(setup.captureCharFrame()).toContain("TOKENS")
     expect(setup.captureCharFrame()).not.toContain("headline")
     setup.mockInput.pressKey("ESCAPE")
