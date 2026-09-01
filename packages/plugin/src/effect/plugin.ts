@@ -2,7 +2,6 @@ import type { ExperimentalApi, GenerateApi, PluginApi } from "@opencode-ai/clien
 import type { Location } from "@opencode-ai/schema/location"
 import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
-import type { VcsDiscovery } from "../vcs.js"
 import type { App } from "../app.js"
 import type { AgentDomain } from "./agent.js"
 import type { AISDKDomain } from "./aisdk.js"
@@ -38,7 +37,7 @@ export interface Context {
   readonly mcp: MCPDomain
   readonly generate: GenerateApi<unknown>
   readonly permission: PermissionDomain
-  readonly plugin: PluginApi<unknown>
+  readonly plugin: Pick<PluginApi<unknown>, "list">
   readonly reference: ReferenceDomain
   readonly rpc: RpcDomain
   readonly session: SessionDomain
@@ -52,7 +51,6 @@ export interface Context {
 
 export interface Plugin<R = Scope.Scope> {
   readonly id: string
-  readonly vcs?: VcsDiscovery
   readonly effect: (context: Context) => Effect.Effect<void, never, R>
 }
 

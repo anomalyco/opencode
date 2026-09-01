@@ -799,6 +799,10 @@ For the same effective tool name, a later valid registration overrides an earlie
 
 ```ts
 const registration = await ctx.tool.transform((draft) => {
+  draft.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
   draft.add({
     name: "greeting",
     description: "Create a greeting",
@@ -868,6 +872,7 @@ interface ToolContext {
 interface ToolDraft {
   list(): readonly (ToolInfo & { readonly id: string })[]
   get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
   add(tool: ToolInfo): void
   update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
   remove(id: string): void

@@ -1,5 +1,6 @@
 [data-component="markdown"] {
-  --markdown-inline-code-path-color: var(--v2-text-text-code-accent);
+  --markdown-inline-code-path-color: var(--v2-text-text-code-path);
+  --markdown-inline-code-path-background: var(--v2-background-bg-code-path);
   --markdown-inline-code-color: var(--v2-text-text-code-accent);
   --markdown-inline-code-bg-mix: 8%;
   --markdown-shell-code-background: var(--v2-background-bg-layer-02);
@@ -290,11 +291,7 @@
 
   :not(pre) > code[data-inline-code-kind="path"] {
     color: var(--markdown-inline-code-path-color);
-    background: color-mix(
-      in oklch,
-      var(--markdown-inline-code-path-color) var(--markdown-inline-code-bg-mix),
-      transparent
-    );
+    background: var(--markdown-inline-code-path-background);
   }
 
   a.external-link > code[data-inline-code-kind="url"] {

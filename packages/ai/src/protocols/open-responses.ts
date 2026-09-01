@@ -1257,9 +1257,12 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
   const events: LLMEvent[] = []
   if (event.type === "response.completed") {
     for (const item of event.response?.output ?? []) {
-      const id = item.id ?? (item.type === "function_call" ? item.call_id : undefined)
-      if (id === undefined) continue
-      if (item.type !== "function_call" || !current.tools[id]) continue
+      if (
+        item.type !== "function_call" ||
+        !item.call_id ||
+        !Object.values(current.tools).some((tool) => tool?.id === item.call_id)
+      )
+        continue
       const [next, emitted] = yield* onOutputItemDone(current, item)
       current = next
       events.push(...emitted)

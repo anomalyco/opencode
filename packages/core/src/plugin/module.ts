@@ -8,23 +8,17 @@ import { readdir } from "node:fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import type { ConfigPluginSource } from "../config/plugin/source.js"
-import type { Versioned } from "../plugin.js"
+import type { Generation } from "../plugin.js"
 import { PluginPromise } from "./promise.js"
 
-const Discovery = Schema.Struct({
-  id: Schema.optional(Schema.String),
-  markers: Schema.Array(Schema.String),
-})
 const Definition = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
       id: Schema.String,
-      vcs: Schema.optional(Discovery),
       effect: Schema.declare<Plugin["effect"]>((input): input is Plugin["effect"] => typeof input === "function"),
     }),
     Schema.Struct({
       id: Schema.String,
-      vcs: Schema.optional(Discovery),
       setup: Schema.declare<Parameters<typeof PluginPromise.fromPromise>[0]["setup"]>(
         (input): input is Parameters<typeof PluginPromise.fromPromise>[0]["setup"] => typeof input === "function",
       ),
@@ -34,13 +28,17 @@ const Definition = Schema.Struct({
 
 export const load = Effect.fn("PluginModule.load")(function* (
   operation: Extract<ConfigPluginSource.Operation, { type: "add" }>,
+  options?: { readonly install?: boolean },
 ) {
   const npm = yield* Npm.Service
   const local = path.isAbsolute(operation.target)
-  const installed = local
-    ? { entrypoint: pathToFileURL(operation.target).href }
-    : yield* npm.add(operation.target, { subpaths: ["server", ""] })
+  const installed: Npm.EntryPoint = local
+    ? { directory: path.dirname(operation.target), entrypoint: pathToFileURL(operation.target).href }
+    : options?.install === false
+      ? yield* npm.resolve(operation.target, { subpaths: ["server", ""] })
+      : yield* npm.add(operation.target, { subpaths: ["server", ""] })
   const entrypoint = installed.entrypoint
+  if (!local && options?.install === false && !entrypoint) return { pending: true as const }
   if (!entrypoint) return yield* Effect.fail(new Error(`Plugin entrypoint not found: ${operation.target}`))
   // Bun currently ignores query parameters when caching file:// imports.
   const target = typeof Bun !== "undefined" ? operation.target.replaceAll("\\", "/") : entrypoint
@@ -63,13 +61,16 @@ export const load = Effect.fn("PluginModule.load")(function* (
   return {
     id: plugin.id,
     features,
-    vcs: plugin.vcs,
-    version: JSON.stringify(operation),
+    revision: JSON.stringify([operation, installed.revision]),
     source: path.isAbsolute(operation.target)
       ? { type: "local" as const, path: operation.target }
-      : { type: "package" as const, package: operation.target },
+      : {
+          type: "package" as const,
+          target: operation.target,
+          ...(installed.version ? { version: installed.version } : {}),
+        },
     effect: (host) => plugin.effect({ ...host, options: operation.options }),
-  } satisfies Versioned
+  } satisfies Generation
 })
 
 function localFeatures(entrypoint: string) {

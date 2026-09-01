@@ -21,8 +21,17 @@ export type JsonSchema = {
   readonly default?: unknown
   readonly format?: string
   readonly deprecated?: boolean
+  readonly minimum?: number
+  readonly maximum?: number
+  readonly exclusiveMinimum?: number
+  readonly exclusiveMaximum?: number
+  readonly multipleOf?: number
+  readonly minLength?: number
+  readonly maxLength?: number
+  readonly pattern?: string
   readonly minItems?: number
   readonly maxItems?: number
+  readonly uniqueItems?: boolean
   readonly $ref?: string
   readonly $defs?: Readonly<Record<string, JsonSchema>>
   readonly definitions?: Readonly<Record<string, JsonSchema>>

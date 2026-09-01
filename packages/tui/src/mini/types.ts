@@ -97,7 +97,7 @@ export type FooterQueuedPrompt = {
   skills?: ReadonlyArray<{ id: string; name: string }>
 }
 
-export type QueuedPromptAction = "steer" | "cancel"
+export type QueuedPromptAction = "steer" | "queue" | "cancel"
 
 export type RunAgent = {
   id: string

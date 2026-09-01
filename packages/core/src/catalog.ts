@@ -74,6 +74,7 @@ const layer = Layer.effect(
     const projectModel = (model: Model.Info, provider: Provider.Info) => {
       return {
         ...model,
+        ...(provider.canonical === undefined ? {} : { canonical: provider.canonical }),
         package: model.package ?? provider.package,
         settings: Provider.mergeOverlay(provider.settings, model.settings),
         headers: Provider.mergeHeaders(provider.headers, model.headers),

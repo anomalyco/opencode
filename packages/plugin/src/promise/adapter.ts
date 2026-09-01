@@ -214,7 +214,6 @@ function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
 export function fromPromise(plugin: Plugin) {
   return define({
     id: plugin.id,
-    vcs: plugin.vcs,
     effect: (host) =>
       Effect.gen(function* () {
         const [{ ClientApi }, { OpenCodeEvent }] = yield* Effect.promise(() =>
@@ -465,6 +464,7 @@ export function fromPromise(plugin: Plugin) {
                       const tool = draft.get(id)
                       return tool ? { ...tool, execute: promiseExecutor(tool.execute) } : undefined
                     },
+                    namespace: draft.namespace,
                     add: (tool: Info) =>
                       draft.add({
                         ...tool,

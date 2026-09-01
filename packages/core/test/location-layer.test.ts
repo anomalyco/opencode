@@ -940,7 +940,7 @@ describe("LocationServiceMap", () => {
                 })
                 .pipe(Effect.asVoid),
           })
-          yield* plugins.activate([{ ...reviewer, version: "1" }])
+          yield* plugins.activate([{ ...reviewer, revision: "1" }])
 
           const agents = yield* Agent.Service
           expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({

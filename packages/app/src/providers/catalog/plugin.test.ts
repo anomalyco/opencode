@@ -8,7 +8,7 @@ describe("pluginLabels", () => {
       { id: "opencode.internal", source: { type: "builtin" }, state: { status: "active" }, features: { server: true } },
       {
         id: "package-plugin",
-        source: { type: "package", package: "example" },
+        source: { type: "package", target: "example" },
         state: { status: "active" },
         features: { server: true },
       },

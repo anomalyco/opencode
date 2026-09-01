@@ -114,7 +114,9 @@ const locations = (references: Layer.Layer<Reference.Service>) =>
                     }),
                     Layer.succeed(
                       PluginSupervisor.Service,
-                      PluginSupervisor.Service.of({ flush: Effect.sync(() => (ready = true)) }),
+                      PluginSupervisor.Service.of({
+                        flush: Effect.sync(() => (ready = true)),
+                      }),
                     ),
                   ),
                 ),

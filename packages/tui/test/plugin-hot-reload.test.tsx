@@ -121,7 +121,7 @@ test("loads an advertised package TUI entrypoint only from the local cache", asy
     plugins: [
       {
         id: "test.server",
-        source: { type: "package", package: "test-plugin@1.0.0" },
+        source: { type: "package", target: "test-plugin@1.0.0" },
         state: { status: "active" },
         features: { server: true, tui: true },
       },

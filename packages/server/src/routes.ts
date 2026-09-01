@@ -26,6 +26,7 @@ import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { PluginUpdate } from "@opencode-ai/core/plugin/update"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Workspace } from "@opencode-ai/core/workspace"
@@ -61,6 +62,7 @@ const applicationServiceNodes = [
   SessionTransfer.node,
   PluginRuntime.providerNode,
   SdkPlugins.node,
+  PluginUpdate.node,
   PermissionSaved.node,
   PtyTicket.node,
   PersistentPty.node,
@@ -145,7 +147,9 @@ function makeRoutes<AuthError, AuthServices>(
       const services = Layer.succeedContext(context)
       const requestServices = Layer.merge(
         Layer.succeedContext(
-          Context.pick(Database.Service, PermissionSaved.Service, Project.Service, WellKnown.Service)(context),
+          Context.pick(Database.Service, PermissionSaved.Service, PluginUpdate.Service, Project.Service, WellKnown.Service)(
+            context,
+          ),
         ),
         ServerInfo.layer(serviceURLs, options.app),
       )

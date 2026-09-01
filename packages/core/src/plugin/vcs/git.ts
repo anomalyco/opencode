@@ -20,7 +20,6 @@ import type { Patch } from "../../vcs/patch.js"
 
 export const Plugin = define({
   id: "opencode.vcs.git",
-  vcs: { id: "git", markers: [".git"] },
   effect: Effect.fn("VcsGitPlugin")(function* (ctx) {
     const location = yield* Location.Service
     if (location.vcs?.type !== "git") return

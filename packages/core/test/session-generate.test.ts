@@ -115,13 +115,16 @@ const plugins = Layer.mock(PluginSupervisor.Service, { flush: Effect.void })
 const tools = Layer.mock(Tool.Service, {
   snapshot: () =>
     Effect.succeed({
-      codeModeCatalog: [
-        {
-          path: "captured.lookup",
-          description: "Captured Code Mode catalog",
-          signature: "tools.captured.lookup(input: {}): Promise<string>",
-        },
-      ],
+      codeModeCatalog: {
+        tools: [
+          {
+            type: "tool",
+            name: "captured.lookup",
+            description: "Captured Code Mode catalog",
+            signature: "tools.captured.lookup(input: {}): Promise<string>",
+          },
+        ],
+      },
       definitions: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
       execute: () => Effect.die(new Error("unused")),
     }),

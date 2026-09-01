@@ -84,17 +84,17 @@ export function PluginsDialog(props: {
         value: entry.key,
         category: entry.runtime === "tui" ? "TUI" : "Server",
         searchText: entry.runtime === "tui" ? entry.target : source(entry.plugin, props.context),
-        footer: status(entry) === "active" ? undefined : status(entry),
+        footer: footer(entry),
         footerColor:
           status(entry) === "failed"
             ? props.context.theme.text.feedback.error.default
-            : props.context.theme.text.subdued,
+            : outdated(entry)
+              ? props.context.theme.text.feedback.info.default
+              : props.context.theme.text.subdued,
         gutter:
-          status(entry) === "active"
-            ? () => <text fg={props.context.theme.text.feedback.success.default}>✓</text>
-            : status(entry) === "failed"
-              ? () => <text fg={props.context.theme.text.feedback.error.default}>✗</text>
-              : undefined,
+          status(entry) === "failed"
+            ? () => <text fg={props.context.theme.text.feedback.error.default}>x</text>
+            : undefined,
       }),
     ),
   )
@@ -211,7 +211,7 @@ function pluginSource(entry: Entry, context: Plugin.Context) {
 }
 
 function source(plugin: PluginInfo, context: Plugin.Context) {
-  if (plugin.source.type === "package") return plugin.source.package
+  if (plugin.source.type === "package") return plugin.source.target
   if (plugin.source.type === "local") return context.ui.format.path(plugin.source.path)
   return plugin.source.type
 }
@@ -219,6 +219,25 @@ function source(plugin: PluginInfo, context: Plugin.Context) {
 function status(entry: Entry) {
   if (entry.runtime === "server") return entry.plugin.state.status
   return entry.status
+}
+
+function outdated(entry: Entry) {
+  return entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.outdated === true
+}
+
+function footer(entry: Entry) {
+  const details = [
+    ...(status(entry) === "active" ? [] : [status(entry)]),
+    ...(entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.version
+      ? [displayVersion(entry.plugin.source.version)]
+      : []),
+    ...(outdated(entry) ? ["update available"] : []),
+  ]
+  return details.length ? details.join(", ") : undefined
+}
+
+function displayVersion(version: string) {
+  return /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(version) ? version.slice(0, 7) : version
 }
 
 function pluginError(entry: Entry | undefined) {

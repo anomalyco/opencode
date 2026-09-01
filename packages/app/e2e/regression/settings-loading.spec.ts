@@ -85,7 +85,7 @@ test("extensions opens without waiting for MCPs or plugins", async ({ page }) =>
         data: [
           {
             id: "demo-plugin",
-            source: { type: "package", package: "demo-plugin" },
+            source: { type: "package", target: "demo-plugin" },
             state: { status: "active" },
             features: { server: true },
           },

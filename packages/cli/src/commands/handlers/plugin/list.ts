@@ -54,7 +54,7 @@ export function format(
     plugin.state.status !== "active" || !plugin.features.tui
       ? []
       : plugin.source.type === "package"
-        ? [{ target: plugin.source.package, source: "advertised" as const }]
+        ? [{ target: plugin.source.target, source: "advertised" as const }]
         : plugin.source.type === "local"
           ? [{ target: path.dirname(plugin.source.path), source: "advertised" as const }]
           : [],
@@ -73,7 +73,7 @@ export function format(
 
 function name(plugin: PluginInfo) {
   if (plugin.id) return plugin.id
-  if (plugin.source.type === "package") return plugin.source.package
+  if (plugin.source.type === "package") return plugin.source.target
   if (plugin.source.type === "local") return plugin.source.path
   return plugin.source.type
 }

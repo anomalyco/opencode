@@ -9,12 +9,12 @@ test("formats server and TUI plugins in sections without builtins", () => {
         { id: "opencode.agent", source: { type: "builtin" }, state: { status: "active" }, features: { server: true } },
         {
           id: "acme.dual",
-          source: { type: "package", package: "acme-plugin@1.0.0" },
+          source: { type: "package", target: "acme-plugin@1.0.0" },
           state: { status: "active" },
           features: { server: true, tui: true },
         },
         {
-          source: { type: "package", package: "broken-plugin" },
+          source: { type: "package", target: "broken-plugin" },
           state: { status: "failed", error: "broken" },
           features: { server: true },
         },

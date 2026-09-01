@@ -38,6 +38,8 @@ const npmLayer = Layer.succeed(
   Npm.Service.of({
     add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
     resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    check: () => Effect.succeed(false),
+    update: () => Effect.succeed({ directory: "", entrypoint: undefined }),
     which: () => Effect.undefined,
   }),
 )

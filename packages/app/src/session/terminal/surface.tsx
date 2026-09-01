@@ -15,6 +15,7 @@ export function TerminalSurface(
     pane: number
     max: number
     resizing: boolean
+    animate?: boolean
     onResizeStart: () => void
     onResize: (height: number) => void
     onCollapse: () => void
@@ -27,7 +28,9 @@ export function TerminalSurface(
       id="terminal-panel"
       data-component="terminal-panel"
       data-opened={props.opened}
-      data-size-animated={!props.embedded && !props.resizing && (!props.desktop || props.stacked)}
+      data-size-animated={
+        props.animate !== false && !props.embedded && !props.resizing && (!props.desktop || props.stacked)
+      }
       role="region"
       aria-label={props.label}
       aria-hidden={!props.opened}

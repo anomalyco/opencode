@@ -838,6 +838,10 @@ effect: (ctx) =>
   Effect.gen(function* () {
     const tool = ctx.tool
     yield* tool.transform((draft) => {
+      draft.namespace({
+        name: "acme",
+        description: "Customer account tools",
+      })
       draft.add({
         name: "greeting",
         description: "Create a greeting",
@@ -889,6 +893,7 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 interface ToolDraft {
   list(): readonly (Tool.Info & { readonly id: string })[]
   get(id: string): (Tool.Info & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
     tool: Tool.Info<Input, Output>,
   ): void

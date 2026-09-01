@@ -3,7 +3,9 @@ import { createServer } from "node:http"
 import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
-import { Effect } from "effect"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Integration } from "@opencode-ai/schema/integration"
+import { Effect, Schedule, Schema } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -58,19 +60,35 @@ function occupy(port: number, cancel = false) {
   })
 }
 
-const ready = (handler: Handler) =>
-  Effect.promise(() => handler(new Request("http://opencode.local/api/model/default")))
-
 const connectOpenAI = (handler: Handler) =>
-  Effect.promise(() =>
-    handler(
-      new Request("http://opencode.local/api/integration/openai/connect/oauth", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ methodID: "chatgpt-browser" }),
-      }),
-    ),
-  )
+  Effect.gen(function* () {
+    // Catalog endpoints no longer wait for plugin initialization.
+    yield* Effect.gen(function* () {
+      const response = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/integration")))
+      expect(response.status).toBe(200)
+      const body = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.Array(Integration.Info) }))(
+        yield* Effect.promise(() => response.json()),
+      )
+      return body.data.some(
+        (integration) =>
+          integration.id === "openai" &&
+          integration.methods.some((method) => method.type === "oauth" && method.id === "chatgpt-browser"),
+      )
+    }).pipe(
+      Effect.filterOrFail((ready) => ready),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("2 seconds"),
+    )
+    return yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/integration/openai/connect/oauth", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ methodID: "chatgpt-browser" }),
+        }),
+      ),
+    )
+  })
 
 const workspaceDriver = WorkspaceDriver.make({
   create: ({ workspaceID }) => Effect.succeed({ binding: { workspaceID } }),
@@ -189,7 +207,6 @@ it.live("cancels a stale OpenAI OAuth callback server before falling back", () =
   Effect.gen(function* () {
     const requests = yield* occupy(1455, true)
     const handler = yield* ServerFetch.make(options)
-    yield* ready(handler)
     const response = yield* connectOpenAI(handler)
 
     expect(response.status).toBe(200)
@@ -203,7 +220,6 @@ it.live("falls back to port 1457 when OpenAI OAuth port 1455 remains busy", () =
   Effect.gen(function* () {
     const requests = yield* occupy(1455)
     const handler = yield* ServerFetch.make(options)
-    yield* ready(handler)
     const response = yield* connectOpenAI(handler)
 
     expect(response.status).toBe(200)
@@ -220,7 +236,6 @@ it.live(
       yield* occupy(1455)
       yield* occupy(1457)
       const handler = yield* ServerFetch.make(options)
-      yield* ready(handler)
       const response = yield* connectOpenAI(handler)
 
       expect(response.status).toBe(400)
@@ -439,7 +454,22 @@ it.live("routes pending requests by Session without loading an instance", () =>
     expect(yield* Effect.promise(() => globalForms.json())).toMatchObject({ data: [{ title: "Global form" }] })
 
     // Agent permission policy is installed by plugin activation.
-    expect((yield* ready(handler)).status).toBe(200)
+    yield* Effect.gen(function* () {
+      const response = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/agent")))
+      expect(response.status).toBe(200)
+      const body = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.Array(Agent.Info) }))(
+        yield* Effect.promise(() => response.json()),
+      )
+      return body.data.some(
+        (agent) =>
+          agent.id === "build" &&
+          agent.permissions.some((rule) => rule.action === "shell" && rule.resource === "*" && rule.effect === "ask"),
+      )
+    }).pipe(
+      Effect.filterOrFail((ready) => ready),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("2 seconds"),
+    )
     const createdPermission = yield* Effect.promise(() =>
       handler(
         new Request(`http://opencode.local/api/session/${created.data.id}/permission`, {

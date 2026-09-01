@@ -9,6 +9,8 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginUpdateInput,
+  PluginUpdateOutput,
   SessionListInput,
   SessionListOutput,
   SessionStatsInput,
@@ -463,6 +465,19 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+          },
+          requestOptions,
+        ),
+      update: (input: PluginUpdateInput, requestOptions?: RequestOptions) =>
+        request<PluginUpdateOutput>(
+          {
+            method: "POST",
+            path: `/api/plugin/update`,
+            query: { location: input["location"] },
+            body: { target: input["target"] },
+            successStatus: 204,
+            declaredStatuses: [400, 503, 401],
+            empty: true,
           },
           requestOptions,
         ),

@@ -3,6 +3,7 @@ export * as ConfigProvider from "./provider.js"
 import { Schema } from "effect"
 import { Money } from "../money.js"
 import { Capabilities, Compatibility, Family, ID, VariantID } from "../model.js"
+import { Provider } from "../provider.js"
 import { optional } from "../schema.js"
 
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
@@ -57,6 +58,7 @@ class Model extends Schema.Class<Model>("Config.Model")({
 }) {}
 
 export class Info extends Schema.Class<Info>("Config.Provider")({
+  canonical: Provider.ID.pipe(optional),
   name: Schema.String.pipe(optional),
   env: Schema.String.pipe(Schema.Array, optional),
   package: Schema.String.pipe(optional),

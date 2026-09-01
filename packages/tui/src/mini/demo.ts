@@ -947,6 +947,16 @@ export function createRunDemo(input: Input) {
 
     clearSubagent(state.footer)
 
+    if (line.mode !== "shell" && ["/help", "/permission", "/form", "/fmt"].includes(cmd)) {
+      state.footer.append({
+        kind: "user",
+        text: line.text,
+        phase: "start",
+        source: "system",
+        messageID: line.messageID,
+      })
+    }
+
     if (cmd === "/help") {
       intro(state)
       return true

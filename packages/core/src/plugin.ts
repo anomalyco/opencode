@@ -30,7 +30,7 @@ import { Permission } from "./permission.js"
 
 export interface Interface {
   readonly activate: (
-    plugins: readonly Versioned[],
+    plugins: readonly Generation[],
     failures?: readonly Failure[],
   ) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Plugin.Info[]>
@@ -38,8 +38,8 @@ export interface Interface {
 
 type Failure = Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
 
-export type Versioned = PluginDefinition & {
-  readonly version: string
+export type Generation = PluginDefinition & {
+  readonly revision: string
   readonly source?: Plugin.Source
   readonly features?: Plugin.Features
 }
@@ -52,11 +52,11 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const kv = yield* KV.Service
     const scope = yield* Scope.make()
-    const active = new Map<Plugin.ID, { readonly plugin: Versioned; readonly scope: Scope.Closeable }>()
+    const active = new Map<Plugin.ID, { readonly plugin: Generation; readonly scope: Scope.Closeable }>()
     const lock = Semaphore.makeUnsafe(1)
     let inventory: Plugin.Info[] = []
     let host: Parameters<PluginDefinition["effect"]>[0]
-    const load = Effect.fnUntraced(function* (plugin: Versioned) {
+    const load = Effect.fnUntraced(function* (plugin: Generation) {
       const child = yield* Scope.fork(scope)
       const inherit = yield* State.inherit()
       const loaded = yield* Effect.suspend(() =>
@@ -83,7 +83,7 @@ const layer = Layer.effect(
     })
 
     const activate = Effect.fn("Plugin.activate")(function* (
-      plugins: readonly Versioned[],
+      plugins: readonly Generation[],
       failures: readonly Failure[] = [],
     ) {
       const definitions = plugins.map((plugin) => ({ ...plugin, id: Plugin.ID.make(plugin.id) }))
@@ -99,10 +99,14 @@ const layer = Layer.effect(
             active.size === definitions.length &&
             Array.from(active.values()).every((entry, index) => {
               const definition = definitions[index]
-              return entry.plugin.id === definition?.id && entry.plugin.version === definition.version
+              return entry.plugin.id === definition?.id && entry.plugin.revision === definition.revision
             })
           ) {
-            const nextInventory = [...Array.from(active.values(), (entry) => activeInfo(entry.plugin)), ...failures]
+            for (const definition of definitions) {
+              const entry = active.get(definition.id)
+              if (entry) active.set(definition.id, { ...entry, plugin: definition })
+            }
+            const nextInventory = [...definitions.map(activeInfo), ...failures]
             if (JSON.stringify(inventory) === JSON.stringify(nextInventory)) return
             inventory = nextInventory
             yield* bus.publish(Plugin.Event.Updated, {})
@@ -174,7 +178,7 @@ const layer = Layer.effect(
   }),
 )
 
-function activeInfo(plugin: Versioned): Plugin.Info {
+function activeInfo(plugin: Generation): Plugin.Info {
   return {
     id: Plugin.ID.make(plugin.id),
     source: plugin.source ?? { type: "builtin" },

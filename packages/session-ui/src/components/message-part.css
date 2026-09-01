@@ -363,6 +363,17 @@
   }
 }
 
+[data-component="read-image"] {
+  min-width: 0;
+
+  img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+  }
+}
+
 [data-component="bash-output"] {
   direction: ltr;
   unicode-bidi: isolate;
@@ -1535,4 +1546,10 @@
 :root body [data-workspace-session] [data-component="user-message"] [data-slot="user-message-text"] {
   background: var(--v2-background-bg-accent);
   color: var(--v2-text-text-contrast);
+}
+
+:root body [data-local-session] [data-component="user-message"] [data-slot="user-message-text"] {
+  background: var(--v2-state-bg-info);
+  color: var(--v2-text-text-accent);
+  border-radius: 8px;
 }

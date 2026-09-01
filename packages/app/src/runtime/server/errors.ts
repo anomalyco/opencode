@@ -36,10 +36,9 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
 }
 
 function unwrapNamedError(error: unknown): unknown {
-  if (error instanceof Error && error.cause && typeof error.cause === "object" && "body" in error.cause) {
-    return (error.cause as Record<string, unknown>).body
-  }
-  return error
+  if (!(error instanceof Error) || !error.cause || typeof error.cause !== "object") return error
+  if ("body" in error.cause) return (error.cause as Record<string, unknown>).body
+  return error.cause
 }
 
 // Client-synthesized session not-found errors share one constructor and

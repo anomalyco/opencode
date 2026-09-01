@@ -82,7 +82,7 @@ const layer = Layer.effect(
     })
     const selected = () => {
       const value = state.get()
-      const id = value.selection ?? location.vcsBackend ?? vcs?.type
+      const id = value.selection ?? vcs?.type
       return id ? value.providers.get(id) : undefined
     }
     const protect = <A>(provider: VcsDefinition, operation: string, effect: Effect.Effect<A, unknown>, fallback: A) =>

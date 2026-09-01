@@ -12,7 +12,7 @@ export type PermissionEffect = "allow" | "deny" | "ask"
 
 export type PluginSource =
   | { type: "builtin" }
-  | { type: "package"; package: string }
+  | { type: "package"; target: string; version?: string; outdated?: true }
   | { type: "local"; path: string }
   | { type: "sdk" }
 
@@ -214,6 +214,7 @@ export type GenerateTextResponse = { data: { text: string } }
 
 export type ProviderInfo = {
   id: string
+  canonical?: string
   integrationID?: string
   name: string
   activation: "auto" | "enabled" | "disabled"
@@ -1816,6 +1817,7 @@ export type ModelInfo = {
   id: string
   modelID: string
   providerID: string
+  canonical?: string
   family?: string
   name: string
   compatibility?: ModelCompatibility
@@ -1993,6 +1995,7 @@ export type ConfigEntry =
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {
           [x: string]: {
+            canonical?: string
             name?: string
             env?: Array<string>
             package?: string
@@ -2354,6 +2357,14 @@ export type AgentNotFoundError = {
 export const isAgentNotFoundError = (value: unknown): value is AgentNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AgentNotFoundError"
 
+export type ServiceUnavailableError = {
+  readonly _tag: "ServiceUnavailableError"
+  readonly message: string
+  readonly service?: string | undefined
+}
+export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
+
 export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly message: string }
 export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidCursorError"
@@ -2414,14 +2425,6 @@ export type SkillNotFoundError = {
 }
 export const isSkillNotFoundError = (value: unknown): value is SkillNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillNotFoundError"
-
-export type ServiceUnavailableError = {
-  readonly _tag: "ServiceUnavailableError"
-  readonly message: string
-  readonly service?: string | undefined
-}
-export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
 
 export type SessionBusyError = {
   readonly _tag: "SessionBusyError"
@@ -2581,6 +2584,15 @@ export type PluginListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<PluginInfo>
 }
+
+export type PluginUpdateInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly target: { readonly target: string }["target"]
+}
+
+export type PluginUpdateOutput = void
 
 export type SessionListInput = {
   readonly workspace?: {
