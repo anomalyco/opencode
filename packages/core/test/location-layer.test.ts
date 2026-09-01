@@ -5,10 +5,12 @@ import { Config } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
 import {
   DateTime,
+  Context,
   Deferred,
   Duration,
   Effect,
   Equal,
+  Exit,
   Fiber,
   Hash,
   Layer,
@@ -16,6 +18,7 @@ import {
   Option,
   RcMap,
   Schema,
+  Scope,
   Stream,
 } from "effect"
 import { TestClock } from "effect/testing"
@@ -82,6 +85,27 @@ const itWithActivity = testEffect(
 )
 
 describe("LocationServiceMap", () => {
+  itWithActivity.effect("keeps borrowed locations discoverable after the activity timeout", () =>
+    Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      const ref = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer((exit) => Scope.close(scope, exit))
+      const context = yield* locations.contextEffect(ref).pipe(Scope.provide(scope))
+
+      // A permission wait owns the Location without producing new Session events.
+      yield* TestClock.adjust("61 minutes")
+      const cached = yield* locations.contextEffectOption(ref).pipe(Effect.scoped)
+      expect(Option.getOrUndefined(Option.map(cached, (value) => Context.get(value, Location.Service)))).toBe(
+        Context.get(context, Location.Service),
+      )
+
+      yield* Scope.close(scope, Exit.void)
+      yield* TestClock.adjust("1 minute")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+    }),
+  )
+
   itWithActivity.effect("does not refresh lifetime from inferred Session routing", () =>
     Effect.gen(function* () {
       const locations = yield* LocationServiceMap.Service

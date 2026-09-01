@@ -1,6 +1,6 @@
 export * as LocationActivity from "./location-activity.js"
 
-import { Clock, Context, Duration, Effect, Layer, RcMap, Schema } from "effect"
+import { Clock, Context, Duration, Effect, Layer, MutableHashMap, RcMap, References, Schema } from "effect"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
@@ -39,11 +39,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         yield* Effect.sleep(options.sweepInterval ?? "1 minute")
         const refs = Array.from(yield* RcMap.keys(locations.rcMap))
         const cached = new Set(refs.map(key))
-        yield* Effect.forEach(
-          refs,
-          (ref) => (entries.has(key(ref)) ? Effect.void : touch(ref)),
-          { discard: true },
-        )
+        yield* Effect.forEach(refs, (ref) => (entries.has(key(ref)) ? Effect.void : touch(ref)), { discard: true })
         for (const id of entries.keys()) {
           if (!cached.has(id)) entries.delete(id)
         }
@@ -51,13 +47,19 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         const expired = Array.from(entries.values()).filter((entry) => entry.expiresAt <= now)
         yield* Effect.forEach(
           expired,
-          (entry) => {
-            entries.delete(key(entry.ref))
-            return Effect.logInfo("location services evicted", {
-              directory: entry.ref.directory,
-              workspaceID: entry.ref.workspaceID,
-            }).pipe(Effect.andThen(locations.invalidate(entry.ref)))
-          },
+          // A new borrower must not arrive between the ref-count check and cache removal.
+          (entry) =>
+            Effect.suspend(() => {
+              if (locations.rcMap.state._tag === "Closed") return Effect.void
+              const cached = MutableHashMap.get(locations.rcMap.state.map, entry.ref)
+              // Invalidation detaches even borrowed entries, hiding live permissions and forms from later readers.
+              if (cached._tag === "Some" && cached.value.refCount > 0) return Effect.void
+              entries.delete(key(entry.ref))
+              return Effect.logInfo("location services evicted", {
+                directory: entry.ref.directory,
+                workspaceID: entry.ref.workspaceID,
+              }).pipe(Effect.andThen(locations.invalidate(entry.ref)))
+            }).pipe(Effect.provideService(References.PreventSchedulerYield, true)),
           { discard: true },
         )
       }).pipe(Effect.forever, Effect.forkScoped)
