@@ -18,10 +18,9 @@ const PROBE = "original"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-// The v2 review pane's diff data is workspace-scoped: switching between session
-// tabs in the same workspace must update its parameters reactively instead of
-// tearing the pane down and remounting it (which flickers).
-test("keeps the v2 review pane mounted when switching session tabs in a workspace", async ({ page }) => {
+// The review pane's data is workspace-scoped, but visibility belongs to each
+// session tab. Switching tabs must keep the pane mounted without opening it.
+test("keeps review visibility per tab and the pane mounted across tab switches", async ({ page }) => {
   await setup(page)
 
   await page.goto(sessionHref(sessionA))
@@ -39,8 +38,7 @@ test("keeps the v2 review pane mounted when switching session tabs in a workspac
 
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
-  await expectAppVisible(review)
-  await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
+  await expect(review).toBeHidden()
   expect(await readProbe(page)).toBe(PROBE)
 
   await switchTab(page, titleA)
@@ -48,6 +46,10 @@ test("keeps the v2 review pane mounted when switching session tabs in a workspac
   await expectAppVisible(review)
   await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   expect(await readProbe(page)).toBe(PROBE)
+
+  await page.reload()
+  await expectSessionTitle(page, titleA)
+  await expectAppVisible(review)
 
   const viewport = page.locator('#review-panel [data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
   await viewport.hover()

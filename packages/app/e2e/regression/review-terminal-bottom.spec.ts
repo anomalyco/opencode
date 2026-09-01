@@ -123,12 +123,13 @@ test("uses side placement by default and supports the terminal across the bottom
     }),
   )
   await page.routeWebSocket("**/api/pty/pty_review_terminal/connect", () => undefined)
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      "opencode.global.dat:layout",
-      JSON.stringify({ review: { diffStyle: "split", panelOpened: true } }),
-    )
-  })
+  await page.addInitScript(
+    (tabKey) => {
+      localStorage.setItem("opencode.global.dat:layout", JSON.stringify({ review: { diffStyle: "split" } }))
+      localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify({ [tabKey]: { review: true } }))
+    },
+    `${server}\n/server/${base64Encode(server)}/session/${sessionID}`,
+  )
 
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionReady(page, { server, sessionID, title })

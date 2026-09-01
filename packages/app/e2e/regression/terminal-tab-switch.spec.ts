@@ -16,10 +16,9 @@ const PROBE = "original"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-// Terminals are workspace-scoped: switching between session tabs in the same
-// workspace must keep the terminal mounted and its PTY connection open instead
-// of tearing it down and reconnecting.
-test("keeps the terminal session alive when switching session tabs in a workspace", async ({ page }) => {
+// Terminal processes are workspace-scoped, but panel visibility belongs to each
+// session tab. Switching tabs must keep the PTY alive without opening its panel.
+test("keeps terminal visibility per tab and the PTY alive across tab switches", async ({ page }) => {
   const connections = await setup(page)
 
   await page.goto(sessionHref(sessionA))
@@ -37,7 +36,7 @@ test("keeps the terminal session alive when switching session tabs in a workspac
 
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
-  await expect(terminal).toBeVisible()
+  await expect(terminal).toBeHidden()
   expect(await readProbe(page)).toBe(PROBE)
   expect(connections.length).toBe(1)
 
@@ -46,6 +45,10 @@ test("keeps the terminal session alive when switching session tabs in a workspac
   await expect(terminal).toBeVisible()
   expect(await readProbe(page)).toBe(PROBE)
   expect(connections.length).toBe(1)
+
+  await page.reload()
+  await expectSessionTitle(page, titleA)
+  await expect(terminal).toBeVisible()
 })
 
 type Probed = HTMLElement & { __e2eProbe?: string }
