@@ -147,6 +147,12 @@ export interface Interface {
   ) => Effect.Effect<PublishResult<I>>
   readonly subscribe: Subscribe
   /**
+   * Unfiltered live channel: every event published from now on, across all
+   * locations. Prefer `subscribe` for location-scoped consumers; use this for
+   * cross-location observers that must not miss other directories.
+   */
+  readonly subscribeGlobal: () => Stream.Stream<Event.Payload>
+  /**
    * Durable, ordered per-aggregate log read. Forked aggregates may reserve an
    * inherited prefix before their first child-authored event. `follow: false`
    * completes at the end of the log; `follow: true` replays then transitions
@@ -761,6 +767,10 @@ export function configured(options?: Options) {
 
         const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))
 
+        const streamLiveGlobal = (): Stream.Stream<Event.Payload> => Stream.fromPubSub(pubsub.live)
+
+        const subscribeGlobal = (): Stream.Stream<Event.Payload> => streamLiveGlobal()
+
         const readAfter = (
           aggregateID: string,
           after: number,
@@ -893,6 +903,7 @@ export function configured(options?: Options) {
           publish,
           publishAll,
           subscribe,
+          subscribeGlobal,
           log,
           listen,
           project,

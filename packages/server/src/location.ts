@@ -36,11 +36,23 @@ export const sessionInfo = Effect.fnUntraced(function* (sessions: Session.Interf
   return yield* sessions.get(id).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
 })
 
+/**
+ * The location used when a request names none: the directory the serve
+ * command was launched from. This is the only directory known before any
+ * request identifies a project.
+ */
+export function defaultRef(): Location.Ref {
+  return Location.Ref.make({
+    directory: AbsolutePath.make(process.cwd()),
+  })
+}
+
 export function requestRef(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   const directory =
     query.get("location[directory]") ||
-    (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : process.cwd())
+    (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : undefined)
+  if (directory === undefined) return defaultRef()
   return Location.Ref.make({
     directory: AbsolutePath.make(directory),
   })
