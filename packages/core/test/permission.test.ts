@@ -6,10 +6,12 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
+import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionTable } from "@opencode-ai/core/permission/sql"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { PlanPlugin } from "@opencode-ai/core/plugin/plan"
 import type { PermissionEvaluation } from "@opencode-ai/plugin/effect/permission"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -18,9 +20,12 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { ShellParse } from "@opencode-ai/core/shell/parse"
+import { Global } from "@opencode-ai/util/global"
+import path from "path"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
+import { host } from "./plugin/host"
 
 const current = Layer.succeed(
   Location.Service,
@@ -36,6 +41,7 @@ const it = testEffect(
       Agent.node,
       PluginHooks.node,
       Permission.node,
+      LocationMutation.node,
     ]),
     [Location.node.replace(current)],
   ),
@@ -108,6 +114,152 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  it.effect("allows the unmodified Plan plugin's absolute rule when home is the Location", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const agents = yield* Agent.Service
+      yield* PlanPlugin.Plugin.effect(
+        host({
+          agent: {
+            get: () => Effect.die("unused agent.get"),
+            list: () => Effect.die("unused agent.list"),
+            reload: agents.reload,
+            transform: (callback) =>
+              agents.transform((draft) =>
+                callback({
+                  ...draft,
+                  list: () => [],
+                  get: () => undefined,
+                }),
+              ),
+          },
+          tool: {
+            transform: () => Effect.die("unused tool.transform"),
+            reload: () => Effect.die("unused tool.reload"),
+            hook: () => Effect.succeed({ dispose: Effect.void }),
+          },
+          session: { hook: () => Effect.succeed({ dispose: Effect.void }) },
+        }),
+      ).pipe(Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: "/project" })))
+      const mutation = yield* LocationMutation.Service
+      const service = yield* Permission.Service
+      const target = yield* mutation.resolve({ path: "/project/.opencode/plan/work.md", kind: "file" })
+      expect(target.resource).toBe(".opencode/plan/work.md")
+      expect(target.externalDirectory).toBeUndefined()
+      yield* service.assert(assertion({ agent: Agent.ID.make("plan"), action: "edit", resources: [target.resource] }))
+      expect(
+        yield* service.ask(assertion({ agent: Agent.ID.make("plan"), action: "edit", resources: ["source.ts"] })),
+      ).toMatchObject({ effect: "deny" })
+    }),
+  )
+
+  for (const action of ["read", "edit"]) {
+    it.effect(`matches absolute ${action} rules against Location-relative resources`, () =>
+      Effect.gen(function* () {
+        yield* setup([
+          { action, resource: "*", effect: "deny" },
+          { action, resource: "/project/.opencode/plan/*", effect: "allow" },
+        ])
+        const service = yield* Permission.Service
+        expect(yield* service.ask(assertion({ action, resources: [".opencode/plan/work.md"] }))).toMatchObject({
+          effect: "allow",
+        })
+        expect(yield* service.ask(assertion({ action, resources: ["source.ts"] }))).toMatchObject({ effect: "deny" })
+      }),
+    )
+
+    it.effect(`preserves relative ${action} rules and ordering across absolute rules`, () =>
+      Effect.gen(function* () {
+        const service = yield* Permission.Service
+        yield* setup([
+          { action, resource: "/project/*", effect: "allow" },
+          { action, resource: "src/*", effect: "deny" },
+          { action, resource: "/project/src/generated/*", effect: "allow" },
+        ])
+        expect(yield* service.ask(assertion({ action, resources: ["src/index.ts"] }))).toMatchObject({ effect: "deny" })
+        expect(yield* service.ask(assertion({ action, resources: ["src/generated/index.ts"] }))).toMatchObject({
+          effect: "allow",
+        })
+        yield* setRules([
+          { action, resource: "*", effect: "allow" },
+          { action, resource: "/project/src/*", effect: "deny" },
+          { action, resource: "src/generated/*", effect: "allow" },
+        ])
+        expect(yield* service.ask(assertion({ action, resources: ["src/index.ts"] }))).toMatchObject({ effect: "deny" })
+        expect(yield* service.ask(assertion({ action, resources: ["src/generated/index.ts"] }))).toMatchObject({
+          effect: "allow",
+        })
+        expect(
+          yield* service.ask(assertion({ action, resources: ["src/generated/index.ts", "src/index.ts"] })),
+        ).toMatchObject({ effect: "deny" })
+      }),
+    )
+
+    it.effect(`uses absolute saved ${action} approvals without overriding relative denies`, () =>
+      Effect.gen(function* () {
+        yield* setup([{ action, resource: "src/private/*", effect: "deny" }])
+        const saved = yield* PermissionSaved.Service
+        yield* saved.add({ projectID: Project.ID.global, action, resources: ["/project/src/*"] })
+        const service = yield* Permission.Service
+        expect(yield* service.ask(assertion({ action, resources: ["src/index.ts"] }))).toMatchObject({
+          effect: "allow",
+        })
+        expect(yield* service.ask(assertion({ action, resources: ["src/private/key.ts"] }))).toMatchObject({
+          effect: "deny",
+        })
+        yield* setRules([{ action, resource: "/project/src/*", effect: "deny" }])
+        yield* saved.add({ projectID: Project.ID.global, action, resources: ["*"] })
+        expect(yield* service.ask(assertion({ action, resources: ["src/index.ts"] }))).toMatchObject({ effect: "deny" })
+      }),
+    )
+  }
+
+  for (const action of ["shell", "glob", "grep", "webfetch", "custom", "external_directory"]) {
+    it.effect(`does not treat ${action} resources as paths`, () =>
+      Effect.gen(function* () {
+        yield* setup([
+          { action, resource: "*", effect: "deny" },
+          { action, resource: "/project/src/*", effect: "allow" },
+        ])
+        const service = yield* Permission.Service
+        expect(yield* service.ask(assertion({ action, resources: ["src/index.ts"] }))).toMatchObject({ effect: "deny" })
+      }),
+    )
+  }
+
+  it.effect("keeps relative wildcard scope and supports absolute action-wildcard rules", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "*", resource: "*", effect: "deny" },
+        { action: "*", resource: "*project*", effect: "allow" },
+        { action: "*", resource: "/pro?ect/plans/*", effect: "allow" },
+      ])
+      const service = yield* Permission.Service
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "deny" })
+      expect(yield* service.ask(assertion({ resources: ["plans/nested/work.md"] }))).toMatchObject({ effect: "allow" })
+      expect(yield* service.ask(assertion({ resources: ["/outside/plans/work.md"] }))).toMatchObject({ effect: "deny" })
+      yield* setRules([{ action: "read", resource: path.resolve("/project", "../README.md"), effect: "allow" }])
+      expect(yield* service.ask(assertion({ resources: ["../README.md"] }))).toMatchObject({ effect: "allow" })
+      yield* setRules([{ action: "read", resource: "/project/src/*".replaceAll("/", "\\"), effect: "allow" }])
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
+    }),
+  )
+
+  it.effect("reevaluates relative pending resources after saving an absolute approval", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const selected = yield* waitForRequest({ save: ["/project/src/*"] })
+      const other = yield* waitForRequest({ id: Permission.ID.create("per_other"), resources: ["src/other.ts"] })
+      expect(other.request.resources).toEqual(["src/other.ts"])
+      yield* selected.service.reply({ requestID: selected.request.id, reply: "always" })
+      yield* Fiber.join(selected.fiber)
+      yield* Fiber.join(other.fiber)
+      expect(yield* selected.service.list()).toEqual([])
+      const saved = yield* PermissionSaved.Service
+      expect((yield* saved.list()).map((rule) => rule.resource)).toEqual(["/project/src/*"])
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
