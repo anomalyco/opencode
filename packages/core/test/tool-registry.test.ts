@@ -599,6 +599,35 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("preserves a top-level tool that also has child tools", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((draft) => {
+        draft.namespace({ name: "pricing", description: "Pricing operations" })
+        draft.add({ ...make(), name: "pricing" })
+        draft.add({ ...make(), name: "sales", options: { namespace: "pricing" } })
+      })
+
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["pricing", "pricing.sales"])
+      const result = yield* snapshot.execute({
+        ...call("execute"),
+        call: {
+          type: "tool-call",
+          id: "top-level-callable",
+          name: "execute",
+          input: {
+            code: `return await Promise.all([
+              tools.pricing({ text: "pricing" }),
+              tools.pricing.sales({ text: "sales" }),
+            ])`,
+          },
+        },
+      })
+      expect(result.output).toMatchObject({ output: expect.stringContaining('"text": "sales"') })
+    }),
+  )
+
   it.effect("logs invalid tool definitions without dropping healthy tools", () => {
     const output: unknown[] = []
     const logger = Logger.map(Logger.formatStructured, (entry) => {

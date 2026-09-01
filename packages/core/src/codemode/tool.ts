@@ -46,7 +46,7 @@ type ToolNode = {
 }
 
 type Tools = {
-  readonly [name: string]: Tool.Tool<never> | Namespace.Namespace<never> | Tools
+  [name: string]: Tool.Tool<never> | Namespace.Namespace<never> | Tools
 }
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
@@ -184,7 +184,7 @@ function runtime(
       execute: (input) => executeTool(name, registration, input),
     })
   }
-  const tools = children(root)
+  const tools = render(root)
   return CodeMode.make<typeof tools>({ tools, ...hooks })
 }
 
@@ -196,21 +196,46 @@ function node(root: ToolNode, path: string) {
   }, root)
 }
 
-function children(node: ToolNode): Tools {
-  return Object.fromEntries(Array.from(node.children, ([name, child]) => [name, entry(child)]))
+function render(root: ToolNode) {
+  const callables = new Map<string, Tool.Tool<never>>()
+  const tools = children(root, [], callables)
+  for (const [path, tool] of callables) tools[path] = tool
+  return tools
 }
 
-function entry(node: ToolNode): Tools[string] {
-  const tools = children(node)
+function children(node: ToolNode, path: ReadonlyArray<string>, callables: Map<string, Tool.Tool<never>>): Tools {
+  return Object.fromEntries(
+    Array.from(node.children).flatMap(([name, child]) => {
+      const next = [...path, name]
+      // A record cannot hold both a top-level tool and namespace under the same key.
+      if (path.length === 0 && child.tool !== undefined && (child.namespace !== undefined || child.children.size > 0)) {
+        const tools: Tools = {}
+        flatten(child, next, tools)
+        return Object.entries(tools)
+      }
+      return [[name, entry(child, next, callables)]]
+    }),
+  )
+}
+
+function entry(node: ToolNode, path: ReadonlyArray<string>, callables: Map<string, Tool.Tool<never>>): Tools[string] {
+  const tools = children(node, path, callables)
+  // CodeMode merges this dotted tool path with the nested namespace entry.
+  if (node.tool !== undefined && (node.namespace !== undefined || node.children.size > 0))
+    callables.set(path.join("."), node.tool)
   if (node.namespace !== undefined)
     return Namespace.make({
       description: node.namespace.description,
-      ...(node.tool === undefined ? {} : { tool: node.tool }),
       tools,
     })
   if (node.tool === undefined) return tools
   if (node.children.size === 0) return node.tool
-  return Namespace.make({ tool: node.tool, tools })
+  return tools
+}
+
+function flatten(node: ToolNode, path: ReadonlyArray<string>, tools: Tools) {
+  if (node.tool !== undefined) tools[path.join(".")] = node.tool
+  for (const [name, child] of node.children) flatten(child, [...path, name], tools)
 }
 
 function qualifiedName(registration: Info) {
