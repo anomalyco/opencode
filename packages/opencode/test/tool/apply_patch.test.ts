@@ -2,6 +2,8 @@ import { describe, expect } from "bun:test"
 import path from "path"
 import * as fs from "fs/promises"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
@@ -10,14 +12,26 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { MessageV2 } from "../../src/session/message-v2"
+import { Session as SessionNs } from "@/session/session"
 import { Truncate } from "@/tool/truncate"
 import { TestInstance } from "../fixture/fixture"
-import { SessionID, MessageID } from "../../src/session/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
   LayerNode.compile(
-    LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node]),
+    LayerNode.group([
+      LSP.node,
+      FSUtil.node,
+      Format.node,
+      EventV2Bridge.node,
+      Truncate.node,
+      Agent.node,
+      SessionNs.node,
+      MessageV2.node,
+      SessionProjector.node,
+    ]),
   ),
 )
 
@@ -376,10 +390,7 @@ describe("tool.apply_patch freeform", () => {
       content.set([0x50, 0x4b, 0x03, 0x04])
       yield* writeBytes(target, content)
 
-      const result = yield* execute(
-        { patchText: "*** Begin Patch\n*** Delete File: archive.zip\n*** End Patch" },
-        ctx,
-      )
+      const result = yield* execute({ patchText: "*** Begin Patch\n*** Delete File: archive.zip\n*** End Patch" }, ctx)
 
       expect(result.metadata.diff.length).toBeLessThan(1024)
       expect(result.metadata.files[0]?.patch.length).toBeLessThan(1024)
@@ -396,10 +407,7 @@ describe("tool.apply_patch freeform", () => {
       const target = path.join(test.directory, "large.txt")
       yield* writeText(target, "x".repeat(1024 * 1024 + 1))
 
-      const result = yield* execute(
-        { patchText: "*** Begin Patch\n*** Delete File: large.txt\n*** End Patch" },
-        ctx,
-      )
+      const result = yield* execute({ patchText: "*** Begin Patch\n*** Delete File: large.txt\n*** End Patch" }, ctx)
 
       expect(result.metadata.diff.length).toBeLessThan(1024)
       expect(result.metadata.files[0]?.patch.length).toBeLessThan(1024)
@@ -407,6 +415,171 @@ describe("tool.apply_patch freeform", () => {
       expect(calls[0]?.metadata.files[0]?.patch.length).toBeLessThan(1024)
       yield* expectReadFailure(target)
     }),
+  )
+
+  it.instance("deletes a 64 MiB file without embedding its contents in metadata", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx, calls } = makeCtx()
+      const target = path.join(test.directory, "huge_blob")
+      const content = new Uint8Array(64 * 1024 * 1024)
+      content.set([0x50, 0x4b, 0x03, 0x04])
+      yield* writeBytes(target, content)
+
+      const result = yield* execute({ patchText: "*** Begin Patch\n*** Delete File: huge_blob\n*** End Patch" }, ctx)
+
+      expect(result.metadata.diff).toContain("content diff omitted")
+      expect(result.metadata.diff).toContain("oversized file")
+      expect(result.metadata.diff).toContain("67108864")
+      expect(Buffer.byteLength(result.metadata.diff)).toBeLessThan(4096)
+      expect(Buffer.byteLength(result.metadata.files[0]?.patch ?? "")).toBeLessThan(4096)
+      expect(calls[0]?.metadata.diff).toBe(result.metadata.diff)
+      yield* expectReadFailure(target)
+    }),
+  )
+
+  it.instance("omits diffs for binary content without a binary extension", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const target = path.join(test.directory, "blob")
+      const content = new Uint8Array(16 * 1024).fill(0x41)
+      content[0] = 0
+      content[1] = 0
+      yield* writeBytes(target, content)
+
+      const result = yield* execute({ patchText: "*** Begin Patch\n*** Delete File: blob\n*** End Patch" }, ctx)
+
+      expect(result.metadata.diff).toContain("binary file")
+      expect(result.metadata.diff).toContain("content diff omitted")
+      expect(result.metadata.diff).toContain("16384")
+      expect(result.metadata.diff).not.toContain("AAAA")
+      yield* expectReadFailure(target)
+    }),
+  )
+
+  it.instance(
+    "bounds metadata across a multi-file patch with mixed sizes",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const { ctx, calls } = makeCtx()
+        const bigPath = path.join(test.directory, "big.txt")
+        const keepPath = path.join(test.directory, "keep.txt")
+        yield* writeText(bigPath, `${"x".repeat(2 * 1024 * 1024)}\n`)
+        yield* writeText(keepPath, "keep me\n")
+
+        const patchText = "*** Begin Patch\n*** Delete File: big.txt\n*** Delete File: keep.txt\n*** End Patch"
+
+        const result = yield* execute({ patchText }, ctx)
+
+        expect(result.metadata.files).toHaveLength(2)
+        const big = result.metadata.files.find((f) => f.relativePath === "big.txt")
+        const keep = result.metadata.files.find((f) => f.relativePath === "keep.txt")
+        expect(big?.patch).toContain("content diff omitted")
+        expect(keep?.patch).toContain("-keep me")
+        expect(Buffer.byteLength(result.metadata.diff)).toBeLessThan(8192)
+        expect(calls[0]?.metadata.diff).toBe(result.metadata.diff)
+        yield* expectReadFailure(bigPath)
+        yield* expectReadFailure(keepPath)
+      }),
+    { git: true },
+  )
+
+  it.instance("truncates the combined diff when per-file diffs exceed the aggregate cap", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const chunk = "y".repeat(900 * 1024)
+      const patchText = `*** Begin Patch\n*** Add File: a.txt\n+${chunk}\n*** Add File: b.txt\n+${chunk}\n*** Add File: c.txt\n+${chunk}\n*** End Patch`
+
+      const result = yield* execute({ patchText }, ctx)
+
+      expect(result.metadata.files).toHaveLength(3)
+      expect(Buffer.byteLength(result.metadata.diff)).toBeLessThanOrEqual(2 * 1024 * 1024 + 512)
+      expect(result.metadata.diff).toContain("[diff truncated")
+      for (const file of result.metadata.files) {
+        expect(file.patch).toContain("yyy")
+        expect(Buffer.byteLength(file.patch)).toBeLessThanOrEqual(1024 * 1024)
+      }
+    }),
+  )
+
+  it.instance("bounds the diff when updating a pathological single-line file", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const target = path.join(test.directory, "one_line.txt")
+      const giant = "x".repeat(2 * 1024 * 1024)
+      yield* writeText(target, `${giant}\n`)
+
+      const patchText = `*** Begin Patch\n*** Update File: one_line.txt\n@@\n-${giant}\n+replaced\n*** End Patch`
+
+      const result = yield* execute({ patchText }, ctx)
+
+      expect(result.metadata.files).toHaveLength(1)
+      const file = result.metadata.files[0]
+      expect(file?.patch).toContain("[diff truncated")
+      expect(file?.patch.includes("x".repeat(1000))).toBe(false)
+      expect(Buffer.byteLength(result.metadata.diff)).toBeLessThan(4096)
+      expect(yield* readText(target)).toBe("replaced\n")
+    }),
+  )
+
+  it.instance(
+    "persists bounded apply_patch metadata and reloads it through the session store",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const { ctx } = makeCtx()
+        const target = path.join(test.directory, "blob")
+        const content = new Uint8Array(16 * 1024).fill(0x41)
+        content[0] = 0
+        content[1] = 0
+        yield* writeBytes(target, content)
+
+        const result = yield* execute({ patchText: "*** Begin Patch\n*** Delete File: blob\n*** End Patch" }, ctx)
+
+        const session = yield* SessionNs.Service
+        const created = yield* session.create({})
+        const messageID = MessageID.ascending()
+        yield* session.updateMessage({
+          id: messageID,
+          sessionID: created.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID: "test", modelID: "test" },
+          tools: {},
+          mode: "",
+        } as unknown as SessionV1.Info)
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID: created.id,
+          messageID,
+          type: "tool",
+          callID: "call_apply_patch",
+          tool: "apply_patch",
+          state: {
+            status: "completed",
+            input: { patchText: "*** Begin Patch\n*** Delete File: blob\n*** End Patch" },
+            output: result.output,
+            title: result.title,
+            metadata: result.metadata,
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+
+        const page = yield* MessageV2.page({ sessionID: created.id, limit: 10 })
+        const toolPart = page.items.flatMap((item) => item.parts).find((part) => part.type === "tool")
+        expect(toolPart).toBeDefined()
+        const state = (toolPart as SessionV1.ToolPart).state
+        expect(state.status).toBe("completed")
+        const persisted = Buffer.byteLength(JSON.stringify(state))
+        expect(persisted).toBeLessThan(8192)
+        expect(JSON.stringify(state)).toContain("content diff omitted")
+      }),
+    { git: true },
   )
 
   it.instance("rejects invalid hunk header", () =>

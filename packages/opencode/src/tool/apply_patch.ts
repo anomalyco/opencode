@@ -16,14 +16,31 @@ import { Format } from "../format"
 import * as Bom from "@/util/bom"
 import { isBinaryFile } from "@/util/binary"
 
-const MAX_DELETE_DIFF_BYTES = 1024 * 1024
+const MAX_DIFF_BYTES = 1024 * 1024
+const MAX_TOTAL_DIFF_BYTES = 2 * MAX_DIFF_BYTES
 
-function omittedDeleteDiff(filePath: string, size: number) {
+function omittedDiff(filePath: string, size: number, reason: string) {
   return [
     `Index: ${filePath}`,
     "===================================================================",
-    `Binary or oversized file deleted (${size} bytes; content diff omitted)`,
+    `${reason} deleted (${size} bytes; content diff omitted)`,
   ].join("\n")
+}
+
+function boundDiff(diff: string, maxBytes: number) {
+  const bytes = Buffer.byteLength(diff, "utf8")
+  if (bytes <= maxBytes) return diff
+  let kept = ""
+  let used = 0
+  // Truncate at line boundaries so consumers never see a half-written hunk.
+  // A single line larger than the cap is dropped entirely in favor of the marker.
+  for (const line of diff.split("\n")) {
+    const size = Buffer.byteLength(line, "utf8") + 1
+    if (used + size > maxBytes) break
+    kept += `${line}\n`
+    used += size
+  }
+  return `${kept}\n[diff truncated: showing first ${used} of ${bytes} bytes]`
 }
 
 export const Parameters = Schema.Struct({
@@ -78,8 +95,6 @@ export const ApplyPatchTool = Tool.define(
         bom: boolean
       }> = []
 
-      let totalDiff = ""
-
       for (const hunk of hunks) {
         const filePath = path.resolve(instance.directory, hunk.path)
         yield* assertExternalDirectoryEffect(ctx, filePath)
@@ -109,8 +124,6 @@ export const ApplyPatchTool = Tool.define(
               deletions,
               bom: next.bom,
             })
-
-            totalDiff += diff + "\n"
             break
           }
 
@@ -164,8 +177,6 @@ export const ApplyPatchTool = Tool.define(
               deletions,
               bom,
             })
-
-            totalDiff += diff + "\n"
             break
           }
 
@@ -178,13 +189,14 @@ export const ApplyPatchTool = Tool.define(
             }
             const size = Number(stat.size)
             const knownBinary = isBinaryFile(filePath, new Uint8Array())
-            const bytes = !knownBinary && size <= MAX_DELETE_DIFF_BYTES ? yield* afs.readFile(filePath) : undefined
-            const omit = knownBinary || size > MAX_DELETE_DIFF_BYTES || isBinaryFile(filePath, bytes ?? new Uint8Array())
+            const oversized = size > MAX_DIFF_BYTES
+            const bytes = knownBinary || oversized ? undefined : yield* afs.readFile(filePath)
+            const omit = knownBinary || oversized || isBinaryFile(filePath, bytes ?? new Uint8Array())
             const source = omit
               ? { bom: false, text: "" }
               : Bom.split(new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes))
             const deleteDiff = omit
-              ? omittedDeleteDiff(filePath, size)
+              ? omittedDiff(filePath, size, oversized ? "oversized file" : "binary file")
               : trimDiff(createTwoFilesPatch(filePath, filePath, source.text, ""))
 
             const deletions = omit ? 0 : source.text.split("\n").length
@@ -199,15 +211,18 @@ export const ApplyPatchTool = Tool.define(
               deletions,
               bom: source.bom,
             })
-
-            totalDiff += deleteDiff + "\n"
             break
           }
         }
       }
 
+      // Final safety net: bound every per-file diff and the combined diff so no
+      // change type can persist pathological content in metadata.
+      const bounded = fileChanges.map((change) => ({ ...change, diff: boundDiff(change.diff, MAX_DIFF_BYTES) }))
+      const totalDiff = boundDiff(bounded.map((change) => `${change.diff}\n`).join(""), MAX_TOTAL_DIFF_BYTES)
+
       // Build per-file metadata for UI rendering (used for both permission and result)
-      const files = fileChanges.map((change) => ({
+      const files = bounded.map((change) => ({
         filePath: change.filePath,
         relativePath: path.relative(instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
         type: change.type,
