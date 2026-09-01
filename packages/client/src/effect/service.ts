@@ -143,11 +143,40 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   return found.value.endpoint
 })
 
-/** Stop the registered local service. */
+/** Stop the registered local service. Returns whether the intended incumbent was stopped. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
   yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
   const info = yield* read(options.file)
-  if (info !== undefined) yield* terminate(info, options, defaultEnsureTiming)
+  if (info === undefined) {
+    return { stopped: false as const, reason: "missing-registration" as const }
+  }
+  const before = yield* read(options.file)
+  if (before === undefined || !same(before, info)) {
+    return { stopped: false as const, reason: "stale-registration" as const }
+  }
+  // Try to terminate the exact incumbent; terminate handles stale PID reuse safety
+  const result = yield* Effect.gen(function* () {
+    yield* terminate(info, options, defaultEnsureTiming)
+    // Verify the incumbent is gone and not reused by an unrelated PID
+    const after = yield* read(options.file)
+    if (after !== undefined && same(after, info)) {
+      return { stopped: false as const, reason: "still-registered" as const }
+    }
+    // Check if process is still running (stale PID reuse check)
+    const stillRunning = yield* Effect.try({
+      try: () => process.kill(info.pid, 0 as any),
+      catch: () => false,
+    }).pipe(Effect.orElseSucceed(() => false as boolean))
+    if (stillRunning) {
+      return { stopped: false as const, reason: "timeout" as const }
+    }
+    return { stopped: true as const, reason: "stopped" as const }
+  }).pipe(
+    Effect.catch((cause) =>
+      Effect.succeed({ stopped: false as const, reason: "error" as const, cause } as const),
+    ),
+  )
+  return result
 })
 
 function fallback() {

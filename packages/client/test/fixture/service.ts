@@ -55,7 +55,7 @@ const server = Bun.serve({
     if (pathname !== "/api/health") return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".health-request", "")
-    if (mode === "hanging") {
+    if (mode === "hanging" || mode === "hanging-stubborn") {
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
     }
@@ -88,6 +88,19 @@ await rename(registration + ".tmp", registration)
 
 async function shutdown(signal?: NodeJS.Signals) {
   if (signal !== undefined) await writeFile(registration + ".signal", signal)
+  if (mode === "hanging-stubborn") {
+    // Force stale-registration during terminate: rewrite id so same() fails,
+    // preventing SIGKILL and leaving process alive to trigger timeout
+    try {
+      const text = await Bun.file(registration).text()
+      const data = JSON.parse(text)
+      data.id = crypto.randomUUID()
+      await writeFile(registration, JSON.stringify(data), { mode: 0o600 } as any)
+      await writeFile(registration + ".stubborn-rewritten", "1")
+    } catch {}
+    // Stay alive indefinitely — do NOT exit, so stop's stillRunning check sees timeout
+    return
+  }
   server.stop(true)
   process.exit()
 }
