@@ -2,6 +2,7 @@ export * as PluginRuntime from "./runtime.js"
 
 import { Context, Effect, Layer } from "effect"
 import type { Agent } from "../agent.js"
+import type { Instance } from "../instance/service.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import type { Job } from "../job.js"
 import type { Location } from "../location.js"
@@ -16,8 +17,6 @@ export interface Interface {
     | "create"
     | "messages"
     | "prompt"
-    | "generate"
-    | "command"
     | "rename"
     | "move"
     | "resume"
@@ -28,6 +27,7 @@ export interface Interface {
     | "wait"
     | "context"
   >
+  readonly instances: Pick<Instance.Interface, "provide">
   readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel" | "completeBackground">
   readonly persistentPty: Pick<PersistentPty.Interface, "read">
   readonly location: {
@@ -70,8 +70,6 @@ export const layerWithCell = (cell: Cell): Layer.Layer<Service> =>
         create: (input) => require(cell, (runtime) => runtime.session.create(input)),
         messages: (input) => require(cell, (runtime) => runtime.session.messages(input)),
         prompt: (input) => require(cell, (runtime) => runtime.session.prompt(input)),
-        generate: (input) => require(cell, (runtime) => runtime.session.generate(input)),
-        command: (input) => require(cell, (runtime) => runtime.session.command(input)),
         rename: (input) => require(cell, (runtime) => runtime.session.rename(input)),
         move: (input) => require(cell, (runtime) => runtime.session.move(input)),
         resume: (sessionID) => require(cell, (runtime) => runtime.session.resume(sessionID)),
@@ -81,6 +79,9 @@ export const layerWithCell = (cell: Cell): Layer.Layer<Service> =>
         synthetic: (input) => require(cell, (runtime) => runtime.session.synthetic(input)),
         wait: (sessionID) => require(cell, (runtime) => runtime.session.wait(sessionID)),
         context: (sessionID) => require(cell, (runtime) => runtime.session.context(sessionID)),
+      },
+      instances: {
+        provide: (session) => (effect) => require(cell, (runtime) => runtime.instances.provide(session)(effect)),
       },
       job: {
         start: (input) => require(cell, (runtime) => runtime.job.start(input)),

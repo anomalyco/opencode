@@ -4,6 +4,7 @@ import { Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Agent } from "../agent.js"
 import { Job } from "../job.js"
+import { Instance } from "../instance/service.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { Mcp } from "../mcp/index.js"
@@ -18,11 +19,13 @@ export const configured = (cell: PluginRuntime.Cell) =>
     layer: Layer.effectDiscard(
       Effect.gen(function* () {
         const sessions = yield* Session.Service
+        const instances = yield* Instance.Service
         const jobs = yield* Job.Service
         const locations = yield* LocationServiceMap.Service
         const persistentPty = yield* PersistentPty.Service
         const runtime: PluginRuntime.Interface = {
           session: sessions,
+          instances,
           job: jobs,
           persistentPty,
           location: {
@@ -66,7 +69,14 @@ export const configured = (cell: PluginRuntime.Cell) =>
         )
       }),
     ),
-    deps: [PluginRuntime.node, Session.node, Job.node, LocationServiceMap.node, PersistentPty.node],
+    deps: [
+      PluginRuntime.node,
+      Session.node,
+      Instance.byLocationNode,
+      Job.node,
+      LocationServiceMap.node,
+      PersistentPty.node,
+    ],
   })
 
 export const node = configured(PluginRuntime.defaultCell)

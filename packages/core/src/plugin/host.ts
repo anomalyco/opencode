@@ -5,6 +5,7 @@ import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/i
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import type { Event } from "@opencode-ai/schema/event"
 import { ServerConfig } from "@opencode-ai/schema/mcp"
+import type { Session } from "@opencode-ai/schema/session"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
@@ -31,7 +32,8 @@ import { WebSearch } from "../websearch.js"
 import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
-import type { Interface } from "../plugin.js"
+import { Service, type Interface } from "../plugin.js"
+import { SessionGenerate } from "../session/generate.js"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
@@ -65,6 +67,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
   const runtime = yield* PluginRuntime.Service
+  const route = <A, E, R>(sessionID: Session.ID, effect: Effect.Effect<A, E, R>) =>
+    runtime.session.get(sessionID).pipe(Effect.flatMap((session) => runtime.instances.provide(session)(effect)))
   const locationInfo = () =>
     new Location.Info({
       directory: location.directory,
@@ -443,8 +447,28 @@ export const make = Effect.fn("PluginHost.make")(function* (
       switchAgent: runtime.session.switchAgent,
       switchModel: runtime.session.switchModel,
       prompt: runtime.session.prompt,
-      generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
-      command: runtime.session.command,
+      generate: (input) =>
+        route(
+          input.sessionID,
+          SessionGenerate.Service.use((generate) => generate.generate(input)),
+        ).pipe(Effect.map((text) => ({ text }))),
+      command: (input) =>
+        route(
+          input.sessionID,
+          Effect.gen(function* () {
+            const plugins = yield* Service
+            yield* plugins.awaitActivation
+            const commands = yield* Command.Service
+            yield* commands.execute({
+              name: input.command,
+              invocation: {
+                sessionID: input.sessionID,
+                prompt: { text: input.text, files: input.files, agents: input.agents, skills: input.skills },
+                delivery: input.delivery ?? "steer",
+              },
+            })
+          }),
+        ),
       rename: runtime.session.rename,
       move: runtime.session.move,
       synthetic: runtime.session.synthetic,

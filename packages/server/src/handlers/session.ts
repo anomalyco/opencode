@@ -1,4 +1,7 @@
 import { Session } from "@opencode-ai/core/session"
+import { Command } from "@opencode-ai/core/command"
+import { Plugin } from "@opencode-ai/core/plugin"
+import { SessionGenerate } from "@opencode-ai/core/session/generate"
 import { SessionStats } from "@opencode-ai/core/session/stats"
 import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
@@ -325,18 +328,24 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.command",
         Effect.fn(function* (ctx) {
-          yield* session
-            .command({
-              sessionID: ctx.params.sessionID,
-              command: ctx.payload.command,
-              text: ctx.payload.text,
-              files: ctx.payload.files,
-              agents: ctx.payload.agents,
-              skills: ctx.payload.skills,
-              delivery: ctx.payload.delivery,
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const commands = yield* Command.Service
+          yield* commands
+            .execute({
+              name: ctx.payload.command,
+              invocation: {
+                sessionID: ctx.params.sessionID,
+                prompt: {
+                  text: ctx.payload.text,
+                  files: ctx.payload.files,
+                  agents: ctx.payload.agents,
+                  skills: ctx.payload.skills,
+                },
+                delivery: ctx.payload.delivery ?? "steer",
+              },
             })
             .pipe(
-              Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Command.NotFoundError", (error) =>
                 Effect.fail(
                   new CommandNotFoundError({
@@ -590,13 +599,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.generate",
         Effect.fn(function* (ctx) {
-          const text = yield* session
+          const generate = yield* SessionGenerate.Service
+          const text = yield* generate
             .generate({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt })
             .pipe(
-              Effect.mapError((error) =>
-                error._tag === "Session.NotFoundError"
-                  ? missingSession(error)
-                  : new ServiceUnavailableError({ message: error.message, service: "session generation" }),
+              Effect.mapError(
+                (error) => new ServiceUnavailableError({ message: error.message, service: "session generation" }),
               ),
             )
           return { data: { text } }
