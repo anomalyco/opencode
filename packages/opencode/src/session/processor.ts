@@ -511,28 +511,6 @@ const layer = Layer.effect(
 
           case "text-end":
             if (!ctx.currentText) return
-            // Extract thinking blocks (e.g. Qwen 3.8 where template pre-fills <think> and emits </think>)
-            if (ctx.currentText.text.includes("</think>")) {
-              const parts = ctx.currentText.text.split("</think>")
-              let thinking = parts[0].trim()
-              if (thinking.startsWith("<think>")) {
-                thinking = thinking.slice(7).trim()
-              }
-              const remainingText = parts.slice(1).join("</think>").trimStart()
-              if (thinking) {
-                const reasoningPart = {
-                  id: PartID.ascending(),
-                  messageID: ctx.assistantMessage.id,
-                  sessionID: ctx.assistantMessage.sessionID,
-                  type: "reasoning" as const,
-                  text: thinking,
-                  time: { start: ctx.currentText.time?.start ?? Date.now(), end: Date.now() },
-                  metadata: ctx.currentText.metadata,
-                }
-                yield* session.updatePart(reasoningPart)
-              }
-              ctx.currentText.text = remainingText
-            }
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.currentText.text = ctx.currentText.text
             ctx.currentText.text = (yield* plugin.trigger(

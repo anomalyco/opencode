@@ -39,6 +39,7 @@ ssh "$DGX_HOST" "export PATH=\"/opt/vllm_env/bin:\$PATH\" && \
     --trust-remote-code \
     --enable-auto-tool-choice \
     --tool-call-parser qwen3_xml \
+    --reasoning-parser qwen3 \
     --gpu-memory-utilization $GPU_MEM_UTIL > /home/root-ziq/vllm_server.log 2>&1 < /dev/null & sleep 2"
 
 echo "[*] Waiting for vLLM model server to initialize weights on GB10 GPU..."
