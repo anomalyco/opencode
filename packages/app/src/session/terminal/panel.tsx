@@ -24,7 +24,7 @@ import { terminalTabLabel } from "@/session/terminal/terminal-label"
 import { createSizing, focusTerminalById } from "@/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/session/handoff"
 import { useSessionLayout } from "@/session/session-layout"
-import { createPaneMotion } from "@/session/pane-motion"
+import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { TerminalSurface } from "./surface"
 
 const MAX_CACHED_TERMINAL_WORKSPACES = 20
@@ -57,12 +57,16 @@ export function TerminalPanel(
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const opened = createMemo(() => view().terminal.opened())
-  const motion = createPaneMotion(tabKey, opened)
   const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
   const close = () => view().terminal.close()
   let root: HTMLElement | undefined
   let tabList: HTMLDivElement | undefined
+  const motion = createAnimatedPresence(
+    () => opened() || undefined,
+    () => root ?? null,
+    tabKey,
+  )
 
   onCleanup(() => terminal.cancelFocus())
 
