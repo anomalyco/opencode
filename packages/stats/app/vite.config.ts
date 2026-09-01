@@ -1,3 +1,4 @@
+// @ts-ignore
 import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
 import { defineConfig, type PluginOption } from "vite"
