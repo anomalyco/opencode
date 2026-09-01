@@ -14,6 +14,7 @@ import { Tool } from "@/tool/tool"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { Plugin } from "@/plugin"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 
@@ -37,6 +38,7 @@ const model = {
 function fakeMcp() {
   return MCP.Service.of({
     tools: () => Effect.succeed({}),
+    clients: () => Effect.succeed({}),
   } as Partial<MCP.Interface> as MCP.Interface)
 }
 
@@ -64,6 +66,7 @@ const layer = Layer.mergeAll(
   Layer.succeed(Permission.Service, fakePermission),
   Layer.succeed(MCP.Service, fakeMcp()),
   Layer.succeed(Truncate.Service, fakeTruncate),
+  RuntimeFlags.layer(),
   Layer.succeed(
     ToolRegistry.Service,
     ToolRegistry.Service.of({
@@ -135,7 +138,7 @@ it.effect("preserves running tool start time across metadata updates", () =>
     const tools = yield* SessionTools.resolve({
       agent,
       model,
-      session: { id: sessionID, permission: [] } as Session.Info,
+      session: { id: sessionID, permission: [] } as unknown as Session.Info,
       processor,
       bypassAgentCheck: false,
       messages: [],
@@ -150,6 +153,7 @@ it.effect("preserves running tool start time across metadata updates", () =>
         {
           toolCallId: callID,
           abortSignal: new AbortController().signal,
+          messages: [],
         },
       ),
     )
