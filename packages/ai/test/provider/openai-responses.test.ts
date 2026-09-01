@@ -177,9 +177,9 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("rejects nested tool namespaces", () =>
+  it.effect("flattens nested levels within a native tool namespace", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           tools: [
@@ -187,14 +187,27 @@ describe("OpenAI Responses route", () => {
               type: "namespace",
               name: "crm",
               description: "Customer management",
-              tools: [{ type: "namespace", name: "orders", description: "Order management", tools: [] }],
+              tools: [
+                {
+                  type: "namespace",
+                  name: "orders",
+                  description: "Order management",
+                  tools: [ToolDefinition.make({ name: "list", description: "List orders", inputSchema: {} })],
+                },
+              ],
             },
           ],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.reason._tag).toBe("InvalidRequest")
-      expect(error.message).toContain("does not support nested tool namespaces")
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "namespace",
+          name: "crm",
+          description: "Customer management",
+          tools: [{ type: "function", name: "orders_list", description: "List orders", parameters: {}, strict: false }],
+        },
+      ])
     }),
   )
 

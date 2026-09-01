@@ -424,7 +424,8 @@ const lowerSystem = (breakpoints: BedrockCache.Breakpoints, system: ReadonlyArra
 
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
-  const tools = yield* ProviderShared.requireFlatToolRequest("Bedrock Converse", request)
+  const flattened = ProviderShared.flattenToolRequest(request)
+  const tools = flattened.tools
   const generation = request.generation
   // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
@@ -439,7 +440,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
     }
   })()
   const system = lowerSystem(breakpoints, request.system)
-  const messages = yield* lowerMessages(request, breakpoints)
+  const messages = yield* lowerMessages(flattened.request, breakpoints)
   if (breakpoints.dropped > 0) {
     yield* Effect.logWarning(
       `Bedrock Converse: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${BedrockCache.BEDROCK_BREAKPOINT_CAP} per request.`,

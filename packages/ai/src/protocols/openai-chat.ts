@@ -736,7 +736,8 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     )
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
-  const tools = yield* ProviderShared.requireFlatToolRequest("OpenAI Chat", request)
+  const flattened = ProviderShared.flattenToolRequest(request)
+  const tools = flattened.tools
   const provider = String(request.model.provider)
   const baseURL = request.model.route.endpoint.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
@@ -752,7 +753,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const hasActiveTools = request.tools.length > 0
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(request, options),
+    messages: yield* lowerMessages(flattened.request, options),
     tools:
       request.tools.length === 0
         ? hasHistory

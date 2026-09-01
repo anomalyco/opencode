@@ -306,7 +306,9 @@ export const flattenToolRequest = (request: LLMRequest) => {
       if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
       return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
     })
-    return content.every((part, index) => part === message.content[index]) ? message : new Message({ ...message, content })
+    return content.every((part, index) => part === message.content[index])
+      ? message
+      : new Message({ ...message, content })
   })
   return {
     tools,

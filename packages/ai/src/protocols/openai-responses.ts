@@ -140,6 +140,24 @@ const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDe
   return yield* OpenResponses.lowerTool(NAME, tool, inputSchema)
 })
 
+function lowerNamespaceTools(
+  tools: ReadonlyArray<ToolEntry>,
+  compatibility: Parameters<typeof ToolSchemaProjection.modelCompatibility>[1],
+  path: ReadonlyArray<string> = [],
+): Effect.Effect<ReadonlyArray<typeof OpenResponses.Tool.Type>, AIError> {
+  return Effect.gen(function* () {
+    const entries = yield* Effect.forEach(tools, (tool) => {
+      if (tool.type === "namespace") return lowerNamespaceTools(tool.tools, compatibility, [...path, tool.name])
+      return OpenResponses.lowerTool(
+        NAME,
+        tool,
+        ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility),
+      ).pipe(Effect.map((lowered) => [{ ...lowered, name: [...path, lowered.name].join("_") }]))
+    }).pipe(Effect.map((entries) => entries.flat()))
+    return Array.from(new Map(entries.map((tool) => [tool.name, tool])).values())
+  })
+}
+
 const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (
   tool: ToolEntry,
   compatibility: Parameters<typeof ToolSchemaProjection.modelCompatibility>[1],
@@ -152,15 +170,7 @@ const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (
     type: "namespace" as const,
     name: tool.name,
     description: tool.description,
-    tools: yield* Effect.forEach(tool.tools, (child) => {
-      if (child.type === "namespace")
-        return Effect.fail(ProviderShared.invalidRequest("OpenAI Responses does not support nested tool namespaces"))
-      return OpenResponses.lowerTool(
-        NAME,
-        child,
-        ToolSchemaProjection.modelCompatibility(child.inputSchema, compatibility),
-      )
-    }),
+    tools: yield* lowerNamespaceTools(tool.tools, compatibility),
   }
 })
 

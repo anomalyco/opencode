@@ -466,7 +466,8 @@ function mapSafetySettings(value: unknown) {
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const hasTools = request.tools.length > 0
-  const tools = yield* ProviderShared.requireFlatToolRequest("Gemini", request)
+  const flattened = ProviderShared.flattenToolRequest(request)
+  const tools = flattened.tools
   const generation = request.generation
   const options = resolveOptions(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
@@ -484,7 +485,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 
   return {
     cachedContent: options.cachedContent,
-    contents: yield* lowerMessages(request),
+    contents: yield* lowerMessages(flattened.request),
     safetySettings: options.safetySettings,
     serviceTier: options.serviceTier,
     systemInstruction:
