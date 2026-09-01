@@ -40,7 +40,7 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     },
   } as unknown as Context
   const app = await testRender(
-    () => <PromptFooter context={context} sessionID="session" mode="normal" confirmingInterrupt={false} />,
+    () => <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />,
     {
       width: 80,
       height: 2,
@@ -64,7 +64,7 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
   }
 })
 
-test("prompt footer hides details during interrupt confirmation", async () => {
+test("prompt footer can hide details", async () => {
   const color = RGBA.fromInts(200, 200, 200)
   const context = {
     location: { directory: "/workspace" },
@@ -100,7 +100,7 @@ test("prompt footer hides details during interrupt confirmation", async () => {
       },
     },
   } as unknown as Context
-  const [confirmingInterrupt, setConfirmingInterrupt] = createSignal(false)
+  const [showDetails, setShowDetails] = createSignal(true)
   const app = await testRender(
     () => (
       <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
@@ -108,7 +108,7 @@ test("prompt footer hides details during interrupt confirmation", async () => {
           context={context}
           sessionID="session"
           mode="normal"
-          confirmingInterrupt={confirmingInterrupt()}
+          showDetails={showDetails()}
         />
       </box>
     ),
@@ -123,7 +123,7 @@ test("prompt footer hides details during interrupt confirmation", async () => {
     expect(app.captureCharFrame()).toContain("1.0K (10%) · $1.00")
     expect(app.captureCharFrame()).toContain("ctrl+p commands")
 
-    setConfirmingInterrupt(true)
+    setShowDetails(false)
     await app.renderOnce()
     const frame = app.captureCharFrame()
     expect(frame).not.toContain("1.0K (10%)")

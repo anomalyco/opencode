@@ -1595,7 +1595,7 @@ export function Prompt(props: PromptProps) {
     if (agentLabel()) revealedPromptMetadata.add(local)
   })
   const borderHighlight = createMemo(() => tint(theme.border.default, highlight(), agentMetaAlpha()))
-  const footerInput = () => ({ sessionID: props.sessionID, mode: store.mode, confirmingInterrupt: store.interrupt > 0 })
+  const footerInput = () => ({ sessionID: props.sessionID, mode: store.mode, showDetails: store.interrupt === 0 })
 
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
