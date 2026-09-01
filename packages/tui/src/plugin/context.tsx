@@ -18,6 +18,7 @@ import { readFile, stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import type { Page } from "@opencode-ai/plugin/tui/context"
 import { Hash } from "@opencode-ai/util/hash"
+import { importModule } from "@opencode-ai/util/runtime-import"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
 import { isDeepEqual } from "remeda"
@@ -615,7 +616,7 @@ async function resolvePlugin(
     const version = generation === undefined ? entrypoint : freshSpecifier(entrypoint, generation)
     if (previous && previous.version === version && sameOptions(previous.options, options))
       return { status: "unchanged" as const, plugin: previous.plugin, version }
-    const mod: { readonly default?: unknown } = await import(version)
+    const mod = (await importModule(version)) as { readonly default?: unknown }
     if (generation !== undefined) {
       const observed = await sourceGeneration(entrypoint)
       // In-place saves can change the file between hashing and import. Retry
