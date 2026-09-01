@@ -73,6 +73,7 @@ const layer = Layer.mergeAll(
       ids: () => Effect.succeed(["timing"]),
       all: () => Effect.succeed([]),
       named: () => Effect.die("unused"),
+      permittedSubagents: () => Effect.succeed([]),
       tools: () =>
         Effect.succeed([
           {
