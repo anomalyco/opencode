@@ -1,5 +1,6 @@
 import { $ } from "bun"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { downloadCliToResources, windowsify } from "./utils"
 
 type ServerSource = { type: "build" } | { type: "download"; version: string }
@@ -49,7 +50,10 @@ async function prepareServer(source: ServerSource) {
 }
 
 async function startDesktop(args: string[]) {
-  await $`electron-vite dev ${args}`
+  process.exitCode = await Bun.spawn(
+    ["node", fileURLToPath(new URL("../bin/electron-vite.js", import.meta.resolve("electron-vite"))), "dev", ...args],
+    { stdio: ["inherit", "inherit", "inherit"] },
+  ).exited
 }
 
 await main()
