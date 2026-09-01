@@ -36,10 +36,12 @@ test("keeps review visibility per tab and the pane mounted across tab switches",
     .toContain("0.24s")
   const reviewTab = page.locator("#session-side-panel-review-tab")
   const reviewTabPanel = page.locator("#session-side-panel-review-tabpanel")
+  const chatPanel = page.locator('[data-slot="session-chat-panel"]')
   await expect(reviewTab).toHaveAttribute("aria-controls", "session-side-panel-review-tabpanel")
   await expect(reviewTabPanel).toHaveAttribute("id", "session-side-panel-review-tabpanel")
   const review = page.locator('#review-panel [data-component="session-review-v2"]')
   await expectAppVisible(review)
+  await expect(chatPanel).toHaveCSS("width", "700px")
   await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   await writeProbe(page)
 
@@ -55,15 +57,21 @@ test("keeps review visibility per tab and the pane mounted across tab switches",
     .toBe("0s")
   expect(await readProbe(page)).toBe(PROBE)
 
+  await page.getByRole("button", { name: "Toggle review" }).click()
+  await expectAppVisible(review)
+  await expect(chatPanel).toHaveCSS("width", "520px")
+
   await switchTab(page, titleA)
   await expectSessionTitle(page, titleA)
   await expectAppVisible(review)
+  await expect(chatPanel).toHaveCSS("width", "700px")
   await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   expect(await readProbe(page)).toBe(PROBE)
 
   await page.reload()
   await expectSessionTitle(page, titleA)
   await expectAppVisible(review)
+  await expect(chatPanel).toHaveCSS("width", "700px")
 
   const viewport = page.locator('#review-panel [data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
   await viewport.hover()
@@ -118,7 +126,7 @@ async function setup(page: Page) {
   })
 
   await page.addInitScript(
-    ({ directory, server, sessions }) => {
+    ({ directory, server, sessions, panes }) => {
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -130,8 +138,17 @@ async function setup(page: Page) {
         "opencode.window.browser.dat:tabs",
         JSON.stringify(sessions.map((sessionId: string) => ({ type: "session", server, sessionId }))),
       )
+      localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify(panes))
     },
-    { directory, server, sessions: [sessionA, sessionB] },
+    {
+      directory,
+      server,
+      sessions: [sessionA, sessionB],
+      panes: {
+        [`${server}\n${sessionHref(sessionA)}`]: { sessionWidth: 700 },
+        [`${server}\n${sessionHref(sessionB)}`]: { sessionWidth: 520 },
+      },
+    },
   )
 }
 

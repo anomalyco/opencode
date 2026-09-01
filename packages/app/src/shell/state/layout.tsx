@@ -62,8 +62,12 @@ export type ReviewPanelSource = "context-button" | "other"
 export type TabPanes = {
   terminalOpened: Accessor<boolean>
   setTerminalOpened(opened: boolean): void
+  terminalHeight: Accessor<number | undefined>
+  setTerminalHeight(height: number): void
   reviewOpened: Accessor<boolean>
   setReviewOpened(opened: boolean): void
+  sessionWidth: Accessor<number | undefined>
+  setSessionWidth(width: number): void
 }
 
 export type LayoutRoute =
@@ -526,8 +530,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           if (typeof file === "string") return file
         })
         const terminalOpened = panes?.terminalOpened ?? createMemo(() => store.terminal?.opened ?? false)
+        const terminalHeight = createMemo(() =>
+          panes
+            ? (panes.terminalHeight() ?? DEFAULT_TERMINAL_HEIGHT)
+            : (store.terminal?.height ?? DEFAULT_TERMINAL_HEIGHT),
+        )
         const reviewPanelOpened =
           panes?.reviewOpened ?? createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
+        const sessionWidth = createMemo(() =>
+          panes ? (panes.sessionWidth() ?? DEFAULT_SESSION_WIDTH) : store.session.width,
+        )
         const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
 
         function setTerminalOpened(next: boolean) {
@@ -584,6 +596,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           terminal: {
             opened: terminalOpened,
+            height: terminalHeight,
+            resize(height: number) {
+              if (panes) {
+                panes.setTerminalHeight(height)
+                return
+              }
+              setStore("terminal", "height", height)
+            },
             open() {
               setTerminalOpened(true)
             },
@@ -597,6 +617,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           reviewPanel: {
             opened: reviewPanelOpened,
             source: reviewPanelSource,
+            width: sessionWidth,
+            resize(width: number) {
+              if (panes) {
+                panes.setSessionWidth(width)
+                return
+              }
+              setStore("session", "width", width)
+            },
             open(source: ReviewPanelSource = "other") {
               setReviewPanelOpened(true, source)
             },

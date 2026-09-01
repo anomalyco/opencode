@@ -47,7 +47,8 @@ export type TabInfo = {
 }
 
 export type TabPane = "terminal" | "review"
-type TabPaneState = Partial<Record<TabPane, boolean>>
+export type TabPaneSize = "terminalHeight" | "sessionWidth"
+type TabPaneState = Partial<Record<TabPane, boolean> & Record<TabPaneSize, number>>
 
 type RecentTab = {
   key?: string
@@ -531,6 +532,21 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           return
         }
         setPanes(key, pane, opened)
+      },
+      paneSize(tab: Tab | undefined, size: TabPaneSize) {
+        if (!tab) return
+        return panes[tabKey(tab)]?.[size]
+      },
+      setPaneSize(tab: Tab | undefined, size: TabPaneSize, value: number) {
+        if (!tab) return
+        const key = tabKey(tab)
+        const current = panes[key]
+        if (current?.[size] === value) return
+        if (!current) {
+          setPanes(key, { [size]: value })
+          return
+        }
+        setPanes(key, size, value)
       },
     }
 

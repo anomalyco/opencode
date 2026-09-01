@@ -13,7 +13,6 @@ import {
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { SessionHeader } from "@/session/header/session-header"
-import { useLayout } from "@/shell/state/layout"
 import { MessageTimeline, SessionSummaryPanel } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
 import { projectForSession } from "@/shell/layout/helpers"
@@ -39,7 +38,6 @@ const SessionMobileFiles = lazy(async () => {
 
 export function SessionScreen(props: { session: SessionModel }) {
   const session = props.session
-  const layout = useLayout()
   const server = useServer()
   const detailsProject = createMemo(() => {
     const info = session.data.info()
@@ -306,7 +304,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                   max={screen.panel.max()}
                   onResize={(width) => {
                     screen.size.touch()
-                    layout.session.resize(width)
+                    session.layout.view().reviewPanel.resize(width)
                   }}
                 />
               </div>
@@ -377,13 +375,13 @@ export function SessionScreen(props: { session: SessionModel }) {
                       <ResizeHandle
                         class="!relative !inset-auto !h-full !w-full !transform-none"
                         direction="vertical"
-                        size={layout.terminal.height()}
+                        size={session.layout.view().terminal.height()}
                         min={100}
                         max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
                         collapseThreshold={50}
                         onResize={(height) => {
                           screen.size.touch()
-                          layout.terminal.resize(height)
+                          session.layout.view().terminal.resize(height)
                         }}
                         onCollapse={() => session.layout.view().terminal.close()}
                       />
@@ -436,13 +434,13 @@ export function SessionScreen(props: { session: SessionModel }) {
                 <ResizeHandle
                   class="!relative !inset-auto !h-full !w-full !transform-none"
                   direction="vertical"
-                  size={layout.terminal.height()}
+                  size={session.layout.view().terminal.height()}
                   min={100}
                   max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
                   collapseThreshold={50}
                   onResize={(height) => {
                     screen.size.touch()
-                    layout.terminal.resize(height)
+                    session.layout.view().terminal.resize(height)
                   }}
                   onCollapse={() => session.layout.view().terminal.close()}
                 />

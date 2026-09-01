@@ -26,8 +26,10 @@ test("keeps terminal visibility per tab and the PTY alive across tab switches", 
 
   await page.keyboard.press("Control+Backquote")
   const terminal = page.locator('[data-component="terminal"]')
+  const terminalPanel = page.locator('[data-component="terminal-panel"]')
   await expect(terminal).toBeVisible()
-  await expect(page.locator('[data-component="terminal-panel"]')).toHaveAttribute("data-size-animated", "true")
+  await expect(terminalPanel).toHaveAttribute("data-size-animated", "true")
+  await expect(terminalPanel).toHaveCSS("height", "300px")
   await expect.poll(() => connections.length).toBe(1)
   const connection = new URL(connections[0]!)
   expect(connection.pathname).toBe(`/api/pty/${ptyID}/connect`)
@@ -38,19 +40,25 @@ test("keeps terminal visibility per tab and the PTY alive across tab switches", 
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
   await expect(terminal).toBeHidden()
-  await expect(page.locator('[data-component="terminal-panel"]')).toHaveAttribute("data-size-animated", "false")
+  await expect(terminalPanel).toHaveAttribute("data-size-animated", "false")
   expect(await readProbe(page)).toBe(PROBE)
   expect(connections.length).toBe(1)
+
+  await page.keyboard.press("Control+Backquote")
+  await expect(terminal).toBeVisible()
+  await expect(terminalPanel).toHaveCSS("height", "180px")
 
   await switchTab(page, titleA)
   await expectSessionTitle(page, titleA)
   await expect(terminal).toBeVisible()
+  await expect(terminalPanel).toHaveCSS("height", "300px")
   expect(await readProbe(page)).toBe(PROBE)
   expect(connections.length).toBe(1)
 
   await page.reload()
   await expectSessionTitle(page, titleA)
   await expect(terminal).toBeVisible()
+  await expect(terminalPanel).toHaveCSS("height", "300px")
 })
 
 type Probed = HTMLElement & { __e2eProbe?: string }
@@ -125,7 +133,7 @@ async function setup(page: Page) {
   })
 
   await page.addInitScript(
-    ({ directory, server, sessions }) => {
+    ({ directory, server, sessions, panes }) => {
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -137,8 +145,17 @@ async function setup(page: Page) {
         "opencode.window.browser.dat:tabs",
         JSON.stringify(sessions.map((sessionId: string) => ({ type: "session", server, sessionId }))),
       )
+      localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify(panes))
     },
-    { directory, server, sessions: [sessionA, sessionB] },
+    {
+      directory,
+      server,
+      sessions: [sessionA, sessionB],
+      panes: {
+        [`${server}\n${sessionHref(sessionA)}`]: { terminalHeight: 300 },
+        [`${server}\n${sessionHref(sessionB)}`]: { terminalHeight: 180 },
+      },
+    },
   )
   return connections
 }
