@@ -53,11 +53,18 @@ export type Prepared = {
 const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
   mergeDeep(target, source ?? {}) as Record<string, any>
 
-export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
-  const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
+export const prepareSystem = Effect.fn("LLMRequestPrep.prepareSystem")(function* (
+  input: Pick<PrepareInput, "agent" | "model" | "plugin" | "sessionID" | "system" | "user"> & {
+    readonly providerPrompt?: boolean
+  },
+) {
   const system = [
     [
-      ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+      ...(input.agent.prompt
+        ? [input.agent.prompt]
+        : input.providerPrompt === false
+          ? []
+          : SystemPrompt.provider(input.model)),
       ...input.system,
       ...(input.user.system ? [input.user.system] : []),
     ]
@@ -76,6 +83,12 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     system.length = 0
     system.push(header, rest.join("\n"))
   }
+  return system
+})
+
+export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
+  const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
+  const system = yield* prepareSystem(input)
 
   const variant =
     !input.small && input.model.variants && input.user.model.variant

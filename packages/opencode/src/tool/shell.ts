@@ -260,7 +260,11 @@ const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boole
   return tree
 })
 
-const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan, input: { command: string }) {
+const ask = Effect.fn("ShellTool.ask")(function* (
+  ctx: Pick<Tool.Context, "ask">,
+  scan: Scan,
+  input: { command: string },
+) {
   if (scan.dirs.size > 0) {
     const directories = Array.from(scan.dirs)
     const globs = directories.map((dir) => {
@@ -288,6 +292,27 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
       command: input.command,
     },
   })
+})
+
+export const askShellPermission = Effect.fn("ShellTool.askPermission")(function* (
+  ctx: Pick<Tool.Context, "ask">,
+  input: { command: string; cwd: string },
+) {
+  yield* Effect.scoped(
+    Effect.gen(function* () {
+      const config = yield* Config.Service
+      const spawner = yield* ChildProcessSpawner
+      const fs = yield* FSUtil.Service
+      const shell = Shell.acceptable((yield* config.get()).shell)
+      const tree = yield* Effect.acquireRelease(parse(input.command, Shell.ps(shell)), (tree) =>
+        Effect.sync(() => tree.delete()),
+      )
+      const instance = yield* InstanceState.context
+      const scan = yield* collect(fs, spawner, tree.rootNode, input.cwd, Shell.ps(shell), shell, instance)
+      if (!containsPath(input.cwd, instance)) scan.dirs.add(input.cwd)
+      yield* ask(ctx, scan, input)
+    }),
+  )
 })
 
 function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
@@ -335,6 +360,89 @@ const parser = lazy(async () => {
   return { bash, ps }
 })
 
+const cygpath = Effect.fn("ShellTool.cygpath")(function* (
+  spawner: (typeof ChildProcessSpawner)["Service"],
+  shell: string,
+  text: string,
+) {
+  const lines = yield* spawner
+    .lines(ChildProcess.make(shell, ["-lc", 'cygpath -w -- "$1"', "_", text]))
+    .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+  const file = lines[0]?.trim()
+  if (!file) return
+  return FSUtil.normalizePath(file)
+})
+
+const resolvePath = Effect.fn("ShellTool.resolvePath")(function* (
+  spawner: (typeof ChildProcessSpawner)["Service"],
+  text: string,
+  root: string,
+  shell: string,
+) {
+  if (process.platform === "win32") {
+    if (Shell.posix(shell) && text.startsWith("/") && FSUtil.windowsPath(text) === text) {
+      const file = yield* cygpath(spawner, shell, text)
+      if (file) return file
+    }
+    return FSUtil.normalizePath(path.resolve(root, FSUtil.windowsPath(text)))
+  }
+  return path.resolve(root, text)
+})
+
+const argPath = Effect.fn("ShellTool.argPath")(function* (
+  spawner: (typeof ChildProcessSpawner)["Service"],
+  arg: string,
+  cwd: string,
+  ps: boolean,
+  shell: string,
+) {
+  const text = ps ? expand(arg, cwd, shell) : home(unquote(arg))
+  const file = text && prefix(text)
+  if (!file || dynamic(file, ps)) return
+  const next = ps ? provider(file) : file
+  if (!next) return
+  return yield* resolvePath(spawner, next, cwd, shell)
+})
+
+const collect = Effect.fn("ShellTool.collect")(function* (
+  fs: FSUtil.Interface,
+  spawner: (typeof ChildProcessSpawner)["Service"],
+  root: Node,
+  cwd: string,
+  ps: boolean,
+  shell: string,
+  instance: InstanceContext,
+) {
+  const scan: Scan = {
+    dirs: new Set<string>(),
+    patterns: new Set<string>(),
+    always: new Set<string>(),
+  }
+  const shellKind = ShellID.toKind(Shell.name(shell))
+
+  for (const node of commands(root)) {
+    const command = parts(node)
+    const tokens = command.map((item) => item.text)
+    const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
+
+    if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
+      for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
+        const resolved = yield* argPath(spawner, arg, cwd, ps, shell)
+        yield* Effect.logInfo("resolved path", { arg, resolved })
+        if (!resolved || containsPath(resolved, instance)) continue
+        scan.dirs.add((yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved))
+      }
+    }
+
+    if (tokens.length && (!cmd || !CWD.has(cmd))) {
+      scan.patterns.add(source(node))
+      scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
+    }
+  }
+
+  return scan
+})
+
 export const ShellTool = Tool.define(
   ShellID.ToolID,
   Effect.gen(function* () {
@@ -345,73 +453,6 @@ export const ShellTool = Tool.define(
     const plugin = yield* Plugin.Service
     const flags = yield* RuntimeFlags.Service
     const defaultTimeoutMs = flags.bashDefaultTimeoutMs ?? 2 * 60 * 1000
-
-    const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
-      const lines = yield* spawner
-        .lines(ChildProcess.make(shell, ["-lc", 'cygpath -w -- "$1"', "_", text]))
-        .pipe(Effect.catch(() => Effect.succeed([] as string[])))
-      const file = lines[0]?.trim()
-      if (!file) return
-      return FSUtil.normalizePath(file)
-    })
-
-    const resolvePath = Effect.fn("ShellTool.resolvePath")(function* (text: string, root: string, shell: string) {
-      if (process.platform === "win32") {
-        if (Shell.posix(shell) && text.startsWith("/") && FSUtil.windowsPath(text) === text) {
-          const file = yield* cygpath(shell, text)
-          if (file) return file
-        }
-        return FSUtil.normalizePath(path.resolve(root, FSUtil.windowsPath(text)))
-      }
-      return path.resolve(root, text)
-    })
-
-    const argPath = Effect.fn("ShellTool.argPath")(function* (arg: string, cwd: string, ps: boolean, shell: string) {
-      const text = ps ? expand(arg, cwd, shell) : home(unquote(arg))
-      const file = text && prefix(text)
-      if (!file || dynamic(file, ps)) return
-      const next = ps ? provider(file) : file
-      if (!next) return
-      return yield* resolvePath(next, cwd, shell)
-    })
-
-    const collect = Effect.fn("ShellTool.collect")(function* (
-      root: Node,
-      cwd: string,
-      ps: boolean,
-      shell: string,
-      instance: InstanceContext,
-    ) {
-      const scan: Scan = {
-        dirs: new Set<string>(),
-        patterns: new Set<string>(),
-        always: new Set<string>(),
-      }
-      const shellKind = ShellID.toKind(Shell.name(shell))
-
-      for (const node of commands(root)) {
-        const command = parts(node)
-        const tokens = command.map((item) => item.text)
-        const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
-
-        if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
-          for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
-            const resolved = yield* argPath(arg, cwd, ps, shell)
-            yield* Effect.logInfo("resolved path", { arg, resolved })
-            if (!resolved || containsPath(resolved, instance)) continue
-            const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
-            scan.dirs.add(dir)
-          }
-        }
-
-        if (tokens.length && (!cmd || !CWD.has(cmd))) {
-          scan.patterns.add(source(node))
-          scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
-        }
-      }
-
-      return scan
-    })
 
     const shellEnv = Effect.fn("ShellTool.shellEnv")(function* (ctx: Tool.Context, cwd: string) {
       const extra = yield* plugin.trigger(
@@ -610,22 +651,16 @@ export const ShellTool = Tool.define(
             Effect.gen(function* () {
               const instanceCtx = yield* InstanceState.context
               const cwd = params.workdir
-                ? yield* resolvePath(params.workdir, instanceCtx.directory, shell)
+                ? yield* resolvePath(spawner, params.workdir, instanceCtx.directory, shell)
                 : instanceCtx.directory
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
               const timeout = params.timeout ?? defaultTimeoutMs
-              const ps = Shell.ps(shell)
-              yield* Effect.scoped(
-                Effect.gen(function* () {
-                  const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
-                    Effect.sync(() => tree.delete()),
-                  )
-                  const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
-                  if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
-                  yield* ask(ctx, scan, params)
-                }),
+              yield* askShellPermission(ctx, { command: params.command, cwd }).pipe(
+                Effect.provideService(Config.Service, config),
+                Effect.provideService(FSUtil.Service, fs),
+                Effect.provideService(ChildProcessSpawner, spawner),
               )
 
               return yield* run(

@@ -148,8 +148,34 @@ it.instance(
     const providers = yield* list
     expect(providers[ProviderV2.ID.anthropic]).toBeDefined()
     expect(providers[ProviderV2.ID.openai]).toBeUndefined()
+    expect(providers[Provider.ClaudeACPProviderID]).toBeUndefined()
   }),
   { config: { enabled_providers: ["anthropic"] } },
+)
+
+it.instance("Claude ACP exposes launcher models", () =>
+  Effect.gen(function* () {
+    const providers = yield* list
+    expect(Object.keys(providers[Provider.ClaudeACPProviderID].models)).toEqual([
+      "claude",
+      "opus",
+      "opus[1m]",
+      "sonnet",
+      "sonnet[1m]",
+      "haiku",
+      "fable",
+      "fable[1m]",
+    ])
+  }),
+)
+
+it.instance(
+  "disabled_providers excludes Claude ACP",
+  Effect.gen(function* () {
+    const providers = yield* list
+    expect(providers[Provider.ClaudeACPProviderID]).toBeUndefined()
+  }),
+  { config: { disabled_providers: [Provider.ClaudeACPProviderID] } },
 )
 
 it.instance(
@@ -386,6 +412,15 @@ it.instance(
     expect(error._tag).toBe("ProviderNoProvidersError")
   }),
   { config: { enabled_providers: [] } },
+)
+
+it.instance(
+  "defaultModel does not implicitly select Claude ACP",
+  Effect.gen(function* () {
+    const error = yield* Provider.use.defaultModel().pipe(Effect.flip)
+    expect(error).toBeInstanceOf(Provider.NoProvidersError)
+  }),
+  { config: { enabled_providers: [Provider.ClaudeACPProviderID] } },
 )
 
 it.instance(

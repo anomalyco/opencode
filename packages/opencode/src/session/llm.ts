@@ -2,6 +2,9 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import type { McpServer } from "@agentclientprotocol/sdk"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { ClaudeACPProviderID, Provider } from "@/provider/provider"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
@@ -17,10 +20,12 @@ import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import type { Agent } from "@/agent/agent"
-import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { Permission } from "@/permission"
 import { Question } from "@/question"
+import { assertExternalDirectoryEffect } from "@/tool/external-directory"
+import { InstanceState } from "@/effect/instance-state"
+import path from "path"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Wildcard } from "@/util/wildcard"
@@ -31,7 +36,6 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
-import { ClaudeACP } from "./llm/claude-acp"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
 import { Session } from "./session"
@@ -42,6 +46,8 @@ export type StreamInput = {
   cwd?: string
   user: SessionV1.User
   sessionID: SessionID
+  assistantID?: SessionV1.Assistant["id"]
+  historyID?: string
   parentSessionID?: string
   model: Provider.Model
   agent: Agent.Info
@@ -66,22 +72,91 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 
 export const use = serviceUse(Service)
 
-export function claudeACPPromptBridge(input: {
+function claudeACPPromptBridge(input: {
   readonly bridge: EffectBridge.Shape
+  readonly cwd: string
+  readonly sessionID: SessionID
   readonly abort: AbortSignal
+  readonly ruleset: PermissionV1.Ruleset
   readonly permission: Permission.Interface
   readonly question: Question.Interface
+  readonly config: Config.Interface
+  readonly fs: FSUtil.Interface
+  readonly spawner: (typeof ChildProcessSpawner)["Service"]
 }) {
+  const abortSignal = (signal?: AbortSignal) => (signal ? AbortSignal.any([input.abort, signal]) : input.abort)
   return {
-    permission: {
-      ask: (request: PermissionV1.AskInput) =>
-        input.bridge.promise(input.permission.askWithReply(request), { signal: input.abort }),
-      reply: (request: PermissionV1.ReplyInput) => input.bridge.promise(input.permission.reply(request)),
-    },
     question: {
-      ask: (request: Parameters<Question.Interface["ask"]>[0]) =>
-        input.bridge.promise(input.question.ask(request), { signal: input.abort }),
+      ask: (request: Parameters<Question.Interface["ask"]>[0], signal?: AbortSignal) =>
+        input.bridge.promise(input.question.ask(request), { signal: abortSignal(signal) }),
     },
+    authorize: (
+      request: {
+        id?: PermissionV1.ID
+        permission: string
+        metadata: Record<string, unknown>
+      },
+      signal?: AbortSignal,
+    ) =>
+      input.bridge.promise(
+        Effect.gen(function* () {
+          const instance = yield* InstanceState.context
+          const filepath = [
+            request.metadata.filePath,
+            request.metadata.file_path,
+            request.metadata.notebook_path,
+            request.metadata.filepath,
+            request.metadata.path,
+          ].find((value): value is string => typeof value === "string")
+          const target = filepath
+            ? path.isAbsolute(filepath)
+              ? filepath
+              : path.resolve(input.cwd, filepath)
+            : undefined
+          const ask = (requestInput: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
+            input.permission
+              .ask({
+                ...requestInput,
+                id: request.id,
+                sessionID: input.sessionID,
+                ruleset: input.ruleset,
+              })
+              .pipe(Effect.orDie)
+          if (["read", "edit", "glob", "grep"].includes(request.permission)) {
+            yield* assertExternalDirectoryEffect({ ask }, target, {
+              kind: request.permission === "glob" || request.permission === "grep" ? "directory" : "file",
+            })
+          }
+          if (request.permission === "bash") {
+            const { askShellPermission } = yield* Effect.promise(() => import("@/tool/shell"))
+            const command = typeof request.metadata.command === "string" ? request.metadata.command : ""
+            return yield* askShellPermission({ ask }, { command, cwd: input.cwd }).pipe(
+              Effect.provideService(Config.Service, input.config),
+              Effect.provideService(FSUtil.Service, input.fs),
+              Effect.provideService(ChildProcessSpawner, input.spawner),
+            )
+          }
+          const pattern = {
+            glob: request.metadata.pattern,
+            grep: request.metadata.pattern,
+            task: request.metadata.subagent_type,
+            webfetch: request.metadata.url,
+            websearch: request.metadata.query,
+            skill: request.metadata.skill ?? request.metadata.name,
+          }[request.permission]
+          const patterns =
+            request.permission === "read" || request.permission === "edit"
+              ? [path.relative(instance.worktree, target ?? input.cwd)]
+              : [typeof pattern === "string" ? pattern : "*"]
+          yield* ask({
+            permission: request.permission,
+            patterns,
+            always: request.permission === "skill" ? patterns : ["*"],
+            metadata: request.metadata,
+          })
+        }),
+        { signal: abortSignal(signal) },
+      ),
   }
 }
 
@@ -98,6 +173,8 @@ const live: Layer.Layer<
   | LLMClientService
   | RuntimeFlags.Service
   | Session.Service
+  | FSUtil.Service
+  | ChildProcessSpawner
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -110,7 +187,9 @@ const live: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
-    const session = yield* Session.Service
+    const sessions = yield* Session.Service
+    const fs = yield* FSUtil.Service
+    const spawner = yield* ChildProcessSpawner
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       yield* Effect.logInfo("stream", {
@@ -123,11 +202,10 @@ const live: Layer.Layer<
       })
 
       if (input.model.providerID === ClaudeACPProviderID) {
-        const unsupported = claudeACPUnsupported(input)
-        if (unsupported) {
+        if (input.toolChoice && input.toolChoice !== "auto") {
           return {
             type: "native" as const,
-            stream: Stream.fail(new Error(unsupported)),
+            stream: Stream.fail(new Error(`Claude ACP does not support toolChoice "${input.toolChoice}"`)),
           }
         }
         if (!input.cwd) {
@@ -136,9 +214,20 @@ const live: Layer.Layer<
             stream: Stream.fail(new Error("Claude ACP requires a session cwd")),
           }
         }
-        const cfg = yield* config.get()
-        const bridge = yield* EffectBridge.make()
-        const prompts = claudeACPPromptBridge({ bridge, abort: input.abort, permission: perm, question })
+        const prompts = claudeACPPromptBridge({
+          bridge: yield* EffectBridge.make(),
+          cwd: input.cwd,
+          sessionID: input.sessionID,
+          abort: input.abort,
+          ruleset: Permission.merge(input.agent.permission, input.permission ?? []),
+          permission: perm,
+          question,
+          config,
+          fs,
+          spawner,
+        })
+        const { ClaudeACP } = yield* Effect.promise(() => import("./llm/claude-acp"))
+        const resume = input.agent.hidden !== true
         yield* Effect.logInfo("llm runtime selected", {
           "llm.runtime": "claude-acp",
           "llm.provider": input.model.providerID,
@@ -150,28 +239,21 @@ const live: Layer.Layer<
             cwd: input.cwd,
             sessionID: input.sessionID,
             modelID: input.model.id,
+            assistantID: input.assistantID ?? input.user.id,
+            historyID: input.historyID,
             agent: input.agent.name,
-            mcpServers: claudeMcpServers(cfg),
-            messages: claudeACPMessages(input.system, input.messages),
+            resume,
+            mcpServers: claudeMcpServers(yield* config.get()),
+            system: yield* LLMRequestPrep.prepareSystem({ ...input, plugin, providerPrompt: false }),
+            messages: input.messages,
             abort: input.abort,
             // Claude ACP owns tool execution through Claude Code plus MCP servers;
             // OpenCode AI SDK tools are intentionally not forwarded here.
-            ruleset: Permission.merge(input.agent.permission, input.permission ?? []),
-            permission: prompts.permission,
             question: prompts.question,
-            onConfig: (config) =>
-              bridge.promise(
-                Effect.gen(function* () {
-                  const current = yield* session.get(input.sessionID)
-                  yield* session.setMetadata({
-                    sessionID: input.sessionID,
-                    metadata: {
-                      ...current.metadata,
-                      claudeAcp: config,
-                    },
-                  })
-                }),
-              ),
+            authorize: prompts.authorize,
+            state: resume
+              ? ClaudeACP.parseState((yield* sessions.get(input.sessionID)).metadata?.claudeACP)
+              : undefined,
           }),
         }
       }
@@ -470,18 +552,6 @@ const live: Layer.Layer<
 
 export const hasToolCalls = LLMRequestPrep.hasToolCalls
 
-function claudeACPUnsupported(input: StreamRequest) {
-  if (input.toolChoice && input.toolChoice !== "auto") {
-    return `Claude ACP does not support toolChoice "${input.toolChoice}"`
-  }
-}
-
-function claudeACPMessages(system: string[], messages: ModelMessage[]) {
-  const text = system.map((item) => item.trim()).filter(Boolean).join("\n\n")
-  if (!text) return messages
-  return [{ role: "system" as const, content: text }, ...messages]
-}
-
 function claudeMcpServers(config: ConfigV1.Info): McpServer[] {
   return Object.entries(config.mcp ?? {}).flatMap<McpServer>(([name, server]) => {
     if (!isMcpConfigured(server) || server.enabled === false) return []
@@ -515,11 +585,8 @@ function isMcpConfigured(server: NonNullable<ConfigV1.Info["mcp"]>[string]): ser
 }
 
 function remoteMcpType(url: string): "http" | "sse" {
-  try {
-    const parsed = new URL(url)
-    if (parsed.pathname.toLowerCase().endsWith("/sse")) return "sse"
-  } catch {}
-  return "http"
+  if (!URL.canParse(url)) return "http"
+  return new URL(url).pathname.toLowerCase().endsWith("/sse") ? "sse" : "http"
 }
 
 export const node = LayerNode.make({
@@ -536,6 +603,8 @@ export const node = LayerNode.make({
     llmClient,
     RuntimeFlags.node,
     Session.node,
+    FSUtil.node,
+    CrossSpawnSpawner.node,
   ],
 })
 

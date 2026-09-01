@@ -14,6 +14,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
 import { useTuiConfig } from "../../config"
 import { useLocation } from "../../context/location"
+import { useLocal } from "../../context/local"
 import { useTheme, selectedForeground } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { useTerminalDimensions } from "@opentui/solid"
@@ -23,8 +24,7 @@ import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
-import { useLocal } from "../../context/local"
-import { ClaudeACPProviderID, ClaudeACPSlashCommands, isClaudeACPSlashCommand } from "../../util/claude-acp"
+import { ClaudeACPCommands, ClaudeACPProviderID, isClaudeACPCommand } from "../../util/claude-acp"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -91,7 +91,6 @@ export function Autocomplete(props: {
   const sync = useSync()
   const data = useData()
   const project = useProject()
-  const local = useLocal()
   const slashes = useCommandSlashes()
   const modeStack = useOpencodeModeStack()
   const { theme } = useTheme()
@@ -100,6 +99,7 @@ export function Autocomplete(props: {
   const tuiConfig = useTuiConfig()
   const paths = useTuiPaths()
   const location = useLocation()
+  const local = useLocal()
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
@@ -240,14 +240,6 @@ export function Autocomplete(props: {
     if (part.type === "file" && part.source && part.source.type === "file") {
       frecency.updateFrecency(part.source.path)
     }
-  }
-
-  function insertSlashCommand(name: string) {
-    const newText = "/" + name + " "
-    const cursor = props.input().logicalCursor
-    props.input().deleteRange(0, 0, cursor.row, cursor.col)
-    props.input().insertText(newText)
-    props.input().cursorOffset = Bun.stringWidth(newText)
   }
 
   function createFilePart(
@@ -455,44 +447,34 @@ export function Autocomplete(props: {
       ),
   )
 
-  const isClaudeACPSelected = createMemo(() => local.model.current()?.providerID === ClaudeACPProviderID)
-
-  const claudeACPSlashes = createMemo((): AutocompleteOption[] => {
-    if (!isClaudeACPSelected()) return []
-    return ClaudeACPSlashCommands.map((command) => ({
-      display: "/" + command.name,
-      description: command.hint ? `${command.hint} ${command.description}` : command.description,
-      onSelect: () => insertSlashCommand(command.name),
-    }))
-  })
-
-  function localSlashForClaudeACP(item: AutocompleteOption) {
-    if (!isClaudeACPSelected()) return item
-    if (isClaudeACPSlashCommand(item.display.trimEnd())) return
-    const aliases = item.aliases?.filter((alias) => !isClaudeACPSlashCommand(alias.trimEnd()))
-    return {
-      ...item,
-      aliases: aliases?.length ? aliases : undefined,
-    }
-  }
-
   const commands = createMemo((): AutocompleteOption[] => {
+    const claude = local.model.current()?.providerID === ClaudeACPProviderID
+    const insert = (name: string) => {
+      const text = "/" + name + " "
+      const cursor = props.input().logicalCursor
+      props.input().deleteRange(0, 0, cursor.row, cursor.col)
+      props.input().insertText(text)
+      props.input().cursorOffset = Bun.stringWidth(text)
+    }
     const results: AutocompleteOption[] = [
-      ...slashes().flatMap((item) => {
-        const slash = localSlashForClaudeACP(item)
-        return slash ? [slash] : []
-      }),
-      ...claudeACPSlashes(),
+      ...slashes().filter((item) => !claude || !isClaudeACPCommand(item.display.trimEnd())),
+      ...(claude
+        ? ClaudeACPCommands.map(([name, hint, description]) => ({
+            display: `/${name}${hint ? ` ${hint}` : ""}`,
+            description,
+            onSelect: () => insert(name),
+          }))
+        : []),
     ]
 
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue
-      if (isClaudeACPSelected() && isClaudeACPSlashCommand(serverCommand.name)) continue
+      if (claude && isClaudeACPCommand(serverCommand.name)) continue
       const label = serverCommand.source === "mcp" ? ":mcp" : ""
       results.push({
         display: "/" + serverCommand.name + label,
         description: serverCommand.description,
-        onSelect: () => insertSlashCommand(serverCommand.name),
+        onSelect: () => insert(serverCommand.name),
       })
     }
 

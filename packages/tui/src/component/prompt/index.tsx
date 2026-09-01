@@ -9,7 +9,7 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, For, Show, Switch, Match } from "solid-js"
 import { registerOpencodeSpinner } from "../register-spinner"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -38,7 +38,7 @@ import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { FilePart, UserMessage } from "@opencode-ai/sdk/v2"
-import { ClaudeACPProviderID, claudeACPFooterState, isClaudeACPSlashCommand } from "../../util/claude-acp"
+import { ClaudeACPProviderID, claudeACPFooter, isClaudeACPCommand } from "../../util/claude-acp"
 import { Locale } from "../../util/locale"
 import { assistantContextTokens, latestAssistantContextMessage } from "../../util/session"
 import { errorMessage } from "../../util/error"
@@ -212,11 +212,7 @@ export function Prompt(props: PromptProps) {
   const workspace = usePromptWorkspace(props.sessionID)
   const move = usePromptMove({ projectID: project.project, sessionID: () => props.sessionID })
   const [cursorVersion, setCursorVersion] = createSignal(0)
-  const currentProviderLabel = createMemo(() => {
-    const model = local.model.parsed()
-    if (model.provider === model.model) return
-    return model.provider
-  })
+  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
@@ -1037,6 +1033,7 @@ export function Prompt(props: PromptProps) {
         return [{ start: extmark.start, end: extmark.end, text: part.text }]
       }),
     )
+    const commandName = inputText.match(/^\/(\S+)/)?.[1]
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
@@ -1073,18 +1070,21 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
-    } else if (shouldRunOpencodeSlashCommand(inputText, selectedModel.providerID)) {
+    } else if (
+      commandName &&
+      sync.data.command.some((x) => x.name === commandName) &&
+      (selectedModel.providerID !== ClaudeACPProviderID || !isClaudeACPCommand(commandName))
+    ) {
       move.startSubmit()
       // Parse command from first line, preserve multi-line content in arguments
       const firstLineEnd = inputText.indexOf("\n")
       const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const [command, ...firstLineArgs] = firstLine.split(" ")
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
-      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+      const args = firstLine.split(" ").slice(1).join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
       void sdk.client.session.command({
         sessionID,
-        command: command.slice(1),
+        command: commandName,
         arguments: args,
         agent: agent.name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
@@ -1146,13 +1146,6 @@ export function Prompt(props: PromptProps) {
     input.clear()
     if (finishMoveProgress) move.finishSubmit()
     return true
-  }
-
-  function shouldRunOpencodeSlashCommand(inputText: string, providerID: string) {
-    if (!inputText.startsWith("/")) return false
-    const command = inputText.split("\n")[0].split(" ")[0].slice(1)
-    if (providerID === ClaudeACPProviderID && isClaudeACPSlashCommand(command)) return false
-    return sync.data.command.some((item) => item.name === command)
   }
 
   function pasteText(text: string, virtualText: string) {
@@ -1308,27 +1301,16 @@ export function Prompt(props: PromptProps) {
     const current = local.model.variant.current()
     return !!current
   })
-
-  const claudeAcpFooter = createMemo(() => {
-    if (local.model.current()?.providerID !== ClaudeACPProviderID) return
-    if (!props.sessionID) return
-    return claudeACPFooterState(sync.session.get(props.sessionID)?.metadata)
-  })
-
-  const showClaudeAcpEffort = createMemo(() => !!claudeAcpFooter()?.effort)
-  const showClaudeAcpFast = createMemo(() => claudeAcpFooter()?.fast === true)
+  const claude = createMemo(() =>
+    local.model.current()?.providerID === ClaudeACPProviderID && props.sessionID
+      ? claudeACPFooter(sync.session.get(props.sessionID)?.metadata)
+      : [],
+  )
 
   const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
   const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
     () => !!local.agent.current() && store.mode === "normal" && showVariant(),
-    animationsEnabled,
-  )
-  const claudeAcpMetaAlpha = createFadeIn(
-    () =>
-      !!local.agent.current() &&
-      store.mode === "normal" &&
-      (showClaudeAcpEffort() || showClaudeAcpFast()),
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
@@ -1486,25 +1468,15 @@ export function Prompt(props: PromptProps) {
                           >
                             {local.model.parsed().model}
                           </text>
-                          <Show when={showClaudeAcpEffort()}>
-                            <text fg={fadeColor(theme.textMuted, claudeAcpMetaAlpha())}>·</text>
-                            <text>
-                              <span style={{ fg: fadeColor(theme.warning, claudeAcpMetaAlpha()), bold: true }}>
-                                {claudeAcpFooter()?.effort}
-                              </span>
-                            </text>
-                          </Show>
-                          <Show when={showClaudeAcpFast()}>
-                            <text fg={fadeColor(theme.textMuted, claudeAcpMetaAlpha())}>·</text>
-                            <text>
-                              <span style={{ fg: fadeColor(theme.warning, claudeAcpMetaAlpha()), bold: true }}>
-                                fast
-                              </span>
-                            </text>
-                          </Show>
-                          <Show when={currentProviderLabel()}>
-                            {(provider) => <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{provider()}</text>}
-                          </Show>
+                          <For each={claude()}>
+                            {(item) => (
+                              <>
+                                <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                                <text fg={fadeColor(theme.warning, modelMetaAlpha())}>{item}</text>
+                              </>
+                            )}
+                          </For>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
                           <Show when={showVariant()}>
                             <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
                             <text>

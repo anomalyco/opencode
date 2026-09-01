@@ -11,14 +11,13 @@ export const Event = PermissionV1.Event
 
 export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
-  readonly askWithReply: (input: PermissionV1.AskInput) => Effect.Effect<PermissionV1.Reply, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
 }
 
 interface PendingEntry {
   info: PermissionV1.Request
-  deferred: Deferred.Deferred<PermissionV1.Reply, PermissionV1.RejectedError | PermissionV1.CorrectedError>
+  deferred: Deferred.Deferred<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>
 }
 
 interface State {
@@ -65,7 +64,7 @@ const layer = Layer.effect(
       }),
     )
 
-    const askWithReply = Effect.fn("Permission.askWithReply")(function* (input: PermissionV1.AskInput) {
+    const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
       let needsAsk = false
@@ -82,7 +81,7 @@ const layer = Layer.effect(
         needsAsk = true
       }
 
-      if (!needsAsk) return "once" as const
+      if (!needsAsk) return
 
       const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {
@@ -96,22 +95,20 @@ const layer = Layer.effect(
       }
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
 
-      const deferred = yield* Deferred.make<
-        PermissionV1.Reply,
-        PermissionV1.RejectedError | PermissionV1.CorrectedError
-      >()
-      pending.set(id, { info, deferred })
-      yield* events.publish(Event.Asked, info)
-      return yield* Effect.ensuring(
-        Deferred.await(deferred),
-        Effect.sync(() => {
-          pending.delete(id)
-        }),
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
+          pending.set(id, { info, deferred })
+          yield* events.publish(Event.Asked, info)
+          return yield* restore(Deferred.await(deferred)).pipe(
+            Effect.onInterrupt(() =>
+              pending.has(id)
+                ? events.publish(Event.Replied, { sessionID: info.sessionID, requestID: id, reply: "reject" })
+                : Effect.void,
+            ),
+          )
+        }).pipe(Effect.ensuring(Effect.sync(() => pending.delete(id)))),
       )
-    })
-
-    const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
-      yield* askWithReply(input)
     })
 
     const reply = Effect.fn("Permission.reply")(function* (input: PermissionV1.ReplyInput) {
@@ -147,7 +144,7 @@ const layer = Layer.effect(
         return
       }
 
-      yield* Deferred.succeed(existing.deferred, input.reply)
+      yield* Deferred.succeed(existing.deferred, undefined)
       if (input.reply === "once") return
 
       for (const pattern of existing.info.always) {
@@ -170,7 +167,7 @@ const layer = Layer.effect(
           requestID: item.info.id,
           reply: "always",
         })
-        yield* Deferred.succeed(item.deferred, "always")
+        yield* Deferred.succeed(item.deferred, undefined)
       }
     })
 
@@ -179,7 +176,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.info)
     })
 
-    return Service.of({ ask, askWithReply, reply, list })
+    return Service.of({ ask, reply, list })
   }),
 )
 

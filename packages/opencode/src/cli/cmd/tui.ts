@@ -63,15 +63,10 @@ async function input(value?: string) {
   return piped + "\n" + value
 }
 
-export function resolveThreadDirectory(
-  project?: string,
-  envPWD = process.env.PWD,
-  cwd = process.cwd(),
-  launchCwd = process.env.OPENCODE_LAUNCH_CWD,
-) {
-  const root = Filesystem.resolve(envPWD ?? launchCwd ?? cwd)
+export function resolveThreadDirectory(project?: string, envPWD = process.env.PWD, cwd = process.cwd()) {
+  const root = Filesystem.resolve(envPWD ?? cwd)
   if (project) return Filesystem.resolve(path.isAbsolute(project) ? project : path.join(root, project))
-  return Filesystem.resolve(launchCwd ?? cwd)
+  return Filesystem.resolve(cwd)
 }
 
 export const TuiThreadCommand = cmd({

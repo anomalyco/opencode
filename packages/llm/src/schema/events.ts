@@ -189,13 +189,6 @@ export const StepFinish = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.StepFinish" })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
-/**
- * Mid-stream usage snapshot (ACP `usage_update` parity). Providers that
- * report live context occupancy emit this as it changes; `usage` is a
- * last-write-wins snapshot, not a delta — later events supersede earlier
- * ones, and values may decrease (e.g. after the provider compacts its own
- * context).
- */
 export const UsageUpdate = Schema.Struct({
   type: Schema.tag("usage"),
   usage: Usage,

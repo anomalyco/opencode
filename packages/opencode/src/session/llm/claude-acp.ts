@@ -1,55 +1,74 @@
-import { mkdir } from "node:fs/promises"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
-import { ClientSideConnection, PROTOCOL_VERSION, RequestError, ndJsonStream } from "@agentclientprotocol/sdk"
+import type { McpServer } from "@agentclientprotocol/sdk"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import type {
-  Client,
-  CreateElicitationRequest,
-  CreateElicitationResponse,
-  CreateTerminalRequest,
-  CreateTerminalResponse,
-  ElicitationContentValue,
-  ElicitationPropertySchema,
-  KillTerminalRequest,
-  KillTerminalResponse,
-  McpServer,
-  ReadTextFileRequest,
-  ReadTextFileResponse,
-  ReleaseTerminalRequest,
-  ReleaseTerminalResponse,
-  RequestPermissionRequest,
-  RequestPermissionResponse,
-  SessionConfigOption,
-  SessionNotification,
-  TerminalOutputRequest,
-  TerminalOutputResponse,
-  ToolCall,
-  ToolCallContent,
-  ToolCallUpdate,
-  WaitForTerminalExitRequest,
-  WaitForTerminalExitResponse,
-  WriteTextFileRequest,
-  WriteTextFileResponse,
-} from "@agentclientprotocol/sdk"
-import { LLMEvent, ToolResultValue, Usage, type FinishReason, type LLMEvent as LLMEventType } from "@opencode-ai/llm"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { LLMEvent, ToolResultValue, Usage, type FinishReason, type ProviderMetadata } from "@opencode-ai/llm"
 import { Question } from "@/question"
 import type { ModelMessage } from "ai"
 import { createTwoFilesPatch } from "diff"
-import * as Stream from "effect/Stream"
+import { fromAsyncIterable, type Stream } from "effect/Stream"
 
-type PermissionBridge = {
-  readonly ask: (input: PermissionV1.AskInput) => Promise<PermissionV1.Reply>
-  readonly reply: (input: PermissionV1.ReplyInput) => Promise<void>
-}
+type ClaudeAgentConstructor = (typeof import("@agentclientprotocol/claude-agent-acp"))["ClaudeAcpAgent"]
+type ClaudeAgent = Pick<
+  InstanceType<ClaudeAgentConstructor>,
+  "initialize" | "newSession" | "resumeSession" | "prompt" | "cancel" | "setSessionConfigOption" | "dispose"
+>
+type ACPClient = ConstructorParameters<ClaudeAgentConstructor>[0]
+type AgentFactory = (client: ACPClient) => Promise<ClaudeAgent>
+type SessionNotification = Parameters<ACPClient["sessionUpdate"]>[0]
+type RequestPermissionRequest = Parameters<ACPClient["requestPermission"]>[0]
+type RequestPermissionResponse = Awaited<ReturnType<ACPClient["requestPermission"]>>
+type CreateElicitationRequest = Parameters<ACPClient["unstable_createElicitation"]>[0]
+type CreateElicitationResponse = Awaited<ReturnType<ACPClient["unstable_createElicitation"]>>
+type FormElicitation = Extract<CreateElicitationRequest, { mode: "form" }>
+type ElicitationPropertySchema = NonNullable<FormElicitation["requestedSchema"]["properties"]>[string]
+type ElicitationContentValue = NonNullable<Extract<CreateElicitationResponse, { action: "accept" }>["content"]>[string]
+type SessionConfigOption = NonNullable<Awaited<ReturnType<ClaudeAgent["newSession"]>>["configOptions"]>[number]
+type ToolUpdate = Extract<SessionNotification["update"], { sessionUpdate: "tool_call" | "tool_call_update" }>
 
 type QuestionBridge = {
-  readonly ask: (input: Parameters<Question.Interface["ask"]>[0]) => Promise<ReadonlyArray<Question.Answer>>
+  readonly ask: (
+    input: Parameters<Question.Interface["ask"]>[0],
+    signal?: AbortSignal,
+  ) => Promise<ReadonlyArray<Question.Answer>>
 }
 
-export type ClaudeACPConfigState = {
-  readonly effort?: string
-  readonly fast?: boolean
+type AuthorizationBridge = (
+  input: {
+    readonly id?: PermissionV1.ID
+    readonly permission: string
+    readonly metadata: Record<string, unknown>
+  },
+  signal?: AbortSignal,
+) => Promise<void>
+
+type Transcript = {
+  readonly count: number
+  readonly hash: string
+  readonly head?: string
+}
+
+export type ClaudeACPState = {
+  readonly owner: string
+  readonly fingerprint: string
+  readonly modelID?: string
+  readonly sessionID?: string
+  readonly transcript?: Transcript
+  readonly config?: Record<string, string>
+}
+
+export function parseState(value: unknown): ClaudeACPState | undefined {
+  const state = recordValue(value)
+  if (typeof state.owner !== "string" || typeof state.fingerprint !== "string") return
+  if (state.modelID !== undefined && typeof state.modelID !== "string") return
+  if (state.sessionID !== undefined && typeof state.sessionID !== "string") return
+  if (state.config !== undefined && !stringRecord(state.config)) return
+  if (state.transcript !== undefined) {
+    const transcript = recordValue(state.transcript)
+    if (!Number.isSafeInteger(transcript.count) || Number(transcript.count) < 0 || typeof transcript.hash !== "string")
+      return
+    if (transcript.head !== undefined && typeof transcript.head !== "string") return
+  }
+  return state as ClaudeACPState
 }
 
 type StreamInput = {
@@ -57,38 +76,27 @@ type StreamInput = {
   readonly sessionID: PermissionV1.AskInput["sessionID"]
   readonly modelID: string
   readonly agent: string
+  readonly assistantID: string
+  readonly historyID?: string
+  readonly resume: boolean
   readonly mcpServers: readonly McpServer[]
+  readonly system: readonly string[]
   readonly messages: ModelMessage[]
   readonly abort: AbortSignal
-  readonly ruleset: PermissionV1.Ruleset
-  readonly permission: PermissionBridge
   readonly question: QuestionBridge
-  readonly onConfig?: (config: ClaudeACPConfigState) => Promise<void>
-}
-
-type Terminal = {
-  readonly process: Bun.Subprocess<"ignore", "pipe", "pipe">
-  readonly output: string[]
-  readonly limit: number
-  truncated: boolean
-  readonly exited: Promise<WaitForTerminalExitResponse>
-  exitStatus?: WaitForTerminalExitResponse
+  readonly authorize: AuthorizationBridge
+  readonly state?: ClaudeACPState
 }
 
 type ACPToolState = {
   name: string
   title: string
   input: unknown
-  content?: ToolCallContent[] | null
+  content?: ToolUpdate["content"]
   rawOutput?: unknown
-  status?: ToolCall["status"] | null
+  status?: ToolUpdate["status"]
   started: boolean
 }
-
-type QueueItem =
-  | { readonly type: "event"; readonly event: LLMEventType }
-  | { readonly type: "done" }
-  | { readonly type: "error"; readonly error: unknown }
 
 type ACPUsage = {
   readonly cachedReadTokens?: number | null
@@ -104,191 +112,159 @@ type ACPContextUsage = {
   readonly size: number
 }
 
-type ACPProviderMetadata = {
-  readonly anthropic: Record<string, unknown>
-}
-
 type ElicitationField = {
   readonly key: string
   readonly question: Question.Info
   readonly value: (answers: ReadonlyArray<string>) => ElicitationContentValue | undefined
 }
 
-type Connection = {
-  readonly key: string
-  readonly cwd: string
-  readonly child: Bun.Subprocess<"pipe", "pipe", "pipe">
-  client: ClientSideConnection
-  readonly stderr: string[]
-  readonly terminals: Map<string, Terminal>
-  sessionID: string
-  configOptions: SessionConfigOption[]
-  lock: Promise<void>
-  used: boolean
-  disposed: boolean
-  active?: {
-    readonly cwd: string
-    readonly queue: ReturnType<typeof makeQueue>
-    readonly sessionID: PermissionV1.AskInput["sessionID"]
-    readonly abort: AbortSignal
-    readonly ruleset: PermissionV1.Ruleset
-    readonly permission: PermissionBridge
-    readonly question: QuestionBridge
-    readonly tools: Map<string, ACPToolState>
-    contextUsage?: ACPContextUsage
-    providerCompacted?: boolean
-  }
-  disposeTimer?: ReturnType<typeof setTimeout>
-}
-
-type ActivePermissionRequest = {
+type ActiveRequest = {
+  readonly queue: ReturnType<typeof makeQueue>
   readonly sessionID: PermissionV1.AskInput["sessionID"]
   readonly abort: AbortSignal
-  readonly ruleset: PermissionV1.Ruleset
-  readonly permission: PermissionBridge
+  readonly question: QuestionBridge
+  readonly authorize: AuthorizationBridge
+  readonly tools: Map<string, ACPToolState>
+  contextUsage?: ACPContextUsage
+  compacted?: boolean
 }
 
-type ActiveDirectRequest = ActivePermissionRequest & {
-  readonly cwd: string
+type ActivePermissionRequest = Pick<ActiveRequest, "abort" | "authorize" | "tools">
+
+type Connection = {
+  readonly agent: ClaudeAgent
+  readonly controller: AbortController
+  readonly fingerprint: string
+  sessionID: string
+  configOptions: SessionConfigOption[]
+  used: boolean
+  idles: ReturnType<typeof Promise.withResolvers<void>>[]
+  disposal?: Promise<void>
+  disposeTimer?: ReturnType<typeof setTimeout>
+  active?: ActiveRequest
 }
 
-type DirectPermissionCheck = Pick<PermissionV1.AskInput, "permission" | "patterns" | "always" | "metadata">
-
-type DirectPermissionInput =
-  | {
-      readonly kind: "read" | "write"
-      readonly cwd: string
-      readonly path: string
-    }
-  | {
-      readonly kind: "terminal"
-      readonly cwd: string
-      readonly command: string
-      readonly args?: readonly string[] | null
-      readonly terminalCwd?: string | null
-    }
+type QueueItem =
+  | { readonly type: "event"; readonly event: LLMEvent }
+  | { readonly type: "done" }
+  | { readonly type: "error"; readonly error: unknown }
 
 const TEXT_ID = "claude-acp-text"
 const REASONING_ID = "claude-acp-reasoning"
-const IDLE_CLOSE_MS = 10 * 60_000
-const TERMINAL_OUTPUT_DEFAULT = 128_000
-const TERMINAL_OUTPUT_MAX = 1_000_000
-const connections = new Map<string, Promise<Connection>>()
-const activeConnections = new Set<Connection>()
-
-process.once("exit", () => {
-  for (const connection of activeConnections) {
-    cleanupTerminals(connection)
-    connection.child.kill()
+const DRAIN_TIMEOUT = 10 * 60 * 1_000
+const drainingConnections = new Map<
+  PermissionV1.AskInput["sessionID"],
+  {
+    readonly connection: Connection
+    readonly idle: ReturnType<typeof Promise.withResolvers<void>>
+    readonly expired: ReturnType<typeof Promise.withResolvers<void>>
+    closing?: Promise<void>
   }
-})
+>()
+const liveConnections = new Set<Connection>()
 
-export function stream(input: StreamInput): Stream.Stream<LLMEventType, unknown> {
-  return Stream.fromAsyncIterable(run(input), (error) =>
+process.once("exit", () => liveConnections.forEach((connection) => void disposeConnection(connection, true)))
+
+export function stream(input: StreamInput, agentFactory?: AgentFactory): Stream<LLMEvent, unknown> {
+  return fromAsyncIterable(run(input, agentFactory), (error) =>
     error instanceof Error ? error : new Error(String(error)),
   )
 }
 
-async function* run(input: StreamInput) {
+async function* run(input: StreamInput, agentFactory?: AgentFactory) {
   const queue = makeQueue()
   let connection: Connection | undefined
+  let ownsConnection = false
   let finished = false
+  let compacted = false
+  let contextUsage: ACPContextUsage | undefined
+  let closed = false
   const onAbort = () => {
-    if (!connection) return
-    void connection.client.cancel({ sessionId: connection.sessionID }).catch(() => undefined)
+    if (!connection || !ownsConnection) return
+    connection.controller.abort()
+    void connection.agent.cancel({ sessionId: connection.sessionID }).catch(() => undefined)
   }
   input.abort.addEventListener("abort", onAbort, { once: true })
 
   void (async () => {
     try {
       queue.push(LLMEvent.stepStart({ index: 0 }))
-      const activeConnection = await getConnection(input)
-      connection = activeConnection
-      await withConnectionLock(activeConnection, async () => {
-        if (input.abort.aborted) {
-          finish(queue, "error")
-          return
+      assertTextHistory(input.messages)
+      connection = await connectionFor(input, connectionFingerprint(input), agentFactory)
+      ownsConnection = true
+      if (closed || input.abort.aborted) throw abortError()
+      connection.active = {
+        queue,
+        sessionID: input.sessionID,
+        abort: input.abort,
+        question: input.question,
+        authorize: input.authorize,
+        tools: new Map(),
+      }
+      let committed: Transcript | undefined
+      let prompted = false
+      let safe = false
+      let idle: ReturnType<typeof Promise.withResolvers<void>> | undefined
+      try {
+        const text = currentPromptText(input.messages)
+        const command = claudeACPConfigCommand(text)
+        if (command) {
+          const message = await applyConfigCommand(connection, command)
+          if (input.abort.aborted) throw abortError()
+          queue.text(message)
+          safe = true
+          committed = connection.used ? { ...transcript(input.messages), head: input.assistantID } : undefined
+          const metadata = stateMetadata(input, connection, committed)
+          return finish(queue, "stop", undefined, metadata)
         }
-        clearDisposeTimer(activeConnection)
-        activeConnection.stderr.length = 0
-        activeConnection.active = {
-          cwd: input.cwd,
+        const slash = /^\/[A-Za-z][\w:-]*(?:\s|$)/.test(text)
+        if (!connection.used && slash && input.messages.slice(0, -1).some((message) => message.role !== "system")) {
+          throw new Error(`Run a normal prompt to resync Claude before using ${text.split(/\s/, 1)[0]}.`)
+        }
+        prompted = true
+        idle = Promise.withResolvers<void>()
+        connection.idles.push(idle)
+        const response = await connection.agent.prompt({
+          sessionId: connection.sessionID,
+          prompt: [{ type: "text", text: connection.used || slash ? text : promptText(input.messages) }],
+        })
+        connection.used = true
+        const aborted = input.abort.aborted || response.stopReason === "cancelled"
+        safe = !aborted
+        compacted = connection.active?.compacted === true
+        committed = safe ? { ...transcript(input.messages), head: input.assistantID } : undefined
+        return finish(
           queue,
-          sessionID: input.sessionID,
-          abort: input.abort,
-          ruleset: input.ruleset,
-          permission: input.permission,
-          question: input.question,
-          tools: new Map(),
-        }
-        try {
-          await publishConfig(input, activeConnection)
-          const commandText = currentPromptText(input.messages)
-          const command = claudeACPConfigCommand(commandText)
-          if (command) {
-            const message = await applyConfigCommand(activeConnection, command)
-            await publishConfig(input, activeConnection)
-            activeConnection.active?.queue.text(message)
-            finish(queue, "stop")
-            return
-          }
-          const response = await activeConnection.client.prompt({
-            sessionId: activeConnection.sessionID,
-            prompt: [
-              {
-                type: "text",
-                text: activeConnection.used ? commandText : promptText(input.messages),
-              },
-            ],
-          })
-          activeConnection.used = true
-          await new Promise((resolve) => setTimeout(resolve, 50))
-          if (input.abort.aborted) {
-            finish(
-              queue,
-              "error",
-              claudeUsage(response.usage, activeConnection.active?.contextUsage) ??
-                claudeContextUsage(activeConnection.active?.contextUsage),
-              claudeProviderMetadata(activeConnection.active?.providerCompacted),
-            )
-            return
-          }
-          finish(
-            queue,
-            finishReason(response.stopReason),
-            claudeUsage(response.usage, activeConnection.active?.contextUsage),
-            claudeProviderMetadata(activeConnection.active?.providerCompacted),
-          )
-        } finally {
-          const providerCompacted = activeConnection.active?.providerCompacted === true
-          activeConnection.active = undefined
-          cleanupTerminals(activeConnection)
-          // OpenCode compaction rewrites our stored history, but Claude Code keeps its own ACP session history.
-          // Start the next turn in a fresh Claude session so it is seeded from the compacted transcript.
-          if (input.agent === "compaction" || providerCompacted) disposeConnection(activeConnection)
-          else scheduleDispose(activeConnection)
-        }
-      })
-    } catch (error) {
-      if (connection) {
-        const usage = claudeContextUsage(connection.active?.contextUsage)
-        const providerMetadata = claudeProviderMetadata(connection.active?.providerCompacted)
-        const aborted = input.abort.aborted
+          aborted ? "error" : finishReason(response.stopReason),
+          claudeUsage(response.usage, connection.active?.contextUsage) ??
+            claudeContextUsage(connection.active?.contextUsage),
+          compacted
+            ? stateMetadata(input, connection, undefined, true)
+            : safe
+              ? stateMetadata(input, connection, committed)
+              : stateMetadata(input, connection),
+        )
+      } finally {
+        compacted ||= connection.active?.compacted === true
+        contextUsage = connection.active?.contextUsage
+        ownsConnection = false
         connection.active = undefined
-        cleanupTerminals(connection)
-        if (aborted) {
-          scheduleDispose(connection)
-          finish(queue, "error", usage, providerMetadata)
-          return
-        }
-        disposeConnection(connection)
+        const reusable = safe && !compacted && prompted && input.resume && input.agent !== "compaction"
+        if (reusable) drainConnection(input.sessionID, connection, idle!)
+        if (!reusable) await disposeConnection(connection, !safe)
       }
-      if (input.abort.aborted) {
-        finish(queue, "error")
-        return
+    } catch (error) {
+      const usage = claudeContextUsage(connection?.active?.contextUsage ?? contextUsage)
+      if (connection && ownsConnection) {
+        ownsConnection = false
+        connection.active = undefined
+        await disposeConnection(connection, true)
       }
-      const message = connection?.stderr.join("").trim()
-      queue.fail(message ? new Error(`${errorMessage(error)}\n${message}`) : error)
+      if (connection && compacted)
+        return finish(queue, "error", usage, stateMetadata(input, connection, undefined, true))
+      if (input.abort.aborted)
+        return finish(queue, "error", usage, connection ? stateMetadata(input, connection) : clearStateMetadata(input))
+      queue.fail(claudeError(error))
     }
   })()
 
@@ -298,186 +274,238 @@ async function* run(input: StreamInput) {
       yield event
     }
   } finally {
+    closed = true
     input.abort.removeEventListener("abort", onAbort)
-    if (connection && !finished) {
-      await connection.client.cancel({ sessionId: connection.sessionID }).catch(() => undefined)
-      disposeConnection(connection)
+    if (connection && ownsConnection && !finished) {
+      await connection.agent.cancel({ sessionId: connection.sessionID }).catch(() => undefined)
+      await disposeConnection(connection, true)
     }
   }
 }
 
-async function getConnection(input: StreamInput) {
-  const key = claudeACPConnectionKey(input)
-  const existing = connections.get(key)
-  if (existing) {
-    const connection = await existing
-    if (!connection.disposed) return connection
-    connections.delete(key)
-  }
-  const created = createConnection(input, key).catch((error) => {
-    connections.delete(key)
-    throw error
-  })
-  connections.set(key, created)
-  return created
-}
-
-async function createConnection(input: StreamInput, key: string): Promise<Connection> {
+async function createConnection(input: StreamInput, fingerprint: string, agentFactory?: AgentFactory) {
   if (input.abort.aborted) throw abortError()
-  const stderr: string[] = []
-  const terminals = new Map<string, Terminal>()
-  const child = Bun.spawn({
-    cmd: claudeCommand(),
-    cwd: input.cwd,
-    env: claudeEnv(input.modelID),
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const connection = {
-    key,
-    cwd: input.cwd,
-    child,
-    stderr,
-    terminals,
-    sessionID: "",
-    configOptions: [] as SessionConfigOption[],
-    lock: Promise.resolve(),
-    used: false,
-    disposed: false,
-  } as unknown as Connection
-  activeConnections.add(connection)
-  connection.client = new ClientSideConnection(
-    () => makeClient(connection),
-    ndJsonStream(writable(child.stdin), child.stdout),
-  )
-  void collect(child.stderr, stderr, 32_000)
-  const onAbort = () => disposeConnection(connection)
+  let connection: Connection | undefined
+  const controller = new AbortController()
+  const onAbort = () => {
+    controller.abort()
+    if (connection?.sessionID) void connection.agent.cancel({ sessionId: connection.sessionID }).catch(() => undefined)
+  }
   input.abort.addEventListener("abort", onAbort, { once: true })
-  void child.exited.finally(() => {
-    if (connection.disposed) return
-    connection.disposed = true
-    activeConnections.delete(connection)
-    connections.delete(connection.key)
-  })
+  const client = makeClient(() => connection!)
   try {
-    await connection.client.initialize({
-      protocolVersion: PROTOCOL_VERSION,
+    const agent = agentFactory ? await agentFactory(client) : await createAgent(client)
+    connection = {
+      agent,
+      controller,
+      fingerprint,
+      sessionID: "",
+      configOptions: [],
+      used: false,
+      idles: [],
+    }
+    liveConnections.add(connection)
+    await agent.initialize({
+      protocolVersion: 1,
       clientInfo: { name: "OpenCode", version: "0.0.0" },
       clientCapabilities: {
-        auth: { terminal: true },
         elicitation: { form: {} },
-        fs: { readTextFile: true, writeTextFile: true },
-        terminal: true,
+        session: { configOptions: { boolean: {} } },
       },
     })
     if (input.abort.aborted) throw abortError()
-    const session = await connection.client.newSession({ cwd: input.cwd, mcpServers: [...input.mcpServers] })
+    const params = {
+      cwd: input.cwd,
+      mcpServers: [...input.mcpServers],
+      _meta: {
+        systemPrompt: {
+          type: "preset" as const,
+          preset: "claude_code" as const,
+          append: input.system.join("\n"),
+        },
+        claudeCode: {
+          emitRawSDKMessages: [{ type: "system", subtype: "session_state_changed" }],
+          options: {
+            abortController: controller,
+            allowedTools: [],
+            settings: {
+              permissions: {
+                allow: [],
+                ask: ["*"],
+                deny: [],
+                defaultMode: "default" as const,
+                disableBypassPermissionsMode: "disable" as const,
+              },
+            },
+          },
+        },
+      },
+    }
+    const resume =
+      input.resume &&
+      input.state?.owner === input.sessionID &&
+      input.state.fingerprint === connection.fingerprint &&
+      continues(input.state.transcript, input.messages, input.historyID)
+    const loaded =
+      resume && input.state?.sessionID
+        ? await agent.resumeSession({ ...params, sessionId: input.state.sessionID }).catch((error) => {
+            if (!isMissingSession(error)) throw error
+            return undefined
+          })
+        : undefined
+    const created = loaded ? undefined : await agent.newSession(params)
     if (input.abort.aborted) throw abortError()
-    connection.sessionID = session.sessionId
-    connection.configOptions = session.configOptions ?? []
-    scheduleDispose(connection)
+    connection.sessionID = loaded ? input.state!.sessionID! : created!.sessionId
+    connection.used = !!loaded
+    connection.configOptions = (loaded ?? created)!.configOptions ?? []
+    await applyInitialConfig(connection, input)
     return connection
   } catch (error) {
-    disposeConnection(connection)
+    if (connection) await disposeConnection(connection, true)
     throw error
   } finally {
     input.abort.removeEventListener("abort", onAbort)
   }
 }
 
-async function withConnectionLock<T>(connection: Connection, fn: () => Promise<T>) {
-  const previous = connection.lock.catch(() => undefined)
-  let release!: () => void
-  connection.lock = previous.then(() => new Promise<void>((resolve) => (release = resolve)))
-  await previous
-  try {
-    return await fn()
-  } finally {
-    release()
+async function createAgent(client: ACPClient) {
+  if (!process.env.CLAUDE_CODE_EXECUTABLE) {
+    // @ts-expect-error - generated file embedded by the standalone build
+    const generated = await import("claude-code.gen.ts").catch(() => undefined)
+    if (generated) {
+      const { extractFromBunfs } = await import("@anthropic-ai/claude-agent-sdk/extract")
+      process.env.CLAUDE_CODE_EXECUTABLE = extractFromBunfs(generated.default)
+    }
+  }
+  const { ClaudeAcpAgent } = await import("@agentclientprotocol/claude-agent-acp")
+  return new ClaudeAcpAgent(client, { log: () => {}, error: () => {} })
+}
+
+function connectionFingerprint(input: StreamInput) {
+  const servers = input.mcpServers
+    .map((server) =>
+      "type" in server
+        ? [
+            server.name,
+            server.type,
+            server.url,
+            server.headers?.map((item) => [item.name, item.value]).toSorted(([a], [b]) => a.localeCompare(b)),
+          ]
+        : [
+            server.name,
+            server.command,
+            server.args,
+            server.env?.map((item) => [item.name, item.value]).toSorted(([a], [b]) => a.localeCompare(b)),
+          ],
+    )
+    .toSorted(([a], [b]) => String(a).localeCompare(String(b)))
+  return Hash.sha256(JSON.stringify([input.cwd, input.modelID, input.agent, servers, input.system]))
+}
+
+function continues(previous: Transcript | undefined, messages: ModelMessage[], historyID: string | undefined) {
+  if (!previous || messages.length <= previous.count) return false
+  if (previous.head && previous.head !== historyID) return false
+  return transcript(messages, previous.count).hash === previous.hash
+}
+
+function transcript(messages: ModelMessage[], count = messages.length): Transcript {
+  return {
+    count,
+    hash: Hash.sha256(JSON.stringify(messages.slice(0, count))),
   }
 }
 
-export function claudeACPConnectionKey(
-  input: Pick<StreamInput, "sessionID" | "cwd" | "modelID" | "agent" | "mcpServers" | "messages">,
-) {
-  return [
-    input.sessionID,
-    input.cwd,
-    input.modelID,
-    input.agent,
-    stableStringify(input.mcpServers),
-    stableStringify(input.messages.filter((message) => message.role === "system").map((message) => contentText(message.content))),
-  ].join("\0")
+async function connectionFor(input: StreamInput, fingerprint: string, agentFactory?: AgentFactory) {
+  const draining = input.resume ? drainingConnections.get(input.sessionID) : undefined
+  if (!draining) return createConnection(input, fingerprint, agentFactory)
+  const compatible =
+    input.state?.sessionID === draining.connection.sessionID &&
+    input.state.owner === input.sessionID &&
+    input.state.fingerprint === fingerprint &&
+    continues(input.state.transcript, input.messages, input.historyID)
+  if (!compatible) {
+    if (drainingConnections.get(input.sessionID) === draining) drainingConnections.delete(input.sessionID)
+    await disposeConnection(draining.connection, true)
+    return createConnection(input, fingerprint, agentFactory)
+  }
+  await waitForDrain(Promise.race([draining.idle.promise, draining.expired.promise]), input.abort)
+  if (drainingConnections.get(input.sessionID) === draining) drainingConnections.delete(input.sessionID)
+  if (draining.connection.disposeTimer) clearTimeout(draining.connection.disposeTimer)
+  if (draining.closing) {
+    await draining.closing
+    return createConnection(input, fingerprint, agentFactory)
+  }
+  return draining.connection
 }
 
-function scheduleDispose(connection: Connection) {
-  if (connection.disposed) return
-  clearDisposeTimer(connection)
-  connection.disposeTimer = setTimeout(() => disposeConnection(connection), IDLE_CLOSE_MS)
+async function waitForDrain(drain: Promise<void>, signal: AbortSignal) {
+  if (signal.aborted) throw abortError()
+  const aborted = Promise.withResolvers<void>()
+  const onAbort = () => aborted.resolve()
+  signal.addEventListener("abort", onAbort, { once: true })
+  await Promise.race([drain, aborted.promise])
+  signal.removeEventListener("abort", onAbort)
+  if (signal.aborted) throw abortError()
+}
+
+async function disposeConnection(connection: Connection, abort = false) {
+  if (abort) connection.controller.abort()
+  if (connection.disposal) return connection.disposal
+  if (connection.disposeTimer) clearTimeout(connection.disposeTimer)
+  liveConnections.delete(connection)
+  connection.disposal = Promise.resolve()
+    .then(() => connection.agent.dispose())
+    .catch(() => undefined)
+  return connection.disposal
+}
+
+function drainConnection(
+  key: PermissionV1.AskInput["sessionID"],
+  connection: Connection,
+  idle: ReturnType<typeof Promise.withResolvers<void>>,
+) {
+  const draining: NonNullable<ReturnType<typeof drainingConnections.get>> = {
+    connection,
+    idle,
+    expired: Promise.withResolvers<void>(),
+  }
+  drainingConnections.set(key, draining)
+  connection.disposeTimer = setTimeout(() => {
+    draining.closing = disposeConnection(connection, true)
+    void draining.closing.finally(() => {
+      draining.expired.resolve()
+      if (drainingConnections.get(key) === draining) drainingConnections.delete(key)
+    })
+  }, DRAIN_TIMEOUT)
   connection.disposeTimer.unref?.()
 }
 
-function clearDisposeTimer(connection: Connection) {
-  if (!connection.disposeTimer) return
-  clearTimeout(connection.disposeTimer)
-  connection.disposeTimer = undefined
-}
-
-function disposeConnection(connection: Connection) {
-  if (connection.disposed) return
-  connection.disposed = true
-  clearDisposeTimer(connection)
-  activeConnections.delete(connection)
-  connections.delete(connection.key)
-  cleanupTerminals(connection)
-  if (connection.sessionID) void connection.client.closeSession({ sessionId: connection.sessionID }).catch(() => undefined)
-  connection.child.kill()
-  void Promise.allSettled([connection.client.closed, connection.child.exited])
-}
-
-function cleanupTerminals(connection: Connection) {
-  for (const terminal of connection.terminals.values()) terminal.process.kill()
-  connection.terminals.clear()
-}
-
-function claudeCommand() {
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
-  return ["node", path.join(root, "node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js")]
-}
-
-function errorMessage(error: unknown) {
+function isMissingSession(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
-  if (message.trim() === "Authentication required") {
-    return "Claude Code authentication required. Run `claude auth login` in a normal terminal, then retry in OpenCode."
-  }
-  return message
+  return /resource.*not found|session.*not found|no conversation found/i.test(message)
 }
 
 function abortError() {
   return new DOMException("Aborted", "AbortError")
 }
 
-function claudeEnv(modelID: string) {
-  const selected = claudeModelID(modelID)
-  if (!selected) return process.env
-  return {
-    ...process.env,
-    ANTHROPIC_MODEL: selected,
-  }
+function claudeError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.trim() !== "Authentication required") return error
+  return new Error("Claude Code authentication required. Run `claude auth login` in a normal terminal, then retry.")
 }
 
-export type ClaudeACPConfigCommand = {
+type ConfigCommand = {
   readonly configId: "effort" | "model" | "fast"
   readonly value?: string
 }
 
-/** Claude Code disables /effort under ACP/SDK; OpenCode handles these locally via setSessionConfigOption. */
-export function claudeACPConfigCommand(text: string): ClaudeACPConfigCommand | undefined {
+/** Claude Code handles these as ACP config options rather than SDK slash commands. */
+export function claudeACPConfigCommand(text: string): ConfigCommand | undefined {
   const match = text.trim().match(/^\/(effort|model|fast)(?:\s+(\S+))?\s*$/i)
   if (!match) return
   return {
-    configId: match[1].toLowerCase() as ClaudeACPConfigCommand["configId"],
+    configId: match[1].toLowerCase() as ConfigCommand["configId"],
     value: match[2]?.toLowerCase(),
   }
 }
@@ -485,7 +513,7 @@ export function claudeACPConfigCommand(text: string): ClaudeACPConfigCommand | u
 export function claudeACPConfigOptionValues(option: SessionConfigOption | undefined) {
   if (!option) return []
   if (option.type === "boolean") return ["on", "off"]
-  if (option.type !== "select" || !Array.isArray(option.options)) return []
+  if (option.type !== "select") return []
   return option.options.flatMap((entry) => ("options" in entry ? entry.options : [entry])).map((entry) => entry.value)
 }
 
@@ -495,84 +523,47 @@ export function claudeACPConfigOptionCurrent(option: SessionConfigOption | undef
   if (typeof option.currentValue === "string") return option.currentValue
 }
 
-export function claudeACPConfigState(configOptions: readonly SessionConfigOption[]): ClaudeACPConfigState {
-  const effort = claudeACPConfigOptionCurrent(configOptions.find((item) => item.id === "effort"))
-  const fast = claudeACPConfigOptionCurrent(configOptions.find((item) => item.id === "fast"))
-  return {
-    ...(effort ? { effort } : {}),
-    ...(fast !== undefined ? { fast: fast === "on" } : {}),
-  }
-}
-
-async function publishConfig(input: StreamInput, connection: Connection) {
-  if (!input.onConfig) return
-  await input.onConfig(claudeACPConfigState(connection.configOptions))
-}
-
-async function applyConfigCommand(connection: Connection, command: ClaudeACPConfigCommand) {
+async function applyConfigCommand(connection: Connection, command: ConfigCommand) {
   if (command.configId === "fast") return applyFastCommand(connection, command.value)
-
-  const option = connection.configOptions.find((item) => item.id === command.configId)
-  if (!option) {
-    return `${labelForConfig(command.configId)} isn't available for the current Claude Code session.`
-  }
-
+  const option = configOption(connection, command.configId)
+  if (!option) return `${configLabel(command.configId)} isn't available for this Claude Code session.`
   const current = claudeACPConfigOptionCurrent(option)
   const allowed = claudeACPConfigOptionValues(option)
   if (!command.value) {
-    const choices = allowed.length > 0 ? allowed.join(", ") : "unknown"
-    return `${labelForConfig(command.configId)} is currently ${current ?? "unset"}. Available: ${choices}`
+    return `${configLabel(command.configId)} is currently ${current ?? "unset"}. Available: ${allowed.join(", ") || "none"}`
   }
-
-  const value = resolveConfigValue(command, allowed)
-  if (!value) {
-    return `Invalid ${command.configId} value "${command.value}". Available: ${allowed.join(", ") || "none"}`
-  }
-  if (value === current) return `${labelForConfig(command.configId)} is already ${value}`
-
+  const value = allowed.includes(command.value) || command.configId === "model" ? command.value : undefined
+  if (!value) return `Invalid ${command.configId} value "${command.value}". Available: ${allowed.join(", ") || "none"}`
+  if (value === current) return `${configLabel(command.configId)} is already ${value}`
   await setConfigOption(connection, command.configId, value, option)
-  const next = claudeACPConfigOptionCurrent(connection.configOptions.find((item) => item.id === command.configId))
-  return `${labelForConfig(command.configId)} set to ${next ?? value}`
+  return `${configLabel(command.configId)} set to ${claudeACPConfigOptionCurrent(configOption(connection, command.configId)) ?? value}`
 }
 
 async function applyFastCommand(connection: Connection, raw?: string) {
   const current = () => claudeACPConfigOptionCurrent(configOption(connection, "fast"))
   const desired = resolveFastDesired(raw, current())
-  if (desired === "invalid") {
-    return `Invalid fast value "${raw}". Use on, off, or omit a value to toggle.`
-  }
-
-  if (desired === false) {
+  if (desired === "invalid") return `Invalid fast value "${raw}". Use on, off, or omit a value to toggle.`
+  if (!desired) {
     const option = configOption(connection, "fast")
-    if (!option || current() !== "on") return "Fast mode OFF"
-    await setConfigOption(connection, "fast", "off", option)
+    if (option && current() === "on") await setConfigOption(connection, "fast", "off", option)
     return "Fast mode OFF"
   }
-
-  // Claude Code switches to Opus when enabling fast mode on an unsupported model.
   let option = configOption(connection, "fast")
   if (!option) {
     const model = configOption(connection, "model")
-    if (!model) {
-      return "Fast mode isn't available for the current Claude Code session."
-    }
+    if (!model) return "Fast mode isn't available for this Claude Code session."
     await setConfigOption(connection, "model", "opus", model)
     option = configOption(connection, "fast")
-    if (!option) {
-      return "Switched to Opus, but Fast mode still isn't available. It may be disabled for your account or organization."
-    }
+    if (!option) return "Switched to Opus, but Fast mode isn't available for this account."
   }
-
-  if (current() === "on") return "Fast mode ON"
-  await setConfigOption(connection, "fast", "on", option)
+  if (current() !== "on") await setConfigOption(connection, "fast", "on", option)
   return "Fast mode ON"
 }
 
 export function resolveFastDesired(raw: string | undefined, current: string | undefined) {
-  if (!raw) return current !== "on"
+  if (!raw || raw === "toggle") return current !== "on"
   if (raw === "on" || raw === "true" || raw === "1") return true
   if (raw === "off" || raw === "false" || raw === "0") return false
-  if (raw === "toggle") return current !== "on"
   return "invalid"
 }
 
@@ -580,61 +571,106 @@ function configOption(connection: Connection, id: string) {
   return connection.configOptions.find((item) => item.id === id)
 }
 
-function resolveConfigValue(command: ClaudeACPConfigCommand, allowed: string[]) {
-  if (!command.value) return
-  if (allowed.includes(command.value)) return command.value
-  // Model aliases are resolved by Claude ACP when the exact ID is absent.
-  if (command.configId === "model") return command.value
-}
-
-function labelForConfig(configId: ClaudeACPConfigCommand["configId"]) {
-  if (configId === "effort") return "Effort"
-  if (configId === "model") return "Model"
+function configLabel(id: ConfigCommand["configId"]) {
+  if (id === "effort") return "Effort"
+  if (id === "model") return "Model"
   return "Fast mode"
 }
 
-async function setConfigOption(
-  connection: Connection,
-  configId: string,
-  value: string,
-  option: SessionConfigOption,
-) {
-  if (option.type === "boolean") {
-    const response = await connection.client.setSessionConfigOption({
-      sessionId: connection.sessionID,
-      configId,
-      type: "boolean",
-      value: value === "on",
-    })
-    connection.configOptions = response.configOptions ?? connection.configOptions
-    return
-  }
-  const response = await connection.client.setSessionConfigOption({
-    sessionId: connection.sessionID,
-    configId,
-    value,
-  })
+async function setConfigOption(connection: Connection, configId: string, value: string, option: SessionConfigOption) {
+  const response = await connection.agent.setSessionConfigOption(
+    option.type === "boolean"
+      ? { sessionId: connection.sessionID, configId, type: "boolean", value: value === "on" }
+      : { sessionId: connection.sessionID, configId, value },
+  )
   connection.configOptions = response.configOptions ?? connection.configOptions
 }
 
-function makeClient(connection: Connection): Client {
+async function applyInitialConfig(connection: Connection, input: StreamInput) {
+  const config =
+    input.state?.owner === input.sessionID && input.state.modelID === input.modelID
+      ? (input.state.config ?? {})
+      : input.modelID === "claude"
+        ? {}
+        : { model: claudeModelID(input.modelID) }
+  for (const id of ["model", "effort", "fast"] as const) {
+    const option = configOption(connection, id)
+    const value = config[id]
+    if (option && value && value !== claudeACPConfigOptionCurrent(option))
+      await setConfigOption(connection, id, value, option)
+  }
+  const mode = configOption(connection, "mode")
+  const desired = input.agent === "plan" ? "plan" : "default"
+  if (mode && desired !== claudeACPConfigOptionCurrent(mode)) await setConfigOption(connection, "mode", desired, mode)
+}
+
+function stateMetadata(input: StreamInput, connection: Connection, committed?: Transcript, compacted = false) {
+  if (!input.resume) return
+  const config = Object.fromEntries(
+    ["model", "effort", "fast"].flatMap((id) => {
+      const value = claudeACPConfigOptionCurrent(configOption(connection, id))
+      return value ? [[id, value]] : []
+    }),
+  )
   return {
-    sessionUpdate: async (params: SessionNotification) => sessionUpdate(connection, params),
-    requestPermission: (params) => requestPermission(connection, params),
-    unstable_createElicitation: (params) => createElicitation(connection, params),
-    readTextFile: (params) => readTextFile(connection.active, connection.cwd, params),
-    writeTextFile: (params) => writeTextFile(connection.active, connection.cwd, params),
-    createTerminal: (params) => createTerminal(connection, params),
-    terminalOutput: (params) => terminalOutput(connection.terminals, params),
-    waitForTerminalExit: (params) => waitForTerminalExit(connection.terminals, params),
-    killTerminal: (params) => killTerminal(connection.terminals, params),
-    releaseTerminal: (params) => releaseTerminal(connection.terminals, params),
+    anthropic: {
+      claudeACP: {
+        owner: input.sessionID,
+        fingerprint: connection.fingerprint,
+        modelID: input.modelID,
+        ...(connection.used && committed ? { sessionID: connection.sessionID, transcript: committed } : {}),
+        config,
+      } satisfies ClaudeACPState,
+      ...(compacted ? { acpCompacted: true } : {}),
+    },
   }
 }
 
-function sessionUpdate(connection: Connection, params: SessionNotification) {
+function clearStateMetadata(input: StreamInput) {
+  if (!input.resume) return
+  if (!input.state || input.state.owner !== input.sessionID) return { anthropic: { claudeACP: null } }
+  return {
+    anthropic: {
+      claudeACP: {
+        owner: input.state.owner,
+        fingerprint: input.state.fingerprint,
+        modelID: input.state.modelID,
+        config: input.state.config,
+      } satisfies ClaudeACPState,
+    },
+  }
+}
+
+function makeClient(getConnection: () => Connection): ACPClient {
+  return {
+    sessionUpdate: async (params) => sessionUpdate(getConnection(), params),
+    requestPermission: (params, signal) => requestPermissionForActive(getConnection().active, params, signal),
+    unstable_createElicitation: (params, signal) => createElicitation(getConnection().active, params, signal),
+    unstable_completeElicitation: async () => {},
+    extNotification: async (method, params) => {
+      const connection = getConnection()
+      const message = recordValue(params.message)
+      if (
+        method === "_claude/sdkMessage" &&
+        params.sessionId === connection.sessionID &&
+        message.type === "system" &&
+        message.subtype === "session_state_changed" &&
+        message.state === "idle"
+      )
+        connection.idles.shift()?.resolve()
+    },
+    readTextFile: async () => {
+      throw new Error("Claude ACP filesystem capability is not enabled")
+    },
+    writeTextFile: async () => {
+      throw new Error("Claude ACP filesystem capability is not enabled")
+    },
+  }
+}
+
+async function sessionUpdate(connection: Connection, params: SessionNotification) {
   if (params.update.sessionUpdate === "config_option_update") {
-    connection.configOptions = params.update.configOptions ?? connection.configOptions
+    connection.configOptions = params.update.configOptions
     return
   }
   const active = connection.active
@@ -642,21 +678,16 @@ function sessionUpdate(connection: Connection, params: SessionNotification) {
   if (params.update.sessionUpdate === "usage_update") {
     const used = token(params.update.used)
     const size = token(params.update.size)
-    // The adapter sends used: 0 only as a fallback when its post-compaction
-    // context probe fails — never as a real measurement (the system prompt
-    // alone occupies tokens) — so hold the last report instead of wiping it.
     if (!used || !size) return
     active.contextUsage = { used, size }
-    // Claude Code reports context occupancy as it changes (including the drop
-    // after its internal compaction) — stream it so the meter moves live.
-    const usage = claudeContextUsage(active.contextUsage)
-    if (usage) active.queue.push(LLMEvent.usage(usage))
+    active.queue.push(LLMEvent.usage(claudeContextUsage(active.contextUsage)!))
     return
   }
   if (params.update.sessionUpdate === "agent_message_chunk" && params.update.content.type === "text") {
-    const compaction = claudeACPCompactionStatus(params.update.content.text)
-    if (compaction) {
-      if (compaction === "completed") active.providerCompacted = true
+    const text = params.update.content.text.trim()
+    if (text === "Compacting...") return
+    if (text === "Compacting completed.") {
+      active.compacted = true
       return
     }
     active.queue.text(params.update.content.text)
@@ -670,27 +701,23 @@ function sessionUpdate(connection: Connection, params: SessionNotification) {
     const events = claudeACPToolEvents(active.tools, params.update)
     if (events.length === 0) return
     active.queue.closeBlocks()
-    for (const event of events) active.queue.push(event)
+    events.forEach(active.queue.push)
   }
 }
 
-export function claudeACPToolEvents(
-  state: Map<string, ACPToolState>,
-  update: Extract<SessionNotification["update"], { sessionUpdate: "tool_call" | "tool_call_update" }>,
-) {
+export function claudeACPToolEvents(state: Map<string, ACPToolState>, update: ToolUpdate) {
   const previous = state.get(update.toolCallId)
   const tool = {
     name: claudeACPToolName(update, previous?.name),
     title: update.title ?? previous?.title ?? update.toolCallId,
-    input: "rawInput" in update && update.rawInput !== undefined ? update.rawInput : (previous?.input ?? {}),
+    input: update.rawInput !== undefined ? update.rawInput : (previous?.input ?? {}),
     content: update.content ?? previous?.content,
-    rawOutput: "rawOutput" in update && update.rawOutput !== undefined ? update.rawOutput : previous?.rawOutput,
+    rawOutput: update.rawOutput !== undefined ? update.rawOutput : previous?.rawOutput,
     status: update.status ?? previous?.status,
     started: previous?.started ?? false,
   } satisfies ACPToolState
   state.set(update.toolCallId, tool)
-
-  const events: LLMEventType[] = []
+  const events: LLMEvent[] = []
   if (!tool.started) {
     tool.started = true
     events.push(
@@ -699,11 +726,10 @@ export function claudeACPToolEvents(
         name: tool.name,
         input: tool.input,
         providerExecuted: true,
-        providerMetadata: claudeACPToolMetadata(tool, update),
+        providerMetadata: toolMetadata(tool, update),
       }),
     )
   }
-
   if (tool.status === "completed") {
     events.push(
       LLMEvent.toolResult({
@@ -711,54 +737,60 @@ export function claudeACPToolEvents(
         name: tool.name,
         result: ToolResultValue.make({
           title: tool.title,
-          output: claudeACPToolOutput(tool),
-          metadata: claudeACPToolResultMetadata(tool, update),
+          output: toolOutput(tool),
+          metadata: { acp: { status: tool.status, kind: update.kind, rawOutput: tool.rawOutput } },
         }),
         providerExecuted: true,
-        providerMetadata: claudeACPToolMetadata(tool, update),
+        providerMetadata: toolMetadata(tool, update),
       }),
     )
     state.delete(update.toolCallId)
   }
-
   if (tool.status === "failed") {
     events.push(
       LLMEvent.toolError({
         id: update.toolCallId,
         name: tool.name,
-        message: claudeACPToolOutput(tool),
+        message: toolOutput(tool),
         error: tool.rawOutput,
-        providerMetadata: claudeACPToolMetadata(tool, update),
+        providerMetadata: toolMetadata(tool, update),
       }),
     )
     state.delete(update.toolCallId)
   }
-
   return events
 }
 
-function claudeACPToolName(tool: Partial<Pick<ToolCall | ToolCallUpdate, "kind" | "rawInput" | "title">>, fallback?: string) {
-  switch (tool.kind) {
-    case "execute":
-      return "bash"
-    case "edit":
-    case "delete":
-    case "move":
-      return "edit"
-    case "fetch":
-      return "webfetch"
-    case "search":
-      return "grep"
-    case "read":
-      return "read"
-  }
-
+function claudeACPToolName(tool: Pick<ToolUpdate, "kind" | "rawInput" | "title" | "_meta">, fallback?: string) {
   const input = recordValue(tool.rawInput)
+  const meta = recordValue(recordValue(tool._meta).claudeCode)
+  const raw =
+    stringValue(meta.toolName) ?? stringValue(input.tool) ?? stringValue(input.toolName) ?? stringValue(input.name)
+  const known = claudeToolName(raw ?? "") ?? claudeToolName(tool.title ?? "")
+  const inferred =
+    typeof input.subagent_type === "string"
+      ? "task"
+      : Array.isArray(input.todos)
+        ? "todowrite"
+        : typeof input.query === "string"
+          ? "websearch"
+          : typeof input.skill === "string"
+            ? "skill"
+            : undefined
+  const names: Partial<Record<NonNullable<ToolUpdate["kind"]>, string>> = {
+    execute: "bash",
+    edit: "edit",
+    delete: "edit",
+    move: "edit",
+    fetch: "webfetch",
+    search: "grep",
+    read: "read",
+  }
   return (
-    stringValue(input.tool) ??
-    stringValue(input.toolName) ??
-    stringValue(input.name) ??
-    stringValue(input.command) ??
+    known ??
+    inferred ??
+    (tool.kind ? names[tool.kind] : undefined) ??
+    raw ??
     fallback ??
     tool.kind ??
     tool.title ??
@@ -766,183 +798,131 @@ function claudeACPToolName(tool: Partial<Pick<ToolCall | ToolCallUpdate, "kind" 
   )
 }
 
-function claudeACPToolMetadata(
-  tool: ACPToolState,
-  update: Extract<SessionNotification["update"], { sessionUpdate: "tool_call" | "tool_call_update" }>,
-) {
+function claudeToolName(name: string) {
+  return {
+    bash: "bash",
+    read: "read",
+    write: "edit",
+    edit: "edit",
+    notebookedit: "edit",
+    glob: "glob",
+    grep: "grep",
+    webfetch: "webfetch",
+    websearch: "websearch",
+    task: "task",
+    agent: "task",
+    todowrite: "todowrite",
+    taskcreate: "todowrite",
+    taskupdate: "todowrite",
+    tasklist: "todowrite",
+    taskget: "todowrite",
+    skill: "skill",
+    lsp: "lsp",
+    enterplanmode: "plan_enter",
+    exitplanmode: "plan_exit",
+  }[name.toLowerCase()]
+}
+
+function toolMetadata(tool: ACPToolState, update: ToolUpdate) {
   return {
     anthropic: {
-      acpTool: {
-        id: update.toolCallId,
-        name: tool.name,
-        title: tool.title,
-        status: tool.status,
-        kind: update.kind,
-      },
+      acpTool: { id: update.toolCallId, name: tool.name, title: tool.title, status: tool.status, kind: update.kind },
     },
   }
 }
 
-function claudeACPToolResultMetadata(
-  tool: ACPToolState,
-  update: Extract<SessionNotification["update"], { sessionUpdate: "tool_call" | "tool_call_update" }>,
-) {
-  return {
-    acp: {
-      status: tool.status,
-      kind: update.kind,
-      rawOutput: tool.rawOutput,
-    },
-  }
-}
-
-function claudeACPToolOutput(tool: ACPToolState) {
+function toolOutput(tool: ACPToolState) {
   if (typeof tool.rawOutput === "string") return tool.rawOutput
+  if (Array.isArray(tool.rawOutput)) {
+    return tool.rawOutput
+      .map((item) => stringValue(recordValue(item).text) ?? stringify(item))
+      .filter(Boolean)
+      .join("\n")
+  }
   const output = recordValue(tool.rawOutput).output
   if (typeof output === "string") return output
-  if (tool.rawOutput !== undefined) return stringifyToolValue(tool.rawOutput)
+  if (tool.rawOutput !== undefined) return stringify(tool.rawOutput)
   const content = (tool.content ?? []).map(toolContentText).filter(Boolean).join("\n")
   return content || tool.title
 }
 
-function toolContentText(content: ToolCallContent) {
+function toolContentText(content: NonNullable<ToolUpdate["content"]>[number]) {
   if (content.type === "diff") return `Updated ${content.path}`
   if (content.type === "terminal") return `Terminal ${content.terminalId}`
   if (content.content.type === "text") return content.content.text
   if (content.content.type === "image") return "[image]"
-  return stringifyToolValue(content.content)
-}
-
-function stringifyToolValue(value: unknown) {
-  if (typeof value === "string") return value
-  try {
-    return JSON.stringify(value) ?? ""
-  } catch {
-    return String(value)
-  }
-}
-
-async function requestPermission(
-  connection: Connection,
-  params: RequestPermissionRequest,
-): Promise<RequestPermissionResponse> {
-  return requestPermissionForActive(connection.active, params)
+  return stringify(content.content)
 }
 
 export async function requestPermissionForActive(
   active: ActivePermissionRequest | undefined,
   params: RequestPermissionRequest,
+  signal?: AbortSignal,
 ): Promise<RequestPermissionResponse> {
-  if (!active || active.abort.aborted) return cancelledPermission()
-
+  if (!active || active.abort.aborted || signal?.aborted) return cancelledPermission()
   const requestID = PermissionV1.ID.ascending()
-  const permission = permissionName(params)
-  const metadata = permissionMetadata(params)
-  const patterns = permissionPatterns(permission, metadata, params)
-  const onAbort = () => {
-    void active.permission.reply({ requestID, reply: "reject" }).catch(() => undefined)
-  }
-  active.abort.addEventListener("abort", onAbort, { once: true })
-
+  const permission = active.tools.get(params.toolCall.toolCallId)?.name ?? claudeACPToolName(params.toolCall)
+  const metadata = permissionMetadata(params, permission)
   try {
-    const reply = await active.permission.ask({
-      id: requestID,
-      sessionID: active.sessionID,
-      permission,
-      patterns,
-      always: permissionAlways(permission, patterns),
-      metadata,
-      ruleset: active.ruleset,
-    })
-    return allowPermission(params, reply)
+    await active.authorize(
+      {
+        id: requestID,
+        permission,
+        metadata,
+      },
+      signal,
+    )
+    if (active.abort.aborted || signal?.aborted) return cancelledPermission()
+    const option = params.options.find((item) => item.kind === "allow_once")
+    return option ? { outcome: { outcome: "selected", optionId: option.optionId } } : cancelledPermission()
   } catch (error) {
-    if (active.abort.aborted) return cancelledPermission()
     if (
       error instanceof PermissionV1.DeniedError ||
       error instanceof PermissionV1.RejectedError ||
       error instanceof PermissionV1.CorrectedError
     ) {
-      return rejectPermission(params)
+      const option = params.options.find((item) => item.kind === "reject_once" || item.kind === "reject_always")
+      return option ? { outcome: { outcome: "selected", optionId: option.optionId } } : cancelledPermission()
     }
     return cancelledPermission()
-  } finally {
-    active.abort.removeEventListener("abort", onAbort)
   }
 }
 
-function permissionName(params: RequestPermissionRequest) {
-  return claudeACPToolName(params.toolCall)
-}
-
-function permissionMetadata(params: RequestPermissionRequest): Record<string, unknown> {
-  const metadata = { ...recordValue(params.toolCall.rawInput) }
-  metadata.toolCallId = params.toolCall.toolCallId
-  metadata.toolName = claudeACPToolName(params.toolCall)
-  metadata.kind = params.toolCall.kind ?? "other"
-  metadata.title = params.toolCall.title ?? params.toolCall.toolCallId
-
+function permissionMetadata(params: RequestPermissionRequest, permission: string): Record<string, unknown> {
+  const raw = recordValue(params.toolCall.rawInput)
+  const metadata: Record<string, unknown> = {
+    ...raw,
+    toolCallId: params.toolCall.toolCallId,
+    toolName: permission,
+    kind: params.toolCall.kind ?? "other",
+    title: params.toolCall.title ?? params.toolCall.toolCallId,
+  }
+  metadata.filepath ??= [raw.file_path, raw.notebook_path, raw.filePath, raw.filepath].find(
+    (value): value is string => typeof value === "string",
+  )
   const location = params.toolCall.locations?.find((item) => item.path)?.path
-  if (location) {
-    metadata.path ??= location
-    metadata.filePath ??= location
-    metadata.filepath ??= location
-  }
-
+  if (location) metadata.filepath ??= location
+  metadata.filePath ??= metadata.filepath
   const diff = params.toolCall.content?.find((item) => item.type === "diff")
-  if (diff) {
-    const diffPath = stringValue(diff.path)
-    if (diffPath) {
-      metadata.filepath = diffPath
-      metadata.filePath = diffPath
-    }
-    if (diffPath && typeof diff.newText === "string") {
+  if (diff?.path) {
+    metadata.filepath = diff.path
+    metadata.filePath = diff.path
+    if (typeof diff.newText === "string") {
       metadata.diff = createTwoFilesPatch(
-        diffPath,
-        diffPath,
+        diff.path,
+        diff.path,
         typeof diff.oldText === "string" ? diff.oldText : "",
         diff.newText,
       )
     }
   }
-
   if (params.toolCall.kind === "execute") metadata.command ??= params.toolCall.title ?? params.toolCall.toolCallId
   if (params.toolCall.kind === "fetch") metadata.url ??= params.toolCall.title
   if (params.toolCall.kind === "search") metadata.pattern ??= params.toolCall.title
+  if ((metadata.toolName === "glob" || metadata.toolName === "grep") && typeof metadata.path !== "string") {
+    metadata.path = stringValue(raw.path)
+  }
   return metadata
-}
-
-function permissionPatterns(
-  permission: string,
-  metadata: Record<string, unknown>,
-  params: RequestPermissionRequest,
-) {
-  const locations = params.toolCall.locations?.map((item) => item.path).filter((item): item is string => !!item) ?? []
-  if (permission === "bash") return [stringValue(metadata.command) ?? params.toolCall.title ?? params.toolCall.toolCallId]
-  if (permission === "webfetch") return [stringValue(metadata.url) ?? params.toolCall.title ?? "*"]
-  if (permission === "grep") return [stringValue(metadata.pattern) ?? params.toolCall.title ?? "*"]
-
-  const file = firstString(metadata.filePath, metadata.filepath, metadata.path)
-  if ((permission === "read" || permission === "edit") && file) return [file]
-  if (locations.length > 0) return locations
-  return [stringValue(metadata.toolName) ?? params.toolCall.title ?? "*"]
-}
-
-function permissionAlways(permission: string, patterns: string[]) {
-  if (permission === "bash") return patterns
-  return ["*"]
-}
-
-function allowPermission(params: RequestPermissionRequest, reply: PermissionV1.Reply): RequestPermissionResponse {
-  void reply
-  const option = params.options.find((item) => item.kind === "allow_once")
-  if (!option) return cancelledPermission()
-  return { outcome: { outcome: "selected", optionId: option.optionId } }
-}
-
-function rejectPermission(params: RequestPermissionRequest): RequestPermissionResponse {
-  const option = params.options.find((item) => item.kind === "reject_once" || item.kind === "reject_always")
-  if (!option) return cancelledPermission()
-  return { outcome: { outcome: "selected", optionId: option.optionId } }
 }
 
 function cancelledPermission(): RequestPermissionResponse {
@@ -950,30 +930,43 @@ function cancelledPermission(): RequestPermissionResponse {
 }
 
 async function createElicitation(
-  connection: Connection,
+  active: ActiveRequest | undefined,
   params: CreateElicitationRequest,
+  signal?: AbortSignal,
 ): Promise<CreateElicitationResponse> {
-  const active = connection.active
-  if (!active || active.abort.aborted) return { action: "cancel" }
+  if (!active || active.abort.aborted || signal?.aborted) return { action: "cancel" }
   if (params.mode !== "form" || !("sessionId" in params)) return { action: "decline" }
-
   const fields = claudeACPElicitationFields(params)
   if (fields.length === 0) return { action: "accept", content: {} }
-
   try {
-    const answers = await active.question.ask({
-      sessionID: active.sessionID,
-      questions: fields.map((field) => field.question),
-    })
+    await active.authorize(
+      {
+        permission: "question",
+        metadata: {},
+      },
+      signal,
+    )
+    if (active.abort.aborted || signal?.aborted) return { action: "cancel" }
+    const answers = await active.question.ask(
+      { sessionID: active.sessionID, questions: fields.map((field) => field.question) },
+      signal,
+    )
     return { action: "accept", content: claudeACPElicitationContent(fields, answers) }
   } catch {
-    if (active.abort.aborted) return { action: "cancel" }
-    return { action: "decline" }
+    return { action: active.abort.aborted || signal?.aborted ? "cancel" : "decline" }
   }
 }
 
-export function claudeACPElicitationFields(params: CreateElicitationRequest): ElicitationField[] {
-  if (params.mode !== "form") return []
+function stringRecord(value: unknown): value is Record<string, string> {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.values(value).every((item) => typeof item === "string")
+  )
+}
+
+export function claudeACPElicitationFields(params: FormElicitation): ElicitationField[] {
   return Object.entries(params.requestedSchema.properties ?? {}).map(([key, property]) =>
     elicitationField(key, property, params),
   )
@@ -986,53 +979,45 @@ export function claudeACPElicitationContent(
   return Object.fromEntries(
     fields.flatMap((field, index) => {
       const value = field.value(answers[index] ?? [])
-      if (value === undefined) return []
-      return [[field.key, value]]
+      return value === undefined ? [] : [[field.key, value]]
     }),
   )
 }
 
-function elicitationField(key: string, property: ElicitationPropertySchema, params: CreateElicitationRequest) {
+function elicitationField(key: string, property: ElicitationPropertySchema, params: FormElicitation) {
   const title = property.title ?? key
   const description = property.description ?? params.message
-  const base = {
-    header: shortHeader(title),
-    question: title,
-  }
-
+  const base = { header: title.slice(0, 30), question: title }
   if (property.type === "string") {
-    const choices = property.oneOf?.map((item) => ({ label: item.title, description: item.const })) ?? property.enum
-    const options = choices?.map((item) =>
-      typeof item === "string" ? { label: item, description } : { label: item.label, description: item.description },
-    )
-    const values = choices?.map(
-      (item): readonly [string, string] =>
-        typeof item === "string" ? [item, item] : [item.label, item.description],
-    )
+    const choices =
+      property.oneOf?.map((item) => [item.title, item.const] as const) ??
+      property.enum?.map((item) => [item, item] as const)
     return {
       key,
-      question: { ...base, options: options ?? [], custom: !options?.length },
-      value: (answers: ReadonlyArray<string>) => valueFromLabels(values, answers, property.default),
+      question: {
+        ...base,
+        options: choices?.map(([label, value]) => ({ label, description: value })) ?? [],
+        custom: !choices?.length,
+      },
+      value: (answers: ReadonlyArray<string>) => valueFromLabels(choices, answers, property.default),
     } satisfies ElicitationField
   }
-
   if (property.type === "array") {
     const raw = "anyOf" in property.items ? property.items.anyOf : property.items.enum
-    const values = raw.map(
-      (item): readonly [string, string] => (typeof item === "string" ? [item, item] : [item.title, item.const]),
+    const choices = raw.map((item) =>
+      typeof item === "string" ? ([item, item] as const) : ([item.title, item.const] as const),
     )
     return {
       key,
       question: {
         ...base,
-        options: values.map(([label, value]) => ({ label, description: value })),
+        options: choices.map(([label, value]) => ({ label, description: value })),
         custom: false,
         multiple: true,
       },
-      value: (answers: ReadonlyArray<string>) => valueFromLabels(values, answers, property.default ?? []),
+      value: (answers: ReadonlyArray<string>) => valueFromLabels(choices, answers, property.default ?? []),
     } satisfies ElicitationField
   }
-
   if (property.type === "boolean") {
     return {
       key,
@@ -1044,23 +1029,18 @@ function elicitationField(key: string, property: ElicitationPropertySchema, para
         ],
         custom: false,
       },
-      value: (answers: ReadonlyArray<string>) => {
-        if (answers[0] === "Yes") return true
-        if (answers[0] === "No") return false
-        return property.default ?? undefined
-      },
+      value: (answers: ReadonlyArray<string>) =>
+        answers[0] === "Yes" ? true : answers[0] === "No" ? false : (property.default ?? undefined),
     } satisfies ElicitationField
   }
-
   return {
     key,
     question: { ...base, options: [], custom: true },
     value: (answers: ReadonlyArray<string>) => {
       const value = answers[0]
-      if (value === undefined || value.trim() === "") return property.default ?? undefined
+      if (!value?.trim()) return property.default ?? undefined
       const parsed = property.type === "integer" ? Number.parseInt(value, 10) : Number(value)
-      if (Number.isNaN(parsed)) return property.default ?? undefined
-      return parsed
+      return Number.isNaN(parsed) ? (property.default ?? undefined) : parsed
     },
   } satisfies ElicitationField
 }
@@ -1072,330 +1052,14 @@ function valueFromLabels(
 ) {
   if (!values) return answers[0] ?? fallback ?? undefined
   const selected = answers.flatMap((answer) => values.find(([label]) => label === answer)?.[1] ?? [])
-  if (Array.isArray(fallback)) return selected.length ? selected : fallback
-  return selected[0] ?? fallback ?? undefined
-}
-
-function shortHeader(value: string) {
-  return value.length <= 30 ? value : value.slice(0, 30)
-}
-
-export function claudeACPDirectPermissionChecks(input: DirectPermissionInput): DirectPermissionCheck[] {
-  if (input.kind === "terminal") {
-    const cwd = input.terminalCwd ? resolveACPPath(input.cwd, input.terminalCwd) : path.resolve(input.cwd)
-    const command = [input.command, ...(input.args ?? [])].join(" ")
-    return uniqueDirectPermissionChecks([
-      ...externalDirectoryPermission(input.cwd, cwd, "directory"),
-      ...terminalArgumentExternalPermissions(input.cwd, cwd, input.args),
-      {
-        permission: "bash",
-        patterns: [command],
-        always: [`${input.command} *`],
-        metadata: {
-          command,
-          cwd,
-        },
-      },
-    ])
-  }
-
-  const target = resolveACPPath(input.cwd, input.path)
-  return [
-    ...externalDirectoryPermission(input.cwd, target, "file"),
-    {
-      permission: input.kind === "read" ? "read" : "edit",
-      patterns: [permissionPathPattern(input.cwd, target)],
-      always: ["*"],
-      metadata: {
-        filepath: target,
-      },
-    },
-  ]
-}
-
-function uniqueDirectPermissionChecks(checks: DirectPermissionCheck[]) {
-  const seen = new Set<string>()
-  return checks.filter((check) => {
-    const key = `${check.permission}\0${check.patterns.join("\0")}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-function terminalArgumentExternalPermissions(
-  projectCwd: string,
-  terminalCwd: string,
-  args: readonly string[] | null | undefined,
-) {
-  return (args ?? []).flatMap((arg) => {
-    const target = terminalArgumentPath(terminalCwd, arg)
-    return target ? externalDirectoryPermission(projectCwd, target, "file") : []
-  })
-}
-
-function terminalArgumentPath(cwd: string, value: string) {
-  const candidate = terminalArgumentPathCandidate(value)
-  if (!candidate) return
-  return resolveACPPath(cwd, candidate)
-}
-
-function terminalArgumentPathCandidate(value: string) {
-  const text = unquote(value.trim())
-  if (!text || text === "." || /^\/[A-Za-z]$/i.test(text)) return
-  const assigned = text.includes("=") ? text.slice(text.indexOf("=") + 1) : text
-  const candidate = unquote(assigned)
-  if (
-    path.isAbsolute(candidate) ||
-    candidate.startsWith("../") ||
-    candidate.startsWith("..\\") ||
-    candidate.startsWith("./") ||
-    candidate.startsWith(".\\") ||
-    candidate.includes("/") ||
-    candidate.includes("\\")
-  ) {
-    return candidate
-  }
-}
-
-function unquote(value: string) {
-  if (value.length < 2) return value
-  const first = value[0]
-  const last = value[value.length - 1]
-  if ((first === `"` || first === "'") && first === last) return value.slice(1, -1)
-  return value
-}
-
-async function assertACPDirectPermissions(
-  active: ActivePermissionRequest | undefined,
-  checks: ReadonlyArray<DirectPermissionCheck>,
-) {
-  if (!active || active.abort.aborted) throw RequestError.invalidParams({}, "permission unavailable")
-
-  for (const check of checks) {
-    const requestID = PermissionV1.ID.ascending()
-    const onAbort = () => {
-      void active.permission.reply({ requestID, reply: "reject" }).catch(() => undefined)
-    }
-    active.abort.addEventListener("abort", onAbort, { once: true })
-    try {
-      await active.permission.ask({
-        id: requestID,
-        sessionID: active.sessionID,
-        ...check,
-        ruleset: active.ruleset,
-      })
-    } catch (error) {
-      if (active.abort.aborted) throw RequestError.invalidParams({}, "permission cancelled")
-      if (
-        error instanceof PermissionV1.DeniedError ||
-        error instanceof PermissionV1.RejectedError ||
-        error instanceof PermissionV1.CorrectedError
-      ) {
-        throw RequestError.invalidParams(
-          { permission: check.permission, patterns: check.patterns },
-          "permission denied",
-        )
-      }
-      throw RequestError.internalError({ permission: check.permission }, errorMessage(error))
-    } finally {
-      active.abort.removeEventListener("abort", onAbort)
-    }
-  }
-}
-
-function externalDirectoryPermission(cwd: string, target: string, kind: "file" | "directory"): DirectPermissionCheck[] {
-  if (containsACPPath(cwd, target)) return []
-  const dir = kind === "directory" ? target : path.dirname(target)
-  const pattern = path.join(dir, "*")
-  return [
-    {
-      permission: "external_directory",
-      patterns: [pattern],
-      always: [pattern],
-      metadata: {
-        filepath: target,
-        parentDir: dir,
-      },
-    },
-  ]
-}
-
-function permissionPathPattern(cwd: string, target: string) {
-  if (!containsACPPath(cwd, target)) return target
-  return path.relative(path.resolve(cwd), target) || "."
-}
-
-function containsACPPath(cwd: string, target: string) {
-  const relative = path.relative(path.resolve(cwd), target)
-  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
-}
-
-async function readTextFile(
-  active: ActiveDirectRequest | undefined,
-  cwd: string,
-  params: ReadTextFileRequest,
-): Promise<ReadTextFileResponse> {
-  const base = active?.cwd ?? cwd
-  const target = resolveACPPath(base, params.path)
-  await assertACPDirectPermissions(
-    active,
-    claudeACPDirectPermissionChecks({ kind: "read", cwd: base, path: params.path }),
-  )
-  const content = await Bun.file(target).text()
-  if (!params.line && !params.limit) return { content }
-  const start = (params.line ?? 1) - 1
-  return { content: content.split(/\r?\n/).slice(start, params.limit ? start + params.limit : undefined).join("\n") }
-}
-
-async function writeTextFile(
-  active: ActiveDirectRequest | undefined,
-  cwd: string,
-  params: WriteTextFileRequest,
-): Promise<WriteTextFileResponse> {
-  const base = active?.cwd ?? cwd
-  const target = resolveACPPath(base, params.path)
-  await assertACPDirectPermissions(
-    active,
-    claudeACPDirectPermissionChecks({ kind: "write", cwd: base, path: params.path }),
-  )
-  await mkdir(path.dirname(target), { recursive: true })
-  await Bun.write(target, params.content)
-  return {}
-}
-
-async function createTerminal(
-  input: Connection,
-  params: CreateTerminalRequest,
-): Promise<CreateTerminalResponse> {
-  const terminalId = `claude-acp-terminal-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  const output: string[] = []
-  const base = input.active?.cwd ?? input.cwd
-  const cwd = params.cwd ? resolveACPPath(base, params.cwd) : base
-  await assertACPDirectPermissions(
-    input.active,
-    claudeACPDirectPermissionChecks({
-      kind: "terminal",
-      cwd: base,
-      command: params.command,
-      args: params.args,
-      terminalCwd: params.cwd,
-    }),
-  )
-  const subprocess = Bun.spawn({
-    cmd: [params.command, ...(params.args ?? [])],
-    cwd,
-    env: params.env ? { ...process.env, ...Object.fromEntries(params.env.map((entry) => [entry.name, entry.value])) } : process.env,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const terminal: Terminal = {
-    process: subprocess,
-    output,
-    limit: claudeACPTerminalOutputLimit(params.outputByteLimit),
-    truncated: false,
-    exited: subprocess.exited.then((exitCode) => {
-      terminal.exitStatus = { exitCode }
-      return terminal.exitStatus
-    }),
-  }
-  input.terminals.set(terminalId, terminal)
-  void collect(subprocess.stdout, output, terminal.limit, () => {
-    terminal.truncated = true
-  })
-  void collect(subprocess.stderr, output, terminal.limit, () => {
-    terminal.truncated = true
-  })
-  return { terminalId }
-}
-
-async function terminalOutput(
-  terminals: Map<string, Terminal>,
-  params: TerminalOutputRequest,
-): Promise<TerminalOutputResponse> {
-  const terminal = requireTerminal(terminals, params.terminalId)
-  return { output: terminal.output.join(""), truncated: terminal.truncated, exitStatus: terminal.exitStatus }
-}
-
-async function waitForTerminalExit(
-  terminals: Map<string, Terminal>,
-  params: WaitForTerminalExitRequest,
-): Promise<WaitForTerminalExitResponse> {
-  return requireTerminal(terminals, params.terminalId).exited
-}
-
-async function killTerminal(terminals: Map<string, Terminal>, params: KillTerminalRequest): Promise<KillTerminalResponse> {
-  requireTerminal(terminals, params.terminalId).process.kill()
-  return {}
-}
-
-async function releaseTerminal(
-  terminals: Map<string, Terminal>,
-  params: ReleaseTerminalRequest,
-): Promise<ReleaseTerminalResponse> {
-  const terminal = requireTerminal(terminals, params.terminalId)
-  terminal.process.kill()
-  terminals.delete(params.terminalId)
-  return {}
-}
-
-function requireTerminal(terminals: Map<string, Terminal>, terminalID: string) {
-  const terminal = terminals.get(terminalID)
-  if (!terminal) throw RequestError.resourceNotFound(terminalID)
-  return terminal
-}
-
-export function claudeACPTerminalOutputLimit(value: number | null | undefined) {
-  if (typeof value !== "number") return TERMINAL_OUTPUT_DEFAULT
-  if (!Number.isFinite(value)) return TERMINAL_OUTPUT_DEFAULT
-  return Math.min(TERMINAL_OUTPUT_MAX, Math.max(0, Math.floor(value)))
-}
-
-export function claudeACPAppendOutput(output: string[], text: string, limit: number) {
-  if (!text) return false
-  output.push(text)
-  const trimmed = trimOutput(output.join(""), claudeACPTerminalOutputLimit(limit))
-  if (!trimmed.truncated) return false
-  output.length = 0
-  if (trimmed.text) output.push(trimmed.text)
-  return true
-}
-
-function trimOutput(text: string, limit: number) {
-  const bytes = Buffer.from(text, "utf8")
-  if (bytes.length <= limit) return { text, truncated: false }
-  if (limit <= 0) return { text: "", truncated: true }
-
-  let start = bytes.length - limit
-  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++
-  return { text: bytes.subarray(start).toString("utf8"), truncated: true }
-}
-
-async function collect(stream: ReadableStream<Uint8Array>, output: string[], limit: number, onTruncated?: () => void) {
-  const reader = stream.getReader()
-  const decoder = new TextDecoder()
-  while (true) {
-    const read = await reader.read().catch(() => undefined)
-    if (!read) return
-    if (read.done) {
-      appendCollectedOutput(decoder.decode())
-      return
-    }
-    appendCollectedOutput(decoder.decode(read.value, { stream: true }))
-  }
-
-  function appendCollectedOutput(text: string) {
-    if (!text) return
-    if (claudeACPAppendOutput(output, text, limit)) onTruncated?.()
-  }
+  return Array.isArray(fallback) ? (selected.length ? selected : fallback) : (selected[0] ?? fallback ?? undefined)
 }
 
 function finish(
   queue: ReturnType<typeof makeQueue>,
   reason: FinishReason,
   usage?: Usage,
-  providerMetadata?: ACPProviderMetadata,
+  providerMetadata?: ProviderMetadata,
 ) {
   queue.closeBlocks()
   queue.push(LLMEvent.stepFinish({ index: 0, reason, usage, providerMetadata }))
@@ -1405,7 +1069,7 @@ function finish(
 
 function finishReason(reason: string): FinishReason {
   if (reason === "end_turn") return "stop"
-  if (reason === "max_tokens") return "length"
+  if (reason === "max_tokens" || reason === "max_turn_requests") return "length"
   if (reason === "cancelled") return "error"
   if (reason === "refusal") return "content-filter"
   return "unknown"
@@ -1416,9 +1080,8 @@ export function claudeUsage(input: ACPUsage | null | undefined, context?: ACPCon
   const nonCachedInputTokens = token(input.inputTokens)
   const cacheReadInputTokens = token(input.cachedReadTokens)
   const cacheWriteInputTokens = token(input.cachedWriteTokens)
-  const inputTokens = (nonCachedInputTokens ?? 0) + (cacheReadInputTokens ?? 0) + (cacheWriteInputTokens ?? 0)
   return new Usage({
-    inputTokens,
+    inputTokens: (nonCachedInputTokens ?? 0) + (cacheReadInputTokens ?? 0) + (cacheWriteInputTokens ?? 0),
     outputTokens: token(input.outputTokens),
     nonCachedInputTokens,
     cacheReadInputTokens,
@@ -1439,110 +1102,95 @@ export function claudeContextUsage(context: ACPContextUsage | undefined) {
   })
 }
 
-export function claudeACPCompactionStatus(text: string) {
-  const normalized = text.trim()
-  if (normalized === "Compacting...") return "started"
-  if (normalized === "Compacting completed.") return "completed"
-  return undefined
-}
-
-function claudeProviderMetadata(providerCompacted: boolean | undefined): ACPProviderMetadata | undefined {
-  if (!providerCompacted) return
-  return { anthropic: { acpCompacted: true } }
-}
-
 function token(value: number | null | undefined) {
-  if (typeof value !== "number") return
-  if (!Number.isFinite(value)) return
-  return Math.max(0, value)
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : undefined
 }
 
 function promptText(messages: ModelMessage[]) {
-  const last = messages.at(-1)
-  if (last?.role === "user") {
-    const text = contentText(last.content).trim()
-    if (text.match(/^\/[A-Za-z][\w:-]*(?:\s|$)/)) return text
-  }
-
   return messages
-    .map((message) => `${message.role.toUpperCase()}:\n${contentText(message.content)}`)
+    .map((message) => {
+      const text = contentText(message.content)
+      return `${message.role.toUpperCase()}:\n${text}`
+    })
     .filter((message) => message.trim() !== "")
     .join("\n\n")
 }
 
 function currentPromptText(messages: ModelMessage[]) {
-  const last = messages.at(-1)
-  if (last?.role !== "user") return promptText(messages)
-  const text = contentText(last.content).trim()
-  return text || promptText(messages)
+  const start = messages.findLastIndex((message) => message.role === "user")
+  if (start < 0) return promptText(messages)
+  const current = messages.slice(start)
+  if (current.length > 1) return promptText(current)
+  return contentText(current[0].content).trim() || promptText(messages)
 }
 
 function claudeModelID(modelID: string) {
-  if (modelID === "claude" || modelID === "default") return
   if (modelID === "fable") return "claude-fable-5"
   if (modelID === "fable[1m]") return "claude-fable-5[1m]"
   return modelID
 }
 
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`
-  if (!value || typeof value !== "object") return JSON.stringify(value)
-  return `{${Object.entries(value)
-    .toSorted(([a], [b]) => a.localeCompare(b))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
-    .join(",")}}`
+function assertTextHistory(messages: ModelMessage[]) {
+  if (
+    messages.some(
+      (message) =>
+        Array.isArray(message.content) &&
+        message.content.some(
+          (part) =>
+            part.type === "file" ||
+            part.type === "image" ||
+            (part.type === "tool-result" &&
+              part.output.type === "content" &&
+              part.output.value.some((value) => value.type !== "text")),
+        ),
+    )
+  ) {
+    throw new Error("Claude ACP does not support file or image history")
+  }
+}
+
+function contentText(content: ModelMessage["content"]): string {
+  if (typeof content === "string") return content
+  if (!Array.isArray(content)) return stringify(content)
+  return content
+    .map((part) => {
+      if (part.type === "text") return part.text
+      if (part.type === "file") return `[file: ${part.filename ?? part.mediaType}]`
+      if (part.type === "image") return "[image]"
+      return stringify(part)
+    })
+    .join("\n")
 }
 
 function recordValue(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
-  return value as Record<string, unknown>
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : undefined
 }
 
-function firstString(...values: unknown[]) {
-  return values.find((value): value is string => typeof value === "string")
-}
-
-function contentText(content: ModelMessage["content"]): string {
-  if (typeof content === "string") return content
-  if (!Array.isArray(content)) return JSON.stringify(content)
-  return content
-    .map((part) => {
-      if (part.type === "text") return part.text
-      if (part.type === "file") return `[file: ${part.filename ?? part.mediaType}]`
-      if (part.type === "image") return "[image]"
-      return JSON.stringify(part)
-    })
-    .join("\n")
-}
-
-export function resolveACPPath(cwd: string, value: string) {
-  if (path.isAbsolute(value)) return path.resolve(value)
-  return path.resolve(cwd, value)
-}
-
-function writable(sink: Bun.FileSink): WritableStream<Uint8Array> {
-  return new WritableStream({
-    write: (chunk) => {
-      sink.write(chunk)
-      sink.flush()
-    },
-    close: () => {
-      sink.end()
-    },
-  })
+function stringify(value: unknown) {
+  if (typeof value === "string") return value
+  try {
+    return JSON.stringify(value) ?? ""
+  } catch {
+    return String(value)
+  }
 }
 
 function makeQueue() {
   const items: QueueItem[] = []
-  const waiting: ((item: QueueItem) => void)[] = []
+  const waiting: Array<(item: QueueItem) => void> = []
   let textStarted = false
   let reasoningStarted = false
+  const offer = (item: QueueItem) => {
+    const resolve = waiting.shift()
+    if (resolve) return resolve(item)
+    items.push(item)
+  }
   return {
-    push(event: LLMEventType) {
+    push(event: LLMEvent) {
       offer({ type: "event", event })
     },
     text(text: string) {
@@ -1560,14 +1208,10 @@ function makeQueue() {
       offer({ type: "event", event: LLMEvent.reasoningDelta({ id: REASONING_ID, text }) })
     },
     closeBlocks() {
-      if (reasoningStarted) {
-        reasoningStarted = false
-        offer({ type: "event", event: LLMEvent.reasoningEnd({ id: REASONING_ID }) })
-      }
-      if (textStarted) {
-        textStarted = false
-        offer({ type: "event", event: LLMEvent.textEnd({ id: TEXT_ID }) })
-      }
+      if (reasoningStarted) offer({ type: "event", event: LLMEvent.reasoningEnd({ id: REASONING_ID }) })
+      if (textStarted) offer({ type: "event", event: LLMEvent.textEnd({ id: TEXT_ID }) })
+      reasoningStarted = false
+      textStarted = false
     },
     end() {
       offer({ type: "done" })
@@ -1578,23 +1222,11 @@ function makeQueue() {
     async *[Symbol.asyncIterator]() {
       while (true) {
         const item = items.shift() ?? (await new Promise<QueueItem>((resolve) => waiting.push(resolve)))
-        if (item.type === "event") {
-          yield item.event
-          continue
-        }
+        if (item.type === "event") yield item.event
         if (item.type === "error") throw item.error
-        return
+        if (item.type === "done") return
       }
     },
-  }
-
-  function offer(item: QueueItem) {
-    const resolve = waiting.shift()
-    if (resolve) {
-      resolve(item)
-      return
-    }
-    items.push(item)
   }
 }
 

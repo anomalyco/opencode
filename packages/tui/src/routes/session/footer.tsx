@@ -5,7 +5,6 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/use-connected"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
-import { visibleSessionRequests } from "./request"
 
 export function Footer() {
   const { theme } = useTheme()
@@ -16,12 +15,7 @@ export function Footer() {
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
   const permissions = createMemo(() => {
     if (route.data.type !== "session") return []
-    return visibleSessionRequests({
-      routeSessionID: route.data.sessionID,
-      currentSession: sync.session.get(route.data.sessionID),
-      sessions: sync.data.session,
-      requests: sync.data.permission,
-    })
+    return sync.data.permission[route.data.sessionID] ?? []
   })
   const directory = useDirectory()
   const connected = useConnected()

@@ -127,6 +127,15 @@ const connection = (updates: SessionNotification[]) => ({
 })
 
 describe("acp usage", () => {
+  test("uses every token component when provider context usage is unavailable", () => {
+    expect(
+      UsageService.contextTokens({
+        cost: 0,
+        tokens: { input: 10, output: 20, reasoning: 3, cache: { read: 4, write: 5 } },
+      }),
+    ).toBe(42)
+  })
+
   test("builds ACP Usage from assistant token shape", () => {
     expect(
       UsageService.buildUsage({
@@ -207,7 +216,7 @@ describe("acp usage", () => {
     )
   })
 
-  it.effect("includes all token types in ACP context usage", () => {
+  it.effect("includes cache reads and writes in ACP context usage", () => {
     const updates: SessionNotification[] = []
     return Effect.gen(function* () {
       const usage = yield* UsageService.Service
@@ -248,78 +257,13 @@ describe("acp usage", () => {
     )
   })
 
-  it.effect("prefers the provider-reported total for ACP context usage", () => {
-    const updates: SessionNotification[] = []
-    return Effect.gen(function* () {
-      const usage = yield* UsageService.Service
-      yield* usage.sendUpdate({
-        connection: connection(updates),
-        sessionID: "ses_1",
-        directory: "/workspace",
-      })
-
-      expect(updates).toEqual([
-        {
-          sessionId: "ses_1",
-          update: {
-            sessionUpdate: "usage_update",
-            used: 55_000,
-            size: 128_000,
-            cost: { amount: 2, currency: "USD" },
-          },
-        },
-      ])
-    }).pipe(
-      Effect.provide(
-        fakeLayer({
-          messages: Effect.succeed([
-            assistant({
-              cost: 2,
-              tokens: {
-                total: 55_000,
-                input: 10,
-                output: 20,
-                reasoning: 0,
-                cache: { read: 5, write: 7 },
-              },
-            }),
-          ]),
-        }),
-      ),
-    )
-  })
-
-  it.effect("retries context limit lookup after a failure instead of caching it", () => {
-    const calls: string[] = []
-    let fail = true
-    return Effect.gen(function* () {
-      const usage = yield* UsageService.Service
-      const input = {
-        directory: "/workspace",
-        providerID: ProviderV2.ID.make("anthropic"),
-        modelID: ModelV2.ID.make("claude-sonnet"),
-      }
-      const first = yield* usage.contextLimit(input)
-      fail = false
-      const second = yield* usage.contextLimit(input)
-      const third = yield* usage.contextLimit(input)
-
-      expect(first).toBeUndefined()
-      expect(second).toBe(200_000)
-      expect(third).toBe(200_000)
-      expect(calls).toEqual(["/workspace", "/workspace"])
-    }).pipe(
-      Effect.provide(
-        fakeLayer({
-          providers: (directory) =>
-            Effect.suspend(() => {
-              calls.push(directory)
-              if (fail) return Effect.fail(new Error("boom"))
-              return Effect.succeed(providers(200_000))
-            }),
-        }),
-      ),
-    )
+  test("prefers the provider-reported total for ACP context usage", () => {
+    expect(
+      UsageService.contextTokens({
+        cost: 2,
+        tokens: { total: 55_000, input: 10, output: 20, reasoning: 0, cache: { read: 5, write: 7 } },
+      }),
+    ).toBe(55_000)
   })
 
   it.effect("skips usage update when messages cannot be fetched", () => {

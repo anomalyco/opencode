@@ -93,21 +93,25 @@ const layer = Layer.effect(
       const id = QuestionID.ascending()
       yield* Effect.logInfo("asking", { id, questions: input.questions.length })
 
-      const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
       const info: Request = {
         id,
         sessionID: input.sessionID,
         questions: input.questions,
         tool: input.tool,
       }
-      pending.set(id, { info, deferred })
-      yield* events.publish(Event.Asked, info)
-
-      return yield* Effect.ensuring(
-        Deferred.await(deferred),
-        Effect.sync(() => {
-          pending.delete(id)
-        }),
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
+          pending.set(id, { info, deferred })
+          yield* events.publish(Event.Asked, info)
+          return yield* restore(Deferred.await(deferred)).pipe(
+            Effect.onInterrupt(() =>
+              pending.has(id)
+                ? events.publish(Event.Rejected, { sessionID: info.sessionID, requestID: id })
+                : Effect.void,
+            ),
+          )
+        }).pipe(Effect.ensuring(Effect.sync(() => pending.delete(id)))),
       )
     })
 

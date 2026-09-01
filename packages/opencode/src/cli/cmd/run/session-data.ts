@@ -24,7 +24,7 @@
 //   `data.questions`. The footer shows whichever is first. When a reply
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
-import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
 import * as Locale from "@/util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
@@ -33,17 +33,6 @@ const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 })
-
-type Tokens = {
-  total?: number
-  input?: number
-  output?: number
-  reasoning?: number
-  cache?: {
-    read?: number
-    write?: number
-  }
-}
 
 type PartKind = "assistant" | "reasoning" | "user"
 type MessageRole = "assistant" | "user"
@@ -87,11 +76,6 @@ export type SessionData = {
   visible: Map<string, string>
   end: Set<string>
   echo: Map<string, Set<string>>
-  usage: {
-    text: string
-    tokens: number
-    estimated: boolean
-  } | undefined
 }
 
 export type SessionDataInput = {
@@ -130,7 +114,6 @@ export function createSessionData(
     visible: new Map(),
     end: new Set(),
     echo: new Map(),
-    usage: undefined,
   }
 }
 
@@ -139,10 +122,10 @@ function modelKey(provider: string, model: string): string {
 }
 
 function formatUsage(
-  tokens: Tokens | undefined,
+  tokens: AssistantMessage["tokens"] | undefined,
   limit: number | undefined,
   cost: number | undefined,
-): { text: string; tokens: number } | undefined {
+): string | undefined {
   const total =
     tokens?.total ??
     (tokens?.input ?? 0) +
@@ -153,7 +136,7 @@ function formatUsage(
 
   if (total <= 0) {
     if (typeof cost === "number" && cost > 0) {
-      return { text: money.format(cost), tokens: 0 }
+      return money.format(cost)
     }
     return undefined
   }
@@ -162,10 +145,10 @@ function formatUsage(
     limit && limit > 0 ? `${Locale.number(total)} (${Math.round((total / limit) * 100)}%)` : Locale.number(total)
 
   if (typeof cost === "number" && cost > 0) {
-    return { text: `${text} · ${money.format(cost)}`, tokens: total }
+    return `${text} · ${money.format(cost)}`
   }
 
-  return { text, tokens: total }
+  return text
 }
 
 export function formatError(error: {
@@ -192,17 +175,6 @@ export function formatError(error: {
 
 function isAbort(error: { name?: string } | undefined): boolean {
   return error?.name === "MessageAbortedError"
-}
-
-// Last write wins: reported usage moves the meter in both directions (context
-// shrinks when the provider compacts its own history). Interrupt estimates
-// (aborted turns without a provider-reported total) only ever fill a void —
-// they never displace a reported value.
-function updateUsage(data: SessionData, usage: { text: string; tokens: number } | undefined, estimated: boolean) {
-  if (!usage) return undefined
-  if (estimated && data.usage && !data.usage.estimated) return undefined
-  data.usage = { ...usage, estimated }
-  return usage.text
 }
 
 function msgErr(id: string): string {
@@ -867,11 +839,10 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       input.limits[modelKey(info.providerID, info.modelID)],
       typeof info.cost === "number" ? info.cost : undefined,
     )
-    const nextUsage = updateUsage(data, usage, isAbort(info.error) && info.tokens?.total === undefined)
-    if (nextUsage) {
+    if (usage) {
       next = {
         ...next,
-        usage: nextUsage,
+        usage,
       }
     }
 

@@ -65,7 +65,6 @@ import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
-import { visibleSessionRequests } from "./request"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
@@ -231,20 +230,12 @@ export function Session() {
       : [],
   )
   const permissions = createMemo(() => {
-    return visibleSessionRequests({
-      routeSessionID: route.sessionID,
-      currentSession: session(),
-      sessions: sync.data.session,
-      requests: sync.data.permission,
-    })
+    if (session()?.parentID) return []
+    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
   const questions = createMemo(() => {
-    return visibleSessionRequests({
-      routeSessionID: route.sessionID,
-      currentSession: session(),
-      sessions: sync.data.session,
-      requests: sync.data.question,
-    })
+    if (session()?.parentID) return []
+    return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
@@ -1303,11 +1294,10 @@ export function Session() {
                 </For>
               </scrollbox>
               <box flexShrink={0}>
-                <Show when={permissions().length > 0}>
-                  <PermissionPrompt
-                    request={permissions()[0]}
-                    directory={sync.session.get(permissions()[0].sessionID)?.directory}
-                  />
+                <Show when={permissions()[0]} keyed>
+                  {(request) => (
+                    <PermissionPrompt request={request} directory={sync.session.get(request.sessionID)?.directory} />
+                  )}
                 </Show>
                 <Show when={permissions().length === 0 && questions().length > 0}>
                   <QuestionPrompt

@@ -15,24 +15,8 @@ export function assistantContextTokens(message: AssistantMessage) {
   )
 }
 
-const withUsage = (message: Message): message is AssistantMessage =>
-  message.role === "assistant" && assistantContextTokens(message) > 0
-
-// Interrupted turns get locally estimated tokens (no provider-reported
-// `total`); an estimate must never displace a provider-reported value.
-const withEstimatedUsage = (message: AssistantMessage) =>
-  message.tokens.total === undefined && message.error?.name === "MessageAbortedError"
-
-/**
- * The message whose usage the context meter shows: the latest assistant
- * message with provider-reported usage, last write wins. Genuine reports move
- * the meter in both directions — context shrinks when the provider compacts
- * its own history, so picking a maximum would pin the meter at the
- * pre-compaction peak forever.
- */
 export function latestAssistantContextMessage(messages: readonly Message[]) {
-  return (
-    messages.findLast((message): message is AssistantMessage => withUsage(message) && !withEstimatedUsage(message)) ??
-    messages.findLast(withUsage)
+  return messages.findLast(
+    (message): message is AssistantMessage => message.role === "assistant" && assistantContextTokens(message) > 0,
   )
 }

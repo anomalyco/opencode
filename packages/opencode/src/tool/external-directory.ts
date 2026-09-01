@@ -13,7 +13,7 @@ type Options = {
 }
 
 export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirectory")(function* (
-  ctx: Tool.Context,
+  ctx: Pick<Tool.Context, "ask">,
   target?: string,
   options?: Options,
 ) {
@@ -44,6 +44,6 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
   return true
 })
 
-export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
+export async function assertExternalDirectory(ctx: Pick<Tool.Context, "ask">, target?: string, options?: Options) {
   return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options))
 }

@@ -129,8 +129,9 @@ test("old success event data containing result still decodes", () => {
 test("step finish records settlement without publishing step ended", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(LLMEvent.usage({ inputTokens: 12, nonCachedInputTokens: 12 })))
   await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "stop" })))
 
   expect(published.some((event) => event.type === "session.next.step.ended.2")).toBe(false)
-  expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
+  expect(publisher.stepSettlement()).toMatchObject({ finish: "stop", tokens: { input: 12 } })
 })

@@ -1102,16 +1102,12 @@ export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 export const ClaudeACPProviderID = ProviderV2.ID.make("claude-acp")
 export const ClaudeACPModelID = ModelV2.ID.make("claude")
 
-function claudeACPModel(id: string, name: string, context = 200_000): Model {
+function claudeACPModel(id: string, name: string): Model {
   const modelID = ModelV2.ID.make(id)
   return {
     id: modelID,
     providerID: ClaudeACPProviderID,
-    api: {
-      id: modelID,
-      npm: "@agentclientprotocol/sdk",
-      url: "acp://claude",
-    },
+    api: { id: modelID, npm: "@agentclientprotocol/sdk", url: "acp://claude" },
     name,
     family: "claude",
     capabilities: {
@@ -1119,34 +1115,14 @@ function claudeACPModel(id: string, name: string, context = 200_000): Model {
       reasoning: true,
       attachment: false,
       toolcall: true,
-      input: {
-        text: true,
-        audio: false,
-        image: false,
-        video: false,
-        pdf: false,
-      },
-      output: {
-        text: true,
-        audio: false,
-        image: false,
-        video: false,
-        pdf: false,
-      },
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
       interleaved: false,
     },
-    cost: {
-      input: 0,
-      output: 0,
-      cache: {
-        read: 0,
-        write: 0,
-      },
-    },
-    limit: {
-      context,
-      output: 32_000,
-    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    // Claude owns model selection and compaction, so OpenCode must not apply a
+    // stale fixed context limit after `/model` switches between 200k and 1M.
+    limit: { context: 0, output: 32_000 },
     status: "active",
     options: {},
     headers: {},
@@ -1162,16 +1138,18 @@ function claudeACPProvider(): Info {
     source: "custom",
     env: [],
     options: {},
-    models: {
-      [ClaudeACPModelID]: claudeACPModel(ClaudeACPModelID, "Claude Code"),
-      [ModelV2.ID.make("opus")]: claudeACPModel("opus", "Opus"),
-      [ModelV2.ID.make("opus[1m]")]: claudeACPModel("opus[1m]", "Opus (1M context)", 1_000_000),
-      [ModelV2.ID.make("sonnet")]: claudeACPModel("sonnet", "Sonnet"),
-      [ModelV2.ID.make("sonnet[1m]")]: claudeACPModel("sonnet[1m]", "Sonnet (1M context)", 1_000_000),
-      [ModelV2.ID.make("haiku")]: claudeACPModel("haiku", "Haiku"),
-      [ModelV2.ID.make("fable")]: claudeACPModel("fable", "Fable"),
-      [ModelV2.ID.make("fable[1m]")]: claudeACPModel("fable[1m]", "Fable (1M context)", 1_000_000),
-    },
+    models: Object.fromEntries(
+      [
+        ["claude", "Claude Code"],
+        ["opus", "Opus"],
+        ["opus[1m]", "Opus (1M context)"],
+        ["sonnet", "Sonnet"],
+        ["sonnet[1m]", "Sonnet (1M context)"],
+        ["haiku", "Haiku"],
+        ["fable", "Fable"],
+        ["fable[1m]", "Fable (1M context)"],
+      ].map(([id, name]) => [id, claudeACPModel(id, name)]),
+    ),
   }
 }
 
@@ -1726,7 +1704,7 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        if (!disabled.has(ClaudeACPProviderID)) providers[ClaudeACPProviderID] = claudeACPProvider()
+        if (isProviderAllowed(ClaudeACPProviderID)) providers[ClaudeACPProviderID] = claudeACPProvider()
 
         const gitlab = ProviderV2.ID.make("gitlab")
         if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
@@ -2104,7 +2082,9 @@ const layer = Layer.effect(
       }
 
       const configured = Object.keys(cfg.provider ?? {})
-      const provider = Object.values(s.providers).find((p) => configured.length === 0 || configured.includes(p.id))
+      const provider = Object.values(s.providers).find((provider) =>
+        configured.length === 0 ? provider.id !== ClaudeACPProviderID : configured.includes(provider.id),
+      )
       if (!provider) return yield* new NoProvidersError()
       const [model] = sort(Object.values(provider.models))
       if (!model) return yield* new NoModelsError({ providerID: provider.id })

@@ -69,6 +69,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   let assistantActive = false
   let assistantFailed = false
   let providerFailed = false
+  let latestUsage: Usage | undefined
   let stepSettlement: { readonly finish: string; readonly tokens: ReturnType<typeof tokens> } | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
@@ -242,6 +243,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   ) {
     switch (event.type) {
       case "step-start":
+        latestUsage = undefined
         return
       case "text-start":
         yield* text.start(event.id)
@@ -397,7 +399,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* flush()
         assistantActive = false
         if (stepSettlement) return yield* Effect.die("Duplicate step finish")
-        stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
+        stepSettlement = { finish: event.reason, tokens: tokens(event.usage ?? latestUsage) }
+        return
+      case "usage":
+        latestUsage = event.usage
         return
       case "finish":
         return

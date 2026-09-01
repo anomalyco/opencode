@@ -617,11 +617,7 @@ function makeUsageService(sdk: OpencodeClient) {
         })
         .catch(() => undefined)
       limits.set(key, next)
-      const value = yield* Effect.promise(() => next)
-      // An unknown limit must not stick: evict the failed lookup so the next
-      // usage update retries instead of never reporting again.
-      if (value === undefined && limits.get(key) === next) limits.delete(key)
-      return value
+      return yield* Effect.promise(() => next)
     },
   )
 
@@ -815,8 +811,7 @@ function selectDefaultModel(snapshot: Directory.Snapshot) {
 }
 
 function automaticModels<T extends { providerID: ProviderV2.ID }>(models: readonly T[]) {
-  const withoutClaudeACP = models.filter((model) => model.providerID !== Provider.ClaudeACPProviderID)
-  return withoutClaudeACP.length > 0 ? withoutClaudeACP : [...models]
+  return models.filter((model) => model.providerID !== Provider.ClaudeACPProviderID)
 }
 
 function detectSlashCommand(parts: ReturnType<typeof promptContentToParts>) {
@@ -888,10 +883,6 @@ function promptErrorMessage(error: AssistantError) {
   return "OpenCode prompt failed"
 }
 
-// One usage service per SDK client so the context-limit cache survives across
-// updates — rebuilding it per call would refetch providers on every update.
-const usageServices = new WeakMap<OpencodeClient, UsageService.Interface>()
-
 function sendUsageUpdate(
   usage: UsageService.Interface | undefined,
   sdk: OpencodeClient,
@@ -900,12 +891,7 @@ function sendUsageUpdate(
   directory: string,
 ) {
   if (!connection) return Effect.void
-  let service = usage ?? usageServices.get(sdk)
-  if (!service) {
-    service = makeUsageService(sdk)
-    usageServices.set(sdk, service)
-  }
-  return service.sendUpdate({
+  return (usage ?? makeUsageService(sdk)).sendUpdate({
     connection,
     sessionID,
     directory,
@@ -1060,10 +1046,7 @@ function restoreFromMessages(messages: readonly MessageInfo[]) {
   )
   if (user?.model?.providerID && user.model.modelID) {
     return {
-      model: normalizeRestoredModel({
-        providerID: user.model.providerID as ProviderV2.ID,
-        modelID: user.model.modelID as ModelV2.ID,
-      }),
+      model: { providerID: user.model.providerID as ProviderV2.ID, modelID: user.model.modelID as ModelV2.ID },
       variant: user.model.variant,
       modeId: user.agent,
     }
@@ -1072,23 +1055,13 @@ function restoreFromMessages(messages: readonly MessageInfo[]) {
   const assistant = messages.findLast((message) => message.providerID && message.modelID)
   if (assistant?.providerID && assistant.modelID) {
     return {
-      model: normalizeRestoredModel({
-        providerID: assistant.providerID as ProviderV2.ID,
-        modelID: assistant.modelID as ModelV2.ID,
-      }),
+      model: { providerID: assistant.providerID as ProviderV2.ID, modelID: assistant.modelID as ModelV2.ID },
       variant: assistant.variant,
       modeId: assistant.mode ?? assistant.agent,
     }
   }
 
   return {}
-}
-
-function normalizeRestoredModel(model: Directory.DefaultModel) {
-  if (model.providerID === Provider.ClaudeACPProviderID && model.modelID === ModelV2.ID.make("default")) {
-    return { providerID: Provider.ClaudeACPProviderID, modelID: Provider.ClaudeACPModelID }
-  }
-  return model
 }
 
 function isSdkResponse<T>(value: T | SdkResponse<T>): value is SdkResponse<T> {

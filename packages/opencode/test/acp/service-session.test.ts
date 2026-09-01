@@ -189,46 +189,13 @@ const provider: Provider.Info = {
   },
 }
 
-function cloneModel(nextProviderID: ProviderV2.ID, nextModelID: ModelV2.ID, name: string): Provider.Model {
-  const base = provider.models[modelID]!
-  return {
-    ...base,
-    id: nextModelID,
-    providerID: nextProviderID,
-    api: {
-      ...base.api,
-      id: nextModelID,
-    },
-    name,
-    variants: {},
-  }
-}
-
-function singleModelProvider(input: {
-  providerID: ProviderV2.ID
-  modelID: ModelV2.ID
-  name: string
-  modelName: string
-  source?: Provider.Info["source"]
-}): Provider.Info {
-  return {
-    id: input.providerID,
-    name: input.name,
-    source: input.source ?? "config",
-    env: [],
-    options: {},
-    models: {
-      [input.modelID]: cloneModel(input.providerID, input.modelID, input.modelName),
-    },
-  }
-}
-
 describe("ACP service sessions", () => {
   const makeService = (
     messages: readonly { info: unknown; parts: readonly unknown[] }[] = [],
     options?: {
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
+      providers?: Provider.Info[]
       sessionUpdate?: (update: SessionNotification) => Promise<void>
     },
   ) => {
@@ -252,7 +219,8 @@ describe("ACP service sessions", () => {
         event: (input?: { signal?: AbortSignal }) => Promise.resolve({ stream: events.stream(input?.signal) }),
       },
       config: {
-        providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
+        providers: () =>
+          Promise.resolve({ data: { providers: options?.providers ?? [provider], default: { test: modelID } } }),
         get: () => Promise.resolve({ data: {} }),
       },
       app: {
@@ -806,93 +774,22 @@ describe("ACP service sessions", () => {
   })
 
   it("does not choose Claude ACP as the automatic fresh-session fallback when other models exist", async () => {
-    const fallbackProviderID = ProviderV2.ID.make("aaa")
-    const fallbackModelID = ModelV2.ID.make("aaa-model")
-    const fallbackProvider = singleModelProvider({
-      providerID: fallbackProviderID,
-      modelID: fallbackModelID,
-      name: "Fallback",
-      modelName: "Fallback Model",
-    })
-    const claudeProvider = singleModelProvider({
-      providerID: Provider.ClaudeACPProviderID,
-      modelID: Provider.ClaudeACPModelID,
-      name: "Claude",
-      modelName: "Claude Code",
-      source: "custom",
-    })
-    const sdk = {
-      config: {
-        providers: () => Promise.resolve({ data: { providers: [claudeProvider, fallbackProvider], default: {} } }),
-        get: () => Promise.resolve({ data: {} }),
+    const claudeProvider: Provider.Info = {
+      ...provider,
+      id: Provider.ClaudeACPProviderID,
+      models: {
+        [Provider.ClaudeACPModelID]: {
+          ...provider.models[modelID],
+          id: Provider.ClaudeACPModelID,
+          providerID: Provider.ClaudeACPProviderID,
+        },
       },
-      app: {
-        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
-        skills: () => Promise.resolve({ data: [] }),
-      },
-      command: {
-        list: () => Promise.resolve({ data: [] }),
-      },
-      session: {
-        create: (input: { model?: { providerID?: string; id?: string } }) =>
-          Promise.resolve({ data: { id: `${input.model?.providerID}/${input.model?.id}` } }),
-        list: () => Promise.resolve({ data: [] }),
-      },
-      mcp: {
-        add: () => Promise.resolve({ data: {} }),
-      },
-    } as unknown as OpencodeClient
-    const service = ACPService.make({ sdk })
+    }
+    const { service } = makeService([], { providers: [claudeProvider, provider] })
 
     const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
 
-    expect(result.sessionId).toBe("aaa/aaa-model")
-    expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("aaa/aaa-model")
-  })
-
-  it("ignores the removed Claude ACP default alias from config", async () => {
-    const fallbackProviderID = ProviderV2.ID.make("aaa")
-    const fallbackModelID = ModelV2.ID.make("aaa-model")
-    const fallbackProvider = singleModelProvider({
-      providerID: fallbackProviderID,
-      modelID: fallbackModelID,
-      name: "Fallback",
-      modelName: "Fallback Model",
-    })
-    const claudeProvider = singleModelProvider({
-      providerID: Provider.ClaudeACPProviderID,
-      modelID: Provider.ClaudeACPModelID,
-      name: "Claude",
-      modelName: "Claude Code",
-      source: "custom",
-    })
-    const sdk = {
-      config: {
-        providers: () => Promise.resolve({ data: { providers: [claudeProvider, fallbackProvider], default: {} } }),
-        get: () => Promise.resolve({ data: { model: "claude-acp/default" } }),
-      },
-      app: {
-        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
-        skills: () => Promise.resolve({ data: [] }),
-      },
-      command: {
-        list: () => Promise.resolve({ data: [] }),
-      },
-      session: {
-        create: (input: { model?: { providerID?: string; id?: string } }) =>
-          Promise.resolve({ data: { id: `${input.model?.providerID}/${input.model?.id}` } }),
-        list: () => Promise.resolve({ data: [] }),
-      },
-      mcp: {
-        add: () => Promise.resolve({ data: {} }),
-      },
-    } as unknown as OpencodeClient
-    const service = ACPService.make({ sdk })
-
-    const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
-
-    expect(result.sessionId).toBe("aaa/aaa-model")
-    expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("aaa/aaa-model")
+    expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/test-model")
   })
 
   it("switches model and returns updated model and effort options", async () => {
