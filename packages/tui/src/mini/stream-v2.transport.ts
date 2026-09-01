@@ -134,7 +134,7 @@ type State = {
   globalForms: MiniFormRequest[]
   view: FooterView
   messageIDs: Set<string>
-  // Optimistic text and pending steers can be visible before attachment delivery.
+  // Delivery can arrive before the admission response supplies the user content.
   promotedMessages: Set<string>
   imageIDs: Set<string>
   fragments: FragmentReconciler
@@ -564,8 +564,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   let syncedPending: string[] | undefined
   const syncPending = () => {
-    const prompts = [...state.pending.values()].filter((item) => item.delivery === "queue")
-    const ids = prompts.map((item) => item.messageID)
+    const prompts = [...state.pending.values()]
+    const ids = prompts.map((item) => `${item.messageID}:${item.delivery}`)
     if (syncedPending?.length === ids.length && syncedPending.every((id, index) => id === ids[index])) return
     syncedPending = ids
     input.trace?.write("ui.patch", { pending: prompts.length })
@@ -580,11 +580,31 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return render
     })
 
+  const renderUser = (
+    messageID: string,
+    text: string,
+    files: SessionMessageUser["files"],
+    skills: FooterQueuedPrompt["skills"],
+    render = true,
+  ) => {
+    const visible = state.messageIDs.has(messageID)
+    state.messageIDs.add(messageID)
+    const images = freshImages(userImageCommits(messageID, files), render)
+    if (!render) return
+    write([
+      ...(!visible ? skillCommits(messageID, skills) : []),
+      ...(!visible && text.trim()
+        ? [{ kind: "user", source: "system", text, phase: "start", messageID } as const]
+        : []),
+      ...images,
+    ])
+  }
+
   const mergePending = (item: SessionInboxInfo) => {
     const prompt = pendingPrompt(item)
     if (!prompt) return
     if (state.promotedMessages.has(prompt.messageID)) {
-      write(freshImages(userImageCommits(prompt.messageID, prompt.files)))
+      renderUser(prompt.messageID, prompt.prompt.text, prompt.files, prompt.skills)
       return
     }
     state.admitted.add(prompt.messageID)
@@ -688,25 +708,15 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     ])
   }
 
-  const renderMessage = (message: SessionMessageInfo, render: boolean, reuseVisibleWait: boolean) => {
+  const renderMessage = (message: SessionMessageInfo, render: boolean) => {
     if (message.type === "user") {
       const waiting = state.wait?.messageID === message.id
       const admitted = state.admitted.delete(message.id)
       if (state.wait && (admitted || (waiting && state.wait.failureMessageID === message.id)))
         promoteWait(state.wait, false, message.id)
       if (state.pending.delete(message.id)) syncPending()
-      const visible = state.messageIDs.has(message.id) || (reuseVisibleWait && waiting)
-      state.messageIDs.add(message.id)
       state.promotedMessages.add(message.id)
-      const images = freshImages(userImageCommits(message.id, message.files), render)
-      if (!render) return
-      write([
-        ...(!visible ? skillCommits(message.id, message.skills) : []),
-        ...(!visible && message.text.trim()
-          ? [{ kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id } as const]
-          : []),
-        ...images,
-      ])
+      renderUser(message.id, message.text, message.files, message.skills, render)
       return
     }
     if (message.type === "skill") {
@@ -837,7 +847,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   const settleSession = async (client: OpenCodeClient) => {
     await client.session.wait({ sessionID: input.sessionID }, { signal: controller.signal })
-    for (const message of await projectedMessages(client, controller.signal)) renderMessage(message, true, true)
+    for (const message of await projectedMessages(client, controller.signal)) renderMessage(message, true)
     paintIdle(blockerStatus(state.view))
     await input.footer.idle()
   }
@@ -878,10 +888,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     return permissions.map((request) => permissionTool(request, state.toolSources))
   }
 
-  const hydrate = async (
-    attempt: Attempt,
-    next: { render: boolean; reuseVisibleWait: boolean; reconnect?: boolean },
-  ) => {
+  const hydrate = async (attempt: Attempt, next: { render: boolean; reconnect?: boolean }) => {
     const client = attempt.client
     const options = { signal: attempt.signal }
     const [projected, pending, permissions, forms, globals, active] = await Promise.all([
@@ -909,7 +916,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     syncPending()
     state.permissions = permissions
     pruneToolSources()
-    for (const message of projected) renderMessage(message, next.render, next.reuseVisibleWait)
+    for (const message of projected) renderMessage(message, next.render)
     state.permissions = await resolvePermissionSources(client, permissions, attempt)
     if (!current(attempt)) return
     pruneToolSources()
@@ -985,26 +992,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.inbox.delivered") {
-      const waiting = state.wait?.messageID === event.data.inboxID
       if (state.wait) promoteWait(state.wait, true, event.data.inboxID)
       state.admitted.delete(event.data.inboxID)
       state.promotedMessages.add(event.data.inboxID)
       const pending = state.pending.get(event.data.inboxID)
       state.pending.delete(event.data.inboxID)
       syncPending()
-      const visible = state.messageIDs.has(event.data.inboxID)
-      if (waiting || pending) state.messageIDs.add(event.data.inboxID)
-      const commits = pending && !visible ? skillCommits(event.data.inboxID, pending.skills) : []
-      if (!waiting && pending && !visible && pending.prompt.text.trim())
-        commits.push({
-          kind: "user",
-          source: "system",
-          text: pending.prompt.text,
-          phase: "start",
-          messageID: event.data.inboxID,
-        })
-      if (pending) commits.push(...freshImages(userImageCommits(event.data.inboxID, pending.files)))
-      write(commits, { phase: "running", status: "waiting for assistant" })
+      if (pending) renderUser(pending.messageID, pending.prompt.text, pending.files, pending.skills)
+      write([], { phase: "running", status: "waiting for assistant" })
       return
     }
     if (event.type === "session.inbox.delivery.changed") {
@@ -1012,19 +1007,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!pending) return
       state.pending.set(event.data.inboxID, { ...pending, delivery: event.data.delivery })
       syncPending()
-      if (event.data.delivery === "queue") return
-      if (state.messageIDs.has(event.data.inboxID)) return
-      state.messageIDs.add(event.data.inboxID)
-      write([
-        ...skillCommits(event.data.inboxID, pending.skills),
-        {
-          kind: "user",
-          source: "system",
-          text: pending.prompt.text,
-          phase: "start",
-          messageID: event.data.inboxID,
-        },
-      ])
       return
     }
     if (event.type === "session.inbox.cancelled") {
@@ -1460,7 +1442,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             serializeHydration(attempt, () =>
               hydrate(attempt, {
                 render: state.initial ? input.replay === true : true,
-                reuseVisibleWait: !state.initial,
                 reconnect: !state.initial,
               }),
             ),
@@ -1630,7 +1611,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.activeCompaction = undefined
       state.shellEnded.clear()
       state.errors.clear()
-      await hydrate(attempt, { render: true, reuseVisibleWait: false })
+      await hydrate(attempt, { render: true })
     } catch (error) {
       failure = error
     } finally {
