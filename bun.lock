@@ -106,20 +106,6 @@
         "vite-plugin-solid": "2.11.14",
       },
     },
-    "packages/browser": {
-      "name": "@opencode-ai/browser",
-      "version": "0.0.0",
-      "devDependencies": {
-        "@opencode-ai/sdk": "workspace:*",
-        "@tsconfig/bun": "catalog:",
-        "@types/bun": "catalog:",
-        "@typescript/native-preview": "catalog:",
-      },
-      "peerDependencies": {
-        "@opencode-ai/plugin": "workspace:*",
-        "effect": "catalog:",
-      },
-    },
     "packages/cli": {
       "name": "@opencode-ai/cli",
       "version": "1.18.4",
@@ -2121,8 +2107,6 @@
     "@opencode-ai/ai": ["@opencode-ai/ai@workspace:packages/ai"],
 
     "@opencode-ai/app": ["@opencode-ai/app@workspace:packages/app"],
-
-    "@opencode-ai/browser": ["@opencode-ai/browser@workspace:packages/browser"],
 
     "@opencode-ai/cli": ["@opencode-ai/cli@workspace:packages/cli"],
 
