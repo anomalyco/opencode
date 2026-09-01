@@ -186,19 +186,18 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
     .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .flatMap(([name, node]) => {
       const tools = renderCatalog(node)
-      return [
-        ...(node.tool === undefined ? [] : [node.tool]),
-        ...(node.namespace === undefined && tools.length === 0
-          ? []
-          : [
-              {
-                type: "namespace" as const,
-                name,
-                ...(node.namespace?.description === undefined ? {} : { description: node.namespace.description }),
-                tools,
-              },
-            ]),
-      ]
+      const namespace =
+        node.namespace === undefined && tools.length === 0
+          ? undefined
+          : {
+              type: "namespace" as const,
+              name,
+              ...(node.namespace?.description === undefined ? {} : { description: node.namespace.description }),
+              tools,
+            }
+      if (node.tool === undefined) return namespace === undefined ? [] : [namespace]
+      if (namespace === undefined) return [node.tool]
+      return [node.tool, namespace]
     })
 }
 

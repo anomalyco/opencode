@@ -17,14 +17,8 @@ export const toolIdentity = {
 export const toolDefinitions = (registry: Tool.Interface, permissions?: Permission.Ruleset) =>
   registry.snapshot(permissions).pipe(Effect.map((toolSet) => toolSet.definitions))
 
-export const codeModeTools = (
-  catalog: CodeModeCatalog.Inventory,
-  path: ReadonlyArray<string> = [],
-): ReadonlyArray<CodeModeCatalog.Tool & { readonly path: string }> =>
-  catalog.tools.flatMap((tool) => {
-    if (tool.type === "tool") return [{ ...tool, path: [...path, tool.name].join(".") }]
-    return codeModeTools({ tools: tool.tools }, [...path, tool.name])
-  })
+export const codeModeListings = (catalog: CodeModeCatalog.Inventory) =>
+  CodeModeCatalog.summarize(catalog, { budget: Infinity }).namespaces.flatMap((namespace) => namespace.entries)
 
 export function waitForTool(registry: Tool.Interface, name: string, remaining = 1000): Effect.Effect<void, Error> {
   return Effect.gen(function* () {
@@ -45,7 +39,7 @@ export function waitForCodeModeTool(
 ): Effect.Effect<Tool.Snapshot, Error> {
   return Effect.gen(function* () {
     const toolSet = yield* registry.snapshot()
-    if (toolSet.codeModeCatalog && codeModeTools(toolSet.codeModeCatalog).some((tool) => tool.path === path))
+    if (toolSet.codeModeCatalog && codeModeListings(toolSet.codeModeCatalog).some((tool) => tool.path === path))
       return toolSet
     if (remaining === 0) {
       return yield* Effect.fail(new Error(`Timed out waiting for Code Mode tool: ${path}`))
