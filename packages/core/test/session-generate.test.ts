@@ -118,7 +118,8 @@ const tools = Layer.mock(Tool.Service, {
       codeModeCatalog: {
         tools: [
           {
-            path: "captured.lookup",
+            type: "function",
+            name: "captured.lookup",
             description: "Captured Code Mode catalog",
             signature: "tools.captured.lookup(input: {}): Promise<string>",
           },
