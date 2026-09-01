@@ -69,15 +69,23 @@ function oauth(http: HttpClient.HttpClient) {
           { grant_type: "refresh_token", refresh_token: current.refresh, client_id: clientID },
           Token,
         )
-        if (token.org_id != null) {
-          const value = yield* credential(http, server, token)
-          return { ...current, ...value, metadata: { ...current.metadata, ...value.metadata } }
-        }
+        // Persist rotated tokens without depending on discovery requests.
         return {
           ...current,
           access: token.access_token,
           refresh: token.refresh_token,
           expires: Date.now() + token.expires_in * 1000,
+          metadata:
+            token.org_id == null
+              ? current.metadata
+              : {
+                  ...current.metadata,
+                  orgID: token.org_id,
+                  orgName:
+                    current.metadata?.orgID === token.org_id && typeof current.metadata.orgName === "string"
+                      ? current.metadata.orgName
+                      : token.org_id,
+                },
         }
       }),
     label: (credential) => (typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined),

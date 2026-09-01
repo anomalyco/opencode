@@ -25,12 +25,14 @@ const addPlugin = Effect.fn(function* () {
   yield* OpencodePlugin.effect(host)
 })
 
-function consoleServer(orgID: string | null | undefined) {
+function consoleServer(orgID: string | null | undefined, unavailable = false) {
   const config: { authorization: string | null; orgID: string | null }[] = []
+  const requests: string[] = []
   const server = Bun.serve({
     port: 0,
     fetch: (request) => {
       const path = new URL(request.url).pathname
+      requests.push(path)
       if (path === "/auth/device/code") {
         return Response.json({
           device_code: "device",
@@ -43,6 +45,9 @@ function consoleServer(orgID: string | null | undefined) {
       if (path === "/auth/device/token") {
         return Response.json({ access_token: "access", refresh_token: "refresh", expires_in: 600, org_id: orgID })
       }
+      if (unavailable && (path === "/api/user" || path === "/api/orgs")) {
+        return new Response("Unavailable", { status: 503 })
+      }
       if (path === "/api/user") return Response.json({ id: "user", email: "user@example.com" })
       if (path === "/api/orgs") {
         return Response.json([
@@ -52,12 +57,13 @@ function consoleServer(orgID: string | null | undefined) {
       }
       if (path === "/api/config") {
         config.push({ authorization: request.headers.get("authorization"), orgID: request.headers.get("x-org-id") })
+        if (orgID === "org-missing") return new Response("Forbidden", { status: 403 })
         return Response.json({ config: {} })
       }
       return new Response("Not found", { status: 404 })
     },
   })
-  return { server, config }
+  return { server, config, requests }
 }
 
 function required<T>(value: T | undefined): T {
@@ -249,58 +255,63 @@ describe("OpencodePlugin", () => {
         ({ server }) => Effect.promise(() => server.stop(true)),
       ),
     )
+  }
 
-    it.live(`uses the device token organization when refreshing persisted credentials: ${orgID}`, () =>
-      Effect.acquireUseRelease(
-        Effect.sync(() => consoleServer(orgID)),
-        ({ server, config }) =>
-          Effect.gen(function* () {
-            const credentials = yield* Credential.Service
-            const initial = yield* credentials.create({
-              integrationID: Integration.ID.make("opencode"),
-              label: "Custom label",
-              value: Credential.OAuth.make({
-                type: "oauth",
-                methodID: Integration.MethodID.make("device"),
-                access: "expired-access",
-                refresh: "old-refresh",
-                expires: 0,
-                metadata: { server: server.url.origin, orgID: "org-a", orgName: "Alpha", custom: "preserved" },
-              }),
-            })
-            yield* addPlugin()
-            const stored = required(yield* credentials.get(initial.id))
-            if (orgID === "org-missing") {
-              expect(stored).toEqual(initial)
-              expect(config).toEqual([])
-              const integrations = yield* Integration.Service
-              const error = yield* integrations.connection
-                .resolve({ type: "credential", id: initial.id, label: initial.label })
-                .pipe(Effect.flip)
-              expect(error).toBeInstanceOf(Integration.AuthorizationError)
-              expect(String(error.cause)).toContain("OpenCode organization not found: org-missing")
-              return
-            }
-            expect(stored).toMatchObject({
-              label: "Custom label",
-              value: {
-                access: "access",
-                refresh: "refresh",
-                metadata: {
-                  server: server.url.origin,
-                  orgID: orgID ?? "org-a",
-                  orgName: orgID === "org-z" ? "Zebra" : "Alpha",
-                  custom: "preserved",
+  for (const scenario of [
+    { orgID: "org-z" },
+    { orgID: undefined },
+    { orgID: null },
+    { orgID: "org-missing" },
+    { orgID: "org-z", unavailable: true },
+    { orgID: "org-a", unavailable: true },
+  ]) {
+    it.live(
+      `persists rotated credentials for ${scenario.orgID}${scenario.unavailable ? " with discovery unavailable" : ""}`,
+      () =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => consoleServer(scenario.orgID, scenario.unavailable)),
+          ({ server, config, requests }) =>
+            Effect.gen(function* () {
+              const credentials = yield* Credential.Service
+              const initial = yield* credentials.create({
+                integrationID: Integration.ID.make("opencode"),
+                label: "Custom label",
+                value: Credential.OAuth.make({
+                  type: "oauth",
+                  methodID: Integration.MethodID.make("device"),
+                  access: "expired-access",
+                  refresh: "old-refresh",
+                  expires: 0,
+                  metadata: { server: server.url.origin, orgID: "org-a", orgName: "Alpha", custom: "preserved" },
+                }),
+              })
+              yield* addPlugin()
+              const stored = required(yield* credentials.get(initial.id))
+              expect(stored).toMatchObject({
+                label: "Custom label",
+                value: {
+                  access: "access",
+                  refresh: "refresh",
+                  metadata: {
+                    server: server.url.origin,
+                    orgID: scenario.orgID ?? "org-a",
+                    orgName: scenario.orgID === "org-a" ? "Alpha" : (scenario.orgID ?? "Alpha"),
+                    custom: "preserved",
+                  },
                 },
-              },
-            })
-            if (stored.value.type !== "oauth") throw new Error("Expected OAuth credential")
-            expect(stored.value.expires).toBeGreaterThan(Date.now())
-            if (orgID == null) expect(stored.value.metadata).toEqual(initial.value.metadata)
-            expect(config).toEqual([{ authorization: "Bearer access", orgID: orgID ?? "org-a" }])
-          }),
-        ({ server }) => Effect.promise(() => server.stop(true)),
-      ),
+              })
+              if (stored.value.type !== "oauth") throw new Error("Expected OAuth credential")
+              expect(stored.value.expires).toBeGreaterThan(Date.now())
+              if (scenario.orgID == null) expect(stored.value.metadata).toEqual(initial.value.metadata)
+              expect(config).toEqual([{ authorization: "Bearer access", orgID: scenario.orgID ?? "org-a" }])
+              const integrations = yield* Integration.Service
+              expect(
+                yield* integrations.connection.resolve({ type: "credential", id: initial.id, label: initial.label }),
+              ).toEqual(stored.value)
+              expect(requests).toEqual(["/auth/device/token", "/api/config"])
+            }),
+          ({ server }) => Effect.promise(() => server.stop(true)),
+        ),
     )
   }
 
