@@ -14,7 +14,8 @@
     "./aggregator": "./src/aggregator.ts",
     "./extractor": "./src/extractor.ts",
     "./store": "./src/store.ts",
-    "./plugin": "./src/plugin.ts"
+    "./plugin": "./src/plugin.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",

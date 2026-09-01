@@ -32,6 +32,10 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { HarnessPlugin } from "@opencode-ai/core/harness/plugin"
+import { Database } from "@opencode-ai/core/database/database"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { LLMClient } from "@opencode-ai/llm"
+import { createPersonalizationPlugin } from "@opencode-ai/personalization/plugin"
 
 type State = {
   hooks: Hooks[]
@@ -128,6 +132,8 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const flags = yield* RuntimeFlags.Service
     const harnessPluginSvc = yield* HarnessPlugin.Service
+    const { db } = yield* Database.Service
+    const llmClient = yield* LLMClient.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
@@ -167,6 +173,14 @@ const layer = Layer.effect(
           },
           // @ts-expect-error
           $: typeof Bun === "undefined" ? undefined : Bun.$,
+        }
+
+        const personalization = createPersonalizationPlugin({ db, llmClient, runPromise: bridge.promise })
+        const personalizationHooks = yield* Effect.promise(() =>
+          personalization(input),
+        ).pipe(Effect.orElseSucceed(() => ({})))
+        if (personalizationHooks && Object.keys(personalizationHooks).length > 0) {
+          hooks.push(personalizationHooks)
         }
 
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
@@ -319,7 +333,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node, HarnessPlugin.node],
+  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node, HarnessPlugin.node, Database.node, LayerNodePlatform.llmClient],
 })
 
 export * as Plugin from "."

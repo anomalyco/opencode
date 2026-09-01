@@ -141,11 +141,26 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           body={
             <Switch>
               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
+                <TextBody title={"This will allow " + props.request.permission + " until the application is restarted."} />
+              </Match>
+              <Match when={props.request.permission === "command"}>
+                <Show when={props.request.patterns.length > 0}>
+                  <text fg={theme.textMuted}>This will allow the following patterns until the application is restarted</text>
+                  <box>
+                    <For each={props.request.always}>
+                      {(pattern) => (
+                        <text fg={theme.text}>
+                          {"- "}
+                          {pattern}
+                        </text>
+                      )}
+                    </For>
+                  </box>
+                </Show>
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
+                  <text fg={theme.textMuted}>This will allow the following patterns until the application is restarted</text>
                   <box>
                     <For each={props.request.always}>
                       {(pattern) => (
@@ -483,7 +498,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           <text fg={theme.text}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>
+          <text fg={theme.textMuted}>Tell the agent what to do differently</text>
         </box>
       </box>
       <box

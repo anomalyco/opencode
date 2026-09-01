@@ -190,10 +190,10 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           <box flexDirection="column" alignItems="center" flexShrink={0}>
             <text fg={colors.muted}>
               {copied()
-                ? "Report copied — paste it into a new GitHub issue."
-                : "Copy the report and open a GitHub issue to help us fix this."}
+                ? "Report copied — paste it into a new issue."
+                : "Copy the report and open an issue to help us fix this."}
             </text>
-            <text fg={colors.muted}>opencode {InstallationVersion}</text>
+            <text fg={colors.muted}>Ziq-code {InstallationVersion}</text>
           </box>
         </Show>
       </box>
@@ -202,17 +202,14 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
 }
 
 function buildIssueURL(message: string, stack: string) {
-  // Field keys match the ids in .github/ISSUE_TEMPLATE/bug-report.yml so the issue
-  // form opens pre-filled. Populating os/terminal/reproduce keeps the report past
-  // the contributing-guidelines compliance check, which pushes for system info.
-  const url = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
+  const url = new URL("https://github.com/sridhar-zenteiq-ai/opencode-dev/issues/new")
   url.searchParams.set("title", `TUI crash: ${message}`)
-  url.searchParams.set("opencode-version", InstallationVersion)
+  url.searchParams.set("version", InstallationVersion)
   url.searchParams.set("os", describeOS())
   url.searchParams.set("terminal", describeTerminal())
   url.searchParams.set(
     "reproduce",
-    "Reported automatically from the opencode crash screen. If you can, describe what you were doing when it crashed.",
+    "Reported automatically from the Ziq-code crash screen. If you can, describe what you were doing when it crashed.",
   )
 
   // Budget the stack against the fully URL-encoded length (not the raw length) so

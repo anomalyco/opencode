@@ -93,7 +93,7 @@ const [store, setStore] = createStore<State>({
   themes: allThemes(),
   mode: "dark",
   lock: undefined,
-  active: "opencode",
+  active: "ziq-dark",
   ready: false,
 })
 
@@ -117,9 +117,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         const mode = lock ?? pick(renderer.themeMode) ?? props.mode
         if (!lock && pick(kv.get("theme_mode")) !== undefined) kv.set("theme_mode", undefined)
         draft.mode = mode
-        draft.lock = lock
-        const active = config.theme ?? kv.get("theme", "opencode")
-        draft.active = typeof active === "string" ? active : "opencode"
+        const defaultTheme = mode === "light" ? "ziq-light" : "ziq-dark"
+        const active = config.theme ?? kv.get("theme", defaultTheme)
+        draft.active = typeof active === "string" ? active : defaultTheme
         draft.ready = false
       }),
     )

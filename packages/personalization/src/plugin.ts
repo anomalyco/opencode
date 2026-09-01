@@ -9,6 +9,8 @@ import { buildPersonalizationContext } from "./aggregator"
 import { extractSignalsWithLLM, parseStructuredSignals, type ExtractedSignals } from "./extractor"
 import { saveUserProfile, saveMemory, logBehaviorEvent, loadUserProfile, loadMemories } from "./store"
 import { Effect } from "effect"
+import { LLMClient } from "@opencode-ai/llm"
+import { logPersonalization } from "./logger"
 
 export interface PersonalizationPluginState {
   profile: UserProfileData
@@ -17,6 +19,8 @@ export interface PersonalizationPluginState {
   embedder?: (text: string) => Promise<Float32Array>
   extractor?: (text: string, model?: unknown) => Promise<ExtractedSignals>
   db?: any
+  llmClient?: any
+  runPromise?: <A>(effect: Effect.Effect<A, any, any>) => Promise<A>
 }
 
 export function createPersonalizationPlugin(initialState?: Partial<PersonalizationPluginState>) {
@@ -26,6 +30,8 @@ export function createPersonalizationPlugin(initialState?: Partial<Personalizati
   const embedder = initialState?.embedder ?? generateEmbedding
   const customExtractor = initialState?.extractor
   const db = initialState?.db
+  const llmClient = initialState?.llmClient
+  const runPromise = initialState?.runPromise
 
   let isInitialized = false
 
@@ -76,30 +82,59 @@ export function createPersonalizationPlugin(initialState?: Partial<Personalizati
 
         if (!text) return
 
-        let signals: ExtractedSignals
-        if (customExtractor) {
-          signals = await customExtractor(text, input.model)
-        } else if (input.model) {
-          signals = await Effect.runPromise(
-            extractSignalsWithLLM({
-              message: text,
-              model: input.model,
-              currentProfile: profile,
-            }),
-          ).catch(() => ({
-            preferenceMemories: [],
-            semanticMemories: [],
-            workingMemories: [],
-          }))
-        } else {
+        logPersonalization("chat.message:start", { text, model: input.model, sessionID: input.sessionID })
+
+        let signals: ExtractedSignals = {
+          preferenceMemories: [],
+          semanticMemories: [],
+          workingMemories: [],
+        }
+
+        try {
+          if (customExtractor) {
+            signals = await customExtractor(text, input.model)
+          } else if (runPromise && input.model) {
+            signals = await runPromise(
+              extractSignalsWithLLM({
+                message: text,
+                model: input.model,
+                currentProfile: profile,
+              }),
+            )
+          } else if (input.model) {
+            signals = await Effect.runPromise(
+              extractSignalsWithLLM({
+                message: text,
+                model: input.model,
+                currentProfile: profile,
+              }).pipe(
+                llmClient ? Effect.provideService(LLMClient.Service, llmClient) : (e) => e,
+              ),
+            )
+          } else {
+            signals = parseStructuredSignals(text)
+          }
+        } catch (err) {
+          logPersonalization("chat.message:extraction_error", err)
           signals = parseStructuredSignals(text)
         }
+
+        logPersonalization("chat.message:signals_extracted", {
+          preferenceCount: signals.preferenceMemories.length,
+          semanticCount: signals.semanticMemories.length,
+          hasProfileDelta: !!signals.profileDelta,
+        })
 
         // 1. Apply dynamic profile drift
         if (signals.profileDelta) {
           profile = applyProfileDrift(profile, signals.profileDelta, 0.25)
           if (sessionDb) {
-            saveUserProfile(sessionDb, userId, profile).catch(() => {})
+            try {
+              await saveUserProfile(sessionDb, userId, profile)
+              logPersonalization("chat.message:profile_saved", { userId })
+            } catch (dbErr) {
+              logPersonalization("chat.message:saveUserProfile_error", dbErr)
+            }
           }
         }
 
@@ -134,15 +169,24 @@ export function createPersonalizationPlugin(initialState?: Partial<Personalizati
             memories.push(record)
 
             if (sessionDb) {
-              saveMemory(sessionDb, record).catch(() => {})
-              logBehaviorEvent(sessionDb, {
-                userId,
-                sessionId: input.sessionID,
-                eventType: "prompt_correction",
-                contextText: text,
-                inferredKey: item.category,
-                inferredValue: item.content,
-              }).catch(() => {})
+              try {
+                await saveMemory(sessionDb, record)
+                logPersonalization("chat.message:memory_saved", { id: record.id, category: record.category, content: record.content })
+              } catch (dbErr) {
+                logPersonalization("chat.message:saveMemory_error", dbErr)
+              }
+              try {
+                await logBehaviorEvent(sessionDb, {
+                  userId,
+                  sessionId: input.sessionID,
+                  eventType: "prompt_correction",
+                  contextText: text,
+                  inferredKey: item.category,
+                  inferredValue: item.content,
+                })
+              } catch (dbErr) {
+                logPersonalization("chat.message:logBehaviorEvent_error", dbErr)
+              }
             }
           }
         }

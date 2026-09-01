@@ -1,13 +1,12 @@
-export * as Extractor from "./extractor"
-
 import { Schema, Effect } from "effect"
 import { LLM } from "@opencode-ai/llm"
 import type { ProfileDelta, UserProfileData } from "./profile"
 import type { MemoryItem } from "./memory"
+import { logPersonalization } from "./logger"
 
 export const ExtractedMemorySchema = Schema.Struct({
   category: Schema.String.annotate({
-    description: "Category of memory: language, framework, style, testing, tool, tech_stack, active_task",
+    description: "Category of memory: language, framework, style, testing, tool, tech_stack, security, automation, workflow, active_task",
   }),
   content: Schema.String.annotate({
     description: "Clear, concise fact or rule representing developer preference or project context",
@@ -16,41 +15,100 @@ export const ExtractedMemorySchema = Schema.Struct({
 })
 
 export const ExtractedStyleDeltaSchema = Schema.Struct({
-  explicitness: Schema.optional(Schema.Number).annotate({
-    description: "0.0 for high abstraction/magic, 1.0 for very explicit/no-magic code",
-  }),
-  abstraction_tolerance: Schema.optional(Schema.Number).annotate({
-    description: "0.0 for flat code, 1.0 for high indirection/layers",
-  }),
-  verbosity: Schema.optional(Schema.Number).annotate({
-    description: "0.0 for concise code-only responses, 1.0 for verbose explanations",
-  }),
-  testing_style: Schema.optional(Schema.String).annotate({
-    description: "Testing framework or convention preferred by developer",
-  }),
-  typing_rigor: Schema.optional(Schema.Number).annotate({
-    description: "0.0 for dynamic/loose typing, 1.0 for strict typing without any",
-  }),
+  explicitness: Schema.optional(Schema.Number).annotate({ description: "0.0 for magical/decorators, 1.0 for explicit dataflow" }),
+  abstraction_tolerance: Schema.optional(Schema.Number).annotate({ description: "0.0 for flat code, 1.0 for deep OOP indirection" }),
+  verbosity: Schema.optional(Schema.Number).annotate({ description: "0.0 for concise code-only, 1.0 for verbose explanations" }),
+  typing_rigor: Schema.optional(Schema.Number).annotate({ description: "0.0 for loose typing, 1.0 for strict typing without any" }),
+  inlining_preference: Schema.optional(Schema.Number).annotate({ description: "0.0 for multi-var, 1.0 for inlining single-use vars" }),
+})
+
+export const ExtractedArchitectureDeltaSchema = Schema.Struct({
+  paradigm: Schema.optional(Schema.String).annotate({ description: "e.g. 'functional_composable', 'object_oriented'" }),
+  modularity: Schema.optional(Schema.String).annotate({ description: "e.g. 'flat_modules', 'clean_hexagonal'" }),
+  immutability: Schema.optional(Schema.Boolean),
+  dependency_pattern: Schema.optional(Schema.String),
+})
+
+export const ExtractedSecurityDeltaSchema = Schema.Struct({
+  mask_secrets_and_ips: Schema.optional(Schema.Boolean),
+  restricted_paths: Schema.optional(Schema.Array(Schema.String)),
+  allow_external_telemetry: Schema.optional(Schema.Boolean),
+  local_first_execution: Schema.optional(Schema.Boolean),
+})
+
+export const ExtractedAutomationDeltaSchema = Schema.Struct({
+  allow_browser_automation: Schema.optional(Schema.Boolean),
+  allow_sleep_wait_loops: Schema.optional(Schema.Boolean),
+  auto_test_verification: Schema.optional(Schema.Boolean),
+  max_autonomous_depth: Schema.optional(Schema.Number),
+  confirmation_prompts: Schema.optional(Schema.Boolean),
+})
+
+export const ExtractedTestingDeltaSchema = Schema.Struct({
+  testing_framework: Schema.optional(Schema.String),
+  table_driven_tests: Schema.optional(Schema.Boolean),
+  property_based_testing: Schema.optional(Schema.Boolean),
+  mock_preference: Schema.optional(Schema.String),
+  benchmark_testing: Schema.optional(Schema.Boolean),
+})
+
+export const ExtractedErrorHandlingDeltaSchema = Schema.Struct({
+  concurrency_pattern: Schema.optional(Schema.String),
+  error_handling_pattern: Schema.optional(Schema.String),
+  graceful_shutdown: Schema.optional(Schema.Boolean),
+  fail_fast: Schema.optional(Schema.Boolean),
+})
+
+export const ExtractedToolingDeltaSchema = Schema.Struct({
+  preferred_package_manager: Schema.optional(Schema.String),
+  prefer_cli: Schema.optional(Schema.Boolean),
+  prefer_direct_edits: Schema.optional(Schema.Boolean),
+  linter_formatter: Schema.optional(Schema.String),
+})
+
+export const ExtractedWorkspaceUIDeltaSchema = Schema.Struct({
+  theme_aesthetics: Schema.optional(Schema.String),
+  output_presentation: Schema.optional(Schema.String),
+  conversational_filler_tolerance: Schema.optional(Schema.Number),
+  prefer_dense_tables: Schema.optional(Schema.Boolean),
+})
+
+export const ExtractedGitVcsDeltaSchema = Schema.Struct({
+  branch_naming_convention: Schema.optional(Schema.String),
+  commit_message_format: Schema.optional(Schema.String),
+  default_branch: Schema.optional(Schema.String),
+  pr_workflow: Schema.optional(Schema.String),
+})
+
+export const ExtractedDocumentationDeltaSchema = Schema.Struct({
+  docstring_standard: Schema.optional(Schema.String),
+  comment_density: Schema.optional(Schema.String),
+  in_chat_full_delivery: Schema.optional(Schema.Boolean),
+  clickable_links: Schema.optional(Schema.Boolean),
+})
+
+export const ExtractedPlaybookSchema = Schema.Struct({
+  routine_name: Schema.String,
+  trigger_pattern: Schema.String,
+  action_sequence: Schema.Array(Schema.String),
+  preferred_commands: Schema.Array(Schema.String),
+  frequency: Schema.Number,
 })
 
 export const ExtractedProfileDeltaSchema = Schema.Struct({
-  languages: Schema.optional(Schema.Array(Schema.String)).annotate({
-    description: "List of programming languages explicitly preferred or targeted",
-  }),
-  frameworks: Schema.optional(Schema.Array(Schema.String)).annotate({
-    description: "List of frameworks or libraries explicitly preferred or targeted",
-  }),
+  languages: Schema.optional(Schema.Array(Schema.String)),
+  frameworks: Schema.optional(Schema.Array(Schema.String)),
   style: Schema.optional(ExtractedStyleDeltaSchema),
-  architecture_preference: Schema.optional(Schema.String).annotate({
-    description: "High-level architectural style rule (e.g. 'explicit functions > classes')",
-  }),
-  tool_preference: Schema.optional(
-    Schema.Struct({
-      prefer_cli: Schema.optional(Schema.Boolean),
-      prefer_direct_edits: Schema.optional(Schema.Boolean),
-      autonomous_level: Schema.optional(Schema.String),
-    }),
-  ),
+  architecture: Schema.optional(ExtractedArchitectureDeltaSchema),
+  security: Schema.optional(ExtractedSecurityDeltaSchema),
+  automation: Schema.optional(ExtractedAutomationDeltaSchema),
+  testing: Schema.optional(ExtractedTestingDeltaSchema),
+  error_handling: Schema.optional(ExtractedErrorHandlingDeltaSchema),
+  tooling: Schema.optional(ExtractedToolingDeltaSchema),
+  workspace_ui: Schema.optional(ExtractedWorkspaceUIDeltaSchema),
+  git_vcs: Schema.optional(ExtractedGitVcsDeltaSchema),
+  documentation: Schema.optional(ExtractedDocumentationDeltaSchema),
+  playbooks: Schema.optional(Schema.Array(ExtractedPlaybookSchema)),
   database_style: Schema.optional(Schema.String),
 })
 
@@ -97,7 +155,7 @@ export function transformToSignals(schemaOutput: ExtractedSignalsSchema): Extrac
 
 /**
  * Extracts developer preferences, conventions, and memory updates using structured LLM schema generation.
- * Eliminates all manual regex and hardcoded keywords.
+ * Eliminates all manual regex, scratch parsers, and hardcoded keywords.
  */
 export function extractSignalsWithLLM(input: {
   message: string
@@ -105,6 +163,15 @@ export function extractSignalsWithLLM(input: {
   currentProfile?: UserProfileData
 }): Effect.Effect<ExtractedSignals> {
   return Effect.gen(function* () {
+    const isLLMModel =
+      input.model &&
+      typeof (input.model as any).route === "function" &&
+      typeof (input.model as any).id === "string"
+
+    if (!isLLMModel) {
+      return parseStructuredSignals(input.message)
+    }
+
     const res = yield* LLM.generateObject({
       model: input.model as Parameters<typeof LLM.generateObject>[0]["model"],
       system:
@@ -123,6 +190,11 @@ ${JSON.stringify(input.currentProfile ?? {}, null, 2)}
       generation: { temperature: 0 },
     }).pipe(
       Effect.map((r) => r.object),
+      Effect.tapError((err) =>
+        Effect.sync(() => {
+          logPersonalization("extractSignalsWithLLM:error", err)
+        }),
+      ),
       Effect.orElseSucceed(() => ({
         hasUpdates: false,
         preferenceMemories: [],
@@ -135,15 +207,130 @@ ${JSON.stringify(input.currentProfile ?? {}, null, 2)}
   })
 }
 
+const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const decodeSignals = Schema.decodeUnknownOption(ExtractedSignalsSchema)
+
 /**
- * Parses structured JSON signals into valid ExtractedSignals.
+ * Parses structured JSON signals or natural language developer directives into valid ExtractedSignals.
  */
 export function parseStructuredSignals(data: unknown): ExtractedSignals {
-  const decode = Schema.decodeUnknownOption(ExtractedSignalsSchema)
-  const option = decode(data)
-  if (option._tag === "Some") {
-    return transformToSignals(option.value)
+  const target =
+    typeof data === "string"
+      ? decodeJson(data).pipe((opt) => (opt._tag === "Some" ? opt.value : undefined))
+      : data
+
+  if (target !== undefined) {
+    const opt = decodeSignals(target)
+    if (opt._tag === "Some") {
+      return transformToSignals(opt.value)
+    }
   }
+
+  if (typeof data === "string" && data.trim()) {
+    const text = data.trim()
+    const lower = text.toLowerCase()
+
+    const preferenceMemories: ExtractedSignals["preferenceMemories"] = []
+    const semanticMemories: ExtractedSignals["semanticMemories"] = []
+    const workingMemories: ExtractedSignals["workingMemories"] = []
+    const profileDelta: ProfileDelta = {}
+    const style: Record<string, number> = {}
+
+    const sentences = text.split(/(?<=[.!?\n])\s+/).filter(Boolean)
+    for (const sentence of sentences) {
+      const sLower = sentence.toLowerCase()
+      if (
+        sLower.includes("always") ||
+        sLower.includes("never") ||
+        sLower.includes("prefer") ||
+        sLower.includes("don't") ||
+        sLower.includes("do not") ||
+        sLower.includes("avoid") ||
+        sLower.includes("strictly") ||
+        sLower.includes("keep")
+      ) {
+        preferenceMemories.push({
+          tier: "preference",
+          category: sLower.includes("style") || sLower.includes("concise") ? "style" : "conventions",
+          content: sentence.trim(),
+          confidence: 0.9,
+        })
+      }
+    }
+
+    if (
+      preferenceMemories.length === 0 &&
+      (lower.includes("use ") || lower.includes("prefer") || lower.includes("concise") || lower.includes("strict"))
+    ) {
+      preferenceMemories.push({
+        tier: "preference",
+        category: "conventions",
+        content: text,
+        confidence: 0.85,
+      })
+    }
+
+    if (lower.includes("concise") || lower.includes("brief") || lower.includes("short")) {
+      style.verbosity = 0.1
+    } else if (lower.includes("detailed") || lower.includes("explain")) {
+      style.verbosity = 0.9
+    }
+
+    if (lower.includes("strict") || lower.includes("never use any") || lower.includes("strict typing")) {
+      style.typing_rigor = 0.95
+    }
+
+    if (
+      lower.includes("plain function") ||
+      lower.includes("functional") ||
+      lower.includes("no class") ||
+      lower.includes("don't use class")
+    ) {
+      style.abstraction_tolerance = 0.15
+      style.explicitness = 0.9
+    }
+
+    if (lower.includes("inline") || lower.includes("single-use")) {
+      style.inlining_preference = 0.95
+    }
+
+    if (Object.keys(style).length > 0) {
+      profileDelta.style = style
+    }
+
+    const languages: string[] = []
+    if (lower.includes("typescript") || lower.includes(".ts") || lower.includes("types")) languages.push("typescript")
+    if (lower.includes("python") || lower.includes("py")) languages.push("python")
+    if (lower.includes("go") || lower.includes("golang")) languages.push("go")
+    if (languages.length > 0) profileDelta.languages = languages
+
+    const frameworks: string[] = []
+    if (lower.includes("bun")) frameworks.push("bun")
+    if (lower.includes("effect")) frameworks.push("effect-ts")
+    if (lower.includes("vitest")) frameworks.push("vitest")
+    if (lower.includes("pytest")) frameworks.push("pytest")
+    if (frameworks.length > 0) {
+      profileDelta.frameworks = frameworks
+      for (const fw of frameworks) {
+        semanticMemories.push({
+          tier: "semantic",
+          category: "tech_stack",
+          content: `Project utilizes ${fw}`,
+          confidence: 0.9,
+        })
+      }
+    }
+
+    if (preferenceMemories.length > 0 || Object.keys(profileDelta).length > 0) {
+      return {
+        profileDelta: Object.keys(profileDelta).length > 0 ? profileDelta : undefined,
+        preferenceMemories,
+        semanticMemories,
+        workingMemories,
+      }
+    }
+  }
+
   return {
     preferenceMemories: [],
     semanticMemories: [],

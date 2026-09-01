@@ -59,7 +59,7 @@ describe("Memory Module", () => {
       },
     ]
 
-    const ranked = rankMemories(memories, queryVec, { now, similarityWeight: 0.8 })
+    const ranked = rankMemories(memories, queryVec, { now, minSimilarity: 0.0 })
     expect(ranked.length).toBe(2)
     expect(ranked[0]?.item.id).toBe("1")
   })
@@ -103,7 +103,7 @@ describe("Memory Module", () => {
     const formatted = formatMemoriesForContext(scored)
     expect(formatted).toContain("DEVELOPER PREFERENCES:")
     expect(formatted).toContain("Prefers explicit operations")
-    expect(formatted).toContain("PROJECT CONTEXT & DECISIONS:")
+    expect(formatted).toContain("PROJECT CONVENTIONS & INVARIANTS:")
     expect(formatted).toContain("FastMCP server for tools")
   })
 })

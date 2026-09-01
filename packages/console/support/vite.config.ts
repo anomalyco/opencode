@@ -1,4 +1,5 @@
 import { defineConfig, PluginOption } from "vite"
+// @ts-ignore
 import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
 

@@ -143,7 +143,7 @@ export const Definitions = {
   messages_next: keybind("none", "Navigate to next message"),
   messages_previous: keybind("none", "Navigate to previous message"),
   messages_last_user: keybind("none", "Navigate to last user message"),
-  messages_copy: keybind("<leader>y", "Copy message"),
+  messages_copy: keybind("ctrl+y,<leader>y", "Copy message or code to clipboard"),
   messages_undo: keybind("<leader>u", "Undo message"),
   messages_redo: keybind("<leader>r", "Redo message"),
   messages_toggle_conceal: keybind("<leader>h", "Toggle code block concealment in messages"),
