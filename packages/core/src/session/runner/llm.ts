@@ -175,7 +175,6 @@ const layer = Layer.effect(
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
-      let compacted = false
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
@@ -185,6 +184,12 @@ const layer = Layer.effect(
           messages: loaded.messages,
           resolved: loaded.model,
           prepare: context.prepare,
+        }
+        if (compaction.required({ ...compactionInput, context: loaded })) {
+          const compacted = yield* compaction.compact(compactionInput)
+          if (compacted.status !== "completed") return yield* new StepFailedError({ error: compacted.error })
+          assistantMessageID = SessionMessage.ID.create()
+          continue
         }
         const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
         const transcript = SessionModelRequest.baseTranscript({
@@ -206,13 +211,6 @@ const layer = Layer.effect(
           toolChoice: stepLimitReached ? "none" : undefined,
           webSocket: "session",
         })
-        if (!compacted && compaction.required({ ...compactionInput, request: prepared.request })) {
-          const result = yield* compaction.compact(compactionInput)
-          if (result.status !== "completed") return yield* new StepFailedError({ error: result.error })
-          compacted = true
-          assistantMessageID = SessionMessage.ID.create()
-          continue
-        }
         const outcome = yield* steps.attempt({
           sessionID,
           assistantMessageID,
@@ -253,7 +251,6 @@ const layer = Layer.effect(
             assistantMessageID = SessionMessage.ID.create()
           }),
           Compacted: Effect.fnUntraced(function* () {
-            compacted = true
             recoverOverflow = false
             assistantMessageID = SessionMessage.ID.create()
           }),

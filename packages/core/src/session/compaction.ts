@@ -1,6 +1,6 @@
 export * as SessionCompaction from "./compaction.js"
 
-import { LLMClient, LLMEvent, Message, type ContentPart, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, Message, type ContentPart } from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/schema/agent"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
@@ -10,7 +10,7 @@ import { llmClient } from "../effect/app-node-platform.js"
 import { SessionEvent } from "./event.js"
 import type { SessionContext } from "./context.js"
 import type { SessionMessage } from "./message.js"
-import type { SessionModelRequest } from "./model-request.js"
+import { SessionModelRequest } from "./model-request.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { toSessionError } from "./to-session-error.js"
@@ -73,7 +73,7 @@ export type AutoInput = {
 }
 
 type RequiredInput = Pick<AutoInput, "messages" | "resolved"> & {
-  readonly request?: Pick<LLMRequest, "system" | "tools" | "messages">
+  readonly context?: SessionContext.Loaded
 }
 
 export type ManualInput = {
@@ -111,45 +111,52 @@ export interface Interface extends State.Transformable<Draft> {
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
 export const estimateTokens = (input: RequiredInput) => {
-  const request = input.request ?? {
-    system: [],
-    tools: [],
-    messages: toLLMMessages(input.messages, input.resolved.ref),
-  }
-  const estimates = request.messages.map((message) =>
-    message.content.reduce((sum, part) => sum + estimatePart(part), 0),
-  )
-  const full =
-    request.system.reduce((sum, part) => sum + Token.estimate(part.text), 0) +
-    request.tools.reduce(
-      (sum, tool) => sum + Token.estimate(tool.name + tool.description + JSON.stringify(tool.inputSchema)),
-      0,
-    ) +
-    estimates.reduce((sum, tokens) => sum + tokens, 0)
   const boundary = input.messages.findLastIndex(
     (message) =>
       message.type === "model-switched" ||
       message.type === "agent-switched" ||
       (message.type === "compaction" && message.status === "completed"),
   )
-  const last = input.messages
-    .slice(boundary + 1)
-    .findLast(
-      (message) =>
-        message.type === "assistant" &&
-        !message.error &&
-        message.model.providerID === input.resolved.ref.providerID &&
-        message.model.id === input.resolved.ref.id &&
-        message.tokens !== undefined &&
-        message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
+  const index = input.messages.findLastIndex(
+    (message, index) =>
+      index > boundary &&
+      message.type === "assistant" &&
+      !message.error &&
+      message.model.providerID === input.resolved.ref.providerID &&
+      message.model.id === input.resolved.ref.id &&
+      message.tokens !== undefined &&
+      message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
+  )
+  const last = input.messages[index]
+  // Keep the anchor's local tool results: they are not covered by its provider usage.
+  const added = toLLMMessages(input.messages.slice(Math.max(0, index)), input.resolved.ref)
+    .filter((message) => message.role !== "assistant" || message.id !== last?.id)
+    .reduce((sum, message) => sum + message.content.reduce((sum, part) => sum + estimatePart(part), 0), 0)
+  if (last?.type === "assistant" && last.tokens)
+    return (
+      added +
+      last.tokens.input +
+      last.tokens.cache.read +
+      last.tokens.cache.write +
+      last.tokens.output +
+      last.tokens.reasoning
     )
-  if (last?.type !== "assistant" || !last.tokens) return full
-  const index = request.messages.findLastIndex((message) => message.role === "assistant" && message.id === last.id)
-  if (index < 0) return full
-  // Local tool results follow their assistant in the model request and are not covered by its usage.
-  const used =
-    last.tokens.input + last.tokens.cache.read + last.tokens.cache.write + last.tokens.output + last.tokens.reasoning
-  return Math.max(full, used + estimates.slice(index + 1).reduce((sum, tokens) => sum + tokens, 0))
+  if (!input.context) return added
+  const transcript = SessionModelRequest.baseTranscript({
+    agent: input.context.agent.info,
+    model: input.resolved,
+    tools: input.context.tools,
+    initial: input.context.initial,
+    messages: [],
+  })
+  return (
+    added +
+    transcript.system.reduce((sum, part) => sum + Token.estimate(part.text), 0) +
+    input.context.tools.definitions.reduce(
+      (sum, tool) => sum + Token.estimate(tool.name + tool.description + JSON.stringify(tool.inputSchema)),
+      0,
+    )
+  )
 }
 
 const estimateMedia = (mime: string) => {
@@ -428,6 +435,9 @@ export const layer = Layer.effect(
     const required = (input: RequiredInput) => {
       const config = state.get()
       if (!config.auto) return false
+      // Run the completed checkpoint before considering another automatic compaction.
+      const last = input.messages.at(-1)
+      if (last?.type === "compaction" && last.status === "completed") return false
       const limit = input.resolved.limit
       const context = limit.context
       if (context <= 0) return false

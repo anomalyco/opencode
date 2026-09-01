@@ -154,7 +154,7 @@ const input = (tokens: number) => ({
       type: "assistant",
       agent: Agent.defaultID,
       model: resolved.ref,
-      content: [{ type: "text", text: "Done" }],
+      content: [],
       tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 0, completed: 0 },
     }),

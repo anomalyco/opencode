@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -13,7 +13,6 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Session } from "@opencode-ai/core/session"
@@ -216,21 +215,6 @@ it.effect("auto compaction estimates current content against the buffered prompt
       }),
     ).toBe(1)
 
-    const request = {
-      system: [SystemPart.make("s".repeat(40))],
-      tools: [{ name: "read", description: "d".repeat(40), inputSchema: {} }],
-      messages: [Message.user("u".repeat(40))],
-    }
-    expect(SessionCompaction.estimateTokens({ ...grown, messages: [], request })).toBe(32)
-    expect(SessionCompaction.estimateTokens({ ...grown, request })).toBe(32)
-    expect(
-      compaction.required({
-        ...grown,
-        messages: [],
-        request: { ...request, system: [SystemPart.make("s".repeat(320_000))] },
-      }),
-    ).toBe(true)
-
     const media = [
       { type: "file", mime: "image/png", uri: `data:image/png;base64,${"a".repeat(100_000)}` },
       { type: "file", mime: "application/pdf", uri: `data:application/pdf;base64,${"a".repeat(100_000)}` },
@@ -239,11 +223,14 @@ it.effect("auto compaction estimates current content against the buffered prompt
       { ...assistant, content: [{ ...tool, state: { status: "completed" as const, input: {}, content: media } }] },
     ]
     expect(SessionCompaction.estimateTokens({ ...grown, messages })).toBe(82_500)
-    const prepared = { ...request, system: [], tools: [], messages: toLLMMessages(messages, resolved.ref) }
-    prepared.messages.push(
-      Message.user(media.map((file) => ({ type: "media" as const, mediaType: file.mime, data: file.uri }))),
-    )
-    expect(SessionCompaction.estimateTokens({ ...grown, messages, request: prepared })).toBe(86_000)
+    const user = Schema.decodeUnknownSync(SessionMessage.User)({
+      id: SessionMessage.ID.create(),
+      type: "user",
+      text: "",
+      files: media.map((file) => ({ mime: file.mime, data: "a".repeat(100_000), source: { type: "inline" } })),
+      time: { created: 0 },
+    })
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [...messages, user] })).toBe(86_000)
 
     const switched = SessionMessage.ModelSelected.make({
       id: SessionMessage.ID.create(),
@@ -252,6 +239,16 @@ it.effect("auto compaction estimates current content against the buffered prompt
       time: { created: DateTime.makeUnsafe(0) },
     })
     expect(SessionCompaction.estimateTokens({ ...grown, messages: [assistant, switched] })).toBe(1)
+    const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
+      id: SessionMessage.ID.create(),
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
+      summary: "x".repeat(400_000),
+      recent: "",
+      time: { created: 0, completed: 0 },
+    })
+    expect(compaction.required({ ...grown, messages: [checkpoint] })).toBe(false)
   }),
 )
 
