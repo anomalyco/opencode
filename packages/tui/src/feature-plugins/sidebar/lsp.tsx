@@ -50,7 +50,7 @@ const tui: TuiPlugin = async (api) => {
   api.slots.register({
     order: 300,
     slots: {
-      sidebar_content() {
+      sidebar_lsp() {
         return <View api={api} />
       },
     },

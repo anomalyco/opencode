@@ -354,20 +354,31 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   sessionRawID={props.sessionID}
                   workspaceID={session()!.workspaceID}
                 />
-                {/* Plugin slot for additional context content */}
-                <pluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />
+                <pluginRuntime.Slot name="sidebar_context" session_id={props.sessionID} />
               </Match>
 
               <Match when={activeTab() === "telemetry"}>
-                <TelemetryPanel sessionID={props.sessionID} />
+                <pluginRuntime.Slot
+                  name="sidebar_telemetry"
+                  session_id={props.sessionID}
+                  fallback={<TelemetryPanel sessionID={props.sessionID} />}
+                />
               </Match>
 
               <Match when={activeTab() === "knowledge"}>
-                <MemoryPanel />
+                <pluginRuntime.Slot
+                  name="sidebar_knowledge"
+                  session_id={props.sessionID}
+                  fallback={<MemoryPanel />}
+                />
               </Match>
 
               <Match when={activeTab() === "lsp"}>
-                <LspPanel />
+                <pluginRuntime.Slot
+                  name="sidebar_lsp"
+                  session_id={props.sessionID}
+                  fallback={<LspPanel />}
+                />
               </Match>
             </Switch>
           </box>
