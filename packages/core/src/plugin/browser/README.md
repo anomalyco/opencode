@@ -1,13 +1,14 @@
 # Experimental Browser Plugin
 
-The server-side browser tool is a standalone Effect plugin. It uses only the public
-plugin API and keeps its RPC contract in `@opencode-ai/browser/rpc`.
+The server-side browser tool lives alongside the other built-in plugins. Its
+implementation uses only the public plugin API, public schemas, and Effect. The
+shared RPC contract is `@opencode-ai/schema/browser`; desktop clients do not import Core.
 
-Load the workspace package with normal plugin configuration:
+Disable it through normal plugin configuration:
 
 ```jsonc
 {
-  "plugins": ["./packages/browser"],
+  "plugins": ["-opencode.browser"],
 }
 ```
 
