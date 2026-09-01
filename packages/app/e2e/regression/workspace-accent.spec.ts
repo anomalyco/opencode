@@ -75,11 +75,12 @@ for (const theme of ["light", "dark"] as const) {
         await expectBackground(view.send, "contrast")
         const message = page.locator('[data-slot="user-message-text"]')
         await expect(message).toHaveText("Check this fixture workspace.")
-        await expectBackground(
+        await expectToken(
           message,
-          scenario.accent ? "accent" : theme === "light" ? "layer-02" : "layer-01",
           "background-color",
+          scenario.accent ? "--v2-background-bg-accent" : "--v2-state-bg-info",
         )
+        await expectToken(message, "color", scenario.accent ? "--v2-text-text-contrast" : "--v2-text-text-accent")
       })
     }
 
@@ -244,4 +245,17 @@ async function expectBackground(element: Locator, token: string, property = "bac
     return color
   }, token)
   await expect(element).toHaveCSS(property, new RegExp(color.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+}
+
+async function expectToken(element: Locator, property: string, token: string) {
+  const color = await element.evaluate((element, token) => {
+    const probe = document.createElement("span")
+    probe.hidden = true
+    probe.style.color = `var(${token})`
+    element.append(probe)
+    const color = getComputedStyle(probe).color
+    probe.remove()
+    return color
+  }, token)
+  await expect(element).toHaveCSS(property, color)
 }

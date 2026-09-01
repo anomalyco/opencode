@@ -5,6 +5,7 @@ import { StoryFooter } from "./footer"
 import { mermanLayoutsStory } from "./merman-layouts"
 import { sessionTabsStory } from "./session-tabs"
 import { sessionLocationMissingStory } from "./session-location-missing"
+import { oneCellSpinnerStory } from "./one-cell-spinner"
 import { statsStory } from "./stats"
 
 /**
@@ -17,7 +18,13 @@ export type Story = {
   render: (context: Plugin.Context) => JSX.Element
 }
 
-const stories: Story[] = [mermanLayoutsStory, sessionTabsStory, sessionLocationMissingStory, statsStory]
+const stories: Story[] = [
+  mermanLayoutsStory,
+  sessionTabsStory,
+  sessionLocationMissingStory,
+  oneCellSpinnerStory,
+  statsStory,
+]
 
 function Commands(props: { context: Plugin.Context }) {
   props.context.keymap.layer(() => ({

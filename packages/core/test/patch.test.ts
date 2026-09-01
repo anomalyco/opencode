@@ -248,6 +248,16 @@ describe("Patch", () => {
     ).toBe("line 1\nline 2\nadded 1\nadded 2\n")
   })
 
+  test.each(["", "original\n"])("preserves equal-offset insertion order and frozen chunks for %j", (original) => {
+    const chunks = Object.freeze([
+      Object.freeze({ oldLines: Object.freeze([]), newLines: Object.freeze(["first"]) }),
+      Object.freeze({ oldLines: Object.freeze([]), newLines: Object.freeze(["second", "third"]) }),
+    ])
+    const expected = { content: original + "first\nsecond\nthird\n", bom: false }
+    expect(Patch.derive("update.txt", chunks, original)).toEqual(expected)
+    expect(Patch.derive("update.txt", chunks, original)).toEqual(expected)
+  })
+
   test("applies a pure-addition chunk after an earlier replacement", () => {
     expect(
       Patch.derive(

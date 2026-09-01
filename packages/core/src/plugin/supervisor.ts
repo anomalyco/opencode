@@ -14,17 +14,20 @@ import { PluginInternal } from "./internal.js"
 import { PluginModule } from "./module.js"
 import { SdkPlugins } from "./sdk.js"
 import { Service } from "./supervisor-service.js"
+import { PluginUpdate } from "./update.js"
 
 const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
-  pre: readonly Plugin.Versioned[],
-  post: readonly Plugin.Versioned[],
+  pre: readonly Plugin.Generation[],
+  post: readonly Plugin.Generation[],
   operations: readonly ConfigPluginSource.Operation[],
+  install: boolean,
 ) {
   const matches = (selector: string, target: string) =>
     selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
   const definitions = [...pre, ...post]
   const enabled = new Set(definitions.map((plugin) => plugin.id))
-  const packages = new Map<string, Plugin.Versioned>()
+  const packages = new Map<string, Plugin.Generation>()
+  const pending = new Set<string>()
   const failures = new Map<
     string,
     Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
@@ -51,13 +54,17 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       continue
     }
 
-    const plugin = yield* PluginModule.load(operation).pipe(
+    const plugin = yield* PluginModule.load(operation, { install }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("failed to load plugin", { target: operation.target, cause }).pipe(
           Effect.as({ error: Cause.pretty(cause) }),
         ),
       ),
     )
+    if ("pending" in plugin) {
+      pending.add(operation.target)
+      continue
+    }
     if ("error" in plugin) {
       failures.set(operation.target, {
         source: pluginSource(operation.target),
@@ -80,9 +87,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       ...post.filter((plugin) => enabled.has(plugin.id)),
     ],
     failures: [...failures.values()],
-    refreshes: [...packages.entries()].flatMap(([target, plugin]) =>
-      !path.isAbsolute(target) && enabled.has(plugin.id) ? [target] : [],
-    ),
+    pending: [...pending],
   }
 })
 
@@ -94,45 +99,74 @@ export const layer = Layer.effect(
     const instance = yield* InstancePlugins.Service
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
-    const npm = yield* Npm.Service
+    const updates = yield* PluginUpdate.Service
     const ready = yield* Latch.make()
+    let packages = new Set<string>()
+    let outdated = new Set<string>()
+    let generation = 0
     let observed = 0
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
+      const current = ++generation
       // Resolve OpenCode's internal plugins with their privileged Location services.
       const internal = yield* PluginInternal.list()
       // Combine internal plugins with host-contributed plugins in boot order.
       // Instance-bound plugins come last: later activation can override earlier
       // container writes, so the instance's explicit choices win over globals.
       const pre = [
-        ...internal.pre.map((plugin) => ({ ...plugin, version: "internal", source: { type: "builtin" as const } })),
+        ...internal.pre.map((plugin) => ({ ...plugin, revision: "internal", source: { type: "builtin" as const } })),
         ...sdk.all(),
         ...instance.all(),
       ]
       const post = internal.post.map((plugin) => ({
         ...plugin,
-        version: "internal",
+        revision: "internal",
         source: { type: "builtin" as const },
       }))
       const operations = yield* sources.operations()
-      // Apply config operations and load enabled package plugins into one ordered generation.
-      const resolved = yield* resolve(pre, post, operations)
-      // Replace the active generation in one scoped, batched activation.
-      yield* registry.activate(resolved.plugins, resolved.failures)
-      if (resolved.refreshes.length) {
-        yield* Effect.forEach(
-          resolved.refreshes,
-          (target) =>
-            npm
-              .add(target, { subpaths: ["server", ""], refresh: true })
-              .pipe(
-                Effect.catchCause((cause) => Effect.logWarning("failed to refresh package plugin", { target, cause })),
-              ),
-          { concurrency: "unbounded", discard: true },
-        ).pipe(Effect.forkDetach)
-      }
+      // Activate everything available locally before waiting on missing package installs.
+      const immediate = yield* resolve(pre, post, operations, false)
+      const source = (source: Plugin.Source) =>
+        source.type === "package" && outdated.has(source.target)
+          ? { ...source, outdated: true as const }
+          : source
+      const apply = (resolved: typeof immediate) =>
+        registry.activate(
+          resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
+          resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
+        )
+      yield* apply(immediate)
+      const resolved = immediate.pending.length ? yield* resolve(pre, post, operations, true) : immediate
+      if (resolved !== immediate) yield* apply(resolved)
+      const loaded = new Set(
+        [...resolved.plugins, ...resolved.failures].flatMap((plugin) =>
+          plugin.source?.type === "package" ? [plugin.source.target] : [],
+        ),
+      )
+      packages = loaded
+      yield* Effect.forEach(
+        loaded,
+        (target) => updates.check(target).pipe(Effect.map((available) => [target, available] as const)),
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.flatMap((checked) => {
+          if (current !== generation) return Effect.void
+          const next = new Set(checked.flatMap(([target, available]) => (available ? [target] : [])))
+          if (next.size === outdated.size && [...next].every((target) => outdated.has(target))) return Effect.void
+          outdated = next
+          return apply(resolved)
+        }),
+        Effect.forkScoped({ startImmediately: true }),
+      )
     })
-    const updates = Stream.merge(sources.changes(), bus.subscribe([Event.Updated, SdkPlugins.Updated])).pipe(
+    const reloads = Stream.merge(
+      Stream.merge(sources.changes(), bus.subscribe([Event.Updated, SdkPlugins.Updated])),
+      updates.changes().pipe(
+        Stream.filter((target) => packages.has(target)),
+        Stream.tap((target) => Effect.sync(() => outdated.delete(target))),
+        Stream.map(() => undefined),
+      ),
+    ).pipe(
       // Make accepted work visible to flush before coalescing the burst.
       Stream.mapEffect(() =>
         Effect.gen(function* () {
@@ -142,7 +176,7 @@ export const layer = Layer.effect(
         }),
       ),
     )
-    yield* Stream.concat(Stream.succeed(0), updates).pipe(
+    yield* Stream.concat(Stream.succeed(0), reloads).pipe(
       // Keep observing updates while activation runs, retaining only the latest generation request.
       Stream.buffer({ capacity: 1, strategy: "sliding" }),
       Stream.debounce("100 millis"),
@@ -154,6 +188,7 @@ export const layer = Layer.effect(
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
+    yield* Effect.sleep("24 hours").pipe(Effect.andThen(activate()), Effect.forever, Effect.forkScoped)
     return Service.of({ flush: ready.await })
   }),
 )
@@ -163,6 +198,7 @@ const nodeDeps = [
   SdkPlugins.node,
   InstancePlugins.node,
   ConfigPluginSource.node,
+  PluginUpdate.node,
   Bus.node,
   Npm.node,
   PluginInternal.requirements,
@@ -170,7 +206,7 @@ const nodeDeps = [
 
 function pluginSource(target: string): Plugin.Source {
   if (path.isAbsolute(target)) return { type: "local", path: target }
-  return { type: "package", package: target }
+  return { type: "package", target }
 }
 
 export const node = makeLocationNode({ service: Service, layer, deps: nodeDeps })

@@ -1,7 +1,8 @@
-import Drawer from "@corvu/drawer"
 import type { ParentProps } from "solid-js"
+import { Button } from "@opencode-ai/ui/button"
 import { useLanguage } from "@/runtime/i18n/language"
-import "./status/status-drawer.css"
+import { MobileDrawer, MobileDrawerClose, MobileDrawerContent, MobileDrawerLabel } from "./mobile-drawer"
+import "./mobile-panel-drawer.css"
 
 export function MobilePanelDrawer(
   props: ParentProps<{
@@ -13,32 +14,29 @@ export function MobilePanelDrawer(
 ) {
   const language = useLanguage()
   return (
-    <Drawer
+    <MobileDrawer
       open={props.open}
       onOpenChange={props.onOpenChange}
-      side="bottom"
-      finalFocusEl={props.returnFocus?.()}
+      returnFocus={props.returnFocus}
       // Menu focus handoff must not dismiss the drawer during its opening transition.
       closeOnOutsideFocus={false}
     >
-      {/* Preserve Corvu's content and dismissal lifecycle across reopenings. */}
-      <Drawer.Portal forceMount>
-        <Drawer.Overlay data-slot="mobile-status-overlay" />
-        <Drawer.Content forceMount data-slot="mobile-status-drawer" dir={language.direction()}>
-          <div data-slot="mobile-status-drag-handle" aria-hidden="true">
-            <span />
-          </div>
-          <div data-slot="mobile-status-header" data-corvu-no-drag>
-            <Drawer.Label>{props.title}</Drawer.Label>
-            <Drawer.Close data-slot="mobile-status-close" aria-label={language.t("common.close")}>
+      <MobileDrawerContent>
+        <div data-slot="mobile-panel" data-corvu-no-drag>
+          <div data-slot="mobile-panel-header">
+            <MobileDrawerLabel>{props.title}</MobileDrawerLabel>
+            <MobileDrawerClose
+              as={Button}
+              variant="ghost"
+              data-slot="mobile-panel-close"
+              aria-label={language.t("common.close")}
+            >
               {language.t("common.close")}
-            </Drawer.Close>
+            </MobileDrawerClose>
           </div>
-          <div data-slot="mobile-status-content" data-corvu-no-drag>
-            {props.children}
-          </div>
-        </Drawer.Content>
-      </Drawer.Portal>
-    </Drawer>
+          <div data-slot="mobile-panel-content">{props.children}</div>
+        </div>
+      </MobileDrawerContent>
+    </MobileDrawer>
   )
 }

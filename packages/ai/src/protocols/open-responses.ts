@@ -176,14 +176,14 @@ export const InputItem = Schema.Union([
   HostedToolItem,
 ])
 type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
-export type ExtendedHostedToolItem = {
+export type HostedToolReplayItem = {
   readonly type: string
   readonly id: string
   readonly [key: string]: unknown
 }
 type LoweredInputItem =
   | OpenResponsesInputItem
-  | ExtendedHostedToolItem
+  | HostedToolReplayItem
   | {
       readonly type: "message"
       readonly id?: string
@@ -373,7 +373,7 @@ export const Event = Schema.StructWithRest(
 )
 export type Event = Schema.Schema.Type<typeof Event>
 
-export interface Extension {
+export interface ProviderAdapter {
   readonly id: string
   readonly name: string
   readonly lowerMedia?: (input: {
@@ -381,10 +381,10 @@ export interface Extension {
     readonly media: ProviderShared.NormalizedMedia
     readonly request: LLMRequest
   }) => MediaInput | undefined
-  readonly lowerHostedToolItem?: (item: unknown) => ExtendedHostedToolItem | undefined
+  readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
 }
 
-const BASE: Extension = { id: ADAPTER, name: NAME }
+const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
 
 export interface ParserState {
   readonly id: string
@@ -397,6 +397,9 @@ export interface ParserState {
   readonly lifecycle: Lifecycle.State
   readonly outputItems: Readonly<Record<number, string>>
   readonly message: { readonly id: string; readonly phase: MessagePhase | null | undefined } | undefined
+  // Item ids are response-scoped identities. Keep completed ids tombstoned so
+  // reconnect replay cannot reopen fragments already emitted downstream.
+  readonly completedMessages: ReadonlySet<string>
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
 }
 
@@ -482,12 +485,12 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   part: MediaPart,
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
   target: "message" | "tool-result",
 ) {
   const media = ProviderShared.normalizeMedia(part)
-  const extended = extension.lowerMedia?.({ part, media, request })
-  if (extended) return extended
+  const providerMedia = adapter.lowerMedia?.({ part, media, request })
+  if (providerMedia) return providerMedia
   const url =
     typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
       ? part.data
@@ -507,17 +510,17 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
 const lowerUserContent = Effect.fnUntraced(function* (
   part: LLMRequest["messages"][number]["content"][number],
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMessageMedia(part, request, extension)
-  return yield* ProviderShared.unsupportedContent(extension.name, "user", ["text", "media"])
+  if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
+  return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
 })
 
-const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, extension: Extension) {
-  const lowered = yield* lowerMedia(part, request, extension, "message")
+const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
+  const lowered = yield* lowerMedia(part, request, adapter, "message")
   if (lowered.type === "input_video")
-    return yield* ProviderShared.invalidRequest(`${extension.name} user messages do not support input_video`)
+    return yield* ProviderShared.invalidRequest(`${adapter.name} user messages do not support input_video`)
   return lowered
 })
 
@@ -526,13 +529,13 @@ const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request:
 const lowerToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMedia(
     { type: "media", mediaType: item.mime, data: item.uri, filename: item.name },
     request,
-    extension,
+    adapter,
     "tool-result",
   )
 })
@@ -540,30 +543,33 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
 const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMessageMedia(
     { type: "media", mediaType: item.mime, data: item.uri, filename: item.name },
     request,
-    extension,
+    adapter,
   )
 })
 
 const lowerToolResultOutput = Effect.fnUntraced(function* (
   part: ToolResultPart,
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
   // Text/json/error results are encoded as a plain string for backward
   // compatibility with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
   // Preserve the narrowed array element type when compiled through a consumer package.
   const content: ReadonlyArray<Content> = part.result.value
-  return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, extension))
+  return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter))
 })
 
-const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (request: LLMRequest, extension: Extension) {
+const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
+  request: LLMRequest,
+  adapter: ProviderAdapter,
+) {
   const input: LoweredInputItem[] = []
   const providerMetadataKey = request.model.route.providerMetadataKey ?? "openresponses"
 
@@ -571,13 +577,13 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
     if (message.role === "system") {
       input.push({
         role: "developer",
-        content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(extension.name, message)),
+        content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(adapter.name, message)),
       })
       continue
     }
 
     if (message.role === "user") {
-      const content = yield* Effect.forEach(message.content, (part) => lowerUserContent(part, request, extension))
+      const content = yield* Effect.forEach(message.content, (part) => lowerUserContent(part, request, adapter))
       if (content.length > 0) input.push({ role: "user", content })
       continue
     }
@@ -644,7 +650,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
               ? undefined
               : Schema.is(HostedToolItem)(part.result.value)
                 ? part.result.value
-                : extension.lowerHostedToolItem?.(part.result.value)
+                : adapter.restoreHostedToolItem?.(part.result.value)
           if (id !== undefined && hosted?.id === id) {
             if (!hostedToolItems.has(id)) {
               input.push(hosted)
@@ -658,13 +664,11 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
               : [{ type: "text", text: ProviderShared.toolResultText(part) }]
           input.push({
             role: "user",
-            content: yield* Effect.forEach(content, (item) =>
-              lowerHostedToolResultContentItem(item, request, extension),
-            ),
+            content: yield* Effect.forEach(content, (item) => lowerHostedToolResultContentItem(item, request, adapter)),
           })
           continue
         }
-        return yield* ProviderShared.unsupportedContent(extension.name, "assistant", [
+        return yield* ProviderShared.unsupportedContent(adapter.name, "assistant", [
           "text",
           "reasoning",
           "tool-call",
@@ -677,11 +681,11 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent(extension.name, "tool", ["tool-result"])
+        return yield* ProviderShared.unsupportedContent(adapter.name, "tool", ["tool-result"])
       input.push({
         type: "function_call_output",
         call_id: part.id,
-        output: yield* lowerToolResultOutput(part, request, extension),
+        output: yield* lowerToolResultOutput(part, request, adapter),
       })
     }
   }
@@ -733,28 +737,28 @@ const allowedToolChoice = (request: LLMRequest) => {
   }
 }
 
-export const fromRequestWithExtension = Effect.fn("OpenResponses.fromRequestWithExtension")(function* (
+export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAdapter")(function* (
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
     model: request.model.id,
-    input: yield* lowerMessages(request, extension),
+    input: yield* lowerMessages(request, adapter),
     tools:
       request.tools.length === 0
         ? undefined
         : yield* Effect.forEach(request.tools, (tool) =>
             lowerTool(
-              extension.name,
+              adapter.name,
               tool,
               ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
             ),
           ),
     tool_choice:
       allowedToolChoice(request) ??
-      (request.toolChoice ? yield* lowerToolChoice(extension.name, request.toolChoice) : undefined),
+      (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
     temperature: generation?.temperature,
@@ -768,7 +772,7 @@ export const fromRequestWithExtension = Effect.fn("OpenResponses.fromRequestWith
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesBody))
 
 export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (request: LLMRequest) {
-  return yield* decodeBody(yield* fromRequestWithExtension(request, BASE))
+  return yield* decodeBody(yield* fromRequestWithAdapter(request, BASE_ADAPTER))
 })
 
 // =============================================================================
@@ -951,12 +955,16 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
   const item = event.item
   if (item?.type === "message" && item.id !== undefined) {
     const itemID = item.id
+    if (state.completedMessages.has(itemID)) return [state, NO_EVENTS]
     const phase = messagePhase(item.phase)
+    const completedMessages = new Set(state.completedMessages)
+    if (state.message !== undefined && state.message.id !== itemID) completedMessages.add(state.message.id)
     // A new message closes earlier messages, including ones that never streamed.
     const events: LLMEvent[] = []
     const lifecycle = [...state.lifecycle.text]
       .filter((id) => id !== itemID)
       .reduce((lifecycle, id) => {
+        completedMessages.add(id)
         const openPhase = state.message?.id === id ? state.message.phase : undefined
         return Lifecycle.textEnd(
           lifecycle,
@@ -969,6 +977,7 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
       {
         ...state,
         lifecycle,
+        completedMessages,
         message: {
           id: itemID,
           phase: phase === undefined && state.message?.id === itemID ? state.message.phase : phase,
@@ -1085,7 +1094,12 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
   if (item.type === "message" && item.id !== undefined) {
-    const message = state.message?.id === item.id ? state.message : undefined
+    if (state.completedMessages.has(item.id)) return [state, NO_EVENTS] satisfies StepResult
+    const completedMessages = new Set(state.completedMessages)
+    completedMessages.add(item.id)
+    if (state.message !== undefined && state.message.id !== item.id)
+      return [{ ...state, completedMessages }, NO_EVENTS] satisfies StepResult
+    const message = state.message
     const itemPhase = messagePhase(item.phase)
     const phase = itemPhase === undefined ? message?.phase : itemPhase
     const parts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
@@ -1098,13 +1112,13 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     const text = content.length > 0 ? content.join("") : undefined
     const metadata = providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) })
     const events: LLMEvent[] = []
-    const lifecycle =
-      message && text ? Lifecycle.textStart(state.lifecycle, events, item.id, metadata) : state.lifecycle
+    const lifecycle = text ? Lifecycle.textStart(state.lifecycle, events, item.id, metadata) : state.lifecycle
     return [
       {
         ...state,
         lifecycle: Lifecycle.textEnd(lifecycle, events, item.id, metadata, text),
-        message: message ? undefined : state.message,
+        completedMessages,
+        message: undefined,
       },
       events,
     ] satisfies StepResult
@@ -1408,9 +1422,9 @@ export const step = (state: ParserState, input: Event) => {
  * The provider-neutral Open Responses protocol. Provider-specific Responses
  * implementations compose this baseline with their own tools and event variants.
  */
-export const initial = (request: LLMRequest, extension: Extension = BASE): ParserState => ({
-  id: extension.id,
-  name: extension.name,
+export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADAPTER): ParserState => ({
+  id: adapter.id,
+  name: adapter.name,
   providerMetadataKey: request.model.route.providerMetadataKey ?? "openresponses",
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
@@ -1418,6 +1432,7 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   lifecycle: Lifecycle.initial(),
   outputItems: {},
   message: undefined,
+  completedMessages: new Set<string>(),
   reasoningItems: {},
 })
 

@@ -46,7 +46,7 @@ import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
-import { executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
+import { codeModeListings, executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<Permission.AssertInput> | undefined
 let decision: Effect.Effect<void, Permission.Error> = Effect.void
@@ -378,10 +378,10 @@ const permissions = Layer.mock(Permission.Service, {
 const events = Layer.mock(Bus.Service, { subscribe: () => Stream.never })
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node]), [
-    [Mcp.node, mcp],
-    [Permission.node, permissions],
-    [Bus.node, events],
-    [Image.node, imagePassthrough],
+    Mcp.node.replace(mcp),
+    Permission.node.replace(permissions),
+    Bus.node.replace(events),
+    Image.node.replace(imagePassthrough),
   ]),
 )
 
@@ -1688,8 +1688,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
       Effect.provide(
         Layer.fresh(
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
-            [
-              Mcp.node,
+            Mcp.node.replace(
               Layer.mock(Mcp.Service, {
                 tools: () => Ref.get(catalog),
                 callTool: (input) =>
@@ -1702,9 +1701,9 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
                     }),
                   ),
               }),
-            ],
-            [Permission.node, Layer.mock(Permission.Service, { assert: () => Effect.void })],
-            [Image.node, imagePassthrough],
+            ),
+            Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+            Image.node.replace(imagePassthrough),
           ]),
         ),
       ),
@@ -1731,8 +1730,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
-        [
-          Mcp.node,
+        Mcp.node.replace(
           Layer.mock(Mcp.Service, {
             tools: () =>
               Effect.sync(() => [
@@ -1744,9 +1742,9 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
                 }),
               ]),
           }),
-        ],
-        [Permission.node, Layer.mock(Permission.Service, { assert: () => Effect.void })],
-        [Image.node, imagePassthrough],
+        ),
+        Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+        Image.node.replace(imagePassthrough),
       ]),
     ),
   )
@@ -1766,7 +1764,9 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
       "direct_media",
       "execute",
     ])
-    expect(toolSet.codeModeCatalog?.find((tool) => tool.path === "demo.search")?.signature).toContain("ok: boolean")
+    expect(codeModeListings(toolSet.codeModeCatalog!).find((tool) => tool.path === "demo.search")?.line).toContain(
+      "ok: boolean",
+    )
     expect(execute?.description).not.toContain("tools.demo.search")
   }),
 )
@@ -1784,7 +1784,9 @@ it.effect("forwards the invoking session through direct and Code Mode MCP tools"
     expect(toolSet.definitions.find((tool) => tool.name === "direct_lookup")?.inputSchema).not.toHaveProperty(
       "properties.sessionID",
     )
-    expect(toolSet.codeModeCatalog?.find((tool) => tool.path === "demo.search")?.signature).not.toContain("sessionID")
+    expect(codeModeListings(toolSet.codeModeCatalog!).find((tool) => tool.path === "demo.search")?.line).not.toContain(
+      "sessionID",
+    )
 
     const directSessionID = Session.ID.make("ses_mcp_direct")
     yield* toolSet.execute({
@@ -1828,7 +1830,7 @@ it.effect("returns content-only MCP results through Code Mode", () =>
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
 
-    expect(toolSet.codeModeCatalog?.some((tool) => tool.path === "demo.status")).toBe(true)
+    expect(codeModeListings(toolSet.codeModeCatalog!).some((tool) => tool.path === "demo.status")).toBe(true)
 
     const execution = yield* toolSet.execute({
       sessionID: Session.ID.make("ses_mcp_content_only"),
@@ -1914,7 +1916,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
     const registration = yield* McpTool.Service
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
-    expect(toolSet.codeModeCatalog?.some((tool) => tool.path === "demo.search")).toBe(true)
+    expect(codeModeListings(toolSet.codeModeCatalog!).some((tool) => tool.path === "demo.search")).toBe(true)
 
     const fiber = yield* toolSet
       .execute({
@@ -1958,7 +1960,7 @@ it.effect("does not call MCP when permission is blocked", () =>
     const registration = yield* McpTool.Service
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
-    expect(toolSet.codeModeCatalog?.some((tool) => tool.path === "demo.search")).toBe(true)
+    expect(codeModeListings(toolSet.codeModeCatalog!).some((tool) => tool.path === "demo.search")).toBe(true)
 
     const execution = yield* toolSet.execute({
       sessionID: Session.ID.make("ses_mcp_blocked"),

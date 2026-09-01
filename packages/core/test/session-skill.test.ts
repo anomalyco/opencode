@@ -52,7 +52,9 @@ const locations = makeGlobalNode({
               get: (id) => Effect.succeed(id === info.id ? info : undefined),
               list: () => Effect.succeed([info]),
             }),
-            Layer.succeed(PluginSupervisor.Service, { flush: Effect.void }),
+            Layer.succeed(PluginSupervisor.Service, {
+              flush: Effect.void,
+            }),
             Layer.mock(Reference.Service, { refresh: () => Effect.void }),
           ),
         ),
@@ -71,9 +73,9 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [LocationServiceMap.node, locations],
-      [Project.node, globalProjectNode],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      LocationServiceMap.node.replace(locations),
+      Project.node.replace(globalProjectNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
     ],
   ),
 )

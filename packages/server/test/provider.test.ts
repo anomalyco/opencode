@@ -1,39 +1,49 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schedule } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
 
 it.live(
-  "waits for plugin initialization on the first provider list request",
+  "lists providers without blocking on plugin initialization",
   () =>
     Effect.gen(function* () {
       const fixture = yield* configuredProvider("opencode-provider-list-endpoint-")
       const url = new URL("/api/provider", fixture.server.base)
       url.searchParams.set("location[directory]", fixture.path)
-      const response = yield* Effect.promise(() => fetch(url, { headers: fixture.server.headers }))
-
-      expect(response.status).toBe(200)
-      const body: unknown = yield* Effect.promise(() => response.json())
-      if (!isRecord(body) || !Array.isArray(body["data"])) throw new Error("Expected a provider list response")
-      expect(body["data"].some((provider) => isRecord(provider) && provider["id"] === "custom")).toBeTrue()
+      yield* Effect.promise(async () => {
+        const response = await fetch(url, { headers: fixture.server.headers })
+        if (response.status !== 200) return false
+        const body: unknown = await response.json()
+        return isRecord(body) && Array.isArray(body["data"])
+          ? body["data"].some((provider) => isRecord(provider) && provider["id"] === "custom")
+          : false
+      }).pipe(
+        Effect.filterOrFail((found) => found),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
     }),
   15_000,
 )
 
 it.live(
-  "waits for plugin initialization on the first provider get request",
+  "gets providers without blocking on plugin initialization",
   () =>
     Effect.gen(function* () {
       const fixture = yield* configuredProvider("opencode-provider-get-endpoint-")
       const url = new URL("/api/provider/custom", fixture.server.base)
       url.searchParams.set("location[directory]", fixture.path)
-      const response = yield* Effect.promise(() => fetch(url, { headers: fixture.server.headers }))
-
-      expect(response.status).toBe(200)
-      const body: unknown = yield* Effect.promise(() => response.json())
+      const body: unknown = yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(url, { headers: fixture.server.headers })
+          if (response.status !== 200) throw new Error(`Provider not ready: ${response.status}`)
+          return response.json()
+        },
+        catch: (cause) => cause,
+      }).pipe(Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("2 seconds"))
       if (!isRecord(body) || !isRecord(body["data"])) throw new Error("Expected a provider response")
       expect(body["data"]["id"]).toBe("custom")
     }),

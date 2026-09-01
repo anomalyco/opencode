@@ -46,6 +46,10 @@ export type TabInfo = {
   directory?: string
 }
 
+export type TabPane = "terminal" | "review"
+export type TabPaneSize = "terminalHeight" | "sessionWidth"
+type TabPaneState = Partial<Record<TabPane, boolean> & Record<TabPaneSize, number>>
+
 type RecentTab = {
   key?: string
 }
@@ -62,13 +66,17 @@ export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, ses
   return sessionIDHasOpenTab(tabs, server, session.id)
 }
 
-export function sessionIDHasOpenTab(tabs: Tab[], server: ServerConnection.Key, sessionID: string) {
-  return tabs.some(
+export function findSessionTab(tabs: Tab[], server: ServerConnection.Key, sessionID: string) {
+  return tabs.find(
     (tab) =>
       tab.type === "session" &&
       tab.server === server &&
       (tab.sessionId === sessionID || tab.routeSessionId === sessionID),
   )
+}
+
+export function sessionIDHasOpenTab(tabs: Tab[], server: ServerConnection.Key, sessionID: string) {
+  return !!findSessionTab(tabs, server, sessionID)
 }
 
 export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
@@ -88,6 +96,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const [info, setInfo, , infoReady] = persisted(
       Persist.window("tabs.info"),
       createStore<Record<string, TabInfo>>({}),
+    )
+    const [panes, setPanes, , panesReady] = persisted(
+      Persist.window("tabs.panes"),
+      createStore<Record<string, TabPaneState>>({}),
     )
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), createStore<ClosedTab[]>([]))
     const [pending, setPending] = createStore<Record<string, PendingSession | undefined>>({})
@@ -141,6 +153,15 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       )
     }
 
+    const removePanes = (key: string) => {
+      if (!panes[key]) return
+      setPanes(
+        produce((draft) => {
+          delete draft[key]
+        }),
+      )
+    }
+
     onCleanup(memory.dispose)
 
     createEffect(() => {
@@ -153,6 +174,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
             const key = tabKey(tab)
             memory.remove(key)
             removeInfo(key)
+            removePanes(key)
           }
         }
         setStore(() => next)
@@ -161,6 +183,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       const keys = new Set(next.map(tabKey))
       for (const key of Object.keys(info)) {
         if (!keys.has(key)) removeInfo(key)
+      }
+      if (!panesReady()) return
+      for (const key of Object.keys(panes)) {
+        if (!keys.has(key)) removePanes(key)
       }
     })
 
@@ -198,6 +224,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       }).finally(() => closing.delete(key))
       memory.remove(key)
       removeInfo(key)
+      removePanes(key)
       if (draftID) removeDraftPersisted(draftID)
     }
 
@@ -491,8 +518,38 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       stateValue<T>(tab: Tab, name: string) {
         return memory.get<T>(tabKey(tab), name)
       },
+      pane(tab: Tab | undefined, pane: TabPane) {
+        if (!tab) return false
+        return panes[tabKey(tab)]?.[pane] ?? false
+      },
+      setPane(tab: Tab | undefined, pane: TabPane, opened: boolean) {
+        if (!tab) return
+        const key = tabKey(tab)
+        const current = panes[key]
+        if (current?.[pane] === opened) return
+        if (!current) {
+          setPanes(key, { [pane]: opened })
+          return
+        }
+        setPanes(key, pane, opened)
+      },
+      paneSize(tab: Tab | undefined, size: TabPaneSize) {
+        if (!tab) return
+        return panes[tabKey(tab)]?.[size]
+      },
+      setPaneSize(tab: Tab | undefined, size: TabPaneSize, value: number) {
+        if (!tab) return
+        const key = tabKey(tab)
+        const current = panes[key]
+        if (current?.[size] === value) return
+        if (!current) {
+          setPanes(key, { [size]: value })
+          return
+        }
+        setPanes(key, size, value)
+      },
     }
 
-    return { ...actions, store, info, ready, infoReady, recentReady }
+    return { ...actions, store, info, ready, infoReady, recentReady, panesReady }
   },
 })

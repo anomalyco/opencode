@@ -26,7 +26,6 @@ import { ConfigShellPlugin } from "../config/plugin/shell.js"
 import { ConfigSnapshotPlugin } from "../config/plugin/snapshot.js"
 import { ConfigSkillPlugin } from "../config/plugin/skill.js"
 import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
-import { ConfigPluginSource } from "../config/plugin/source.js"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
@@ -97,7 +96,6 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const command = yield* Command.Service
   const config = yield* Config.Service
   const credential = yield* Credential.Service
-  const pluginSources = yield* ConfigPluginSource.Service
   const bus = yield* Bus.Service
   const environment = yield* Environment.Service
   const mutation = yield* FileMutation.Service
@@ -141,7 +139,6 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Command.Service, command),
     Context.make(Config.Service, config),
     Context.make(Credential.Service, credential),
-    Context.make(ConfigPluginSource.Service, pluginSources),
     Context.make(Bus.Service, bus),
     Context.make(Environment.Service, environment),
     Context.make(FileMutation.Service, mutation),
@@ -192,7 +189,6 @@ export const requirements = LayerNode.group([
   Command.node,
   Config.node,
   Credential.node,
-  ConfigPluginSource.node,
   Bus.node,
   Environment.node,
   FileMutation.node,
@@ -287,7 +283,6 @@ export const list = Effect.fn("PluginInternal.list")(function* () {
     plugins.map(
       (plugin): Plugin => ({
         id: plugin.id,
-        vcs: plugin.vcs,
         effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
       }),
     )

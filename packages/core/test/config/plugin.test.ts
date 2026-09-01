@@ -20,7 +20,7 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Effect, Fiber, Layer, Logger, Schedule, Stream } from "effect"
+import { Effect, Fiber, Layer, Logger, Option, Schedule, Stream } from "effect"
 import { Database } from "../../src/database/database"
 import { tmpdir } from "../fixture/tmpdir"
 import { tempGlobalLayer } from "../fixture/global"
@@ -28,50 +28,88 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
 const staticIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [ConfigPluginSource.node, ConfigPluginSource.empty],
-    [Global.node, tempGlobalLayer],
+    ConfigPluginSource.node.replace(ConfigPluginSource.empty),
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
-const refreshNpm = makeGlobalNode({
+const outdatedNpm = makeGlobalNode({
   service: Npm.Service,
   layer: Layer.effect(
     Npm.Service,
     Effect.gen(function* () {
       const global = yield* Global.Service
-      const directory = path.join(global.tmp, "background-refresh-plugin")
-      const installed = { directory, entrypoint: pathToFileURL(path.join(directory, "index.js")).href }
+      const directory = path.join(global.tmp, "outdated-plugin")
+      let version = "1.0.0"
+      const installed = () => ({
+        directory,
+        entrypoint: pathToFileURL(path.join(directory, "index.js")).href,
+        version,
+        revision: version,
+      })
+      yield* Effect.promise(async () => {
+        await fs.mkdir(directory, { recursive: true })
+        await Bun.write(path.join(directory, "index.js"), 'export default { id: "outdated-plugin", setup() {} }')
+      })
       return Npm.Service.of({
-        add: (_pkg, options) =>
-          options?.refresh
-            ? Effect.gen(function* () {
-                yield* Effect.promise(() => Bun.write(path.join(directory, "refresh-requested"), ""))
-                yield* waitForFile(path.join(directory, "refresh-release")).pipe(Effect.orDie)
-                yield* Effect.promise(() => Bun.write(path.join(directory, "refresh-finished"), ""))
-                return installed
-              })
-            : Effect.succeed(installed),
-        resolve: () => Effect.succeed(installed),
+        add: () => Effect.sync(installed),
+        resolve: () => Effect.sync(installed),
+        check: () => Effect.sync(() => version === "1.0.0"),
+        update: () => Effect.sync(() => (version = "1.1.0")).pipe(Effect.map(installed)),
         which: () => Effect.succeed(undefined),
       })
     }),
   ),
   deps: [Global.node],
 })
-const refreshIt = testEffect(
+const updateIt = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, Global.node]),
-    [
-      [Global.node, tempGlobalLayer],
-      [Npm.node, refreshNpm],
-    ],
+    [Global.node.replace(tempGlobalLayer), Npm.node.replace(outdatedNpm)],
   ),
 )
-
+const coldNpm = makeGlobalNode({
+  service: Npm.Service,
+  layer: Layer.effect(
+    Npm.Service,
+    Effect.gen(function* () {
+      const global = yield* Global.Service
+      const directory = path.join(global.tmp, "cold-plugin")
+      const started = path.join(directory, "started")
+      const release = path.join(directory, "release")
+      const entry = { directory, entrypoint: pathToFileURL(path.join(directory, "index.js")).href, revision: "1" }
+      let installed = false
+      yield* Effect.promise(async () => {
+        await fs.mkdir(directory, { recursive: true })
+        await Bun.write(path.join(directory, "index.js"), 'export default { id: "cold-plugin", setup() {} }')
+      })
+      return Npm.Service.of({
+        add: () =>
+          Effect.gen(function* () {
+            yield* Effect.promise(() => Bun.write(started, ""))
+            yield* waitForFile(release).pipe(Effect.orDie)
+            installed = true
+            return entry
+          }),
+        resolve: () => Effect.sync(() => (installed ? entry : { directory })),
+        check: () => Effect.succeed(false),
+        update: () => Effect.succeed(entry),
+        which: () => Effect.succeed(undefined),
+      })
+    }),
+  ),
+  deps: [Global.node],
+})
+const coldIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, Global.node]),
+    [Global.node.replace(tempGlobalLayer), Npm.node.replace(coldNpm)],
+  ),
+)
 describe("PluginSupervisor config", () => {
   it.live("applies selectors in order", () =>
     withLocation(
@@ -466,46 +504,40 @@ describe("PluginSupervisor config", () => {
     }),
   )
 
-  refreshIt.live("refreshes active package plugins after setup without blocking flush", () =>
-    Effect.gen(function* () {
-      const global = yield* Global.Service
-      const directory = path.join(global.tmp, "background-refresh-plugin")
-      const activated = path.join(directory, "activated")
-      const release = path.join(directory, "release")
-      const refreshed = path.join(directory, "refresh-requested")
-      const refreshRelease = path.join(directory, "refresh-release")
-      const refreshFinished = path.join(directory, "refresh-finished")
-      yield* Effect.promise(async () => {
-        await fs.mkdir(directory, { recursive: true })
-        await fs.writeFile(
-          path.join(directory, "index.js"),
-          `export default {
-            id: "background-refresh-plugin",
-            async setup() {
-              await Bun.write(${JSON.stringify(activated)}, "")
-              while (!(await Bun.file(${JSON.stringify(release)}).exists())) await Bun.sleep(10)
-            },
-          }`,
+  updateIt.live("marks active package plugins as outdated after a background check", () =>
+    withLocation(
+      { plugins: ["outdated-plugin"] },
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        const source = yield* Effect.suspend(() => plugins.list()).pipe(
+          Effect.map((items) => items.find((item) => item.id === "outdated-plugin")?.source),
+          Effect.filterOrFail((source) => source?.type === "package" && source.outdated === true),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("2 seconds"),
         )
-      })
-
-      yield* withLocation(
-        { plugins: ["background-refresh-plugin"] },
-        Effect.gen(function* () {
-          yield* waitForFile(activated)
-          yield* Effect.sleep("100 millis")
-          expect(yield* Effect.promise(() => Bun.file(refreshed).exists())).toBeFalse()
-          yield* Effect.promise(() => Bun.write(release, ""))
-          yield* waitForFile(refreshed)
-          yield* ready().pipe(Effect.timeout("2 seconds"))
-          yield* Effect.promise(() => Bun.write(refreshRelease, ""))
-          yield* waitForFile(refreshFinished)
-          const plugins = yield* Plugin.Service
-          expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toContain("background-refresh-plugin")
-        }),
-      )
-    }),
+        expect(source).toEqual({ type: "package", target: "outdated-plugin", version: "1.0.0", outdated: true })
+      }),
+    ),
   )
+
+  coldIt.live("activates available plugins before a missing package finishes installing", () =>
+    withLocation(
+      { plugins: ["cold-plugin"] },
+      Effect.gen(function* () {
+        const global = yield* Global.Service
+        yield* waitForFile(path.join(global.tmp, "cold-plugin", "started"))
+        const plugins = yield* Plugin.Service
+        expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toContain("opencode.provider.openai")
+        const supervisor = yield* PluginSupervisor.Service
+        expect(Option.isNone(yield* supervisor.flush.pipe(Effect.timeoutOption("20 millis")))).toBeTrue()
+        yield* Effect.promise(() => Bun.write(path.join(global.tmp, "cold-plugin", "release"), ""))
+        yield* supervisor.flush.pipe(Effect.timeout("2 seconds"))
+        expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toContain("cold-plugin")
+      }),
+    ),
+  )
+
 })
 
 const ready = Effect.fnUntraced(function* () {

@@ -15,7 +15,7 @@ export function action(current: string, latest: string, policy: Policy): Action 
   return policy === "notify" ? "notify" : "upgrade"
 }
 
-function parseReleaseVersion(input: string) {
+export function parseReleaseVersion(input: string) {
   if (input.length > 256) return
   const match = input.trim().match(versionPattern)
   if (!match) return

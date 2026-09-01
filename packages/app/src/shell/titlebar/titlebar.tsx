@@ -25,7 +25,7 @@ import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
 import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
-import Drawer from "@corvu/drawer"
+import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
 import { sessionLabel } from "@/session/title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { projectForSession } from "@/shell/layout/helpers"
@@ -415,7 +415,7 @@ export function Titlebar(props: {
                 <Show
                   when={!mobile()}
                   fallback={
-                    <Drawer
+                    <MobileDrawer
                       open={mobileTabs.open}
                       onOpenChange={(open) => setMobileTabs("open", open)}
                       onContentPresentChange={(present) => {
@@ -423,11 +423,9 @@ export function Titlebar(props: {
                         setMobileTabs("settings", false)
                         openSettings()
                       }}
-                      side="bottom"
                     >
-                      <Drawer.Trigger
+                      <MobileDrawerTrigger
                         data-slot="mobile-tabs-trigger"
-                        aria-expanded={mobileTabs.open}
                         class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:outline-none [app-region:no-drag]"
                         aria-label={language.t("titlebar.tabs")}
                       >
@@ -467,15 +465,11 @@ export function Titlebar(props: {
                           {currentTitle()}
                         </span>
                         <span class="shrink-0 text-v2-text-text-muted">{tabsStore.length}</span>
-                      </Drawer.Trigger>
-                      <Drawer.Portal forceMount>
-                        <Drawer.Overlay data-slot="mobile-tabs-overlay" />
-                        <Drawer.Content forceMount data-slot="mobile-tabs-drawer" dir={language.direction()}>
-                          <Drawer.Label class="sr-only">{language.t("titlebar.tabs")}</Drawer.Label>
-                          <div data-slot="mobile-tabs-drag-handle" aria-hidden="true">
-                            <span />
-                          </div>
-                          <div data-slot="mobile-tabs-drawer-list" data-corvu-no-drag>
+                      </MobileDrawerTrigger>
+                      <MobileDrawerContent>
+                        <MobileDrawerLabel class="sr-only">{language.t("titlebar.tabs")}</MobileDrawerLabel>
+                        <div data-slot="mobile-tabs-drawer" data-corvu-no-drag>
+                          <div data-slot="mobile-tabs-drawer-list">
                             <TitlebarTabStrip
                               orientation="vertical"
                               tabs={tabsStore}
@@ -493,7 +487,6 @@ export function Titlebar(props: {
                           </div>
                           <button
                             type="button"
-                            data-corvu-no-drag
                             data-action="mobile-tabs-new-session"
                             class="flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
                             onClick={() => {
@@ -504,10 +497,7 @@ export function Titlebar(props: {
                             <Icon name="plus" />
                             {language.t("command.session.new")}
                           </button>
-                          <div
-                            class="flex shrink-0 flex-col gap-1 border-t border-v2-border-border-muted pt-2"
-                            data-corvu-no-drag
-                          >
+                          <div class="flex shrink-0 flex-col gap-1 border-t border-v2-border-border-muted pt-2">
                             <button
                               type="button"
                               data-action="mobile-tabs-home"
@@ -546,9 +536,9 @@ export function Titlebar(props: {
                               </button>
                             </div>
                           </div>
-                        </Drawer.Content>
-                      </Drawer.Portal>
-                    </Drawer>
+                        </div>
+                      </MobileDrawerContent>
+                    </MobileDrawer>
                   }
                 >
                   <Show

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { MobilePanelDrawer } from "../mobile-panel-drawer"
+import "./status-drawer.css"
 
 const Body = lazy(async () => {
   const { StatusPopoverBody } = await import("./body")

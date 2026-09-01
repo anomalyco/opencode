@@ -39,7 +39,7 @@ it.effect("Effect plugins register, call, and publish RPCs independently of plug
     yield* plugins.activate([
       {
         id: "implementer",
-        version: "1",
+        revision: "1",
         effect: (ctx) =>
           Effect.gen(function* () {
             const registration = yield* ctx.rpc.register(Echo, {
@@ -51,7 +51,7 @@ it.effect("Effect plugins register, call, and publish RPCs independently of plug
       },
       {
         id: "consumer",
-        version: "1",
+        revision: "1",
         effect: (ctx) =>
           Effect.gen(function* () {
             expect(yield* ctx.rpc(Echo).echo("hello")).toBe("hello!")
@@ -78,7 +78,7 @@ it.effect("failed plugin setup removes RPC overrides and restores the previous i
     yield* plugins.activate([
       {
         id: "implementer",
-        version: "1",
+        revision: "1",
         effect: (ctx) =>
           ctx.rpc
             .register(Echo, {
@@ -91,7 +91,7 @@ it.effect("failed plugin setup removes RPC overrides and restores the previous i
     yield* plugins.activate([
       {
         id: "implementer",
-        version: "2",
+        revision: "2",
         effect: (ctx) =>
           ctx.rpc
             .register(Echo, {

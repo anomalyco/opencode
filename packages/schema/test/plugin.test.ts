@@ -4,7 +4,7 @@ import { Plugin } from "../src/plugin.js"
 
 test("embeds plugin state with a status discriminator", () => {
   const decode = Schema.decodeUnknownSync(Plugin.Info)
-  const source = { type: "package" as const, package: "acme" }
+  const source = { type: "package" as const, target: "acme", version: "1.2.3" }
   const features = { server: true as const }
 
   expect(decode({ id: "acme", source, features, state: { status: "active" } })).toEqual({
@@ -17,5 +17,9 @@ test("embeds plugin state with a status discriminator", () => {
     source,
     features,
     state: { status: "failed", error: "broken" },
+  })
+  expect(decode({ source: { ...source, outdated: true }, features, state: { status: "active" } }).source).toEqual({
+    ...source,
+    outdated: true,
   })
 })

@@ -9,10 +9,11 @@ import { useDialog } from "../../ui/dialog"
 const id = "opencode.plugins"
 
 type Entry =
-  | { readonly key: string; readonly runtime: "server"; readonly plugin: PluginInfo }
+  | { readonly key: string; readonly runtime: "server"; readonly internal: boolean; readonly plugin: PluginInfo }
   | {
       readonly key: string
       readonly runtime: "tui"
+      readonly internal: boolean
       readonly id?: string
       readonly target: string
       readonly status: "active" | "inactive" | "failed"
@@ -28,7 +29,7 @@ export function PluginsDialog(props: {
   const [locked, setLocked] = createSignal(false)
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<Entry>()
-  const [initial, setInitial] = createSignal<string>()
+  const [showInternal, setShowInternal] = createSignal(false)
   const [server] = createResource(
     () => (props.server ? undefined : (props.context.location ?? props.context.data.location.default())),
     (location) => props.context.client.plugin.list({ location }).then((result) => result.data),
@@ -41,6 +42,7 @@ export function PluginsDialog(props: {
       .map((plugin) => ({
         key: `tui:${plugin.id}`,
         runtime: "tui" as const,
+        internal: true,
         id: plugin.id,
         target: plugin.id,
         status: plugin.active ? ("active" as const) : ("inactive" as const),
@@ -51,6 +53,7 @@ export function PluginsDialog(props: {
       .map((plugin) => ({
         key: `tui:${plugin.id ?? plugin.target}`,
         runtime: "tui" as const,
+        internal: false,
         id: plugin.id,
         target: plugin.target,
         status: plugin.status,
@@ -59,6 +62,7 @@ export function PluginsDialog(props: {
     const serverEntries: Entry[] = (props.server?.() ?? server() ?? []).map((plugin) => ({
       key: `server:${plugin.id ?? source(plugin, props.context)}`,
       runtime: "server" as const,
+      internal: plugin.source.type === "builtin",
       plugin,
     }))
     return [
@@ -66,32 +70,31 @@ export function PluginsDialog(props: {
       ...serverEntries.sort((a, b) => label(a, props.context).localeCompare(label(b, props.context))),
     ]
   })
+  const visibleEntries = createMemo(() => entries().filter((entry) => showInternal() || !entry.internal))
   createEffect(() => {
-    if (initial()) return
-    const first = entries().find((entry) => entry.runtime === "tui")
-    if (!first) return
-    setInitial(first.key)
-    setFocused(first.key)
+    if (visibleEntries().some((entry) => entry.key === focused())) return
+    const first = visibleEntries().find((entry) => entry.runtime === "tui") ?? visibleEntries()[0]
+    setFocused(first?.key)
   })
 
   const options = createMemo(() =>
-    entries().map(
+    visibleEntries().map(
       (entry): DialogSelectOption<string> => ({
         title: label(entry, props.context),
         value: entry.key,
         category: entry.runtime === "tui" ? "TUI" : "Server",
         searchText: entry.runtime === "tui" ? entry.target : source(entry.plugin, props.context),
-        footer: status(entry) === "active" ? undefined : status(entry),
+        footer: footer(entry),
         footerColor:
           status(entry) === "failed"
             ? props.context.theme.text.feedback.error.default
-            : props.context.theme.text.subdued,
+            : outdated(entry)
+              ? props.context.theme.text.feedback.info.default
+              : props.context.theme.text.subdued,
         gutter:
-          status(entry) === "active"
-            ? () => <text fg={props.context.theme.text.feedback.success.default}>✓</text>
-            : status(entry) === "failed"
-              ? () => <text fg={props.context.theme.text.feedback.error.default}>✗</text>
-              : undefined,
+          status(entry) === "failed"
+            ? () => <text fg={props.context.theme.text.feedback.error.default}>x</text>
+            : undefined,
       }),
     ),
   )
@@ -133,12 +136,28 @@ export function PluginsDialog(props: {
           <DialogSelect
             title="Plugins"
             options={options()}
-            current={initial()}
             locked={locked()}
             preserveSelection={true}
+            bindings={[
+              {
+                bind: "ctrl+a",
+                title: "Toggle internal plugins",
+                group: "Plugins",
+                run: () => {
+                  setShowInternal((value) => !value)
+                },
+              },
+            ]}
+            footerHints={[{ title: "ctrl+a", label: `${showInternal() ? "hide" : "show"} internal` }]}
             onMove={(option) => setFocused(option.value)}
             onSelect={(option) => {
               const entry = entries().find((entry) => entry.key === option.value)
+              if (
+                entry?.runtime === "tui" &&
+                entry.id &&
+                props.plugins.registered().some((plugin) => plugin.id === entry.id)
+              )
+                return toggle(entry)
               if (pluginError(entry)) setDetail(entry)
             }}
             actions={
@@ -192,7 +211,7 @@ function pluginSource(entry: Entry, context: Plugin.Context) {
 }
 
 function source(plugin: PluginInfo, context: Plugin.Context) {
-  if (plugin.source.type === "package") return plugin.source.package
+  if (plugin.source.type === "package") return plugin.source.target
   if (plugin.source.type === "local") return context.ui.format.path(plugin.source.path)
   return plugin.source.type
 }
@@ -200,6 +219,25 @@ function source(plugin: PluginInfo, context: Plugin.Context) {
 function status(entry: Entry) {
   if (entry.runtime === "server") return entry.plugin.state.status
   return entry.status
+}
+
+function outdated(entry: Entry) {
+  return entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.outdated === true
+}
+
+function footer(entry: Entry) {
+  const details = [
+    ...(status(entry) === "active" ? [] : [status(entry)]),
+    ...(entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.version
+      ? [displayVersion(entry.plugin.source.version)]
+      : []),
+    ...(outdated(entry) ? ["update available"] : []),
+  ]
+  return details.length ? details.join(", ") : undefined
+}
+
+function displayVersion(version: string) {
+  return /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(version) ? version.slice(0, 7) : version
 }
 
 function pluginError(entry: Entry | undefined) {

@@ -4,12 +4,12 @@ import { Agent } from "@opencode-ai/schema/agent"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Session } from "@opencode-ai/schema/session"
-import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Effect } from "effect"
 import { PluginHooks } from "../src/plugin/hooks"
 import { testEffect } from "./lib/effect"
 
-const layer = PluginHooks.node.implementation as Layer.Layer<PluginHooks.Service>
-const it = testEffect(layer)
+const it = testEffect(LayerNode.compile(PluginHooks.node))
 
 describe("PluginHooks", () => {
   it.effect("registers scoped session hooks and triggers them sequentially", () =>

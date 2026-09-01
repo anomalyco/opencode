@@ -10,7 +10,7 @@ test("status drawer dismisses and reopens after button, backdrop, Escape, and dr
     .locator('[data-slot="session-mobile-view-navigation"]')
     .getByRole("button", { name: "More options", exact: true })
   const drawer = page.getByRole("dialog", { name: "Status", exact: true })
-  const overlay = page.locator('[data-slot="mobile-status-overlay"]')
+  const overlay = page.locator('[data-slot="mobile-drawer-overlay"]')
 
   for (const dismissal of ["button", "backdrop", "escape", "drag", "button"] as const) {
     await more.click()
@@ -21,7 +21,7 @@ test("status drawer dismisses and reopens after button, backdrop, Escape, and dr
     if (dismissal === "backdrop") await overlay.click({ position: { x: 10, y: 10 } })
     if (dismissal === "escape") await page.keyboard.press("Escape")
     if (dismissal === "drag") {
-      const handle = drawer.locator('[data-slot="mobile-status-drag-handle"]')
+      const handle = drawer.locator('[data-slot="mobile-drawer-handle"]')
       const bounds = await handle.boundingBox()
       expect(bounds).not.toBeNull()
       await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2)

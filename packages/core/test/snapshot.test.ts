@@ -54,9 +54,9 @@ describe("Snapshot", () => {
             },
           })
           const layer = AppNodeBuilder.build(Snapshot.node, [
-            [Location.node, Layer.succeed(Location.Service, location)],
-            [Global.node, Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })],
-            [Git.node, Layer.succeed(Git.Service, instrumented)],
+            Location.node.replace(Layer.succeed(Location.Service, location)),
+            Global.node.replace(Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })),
+            Git.node.replace(Layer.succeed(Git.Service, instrumented)),
           ])
 
           yield* Effect.gen(function* () {
@@ -239,8 +239,8 @@ describe("Snapshot", () => {
 
 function snapshotLayer(data: string, directory: string) {
   return AppNodeBuilder.build(Snapshot.node, [
-    [Location.node, Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))],
-    [Global.node, Global.layerWith({ data, config: path.join(data, "config") })],
+    Location.node.replace(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+    Global.node.replace(Global.layerWith({ data, config: path.join(data, "config") })),
   ])
 }
 

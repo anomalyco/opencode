@@ -408,22 +408,22 @@ const layer = Layer.unwrap(
       },
     })
     const replacements: LayerNode.Replacements = [
-      [Snapshot.node, Snapshot.noopLayer],
-      [LayerNodePlatform.llmClient, TestLLM.clientLayer],
-      [SessionRunnerModel.node, models],
-      [InstructionBuiltIns.node, systemContext],
-      [InstructionDiscovery.node, instructionContext],
-      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-      [SkillInstructions.node, skillInstructions],
-      [ReferenceInstructions.node, referenceInstructions],
-      [Permission.node, permission],
-      [Config.node, config],
-      [PluginSupervisor.node, pluginSupervisor],
-      [SessionModelTransport.node, modelTransport],
+      Snapshot.node.replace(Snapshot.noopLayer),
+      LayerNodePlatform.llmClient.replace(TestLLM.clientLayer.pipe(Layer.provide(testLLM))),
+      SessionRunnerModel.node.replace(models),
+      InstructionBuiltIns.node.replace(systemContext),
+      InstructionDiscovery.node.replace(instructionContext),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      SkillInstructions.node.replace(skillInstructions),
+      ReferenceInstructions.node.replace(referenceInstructions),
+      Permission.node.replace(permission),
+      Config.node.replace(config),
+      PluginSupervisor.node.replace(pluginSupervisor),
+      SessionModelTransport.node.replace(modelTransport),
     ]
     const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
       ...replacements,
-      [McpInstructions.node, mcpInstructions],
+      McpInstructions.node.replace(mcpInstructions),
     ])
     const execution = Layer.effect(
       SessionExecution.Service,
@@ -485,10 +485,10 @@ const layer = Layer.unwrap(
       ]),
       [
         ...replacements,
-        [Bus.node, Bus.configured({ persist: true })],
-        [LocationServiceMap.node, promptLocationNode],
-        [Catalog.node, promptCatalog],
-        [SessionExecution.node, execution],
+        Bus.node.replace(Bus.configured({ persist: true })),
+        LocationServiceMap.node.replace(promptLocationNode),
+        Catalog.node.replace(promptCatalog),
+        SessionExecution.node.replace(execution),
       ],
     )
   }),
@@ -1454,32 +1454,49 @@ describe("SessionRunnerLLM", () => {
     ).toEqual([Bus.versionedType(SessionEvent.Moved.type, 1), Bus.versionedType(SessionEvent.InboxDelivered.type, 1)])
   })
 
-  scenario("preserves a tool continuation across a steered move", function* (s) {
-    yield* s.admit("Echo before moving")
-    yield* s.llm.push(TestLLM.tool("call-move", "echo", { text: "moving" }), TestLLM.text("Done", "text-after-move"))
-    const tools = yield* s.blockTools()
-    const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* tools.started
-    yield* s.sessionInbox.admit({
-      id: SessionMessage.ID.create(),
-      sessionID,
-      item: {
-        type: "move",
-        payload: {
-          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
-          projectID: Project.ID.global,
-        },
-        delivery: "steer",
-      },
+  for (const delivery of ["steer", "queue"] as const) {
+    scenario(`preserves a tool continuation and step allowance across chained moves (${delivery})`, function* (s) {
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("build"), (agent) => {
+          agent.steps = 2
+        }),
+      )
+      yield* s.admit("Echo before moving")
+      yield* s.llm.push(TestLLM.tool("call-move", "echo", { text: "moving" }), TestLLM.text("Done", "text-after-move"))
+      const tools = yield* s.blockTools()
+      const run = yield* s.resume.pipe(Effect.forkChild)
+      yield* tools.started
+      yield* Effect.forEach(["steer", delivery] as const, (delivery) =>
+        s.sessionInbox.admit({
+          id: SessionMessage.ID.create(),
+          sessionID,
+          item: {
+            type: "move",
+            payload: {
+              location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+              projectID: Project.ID.global,
+            },
+            delivery,
+          },
+        }),
+      )
+
+      yield* tools.release
+      yield* Fiber.join(run)
+
+      expect(s.requests).toHaveLength(2)
+      expect(messageRoles(s.requests[1])?.slice(0, 3)).toEqual(["user", "assistant", "tool"])
+      expect(s.requests[0]?.toolChoice).toBeUndefined()
+      expect(s.requests[1]?.toolChoice).toMatchObject({ type: "none" })
+      expect(
+        (yield* recordedEventTypes(sessionID)).filter(
+          (type) => type === "session.step.started.1" || type === "session.moved.1",
+        ),
+      ).toEqual(["session.step.started.1", "session.moved.1", "session.moved.1", "session.step.started.1"])
+      expect(yield* s.inbox).toEqual([])
     })
-
-    yield* tools.release
-    yield* Fiber.join(run)
-
-    expect(s.requests).toHaveLength(2)
-    expect(s.requests.map(messageRoles).at(1)?.slice(0, 3)).toEqual(["user", "assistant", "tool"])
-    expect(yield* s.inbox).toEqual([])
-  })
+  }
 
   scenario("keeps queued input parked across a mid-turn move", function* (s) {
     yield* s.admit("Echo before moving")

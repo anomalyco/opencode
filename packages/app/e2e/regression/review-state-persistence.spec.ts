@@ -22,6 +22,7 @@ test("restores review mode and selected file per session", async ({ page }) => {
   await selectFile(page, "alpha.ts")
 
   await switchSession(page, titleB)
+  await page.getByRole("button", { name: "Toggle review" }).click()
   await expect(page.getByRole("button", { name: "Git changes" })).toBeVisible()
   await selectFile(page, "gamma.ts")
 

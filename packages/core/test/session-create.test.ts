@@ -51,30 +51,27 @@ const it = testEffect(
       InstructionEntry.node,
     ]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [Project.node, globalProjectNode],
-      [LocationServiceMap.node, promptLocationNode],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Project.node.replace(globalProjectNode),
+      LocationServiceMap.node.replace(promptLocationNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
     ],
   ),
 )
 const liveIt = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
-    [
-      [Bus.node, Bus.configured({ persist: true })],
-      [SessionExecution.node, SessionExecution.noopLayer],
-    ],
+    [Bus.node.replace(Bus.configured({ persist: true })), SessionExecution.node.replace(SessionExecution.noopLayer)],
   ),
 )
 const projectIt = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
+      Bus.node.replace(Bus.configured({ persist: true })),
       // Project adoption needs plain-prompt admission, not live plugin/provider startup.
-      [LocationServiceMap.node, promptLocationNode],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      LocationServiceMap.node.replace(promptLocationNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
     ],
   ),
 )
@@ -968,8 +965,8 @@ describe("Session.create", () => {
       const targetLayer = AppNodeBuilder.build(
         LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
         [
-          [Database.node, Database.configured({ path: path.join(tmp.path, "target.sqlite") })],
-          [Bus.node, Bus.configured({ persist: true })],
+          Database.node.replace(Database.configured({ path: path.join(tmp.path, "target.sqlite") })),
+          Bus.node.replace(Bus.configured({ persist: true })),
         ],
       )
 

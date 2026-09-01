@@ -84,7 +84,7 @@ describe("Promise plugin RPC", () => {
         }),
       )
 
-      yield* plugins.activate([{ ...adapted, version: "1" }])
+      yield* plugins.activate([{ ...adapted, revision: "1" }])
       expect(yield* plugins.list()).toMatchObject([{ id: adapted.id, state: { status: "active" } }])
     }),
   )
@@ -141,7 +141,7 @@ describe("Promise plugin RPC", () => {
         }),
       )
 
-      yield* plugins.activate([{ ...adapted, version: "1" }])
+      yield* plugins.activate([{ ...adapted, revision: "1" }])
       expect(yield* plugins.list()).toMatchObject([{ id: adapted.id, state: { status: "active" } }])
     }),
   )
@@ -197,7 +197,7 @@ describe("Promise plugin RPC", () => {
         }),
       )
       yield* plugins
-        .activate([{ ...adapted, version: "1" }])
+        .activate([{ ...adapted, revision: "1" }])
         .pipe(Effect.provideService(Logger.CurrentLoggers, new Set([logger])))
       expect(yield* plugins.list()).toMatchObject([{ id: adapted.id, state: { status: "active" } }])
       yield* plugins.activate([])
@@ -279,7 +279,7 @@ describe("Promise plugin RPC", () => {
         }),
       )
 
-      yield* plugins.activate([{ ...adapted, version: "1" }])
+      yield* plugins.activate([{ ...adapted, revision: "1" }])
       expect(yield* plugins.list()).toMatchObject([{ id: adapted.id, state: { status: "active" } }])
       const active = yield* Effect.promise(() => subscriptions.promise)
       yield* plugins.activate([])

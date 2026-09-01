@@ -6,7 +6,7 @@ import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } fr
 import { Config } from "@opencode-ai/core/config"
 import { ConfigLocationWatcherPlugin } from "@opencode-ai/core/config/plugin/location-watcher"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { makeLocationNode, type LocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -129,7 +129,7 @@ function provide(
   vcs?: Location.Interface["vcs"],
   watcher?: Layer.Layer<Watcher.Service>,
   config: Layer.Layer<Config.Service> = configLayer,
-  plugins: LocationNode<PluginSupervisor.Service> = pluginNode,
+  plugins: typeof pluginNode = pluginNode,
 ) {
   const locationLayer = Layer.succeed(
     Location.Service,
@@ -138,10 +138,10 @@ function provide(
   const built = AppNodeBuilder.build(
     LayerNode.group([LocationWatcher.node, LocationWatcherPolicy.node, Bus.node, Config.node]),
     [
-      [Config.node, config],
-      [Location.node, locationLayer],
-      [PluginSupervisor.node, plugins],
-      ...(watcher ? ([[Watcher.node, watcher]] as const) : []),
+      Config.node.replace(config),
+      Location.node.replace(locationLayer),
+      PluginSupervisor.node.replace(plugins),
+      ...(watcher ? ([Watcher.node.replace(watcher)] as const) : []),
     ],
   )
   return Effect.provide(built)
@@ -154,7 +154,7 @@ function withTmp<A, E, R>(
     init?: (directory: string) => Promise<void>
     watcher?: Layer.Layer<Watcher.Service>
     config?: Layer.Layer<Config.Service>
-    plugins?: LocationNode<PluginSupervisor.Service>
+    plugins?: typeof pluginNode
   },
 ) {
   return Effect.acquireRelease(

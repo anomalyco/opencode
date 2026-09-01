@@ -9,7 +9,12 @@ export type ID = typeof ID.Type
 
 export const Source = Schema.Union([
   Schema.Struct({ type: Schema.Literal("builtin") }),
-  Schema.Struct({ type: Schema.Literal("package"), package: Schema.String }),
+  Schema.Struct({
+    type: Schema.Literal("package"),
+    target: Schema.String,
+    version: Schema.String.pipe(optional),
+    outdated: Schema.Literal(true).pipe(optional),
+  }),
   Schema.Struct({ type: Schema.Literal("local"), path: Schema.String }),
   Schema.Struct({ type: Schema.Literal("sdk") }),
 ]).annotate({ identifier: "Plugin.Source" })

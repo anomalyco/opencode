@@ -1,6 +1,6 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
-import { Auth, LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
+import { Auth, LLMClient, type LLMClientService, RequestExecutor } from "@opencode-ai/ai/route"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -100,22 +100,22 @@ const promptCatalog = Layer.mock(Catalog.Service, {
     small: () => Effect.undefined,
   },
 })
-const runnerLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+const runnerLayer = (llmClient: Layer.Layer<LLMClientService>) =>
   AppNodeBuilder.build(SessionRunnerLLM.node, [
-    [Snapshot.node, Snapshot.noopLayer],
-    [LayerNodePlatform.llmClient, llmClient],
-    [SessionRunnerModel.node, models],
-    [InstructionBuiltIns.node, systemContext],
-    [InstructionDiscovery.node, instructionContext],
-    [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-    [SkillInstructions.node, skillInstructions],
-    [ReferenceInstructions.node, referenceInstructions],
-    [McpInstructions.node, mcpInstructions],
-    [Config.node, config],
-    [Permission.node, permission],
-    [PluginSupervisor.node, pluginSupervisor],
+    Snapshot.node.replace(Snapshot.noopLayer),
+    LayerNodePlatform.llmClient.replace(llmClient),
+    SessionRunnerModel.node.replace(models),
+    InstructionBuiltIns.node.replace(systemContext),
+    InstructionDiscovery.node.replace(instructionContext),
+    Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+    SkillInstructions.node.replace(skillInstructions),
+    ReferenceInstructions.node.replace(referenceInstructions),
+    McpInstructions.node.replace(mcpInstructions),
+    Config.node.replace(config),
+    Permission.node.replace(permission),
+    PluginSupervisor.node.replace(pluginSupervisor),
   ])
-const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+const execution = (llmClient: Layer.Layer<LLMClientService>) =>
   Layer.effect(
     SessionExecution.Service,
     Effect.gen(function* () {
@@ -133,7 +133,7 @@ const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
       })
     }),
   ).pipe(Layer.provide(runnerLayer(llmClient)))
-const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
   AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
@@ -155,21 +155,21 @@ const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
       Session.node,
     ]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [LocationServiceMap.node, promptLocationNode],
-      [LayerNodePlatform.llmClient, llmClient],
-      [Permission.node, permission],
-      [Catalog.node, promptCatalog],
-      [SessionRunnerModel.node, models],
-      [InstructionBuiltIns.node, systemContext],
-      [InstructionDiscovery.node, instructionContext],
-      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-      [SkillInstructions.node, skillInstructions],
-      [ReferenceInstructions.node, referenceInstructions],
-      [Config.node, config],
-      [Snapshot.node, Snapshot.noopLayer],
-      [PluginSupervisor.node, pluginSupervisor],
-      [SessionExecution.node, execution(llmClient)],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      LocationServiceMap.node.replace(promptLocationNode),
+      LayerNodePlatform.llmClient.replace(llmClient),
+      Permission.node.replace(permission),
+      Catalog.node.replace(promptCatalog),
+      SessionRunnerModel.node.replace(models),
+      InstructionBuiltIns.node.replace(systemContext),
+      InstructionDiscovery.node.replace(instructionContext),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      SkillInstructions.node.replace(skillInstructions),
+      ReferenceInstructions.node.replace(referenceInstructions),
+      Config.node.replace(config),
+      Snapshot.node.replace(Snapshot.noopLayer),
+      PluginSupervisor.node.replace(pluginSupervisor),
+      SessionExecution.node.replace(execution(llmClient)),
     ],
   )
 const it = testEffect(testLayer(client))

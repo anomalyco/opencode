@@ -7,7 +7,10 @@ import { Context, Effect } from "effect"
  * imports: the supervisor reaches PluginRuntime, which depends on Session.
  */
 export interface Interface {
-  /** Wait for the initial plugin generation and startup updates to settle. */
+  /**
+   * Wait for the plugin generation to settle. Use this rarely: blocking reads,
+   * UI startup, or other unrelated work on plugin boot should be avoided.
+   */
   readonly flush: Effect.Effect<void>
 }
 

@@ -22,20 +22,21 @@ const describeHg = Bun.which("hg") ? describe : describe.skip
 
 const provide = (directory: string) =>
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node, FSUtil.node]), [
-      [
-        Location.node,
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of(
-            location(
-              { directory: AbsolutePath.make(directory) },
-              { vcs: { type: "hg", store: AbsolutePath.make(path.join(directory, ".hg")) } },
+    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node, FSUtil.node]), {
+      replacements: [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(
+                { directory: AbsolutePath.make(directory) },
+                { vcs: { type: "hg", store: AbsolutePath.make(path.join(directory, ".hg")) } },
+              ),
             ),
           ),
         ),
       ],
-    ]),
+    }),
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>

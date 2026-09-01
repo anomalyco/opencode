@@ -61,13 +61,6 @@ test.each([
   ])
 })
 
-test.each([
-  ["effect", Plugin.Plugin.define({ id: "svn", vcs: { markers: [".svn"] }, effect: () => Effect.void })],
-  ["promise", PromisePlugin.Plugin.define({ id: "svn", vcs: { markers: [".svn"] }, setup() {} })],
-])("%s plugin definitions retain repository markers", (_name, plugin) => {
-  expect(plugin.vcs).toEqual({ markers: [".svn"] })
-})
-
 test("tui entrypoint exposes the plugin definition", () => {
   const plugin = TuiPlugin.Plugin.define({ id: "demo", setup() {} })
   expect(plugin.id).toBe("demo")

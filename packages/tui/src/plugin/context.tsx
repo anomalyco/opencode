@@ -272,7 +272,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         discovered: true,
       })),
       ...serverPlugins().map((plugin) => ({
-        entry: plugin.source.type === "package" ? plugin.source.package : path.dirname(plugin.source.path),
+        entry: plugin.source.type === "package" ? plugin.source.target : path.dirname(plugin.source.path),
         install: false,
         server: true,
         discovered: false,
