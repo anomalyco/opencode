@@ -24,7 +24,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
-    [Bus.node, Bus.configured({ persist: true })],
+    Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
 

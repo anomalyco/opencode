@@ -85,14 +85,10 @@ describe("OpenAIPlugin", () => {
       const catalog = yield* Catalog.Service
       const credentials = yield* Credential.Service
       yield* catalog.transform((catalog) => {
-        const item = Provider.Info.make({
-          ...Provider.Info.empty(Provider.ID.openai),
-          package: Provider.aisdk("@ai-sdk/openai"),
+        catalog.provider.update(Provider.ID.openai, (draft) => {
+          draft.package = Provider.aisdk("@ai-sdk/openai")
         })
-        catalog.provider.update(item.id, (draft) => {
-          draft.package = item.package
-        })
-        catalog.model.update(item.id, Model.ID.make("gpt-5.5"), (model) => {
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
           model.cost = [
             {
@@ -105,19 +101,19 @@ describe("OpenAIPlugin", () => {
             },
           ]
         })
-        catalog.model.update(item.id, Model.ID.make("gpt-5.5-pro"), () => {})
-        catalog.model.update(item.id, Model.ID.make("gpt-5.4"), (model) => {
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.5-pro"), () => {})
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.4"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 64_000 }
         })
-        catalog.model.update(item.id, Model.ID.make("gpt-5.4-pro"), (model) => {
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.4-pro"), (model) => {
           model.modelID = Model.ID.make("gpt-5.4")
           model.body = { reasoning: { mode: "pro" } }
         })
-        catalog.model.update(item.id, Model.ID.make("gpt-5.6"), () => {})
-        catalog.model.update(item.id, Model.ID.make("gpt-5.6-sol"), (model) => {
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.6"), () => {})
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.6-sol"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
         })
-        catalog.model.update(item.id, Model.ID.make("gpt-4.1"), () => {})
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-4.1"), () => {})
       })
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
@@ -172,17 +168,13 @@ describe("OpenAIPlugin", () => {
       const catalog = yield* Catalog.Service
       const credentials = yield* Credential.Service
       yield* catalog.transform((catalog) => {
-        const item = Provider.Info.make({
-          ...Provider.Info.empty(Provider.ID.openai),
-          package: Provider.aisdk("@ai-sdk/openai"),
+        catalog.provider.update(Provider.ID.openai, (draft) => {
+          draft.package = Provider.aisdk("@ai-sdk/openai")
         })
-        catalog.provider.update(item.id, (draft) => {
-          draft.package = item.package
-        })
-        catalog.model.update(item.id, Model.ID.make("gpt-5.5"), (model) => {
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
         })
-        catalog.model.update(item.id, Model.ID.make("gpt-4.1"), () => {})
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-4.1"), () => {})
       })
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),

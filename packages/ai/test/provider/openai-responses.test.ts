@@ -2554,7 +2554,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("preserves terminal reasoning metadata when output item completion is missing", () =>
+  it.effect("ignores terminal reasoning output when item completion is missing", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, { providerOptions: { store: false } }),
@@ -2595,29 +2595,13 @@ describe("OpenAI Responses route", () => {
 
       expect(response.reasoning).toBe("Checked the diff.")
       expect(response.events.filter((event) => event.type === "reasoning-end")).toEqual([
-        {
-          type: "reasoning-end",
-          id: "rs_1:0",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
-        },
+        { type: "reasoning-end", id: "rs_1:0" },
       ])
       expect(response.message.content).toContainEqual({
         type: "reasoning",
         text: "Checked the diff.",
-        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
+        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
       })
-
-      const prepared = yield* compileRequest(
-        LLM.request({ model, messages: [response.message], providerOptions: { store: false } }),
-      )
-      expect(prepared.body.input).toEqual([
-        {
-          type: "reasoning",
-          id: "rs_1",
-          summary: [{ type: "summary_text", text: "Checked the diff." }],
-          encrypted_content: "terminal-state",
-        },
-      ])
     }),
   )
 
@@ -2644,7 +2628,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("reconciles pending reasoning and function calls in completed output order", () =>
+  it.effect("recovers pending function calls without reconciling terminal reasoning", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, { providerOptions: { store: false } }),
@@ -2682,14 +2666,15 @@ describe("OpenAI Responses route", () => {
         ),
       )
 
-      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
-        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
+      expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
+        type: "reasoning-end",
+        id: "rs_1:0",
       })
       expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
         expect.objectContaining({ id: "call_1", input: { query: "weather" } }),
       ])
-      expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
-        response.events.findIndex(LLMEvent.is.toolCall),
+      expect(response.events.findIndex(LLMEvent.is.toolCall)).toBeLessThan(
+        response.events.findIndex((event) => event.type === "reasoning-end"),
       )
       expect(response.finishReason.normalized).toBe("tool-calls")
     }),
@@ -3019,6 +3004,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning-end",
           id: "rs_1:0",
+          text: "Checked the diff.",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
       ])

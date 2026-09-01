@@ -15,18 +15,45 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { globalProjectLayer } from "./lib/project"
+import { globalProjectNode } from "./lib/project"
 
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
+    [Project.node.replace(globalProjectNode), SessionExecution.node.replace(SessionExecution.noopLayer)],
+  ),
+)
+const itWithActiveExecution = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      SessionExecution.node,
+      Session.node,
+    ]),
     [
-      [Project.node, globalProjectLayer],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      Project.node.replace(globalProjectNode),
+      LocationServiceMap.node.replace(
+        Layer.effect(
+          LocationServiceMap.Service,
+          LayerMap.make(
+            (ref: Location.Ref) =>
+              Layer.merge(
+                LayerNode.compile(Location.boundNode(ref), {
+                  replacements: [Project.node.replace(globalProjectNode)],
+                }),
+                Layer.succeed(SessionRunner.Service, { drain: () => Effect.never }),
+              ) as unknown as Layer.Layer<LocationServices>,
+          ),
+        ),
+      ),
     ],
   ),
 )
@@ -40,9 +67,9 @@ const itWithUnavailableDestination = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [Project.node, globalProjectLayer],
-      [SessionExecution.node, SessionExecution.noopLayer],
-      [LocationServiceMap.node, unavailableLocations],
+      Project.node.replace(globalProjectNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      LocationServiceMap.node.replace(unavailableLocations),
     ],
   ),
 )
@@ -99,6 +126,41 @@ describe("Session.move", () => {
           })
           yield* session.move({ sessionID: steered.id, directory: destination, delivery: "queue" })
           expect(yield* session.inbox(steered.id)).toMatchObject([{ type: "move", delivery: "queue" }])
+        }),
+      ),
+    ),
+  )
+
+  itWithActiveExecution.live("defers an active move when the source directory no longer exists", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const execution = yield* SessionExecution.Service
+          const source = AbsolutePath.make(path.join(tmp.path, "source"))
+          const destination = AbsolutePath.make(tmp.path)
+          yield* Effect.promise(() => mkdir(source))
+          const created = yield* session.create({ location: Location.Ref.make({ directory: source }) })
+
+          // Hold real execution open so the move cannot be consumed before admission is checked.
+          yield* execution.wake(created.id)
+          expect(yield* execution.isActive(created.id)).toBe(true)
+          yield* Effect.promise(() => rm(source, { recursive: true }))
+
+          yield* session.move({ sessionID: created.id, directory: destination })
+
+          expect((yield* session.get(created.id)).location.directory).toBe(source)
+          expect(yield* session.inbox(created.id)).toMatchObject([
+            {
+              type: "move",
+              delivery: "steer",
+              payload: { location: { directory: destination } },
+            },
+          ])
+          expect(yield* execution.isActive(created.id)).toBe(true)
+
+          yield* execution.interrupt(created.id)
+          yield* execution.awaitIdle(created.id)
         }),
       ),
     ),

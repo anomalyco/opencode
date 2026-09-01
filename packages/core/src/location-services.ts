@@ -37,6 +37,7 @@ export function buildLocationServiceMap(
         ...inner,
         get: (ref: Location.Ref) => inner.get(canonical(ref)),
         contextEffect: (ref: Location.Ref) => inner.contextEffect(canonical(ref)),
+        contextEffectOption: (ref: Location.Ref) => inner.contextEffectOption(canonical(ref)),
         invalidate: (ref: Location.Ref) => inner.invalidate(canonical(ref)),
       }),
     ),

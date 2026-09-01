@@ -20,7 +20,7 @@ const writePackage = (dir: string, pkg: Record<string, unknown>) =>
   )
 
 const npmLayer = (cache: string) =>
-  AppNodeBuilder.build(Npm.node, [[Global.node, Global.layerWith({ cache, state: path.join(cache, "state") })]])
+  AppNodeBuilder.build(Npm.node, [Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") }))])
 
 async function createGitFixture(directory: string) {
   const repository = path.join(directory, "repository")
@@ -53,6 +53,58 @@ async function createGitFixture(directory: string) {
   await Bun.$`git -C ${repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm fixture`
   const commit = await Bun.$`git -C ${repository} rev-parse HEAD`.text().then((value) => value.trim())
   return { repository, commit }
+}
+
+async function createRegistryFixture(directory: string) {
+  const tarballs = new Map<string, Uint8Array>()
+  for (const version of ["1.0.0", "1.1.0"]) {
+    const root = path.join(directory, version)
+    await fs.mkdir(path.join(root, "package"), { recursive: true })
+    await writePackage(path.join(root, "package"), {
+      name: "@fixture/registry-plugin",
+      version,
+      exports: "./index.js",
+    })
+    await Bun.write(path.join(root, "package", "index.js"), `export const version = "${version}"\n`)
+    await Bun.$`tar -czf ${path.join(root, "package.tgz")} -C ${root} package`
+    tarballs.set(version, await Bun.file(path.join(root, "package.tgz")).bytes())
+  }
+  const state = { latest: "1.0.0" }
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url)
+      if (decodeURIComponent(url.pathname) === "/@fixture/registry-plugin")
+        return Response.json({
+          name: "@fixture/registry-plugin",
+          "dist-tags": { latest: state.latest },
+          versions: Object.fromEntries(
+            [...tarballs.keys()].map((version) => [
+              version,
+              { name: "@fixture/registry-plugin", version, dist: { tarball: `${url.origin}/${version}.tgz` } },
+            ]),
+          ),
+        })
+      const tarball = tarballs.get(url.pathname.slice(1).replace(".tgz", ""))
+      return tarball ? new Response(tarball) : new Response("missing", { status: 404 })
+    },
+  })
+  return {
+    state,
+    async configure(cache: string, spec: string) {
+      const root = path.join(cache, "npm", await Npm.cacheKey(spec))
+      await fs.mkdir(root, { recursive: true })
+      await Bun.write(
+        path.join(root, ".npmrc"),
+        `@fixture:registry=${server.url}\ncache=${path.join(directory, "npm-cache")}\nfetch-retries=0\naudit=false\n`,
+      )
+      return root
+    },
+    async [Symbol.asyncDispose]() {
+      await server.stop(true)
+    },
+  }
 }
 
 describe("Npm.sanitize", () => {
@@ -98,10 +150,12 @@ describe("Npm.isInstallablePackage", () => {
 })
 
 describe("Npm.cacheKey", () => {
-  test("preserves registry keys and hashes Git specs", async () => {
+  test("canonicalizes registry keys and hashes Git specs", async () => {
     expect(await Npm.cacheKey("@opencode/acme@1.0.0")).toBe(Npm.sanitize("@opencode/acme@1.0.0"))
+    expect(await Npm.cacheKey("plugin")).toBe(Npm.sanitize("plugin@latest"))
+    expect(await Npm.cacheKey("@opencode/acme")).toBe(Npm.sanitize("@opencode/acme@latest"))
     const spec = "git+ssh://git@github.com/acme/plugin.git#main"
-    expect(await Npm.cacheKey(spec)).toMatch(/^git-[a-f0-9]{64}$/)
+    expect(await Npm.cacheKey(spec)).toMatch(/^git-plugin-[a-f0-9]{12}$/)
     expect(await Npm.cacheKey(spec)).toBe(await Npm.cacheKey(spec))
     expect(await Npm.cacheKey(`${spec}-other`)).not.toBe(await Npm.cacheKey(spec))
   })
@@ -114,8 +168,9 @@ describe("Npm.add", () => {
     const directory = path.join(
       tmp.path,
       "cache",
-      "packages",
-      Npm.sanitize(spec),
+      "npm",
+      await Npm.cacheKey(spec),
+      "1000",
       "node_modules",
       "@fixture",
       "provider",
@@ -136,7 +191,7 @@ describe("Npm.add", () => {
   test("falls back to the original spec when parsing fails", async () => {
     await using tmp = await tmpdir()
     const spec = "fixture provider"
-    const directory = path.join(tmp.path, "cache", "packages", Npm.sanitize(spec), "node_modules", spec)
+    const directory = path.join(tmp.path, "cache", "npm", Npm.sanitize(spec), "1000", "node_modules", spec)
     await fs.mkdir(directory, { recursive: true })
     await writePackage(directory, { name: spec, exports: "./index.js" })
     await Bun.write(path.join(directory, "index.js"), "export const fixture = true\n")
@@ -164,7 +219,7 @@ describe("Npm.add", () => {
     await Bun.write(path.join(tmp.path, "fixture-provider", "tui.js"), "export const tui = true\n")
 
     const spec = `fixture-provider@file:${path.join(tmp.path, "fixture-provider")}`
-    await fs.mkdir(path.join(tmp.path, "cache", "packages", Npm.sanitize(spec)), { recursive: true })
+    await fs.mkdir(path.join(tmp.path, "cache", "npm", Npm.sanitize(spec)), { recursive: true })
 
     const entries = await Effect.gen(function* () {
       const npm = yield* Npm.Service
@@ -198,12 +253,14 @@ describe("Npm.add", () => {
       }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
 
       expect(entries.added.entrypoint).toEndWith("/index.js")
+      expect(entries.added.version).toBe(fixture.commit)
       expect(entries.cached).toEqual(entries.added)
       expect(entries.resolved).toEqual(entries.added)
       expect(
         await fs.stat(path.join(path.dirname(entries.added.directory), "fixture-dependency", "package.json")),
       ).toBeTruthy()
-      expect(entries.added.directory).toContain(path.join("packages", await Npm.cacheKey(spec), "node_modules"))
+      expect(entries.added.directory).toContain(path.join("npm", await Npm.cacheKey(spec)))
+      expect(entries.added.directory).toContain("node_modules")
     }
   })
 
@@ -223,8 +280,8 @@ describe("Npm.add", () => {
     ).toBeTruthy()
   })
 
-  // Several real Git installs and refreshes exceed Bun's default timeout on Windows.
-  test("refreshes mutable Git packages once per service lifetime and preserves pinned or cached installs", async () => {
+  // Several real Git installs and updates exceed Bun's default timeout on Windows.
+  test("checks and updates mutable Git packages without changing pinned installs", async () => {
     await using tmp = await tmpdir()
     const fixture = await createGitFixture(tmp.path)
     const cache = path.join(tmp.path, "cache")
@@ -232,37 +289,38 @@ describe("Npm.add", () => {
     const mutable = `git+${repository}#fixture-branch`
     const pinned = `git+${repository}#${fixture.commit}`
 
-    const first = await Effect.gen(function* () {
+    const result = await Effect.gen(function* () {
       const npm = yield* Npm.Service
       const mutableEntry = yield* npm.add(mutable)
-      const pinnedEntry = yield* npm.add(pinned, { refresh: true })
+      const pinnedEntry = yield* npm.add(pinned)
       yield* Effect.promise(async () => {
         await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
         await Bun.$`git -C ${fixture.repository} add .`
         await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
       })
-      yield* npm.add(mutable, { refresh: true })
-      return { mutable: mutableEntry, pinned: pinnedEntry }
-    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
-    expect(await Bun.file(path.join(first.mutable.directory, "index.js")).text()).toContain("root: true")
-    expect(await Bun.file(path.join(first.pinned.directory, "index.js")).text()).toContain("root: true")
-
-    const second = await Effect.gen(function* () {
-      const npm = yield* Npm.Service
+      const before = yield* Effect.promise(() => Bun.file(path.join(mutableEntry.directory, "index.js")).text())
+      const outdated = yield* npm.check(mutable)
+      const pinnedOutdated = yield* npm.check(pinned)
+      const unchanged = yield* Effect.promise(() => Bun.file(path.join(mutableEntry.directory, "index.js")).text())
+      const updated = yield* npm.update(mutable)
+      const pinnedUpdated = yield* npm.update(pinned)
       return {
-        mutable: yield* npm.add(mutable, { refresh: true }),
-        pinned: yield* npm.add(pinned, { refresh: true }),
+        before,
+        outdated,
+        pinnedOutdated,
+        unchanged,
+        updated: yield* Effect.promise(() => Bun.file(path.join(updated.directory, "index.js")).text()),
+        pinned: yield* Effect.promise(() => Bun.file(path.join(pinnedUpdated.directory, "index.js")).text()),
+        current: yield* npm.check(mutable),
       }
     }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
-    expect(await Bun.file(path.join(second.mutable.directory, "index.js")).text()).toContain('root: "second"')
-    expect(await Bun.file(path.join(second.pinned.directory, "index.js")).text()).toContain("root: true")
-
-    await fs.rename(fixture.repository, `${fixture.repository}-offline`)
-    const offline = await Effect.gen(function* () {
-      const npm = yield* Npm.Service
-      return yield* npm.add(mutable, { refresh: true })
-    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
-    expect(await Bun.file(path.join(offline.directory, "index.js")).text()).toContain('root: "second"')
+    expect(result.before).toContain("root: true")
+    expect(result.outdated).toBeTrue()
+    expect(result.pinnedOutdated).toBeFalse()
+    expect(result.unchanged).toContain("root: true")
+    expect(result.updated).toContain('root: "second"')
+    expect(result.pinned).toContain("root: true")
+    expect(result.current).toBeFalse()
   }, 30_000)
 })
 
@@ -271,7 +329,7 @@ describe("Npm.resolve", () => {
     await using tmp = await tmpdir()
     const cache = path.join(tmp.path, "cache")
     const spec = "fixture-plugin@1.0.0"
-    const directory = path.join(cache, "packages", Npm.sanitize(spec), "node_modules", "fixture-plugin")
+    const directory = path.join(cache, "npm", Npm.sanitize(spec), "1000", "node_modules", "fixture-plugin")
     const missing = await Effect.gen(function* () {
       const npm = yield* Npm.Service
       return yield* npm.resolve(spec, { subpaths: ["tui"] })
@@ -291,5 +349,56 @@ describe("Npm.resolve", () => {
       return yield* npm.resolve(spec, { subpaths: ["tui"] })
     }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
     expect(resolved.entrypoint).toEndWith("/tui.js")
+    expect(resolved.version).toBe("1.0.0")
+  })
+})
+
+describe("Npm.check and Npm.update", () => {
+  test("checks registry targets without mutation and explicitly updates mutable targets", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const mutable = "@fixture/registry-plugin@latest"
+    const pinned = "@fixture/registry-plugin@1.0.0"
+    const root = await registry.configure(cache, mutable)
+    await registry.configure(cache, pinned)
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const installed = yield* npm.add(mutable)
+      yield* npm.add(pinned)
+      const current = yield* npm.check(mutable)
+      registry.state.latest = "1.1.0"
+      const outdated = yield* npm.check(mutable)
+      const pinnedOutdated = yield* npm.check(pinned)
+      const before = yield* Effect.promise(() => Bun.file(path.join(installed.directory, "index.js")).text())
+      yield* Effect.promise(() => Promise.all([fs.mkdir(path.join(root, "1")), fs.mkdir(path.join(root, "2"))]))
+      const updated = yield* npm.update(mutable)
+      const unchanged = yield* npm.update(mutable)
+      return {
+        current,
+        outdated,
+        pinnedOutdated,
+        before,
+        after: yield* Effect.promise(() => Bun.file(path.join(updated.directory, "index.js")).text()),
+        version: updated.version,
+        changedDirectory: installed.directory !== updated.directory,
+        unchangedDirectory: unchanged.directory === updated.directory,
+        generations: yield* Effect.promise(() => fs.readdir(root)),
+        updated: yield* npm.check(mutable),
+      }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(result.current).toBeFalse()
+    expect(result.outdated).toBeTrue()
+    expect(result.pinnedOutdated).toBeFalse()
+    expect(result.before).toContain('version = "1.0.0"')
+    expect(result.after).toContain('version = "1.1.0"')
+    expect(result.version).toBe("1.1.0")
+    expect(result.changedDirectory).toBeTrue()
+    expect(result.unchangedDirectory).toBeTrue()
+    expect(result.generations).not.toContain("1")
+    expect(result.generations).not.toContain("2")
+    expect(result.updated).toBeFalse()
   })
 })

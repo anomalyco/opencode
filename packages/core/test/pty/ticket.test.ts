@@ -8,7 +8,9 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(PtyTicket.node))
 const itExpiring = testEffect(
-  LayerNode.compile(PtyTicket.node, [[PtyTicket.node, Layer.effect(PtyTicket.Service, PtyTicket.make(5))]]),
+  LayerNode.compile(PtyTicket.node, {
+    replacements: [PtyTicket.node.replace(Layer.effect(PtyTicket.Service, PtyTicket.make(5)))],
+  }),
 )
 
 describe("PTY websocket tickets", () => {

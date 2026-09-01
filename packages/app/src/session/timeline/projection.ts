@@ -96,38 +96,29 @@ export function createTimelineProjection(input: {
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
     reuseTimelineRows(previous, projection().rows),
   )
-  const rowByKey = createMemo(() => new Map(rows().map((row) => [TimelineRow.key(row), row] as const)))
-  const messageRowIndex = createMemo(() => {
-    const result = new Map<string, number>()
+  const indexes = createMemo(() => {
+    const rowByKey = new Map<string, TimelineRow.TimelineRow>()
+    const messageRowIndex = new Map<string, number>()
+    const messageLastRowIndex = new Map<string, number>()
+    const lastAssistantGroupKey = new Map<string, string>()
     rows().forEach((row, index) => {
-      if (!("userMessageID" in row) || result.has(row.userMessageID)) return
-      result.set(row.userMessageID, index)
+      rowByKey.set(TimelineRow.key(row), row)
+      if (!("userMessageID" in row)) return
+      if (!messageRowIndex.has(row.userMessageID)) messageRowIndex.set(row.userMessageID, index)
+      messageLastRowIndex.set(row.userMessageID, index)
+      if (row._tag === "AssistantPart") lastAssistantGroupKey.set(row.userMessageID, row.group.key)
     })
-    return result
-  })
-  const messageLastRowIndex = createMemo(() => {
-    const result = new Map<string, number>()
-    rows().forEach((row, index) => {
-      if ("userMessageID" in row) result.set(row.userMessageID, index)
-    })
-    return result
-  })
-  const lastAssistantGroupKey = createMemo(() => {
-    const result = new Map<string, string>()
-    rows().forEach((row) => {
-      if (row._tag === "AssistantPart") result.set(row.userMessageID, row.group.key)
-    })
-    return result
+    return { rowByKey, messageRowIndex, messageLastRowIndex, lastAssistantGroupKey }
   })
 
   return {
     activeMessageID,
     assistantMessagesByParent,
-    lastAssistantGroupKey,
+    lastAssistantGroupKey: () => indexes().lastAssistantGroupKey,
     messageByID: sessionMessageByID,
-    messageRowIndex,
-    messageLastRowIndex,
-    rowByKey,
+    messageRowIndex: () => indexes().messageRowIndex,
+    messageLastRowIndex: () => indexes().messageLastRowIndex,
+    rowByKey: () => indexes().rowByKey,
     rows,
     sessionMessageByID,
     userContextByID,

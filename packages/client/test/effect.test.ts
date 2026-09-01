@@ -27,6 +27,26 @@ test("health.get decodes the readiness response", async () => {
   expect(result).toEqual({ healthy: true, version: "old", pid: 123 })
 })
 
+test("vcs.base decodes nullable review-base metadata", async () => {
+  const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
+  const base = {
+    name: "release",
+    ref: "refs/remotes/origin/release",
+    source: "reflog",
+  }
+  for (const data of [base, null]) {
+    const httpClient = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ location, data }))),
+    )
+    const result = await Effect.gen(function* () {
+      const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+      return yield* client.vcs.base({ location: { directory: AbsolutePath.make("/repo") } })
+    }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+    expect(result.data).toEqual(data)
+    expect(result.location.directory).toBe("/repo")
+  }
+})
+
 test("session.get returns the decoded Effect projection", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(session))),

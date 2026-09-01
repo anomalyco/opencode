@@ -1,7 +1,8 @@
 import { Location } from "@opencode-ai/schema/location"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { InvalidRequestError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const PluginGroup = HttpApiGroup.make("server.plugin")
@@ -16,6 +17,22 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
           identifier: "v2.plugin.list",
           summary: "List plugins",
           description: "Retrieve enabled server plugins and their current status.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("plugin.update", "/api/plugin/update", {
+      query: LocationQuery,
+      payload: Schema.Struct({ target: Schema.String }),
+      success: HttpApiSchema.NoContent,
+      error: [InvalidRequestError, ServiceUnavailableError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.plugin.update",
+          summary: "Update plugin",
+          description: "Update one package plugin and notify active locations to reload it.",
         }),
       ),
   )

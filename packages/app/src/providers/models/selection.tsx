@@ -221,7 +221,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
-    const current = () => {
+    const current = createMemo(() => {
       const item = firstModel(
         () => scope()?.model,
         () => agent.current()?.model,
@@ -229,7 +229,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       )
       if (!item) return
       return models.find(item)
-    }
+    })
 
     const configured = () => {
       const item = agent.current()

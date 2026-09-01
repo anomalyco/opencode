@@ -25,7 +25,7 @@ const locationLayer = Layer.succeed(
 )
 const catalogLayer = AppNodeBuilder.build(
   LayerNode.group([Catalog.node, Bus.node, Credential.node, Integration.node]),
-  [[Location.node, locationLayer]],
+  [Location.node.replace(locationLayer)],
 )
 const it = testEffect(catalogLayer)
 
@@ -48,7 +48,7 @@ describe("Catalog", () => {
   it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
     const localCatalogLayer = Layer.fresh(
-      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node]), [[Location.node, locationLayer]]),
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node]), [Location.node.replace(locationLayer)]),
     )
 
     return Effect.gen(function* () {
@@ -78,13 +78,14 @@ describe("Catalog", () => {
     const providerID = Provider.ID.make("remote")
     const localCatalogLayer = Layer.fresh(
       AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
-        [Location.node, locationLayer],
+        Location.node.replace(locationLayer),
       ]),
     )
 
     return Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      const integrations = yield* Integration.Service
+      yield* integrations.transform((editor) => editor.update(integrationID, () => {}))
       yield* catalog.transform((editor) =>
         editor.provider.update(providerID, (provider) => {
           provider.integrationID = integrationID
@@ -92,7 +93,8 @@ describe("Catalog", () => {
       )
       expect(yield* catalog.provider.available()).toEqual([])
 
-      yield* (yield* Credential.Service).create({
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
         integrationID,
         value: Credential.Key.make({ type: "key", key: "secret" }),
       })
@@ -106,13 +108,14 @@ describe("Catalog", () => {
     const providerID = Provider.ID.make("remote")
     const localCatalogLayer = Layer.fresh(
       AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
-        [Location.node, locationLayer],
+        Location.node.replace(locationLayer),
       ]),
     )
 
     return Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      const integrations = yield* Integration.Service
+      yield* integrations.transform((editor) => editor.update(integrationID, () => {}))
       yield* catalog.transform((editor) =>
         editor.provider.update(providerID, (provider) => {
           provider.integrationID = integrationID

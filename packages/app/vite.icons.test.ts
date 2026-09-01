@@ -59,6 +59,7 @@ test.each(["dev", "beta", "prod"])("serves %s app icons", async (channel) => {
 async function check(channel: string, read: (path: string) => Promise<Uint8Array>) {
   const html = new TextDecoder().decode(await read("/index.html"))
   const actual: typeof manifest = JSON.parse(new TextDecoder().decode(await read("/site.webmanifest")))
+  expect(actual.icons.every((icon) => icon.purpose === "maskable")).toBe(true)
   expect(actual).toEqual({
     ...manifest,
     icons: manifest.icons.map((icon) => ({ ...icon, src: `/icons/${channel}${icon.src}` })),

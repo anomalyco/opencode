@@ -21,8 +21,8 @@ function provide(directory: string, transformFiles: EnvironmentFilesTransform = 
   )
   return Effect.provide(
     AppNodeBuilder.build(LayerNode.group([LocationMutation.node, FileMutation.node]), [
-      [Location.node, activeLocation],
-      [Environment.node, transformEnvironmentFiles(transformFiles)],
+      Location.node.replace(activeLocation),
+      Environment.node.replace(transformEnvironmentFiles(transformFiles)),
     ]),
   )
 }

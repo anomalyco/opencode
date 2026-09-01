@@ -84,7 +84,9 @@ export const Plugin = define({
 })
 
 function append(template: string, input: string) {
-  return [template, input.trim()].filter(Boolean).join("\n\n")
+  const value = input.trim()
+  if (template.includes("$ARGUMENTS")) return template.replaceAll("$ARGUMENTS", () => value)
+  return [template, value].filter(Boolean).join("\n\n")
 }
 
 function parseArguments(input: string) {

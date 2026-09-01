@@ -115,13 +115,15 @@ const plugins = Layer.mock(PluginSupervisor.Service, { flush: Effect.void })
 const tools = Layer.mock(Tool.Service, {
   snapshot: () =>
     Effect.succeed({
-      codeModeCatalog: [
-        {
-          path: "captured.lookup",
-          description: "Captured Code Mode catalog",
-          signature: "tools.captured.lookup(input: {}): Promise<string>",
-        },
-      ],
+      codeModeCatalog: {
+        tools: [
+          {
+            path: "captured.lookup",
+            description: "Captured Code Mode catalog",
+            signature: "tools.captured.lookup(input: {}): Promise<string>",
+          },
+        ],
+      },
       definitions: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
       execute: () => Effect.die(new Error("unused")),
     }),
@@ -142,17 +144,17 @@ const it = testEffect(
       SessionGenerateNode.node,
     ]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [llmClient, client],
-      [SessionRunnerModel.node, models],
-      [InstructionBuiltIns.node, builtins],
-      [InstructionDiscovery.node, discovery],
-      [SkillInstructions.node, skills],
-      [ReferenceInstructions.node, references],
-      [McpInstructions.node, mcp],
-      [PluginSupervisor.node, plugins],
-      [Tool.node, tools],
-      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      llmClient.replace(client),
+      SessionRunnerModel.node.replace(models),
+      InstructionBuiltIns.node.replace(builtins),
+      InstructionDiscovery.node.replace(discovery),
+      SkillInstructions.node.replace(skills),
+      ReferenceInstructions.node.replace(references),
+      McpInstructions.node.replace(mcp),
+      PluginSupervisor.node.replace(plugins),
+      Tool.node.replace(tools),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
     ],
   ),
 )

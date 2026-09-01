@@ -338,6 +338,7 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@ai-sdk/openai-compatible" ||
     name === "@ai-sdk/google" ||
     name === "@ai-sdk/groq" ||
+    name === "@ai-sdk/mistral" ||
     name === "@ai-sdk/togetherai" ||
     name === "@ai-sdk/xai" ||
     name === "@openrouter/ai-sdk-provider" ||
@@ -351,6 +352,7 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode-ai/ai/providers/openai-compatible" ||
     name === "@opencode-ai/ai/providers/google" ||
     name === "@opencode-ai/ai/providers/groq" ||
+    name === "@opencode-ai/ai/providers/mistral" ||
     name === "@opencode-ai/ai/providers/togetherai" ||
     name === "@opencode-ai/ai/providers/xai" ||
     name === "@opencode-ai/ai/providers/openrouter" ||

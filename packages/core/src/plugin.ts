@@ -1,5 +1,5 @@
 export * as Plugin from "./plugin.js"
-export { Event, ID, Info, Source } from "@opencode-ai/schema/plugin"
+export { Event, ID, Info, Source, State } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
@@ -19,6 +19,7 @@ import { PluginHost } from "./plugin/host.js"
 import { PluginRuntime } from "./plugin/runtime.js"
 import { WebSearch } from "./websearch.js"
 import { Reference } from "./reference.js"
+import { Rpc } from "./rpc.js"
 import { Skill } from "./skill.js"
 import { State } from "./state.js"
 import { Tool } from "./tool.js"
@@ -29,15 +30,18 @@ import { Permission } from "./permission.js"
 
 export interface Interface {
   readonly activate: (
-    plugins: readonly Versioned[],
-    failures?: readonly Extract<Plugin.Info, { readonly status: "failed" }>[],
+    plugins: readonly Generation[],
+    failures?: readonly Failure[],
   ) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Plugin.Info[]>
 }
 
-export type Versioned = PluginDefinition & {
-  readonly version: string
+type Failure = Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
+
+export type Generation = PluginDefinition & {
+  readonly revision: string
   readonly source?: Plugin.Source
+  readonly features?: Plugin.Features
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
@@ -48,11 +52,11 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const kv = yield* KV.Service
     const scope = yield* Scope.make()
-    const active = new Map<Plugin.ID, { readonly plugin: Versioned; readonly scope: Scope.Closeable }>()
+    const active = new Map<Plugin.ID, { readonly plugin: Generation; readonly scope: Scope.Closeable }>()
     const lock = Semaphore.makeUnsafe(1)
     let inventory: Plugin.Info[] = []
     let host: Parameters<PluginDefinition["effect"]>[0]
-    const load = Effect.fnUntraced(function* (plugin: Versioned) {
+    const load = Effect.fnUntraced(function* (plugin: Generation) {
       const child = yield* Scope.fork(scope)
       const inherit = yield* State.inherit()
       const loaded = yield* Effect.suspend(() =>
@@ -79,8 +83,8 @@ const layer = Layer.effect(
     })
 
     const activate = Effect.fn("Plugin.activate")(function* (
-      plugins: readonly Versioned[],
-      failures: readonly Extract<Plugin.Info, { readonly status: "failed" }>[] = [],
+      plugins: readonly Generation[],
+      failures: readonly Failure[] = [],
     ) {
       const definitions = plugins.map((plugin) => ({ ...plugin, id: Plugin.ID.make(plugin.id) }))
       const ids = new Set<Plugin.ID>()
@@ -95,10 +99,14 @@ const layer = Layer.effect(
             active.size === definitions.length &&
             Array.from(active.values()).every((entry, index) => {
               const definition = definitions[index]
-              return entry.plugin.id === definition?.id && entry.plugin.version === definition.version
+              return entry.plugin.id === definition?.id && entry.plugin.revision === definition.revision
             })
           ) {
-            const nextInventory = [...Array.from(active.values(), (entry) => activeInfo(entry.plugin)), ...failures]
+            for (const definition of definitions) {
+              const entry = active.get(definition.id)
+              if (entry) active.set(definition.id, { ...entry, plugin: definition })
+            }
+            const nextInventory = [...definitions.map(activeInfo), ...failures]
             if (JSON.stringify(inventory) === JSON.stringify(nextInventory)) return
             inventory = nextInventory
             yield* bus.publish(Plugin.Event.Updated, {})
@@ -122,9 +130,8 @@ const layer = Layer.effect(
                 nextInventory.push({
                   id: definition.id,
                   source: definition.source ?? { type: "builtin" },
-                  status: "failed",
-                  error: loaded.error,
-                  tui: definition.tui ?? false,
+                  state: { status: "failed", error: loaded.error },
+                  features: { server: true, ...definition.features },
                 })
 
                 if (!previous) continue
@@ -171,12 +178,12 @@ const layer = Layer.effect(
   }),
 )
 
-function activeInfo(plugin: Versioned): Plugin.Info {
+function activeInfo(plugin: Generation): Plugin.Info {
   return {
     id: Plugin.ID.make(plugin.id),
     source: plugin.source ?? { type: "builtin" },
-    status: "active",
-    tui: plugin.tui ?? false,
+    state: { status: "active" },
+    features: { server: true, ...plugin.features },
   }
 }
 
@@ -195,6 +202,7 @@ export const node = makeLocationNode({
     Mcp.node,
     Location.node,
     Reference.node,
+    Rpc.node,
     Skill.node,
     Tool.node,
     Vcs.node,

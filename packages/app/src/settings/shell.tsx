@@ -1,6 +1,18 @@
-import { Component, createEffect, createMemo, createSignal, onCleanup, onMount, startTransition } from "solid-js"
+import {
+  Component,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Show,
+  onCleanup,
+  onMount,
+  startTransition,
+} from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Menu } from "@opencode-ai/ui/menu"
+import { Button } from "@opencode-ai/ui/button"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsGeneral } from "./general/general"
@@ -22,6 +34,25 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useCommand } from "@/shell/commands/command"
 import { useSettingsSurface } from "./surface"
 import "@/settings/settings.css"
+
+const sections = [
+  [
+    { value: "general", icon: "sliders", label: "settings.tab.preferences" },
+    { value: "appearance", icon: "appearance", label: "settings.general.section.appearance" },
+    { value: "notifications", icon: "notifications", label: "settings.tab.notifications" },
+    { value: "shortcuts", icon: "keyboard", label: "settings.tab.shortcuts" },
+  ],
+  [
+    { value: "servers", icon: "server", label: "status.popover.tab.servers" },
+    { value: "projects", icon: "folder", label: "settings.tab.projects" },
+    { value: "workspaces", icon: "workspace-isolated", label: "settings.tab.workspaces" },
+  ],
+  [
+    { value: "providers", icon: "providers", label: "settings.providers.title" },
+    { value: "models", icon: "models", label: "settings.models.title" },
+    { value: "extensions", icon: "extensions", label: "settings.tab.extensions" },
+  ],
+] as const
 
 export const SettingsScreen: Component<{
   defaultValue?: string
@@ -103,6 +134,45 @@ export const SettingsScreen: Component<{
         onChange={(value) => void startTransition(() => setTab(value))}
         class="settings"
       >
+        <div class="settings-mobile-nav">
+          <button type="button" class="settings-back" onClick={surface.close}>
+            <Icon name="arrow-left" size="small" class="settings-back-icon" />
+            <span>{language.t("settings.backToApp")}</span>
+          </button>
+          <Menu placement="bottom-end" gutter={8}>
+            <Menu.Trigger as={Button} size="normal" variant="outline" class="settings-mobile-menu-trigger">
+              <span>
+                {language.t(
+                  sections.flat().find((section) => section.value === tab())?.label ?? "settings.tab.preferences",
+                )}
+              </span>
+              <Icon name="chevron-down" size="small" />
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content class="settings-mobile-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
+                <Menu.RadioGroup value={tab()} onChange={(value) => void startTransition(() => setTab(value))}>
+                  <For each={sections}>
+                    {(group, index) => (
+                      <>
+                        <Show when={index() > 0}>
+                          <Menu.Separator />
+                        </Show>
+                        <For each={group}>
+                          {(section) => (
+                            <Menu.RadioItem value={section.value} closeOnSelect>
+                              <Icon name={section.icon} />
+                              {language.t(section.label)}
+                            </Menu.RadioItem>
+                          )}
+                        </For>
+                      </>
+                    )}
+                  </For>
+                </Menu.RadioGroup>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
+        </div>
         <Tabs.List>
           <div class="settings-nav">
             <button type="button" class="settings-back" onClick={surface.close}>
@@ -110,57 +180,20 @@ export const SettingsScreen: Component<{
               <span>{language.t("settings.backToApp")}</span>
             </button>
             <div class="flex flex-col gap-4 w-full">
-              {/* Group 1: Preferences */}
-              <div class="flex flex-col gap-1 w-full">
-                <Tabs.Trigger value="general">
-                  <Icon name="sliders" />
-                  {language.t("settings.tab.preferences")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="appearance">
-                  <Icon name="appearance" />
-                  {language.t("settings.general.section.appearance")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="notifications">
-                  <Icon name="notifications" />
-                  {language.t("settings.tab.notifications")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="shortcuts">
-                  <Icon name="keyboard" />
-                  {language.t("settings.tab.shortcuts")}
-                </Tabs.Trigger>
-              </div>
-
-              {/* Group 2: Environment & Workspaces */}
-              <div class="flex flex-col gap-1 w-full">
-                <Tabs.Trigger value="servers">
-                  <Icon name="server" />
-                  {language.t("status.popover.tab.servers")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="projects">
-                  <Icon name="folder" />
-                  {language.t("settings.tab.projects")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="workspaces">
-                  <Icon name="workspace-isolated" />
-                  {language.t("settings.tab.workspaces")}
-                </Tabs.Trigger>
-              </div>
-
-              {/* Group 3: Capabilities & Extensions */}
-              <div class="flex flex-col gap-1 w-full">
-                <Tabs.Trigger value="providers">
-                  <Icon name="providers" />
-                  {language.t("settings.providers.title")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="models">
-                  <Icon name="models" />
-                  {language.t("settings.models.title")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="extensions">
-                  <Icon name="extensions" />
-                  {language.t("settings.tab.extensions")}
-                </Tabs.Trigger>
-              </div>
+              <For each={sections}>
+                {(group) => (
+                  <div class="flex flex-col gap-1 w-full">
+                    <For each={group}>
+                      {(section) => (
+                        <Tabs.Trigger value={section.value}>
+                          <Icon name={section.icon} />
+                          {language.t(section.label)}
+                        </Tabs.Trigger>
+                      )}
+                    </For>
+                  </div>
+                )}
+              </For>
             </div>
           </div>
           <div class="settings-nav-footer">

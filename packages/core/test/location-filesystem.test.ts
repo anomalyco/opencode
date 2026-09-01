@@ -13,15 +13,16 @@ import { it } from "./lib/effect"
 
 const provide = (directory: string, workspaceID?: Workspace.ID) =>
   Effect.provide(
-    LayerNode.compile(FileSystem.node, [
-      [
-        Location.node,
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of(location({ directory: AbsolutePath.make(directory), workspaceID })),
+    LayerNode.compile(FileSystem.node, {
+      replacements: [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make(directory), workspaceID })),
+          ),
         ),
       ],
-    ]),
+    }),
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
@@ -51,7 +52,8 @@ describe("FileSystem", () => {
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.mkdir(path.join(directory, "src")))
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "README.md"), "# Test"))
-        const entries = yield* (yield* FileSystem.Service).list()
+        const filesystem = yield* FileSystem.Service
+        const entries = yield* filesystem.list()
         expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
           { path: RelativePath.make("src" + path.sep), type: "directory" },
           { path: RelativePath.make("README.md"), type: "file" },
@@ -103,9 +105,8 @@ describe("FileSystem", () => {
   it.live("rejects lexical escapes", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        const result = yield* (yield* FileSystem.Service)
-          .read({ path: RelativePath.make("../outside.txt") })
-          .pipe(Effect.exit)
+        const filesystem = yield* FileSystem.Service
+        const result = yield* filesystem.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)
         expect(Exit.isFailure(result)).toBe(true)
       }).pipe(provide(directory)),
     ),

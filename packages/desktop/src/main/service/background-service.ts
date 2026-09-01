@@ -52,14 +52,12 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const url = new URL(service.url)
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
   yield* Effect.logInfo("v2 CLI background service ready", {
-    username: service.auth.username,
     version,
     ...endpoint(url.origin),
   })
   if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
   return {
     url: url.origin,
-    username: service.auth.username,
     password: service.auth.password,
   } satisfies ServerReadyData
 })

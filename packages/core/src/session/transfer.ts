@@ -5,6 +5,7 @@ import { Tool } from "@opencode-ai/schema/tool"
 import { Skill } from "@opencode-ai/schema/skill"
 import { eq } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { map } from "effect/Array"
 import path from "path"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app.js"
@@ -309,21 +310,13 @@ function sanitizeToolState(id: string, state: SessionMessage.ToolState): Session
     return {
       ...state,
       input: { redacted: `tool-input:${id}` },
-      content: [
-        sanitizeToolContent(id, state.content[0]),
-        ...state.content.slice(1).map((item) => sanitizeToolContent(id, item)),
-      ],
+      content: map(state.content, (item) => sanitizeToolContent(id, item)),
       metadata: meta,
     }
   return {
     ...state,
     input: { redacted: `tool-input:${id}` },
-    content: state.content
-      ? [
-          sanitizeToolContent(id, state.content[0]),
-          ...state.content.slice(1).map((item) => sanitizeToolContent(id, item)),
-        ]
-      : undefined,
+    content: state.content ? map(state.content, (item) => sanitizeToolContent(id, item)) : undefined,
     metadata: meta,
   }
 }

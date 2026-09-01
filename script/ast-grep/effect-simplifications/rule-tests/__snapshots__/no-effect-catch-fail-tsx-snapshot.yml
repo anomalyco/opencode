@@ -1,0 +1,58 @@
+id: no-effect-catch-fail-tsx
+snapshots:
+  const view = <Widget value={Effect.catch(effect, error => Effect.fail(new Wrapped(error)))} />:
+    fixed: const view = <Widget value={Effect.mapError(effect, (error) => new Wrapped(error))} />
+    labels:
+      - source: Effect.catch(effect, error => Effect.fail(new Wrapped(error)))
+        style: primary
+        start: 28
+        end: 90
+  const view = <Widget value={Stream.catch(stream, error => Stream.fail(new Wrapped(error)))} />:
+    fixed: const view = <Widget value={Stream.mapError(stream, (error) => new Wrapped(error))} />
+    labels:
+      - source: Stream.catch(stream, error => Stream.fail(new Wrapped(error)))
+        style: primary
+        start: 28
+        end: 90
+  const view = <Widget value={effect.pipe(Effect.catch((error) => Effect.fail(transform(error))))} />:
+    fixed: const view = <Widget value={effect.pipe(Effect.mapError((error) => transform(error)))} />
+    labels:
+      - source: Effect.catch((error) => Effect.fail(transform(error)))
+        style: primary
+        start: 40
+        end: 94
+  const view = <Widget value={effect.pipe(Effect.catch((error) => { return Effect.fail(transform(error)) }))} />:
+    fixed: const view = <Widget value={effect.pipe(Effect.mapError((error) => transform(error)))} />
+    labels:
+      - source: Effect.catch((error) => { return Effect.fail(transform(error)) })
+        style: primary
+        start: 40
+        end: 105
+  "const view = <Widget value={effect.pipe(Effect.catch((error: Error): Effect.Effect<never, Wrapped> => Effect.fail(transform(error))))} />":
+    fixed: "const view = <Widget value={effect.pipe(Effect.mapError((error: Error): Wrapped => transform(error)))} />"
+    labels:
+      - source: "Effect.catch((error: Error): Effect.Effect<never, Wrapped> => Effect.fail(transform(error)))"
+        style: primary
+        start: 40
+        end: 132
+  const view = <Widget value={stream.pipe(Stream.catch((error) => Stream.fail(transform(error))))} />:
+    fixed: const view = <Widget value={stream.pipe(Stream.mapError((error) => transform(error)))} />
+    labels:
+      - source: Stream.catch((error) => Stream.fail(transform(error)))
+        style: primary
+        start: 40
+        end: 94
+  const view = <Widget value={stream.pipe(Stream.catch((error) => { return Stream.fail(transform(error)) }))} />:
+    fixed: const view = <Widget value={stream.pipe(Stream.mapError((error) => transform(error)))} />
+    labels:
+      - source: Stream.catch((error) => { return Stream.fail(transform(error)) })
+        style: primary
+        start: 40
+        end: 105
+  "const view = <Widget value={stream.pipe(Stream.catch((error: Error): Stream.Stream<string, Wrapped> => Stream.fail(transform(error))))} />":
+    fixed: "const view = <Widget value={stream.pipe(Stream.mapError((error: Error): Wrapped => transform(error)))} />"
+    labels:
+      - source: "Stream.catch((error: Error): Stream.Stream<string, Wrapped> => Stream.fail(transform(error)))"
+        style: primary
+        start: 40
+        end: 133

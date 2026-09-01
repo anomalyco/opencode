@@ -9,12 +9,24 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
-test("validates mini replay settings", () => {
+test("validates the three explicit diff source defaults", () => {
+  for (const source of ["branch", "committed", "working"] as const) {
+    expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })
+  }
+  expect(decodeInfo({ diffs: {} })).toEqual({ diffs: {} })
+  expect(() => decodeInfo({ diffs: { source: "auto" } })).toThrow()
+})
+
+test("validates mini replay and work spinner settings", () => {
   expect(decodeInfo({ mini: { replay: false, replay_limit: 50 } })).toEqual({
     mini: { replay: false, replay_limit: 50 },
   })
   expect(() => decodeInfo({ mini: { replay_limit: 0 } })).toThrow()
   expect(() => decodeInfo({ mini: { replay_limit: 1.5 } })).toThrow()
+  expect(decodeInfo({ mini: { work_spinner: "quadrant-orbit" } })).toEqual({
+    mini: { work_spinner: "quadrant-orbit" },
+  })
+  expect(() => decodeInfo({ mini: { work_spinner: "unknown" } })).toThrow()
 })
 
 test("validates the session tabs setting", () => {

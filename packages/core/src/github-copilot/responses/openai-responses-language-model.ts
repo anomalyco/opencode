@@ -4,7 +4,6 @@ import {
   type LanguageModelV3,
   type LanguageModelV3CallOptions,
   type LanguageModelV3Content,
-  type LanguageModelV3ProviderTool,
   type LanguageModelV3StreamPart,
   type SharedV3ProviderMetadata,
   type SharedV3Warning,
@@ -27,7 +26,7 @@ import { imageGenerationOutputSchema } from "./tool/image-generation.js"
 import { convertToOpenAIResponsesInput } from "./convert-to-openai-responses-input.js"
 import { mapOpenAIResponseFinishReason } from "./map-openai-responses-finish-reason.js"
 import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from "./openai-responses-api-types.js"
-import { prepareResponsesTools } from "./openai-responses-prepare-tools.js"
+import { prepareResponsesTools, type ResponsesHostedTool } from "./openai-responses-prepare-tools.js"
 import type { OpenAIResponsesModelId } from "./openai-responses-settings.js"
 
 const webSearchCallItem = z.object({
@@ -221,15 +220,23 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       addInclude("message.output_text.logprobs")
     }
 
-    // when a web search tool is present, automatically include the sources:
-    const webSearchToolName = (
-      tools?.find(
-        (tool) =>
-          tool.type === "provider" && (tool.id === "openai.web_search" || tool.id === "openai.web_search_preview"),
-      ) as LanguageModelV3ProviderTool | undefined
-    )?.name
+    const {
+      tools: openaiTools,
+      toolChoice: openaiToolChoice,
+      hostedTools,
+      selectedHostedTool,
+      toolWarnings,
+    } = prepareResponsesTools({
+      tools,
+      toolChoice,
+      strictJsonSchema,
+    })
+    const getHostedToolName = (responseType: ResponsesHostedTool["responseType"]) => {
+      if (selectedHostedTool?.responseType === responseType) return selectedHostedTool.name
+      return hostedTools.find((tool) => tool.responseType === responseType)?.name ?? responseType
+    }
 
-    if (webSearchToolName) {
+    if (hostedTools.some((tool) => tool.responseType === "web_search")) {
       addInclude("web_search_call.action.sources")
     }
 
@@ -357,18 +364,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       baseArgs.service_tier = undefined
     }
 
-    const {
-      tools: openaiTools,
-      toolChoice: openaiToolChoice,
-      toolWarnings,
-    } = prepareResponsesTools({
-      tools,
-      toolChoice,
-      strictJsonSchema,
-    })
-
     return {
-      webSearchToolName,
+      getHostedToolName,
       args: {
         ...baseArgs,
         tools: openaiTools,
@@ -379,7 +376,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
   }
 
   async doGenerate(options: LanguageModelV3CallOptions) {
-    const { args: body, warnings, webSearchToolName } = await this.getArgs(options)
+    const { args: body, warnings, getHostedToolName } = await this.getArgs(options)
     const url = this.config.url({
       path: "/responses",
       modelId: this.modelId,
@@ -526,7 +523,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
           content.push({
             type: "tool-call",
             toolCallId: part.id,
-            toolName: "image_generation",
+            toolName: getHostedToolName("image_generation"),
             input: "{}",
             providerExecuted: true,
           })
@@ -534,7 +531,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
           content.push({
             type: "tool-result",
             toolCallId: part.id,
-            toolName: "image_generation",
+            toolName: getHostedToolName("image_generation"),
             result: {
               result: part.result,
             } satisfies z.infer<typeof imageGenerationOutputSchema>,
@@ -605,7 +602,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
           content.push({
             type: "tool-call",
             toolCallId: part.id,
-            toolName: webSearchToolName ?? "web_search",
+            toolName: getHostedToolName("web_search"),
             input: JSON.stringify({ action: part.action }),
             providerExecuted: true,
           })
@@ -613,7 +610,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
           content.push({
             type: "tool-result",
             toolCallId: part.id,
-            toolName: webSearchToolName ?? "web_search",
+            toolName: getHostedToolName("web_search"),
             result: { status: part.status },
           })
 
@@ -645,7 +642,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
           content.push({
             type: "tool-call",
             toolCallId: part.id,
-            toolName: "file_search",
+            toolName: getHostedToolName("file_search"),
             input: "{}",
             providerExecuted: true,
           })
@@ -653,7 +650,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
           content.push({
             type: "tool-result",
             toolCallId: part.id,
-            toolName: "file_search",
+            toolName: getHostedToolName("file_search"),
             result: {
               queries: part.queries,
               results:
@@ -673,7 +670,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
           content.push({
             type: "tool-call",
             toolCallId: part.id,
-            toolName: "code_interpreter",
+            toolName: getHostedToolName("code_interpreter"),
             input: JSON.stringify({
               code: part.code,
               containerId: part.container_id,
@@ -684,7 +681,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
           content.push({
             type: "tool-result",
             toolCallId: part.id,
-            toolName: "code_interpreter",
+            toolName: getHostedToolName("code_interpreter"),
             result: {
               outputs: part.outputs,
             } satisfies z.infer<typeof codeInterpreterOutputSchema>,
@@ -746,7 +743,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
   }
 
   async doStream(options: LanguageModelV3CallOptions) {
-    const { args: body, warnings, webSearchToolName } = await this.getArgs(options)
+    const { args: body, warnings, getHostedToolName } = await this.getArgs(options)
 
     const { responseHeaders, value: response } = await postJsonToApi({
       url: this.config.url({
@@ -866,7 +863,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-input-start",
                   id: value.item.id,
-                  toolName: webSearchToolName ?? "web_search",
+                  toolName: getHostedToolName("web_search"),
                 })
               } else if (value.item.type === "computer_call") {
                 ongoingToolCalls[value.output_index] = {
@@ -889,7 +886,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-input-start",
                   id: value.item.id,
-                  toolName: "code_interpreter",
+                  toolName: getHostedToolName("code_interpreter"),
                 })
 
                 controller.enqueue({
@@ -901,7 +898,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId: value.item.id,
-                  toolName: "file_search",
+                  toolName: getHostedToolName("file_search"),
                   input: "{}",
                   providerExecuted: true,
                 })
@@ -909,7 +906,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId: value.item.id,
-                  toolName: "image_generation",
+                  toolName: getHostedToolName("image_generation"),
                   input: "{}",
                   providerExecuted: true,
                 })
@@ -980,7 +977,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId: value.item.id,
-                  toolName: "web_search",
+                  toolName: getHostedToolName("web_search"),
                   input: JSON.stringify({ action: value.item.action }),
                   providerExecuted: true,
                 })
@@ -988,7 +985,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-result",
                   toolCallId: value.item.id,
-                  toolName: "web_search",
+                  toolName: getHostedToolName("web_search"),
                   result: { status: value.item.status },
                 })
               } else if (value.item.type === "computer_call") {
@@ -1022,7 +1019,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-result",
                   toolCallId: value.item.id,
-                  toolName: "file_search",
+                  toolName: getHostedToolName("file_search"),
                   result: {
                     queries: value.item.queries,
                     results:
@@ -1041,7 +1038,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-result",
                   toolCallId: value.item.id,
-                  toolName: "code_interpreter",
+                  toolName: getHostedToolName("code_interpreter"),
                   result: {
                     outputs: value.item.outputs,
                   } satisfies z.infer<typeof codeInterpreterOutputSchema>,
@@ -1050,7 +1047,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-result",
                   toolCallId: value.item.id,
-                  toolName: "image_generation",
+                  toolName: getHostedToolName("image_generation"),
                   result: {
                     result: value.item.result,
                   } satisfies z.infer<typeof imageGenerationOutputSchema>,
@@ -1099,7 +1096,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               controller.enqueue({
                 type: "tool-result",
                 toolCallId: value.item_id,
-                toolName: "image_generation",
+                toolName: getHostedToolName("image_generation"),
                 result: {
                   result: value.partial_image_b64,
                 } satisfies z.infer<typeof imageGenerationOutputSchema>,
@@ -1135,7 +1132,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId: toolCall.toolCallId,
-                  toolName: "code_interpreter",
+                  toolName: getHostedToolName("code_interpreter"),
                   input: JSON.stringify({
                     code: value.code,
                     containerId: toolCall.codeInterpreter!.containerId,

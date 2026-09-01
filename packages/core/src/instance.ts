@@ -30,6 +30,7 @@ import { Pty } from "./pty.js"
 import { Shell } from "./shell.js"
 import { ShellSelect } from "./shell/select.js"
 import { Reference } from "./reference.js"
+import { Rpc } from "./rpc.js"
 import { WebSearch } from "./websearch.js"
 import { ReferenceInstructions } from "./reference/instructions.js"
 import { SessionRunnerLLM } from "./session/runner/llm.js"
@@ -45,6 +46,8 @@ import { InstructionBuiltIns } from "./instructions/builtins.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 import { SessionInstructions } from "./session/instructions.js"
 import { SessionGenerateNode } from "./session/generate-node.js"
+import { SessionPromptNode } from "./session/prompt-node.js"
+import { SessionRevertNode } from "./session/revert-node.js"
 import { McpTool } from "./tool/mcp.js"
 import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
@@ -52,6 +55,7 @@ import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
 
 export * as Instance from "./instance.js"
+export { Service, byLocationNode, type Interface } from "./instance/service.js"
 
 const nodes = [
   Location.node,
@@ -60,6 +64,7 @@ const nodes = [
   Agent.node,
   Command.node,
   Reference.node,
+  Rpc.node,
   WebSearch.node,
   Integration.node,
   Catalog.node,
@@ -92,6 +97,8 @@ const nodes = [
   Form.node,
   Generate.node,
   SessionGenerateNode.node,
+  SessionPromptNode.node,
+  SessionRevertNode.node,
   ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,
@@ -104,9 +111,9 @@ const nodes = [
   Vcs.node,
   // Start repository watches only after boot-critical filesystem and Git work.
   LocationWatcher.node,
-] as const satisfies readonly Node.LocationNode<unknown, unknown>[]
+] as const satisfies readonly Node.LocationGraph<never, unknown>[]
 
-export const graph = LayerNode.group<typeof nodes>(nodes)
+export const graph = LayerNode.group(nodes)
 
 export type Services = LayerNode.Output<typeof graph>
 export type Error = LayerNode.Error<typeof graph>
@@ -135,29 +142,23 @@ export interface Options {
 // source still honors explicit plugin operations from wellknown and
 // host-injected config.
 const vanillaReplacements: LayerNode.Replacements = [
-  [Config.node, Config.configured({ project: false, global: false })],
-  [InstructionDiscovery.node, InstructionDiscovery.configured({ project: false, global: false })],
+  Config.node.replace(Config.configured({ project: false, global: false })),
+  InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: false, global: false })),
 ]
 
 // One instance is one compiled, fresh copy of the graph standing on a directory.
 export function layer(ref: Location.Ref, options: Options = {}) {
   const startedAt = performance.now()
   // Ordered: vanilla defaults, then caller replacements (which win over the
-  // defaults), then bound pairs (which win over everything).
-  const allReplacements: LayerNode.Replacements = [
+  // defaults), then instance bindings (which win over everything).
+  const replacements: LayerNode.Replacements = [
     ...(options.discovery === false ? vanillaReplacements : []),
     ...(options.replacements ?? []),
-    [Location.node, Location.boundNode(ref, { discovery: options.discovery })],
-    [InstancePlugins.node, InstancePlugins.bound(options.plugins ?? [])],
+    Location.node.replace(Location.boundNode(ref, { discovery: options.discovery })),
+    InstancePlugins.node.replace(InstancePlugins.bound(options.plugins ?? [])),
   ]
-  // Apply replacements during hoist, not afterward: replacements can
-  // introduce new tagged dependencies (Location.boundNode depends on
-  // Project), and the hoist walk is the only pass that can still slice
-  // those back out.
-  const location = LayerNode.hoist(graph, Node.tags.values.global, allReplacements)
 
-  return LayerNode.compile(location.node).pipe(
-    Layer.fresh,
+  return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global }).pipe(
     Layer.tap(() =>
       Effect.logInfo("location services booted", {
         directory: ref.directory,
@@ -165,6 +166,5 @@ export function layer(ref: Location.Ref, options: Options = {}) {
         durationMs: Math.round(performance.now() - startedAt),
       }),
     ),
-    Layer.provide(LayerNode.compile(location.hoisted)),
   )
 }

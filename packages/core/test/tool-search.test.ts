@@ -45,19 +45,17 @@ const withTools = <A, E, R>(
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, globToolNode, grepToolNode]), [
-        [
-          Location.node,
+        Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-        ],
-        [
-          Permission.node,
+        ),
+        Permission.node.replace(
           permissionLayer({
             assert: (input) =>
               Effect.sync(() => {
                 assertions?.push(input)
               }),
           }),
-        ],
+        ),
       ]),
     ),
   )

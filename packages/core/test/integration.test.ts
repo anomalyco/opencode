@@ -27,7 +27,7 @@ const failingCredentialNode = makeGlobalNode({
   deps: [],
 })
 const failingIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Integration.node, Bus.node]), [[Credential.node, failingCredentialNode]]),
+  AppNodeBuilder.build(LayerNode.group([Integration.node, Bus.node]), [Credential.node.replace(failingCredentialNode)]),
 )
 
 function eventually<A, E, R>(

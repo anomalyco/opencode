@@ -24,6 +24,8 @@ function npmEntrypoint(entrypoint?: string) {
   return Npm.Service.of({
     add: () => Effect.succeed({ directory: "", entrypoint }),
     resolve: () => Effect.succeed({ directory: "", entrypoint }),
+    check: () => Effect.succeed(false),
+    update: () => Effect.succeed({ directory: "", entrypoint }),
     which: () => Effect.undefined,
   })
 }

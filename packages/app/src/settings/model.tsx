@@ -41,6 +41,7 @@ export interface Settings {
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
+    mobileDiffWrap: boolean
     terminalPlacement: TerminalPlacement
     followUpBehavior: FollowUpBehavior
   }
@@ -130,6 +131,7 @@ const defaultSettings: Settings = {
     editToolPartsExpanded: false,
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
+    mobileDiffWrap: true,
     terminalPlacement: "side",
     followUpBehavior: "steer",
   },
@@ -267,6 +269,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
+        },
+        mobileDiffWrap: withFallback(() => store.general?.mobileDiffWrap, defaultSettings.general.mobileDiffWrap),
+        setMobileDiffWrap(value: boolean) {
+          setStore("general", "mobileDiffWrap", value)
         },
         terminalPlacement: withFallback(
           () => store.general?.terminalPlacement,

@@ -51,6 +51,7 @@ import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
+type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 
 export type CreateDataInput = {
   readonly api: () => OpenCodeClient
@@ -58,7 +59,7 @@ export type CreateDataInput = {
   readonly event: {
     readonly on: <Type extends OpenCodeEvent["type"]>(
       type: Type,
-      handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
+      handler: (event: OpenCodeEventMap[Type]) => void,
     ) => () => void
     readonly listen: (handler: (event: { name: OpenCodeEvent["type"]; details: OpenCodeEvent }) => void) => () => void
   }
@@ -617,13 +618,17 @@ export function createData(config: CreateDataInput) {
           })
           .catch((error) => console.error("Failed to load projected model switch message", error))
         return
-      case "session.renamed":
+      case "session.renamed": {
         // Preserve the live title when it races the session's initial read.
-        void result.session.sync(event.data.sessionID).then(() => {
+        const family = sync.pending(`session.family:${event.data.sessionID}`)
+          ? result.session.sync(event.data.sessionID, { children: true })
+          : Promise.resolve()
+        void Promise.all([result.session.sync(event.data.sessionID), family]).then(() => {
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "title", event.data.title)
         })
         return
+      }
       case "session.moved": {
         const current = store.session.info[event.data.sessionID]
         if (current) {
@@ -750,7 +755,8 @@ export function createData(config: CreateDataInput) {
             command: event.data.shell.command,
             status: event.data.shell.status,
             exit: event.data.shell.exit,
-            metadata: event.metadata,
+            metadata:
+              event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
             time: { created: event.created },
           })
         })

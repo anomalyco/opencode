@@ -1,4 +1,5 @@
 import { EOL } from "node:os"
+import path from "node:path"
 import { Effect } from "effect"
 import { OpenCode, type PluginInfo } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/effect/service"
@@ -7,7 +8,7 @@ import { Runtime } from "../../../framework/runtime"
 import { ServiceConfig } from "../../../services/service-config"
 import { Config } from "../../../config"
 import { Global } from "@opencode-ai/util/global"
-import { discoverTuiPlugins, tuiPluginDirectories } from "@opencode-ai/tui/plugin/discovery"
+import { discoverTuiPlugins, localPluginDirectories } from "@opencode-ai/tui/plugin/discovery"
 
 export default Runtime.handler(
   Commands.commands.plugin.commands.list,
@@ -19,7 +20,7 @@ export default Runtime.handler(
     const global = yield* Global.Service
     const info = yield* config.get()
     const discovered = yield* Effect.promise(() =>
-      tuiPluginDirectories(process.cwd(), global.config).then(discoverTuiPlugins),
+      localPluginDirectories(process.cwd(), global.config).then(discoverTuiPlugins),
     )
     const output = format(
       response.data,
@@ -48,11 +49,15 @@ export function format(
   const server = plugins
     .filter((plugin) => builtin || plugin.source.type !== "builtin")
     .toSorted((a, b) => name(a).localeCompare(name(b)))
-    .map((plugin) => `${name(plugin)} (${plugin.status})`)
+    .map((plugin) => `${name(plugin)} (${plugin.state.status})`)
   const advertised = plugins.flatMap((plugin) =>
-    plugin.status === "active" && plugin.tui && plugin.source.type === "package"
-      ? [{ target: plugin.source.package, source: "advertised" as const }]
-      : [],
+    plugin.state.status !== "active" || !plugin.features.tui
+      ? []
+      : plugin.source.type === "package"
+        ? [{ target: plugin.source.target, source: "advertised" as const }]
+        : plugin.source.type === "local"
+          ? [{ target: path.dirname(plugin.source.path), source: "advertised" as const }]
+          : [],
   )
   const targets = [...tui, ...advertised]
     .filter((plugin, index, all) => all.findIndex((candidate) => candidate.target === plugin.target) === index)
@@ -68,7 +73,7 @@ export function format(
 
 function name(plugin: PluginInfo) {
   if (plugin.id) return plugin.id
-  if (plugin.source.type === "package") return plugin.source.package
+  if (plugin.source.type === "package") return plugin.source.target
   if (plugin.source.type === "local") return plugin.source.path
   return plugin.source.type
 }

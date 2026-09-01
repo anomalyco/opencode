@@ -124,62 +124,58 @@ const layer = Layer.effect(
       return entries
     })
 
-    const refresh = Effect.fn("WellKnown.refresh")(function* () {
-      return yield* lock.withPermit(
-        Effect.gen(function* () {
-          const value = yield* kv.get(sourcesKey)
-          const origins = Schema.is(Sources)(value) ? value : []
-          if (!origins.length) return false
-          const entries = yield* Effect.forEach(origins, loadEntry)
-          const next = new Map(entries.map((entry) => [entry.origin, entry]))
-          const changed = !isDeepStrictEqual(Ref.getUnsafe(cache), next)
-          if (!changed) return false
-          yield* Ref.set(cache, next)
-          yield* bus.publish(Event.Updated, {})
-          return true
-        }),
-      )
-    })
+    const refresh = Effect.fn("WellKnown.refresh")(
+      function* () {
+        const value = yield* kv.get(sourcesKey)
+        const origins = Schema.is(Sources)(value) ? value : []
+        if (!origins.length) return false
+        const entries = yield* Effect.forEach(origins, loadEntry)
+        const next = new Map(entries.map((entry) => [entry.origin, entry]))
+        const changed = !isDeepStrictEqual(Ref.getUnsafe(cache), next)
+        if (!changed) return false
+        yield* Ref.set(cache, next)
+        yield* bus.publish(Event.Updated, {})
+        return true
+      },
+      (effect) => lock.withPermit(effect),
+    )
 
     return Service.of({
       entries: load,
       snapshot: () => Array.from(Ref.getUnsafe(cache).values()),
       refresh,
-      add: Effect.fn("WellKnown.add")(function* (value) {
-        return yield* lock.withPermit(
-          Effect.gen(function* () {
-            const origin = value.replace(/\/+$/, "")
-            const entry = yield* loadEntry(origin)
-            if (!entry.manifest.auth)
-              return yield* Effect.fail(new Error(`No authentication method found at ${origin}`))
-            const sources = yield* kv.get(sourcesKey)
-            const origins = Schema.is(Sources)(sources) ? sources : []
-            yield* kv.set(sourcesKey, Array.from(new Set([...origins, origin])))
-            yield* Ref.update(cache, (current) => new Map(current).set(origin, entry))
-            yield* bus.publish(Event.Updated, {})
-            return entry
-          }),
-        )
-      }),
-      remove: Effect.fn("WellKnown.remove")(function* (value) {
-        yield* lock.withPermit(
-          Effect.gen(function* () {
-            const origin = value.replace(/\/+$/, "")
-            const sources = yield* kv.get(sourcesKey)
-            const origins = Schema.is(Sources)(sources) ? sources : []
-            yield* kv.set(
-              sourcesKey,
-              origins.filter((item) => item !== origin),
-            )
-            yield* Ref.update(cache, (current) => {
-              const next = new Map(current)
-              next.delete(origin)
-              return next
-            })
-            yield* bus.publish(Event.Updated, {})
-          }),
-        )
-      }),
+      add: Effect.fn("WellKnown.add")(
+        function* (value) {
+          const origin = value.replace(/\/+$/, "")
+          const entry = yield* loadEntry(origin)
+          if (!entry.manifest.auth) return yield* Effect.fail(new Error(`No authentication method found at ${origin}`))
+          const sources = yield* kv.get(sourcesKey)
+          const origins = Schema.is(Sources)(sources) ? sources : []
+          yield* kv.set(sourcesKey, Array.from(new Set([...origins, origin])))
+          yield* Ref.update(cache, (current) => new Map(current).set(origin, entry))
+          yield* bus.publish(Event.Updated, {})
+          return entry
+        },
+        (effect, _value) => lock.withPermit(effect),
+      ),
+      remove: Effect.fn("WellKnown.remove")(
+        function* (value) {
+          const origin = value.replace(/\/+$/, "")
+          const sources = yield* kv.get(sourcesKey)
+          const origins = Schema.is(Sources)(sources) ? sources : []
+          yield* kv.set(
+            sourcesKey,
+            origins.filter((item) => item !== origin),
+          )
+          yield* Ref.update(cache, (current) => {
+            const next = new Map(current)
+            next.delete(origin)
+            return next
+          })
+          yield* bus.publish(Event.Updated, {})
+        },
+        (effect, _value) => lock.withPermit(effect),
+      ),
       resolve: Effect.fn("WellKnown.resolveEntry")((entry, variables) =>
         resolveEntry(entry, variables).pipe(Effect.provideService(HttpClient.HttpClient, http)),
       ),

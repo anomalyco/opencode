@@ -859,16 +859,12 @@ export function configured(options?: Options) {
                 aggregateID: input.aggregateID,
                 ...(target >= 0 ? { seq: Event.Seq.make(target) } : {}),
               }
-              const replay: Stream.Stream<LogItem> = readThrough(target).pipe(
-                Stream.map((event): LogItem => event),
-                Stream.concat(Stream.make(marker)),
-              )
+              const replay: Stream.Stream<LogItem> = readThrough(target).pipe(Stream.concat(Stream.make(marker)))
               if (!wakes) return replay
               const live: Stream.Stream<LogItem> = Stream.fromSubscription(wakes).pipe(
                 Stream.mapEffect(() => latestSequence(db, input.aggregateID)),
                 Stream.filter((target) => target > sequence),
                 Stream.flatMap((target) => readThrough(target)),
-                Stream.map((event): LogItem => event),
               )
               return Stream.concat(replay, live)
             }),

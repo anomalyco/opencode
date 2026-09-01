@@ -39,7 +39,7 @@ export type WslServerConfig = {
 
 export type WslServerRuntime =
   | { kind: "starting" }
-  | { kind: "ready"; url: string; username: string | null; password: string | null }
+  | { kind: "ready"; url: string; password: string | null }
   | { kind: "failed"; message: string }
   | { kind: "stopped" }
 

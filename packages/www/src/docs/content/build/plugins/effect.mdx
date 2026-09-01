@@ -12,7 +12,7 @@ bun add @opencode-ai/plugin@beta effect
 
 Export an Effect plugin from `.opencode/plugins/` to load it automatically.
 
-```ts title=".opencode/plugins/concise.ts"
+```ts title=".opencode/plugins/concise/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -26,7 +26,7 @@ export default Plugin.define({
 })
 ```
 
-Published packages and files outside `.opencode/plugins/` use the same `plugins` configuration as other server
+Published packages and plugin directories outside `.opencode/plugins/` use the same `plugins` configuration as other server
 plugins.
 
 ```jsonc title="opencode.jsonc"
@@ -36,18 +36,18 @@ plugins.
     "opencode-acme-effect-plugin",
     "opencode-acme-effect-plugin@1.2.0",
     "@acme/opencode-effect-plugin",
-    "./plugins/local-effect.ts",
+    "./plugins/local-effect",
     {
       "package": "@acme/opencode-effect-plugin",
-      "options": { "agent": "reviewer", "strict": true }
-    }
-  ]
+      "options": { "agent": "reviewer", "strict": true },
+    },
+  ],
 }
 ```
 
 See [Configure plugins](/plugins) for enablement, package resolution, and configuration precedence.
 
-```ts title="plugins/local-effect.ts"
+```ts title="plugins/local-effect/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -120,6 +120,7 @@ interface Context {
   readonly mcp: MCPDomain
   readonly plugin: PluginApi<unknown>
   readonly reference: ReferenceDomain
+  readonly rpc: RpcDomain
   readonly session: SessionDomain
   readonly shell: ShellDomain
   readonly skill: SkillDomain
@@ -131,7 +132,6 @@ interface Context {
 
 interface Plugin<R = Scope.Scope> {
   readonly id: string
-  readonly tui?: boolean
   readonly effect: (context: Context) => Effect.Effect<void, never, R>
 }
 ```
@@ -144,16 +144,16 @@ Pass options with the object form in `opencode.json(c)`.
 {
   "plugins": [
     {
-      "package": "./plugins/company-effect.ts",
-      "options": { "strict": true }
-    }
-  ]
+      "package": "./plugins/company-effect",
+      "options": { "strict": true },
+    },
+  ],
 }
 ```
 
 Read options from `ctx.options`. Narrow unknown values before use.
 
-```ts title="plugins/company-effect.ts"
+```ts title="plugins/company-effect/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -172,7 +172,7 @@ export default Plugin.define({
 Transforms synchronously edit a mutable draft. OpenCode applies transforms in plugin order, so later transforms see
 earlier changes. Yielding the registration keeps it in the plugin scope.
 
-```ts title="plugins/models-effect.ts"
+```ts title="plugins/models-effect/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -193,7 +193,7 @@ export default Plugin.define({
 
 A later transform can enforce policy across the composed catalog.
 
-```ts title="plugins/model-budget-effect.ts"
+```ts title="plugins/model-budget-effect/index.ts"
 effect: (ctx) =>
   Effect.gen(function* () {
     const catalog = ctx.catalog
@@ -211,7 +211,7 @@ effect: (ctx) =>
 
 Call `reload` when external state used by a transform changes. Reload replays every transform in order.
 
-```ts title="plugins/models-effect.ts"
+```ts title="plugins/models-effect/index.ts"
 effect: (ctx) =>
   Effect.gen(function* () {
     const catalog = ctx.catalog
@@ -838,6 +838,10 @@ effect: (ctx) =>
   Effect.gen(function* () {
     const tool = ctx.tool
     yield* tool.transform((draft) => {
+      draft.namespace({
+        name: "acme",
+        description: "Customer account tools",
+      })
       draft.add({
         name: "greeting",
         description: "Create a greeting",
@@ -889,6 +893,7 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 interface ToolDraft {
   list(): readonly (Tool.Info & { readonly id: string })[]
   get(id: string): (Tool.Info & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
     tool: Tool.Info<Input, Output>,
   ): void
@@ -1128,6 +1133,35 @@ effect: (ctx) =>
   }),
 ```
 
+Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
+classifies the failure and proposes its policy, but before any retry is scheduled. It does not expose how OpenCode
+internally performs the next attempt.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("retry", (event) =>
+      Effect.sync(() => {
+        if (event.error.status === 429) {
+          event.decision = { retry: true, delay: 10_000 }
+          return
+        }
+        if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+          event.decision = { retry: true, delay: 0 }
+          return
+        }
+        if (event.attempt >= 3) event.decision = { retry: false }
+      }),
+    )
+  }),
+```
+
+The initial `decision` is OpenCode's policy, so hooks may make a normally terminal provider failure retryable or veto a
+proposed retry. Multiple hooks run in registration order and later hooks see the current decision. The built-in maximum
+attempt count remains a hard limit. `attempt` is the physical attempt being proposed; the initial request is attempt `1`,
+so the first retry is attempt `2`. Invalid delays (`NaN`, infinity, or negative values) fall back to the computed delay.
+Context-overflow recovery remains separate because it compacts the conversation instead of retrying the same request.
+
 #### Reference
 
 ```ts
@@ -1136,6 +1170,18 @@ interface SessionHooks {
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly retry: SessionRetry
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetry {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
 }
 
 interface SessionHookDomain {

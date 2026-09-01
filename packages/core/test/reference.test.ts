@@ -11,7 +11,7 @@ import { it } from "./lib/effect"
 const cache = Layer.mock(RepositoryCache.Service, {
   ensure: () => Effect.die("unexpected Git materialization"),
 })
-const referenceLayer = AppNodeBuilder.build(Reference.node, [[RepositoryCache.node, cache]])
+const referenceLayer = AppNodeBuilder.build(Reference.node, [RepositoryCache.node.replace(cache)])
 
 describe("Reference", () => {
   it.effect("registers normalized sources for the owning scope", () =>

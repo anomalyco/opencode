@@ -169,7 +169,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           SessionMessage.Shell.make({
             id: SessionMessage.ID.fromEvent(event.id),
             type: "shell",
-            metadata: event.metadata,
+            metadata:
+              event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
             shellID: event.data.shell.id,
             command: event.data.shell.command,
             status: event.data.shell.status,

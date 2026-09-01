@@ -1,6 +1,5 @@
 import { Shell } from "@opencode-ai/core/shell"
 import { Location } from "@opencode-ai/core/location"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { ShellNotFoundError } from "@opencode-ai/protocol/errors"
@@ -20,8 +19,6 @@ export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers)
       .handle(
         "shell.create",
         Effect.fn(function* (ctx) {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
           const shell = yield* Shell.Service
           const location = yield* Location.Service
           return yield* response(

@@ -13,6 +13,7 @@ import {
   Hash,
   Layer,
   LayerMap,
+  Option,
   RcMap,
   Schema,
   Stream,
@@ -50,12 +51,12 @@ import { Tool } from "../src/tool"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
 const itWithSdk = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
 const activityLocations = Layer.effect(
@@ -76,7 +77,7 @@ const activityLocations = Layer.effect(
 )
 const itWithActivity = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node, LocationActivity.node]), [
-    [LocationServiceMap.node, activityLocations],
+    LocationServiceMap.node.replace(activityLocations),
   ]),
 )
 
@@ -346,7 +347,7 @@ describe("LocationServiceMap", () => {
           yield* Effect.promise(() =>
             fs.writeFile(
               file,
-              JSON.stringify({ plugins: [path.join(import.meta.dir, "plugin/fixtures/config-effect-plugin.ts")] }),
+              JSON.stringify({ plugins: [path.join(import.meta.dir, "plugin/fixtures/config-effect")] }),
             ),
           )
           yield* Fiber.join(updated)
@@ -517,7 +518,8 @@ describe("LocationServiceMap", () => {
           )
           const plugins = yield* Effect.gen(function* () {
             const plugins = yield* Plugin.Service
-            yield* (yield* PluginSupervisor.Service).flush
+            const supervisor = yield* PluginSupervisor.Service
+            yield* supervisor.flush
             return yield* plugins.list()
           }).pipe(
             Effect.scoped,
@@ -559,21 +561,20 @@ describe("LocationServiceMap", () => {
               fs.writeFile(
                 file,
                 JSON.stringify({
-                  plugins: ["-*", path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts")],
+                  plugins: ["-*", path.join(import.meta.dir, "plugin/fixtures/failing")],
                 }),
               ),
             )
             for (let attempt = 0; attempt < 100; attempt++) {
-              if ((yield* registry.list()).some((plugin) => plugin.status === "failed")) break
+              if ((yield* registry.list()).some((plugin) => plugin.state.status === "failed")) break
               yield* Effect.sleep("20 millis")
             }
             expect(yield* registry.list()).toEqual([
               {
                 id: Plugin.ID.make("failing-plugin"),
-                source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts") },
-                status: "failed",
-                error: expect.stringContaining("plugin failed"),
-                tui: false,
+                source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing/index.ts") },
+                state: { status: "failed", error: expect.stringContaining("plugin failed") },
+                features: { server: true },
               },
             ])
 
@@ -674,14 +675,21 @@ describe("LocationServiceMap", () => {
             expect(Equal.equals(absent, present)).toBe(false)
             if (process.platform === "win32") expect(absent.directory).not.toBe(present.directory)
 
+            expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
+
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
+            expect(Option.getOrThrow(yield* locations.contextEffectOption(absent))).toBe(first)
+            expect(Option.getOrThrow(yield* locations.contextEffectOption(present))).toBe(first)
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
               Location.Ref.make({ directory, workspaceID: undefined }),
             ])
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)
+            expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
+            expect(yield* locations.contextEffectOption(present)).toEqual(Option.none())
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
           }),
         ),
@@ -932,9 +940,10 @@ describe("LocationServiceMap", () => {
                 })
                 .pipe(Effect.asVoid),
           })
-          yield* plugins.activate([{ ...reviewer, version: "1" }])
+          yield* plugins.activate([{ ...reviewer, revision: "1" }])
 
-          expect(yield* (yield* Agent.Service).get(Agent.ID.make("reviewer"))).toMatchObject({
+          const agents = yield* Agent.Service
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({
             description: "Reviews code",
             mode: "subagent",
           })

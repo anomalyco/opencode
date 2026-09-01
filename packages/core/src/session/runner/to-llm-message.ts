@@ -1,7 +1,7 @@
 import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
+import type { Model } from "@opencode-ai/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
-import type { Model } from "../../model.js"
 import { SessionMessage } from "../message.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
@@ -260,6 +260,8 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "system":
       return [Message.system(message.text)]
     case "shell":
+      // Background shell results enter context once, through their completion inbox item.
+      if (message.metadata?.background === true) return []
       return [
         Message.make({
           id: message.id,

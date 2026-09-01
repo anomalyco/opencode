@@ -51,13 +51,7 @@ import { DialogSkill } from "../dialog-skill"
 import { useArgs } from "../../context/args"
 import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
-import {
-  normalizePastedFilepath,
-  parsePastedFilepaths,
-  readLocalAttachment,
-  MAX_LOCAL_ATTACHMENT_BYTES,
-  type LocalAttachment,
-} from "./local-attachment"
+import { resolvePastedAttachments } from "./local-attachment"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
@@ -468,6 +462,7 @@ export function Prompt(props: PromptProps) {
           event?.preventDefault()
           event?.stopPropagation()
           if (!input.focused) return
+          if (auto()?.visible && !auto()?.completeQueueableCommand()) return
           const handled = await submit("queue")
           if (!handled) return
           dialog.clear()
@@ -1454,35 +1449,18 @@ export function Prompt(props: PromptProps) {
   async function pasteInputText(text: string, changed: () => boolean) {
     const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
     const pastedContent = normalizedText.trim()
-    const filepath = normalizePastedFilepath(pastedContent, terminalEnvironment.platform)
-    const isUrl = /^(https?):\/\//.test(filepath)
-    if (!isUrl) {
-      const attachment = await readLocalAttachment(filepath)
-      if (attachment) {
-        if (changed()) return
-        pasteLocalAttachment(filepath, attachment)
-        return
-      }
-
-      const filepaths = parsePastedFilepaths(pastedContent, terminalEnvironment.platform)
-      if (filepaths.length > 1) {
-        let remaining = MAX_LOCAL_ATTACHMENT_BYTES
-        const attachments: Array<{ filepath: string; attachment: LocalAttachment }> = []
-        for (const candidate of filepaths) {
-          const next = await readLocalAttachment(candidate, remaining)
-          if (!next) break
-          remaining -= typeof next.content === "string" ? Buffer.byteLength(next.content) : next.content.byteLength
-          attachments.push({ filepath: candidate, attachment: next })
-        }
-        if (attachments.length === filepaths.length) {
-          if (changed()) return
-          for (const item of attachments) pasteLocalAttachment(item.filepath, item.attachment)
+    const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
+    if (changed()) return
+    if (attachments) {
+      attachments.forEach((attachment) => {
+        if (attachment.type === "text") {
+          pasteText(attachment.content, `[SVG: ${attachment.filename || "image"}]`)
           return
         }
-      }
+        pasteAttachment(attachment)
+      })
+      return
     }
-
-    if (changed()) return
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
     if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
@@ -1506,18 +1484,6 @@ export function Prompt(props: PromptProps) {
       input.getLayoutNode().markDirty()
       renderer.requestRender()
     }, 0)
-  }
-
-  function pasteLocalAttachment(filepath: string, attachment: LocalAttachment) {
-    const filename = path.basename(filepath)
-    if (attachment.type === "text") {
-      pasteText(attachment.content, `[SVG: ${filename || "image"}]`)
-      return
-    }
-    pasteAttachment({
-      filename,
-      uri: `data:${attachment.mime};base64,${Buffer.from(attachment.content).toString("base64")}`,
-    })
   }
 
   function pasteAttachment(file: { filename?: string; uri: string }) {

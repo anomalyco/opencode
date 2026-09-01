@@ -15,9 +15,15 @@ test("loads cached plugin packages without requesting a refresh", async () => {
         add: (_pkg, options) =>
           Effect.sync(() => {
             calls.push(options)
+            return { directory: path.dirname(entrypoint), entrypoint: pathToFileURL(entrypoint).href, version: "1.2.3" }
+          }),
+        resolve: (_pkg, options) =>
+          Effect.sync(() => {
+            calls.push(options)
             return { directory: path.dirname(entrypoint), entrypoint: pathToFileURL(entrypoint).href }
           }),
-        resolve: () => Effect.die(new Error("Unexpected resolve")),
+        check: () => Effect.die(new Error("Unexpected check")),
+        update: () => Effect.die(new Error("Unexpected update")),
         which: () => Effect.die(new Error("Unexpected which")),
       }),
     ),
@@ -25,5 +31,7 @@ test("loads cached plugin packages without requesting a refresh", async () => {
   )
 
   expect(plugin.id).toBe("config-effect-plugin")
-  expect(calls).toEqual([{ subpaths: ["server", ""] }])
+  expect(plugin.features).toEqual({ tui: true, rpc: true })
+  expect(plugin.source).toEqual({ type: "package", target: "fixture-plugin", version: "1.2.3" })
+  expect(calls).toEqual([{ subpaths: ["server", ""] }, { subpaths: ["tui"] }, { subpaths: ["rpc"] }])
 })

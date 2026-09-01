@@ -12,9 +12,13 @@ export type PermissionEffect = "allow" | "deny" | "ask"
 
 export type PluginSource =
   | { type: "builtin" }
-  | { type: "package"; package: string }
+  | { type: "package"; target: string; version?: string; outdated?: true }
   | { type: "local"; path: string }
   | { type: "sdk" }
+
+export type PluginFeatures = { server?: true; tui?: true; rpc?: true }
+
+export type PluginState = { status: "active" } | { status: "failed"; error: string }
 
 export type SessionForkBoundary = { type: "before"; messageID: string } | { type: "through"; messageID: string }
 
@@ -333,6 +337,8 @@ export type SkillInfo = {
   content: string
 }
 
+export type RpcOutput = { output?: any }
+
 export type PermissionReply = "once" | "always" | "reject"
 
 export type Pty = {
@@ -419,6 +425,8 @@ export type WorkspaceDestroyResult = { destroyed: boolean }
 
 export type VcsBranch = { current?: string; default?: string }
 
+export type VcsBase = { name: string; ref: string; source: "reflog" | "default" }
+
 export type VcsFileStatus = {
   file: string
   additions: number
@@ -440,9 +448,7 @@ export type ProviderRequest = {
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
-export type PluginInfo =
-  | { id: string; source: PluginSource; status: "active"; tui: boolean }
-  | { id?: string; source: PluginSource; status: "failed"; error: string; tui: boolean }
+export type PluginInfo = { id?: string; source: PluginSource; features: PluginFeatures; state: PluginState }
 
 export type SessionMessageLocationSwitched = {
   id: string
@@ -456,6 +462,15 @@ export type SessionMessageLocationSwitched = {
 }
 
 export type SessionInboxMovePayload = { location: LocationRef; projectID: string; subpath?: string }
+
+export type V2EventRpc = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any } | undefined
+  type: `${"rpc."}${string}`
+  location: LocationRef
+  data: { [x: string]: any }
+}
 
 export type V2EventServerConnected = {
   id: string
@@ -2313,6 +2328,7 @@ export type V2Event =
   | VcsBranchUpdated
   | McpStatusChanged
   | McpResourcesChanged
+  | V2EventRpc
   | V2EventServerConnected
 
 export type SessionLogItem = SessionEventDurable | EventLogSynced
@@ -2337,6 +2353,14 @@ export type AgentNotFoundError = {
 }
 export const isAgentNotFoundError = (value: unknown): value is AgentNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AgentNotFoundError"
+
+export type ServiceUnavailableError = {
+  readonly _tag: "ServiceUnavailableError"
+  readonly message: string
+  readonly service?: string | undefined
+}
+export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
 
 export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly message: string }
 export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
@@ -2398,14 +2422,6 @@ export type SkillNotFoundError = {
 }
 export const isSkillNotFoundError = (value: unknown): value is SkillNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillNotFoundError"
-
-export type ServiceUnavailableError = {
-  readonly _tag: "ServiceUnavailableError"
-  readonly message: string
-  readonly service?: string | undefined
-}
-export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
 
 export type SessionBusyError = {
   readonly _tag: "SessionBusyError"
@@ -2479,6 +2495,24 @@ export type PermissionNotFoundError = {
 export const isPermissionNotFoundError = (value: unknown): value is PermissionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PermissionNotFoundError"
 
+export type RpcError = {
+  readonly _tag: "RpcError"
+  readonly type: string
+  readonly message: string
+  readonly data?: unknown | undefined
+}
+export const isRpcError = (value: unknown): value is RpcError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "RpcError"
+
+export type RpcInternalError = {
+  readonly _tag: "RpcInternalError"
+  readonly type: "rpc.internal" | "rpc.invalid_output"
+  readonly message: string
+  readonly data?: unknown | undefined
+}
+export const isRpcInternalError = (value: unknown): value is RpcInternalError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "RpcInternalError"
+
 export type PtyNotFoundError = { readonly _tag: "PtyNotFoundError"; readonly ptyID: string; readonly message: string }
 export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyNotFoundError"
@@ -2547,6 +2581,15 @@ export type PluginListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<PluginInfo>
 }
+
+export type PluginUpdateInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly target: { readonly target: string }["target"]
+}
+
+export type PluginUpdateOutput = void
 
 export type SessionListInput = {
   readonly workspace?: {
@@ -5667,6 +5710,17 @@ export type SkillListOutput = {
   data: Array<SkillInfo>
 }
 
+export type RpcCallInput = {
+  readonly rpcID: { readonly rpcID: string; readonly method: string }["rpcID"]
+  readonly method: { readonly rpcID: string; readonly method: string }["method"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly input?: { readonly input: JsonValue }["input"]
+}
+
+export type RpcCallOutput = RpcOutput
+
 export type EventSubscribeOutput = V2Event
 
 export type PtyListInput = {
@@ -6073,6 +6127,17 @@ export type VcsGetOutput = {
   data: VcsInfo
 }
 
+export type VcsBaseInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type VcsBaseOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: VcsBase | null
+}
+
 export type VcsStatusInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -6110,17 +6175,26 @@ export type VcsBranchesOutput = {
 export type VcsDiffInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly mode: "working" | "branch"
+    readonly mode: "working" | "branch" | "committed"
+    readonly base?: string | undefined
     readonly context?: number | undefined
   }["location"]
   readonly mode: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly mode: "working" | "branch"
+    readonly mode: "working" | "branch" | "committed"
+    readonly base?: string | undefined
     readonly context?: number | undefined
   }["mode"]
+  readonly base?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly mode: "working" | "branch" | "committed"
+    readonly base?: string | undefined
+    readonly context?: number | undefined
+  }["base"]
   readonly context?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly mode: "working" | "branch"
+    readonly mode: "working" | "branch" | "committed"
+    readonly base?: string | undefined
     readonly context?: number | undefined
   }["context"]
 }

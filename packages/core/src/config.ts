@@ -316,16 +316,15 @@ export const layer = (options?: Options) =>
         }
       })
 
-      const reload = Effect.fn("Config.reload")(() =>
-        reloadLock.withPermit(
-          Effect.gen(function* () {
-            const next = yield* discover()
-            yield* reconcile(next)
-            if (isDeepStrictEqual(configs, next)) return
-            configs = next
-            yield* bus.publish(Event.Updated, {})
-          }),
-        ),
+      const reload = Effect.fn("Config.reload")(
+        function* () {
+          const next = yield* discover()
+          yield* reconcile(next)
+          if (isDeepStrictEqual(configs, next)) return
+          configs = next
+          yield* bus.publish(Event.Updated, {})
+        },
+        (effect) => reloadLock.withPermit(effect),
       )
 
       yield* Stream.fromPubSub(updates).pipe(

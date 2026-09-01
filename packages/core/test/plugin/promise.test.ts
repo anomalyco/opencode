@@ -27,7 +27,7 @@ import { Pty } from "@opencode-ai/schema/pty"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
-import { host as testHost } from "./host"
+import { host } from "./host"
 
 const it = testEffect(PluginTestLayer)
 
@@ -42,7 +42,7 @@ describe("fromPromise", () => {
         foregroundProcess: "bun",
         screen: { text: "one\ntwo\nthree", cols: 80, rows: 2, cursor: { x: 3, y: 1 } },
       })
-      const host = testHost({
+      const context = host({
         experimental: {
           terminal: {
             read: (input) => {
@@ -72,7 +72,7 @@ describe("fromPromise", () => {
             await ctx.experimental.terminal.read({ sessionID: "ses_terminal", lines: 65535 })
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual([
         { sessionID: Session.ID.make("ses_terminal") },
@@ -85,7 +85,7 @@ describe("fromPromise", () => {
 
   it.effect("preserves null terminal reads and rejects daemon failures", () =>
     Effect.gen(function* () {
-      const host = testHost({
+      const context = host({
         experimental: {
           terminal: {
             read: (input) =>
@@ -106,7 +106,7 @@ describe("fromPromise", () => {
             )
           },
         }),
-      ).effect(host)
+      ).effect(context)
     }),
   )
 
@@ -167,14 +167,14 @@ describe("fromPromise", () => {
         }),
       )
 
-      yield* plugins.activate([{ ...adapted, version: "1" }])
+      yield* plugins.activate([{ ...adapted, revision: "1" }])
     }),
   )
 
   it.effect("adapts session creation through the protocol schema", () =>
     Effect.gen(function* () {
       let seen: unknown
-      const host = testHost({
+      const context = host({
         session: {
           create: (input) => {
             seen = input
@@ -212,7 +212,7 @@ describe("fromPromise", () => {
             })
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual({ title: "Promise title" })
     }),
@@ -220,7 +220,7 @@ describe("fromPromise", () => {
 
   it.effect("forwards transient session generation", () =>
     Effect.gen(function* () {
-      const host = testHost({
+      const context = host({
         session: {
           generate: (input) => Effect.succeed({ text: `${input.sessionID}: ${input.prompt}` }),
         },
@@ -235,14 +235,14 @@ describe("fromPromise", () => {
             })
           },
         }),
-      ).effect(host)
+      ).effect(context)
     }),
   )
 
   it.effect("preserves interrupt results and rejected Promise behavior", () =>
     Effect.gen(function* () {
       const seen: unknown[] = []
-      const host = testHost({
+      const context = host({
         session: {
           interrupt: (input) => {
             if (input.sessionID === Session.ID.make("ses_failure")) {
@@ -281,7 +281,7 @@ describe("fromPromise", () => {
             expect(await ctx.session.wait({ sessionID: "ses_success" })).toBeUndefined()
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual([
         { sessionID: Session.ID.make("ses_success"), agent: Agent.ID.make("build") },
@@ -312,7 +312,7 @@ describe("fromPromise", () => {
         resume: null,
       }
       let seen: unknown
-      const host = testHost({
+      const context = host({
         session: {
           synthetic: (value) => {
             seen = value
@@ -340,7 +340,7 @@ describe("fromPromise", () => {
             await ctx.session.synthetic(input)
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual({
         ...input,
@@ -567,7 +567,7 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("registers a Promise VCS provider and forwards client reads", () =>
+  it.effect("registers a Promise VCS provider and preserves its receiver when forwarding client reads", () =>
     Effect.gen(function* () {
       const vcs = yield* Vcs.Service
       const plugin = yield* Plugin.Service
@@ -583,6 +583,11 @@ describe("fromPromise", () => {
               info: async (_input, request) => {
                 signals.push(request.signal)
                 return { branch: { current: "feature", default: "main" } }
+              },
+              async base(_input, request) {
+                expect(this.id).toBe("custom")
+                signals.push(request.signal)
+                return { name: "main", ref: "refs/heads/main", source: "default" }
               },
               branches: async (input, request) => {
                 signals.push(request.signal)
@@ -604,6 +609,7 @@ describe("fromPromise", () => {
           })
 
           expect((await ctx.vcs.get()).data.branch.current).toBe("feature")
+          expect((await ctx.vcs.base()).data).toEqual({ name: "main", ref: "refs/heads/main", source: "default" })
           expect((await ctx.vcs.branches({ search: "feat" })).data).toEqual(["feature"])
           expect((await ctx.vcs.status()).data).toHaveLength(1)
           expect((await ctx.vcs.diff({ mode: "working", context: 2 })).data[0].patch).toBe("+hello")
@@ -612,7 +618,7 @@ describe("fromPromise", () => {
 
       yield* PluginPromise.fromPromise(promisePlugin).effect(host)
       expect((yield* vcs.info()).branch.current).toBe("feature")
-      expect(signals).toHaveLength(4)
+      expect(signals).toHaveLength(5)
       expect(signals.every((signal) => signal instanceof AbortSignal)).toBeTrue()
     }),
   )
@@ -957,7 +963,7 @@ describe("fromPromise", () => {
       })
       const original = yield* registry.snapshot()
       expect(original.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
-      expect(original.codeModeCatalog).toEqual([])
+      expect(original.codeModeCatalog?.tools).toEqual([])
 
       yield* PluginPromise.fromPromise(
         define({
@@ -975,7 +981,7 @@ describe("fromPromise", () => {
 
       const snapshot = yield* registry.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["acme.hello"])
+      expect(snapshot.codeModeCatalog?.tools.map((tool) => tool.path)).toEqual(["acme.hello"])
       expect(original.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
       expect(
         yield* snapshot.execute({

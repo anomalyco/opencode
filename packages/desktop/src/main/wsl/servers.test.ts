@@ -65,7 +65,6 @@ test("stops a running WSL server before replacing its CLI", async () => {
             },
             onExit: () => undefined,
             url: "http://127.0.0.1:4096",
-            username: "opencode",
             password: "secret",
           }
         },
@@ -77,6 +76,11 @@ test("stops a running WSL server before replacing its CLI", async () => {
   )
   controller.startConfiguredServers()
   await waitFor(() => controller.getState().servers[0]?.runtime.kind === "ready")
+  expect(controller.getState().servers[0]?.runtime).toEqual({
+    kind: "ready",
+    url: "http://127.0.0.1:4096",
+    password: "secret",
+  })
 
   await controller.installOpencode("Debian")
 
@@ -105,7 +109,6 @@ test("stops a sidecar that finishes starting after shutdown", async () => {
     },
     onExit: () => undefined,
     url: "http://127.0.0.1:4096",
-    username: "opencode",
     password: "secret",
   })
   await waitFor(() => stopped.length === 1)
@@ -194,7 +197,6 @@ function testControllerOptions(overrides: Partial<ControllerOptions> = {}): Cont
       stop: async () => undefined,
       onExit: () => undefined,
       url: "http://127.0.0.1:4096",
-      username: "opencode",
       password: "secret",
     }),
     readServers: () => persistedServers,

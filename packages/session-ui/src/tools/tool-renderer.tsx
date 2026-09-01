@@ -27,6 +27,8 @@ import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "../components/tool-error-card"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "../components/markdown"
+import { createMarkdownImages } from "../components/markdown-image"
+import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -270,6 +272,12 @@ function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI1
 function readToolPath(input: Record<string, unknown>) {
   if (typeof input.path === "string") return input.path
   return undefined
+}
+
+function readImagePath(input: Record<string, unknown>) {
+  const path = readToolPath(input)
+  if (!path || !/\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(path)) return
+  return path.replaceAll("\\", "/")
 }
 
 function skillToolName(input: Record<string, unknown>, metadata?: Record<string, unknown>) {
@@ -554,6 +562,7 @@ export function CurrentContextToolGroup(props: {
         icon="glasses"
         status={pending() ? "running" : "completed"}
         compact
+        hasContent
         allowOpenWhilePending
         open={props.open}
         onOpenChange={change}
@@ -620,7 +629,9 @@ export function CurrentContextToolGroup(props: {
                       <div data-slot="context-tool-group-item">
                         <Show
                           when={
-                            tool().state.status !== "error" && ["read", "glob", "grep", "list"].includes(tool().name)
+                            tool().state.status !== "error" &&
+                            ["read", "glob", "grep", "list"].includes(tool().name) &&
+                            !(tool().name === "read" && readImagePath(currentToolInput(tool())))
                           }
                           fallback={
                             <Show
@@ -1048,6 +1059,7 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
+    const image = createMemo(() => (props.status === "completed" ? readImagePath(props.input) : undefined))
     const args: string[] = []
     if (typeof props.input.offset === "number") args.push("offset=" + props.input.offset)
     if (typeof props.input.limit === "number") args.push("limit=" + props.input.limit)
@@ -1070,12 +1082,22 @@ ToolRegistry.register({
         <BasicTool
           {...props}
           icon="glasses"
+          hasContent={!!image()}
+          defer
+          onOpenChange={(open) => {
+            props.onOpenChange?.(open)
+            props.onContentRendered?.()
+          }}
           trigger={{
             title: i18n.t("ui.tool.read"),
             subtitle: getFilename(readToolPath(props.input) ?? ""),
             args,
           }}
-        />
+        >
+          <Show when={image()} keyed>
+            {(path) => <ReadImage path={path} onContentRendered={props.onContentRendered} />}
+          </Show>
+        </BasicTool>
         <Show when={paths().length > 0}>
           <div
             data-component="tool-loaded-item"
@@ -1100,6 +1122,28 @@ ToolRegistry.register({
     )
   },
 })
+
+function ReadImage(props: { path: string; onContentRendered?: () => void }) {
+  const markdown = useMarkdown()
+  let root!: HTMLDivElement
+  createEffect(() => {
+    if (!markdown?.readImage) return
+    const images = createMarkdownImages(markdown.readImage)
+    images.update(root)
+    onCleanup(() => images.dispose())
+  })
+  onMount(() => props.onContentRendered?.())
+  return (
+    <div ref={root} data-component="read-image">
+      <img
+        data-local-image={props.path}
+        alt={getFilename(props.path)}
+        onLoad={() => props.onContentRendered?.()}
+        onError={() => props.onContentRendered?.()}
+      />
+    </div>
+  )
+}
 
 ToolRegistry.register({
   name: "list",
@@ -1475,7 +1519,14 @@ ToolRegistry.register({
       (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true)
     const sawStreaming = streaming()
     const [streamed, setStreamed] = createSignal("")
+    // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
+    const saved = createMemo(() =>
+      props.metadata.status === "exited" || props.metadata.status === "timeout" || props.metadata.status === "killed"
+        ? props.output
+        : undefined,
+    )
     createEffect(() => {
+      if (saved() !== undefined) return
       const id = props.metadata.shellID
       const shellOutput = data.shellOutput
       if (typeof id !== "string" || !shellOutput) return
@@ -1511,7 +1562,7 @@ ToolRegistry.register({
       return ""
     }
     const output = createMemo(() =>
-      stripAnsi((typeof props.metadata.shellID === "string" && streamed()) || props.output || "").replace(
+      stripAnsi(saved() ?? ((typeof props.metadata.shellID === "string" && streamed()) || props.output || "")).replace(
         /\r\n?/g,
         "\n",
       ),
@@ -1560,7 +1611,15 @@ export function SessionShellMessage(props: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
+  const i18n = useI18n()
   const render = ToolRegistry.render("shell") ?? GenericTool
+  const error = createMemo(() => {
+    const message = props.message
+    if (message.status === "timeout") return i18n.t("ui.tool.shell.timeout")
+    if (message.status === "killed") return i18n.t("ui.tool.shell.cancelled")
+    if (message.status !== "exited" || message.exit === undefined || message.exit === 0) return
+    return i18n.t("ui.tool.shell.exit", { code: message.exit })
+  })
   return (
     <div data-component="session-shell-message" data-timeline-part-id={props.message.id}>
       <Dynamic
@@ -1568,6 +1627,7 @@ export function SessionShellMessage(props: {
         tool="shell"
         input={{ command: props.message.command }}
         metadata={{
+          shellID: props.message.shellID,
           status: props.message.status,
           exit: props.message.exit,
           truncated: props.message.output?.truncated,
@@ -1578,6 +1638,9 @@ export function SessionShellMessage(props: {
         open={props.open}
         onOpenChange={props.onOpenChange}
       />
+      <Show when={error()}>
+        {(error) => <ToolErrorCard tool="shell" error={error()} subtitle={props.message.command} />}
+      </Show>
     </div>
   )
 }

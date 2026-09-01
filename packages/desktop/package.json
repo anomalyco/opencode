@@ -44,6 +44,7 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "app-builder-lib": "26.15.7",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "electron": "42.10.1",

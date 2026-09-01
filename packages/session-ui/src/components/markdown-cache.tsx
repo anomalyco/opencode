@@ -1,4 +1,5 @@
 import { checksum } from "@opencode-ai/util/encode"
+import { parseSmallMarkdown } from "@opencode-ai/ui/context/marked-base"
 import DOMPurify from "dompurify"
 import { parseMarkdown } from "./markdown-worker"
 import { localImagePath } from "./markdown-image"
@@ -11,6 +12,7 @@ export type MarkdownCacheEntry = {
 
 const max = 200
 const cache = new Map<string, MarkdownCacheEntry>()
+const pending = new Map<string, { raw: string; promise: Promise<MarkdownCacheEntry> }>()
 // Mermaid registers hooks on the shared instance that overwrite link attributes.
 const purifier = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 const config = {
@@ -66,17 +68,55 @@ export function touchCachedMarkdown(key: string, value: MarkdownCacheEntry) {
 }
 
 export async function preloadMarkdown(text: string, cacheKey: string) {
+  const block = { raw: text, src: text }
   const key = `${cacheKey}:0:full`
-  const cached = getCachedMarkdown(key)
-  if (cached?.raw === text) {
+  if (getReadyMarkdown(block, key)) return
+  await renderCachedMarkdown(block, key)
+}
+
+export function getReadyMarkdown(block: { raw: string; src: string }, key?: string) {
+  const cached = key ? getCachedMarkdown(key) : undefined
+  if (key && cached?.raw === block.raw) {
+    pending.delete(key)
     touchCachedMarkdown(key, cached)
+    return cached
+  }
+  if (!purifier.isSupported) return
+  try {
+    const html = parseSmallMarkdown(block.src)
+    if (html === undefined) return
+    const hash = checksum(block.raw)
+    const result = { raw: block.raw, hash: hash ?? "", html: sanitizeMarkdown(html) }
+    if (key && hash) {
+      pending.delete(key)
+      touchCachedMarkdown(key, result)
+    }
+    return result
+  } catch {
+    // Keep parser failures on the normal worker/escaped-text fallback path.
     return
   }
-  const hash = checksum(text)
-  if (!hash) return
-  touchCachedMarkdown(key, {
-    raw: text,
-    hash,
-    html: sanitizeMarkdown(await parseMarkdown(text)),
-  })
+}
+
+export async function renderCachedMarkdown(block: { raw: string; src: string }, key?: string) {
+  const cached = key ? getCachedMarkdown(key) : undefined
+  if (key && cached?.raw === block.raw) {
+    pending.delete(key)
+    touchCachedMarkdown(key, cached)
+    return cached
+  }
+  const current = key ? pending.get(key) : undefined
+  if (current?.raw === block.raw) return current.promise
+  const promise = parseMarkdown(block.src)
+    .then((html) => {
+      const hash = checksum(block.raw)
+      const result = { raw: block.raw, hash: hash ?? "", html: sanitizeMarkdown(html) }
+      if (key && hash && pending.get(key)?.promise === promise) touchCachedMarkdown(key, result)
+      return result
+    })
+    .finally(() => {
+      if (key && pending.get(key)?.promise === promise) pending.delete(key)
+    })
+  if (key) pending.set(key, { raw: block.raw, promise })
+  return promise
 }

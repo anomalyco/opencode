@@ -22,20 +22,21 @@ const describeHg = Bun.which("hg") ? describe : describe.skip
 
 const provide = (directory: string) =>
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node, FSUtil.node]), [
-      [
-        Location.node,
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of(
-            location(
-              { directory: AbsolutePath.make(directory) },
-              { vcs: { type: "hg", store: AbsolutePath.make(path.join(directory, ".hg")) } },
+    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node, FSUtil.node]), {
+      replacements: [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(
+                { directory: AbsolutePath.make(directory) },
+                { vcs: { type: "hg", store: AbsolutePath.make(path.join(directory, ".hg")) } },
+              ),
             ),
           ),
         ),
       ],
-    ]),
+    }),
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
@@ -72,6 +73,22 @@ async function commitAll(directory: string, message: string) {
   await hg(directory, "addremove", "-q")
   await hg(directory, "commit", "-q", "-m", message, "-u", "test")
 }
+
+it.live("Mercurial rejects unsupported review modes and bases without requiring hg", () =>
+  withTmp((directory) =>
+    Effect.gen(function* () {
+      const vcs = yield* Vcs.Service
+      const context = host()
+      yield* VcsHgPlugin.Plugin.effect({
+        ...context,
+        vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+      })
+      expect(yield* vcs.base()).toBeNull()
+      expect(yield* vcs.diff("committed").pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
+      expect(yield* vcs.diff("branch", { base: "release" }).pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
+    }).pipe(provide(directory)),
+  ),
+)
 
 describeHg("Vcs mercurial", () => {
   it.live("reports modified, missing, and untracked files", () =>

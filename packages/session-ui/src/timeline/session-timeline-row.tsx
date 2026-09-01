@@ -27,6 +27,7 @@ import {
   Timeline,
   TimelineRow,
   unwrapErrorMessage,
+  type PartRef,
   type ReasoningMode,
 } from "./projection"
 
@@ -80,15 +81,31 @@ export function createSessionTimelineRowRenderer(input: {
       .find((entry) => entry.content.type === "text" && !!entry.content.text.trim())?.id
   }
   const padding = () => input.padding?.() ?? "px-4 md:px-5"
+  const indexGroupContents = (refs: PartRef[]) => {
+    const result = new Map<string, Map<string, SessionMessageAssistant["content"][number]>>()
+    refs.forEach((ref) => {
+      if (result.has(ref.messageID)) return
+      const contents = new Map<string, SessionMessageAssistant["content"][number]>()
+      const message = input.projection.messageByID().get(ref.messageID)
+      if (message?.type === "assistant") {
+        Timeline.contentEntries(message).forEach((entry) => {
+          // Match resolveContent's first entry when content IDs repeat.
+          if (!contents.has(entry.id)) contents.set(entry.id, entry.content)
+        })
+      }
+      result.set(ref.messageID, contents)
+    })
+    return result
+  }
 
   const renderAssistant = (row: Accessor<TimelineRow.AssistantPart>, onSizeChange?: () => void) => {
     if (row().group.type === "context") {
       const parts = createMemo(() => {
         const group = row().group
         if (group.type !== "context") return []
+        const contents = indexGroupContents(group.refs)
         return group.refs.flatMap<ContextGroupPart>((ref) => {
-          const message = input.projection.messageByID().get(ref.messageID)
-          const content = Timeline.resolveContent(message, ref.partID)
+          const content = contents.get(ref.messageID)?.get(ref.partID)
           if (content?.type === "tool") return [content]
           if (content?.type === "reasoning") return [{ ...content, id: ref.partID }]
           return []
@@ -116,10 +133,10 @@ export function createSessionTimelineRowRenderer(input: {
       const tools = createMemo(() => {
         const group = row().group
         if (group.type !== "file") return []
+        const contents = indexGroupContents(group.refs)
         return group.refs.flatMap((ref) => {
-          const message = input.projection.messageByID().get(ref.messageID)
-          const content = Timeline.resolveContent(message, ref.partID)
-          return message?.type === "assistant" && content?.type === "tool" ? [content] : []
+          const content = contents.get(ref.messageID)?.get(ref.partID)
+          return content?.type === "tool" ? [content] : []
         })
       })
       const firstPath = createMemo(() => {

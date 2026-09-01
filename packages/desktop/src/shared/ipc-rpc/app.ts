@@ -3,7 +3,6 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc"
 
 const ServerReadyData = Schema.Struct({
   url: Schema.String,
-  username: Schema.NullOr(Schema.String),
   password: Schema.NullOr(Schema.String),
 })
 

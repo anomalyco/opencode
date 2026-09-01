@@ -23,19 +23,22 @@ describe("CodeMode", () => {
 
       const snapshot = yield* tools.snapshot()
       expect(snapshot.definitions.some((tool) => tool.name === "execute")).toBe(true)
-      expect(snapshot.codeModeCatalog).toStrictEqual([
-        {
-          path: "echo",
-          description: "Echo text",
-          signature: "tools.echo(input: {\n  text: string,\n}): Promise<string>",
-          pinned: true,
-        },
-      ])
+      expect(snapshot.codeModeCatalog).toStrictEqual({
+        tools: [
+          {
+            path: "echo",
+            description: "Echo text",
+            signature: "tools.echo(input: {\n  text: string,\n}): Promise<string>",
+            pinned: true,
+          },
+        ],
+        namespaces: new Map(),
+      })
     }).pipe(
       Effect.scoped,
       Effect.provide(
         AppNodeBuilder.build(Tool.node, [
-          [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+          Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
         ]),
       ),
     ),

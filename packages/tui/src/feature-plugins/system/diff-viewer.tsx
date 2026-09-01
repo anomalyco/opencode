@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
-import type { FileDiffInfo } from "@opencode-ai/client"
+import type { FileDiffInfo, LocationRef } from "@opencode-ai/client"
+import type { Vcs } from "@opencode-ai/schema/vcs"
 import { Plugin } from "@opencode-ai/plugin/tui"
 import type { KeymapCommand, Route } from "@opencode-ai/plugin/tui/context"
 import {
@@ -18,7 +19,9 @@ import { DialogSelect } from "../../ui/dialog-select"
 import { EmptyBorder } from "../../ui/border"
 import { FilePath } from "../../ui/file-path"
 import { getScrollAcceleration } from "../../util/scroll"
+import { createDebouncedSignal } from "../../util/signal"
 import { useConfig } from "../../config"
+import { locationKey } from "../../context/data"
 import { useThemes } from "../../context/theme"
 import { PatchDiff, type PatchDiffRef } from "../../component/patch-diff"
 import {
@@ -40,7 +43,7 @@ const FILE_TREE_MIN_WIDTH = 30
 const FILE_TREE_MAX_WIDTH = 40
 const FILE_HEADER_HEIGHT = 2
 const VCS_DIFF_CONTEXT_LINES = 12
-type DiffMode = "working" | "branch"
+type DiffMode = Vcs.Mode
 type DiffView = "split" | "unified"
 type SelectedHunk = { readonly fileIndex: number; readonly hunkIndex: number; readonly scrollTop: number }
 type FileMenuState = { readonly fileIndex: number; readonly x: number; readonly y: number }
@@ -67,14 +70,18 @@ function storedView(value: unknown): DiffView | undefined {
 }
 
 function diffSourceLabel(mode: DiffMode) {
-  if (mode === "branch") return "Main branch"
-  return "Working tree"
+  if (mode === "branch") return "All"
+  if (mode === "committed") return "Committed"
+  return "Uncommitted"
 }
 
 function DiffViewer(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const config = useConfig()
-  const dialog = props.context.ui.dialog
+  const [memory, updateMemory] = props.context.storage.memory<{
+    source?: DiffMode
+    bases: Record<string, string>
+  }>("review", { initial: { bases: {} } })
   const params = () => {
     const route = props.context.ui.router.current()
     return (route.type === "plugin" ? route.data : undefined) as
@@ -85,38 +92,85 @@ function DiffViewer(props: { context: Plugin.Context }) {
         }
       | undefined
   }
-  const mode = () => params()?.mode ?? "working"
-  const diffInput = createMemo(() => {
-    const sessionID = params()?.sessionID
-    return {
-      mode: mode(),
-      sessionID,
-      location: sessionID
+  const [mode, setMode] = createSignal(params()?.mode ?? memory.source ?? config.data.diffs?.source ?? "branch")
+  const location = createMemo(
+    () => {
+      const sessionID = params()?.sessionID
+      return sessionID
         ? (props.context.data.session.get(sessionID)?.location ?? props.context.data.location.default())
-        : props.context.data.location.default(),
-    }
-  })
+        : props.context.data.location.default()
+    },
+    undefined,
+    { equals: (a, b) => a.directory === b.directory && a.workspaceID === b.workspaceID },
+  )
+  const baseKey = createMemo(() =>
+    JSON.stringify([locationKey(location()), props.context.data.location.vcs.info(location())?.branch.current]),
+  )
+  const selectedBase = () => memory.bases[baseKey()]
+  // Mode changes share the same lazy base lookup until this viewer is closed.
+  const bases = new Map<string, ReturnType<Plugin.Context["client"]["vcs"]["base"]>>()
+  const [reportedBases, setReportedBases] = createSignal<ReadonlyMap<string, Vcs.Base | null>>(new Map())
+  const loadBase = (location: LocationRef, key: string) => {
+    const cached = bases.get(key)
+    if (cached) return cached
+    const pending = props.context.client.vcs.base({ location }).then((result) => {
+      setReportedBases((known) => new Map(known).set(key, result.data))
+      return result
+    })
+    bases.set(key, pending)
+    return pending
+  }
+  const diffInput = createMemo(() => ({
+    mode: mode(),
+    location: location(),
+    key: baseKey(),
+    selected: mode() === "working" ? undefined : selectedBase(),
+  }))
   const [diff] = createResource(diffInput, async (input) => {
+    const base =
+      input.mode === "working"
+        ? undefined
+        : input.selected
+          ? { name: input.selected, ref: input.selected }
+          : (await loadBase(input.location, input.key)).data
+    if (input !== diffInput() || (input.mode === "committed" && !base)) {
+      return { base: null, files: [] }
+    }
     const result = await props.context.client.vcs.diff({
       location: input.location,
       mode: input.mode,
+      ...(base ? { base: base.ref } : {}),
       context: VCS_DIFF_CONTEXT_LINES,
     })
-    return normalizeDiffs(result.data ?? [])
+    return { base, files: normalizeDiffs(result.data ?? []) }
   })
+  const sourceBase = () => {
+    const ref = selectedBase()
+    return ref ? { name: ref, ref } : reportedBases().get(baseKey())
+  }
+  const result = () => (diff.error || diff.loading ? undefined : diff())
+  const sourceDetail = () => {
+    if (mode() === "working") return "vs HEAD"
+    if (diff.error) return "Base or diff unavailable"
+    if (!result()) return "Resolving diff..."
+    const base = result()?.base
+    if (!base) return "Base not reported"
+    return `vs ${base.name}`
+  }
 
   return (
     <box position="absolute" zIndex={2500} left={0} top={0} width={dimensions().width} height={dimensions().height}>
       <DiffViewerContent
         context={props.context}
-        files={diff.error ? [] : (diff() ?? [])}
+        files={result()?.files ?? []}
         loading={diff.loading}
         error={diff.error}
         mode={mode()}
+        sourceDetail={sourceDetail()}
+        sourceBase={sourceBase()}
+        unavailable={mode() === "committed" && !!result() && !result()?.base}
         preferences={config.data.diffs}
-        loadImage={(file, signal) =>
-          props.context.client.file.read({ path: file, location: diffInput().location }, { signal })
-        }
+        loadImage={(file, signal) => props.context.client.file.read({ path: file, location: location() }, { signal })}
         onPreferencesChange={(value) => {
           void config
             .update((draft) => {
@@ -126,15 +180,75 @@ function DiffViewer(props: { context: Plugin.Context }) {
         }}
         onClose={() => props.context.ui.router.navigate(params()?.returnRoute ?? { type: "home" })}
         onSwitchSource={(mode) => {
-          dialog.clear()
-          props.context.ui.router.navigate({
-            type: "plugin",
-            name: ROUTE,
-            data: { mode, sessionID: params()?.sessionID, returnRoute: params()?.returnRoute },
+          updateMemory((draft) => {
+            draft.source = mode
           })
+          setMode(mode)
+        }}
+        onChooseBase={() => {
+          const target = { ...location() }
+          const key = baseKey()
+          if (!memory.bases[key]) void loadBase(target, key).catch(() => {})
+          props.context.ui.dialog.show(() => (
+            <DiffBaseDialog
+              context={props.context}
+              location={target}
+              current={memory.bases[key] ?? reportedBases().get(key)?.ref}
+              onSelect={(ref) =>
+                updateMemory((draft) => {
+                  draft.bases[key] = ref
+                })
+              }
+            />
+          ))
         }}
       />
     </box>
+  )
+}
+
+function DiffBaseDialog(props: {
+  context: Plugin.Context
+  location: LocationRef
+  current?: string
+  onSelect: (ref: string) => void
+}) {
+  const theme = props.context.theme.contextual.elevated
+  const [search, setSearch] = createDebouncedSignal("", 150)
+  const [branches] = createResource(search, (search) =>
+    props.context.client.vcs.branches({ location: props.location, search, limit: 100 }),
+  )
+  const Empty = () => (
+    <box paddingLeft={4} paddingRight={4}>
+      <text fg={branches.error ? theme.text.feedback.error.default : theme.text.subdued}>
+        {branches.loading
+          ? "Loading branches..."
+          : branches.error
+            ? "Could not load branches. Reopen the picker to try again."
+            : "No branches found"}
+      </text>
+    </box>
+  )
+
+  return (
+    <DialogSelect
+      title="Base branch"
+      placeholder="Search local and remote branches"
+      skipFilter
+      current={props.current?.replace(/^refs\/(heads|remotes)\//, "")}
+      onFilter={setSearch}
+      emptyView={<Empty />}
+      noMatchView={<Empty />}
+      footer={<text fg={theme.text.subdued}>Remembered until the TUI exits</text>}
+      options={(branches.loading || branches.error ? [] : (branches()?.data ?? [])).map((name) => ({
+        title: name,
+        value: name,
+        onSelect() {
+          props.onSelect(name)
+          props.context.ui.dialog.clear()
+        },
+      }))}
+    />
   )
 }
 
@@ -146,12 +260,16 @@ export function DiffViewerContent(props: {
   loading?: boolean
   error?: unknown
   mode: DiffMode
+  sourceDetail?: string
+  sourceBase?: Pick<Vcs.Base, "name" | "ref"> | null
+  unavailable?: boolean
   navigation?: "tree" | "list"
   loadImage?: (file: string, signal: AbortSignal) => Promise<Uint8Array>
   preferences?: DiffPreferences
   onPreferencesChange?: (value: DiffPreferences) => void
   onClose: () => void
   onSwitchSource: (mode: DiffMode) => void
+  onChooseBase?: () => void
 }) {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
@@ -585,29 +703,46 @@ export function DiffViewerContent(props: {
   const openSwitchDiffDialog = () => {
     const options = [
       {
-        title: "Working tree",
-        value: "working" as const,
-        description: "Show current git changes",
+        value: "branch" as const,
+        description: "Branch + local changes",
       },
       {
-        title: "Main branch",
-        value: "branch" as const,
-        description: "Show changes compared to main branch",
+        value: "committed" as const,
+        description: "Branch commits only",
+      },
+      {
+        value: "working" as const,
+        description: "Local changes only",
       },
     ]
     dialog.show(() => (
-      <DialogSelect
-        title="Switch source"
+      <DialogSelect<DiffMode | "base">
+        title="Diff source"
         skipFilter={true}
         renderFilter={false}
         current={mode()}
-        options={options.map((option) => ({
-          ...option,
-          onSelect() {
-            dialog.clear()
-            props.onSwitchSource(option.value)
-          },
-        }))}
+        options={[
+          ...options.map((option) => ({
+            ...option,
+            title: diffSourceLabel(option.value),
+            titleView: diffSourceLabel(option.value).padEnd(11),
+            onSelect() {
+              dialog.clear()
+              props.onSwitchSource(option.value)
+            },
+          })),
+          ...(props.onChooseBase
+            ? [
+                {
+                  title: "Base",
+                  titleView: "Base".padEnd(11),
+                  value: "base" as const,
+                  description: props.sourceBase?.name ?? "Choose...",
+                  onSelect: props.onChooseBase,
+                },
+              ]
+            : []),
+        ]}
       />
     ))
   }
@@ -647,6 +782,47 @@ export function DiffViewerContent(props: {
 
   return (
     <box width="100%" height="100%" backgroundColor={theme.background.default}>
+      <Show when={!showFileTree()}>
+        <box
+          id="diff-source-header"
+          paddingLeft={2}
+          paddingRight={2}
+          height={1}
+          flexShrink={0}
+          flexDirection="row"
+          gap={1}
+        >
+          <box
+            id="diff-source-switch"
+            flexDirection="row"
+            flexGrow={1}
+            minWidth={0}
+            onMouseUp={(event) => {
+              if (event.button !== MouseButton.LEFT) return
+              event.stopPropagation()
+              openSwitchDiffDialog()
+            }}
+          >
+            <text
+              fg={theme.text.action.secondary.default}
+              attributes={TextAttributes.BOLD}
+              selectable={false}
+              flexShrink={0}
+              wrapMode="none"
+            >
+              {diffSourceLabel(mode())}
+            </text>
+            <Show when={props.sourceDetail}>
+              <text fg={theme.text.subdued} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
+                {` · ${props.sourceDetail}`}
+              </text>
+            </Show>
+          </box>
+          <text id="diff-review-count" fg={theme.text.subdued} flexShrink={0} wrapMode="none">
+            {files().filter((file) => reviewedFileNames().has(file.file)).length}/{files().length}
+          </text>
+        </box>
+      </Show>
       <box flexGrow={1} minHeight={0}>
         <Switch>
           <Match when={props.loading}>
@@ -657,7 +833,16 @@ export function DiffViewerContent(props: {
           <Match when={!props.loading && props.error}>
             <box flexGrow={1} padding={2}>
               <text fg={theme.text.feedback.error.default}>
-                Could not load diff. Reopen the diff viewer to try again.
+                {!props.sourceBase && mode() !== "working"
+                  ? "Could not load diff. Choose a base branch from Diff source, or select Uncommitted."
+                  : "Could not load diff. Reopen the diff viewer to try again."}
+              </text>
+            </box>
+          </Match>
+          <Match when={!props.loading && props.unavailable}>
+            <box flexGrow={1} padding={2}>
+              <text fg={theme.text.subdued}>
+                Committed comparison unavailable without base metadata. Choose a base branch from Diff source.
               </text>
             </box>
           </Match>
@@ -683,6 +868,7 @@ export function DiffViewerContent(props: {
                   onRowClick={clickFileTreeRow}
                   onFileContextMenu={openFileMenu}
                   source={diffSourceLabel(mode())}
+                  sourceDetail={props.sourceDetail}
                   onSwitchSource={openSwitchDiffDialog}
                   footer={<HelpShortcut />}
                 />
@@ -810,17 +996,26 @@ export function DiffViewerContent(props: {
                                 fallback={
                                   <box width="100%" flexShrink={0} paddingLeft={1} paddingRight={1} paddingBottom={1}>
                                     <text fg={theme.text.subdued}>
-                                      {entry.file.status === "deleted" && image()
-                                        ? "Deleted image. The previous revision is not available for preview."
-                                        : "No patch available for this file."}
+                                      {mode() === "committed" && image()
+                                        ? "Committed image preview unavailable. The working-tree image is not shown."
+                                        : entry.file.status === "deleted" && image()
+                                          ? "Deleted image. The previous revision is not available for preview."
+                                          : "No patch available for this file."}
                                     </text>
                                   </box>
                                 }
                               >
-                                <Match when={entry.file.status !== "deleted" && image() && props.loadImage}>
+                                <Match
+                                  when={
+                                    mode() !== "committed" &&
+                                    entry.file.status !== "deleted" &&
+                                    image() &&
+                                    props.loadImage
+                                  }
+                                >
                                   {(load) => <DiffViewerImage file={entry.file.file} load={load()} />}
                                 </Match>
-                                <Match when={entry.file.patch}>
+                                <Match when={!(mode() === "committed" && image()) && entry.file.patch}>
                                   {(patch) => (
                                     <PatchDiff
                                       ref={(component) => {
@@ -862,7 +1057,7 @@ export function DiffViewerContent(props: {
         </Switch>
       </box>
       <Show when={!showFileTree()}>
-        <box position="absolute" top={1} right={0} width={1} height={1}>
+        <box position="absolute" top={0} right={0} width={1} height={1}>
           <HelpShortcut compact />
         </box>
       </Show>
@@ -1074,7 +1269,6 @@ function Commands(props: { context: Plugin.Context }) {
             type: "plugin",
             name: ROUTE,
             data: {
-              mode: "working",
               sessionID: route.type === "session" ? route.sessionID : undefined,
               returnRoute,
             },

@@ -5,19 +5,21 @@ import { Context, Duration, Effect, FileSystem, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
-import { action, type Policy } from "./updater-action"
+import { action, parseReleaseVersion, type Policy } from "./updater-action"
 
 declare const OPENCODE_CLI_NAME: string | undefined
 
-type Method = "npm" | "pnpm" | "bun" | "yarn" | "curl"
+export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
+export type Method = (typeof methods)[number]
 
 const packageName =
-  typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-node"
-    ? OPENCODE_CLI_NAME
-    : "@opencode-ai/cli"
+  typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-node" ? "opencode-node" : "@opencode-ai/cli"
 
 export interface Interface {
   readonly check: () => Effect.Effect<void>
+  readonly method: () => Effect.Effect<Method | undefined>
+  readonly latest: () => Effect.Effect<string, Error>
+  readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
@@ -110,7 +112,9 @@ export const layer = Layer.effect(
       return data.version
     })
 
-    const upgrade = Effect.fnUntraced(function* (method: Method, version: string) {
+    const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
+      if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
+      const version = input.trim().replace(/^v/, "")
       const target = `${packageName}@${version}`
       const commands: Record<Exclude<Method, "bun" | "curl">, string[]> = {
         npm: ["npm", "install", "--global", target],
@@ -138,7 +142,7 @@ export const layer = Layer.effect(
           }
           return yield* run(commands[method], "5 minutes")
         }),
-      )
+      ).pipe(Effect.mapError((cause) => new Error(`Failed to update with ${method}`, { cause })))
       if (result.code === 0) return
       return yield* Effect.fail(new Error(result.stderr.trim() || `Failed to update with ${method}`))
     })
@@ -173,7 +177,7 @@ export const layer = Layer.effect(
       Effect.catchCause((cause) => Effect.logWarning("automatic update failed", { cause })),
     )
 
-    return Service.of({ check })
+    return Service.of({ check, method, latest, upgrade })
   }),
 )
 

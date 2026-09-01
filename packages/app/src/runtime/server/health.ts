@@ -24,7 +24,7 @@ const healthCache = new Map<
 >()
 
 function cacheKey(server: ServerConnection.HttpBase) {
-  return `${server.url}\n${server.username ?? ""}\n${server.password ?? ""}`
+  return `${server.url}\n${server.password ?? ""}`
 }
 
 function timeoutSignal(timeoutMs: number) {
@@ -80,7 +80,7 @@ export async function checkServerHealth(
   const retryDelayMs = opts?.retryDelayMs ?? defaultRetryDelayMs
   const headers = server.password
     ? {
-        Authorization: `Basic ${authTokenFromCredentials({ username: server.username, password: server.password })}`,
+        Authorization: `Basic ${authTokenFromCredentials({ password: server.password })}`,
       }
     : undefined
   const next = (count: number, error: unknown) => {

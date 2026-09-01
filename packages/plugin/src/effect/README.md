@@ -98,6 +98,13 @@ yield *
       delete event.tools.write
     }),
   )
+
+yield *
+  ctx.session.hook("retry", (event) =>
+    Effect.sync(() => {
+      if (event.attempt >= 3) event.decision = { retry: false }
+    }),
+  )
 ```
 
 ## Reloading A Domain

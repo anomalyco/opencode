@@ -17,7 +17,9 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/tmp") })),
 )
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [[Location.node, locationLayer]]))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [Location.node.replace(locationLayer)]),
+)
 const ptyTest = process.platform === "win32" ? it.live.skip : it.live
 
 const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
@@ -200,7 +202,7 @@ describe("pty", () => {
 
 const configuredShell = process.platform === "win32" ? undefined : Bun.which("bash")
 const configuredIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node, ShellSelect.node]), [[Location.node, locationLayer]]),
+  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node, ShellSelect.node]), [Location.node.replace(locationLayer)]),
 )
 const configuredTest = process.platform === "win32" ? configuredIt.live.skip : configuredIt.live
 
