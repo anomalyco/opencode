@@ -19,9 +19,16 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
   return `[${entries.map(([key, value]) => `${key}=${String(value)}`).join(", ")}]`
 }
 
+// Capitalizing the id is enough for single-word providers; anything hyphenated
+// needs a spelling here or it renders as "Firecrawl-developer".
+const WEB_SEARCH_PROVIDER_LABELS: Record<string, string> = {
+  "firecrawl-developer": "Firecrawl Developer",
+}
+
 export function webSearchProviderLabel(provider: unknown) {
   if (typeof provider !== "string" || !provider) return "Web Search"
-  return `Web Search via ${provider[0].toUpperCase()}${provider.slice(1)}`
+  const label = WEB_SEARCH_PROVIDER_LABELS[provider] ?? `${provider[0].toUpperCase()}${provider.slice(1)}`
+  return `Web Search via ${label}`
 }
 
 export function toolDisplayMetadata(state: unknown): Record<string, unknown> {
