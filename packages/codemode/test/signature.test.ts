@@ -44,9 +44,9 @@ describe("pretty signature rendering", () => {
         "  owner: string,",
         "  /** Cursor from the previous response's pageInfo */",
         "  after?: string,",
-        "  /** Results per page. default: 30 */",
+        "  /** Results per page. @default 30 */",
         "  perPage?: number,",
-        "  /** Filter by labels. 1-10 items */",
+        "  /** Filter by labels. @minItems 1 @maxItems 10 */",
         "  labels?: Array<string>,",
         '  state?: "open" | "closed",',
         "}",
@@ -98,7 +98,7 @@ describe("pretty signature rendering", () => {
     )
   })
 
-  test("constraints and annotations share compact JSDoc summaries", () => {
+  test("constraints and annotations share compact tagged JSDoc", () => {
     const pretty = jsonSchemaToTypeScript(
       {
         type: "object",
@@ -110,9 +110,9 @@ describe("pretty signature rendering", () => {
       },
       true,
     )
-    expect(pretty).toContain("  /** Deprecated */\n  legacy?: string")
-    expect(pretty).toContain("  /** format: uri */\n  homepage?: string")
-    expect(pretty).toContain('  /** 2-5 items; default: ["a","b"] */\n  tags?: Array<string>')
+    expect(pretty).toContain("  /** @deprecated */\n  legacy?: string")
+    expect(pretty).toContain("  /** @format uri */\n  homepage?: string")
+    expect(pretty).toContain('  /** @default ["a","b"] @minItems 2 @maxItems 5 */\n  tags?: Array<string>')
   })
 
   test("skips an unserializable default rather than emitting a broken summary", () => {
@@ -124,23 +124,24 @@ describe("pretty signature rendering", () => {
   })
 
   test.each([
-    [{ type: "number", minimum: 0 }, ">= 0", "number"],
-    [{ type: "number", maximum: 0 }, "<= 0", "number"],
-    [{ type: "number", exclusiveMinimum: 0 }, "> 0", "number"],
-    [{ type: "number", exclusiveMaximum: 0 }, "< 0", "number"],
-    [{ type: "number", multipleOf: 0.25 }, "multiple of 0.25", "number"],
-    [{ type: "string", minLength: 0 }, "at least 0 characters", "string"],
-    [{ type: "string", maxLength: 0 }, "at most 0 characters", "string"],
-    [{ type: "string", pattern: "^[a-z]+$" }, "pattern: ^[a-z]+$", "string"],
-    [{ type: "array", minItems: 0 }, "at least 0 items", "Array<unknown>"],
-    [{ type: "array", maxItems: 0 }, "at most 0 items", "Array<unknown>"],
-    [{ type: "array", uniqueItems: true }, "unique items", "Array<unknown>"],
-    [{ type: "string", minLength: 0, maxLength: 0 }, "0 characters", "string"],
-    [{ type: "string", minLength: 1 }, "at least 1 character", "string"],
-    [{ type: "string", maxLength: 1 }, "at most 1 character", "string"],
-    [{ type: "array", minItems: 1, maxItems: 1 }, "1 item", "Array<unknown>"],
-    [{ type: "array", minItems: 0, maxItems: 0 }, "0 items", "Array<unknown>"],
-    [{ type: "array", minItems: 1, maxItems: 10, uniqueItems: true }, "1-10 items; unique items", "Array<unknown>"],
+    [{ type: "number", minimum: 0 }, "@minimum 0", "number"],
+    [{ type: "number", maximum: 0 }, "@maximum 0", "number"],
+    [{ type: "number", exclusiveMinimum: 0 }, "@exclusiveMinimum 0", "number"],
+    [{ type: "number", exclusiveMaximum: 0 }, "@exclusiveMaximum 0", "number"],
+    [{ type: "number", multipleOf: 0.25 }, "@multipleOf 0.25", "number"],
+    [{ type: "string", minLength: 0 }, "@minLength 0", "string"],
+    [{ type: "string", maxLength: 0 }, "@maxLength 0", "string"],
+    [{ type: "string", pattern: "^[a-z]+$" }, "@pattern ^[a-z]+$", "string"],
+    [{ type: "array", minItems: 0 }, "@minItems 0", "Array<unknown>"],
+    [{ type: "array", maxItems: 0 }, "@maxItems 0", "Array<unknown>"],
+    [{ type: "array", uniqueItems: true }, "@uniqueItems true", "Array<unknown>"],
+    [{ type: "string", minLength: 0, maxLength: 0 }, "@minLength 0 @maxLength 0", "string"],
+    [{ type: "array", minItems: 0, maxItems: 0 }, "@minItems 0 @maxItems 0", "Array<unknown>"],
+    [
+      { type: "array", minItems: 1, maxItems: 10, uniqueItems: true },
+      "@minItems 1 @maxItems 10 @uniqueItems true",
+      "Array<unknown>",
+    ],
   ] as const)("renders constraint %j without changing the compact type", (value, summary, type) => {
     const schema = { type: "object", properties: { value } }
     expect(jsonSchemaToTypeScript(schema, true)).toBe(
@@ -168,7 +169,7 @@ describe("pretty signature rendering", () => {
     ).toBe(
       [
         "{",
-        "  /** Integer */",
+        "  /** @integer */",
         "  count?: number,",
         "  amount?: number,",
         "  name?: string,",
@@ -182,7 +183,7 @@ describe("pretty signature rendering", () => {
 
   test.each([false, null, ""])("preserves default %j alongside constraints", (value) => {
     expect(jsonSchemaToTypeScript({ properties: { value: { default: value, minLength: 0 } } }, true)).toContain(
-      `  /** at least 0 characters; default: ${JSON.stringify(value)} */\n`,
+      `  /** @default ${JSON.stringify(value)} @minLength 0 */\n`,
     )
   })
 
@@ -192,7 +193,7 @@ describe("pretty signature rendering", () => {
         { properties: { value: { type: "string", default: "*/", format: "*/", pattern: "^a*/b$" } } },
         true,
       ),
-    ).toBe(["{", '  /** pattern: ^a* /b$; format: * /; default: "* /" */', "  value?: string,", "}"].join("\n"))
+    ).toBe(["{", '  /** @default "* /" @format * / @pattern ^a* /b$ */', "  value?: string,", "}"].join("\n"))
   })
 
   test("neutralizes */ inside descriptions so nothing closes the comment early", () => {
@@ -234,7 +235,9 @@ describe("pretty signature rendering", () => {
         },
         true,
       ),
-    ).toContain("  /** Integer >= -10, <= 10, > -5, < 5, multiple of 2 */\n  value?: number,")
+    ).toContain(
+      "  /** @integer @minimum -10 @maximum 10 @exclusiveMinimum -5 @exclusiveMaximum 5 @multipleOf 2 */\n  value?: number,",
+    )
   })
 
   test.each(["Maximum attempts", "Maximum attempts.", "Maximum attempts!"])(
@@ -245,7 +248,9 @@ describe("pretty signature rendering", () => {
           { properties: { attempts: { description, type: "integer", minimum: 1, default: 3 } } },
           true,
         ),
-      ).toContain(`  /** ${description}${description === "Maximum attempts" ? "." : ""} Integer >= 1; default: 3 */\n`)
+      ).toContain(
+        `  /** ${description}${description === "Maximum attempts" ? "." : ""} @default 3 @integer @minimum 1 */\n`,
+      )
     },
   )
 
@@ -270,7 +275,7 @@ describe("pretty signature rendering", () => {
         "   * Maximum attempts",
         "   *",
         "   * Includes the initial request.",
-        "   * Integer >= 1",
+        "   * @integer @minimum 1",
         "   */",
         "  attempts?: number,",
         "}",
@@ -281,7 +286,7 @@ describe("pretty signature rendering", () => {
   test("uses a block for long descriptions without truncating or rewriting them", () => {
     const description = "A detailed description. ".repeat(8).trim()
     expect(jsonSchemaToTypeScript({ properties: { name: { type: "string", description, minLength: 1 } } }, true)).toBe(
-      ["{", "  /**", `   * ${description}`, "   * at least 1 character", "   */", "  name?: string,", "}"].join("\n"),
+      ["{", "  /**", `   * ${description}`, "   * @minLength 1", "   */", "  name?: string,", "}"].join("\n"),
     )
   })
 
@@ -292,9 +297,7 @@ describe("pretty signature rendering", () => {
         true,
       ),
     ).toBe(
-      ["{", "  /**", "   * pattern: ^\\d+", '   * * /$; default: "a\\nb"', "   */", "  value?: string,", "}"].join(
-        "\n",
-      ),
+      ["{", "  /**", '   * @default "a\\nb" @pattern ^\\d+', "   * * /$", "   */", "  value?: string,", "}"].join("\n"),
     )
   })
 
@@ -548,11 +551,11 @@ describe("JSDoc signatures in catalogs and search results", () => {
     })
     const type = [
       "{",
-      "  /** Integer >= 0, <= 10 */",
+      "  /** @integer @minimum 0 @maximum 10 */",
       "  count: number,",
-      "  /** 1-20 characters; pattern: ^[a-z]+$ */",
+      "  /** @minLength 1 @maxLength 20 @pattern ^[a-z]+$ */",
       "  name: string,",
-      "  /** 1-5 items */",
+      "  /** @minItems 1 @maxItems 5 */",
       "  labels: Array<string>,",
       "}",
     ].join("\n")
@@ -583,9 +586,9 @@ describe("JSDoc signatures in catalogs and search results", () => {
         "  owner: string,",
         "  /** Cursor from the previous response's pageInfo */",
         "  after?: string,",
-        "  /** Results per page. default: 30 */",
+        "  /** Results per page. @default 30 */",
         "  perPage?: number,",
-        "  /** Filter by labels. 1-10 items */",
+        "  /** Filter by labels. @minItems 1 @maxItems 10 */",
         "  labels?: Array<string>,",
         '  state?: "open" | "closed",',
         "}): Promise<unknown>",

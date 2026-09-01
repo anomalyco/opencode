@@ -53,38 +53,29 @@ const hasUnresolvedRef = (
   ].some((item) => hasUnresolvedRef(item, definitions, seen, nextVisited))
 }
 
-const docSummary = (schema: JsonSchema): string => {
-  const parts: Array<string> = []
-  const numeric: Array<string> = []
-  if (typeof schema.minimum === "number") numeric.push(`>= ${schema.minimum}`)
-  if (typeof schema.maximum === "number") numeric.push(`<= ${schema.maximum}`)
-  if (typeof schema.exclusiveMinimum === "number") numeric.push(`> ${schema.exclusiveMinimum}`)
-  if (typeof schema.exclusiveMaximum === "number") numeric.push(`< ${schema.exclusiveMaximum}`)
-  if (typeof schema.multipleOf === "number") numeric.push(`multiple of ${schema.multipleOf}`)
-  if (schema.type === "integer" || numeric.length > 0)
-    parts.push([schema.type === "integer" ? "Integer" : "", numeric.join(", ")].filter(Boolean).join(" "))
-  const characters = lengthSummary(schema.minLength, schema.maxLength, "characters")
-  if (characters) parts.push(characters)
-  if (typeof schema.pattern === "string") parts.push(`pattern: ${schema.pattern}`)
-  const items = lengthSummary(schema.minItems, schema.maxItems, "items")
-  if (items) parts.push(items)
-  if (schema.uniqueItems === true) parts.push("unique items")
-  if (typeof schema.format === "string") parts.push(`format: ${schema.format}`)
+const docTags = (schema: JsonSchema): Array<string> => {
+  const tags: Array<string> = []
+  if (schema.deprecated === true) tags.push("@deprecated")
   if (schema.default !== undefined) {
     try {
       const rendered = JSON.stringify(schema.default)
-      if (rendered !== undefined) parts.push(`default: ${rendered}`)
+      if (rendered !== undefined) tags.push(`@default ${rendered}`)
     } catch {}
   }
-  if (schema.deprecated === true) parts.push("Deprecated")
-  return parts.join("; ")
-}
-
-const lengthSummary = (min: number | undefined, max: number | undefined, unit: string): string => {
-  const count = min !== undefined && max !== undefined && min !== max ? `${min}-${max}` : (min ?? max)
-  if (count === undefined) return ""
-  const prefix = min !== undefined && max !== undefined ? "" : min !== undefined ? "at least " : "at most "
-  return `${prefix}${count} ${count === 1 ? unit.slice(0, -1) : unit}`
+  if (typeof schema.format === "string") tags.push(`@format ${schema.format}`)
+  if (schema.type === "integer") tags.push("@integer")
+  if (typeof schema.minimum === "number") tags.push(`@minimum ${schema.minimum}`)
+  if (typeof schema.maximum === "number") tags.push(`@maximum ${schema.maximum}`)
+  if (typeof schema.exclusiveMinimum === "number") tags.push(`@exclusiveMinimum ${schema.exclusiveMinimum}`)
+  if (typeof schema.exclusiveMaximum === "number") tags.push(`@exclusiveMaximum ${schema.exclusiveMaximum}`)
+  if (typeof schema.multipleOf === "number") tags.push(`@multipleOf ${schema.multipleOf}`)
+  if (typeof schema.minLength === "number") tags.push(`@minLength ${schema.minLength}`)
+  if (typeof schema.maxLength === "number") tags.push(`@maxLength ${schema.maxLength}`)
+  if (typeof schema.pattern === "string") tags.push(`@pattern ${schema.pattern}`)
+  if (typeof schema.minItems === "number") tags.push(`@minItems ${schema.minItems}`)
+  if (typeof schema.maxItems === "number") tags.push(`@maxItems ${schema.maxItems}`)
+  if (schema.uniqueItems === true) tags.push("@uniqueItems true")
+  return tags
 }
 
 // Neutralize `*\/` so model-provided schema text cannot terminate generated documentation.
@@ -180,7 +171,7 @@ const renderSchema = (
     if (properties.length === 0 && indexType === undefined) return "{}"
     const pad = "  ".repeat(depth + 1)
     const lines = properties.map(
-      (entry) => `${jsdoc(entry[1].description, docSummary(entry[1]), pad)}${pad}${field(entry)},`,
+      (entry) => `${jsdoc(entry[1].description, docTags(entry[1]).join(" "), pad)}${pad}${field(entry)},`,
     )
     if (indexType !== undefined) lines.push(`${pad}[key: string]: ${indexType},`)
     return `{\n${lines.join("\n")}\n${"  ".repeat(depth)}}`
