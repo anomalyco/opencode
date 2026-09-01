@@ -10,6 +10,7 @@ import {
   parseDiagnostics,
   parseQuestionAnswers,
   parseQuestions,
+  toolPresentationIcon,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -213,6 +214,16 @@ describe("TUI inline tool wrapping", () => {
       "demo_get_weather [city=Tokyo, units=celsius]",
     )
     expect(genericToolSummary("demo_refresh", {})).toBe("demo_refresh")
+    expect(
+      genericToolSummary("rename_session", { title: "ignored" }, { summary: "Renamed session to “OpenCode”" }),
+    ).toBe("Renamed session to “OpenCode”")
+  })
+
+  test("accepts only single-cell presenter icons", () => {
+    expect(toolPresentationIcon({ summary: "Renamed", icon: "✎" }, "✓")).toBe("✎")
+    expect(toolPresentationIcon({ summary: "Renamed", icon: "✅" }, "✓")).toBe("✓")
+    expect(toolPresentationIcon({ summary: "Renamed", icon: "" }, "✓")).toBe("✓")
+    expect(toolPresentationIcon({ summary: "Renamed", icon: "x\ny" }, "✓")).toBe("✓")
   })
 
   test("ignores diagnostics with malformed nested ranges", () => {

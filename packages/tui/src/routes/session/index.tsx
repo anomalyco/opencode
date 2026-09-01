@@ -86,6 +86,7 @@ import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
+import type { ToolPresentation, ToolPresenter } from "@opencode-ai/plugin/tui/context"
 import {
   backgroundToolRowIndex,
   cacheReuseDrop,
@@ -2683,7 +2684,19 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText; mes
 // Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
+  const plugins = usePlugin()
+  const presenter = createMemo(() => plugins.tool(props.part.name))
+  return [
+    <ToolPartContent part={props.part} presenter={presenter()?.presenter} />,
+    <Show when={props.images !== false}>
+      <ToolImages parts={[props.part]} />
+    </Show>,
+  ]
+}
+
+function ToolPartContent(props: { part: SessionMessageAssistantTool; presenter?: ToolPresenter }) {
   const display = createMemo(() => toolDisplay(props.part.name))
+  const presentation = createMemo(() => props.presenter?.(props.part))
 
   const toolprops = {
     get metadata() {
@@ -2747,17 +2760,13 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       <Match when={display() === "skill"}>
         <Skill {...toolprops} />
       </Match>
+      <Match when={presentation()}>{(value) => <GenericTool {...toolprops} presentation={value()} />}</Match>
       <Match when={true}>
         <GenericTool {...toolprops} />
       </Match>
     </Switch>
   )
-  return [
-    content,
-    <Show when={props.images !== false}>
-      <ToolImages parts={[props.part]} />
-    </Show>,
-  ]
+  return content
 }
 
 function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
@@ -2841,25 +2850,28 @@ type ToolProps = {
   output?: string
   part: SessionMessageAssistantTool
 }
-function GenericTool(props: ToolProps) {
+function GenericTool(props: ToolProps & { presentation?: ToolPresentation }) {
   const theme = useTheme()
   const output = createMemo(() => props.output?.trim() ?? "")
   const input = createMemo(() => Object.entries(props.input))
   const [expanded, setExpanded] = createSignal(false)
   const expandable = createMemo(() => input().length > 0 || output().length > 0)
   const loading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
+  const icon = createMemo(() =>
+    toolPresentationIcon(props.presentation, props.part.state.status === "error" ? "✗" : "✓"),
+  )
 
   return (
     <>
       <InlineTool
-        icon={props.part.state.status === "error" ? "✗" : "✓"}
+        icon={icon()}
         complete={props.part.state.status === "completed"}
-        pending={props.tool}
+        pending={props.presentation?.summary ?? props.tool}
         spinner={loading()}
         part={props.part}
         onClick={expandable() ? () => setExpanded((value) => !value) : undefined}
       >
-        {genericToolSummary(props.tool, props.input)}
+        {genericToolSummary(props.tool, props.input, props.presentation)}
       </InlineTool>
       <Show when={expanded()}>
         <box paddingLeft={3 + INLINE_TOOL_ICON_WIDTH}>
@@ -2893,9 +2905,14 @@ function GenericTool(props: ToolProps) {
   )
 }
 
-export function genericToolSummary(tool: string, input: Record<string, unknown>) {
+export function genericToolSummary(tool: string, input: Record<string, unknown>, presentation?: ToolPresentation) {
+  if (presentation) return presentation.summary
   const args = primitiveInputSummary(input).replace(/\s+/g, " ")
   return `${tool}${args ? ` ${args}` : ""}`
+}
+
+export function toolPresentationIcon(presentation: ToolPresentation | undefined, fallback: string) {
+  return presentation?.icon && stringWidth(presentation.icon) === 1 ? presentation.icon : fallback
 }
 
 function useToolPermission(part: () => SessionMessageAssistantTool | undefined) {

@@ -1,6 +1,15 @@
 import { PluginContextProvider } from "@opencode-ai/plugin/tui"
 import type { JSX } from "solid-js"
-import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode-ai/plugin/tui/context"
+import type {
+  Context,
+  Dialog,
+  Page,
+  SlotClaim,
+  SlotMap,
+  SlotPath,
+  Toast,
+  ToolPresenter,
+} from "@opencode-ai/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
@@ -21,6 +30,7 @@ import { useAttention } from "../context/attention"
 import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
 import { abbreviateHome } from "../util/path-format"
+import { errorMessage } from "../util/error"
 
 export type Dispose = () => Promise<void>
 
@@ -37,15 +47,29 @@ export type RegisteredSlot = {
 const placements = ["prepend", "append", "before", "after", "replace"] as const satisfies readonly PlacementKind[]
 
 // The provider's registration store, narrowed to what a plugin context needs:
-// route/slot registration lands there, but ordering and lifecycle stay owned
-// by the provider.
+// contributions land there, but ordering and lifecycle stay owned by the
+// provider.
 export type Registry = {
-  has(kind: "routes" | "slots" | "markdown", name: string): boolean
+  has(kind: "routes" | "slots" | "markdown" | "tools", name: string): boolean
   set(kind: "routes", name: string, page: Page): void
   set(kind: "slots", name: string, claim: RegisteredSlot): void
   set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
-  remove(kind: "routes" | "slots" | "markdown", name: string): void
+  set(kind: "tools", name: string, presenter: ToolPresenter): void
+  remove(kind: "routes" | "slots" | "markdown" | "tools", name: string): void
   active(): boolean
+}
+
+export function guardToolPresenter(presenter: ToolPresenter, onError: (error: unknown) => void): ToolPresenter {
+  let failed = false
+  return (part) => {
+    if (failed) return
+    try {
+      return presenter(part)
+    } catch (error) {
+      failed = true
+      onError(error)
+    }
+  }
 }
 
 // The host services a plugin context adapts. Collected once by the provider
@@ -96,8 +120,8 @@ export function createPluginContext(input: {
     },
   }
   // Unregistering after deactivation is a no-op: deactivate already resets
-  // the registration's routes and slots wholesale.
-  const registration = (kind: "routes" | "slots" | "markdown", name: string) => {
+  // the registration's contributions wholesale.
+  const registration = (kind: "routes" | "slots" | "markdown" | "tools", name: string) => {
     let registered = true
     const unregister = () => {
       if (!registered) return
@@ -203,6 +227,25 @@ export function createPluginContext(input: {
           if (!target || !host.sessionTabs.tabs().some((tab) => tab.sessionID === target)) return false
           host.sessionTabs.close(target)
           return true
+        },
+      },
+      tool: {
+        register(name, presenter) {
+          const tool = name.trim()
+          if (!tool) throw new Error("Tool name is required")
+          if (input.registry.has("tools", tool)) throw new Error(`Tool presenter already registered: ${tool}`)
+          input.registry.set(
+            "tools",
+            tool,
+            guardToolPresenter(presenter, (error) =>
+              host.toast.show({
+                variant: "error",
+                title: "Plugin",
+                message: `${input.id} crashed in tool presenter ${tool}: ${errorMessage(error)}`,
+              }),
+            ),
+          )
+          return registration("tools", tool)
         },
       },
       slot(value: SlotClaim) {

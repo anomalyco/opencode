@@ -2,7 +2,8 @@
 title: "CLI"
 ---
 
-CLI plugins extend the terminal with commands, routes, slots, Markdown renderers, notifications, and local state.
+CLI plugins extend the terminal with commands, routes, slots, tool presenters, Markdown renderers, notifications, and
+local state.
 
 ```ts title="src/tui.ts"
 import { Plugin } from "@opencode-ai/plugin/tui"
@@ -242,6 +243,38 @@ const unregister = context.markdown.registerCodeBlockRenderer(
 )
 return unregister
 ```
+
+## Tool transcripts
+
+Register a presenter for a custom tool's exact effective name to replace its generic transcript summary. The callback
+receives the tool part for its current state and runs again as that state changes.
+
+```ts
+const unregister = context.ui.tool.register("rename_session", (part) => {
+  if (part.state.status === "streaming" || part.state.status === "running") {
+    return { summary: "Renaming session…" }
+  }
+  if (part.state.status === "error") return { summary: "Could not rename session" }
+
+  const title = part.state.metadata?.title
+  if (typeof title !== "string") return
+  return { summary: `Renamed session to “${title}”` }
+})
+return unregister
+```
+
+Return `undefined` to use OpenCode's built-in or generic presentation for the current state. A presentation may also set
+a single-cell `icon`; otherwise OpenCode keeps its status icon. Presenters replace only the summary and icon, so standard
+error expansion, input/output details, permissions, and attachments continue to work. Keep the callback synchronous and
+free of side effects because it runs during reactive rendering.
+
+Tool names are matched exactly without aliases or case folding. When several active plugins register the same name, the
+later plugin takes precedence. OpenCode's built-in tool presentations remain authoritative for their names. A presenter
+that throws falls back to the standard presentation, reports the plugin error once, and stays disabled until its plugin
+is reactivated or reloaded.
+
+This API customizes the full TUI transcript. It does not change Mini, `opencode run`, exported transcripts, permission
+prompts, or ACP clients.
 
 ## Commands and keymaps
 

@@ -17,6 +17,7 @@ import type {
   ProviderInfo,
   ReferenceInfo,
   SessionInfo,
+  SessionMessageAssistantTool,
   SessionMessageInfo,
   SessionInboxInfo,
   ShellInfo,
@@ -155,6 +156,22 @@ export interface Page {
   readonly name: string
   readonly render: (input: { readonly data?: Record<string, any> }) => JSX.Element
 }
+
+export interface ToolPresentation {
+  /** The status-aware summary shown in the transcript row. */
+  readonly summary: string
+  /** A single-cell icon. OpenCode supplies its status icon when omitted. */
+  readonly icon?: string
+}
+
+type ReadonlyDeep<Value> =
+  Value extends ReadonlyArray<infer Item>
+    ? ReadonlyArray<ReadonlyDeep<Item>>
+    : Value extends object
+      ? { readonly [Key in keyof Value]: ReadonlyDeep<Value[Key]> }
+      : Value
+
+export type ToolPresenter = (part: ReadonlyDeep<SessionMessageAssistantTool>) => ToolPresentation | undefined
 
 type PromptFooterInput = { readonly sessionID?: string; readonly mode: "normal" | "shell" }
 
@@ -464,6 +481,10 @@ export interface UI {
     focus(sessionID: string): boolean
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
+  }
+  readonly tool: {
+    /** Registers a transcript presenter for an exact effective tool name. */
+    register(name: string, presenter: ToolPresenter): () => void
   }
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void

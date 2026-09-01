@@ -16,7 +16,7 @@ import {
 import path from "path"
 import { readFile, stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import type { Page } from "@opencode-ai/plugin/tui/context"
+import type { Page, ToolPresenter } from "@opencode-ai/plugin/tui/context"
 import { Hash } from "@opencode-ai/util/hash"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
@@ -53,6 +53,7 @@ type Value = {
   readonly list: () => ReadonlyArray<State>
   readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
+  readonly tool: (name: string) => { readonly plugin: string; readonly presenter: ToolPresenter } | undefined
   readonly slots: {
     // A mounted <Slot> instance registers its path; the disposer unregisters.
     readonly register: (path: string) => () => void
@@ -73,6 +74,7 @@ type Registration = {
   routes: Record<string, Page>
   slots: Record<string, RegisteredSlot>
   markdown: Record<string, MarkdownCodeBlockRenderer>
+  tools: Record<string, ToolPresenter>
   cleanups: Dispose[]
 }
 
@@ -91,6 +93,16 @@ export function combineMarkdownRenderers(
   }
   if (renderers.size === 0) return undefined
   return createMarkdownCodeBlockRenderer(renderers)
+}
+
+export function combineToolPresenters(
+  sources: ReadonlyArray<readonly [plugin: string, presenters: Readonly<Record<string, ToolPresenter>>]>,
+) {
+  const presenters = new Map<string, { readonly plugin: string; readonly presenter: ToolPresenter }>()
+  for (const [plugin, source] of sources) {
+    for (const [name, presenter] of Object.entries(source)) presenters.set(name, { plugin, presenter })
+  }
+  return presenters
 }
 
 export function PluginProvider(props: ParentProps<{ packages: PackageResolver; directories: string[] }>) {
@@ -131,10 +143,18 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       ),
     ),
   )
+  const tools = createMemo(() =>
+    combineToolPresenters(
+      Object.entries(store.registrations).flatMap(([id, registration]) =>
+        registration.active ? ([[id, registration.tools]] as const) : [],
+      ),
+    ),
+  )
   const clearContributions = (id: string) => {
     setStore("registrations", id, "routes", reconcileStore({}))
     setStore("registrations", id, "slots", reconcileStore({}))
     setStore("registrations", id, "markdown", reconcileStore({}))
+    setStore("registrations", id, "tools", reconcileStore({}))
   }
 
   const activate = async (id: string) => {
@@ -154,9 +174,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
         set: (
-          kind: "routes" | "slots" | "markdown",
+          kind: "routes" | "slots" | "markdown" | "tools",
           name: string,
-          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer,
+          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer | ToolPresenter,
         ) => setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
@@ -561,6 +581,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
             active: plugin.active,
           })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
+        tool: (name) => tools().get(name),
         slots: { register: registerSlot, resolved },
         markdown,
         // Manual dialog toggles join the same chain as reconciles so a
@@ -641,6 +662,7 @@ function toRegistration(item: Desired): Registration {
     routes: {},
     slots: {},
     markdown: {},
+    tools: {},
     cleanups: [],
   }
 }
