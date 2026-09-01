@@ -4200,7 +4200,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("finalizes and replays a completed function call without an optional item id", () =>
+  it.effect("mints and replays an item id for a completed function call without one", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
@@ -4219,7 +4219,9 @@ describe("OpenAI Responses route", () => {
       expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
         expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "weather" } }),
       ])
-      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toEqual({
+        openai: { itemId: expect.stringMatching(/^fc_/) },
+      })
 
       const prepared = yield* compileRequest(
         LLM.request({
@@ -4231,7 +4233,13 @@ describe("OpenAI Responses route", () => {
         }),
       )
       expect(prepared.body.input).toEqual([
-        { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+        {
+          type: "function_call",
+          id: expect.stringMatching(/^fc_/),
+          call_id: "call_1",
+          name: "lookup",
+          arguments: '{"query":"weather"}',
+        },
         { type: "function_call_output", call_id: "call_1", output: '{"forecast":"sunny"}' },
       ])
     }),

@@ -45,15 +45,49 @@ const OpenAIResponsesImageGenerationTool = Schema.Struct({
 const OpenAIResponsesCustomTool = Schema.Struct({
   type: Schema.tag("custom"),
   name: Schema.String,
-  description: Schema.String,
+  description: Schema.optional(Schema.String),
+  allowed_callers: Schema.optional(Schema.Array(Schema.Literals(["direct", "programmatic"]))),
+  defer_loading: Schema.optional(Schema.Boolean),
   format: Schema.optional(
-    Schema.Struct({
-      type: Schema.tag("grammar"),
-      syntax: Schema.Literals(["lark", "regex"]),
-      definition: Schema.String,
-    }),
+    Schema.Union([
+      Schema.Struct({ type: Schema.tag("text") }),
+      Schema.Struct({
+        type: Schema.tag("grammar"),
+        syntax: Schema.Literals(["lark", "regex"]),
+        definition: Schema.String,
+      }),
+    ]),
   ),
 })
+
+const OpenAIResponsesCustomToolCaller = optionalNull(
+  Schema.Union([
+    Schema.Struct({ type: Schema.tag("direct") }),
+    Schema.Struct({ type: Schema.tag("program"), caller_id: Schema.String }),
+  ]),
+)
+
+const OpenAIResponsesCustomToolOutput = Schema.Union([
+  Schema.String,
+  Schema.Array(
+    Schema.Union([
+      Schema.Struct({ type: Schema.tag("input_text"), text: Schema.String }),
+      Schema.Struct({
+        type: Schema.tag("input_image"),
+        image_url: Schema.optional(Schema.String),
+        file_id: Schema.optional(Schema.String),
+        detail: Schema.optional(Schema.Literals(["auto", "low", "high"])),
+      }),
+      Schema.Struct({
+        type: Schema.tag("input_file"),
+        filename: Schema.optional(Schema.String),
+        file_data: Schema.optional(Schema.String),
+        file_url: Schema.optional(Schema.String),
+        file_id: Schema.optional(Schema.String),
+      }),
+    ]),
+  ),
+])
 
 const OpenAIResponsesCustomToolItem = Schema.Union([
   Schema.Struct({
@@ -62,11 +96,15 @@ const OpenAIResponsesCustomToolItem = Schema.Union([
     call_id: Schema.String,
     name: Schema.String,
     input: Schema.String,
+    caller: Schema.optional(OpenAIResponsesCustomToolCaller),
+    namespace: Schema.optional(Schema.String),
   }),
   Schema.Struct({
     type: Schema.tag("custom_tool_call_output"),
+    id: Schema.optional(Schema.String),
     call_id: Schema.String,
-    output: OpenResponses.FunctionCallOutput,
+    output: OpenAIResponsesCustomToolOutput,
+    caller: Schema.optional(OpenAIResponsesCustomToolCaller),
   }),
 ])
 
@@ -279,10 +317,9 @@ const lowerToolChoice = (
     none: () => "none" as const,
     required: () => "required" as const,
     tool: (name) => {
-      const tool = tools.find((tool) => tool.type === "tool" && tool.name === name)
+      const tool = tools.find((tool): tool is ToolDefinition => tool.type === "tool" && tool.name === name)
       if (tool && nativeImageTool(tool) !== undefined) return { type: "image_generation" as const }
-      if (supportsFreeformTools && tool?.freeform)
-        return { type: "custom" as const, name: tool.freeform.name ?? name }
+      if (supportsFreeformTools && tool?.freeform) return { type: "custom" as const, name: tool.freeform.name ?? name }
       return { type: "function" as const, name }
     },
   })
@@ -295,8 +332,8 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   )(request.providerOptions?.contextManagement)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const supportsFreeformTools = request.model.compatibility?.supportsFreeformTools === true
-  const names = request.tools.map((tool) =>
-    supportsFreeformTools && tool.type === "tool" && tool.freeform ? (tool.freeform.name ?? tool.name) : tool.name,
+  const names = request.tools.flatMap((tool) =>
+    supportsFreeformTools && tool.type === "tool" && tool.freeform ? [tool.freeform.name ?? tool.name] : [],
   )
   const duplicate = names.find((name, index) => names.indexOf(name) !== index)
   if (duplicate)

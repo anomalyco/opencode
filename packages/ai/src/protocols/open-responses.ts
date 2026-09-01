@@ -153,8 +153,8 @@ const OpenResponsesFunctionCallOutputContent = Schema.Union([
   OpenResponsesInputVideo,
 ])
 
-export const FunctionCallOutput = Schema.Union([Schema.String, Schema.Array(OpenResponsesFunctionCallOutputContent)])
-export type FunctionCallOutput = Schema.Schema.Type<typeof FunctionCallOutput>
+const FunctionCallOutput = Schema.Union([Schema.String, Schema.Array(OpenResponsesFunctionCallOutputContent)])
+type FunctionCallOutput = Schema.Schema.Type<typeof FunctionCallOutput>
 
 export const CompactionItem = Schema.Struct({
   type: Schema.Literal("compaction"),
