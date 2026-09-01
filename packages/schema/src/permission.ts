@@ -51,7 +51,7 @@ const Replied = define({
 })
 export const Event = { Asked, Replied, Definitions: inventory(Asked, Replied) }
 
-export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Effect" })
+export const Effect = Schema.Literals(["allow", "deny", "ask", "smart"]).annotate({ identifier: "PermissionV2.Effect" })
 export type Effect = typeof Effect.Type
 
 export interface Rule extends Schema.Schema.Type<typeof Rule> {}

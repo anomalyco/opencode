@@ -6,6 +6,8 @@ import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { PermissionClassifier } from "@opencode-ai/core/permission/classifier"
+export { PermissionClassifier }
 
 export const Event = PermissionV1.Event
 
@@ -68,6 +70,7 @@ const layer = Layer.effect(
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
       let needsAsk = false
+      let smartDecision: "allow" | "deny" | "ask" | undefined
 
       for (const pattern of request.patterns) {
         const rule = evaluate(request.permission, pattern, ruleset, approved)
@@ -78,6 +81,55 @@ const layer = Layer.effect(
           })
         }
         if (rule.action === "allow") continue
+
+        // Handle smart action - run LLM classifier
+        if (rule.action === "smart") {
+          const classifier = yield* PermissionClassifier.Service
+
+          // Check if this tool is safe and bypasses the classifier
+          if (classifier.isSafeTool(request.permission)) {
+            yield* Effect.logInfo("smart: safe tool bypass", { permission: request.permission })
+            continue
+          }
+
+          // Run the LLM classifier
+          const decision = yield* classifier.classify(
+            {
+              id: request.id ?? PermissionV1.ID.ascending(),
+              sessionID: request.sessionID,
+              action: request.permission,
+              resources: request.patterns,
+              metadata: request.metadata,
+              save: request.always,
+            },
+            request.sessionID,
+          )
+          yield* Effect.logInfo("smart: classifier decision", {
+            permission: request.permission,
+            pattern,
+            decision,
+          })
+
+          if (decision === "allow") {
+            // Record successful classification
+            yield* classifier.resetDenials(request.sessionID)
+            continue
+          }
+
+          if (decision === "deny") {
+            // Record denial for escalation tracking
+            yield* classifier.recordDenial(request.sessionID)
+            return yield* new PermissionV1.DeniedError({
+              ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+            })
+          }
+
+          // decision === "ask" - fall through to manual approval
+          smartDecision = "ask"
+          needsAsk = true
+          continue
+        }
+
         needsAsk = true
       }
 
@@ -171,7 +223,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.info)
     })
 
-    return Service.of({ ask, reply, list })
+    return Service.of({ ask: ask as any, reply, list })
   }),
 )
 
@@ -218,6 +270,6 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
   return Object.fromEntries(Object.entries(tools).filter(([name]) => !hidden.has(name)))
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node, PermissionClassifier.node] })
 
 export * as Permission from "."

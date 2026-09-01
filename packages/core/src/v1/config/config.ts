@@ -126,6 +126,27 @@ export const Info = Schema.Struct({
   }),
   layout: Schema.optional(ConfigLayoutV1.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermissionV1.Info),
+  permission_classifier: Schema.optional(
+    Schema.Struct({
+      model: Schema.optional(Schema.String).annotate({
+        description: "Model to use for permission classification in the format of provider/model",
+      }),
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable or disable the permission classifier (default: true when any rule uses 'smart')",
+      }),
+      timeout: Schema.optional(PositiveInt).annotate({
+        description: "Timeout in milliseconds for classifier LLM calls (default: 10000)",
+      }),
+      max_consecutive_denials: Schema.optional(PositiveInt).annotate({
+        description: "Maximum consecutive denials before escalating to manual approval (default: 3)",
+      }),
+      max_total_denials: Schema.optional(PositiveInt).annotate({
+        description: "Maximum total denials per session before escalating (default: 20)",
+      }),
+    }),
+  ).annotate({
+    description: "Configuration for the smart permission classifier",
+  }),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   attachment: Schema.optional(ConfigAttachmentV1.Info).annotate({
     description: "Attachment processing configuration, including image size limits and resizing behavior",

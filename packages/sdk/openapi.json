@@ -15719,7 +15719,7 @@
       },
       "PermissionAction": {
         "type": "string",
-        "enum": ["allow", "deny", "ask"]
+        "enum": ["allow", "deny", "ask", "smart"]
       },
       "PermissionRule": {
         "type": "object",
@@ -20563,7 +20563,7 @@
       },
       "PermissionActionConfig": {
         "type": "string",
-        "enum": ["ask", "allow", "deny"]
+        "enum": ["ask", "allow", "deny", "smart"]
       },
       "PermissionObjectConfig": {
         "type": "object",
@@ -27172,7 +27172,7 @@
       },
       "PermissionV2Effect": {
         "type": "string",
-        "enum": ["allow", "deny", "ask"]
+        "enum": ["allow", "deny", "ask", "smart"]
       },
       "PermissionV2Rule": {
         "type": "object",

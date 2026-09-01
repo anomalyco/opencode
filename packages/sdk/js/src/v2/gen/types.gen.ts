@@ -157,7 +157,7 @@ export type SnapshotFileDiff = {
   status?: "added" | "deleted" | "modified"
 }
 
-export type PermissionAction = "allow" | "deny" | "ask"
+export type PermissionAction = "allow" | "deny" | "ask" | "smart"
 
 export type PermissionRule = {
   permission: string
@@ -1654,7 +1654,7 @@ export type ServerConfig = {
   cors?: Array<string>
 }
 
-export type PermissionActionConfig = "ask" | "allow" | "deny"
+export type PermissionActionConfig = "ask" | "allow" | "deny" | "smart"
 
 export type PermissionObjectConfig = {
   [key: string]: PermissionActionConfig
@@ -3879,7 +3879,7 @@ export type ProviderRequest = {
 
 export type AgentColor = string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
 
-export type PermissionV2Effect = "allow" | "deny" | "ask"
+export type PermissionV2Effect = "allow" | "deny" | "ask" | "smart"
 
 export type PermissionV2Rule = {
   action: string

@@ -13,7 +13,7 @@ export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
 )
 export type ID = typeof ID.Type
 
-export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionAction" })
+export const Action = Schema.Literals(["allow", "deny", "ask", "smart"]).annotate({ identifier: "PermissionAction" })
 export type Action = typeof Action.Type
 
 export const Rule = Schema.Struct({ permission: Schema.String, pattern: Schema.String, action: Action }).annotate({

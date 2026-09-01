@@ -10,6 +10,8 @@ import { SessionV2 } from "./session"
 import { SessionStore } from "./session/store"
 import { Wildcard } from "./util/wildcard"
 import { PermissionSaved } from "./permission/saved"
+import * as PermissionClassifierModule from "./permission/classifier"
+export const PermissionClassifier = PermissionClassifierModule
 
 export { Effect, Rule, Ruleset } from "@opencode-ai/schema/permission"
 const missingAgentPermissions: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
@@ -114,6 +116,7 @@ const layer = Layer.effect(
     const agents = yield* AgentV2.Service
     const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
+    const classifier = yield* PermissionClassifier.Service
     const pending = new Map<ID, Pending>()
 
     yield* EffectRuntime.addFinalizer(() =>
@@ -152,11 +155,57 @@ const layer = Layer.effect(
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
+    const classifyIfSmart = EffectRuntime.fnUntraced(function* (
+      action: string,
+      resources: readonly string[],
+      sessionID: string,
+    ) {
+      if (classifier.isSafeTool(action)) {
+        return "allow" as Permission.Effect
+      }
+
+      const req = {
+        id: Permission.ID.create(),
+        sessionID,
+        action,
+        resources,
+      }
+      const decision = yield* classifier.classify(req, sessionID)
+
+      if (decision === "allow") {
+        yield* classifier.resetDenials(sessionID)
+        return "allow" as Permission.Effect
+      }
+      if (decision === "deny") {
+        yield* classifier.recordDenial(sessionID)
+        return "deny" as Permission.Effect
+      }
+      return "ask" as Permission.Effect
+    })
+
     const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
-      if (denied(input, rules)) return { effect: "deny" as const, rules }
+      if (denied(input, rules)) return { effect: "deny" as Permission.Effect, rules }
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
+
+      // Check if any resource has a "smart" effect
+      const hasSmart = effects.includes("smart")
+      if (hasSmart) {
+        // Run the LLM classifier for smart permissions
+        const smartEffect = yield* classifyIfSmart(input.action, input.resources, input.sessionID)
+        yield* EffectRuntime.logInfo("smart: classifier result", {
+          action: input.action,
+          smartEffect,
+        })
+
+        // Replace smart with the classifier's decision
+        const finalEffects = effects.map((e) => (e === "smart" ? smartEffect : e))
+        const effect: Permission.Effect =
+          finalEffects.includes("deny") ? "deny" : finalEffects.includes("ask") ? "ask" : "allow"
+        return { effect, rules: all }
+      }
+
       const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
       return { effect, rules: all }
     })
@@ -297,7 +346,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, reply, get, forSession, list })
+    return Service.of({ ask: ask as any, assert: assert as any, reply, get, forSession, list })
   }),
 )
 
@@ -306,5 +355,5 @@ export const locationLayer = layer.pipe(Layer.provideMerge(AgentV2.locationLayer
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [EventV2.node, Location.node, AgentV2.node, SessionStore.node, PermissionSaved.node],
+  deps: [EventV2.node, Location.node, AgentV2.node, SessionStore.node, PermissionSaved.node, PermissionClassifier.node],
 })
