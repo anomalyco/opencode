@@ -22,7 +22,7 @@ if (await Bun.file(filename).exists()) throw new Error("Refusing to seed an exis
 
 const encode = Schema.encodeSync(SessionMessage.Info)
 const now = new Date()
-const scale = process.argv.includes("--max") ? 50 : 1
+const max = process.argv.includes("--max")
 const projectID = Project.ID.make("global")
 const models = ["claude-sonnet-4-6", "gpt-5.4", "gemini-3.1-pro"]
 const fixtures = Array.from({ length: 731 }, (_, day) => {
@@ -33,6 +33,11 @@ const fixtures = Array.from({ length: 731 }, (_, day) => {
     if (day % 181 >= 90 && day % 181 < 101) return []
     if (day % 17 === 0) return []
   }
+  const scale = !max
+    ? 1
+    : date.getFullYear() === now.getFullYear()
+      ? 3 + ((day * 73 + Math.floor(day / 7) * 19) % 9)
+      : 1 + ((day * 37) % 4)
   return Array.from({ length: 1 + Math.floor(day / 245) + (day % 3) }, (_, index) => {
     const id = Session.ID.make(`ses_stats_demo_${day}_${index}`)
     const created = Math.min(date.getTime() + (9 + index * 2) * 3_600_000, now.getTime() - 1)

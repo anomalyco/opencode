@@ -20,7 +20,7 @@ For light mode:
 bun run dev:stats-tui --light
 ```
 
-For a synthetic high-volume fixture with 50x token usage (roughly 1.2T tokens across two years):
+For a synthetic high-volume fixture averaging roughly 500M tokens per active day this year, with varying daily usage and lighter prior years:
 
 ```sh
 bun run dev:stats-tui --max
