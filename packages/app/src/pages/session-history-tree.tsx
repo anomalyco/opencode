@@ -226,7 +226,7 @@ export function SessionHistoryTree(props: { update?: TitlebarUpdate }) {
       >
         <div class="flex h-full min-h-0 w-[244px] shrink-0 flex-col">
           <Show when={railOpen()}>
-            <div class="flex h-12 shrink-0 items-center gap-2" style={headerPad()} classList={fadeClass()}>
+            <div class="flex h-12 shrink-0 items-center gap-3" style={headerPad()} classList={fadeClass()}>
               <Show when={!mobile()}>
                 <TooltipV2
                   class="inline-flex shrink-0 items-center"
@@ -243,7 +243,7 @@ export function SessionHistoryTree(props: { update?: TitlebarUpdate }) {
                     data-action="sidebar-toggle"
                     variant="ghost-muted"
                     size="large"
-                    class={`${TREE_TOGGLE} -me-1.5`}
+                    class={TREE_TOGGLE}
                     icon={<IconV2 name="sidebar-right" />}
                     aria-label={language.t("command.sidebar.toggle")}
                     aria-expanded={layout.historyTree.opened()}
@@ -252,7 +252,7 @@ export function SessionHistoryTree(props: { update?: TitlebarUpdate }) {
                 </TooltipV2>
               </Show>
               <Show when={mobile()}>
-                <div class="-me-1.5 size-7 shrink-0" aria-hidden="true" />
+                <div class="size-7 shrink-0" aria-hidden="true" />
               </Show>
               <Logo class="h-3.5 w-auto min-w-0 shrink opacity-60" aria-hidden="true" />
             </div>
