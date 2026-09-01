@@ -4,6 +4,25 @@ import { Browser } from "./rpc.js"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Effect } from "effect"
 
+export const resolve = Effect.fn("BrowserFiles.resolve")((inputs: readonly string[], directory: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const { realpath } = await import("node:fs/promises")
+      const { resolve, relative, isAbsolute, sep } = await import("node:path")
+      const root = await realpath(directory)
+      const paths = await Promise.all(inputs.map((file) => realpath(resolve(directory, file))))
+      return {
+        paths,
+        external: paths.filter((file) => {
+          const value = relative(root, file)
+          return value === ".." || value.startsWith(`..${sep}`) || isAbsolute(value)
+        }),
+      }
+    },
+    catch: (error) => failure("resolve", error),
+  }),
+)
+
 // Files cross machines as bytes. Only this endpoint interprets its local paths.
 export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], directory: string) =>
   Effect.tryPromise({
@@ -84,7 +103,7 @@ export const save = Effect.fn("BrowserFiles.save")((files: readonly Browser.File
   }),
 )
 
-function failure(operation: "read" | "save", error: unknown) {
+function failure(operation: "resolve" | "read" | "save", error: unknown) {
   const detail = error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400)
   const code =
     error instanceof Error && "code" in error && typeof error.code === "string" && !detail.startsWith(error.code)
