@@ -5,6 +5,8 @@ import type { Server } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Bus } from "../../bus.js"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
@@ -230,6 +232,7 @@ export const OpenAIPlugin = define({
   id: "opencode.provider.openai",
   effect: Effect.fn(function* (ctx) {
     const bus = yield* Bus.Service
+    const config = yield* Config.Service
     const loading = Semaphore.makeUnsafe(1)
     let chatgpt: Credential.OAuth | undefined
 
@@ -250,6 +253,8 @@ export const OpenAIPlugin = define({
       draft.method.update(headless(ctx.app))
     })
     yield* load()
+    // Observe config entries so changing the opt-in rebuilds the catalog.
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.catalog.reload())
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(Provider.ID.openai)
       if (!item) return
@@ -259,6 +264,9 @@ export const OpenAIPlugin = define({
         })
       }
       if (!chatgpt) return
+      // Enabled pricing is an optional local API-equivalent estimate, not a subscription charge.
+      const oauthCostEstimates =
+        Config.latestProviderField(loaded.entries, Provider.ID.openai, "oauth_cost_estimates") === true
       item.provider.settings = Provider.mergeOverlay(item.provider.settings, { baseURL: codexBaseURL })
       const account = chatgpt.metadata?.accountID
       item.provider.headers = Provider.mergeHeaders(item.provider.headers, {
@@ -266,8 +274,7 @@ export const OpenAIPlugin = define({
         ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
       })
       for (const model of item.models.values()) {
-        // ChatGPT-plan tokens only authorize codex-eligible models, and the
-        // subscription covers usage, so hide the rest and zero the cost.
+        // ChatGPT-plan tokens only authorize Codex-eligible models, so hide the rest and apply Codex-compatible limits.
         evt.model.update(item.provider.id, model.id, (draft) => {
           if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
             draft.enabled = false
@@ -282,7 +289,7 @@ export const OpenAIPlugin = define({
             draft.enabled = false
             return
           }
-          draft.cost = []
+          if (!oauthCostEstimates) draft.cost = []
           // Match Codex CLI so context consumption and subscription usage stay consistent between clients.
           draft.limit = { ...draft.limit, context: 400_000, input: 272_000 }
         })

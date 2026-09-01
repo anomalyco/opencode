@@ -9,6 +9,14 @@ import { AbsolutePath } from "../src/schema.js"
 import { WebSearch } from "../src/websearch.js"
 
 describe("Config.Entry", () => {
+  test("decodes and omits the OAuth cost estimate option", () => {
+    const decode = Schema.decodeUnknownSync(ConfigProvider.Info)
+
+    expect(decode({ oauth_cost_estimates: true }).oauth_cost_estimates).toBe(true)
+    expect(decode({ oauth_cost_estimates: false }).oauth_cost_estimates).toBe(false)
+    expect(Schema.encodeSync(ConfigProvider.Info)(new ConfigProvider.Info({}))).not.toHaveProperty("oauth_cost_estimates")
+  })
+
   test("accepts disabled, fixed, and random web search selection", () => {
     const decode = Schema.decodeUnknownSync(Config.Info)
 

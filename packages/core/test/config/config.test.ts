@@ -366,6 +366,26 @@ describe("Config", () => {
     expect(Config.latest(entries, "default_agent")).toBeUndefined()
   })
 
+  test("returns the latest explicitly defined provider field", () => {
+    const enabled = new Document({
+      type: "document",
+      info: new Info({ providers: { openai: { oauth_cost_estimates: true } } }),
+    })
+    const disabled = new Document({
+      type: "document",
+      info: new Info({ providers: { openai: { oauth_cost_estimates: false } } }),
+    })
+    const omitted = new Document({
+      type: "document",
+      info: new Info({ providers: { openai: {} } }),
+    })
+
+    expect(Config.latestProviderField([enabled, disabled], "openai", "oauth_cost_estimates")).toBe(false)
+    expect(Config.latestProviderField([enabled, disabled, omitted], "openai", "oauth_cost_estimates")).toBe(false)
+    expect(Config.latestProviderField([enabled, omitted], "openai", "oauth_cost_estimates")).toBe(true)
+    expect(Config.latestProviderField([omitted], "openai", "oauth_cost_estimates")).toBeUndefined()
+  })
+
   it.live("tolerates unavailable authenticated wellknown config and reloads it later", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
