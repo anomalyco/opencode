@@ -60,17 +60,18 @@ function occupy(port: number, cancel = false) {
 
 const ready = (handler: Handler) =>
   Effect.promise(async () => {
-    const response = await handler(new Request("http://opencode.local/api/model/default"))
+    const response = await handler(new Request("http://opencode.local/api/plugin"))
     const body: unknown = await response.json()
-    if (
-      !response.ok ||
-      typeof body !== "object" ||
-      body === null ||
-      !("data" in body) ||
-      body.data === undefined ||
-      body.data === null
+    if (!response.ok || typeof body !== "object" || body === null || !("data" in body) || !Array.isArray(body.data))
+      throw new Error("Expected a plugin list response")
+    const ids = new Set(
+      body.data.flatMap((plugin) =>
+        typeof plugin === "object" && plugin !== null && "id" in plugin && typeof plugin.id === "string"
+          ? [plugin.id]
+          : [],
+      ),
     )
-      throw new Error("Plugins not ready")
+    if (!ids.has("opencode.agent") || !ids.has("opencode.provider.openai")) throw new Error("Plugins not ready")
     return response
   }).pipe(Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("2 seconds"))
 
