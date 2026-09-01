@@ -71,7 +71,9 @@ describe("ConfigCompactionPlugin.Plugin", () => {
           }),
         }),
       ])
-      yield* ConfigCompactionPlugin.Plugin.effect(host({ event: { subscribe: () => bus.subscribe(Event.Updated) } }))
+      yield* ConfigCompactionPlugin.Plugin.effect(
+        host({ event: { subscribe: () => bus.subscribe(Event.Updated), subscribeGlobal: () => Stream.empty } }),
+      )
 
       expect(compaction.required(nearInput)).toBe(false)
       const started = yield* bus
