@@ -1,4 +1,4 @@
-import { Schema, SchemaGetter } from "effect"
+import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 
 export const ServerKey = Schema.String.pipe(Schema.brand("ServerConnection.Key"))
@@ -29,7 +29,7 @@ const StoredServer = Schema.Union([ServerHttp, ServerHttpBase, Schema.String]).p
 
 const State = Persistence.struct({
   list: Persistence.array(StoredServer),
-  hidden: Persistence.record(Schema.Boolean),
+  hidden: Persistence.record(Schema.Boolean.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
   projects: Persistence.record(
     Persistence.array(
       Persistence.struct({
@@ -38,7 +38,7 @@ const State = Persistence.struct({
       }),
     ),
   ),
-  lastProject: Persistence.record(Schema.String),
+  lastProject: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
   recentlyClosed: Persistence.record(Persistence.array(Schema.String)),
 })
 
@@ -88,7 +88,9 @@ export const ModelState = Persistence.struct({
     }),
   ),
   recent: Persistence.array(Persistence.struct({ providerID: Schema.String, modelID: Schema.String })),
-  variant: Persistence.record(Schema.UndefinedOr(Schema.String)),
+  variant: Persistence.record(
+    Schema.UndefinedOr(Schema.String).pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
+  ),
 })
 
 export const VcsState = Persistence.struct({

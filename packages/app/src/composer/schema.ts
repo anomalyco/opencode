@@ -170,6 +170,24 @@ export const ComposerStore = Persistence.struct({
 })
 export type ComposerStore = typeof ComposerStore.Type
 
+// Preserve the old post-recovery initial defaults without a generic persistence merge.
+export function composerStore(initial: Pick<ComposerStore, "cursor" | "model">) {
+  if (initial.cursor === undefined && initial.model === undefined) return ComposerStore
+  return Persistence.struct({
+    ...ComposerStore.fields,
+    cursor: Persistence.fallback(ComposerStore.fields.cursor, () => initial.cursor),
+    model: Persistence.fallback(
+      Persistence.optional(
+        Persistence.struct({
+          ...PromptModel.fields,
+          variant: Persistence.fallback(PromptModel.fields.variant, () => initial.model?.variant),
+        }),
+      ),
+      () => (initial.model ? { ...initial.model } : undefined),
+    ),
+  })
+}
+
 export const LineComment = Persistence.struct({
   id: Schema.String,
   file: Schema.String,
