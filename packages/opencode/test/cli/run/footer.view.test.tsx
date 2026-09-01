@@ -164,6 +164,7 @@ async function renderFooter(
     width?: number
     height?: number
     state?: Partial<FooterState>
+    agent?: string
     onCycle?: () => void
     onSubmit?: (prompt: RunPrompt) => boolean
   } = {},
@@ -199,7 +200,7 @@ async function renderFooter(
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           tuiConfig={config}
           backgroundSubagents={input.backgroundSubagents ?? true}
-          agent="opencode"
+          agent={input.agent ?? "build"}
           onSubmit={input.onSubmit ?? (() => true)}
           onPermissionReply={() => {}}
           onQuestionReply={() => {}}
@@ -1147,18 +1148,18 @@ test("direct footer shows full usage metadata when room is available", async () 
   }
 })
 
-test("direct footer mode label keeps left padding without a status pill", async () => {
-  const app = await renderFooter()
+test("direct footer mode label shows the selected agent with left padding", async () => {
+  const app = await renderFooter({ agent: "Plan" })
 
   try {
     await app.renderOnce()
     const statusline = app
       .captureCharFrame()
       .split("\n")
-      .find((line) => line.includes("BUILD") && line.includes("cmd"))
+      .find((line) => line.includes("PLAN") && line.includes("cmd"))
 
     expect(statusline).toBeDefined()
-    expect(statusline?.startsWith(" BUILD ")).toBe(true)
+    expect(statusline?.startsWith(" PLAN ")).toBe(true)
   } finally {
     app.cleanup()
   }
