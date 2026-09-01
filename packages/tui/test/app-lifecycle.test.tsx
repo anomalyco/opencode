@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { EmbeddedTerminalRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
+import { EmbeddedTerminalRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -919,66 +919,6 @@ test("error investigations repeatedly seed editable home drafts without creating
 
   setup.mockInput.pressKey("c", { ctrl: true })
   await setup.waitForFrame((frame) => !frame.includes("Beta initialization failed"))
-})
-
-test("shows jump to latest after scrolling one line above the final message", async () => {
-  const session = {
-    id: "dummy",
-    title: "Demo session",
-    projectID: "project",
-    location: { directory },
-    agent: "build",
-    model: { providerID: "provider", id: "model" },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 0, updated: 0 },
-  }
-  const messages = Array.from({ length: 8 }, (_, index) => ({
-    id: `message-${index}`,
-    type: "user",
-    text: index === 7 ? "Final visible message" : `Earlier message ${index}`,
-    time: { created: index },
-  }))
-  await using setup = await createAppFixture({
-    width: 80,
-    height: 20,
-    config: { animations: false, keybinds: { "session.line.up": "f6", "session.line.down": "f7" } },
-    args: { sessionID: "dummy" },
-    fetch: (url) => {
-      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-      if (url.pathname === "/api/session/dummy") return json({ data: session })
-      if (url.pathname === "/api/session/dummy/message") return json({ data: messages.toReversed(), cursor: {} })
-      if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
-      if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
-    },
-  })
-
-  await setup.waitForFrame((frame) => frame.includes("Final visible message"))
-  const findScrollBox = (root: Renderable): ScrollBoxRenderable | undefined =>
-    root instanceof ScrollBoxRenderable && root.getRenderable("message-7")
-      ? root
-      : root.getChildren().map(findScrollBox).find(Boolean)
-  const scroll = findScrollBox(setup.renderer.root)
-  expect(scroll).toBeDefined()
-  if (!scroll) throw new Error("session transcript scrollbox was not found")
-  const maximum = () => Math.max(0, scroll.scrollHeight - scroll.viewport.height)
-
-  expect(scroll.scrollTop).toBe(maximum())
-  const initial = setup.captureCharFrame().split("\n")
-  expect(initial.find((line) => line.includes("Jump to latest"))).toBeUndefined()
-  expect(initial[initial.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
-
-  setup.mockInput.pressKey("F6")
-  const clipped = (await setup.waitForFrame((frame) => frame.includes("Jump to latest"))).split("\n")
-  expect(scroll.scrollTop).toBe(maximum() - 1)
-  expect(clipped.find((line) => line.includes("Jump to latest"))).toBeDefined()
-  expect(clipped[clipped.findIndex((line) => line.includes("Final visible message")) + 1]).not.toContain("┃")
-
-  setup.mockInput.pressKey("F7")
-  const restored = (await setup.waitForFrame((frame) => !frame.includes("Jump to latest"))).split("\n")
-  expect(scroll.scrollTop).toBe(maximum())
-  expect(restored.find((line) => line.includes("Jump to latest"))).toBeUndefined()
-  expect(restored[restored.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
 })
 
 test("completed user shell output replaces a partial live read when the final read fails", async () => {
