@@ -8,6 +8,7 @@ import { Project } from "./project.js"
 import { Model } from "@opencode-ai/schema/model"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session/message.js"
+import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Bus } from "./bus.js"
 import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
@@ -44,11 +45,14 @@ import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
+import { SessionGenerate } from "./session/generate.js"
 import { Snapshot } from "./snapshot.js"
 import { Session } from "./session/session.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Plugin } from "./plugin.js"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { Job } from "./job.js"
+import { Command } from "./command.js"
 import { Global } from "@opencode-ai/util/global"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
@@ -180,6 +184,20 @@ export interface Interface {
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["prompt"]>
+  /** Generates text from current Session context without admitting input or mutating history. */
+  readonly generate: (input: {
+    sessionID: SessionSchema.ID
+    prompt: string
+  }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
+  readonly command: (input: {
+    sessionID: SessionSchema.ID
+    command: string
+    text: string
+    files?: PromptInput.Prompt["files"]
+    agents?: PromptInput.Prompt["agents"]
+    skills?: PromptInput.Prompt["skills"]
+    delivery?: SessionInbox.Delivery
+  }) => Effect.Effect<void, NotFoundError | Command.NotFoundError | Command.ExecutionError>
   readonly shell: (
     input: Parameters<Session.Handle["shell"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["shell"]>
@@ -380,6 +398,33 @@ const layer = Layer.effect(
           ),
         ),
       prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
+      generate: Effect.fn("Session.generate")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const generate = yield* SessionGenerate.Service.pipe(instances.provide(session))
+        return yield* generate.generate(input)
+      }),
+      command: Effect.fn("Session.command")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const commands = yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          return yield* Command.Service
+        }).pipe(instances.provide(session))
+        const delivery = input.delivery ?? "steer"
+        yield* commands.execute({
+          name: input.command,
+          invocation: {
+            sessionID: input.sessionID,
+            prompt: {
+              text: input.text,
+              files: input.files,
+              agents: input.agents,
+              skills: input.skills,
+            },
+            delivery,
+          },
+        })
+      }),
       shell: (input) => sessions.forSession(input.sessionID).shell(input),
       skill: (input) => sessions.forSession(input.sessionID).skill(input),
       switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
