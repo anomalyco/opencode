@@ -4,6 +4,7 @@ import { searchSignature, toolExpression } from "@opencode-ai/codemode"
 import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
+import type { Namespace } from "@opencode-ai/schema/tool"
 
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.
@@ -23,14 +24,7 @@ export function render(catalog: CodeModeCatalog.Summary) {
     return "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool."
 
   const tools = catalog.namespaces.flatMap((namespace) => {
-    const count = namespace.count === 1 ? "1 tool" : `${namespace.count} tools`
-    const label =
-      namespace.entries.length === namespace.count
-        ? count
-        : namespace.entries.length === 0
-          ? `${count}, none shown`
-          : `${count}, ${namespace.entries.length} shown`
-    return [`- ${namespace.name} (${label})`, ...namespace.entries.map((entry) => entry.line)]
+    return [CodeModeCatalog.namespaceLine(namespace), ...namespace.entries.map((entry) => entry.line)]
   })
 
   return `${prompt(catalog.shown < catalog.total)}
@@ -46,6 +40,15 @@ ${render(current)}`
   const previousComplete = previous.shown === previous.total
   const currentComplete = current.shown === current.total
   if (previousComplete !== currentComplete) return replacement
+
+  const descriptions = Instructions.diffByKey(
+    previous.namespaces.filter((namespace) => namespace.description !== undefined),
+    current.namespaces.filter((namespace) => namespace.description !== undefined),
+    (namespace) => namespace.name,
+    (before, after) => before.description !== after.description,
+  )
+  if (descriptions.added.length > 0 || descriptions.removed.length > 0 || descriptions.changed.length > 0)
+    return replacement
 
   const diff = Instructions.diffByKey(
     previous.namespaces.flatMap((namespace) => namespace.entries),
@@ -126,8 +129,11 @@ ${render(current)}`
 const key = Instructions.Key.make("core/codemode")
 const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
 
-export const make = (entries?: ReadonlyArray<CodeModeCatalog.Entry>): Instructions.List => {
-  const catalog = entries === undefined ? Instructions.removed : CodeModeCatalog.summarize(entries)
+export const make = (
+  entries?: ReadonlyArray<CodeModeCatalog.Entry>,
+  namespaces?: ReadonlyMap<string, Namespace>,
+): Instructions.List => {
+  const catalog = entries === undefined ? Instructions.removed : CodeModeCatalog.summarize(entries, { namespaces })
   return Instructions.make({
     key,
     codec,

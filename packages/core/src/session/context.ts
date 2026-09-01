@@ -146,7 +146,7 @@ const layer = Layer.effect(
         agent: { ...agent, info: agent.info },
         instructions: Instructions.combine([
           loaded.builtins,
-          CodeModeInstructions.make(loaded.tools.codeModeCatalog),
+          CodeModeInstructions.make(loaded.tools.codeModeCatalog, loaded.tools.codeModeNamespaces),
           loaded.discovery,
           loaded.skills,
           loaded.references,

@@ -93,22 +93,30 @@ describe("CodeModeInstructions", () => {
       const initialized = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* tools.transform((draft) => {
+            draft.namespace({ name: "tools", description: "Project utilities" })
             draft.add({ ...zeta, options: { namespace: "tools" } })
             draft.add({ ...alpha, options: { namespace: "tools" } })
           })
-          return yield* readInitial(CodeModeInstructions.make((yield* tools.snapshot()).codeModeCatalog))
+          const snapshot = yield* tools.snapshot()
+          return yield* readInitial(CodeModeInstructions.make(snapshot.codeModeCatalog, snapshot.codeModeNamespaces))
         }),
       )
       const reordered = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* tools.transform((draft) => {
+            draft.namespace({ name: "tools", description: "Project utilities" })
             draft.add({ ...alpha, options: { namespace: "tools" } })
             draft.add({ ...zeta, options: { namespace: "tools" } })
           })
-          return yield* readUpdate(CodeModeInstructions.make((yield* tools.snapshot()).codeModeCatalog), initialized)
+          const snapshot = yield* tools.snapshot()
+          return yield* readUpdate(
+            CodeModeInstructions.make(snapshot.codeModeCatalog, snapshot.codeModeNamespaces),
+            initialized,
+          )
         }),
       )
 
+      expect(initialized.text).toContain("- tools (2 tools) // Project utilities")
       expect(reordered.changed).toBe(false)
       expect(reordered.text).toBe("")
     }).pipe(Effect.provide(layer))

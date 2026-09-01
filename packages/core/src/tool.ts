@@ -45,6 +45,7 @@ export interface Interface extends State.Transformable<Draft> {
 export interface Snapshot {
   readonly definitions: ReadonlyArray<ToolDefinition>
   readonly codeModeCatalog?: ReadonlyArray<CodeModeCatalog.Entry>
+  readonly codeModeNamespaces?: ReadonlyMap<string, Tool.Namespace>
   readonly execute: (input: {
     readonly sessionID: SessionSchema.ID
     readonly agent: Agent.ID
@@ -234,7 +235,7 @@ const layer = Layer.effect(
             : undefined
           const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeInventory) : undefined
           return {
-            ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
+            ...(codeModeCatalog === undefined ? {} : { codeModeCatalog, codeModeNamespaces: namespaces }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
