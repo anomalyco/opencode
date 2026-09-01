@@ -23,23 +23,44 @@ type SelectionKeyEvent = {
   stopPropagation: () => void
 }
 
-export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
+export function text(renderer: Renderer) {
   const selection = renderer.getSelection()
-  if (!selection) return false
-
-  const text = selection.getSelectedText()
-  if (!text) return false
-
+  if (!selection) return undefined
+  const selected = selection.getSelectedText()
+  if (!selected) return undefined
   const focus = renderer.currentFocusedRenderable
-  const clipboardText =
-    focus?.getClipboardText && selection.selectedRenderables.includes(focus) ? focus.getClipboardText(text) : text
+  if (focus?.getClipboardText && selection.selectedRenderables.includes(focus)) return focus.getClipboardText(selected)
+  return selected
+}
+
+// Blank lines carry a bare ">" and content lines drop trailing padding, so a quoted block
+// never introduces trailing whitespace. Already-quoted lines nest, which is what they mean.
+export function quote(value: string) {
+  return (
+    value
+      .split("\n")
+      .map((line) => (line.trim() ? `> ${line.trimEnd()}` : ">"))
+      .join("\n") + "\n"
+  )
+}
+
+// `retain` keeps the highlight up after copy-on-select so it can still be acted on, for
+// example added to the prompt. The highlight is dismissed by the next click or key press.
+export function copy(
+  renderer: Renderer,
+  toast: Toast,
+  clipboard: ClipboardService,
+  options?: { retain?: boolean },
+): boolean {
+  const clipboardText = text(renderer)
+  if (!clipboardText) return false
 
   clipboard
     ?.write?.(clipboardText)
     .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
     .catch(toast.error)
 
-  renderer.clearSelection()
+  if (!options?.retain) renderer.clearSelection()
   return true
 }
 

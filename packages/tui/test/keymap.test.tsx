@@ -139,3 +139,11 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
     app.renderer.destroy()
   }
 })
+
+test("add selection to chat resolves through the keybind command map", () => {
+  const config = createResolvedKeymapConfig()
+  expect(config.keybinds.get("prompt.add_selection").map((binding) => binding.key)).toEqual(["<leader>p"])
+  expect(config.keybinds.get("prompt.add_selection")).toEqual(
+    config.keybinds.gather("prompt.palette", ["prompt.add_selection"]),
+  )
+})
