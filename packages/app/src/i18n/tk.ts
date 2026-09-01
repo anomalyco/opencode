@@ -877,6 +877,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Duýduryşlary arassalaň",
   "sidebar.empty.title": "Taslama açylmaýar",
   "sidebar.empty.description": "Başlamak üçin taslama açyň",
+  "sidebar.history.runningChat": "Işleýär: {{title}}",
   "debugBar.ariaLabel": "Ösüş öndürijiligini anyklaýyş",
   "debugBar.na": "n / a",
   "debugBar.nav.label": "NAV",

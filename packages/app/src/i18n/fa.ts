@@ -875,6 +875,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "پرامپت ها را پاک کنید",
   "sidebar.empty.title": "هیچ پروژه ای باز نشده است",
   "sidebar.empty.description": "برای شروع یک پروژه باز کنید",
+  "sidebar.history.runningChat": "در حال اجرا: {{title}}",
   "debugBar.ariaLabel": "تشخیص عملکرد توسعه",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

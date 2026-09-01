@@ -319,7 +319,7 @@ export function SessionHeader() {
           </Portal>
         )}
       </Show>
-      <Show when={rightMount()} keyed>
+      <Show when={!isV2() && rightMount()} keyed>
         {(mount) => (
           <Portal mount={mount}>
             <Show
@@ -511,6 +511,13 @@ export function SessionHeader() {
             </Show>
           </Portal>
         )}
+      </Show>
+      <Show when={isV2()}>
+        <div class="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end p-3">
+          <div class="pointer-events-auto">
+            <SessionHeaderV2Actions state={v2ActionsState()} />
+          </div>
+        </div>
       </Show>
     </>
   )

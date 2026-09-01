@@ -59,7 +59,7 @@ import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { TerminalProvider, useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
-import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
+import { PromptInputV2Composer, PROMPT_INPUT_V2_SURFACE_CLASS, usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { promptLength } from "@/components/prompt-input/history"
@@ -2234,7 +2234,13 @@ export default function Page() {
                         setFollowup("paused", id, true)
                       },
                     })
-                    return <PromptInputV2Composer controller={controller} borderUnderlay />
+                    return (
+                      <PromptInputV2Composer
+                        controller={controller}
+                        borderUnderlay
+                        class={PROMPT_INPUT_V2_SURFACE_CLASS}
+                      />
+                    )
                   }}
                 </Show>
               }

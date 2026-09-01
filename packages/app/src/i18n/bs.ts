@@ -891,6 +891,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Očisti obavijesti",
   "sidebar.empty.title": "Nema otvorenih projekata",
   "sidebar.empty.description": "Otvori projekat za početak",
+  "sidebar.history.runningChat": "U toku: {{title}}",
 
   "app.name.desktop": "OpenCode Desktop",
 

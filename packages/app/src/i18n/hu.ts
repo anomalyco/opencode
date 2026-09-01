@@ -884,6 +884,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Értesítések törlése",
   "sidebar.empty.title": "Nincs nyitott projekt",
   "sidebar.empty.description": "A kezdéshez nyisson meg egy projektet",
+  "sidebar.history.runningChat": "Fut: {{title}}",
   "debugBar.ariaLabel": "Fejlesztési teljesítmény diagnosztika",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

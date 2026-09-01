@@ -1016,6 +1016,7 @@ export const dict = {
 
   "sidebar.empty.title": "열린 프로젝트 없음",
   "sidebar.empty.description": "프로젝트를 열어 시작하세요",
+  "sidebar.history.runningChat": "실행 중: {{title}}",
 
   "settings.general.section.advanced": "고급",
   "settings.general.row.shell.title": "터미널 셸",

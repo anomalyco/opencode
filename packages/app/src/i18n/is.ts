@@ -880,6 +880,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Hreinsaðu tilkynningar",
   "sidebar.empty.title": "Engin verkefni opin",
   "sidebar.empty.description": "Opnaðu verkefni til að byrja",
+  "sidebar.history.runningChat": "Í gangi: {{title}}",
   "debugBar.ariaLabel": "Þróunarárangursgreiningar",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

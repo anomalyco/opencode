@@ -873,6 +873,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "ជម្រះការជូនដំណឹង",
   "sidebar.empty.title": "គ្មានគម្រោងបើកទេ។",
   "sidebar.empty.description": "បើកគម្រោងដើម្បីចាប់ផ្តើម",
+  "sidebar.history.runningChat": "កំពុងដំណើរការ: {{title}}",
   "debugBar.ariaLabel": "ការវិនិច្ឆ័យដំណើរការអភិវឌ្ឍន៍",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

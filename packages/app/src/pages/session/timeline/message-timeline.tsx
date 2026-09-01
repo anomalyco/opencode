@@ -60,13 +60,16 @@ import { normalize } from "@opencode-ai/session-ui/session-diff"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { createMediaQuery } from "@solid-primitives/media"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useSessionArchive } from "@/pages/session/session-archive"
 import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
+import { historyTreeChromeOnCard, historyTreeMacLights, historyTreeTitlePadding } from "@/pages/layout/history-tree-chrome"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -272,6 +275,13 @@ export function MessageTimeline(props: {
   const initialMeasurements = cached?.measurements
   const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
   const platform = usePlatform()
+  const layout = useLayout()
+  const mobile = createMediaQuery("(max-width: 767px)")
+  const titlePadding = () =>
+    historyTreeTitlePadding(
+      historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
+      !mobile() && historyTreeMacLights(platform),
+    )
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const sessionID = createMemo(() => params.id)
@@ -1379,10 +1389,16 @@ export function MessageTimeline(props: {
               "w-full": true,
               "pb-4": true,
               "pr-3": true,
-              "pl-2.5": settings.general.newLayoutDesigns(),
               "pl-2 md:pl-4": !settings.general.newLayoutDesigns(),
+              "transition-[padding-inline-start] duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:duration-[0ms]":
+                settings.general.newLayoutDesigns(),
               "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !settings.general.newLayoutDesigns(),
             }}
+            style={
+              settings.general.newLayoutDesigns()
+                ? { "padding-inline-start": `${titlePadding()}px` }
+                : undefined
+            }
           >
             <div class="h-12 w-full flex items-center justify-between gap-2">
               <div
@@ -1417,8 +1433,14 @@ export function MessageTimeline(props: {
                           data-slot="session-title-child"
                           classList={{
                             "truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
-                            "w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover":
+                            "w-fit rounded-[6px] py-1 hover:bg-v2-overlay-simple-overlay-hover":
                               settings.general.newLayoutDesigns(),
+                            "px-2":
+                              settings.general.newLayoutDesigns() &&
+                              !historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
+                            "pe-2":
+                              settings.general.newLayoutDesigns() &&
+                              historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
                             "grow-1 min-w-0": !settings.general.newLayoutDesigns(),
                           }}
                           onClick={openTitleEditor}
@@ -1437,8 +1459,14 @@ export function MessageTimeline(props: {
                         classList={{
                           "block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
                           "w-full flex-1 grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !settings.general.newLayoutDesigns(),
-                          "field-sizing-content self-start rounded-[6px] px-2 py-1 ":
+                          "field-sizing-content self-start rounded-[6px] py-1":
                             settings.general.newLayoutDesigns(),
+                          "px-2":
+                            settings.general.newLayoutDesigns() &&
+                            !historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
+                          "pe-2":
+                            settings.general.newLayoutDesigns() &&
+                            historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
                         }}
                         style={{
                           "--inline-input-shadow": settings.general.newLayoutDesigns()

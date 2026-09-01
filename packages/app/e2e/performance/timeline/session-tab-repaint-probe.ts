@@ -25,9 +25,9 @@ type CachedRepaintTrace = {
 
 export async function installCachedRepaintProbe(
   page: Page,
-  input: { targetHref: string; destination: string[]; source: string[]; last: string; windowMs: number },
+  input: { targetSessionID: string; destination: string[]; source: string[]; last: string; windowMs: number },
 ) {
-  await page.evaluate(({ targetHref, destination, source, last, windowMs }) => {
+  await page.evaluate(({ targetSessionID, destination, source, last, windowMs }) => {
     const destinationIDs = new Set(destination)
     const sourceIDs = new Set(source)
     const nodeIDs = new WeakMap<Node, number>()
@@ -154,8 +154,8 @@ export async function installCachedRepaintProbe(
     document.addEventListener(
       "click",
       (event) => {
-        const link = event.target instanceof Element ? event.target.closest("a") : undefined
-        if (link?.getAttribute("href") !== targetHref) return
+        const row = event.target instanceof Element ? event.target.closest("[data-component=session-history-row]") : undefined
+        if (row?.getAttribute("data-session-id") !== targetSessionID) return
         state.startedAtPerformanceMs = performance.now()
         state.running = true
         requestAnimationFrame(sample)

@@ -21,6 +21,8 @@ import {
   latestRootSession,
   sortedRootSessions,
   toggleHomeProjectSelection,
+  historyTreeGroups,
+  historyTreeProjectForDirectory,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
 import { ServerConnection } from "@/context/server"
@@ -343,5 +345,61 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+})
+
+describe("history tree groups", () => {
+  test("nests root sessions under their project and skips children and archives", () => {
+    const opencode = { worktree: "/opencode", name: "opencode" }
+    const tracker = { worktree: "/tracker", name: "Tracker", sandboxes: ["/tracker/.worktrees/sim"] }
+    const groups = historyTreeGroups(
+      [opencode, tracker],
+      [
+        session({ id: "child", directory: "/opencode", parentID: "parent", time: { created: 9, updated: 9 } }),
+        session({
+          id: "archived",
+          directory: "/opencode",
+          time: { created: 8, updated: 8, archived: 8 },
+        }),
+        session({ id: "cost", directory: "/opencode", title: "Cost calculator", time: { created: 2, updated: 4 } }),
+        session({ id: "flaky", directory: "/opencode", title: "Fix flaky", time: { created: 1, updated: 3 } }),
+        session({ id: "sim", directory: "/tracker/.worktrees/sim", title: "Simulator", time: { created: 5, updated: 5 } }),
+      ],
+    )
+
+    expect(groups.map((group) => group.projectName)).toEqual(["opencode", "Tracker"])
+    expect(groups[0]!.sessions.map((item) => item.id)).toEqual(["cost", "flaky"])
+    expect(groups[1]!.sessions.map((item) => item.id)).toEqual(["sim"])
+  })
+
+  test("assigns a nested directory to the longest matching project", () => {
+    const root = { worktree: "/src", name: "src" }
+    const nested = { worktree: "/src/app", name: "app" }
+    const groups = historyTreeGroups(
+      [root, nested],
+      [session({ id: "inner", directory: "/src/app/lib", time: { created: 1, updated: 1 } })],
+    )
+    expect(historyTreeProjectForDirectory([root, nested], "/src/app/lib")?.name).toBe("app")
+    expect(groups[0]!.sessions.map((item) => item.id)).toEqual([])
+    expect(groups[1]!.sessions.map((item) => item.id)).toEqual(["inner"])
+  })
+
+  test("nests a worktree path under its project even without a sandbox list", () => {
+    const groups = historyTreeGroups(
+      [{ worktree: "/tracker", name: "Tracker" }],
+      [session({ id: "sim", directory: "/tracker/.worktrees/sim", time: { created: 1, updated: 1 } })],
+    )
+    expect(groups[0]!.sessions.map((item) => item.id)).toEqual(["sim"])
+  })
+
+  test("keeps projects with no chats so a new session can still start there", () => {
+    const groups = historyTreeGroups([{ worktree: "/empty", name: "empty" }], [])
+    expect(groups).toEqual([
+      {
+        project: { worktree: "/empty", name: "empty" },
+        projectName: "empty",
+        sessions: [],
+      },
+    ])
   })
 })

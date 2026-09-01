@@ -891,6 +891,7 @@ export const dict: Record<string, string> = {
   "sidebar.project.clearNotifications": "བརྡ་བསྐུལ་ཚུ་གསལ་བཟོ།",
   "sidebar.empty.title": "ལས་འགུལ་ཁ་ཕྱེ་མེད།",
   "sidebar.empty.description": "འགོ་བཙུགས་ནིའི་དོན་ལུ་ལས་འགུལ་ཅིག་ཁ་ཕྱེ།",
+  "sidebar.history.runningChat": "འཁོར་བཞིན་པ: {{title}}",
   "debugBar.ariaLabel": "གོང་འཕེལ་གྱི་ལས་དོན་བརྟག་དཔྱད།",
   "debugBar.na": "ན/ཨེ།",
   "debugBar.nav.label": "NAV",

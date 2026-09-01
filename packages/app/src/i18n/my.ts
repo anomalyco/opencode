@@ -886,6 +886,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "အကြောင်းကြားချက်များကို ရှင်းလင်းပါ။",
   "sidebar.empty.title": "မည်သည့်ပရောဂျက်မှ ဖွင့်ထားခြင်းမရှိပါ။",
   "sidebar.empty.description": "စတင်ရန် ပရောဂျက်တစ်ခုကို ဖွင့်ပါ။",
+  "sidebar.history.runningChat": "လုပ်ဆောင်နေသည်: {{title}}",
   "debugBar.ariaLabel": "ဖွံ့ဖြိုးတိုးတက်မှု စွမ်းဆောင်ရည် အဖြေရှာခြင်း",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

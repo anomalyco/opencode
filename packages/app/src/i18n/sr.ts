@@ -880,6 +880,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Обришите обавештења",
   "sidebar.empty.title": "Нема отворених пројеката",
   "sidebar.empty.description": "Отворите пројекат да бисте започели",
+  "sidebar.history.runningChat": "У току: {{title}}",
   "debugBar.ariaLabel": "Дијагностика перформанси развоја",
   "debugBar.na": "н/а",
   "debugBar.nav.label": "NAV",

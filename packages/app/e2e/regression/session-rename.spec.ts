@@ -52,7 +52,7 @@ for (const commit of ["Enter", "blur", "click outside"]) {
     if (commit === "blur") await input.press("Tab")
     if (commit === "click outside") await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
     await expect(page.getByRole("heading", { name: "Renamed session", exact: true })).toBeVisible()
-    await expect(page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: "Renamed session" })).toBeVisible()
+    await expect(page.locator('[data-component="session-history-row"]').filter({ hasText: "Renamed session" })).toBeVisible()
     await page.reload()
     await expect(page.getByRole("heading", { name: "Renamed session", exact: true })).toBeVisible()
   })
@@ -81,7 +81,7 @@ test("keeps the draft when saving the session heading fails", async ({ page }) =
   await expect(input).toBeEnabled()
   await expect(input).toHaveValue("Retry this title")
   await expect(
-    page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: fixture.expected.targetTitle }),
+    page.locator('[data-component="session-history-row"]').filter({ hasText: fixture.expected.targetTitle }),
   ).toBeVisible()
 })
 
@@ -93,49 +93,4 @@ test("does not save an empty session heading", async ({ page }) => {
   await expect(page.getByRole("heading", { name: fixture.expected.targetTitle, exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByRole("heading", { name: fixture.expected.targetTitle, exact: true })).toBeVisible()
-})
-
-test("renames and closes the session tab from its context menu", async ({ page }) => {
-  const tab = page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: fixture.expected.targetTitle })
-  await tab.click({ button: "right" })
-  await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeVisible()
-  await page.keyboard.press("Escape")
-  await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeHidden()
-  await expect(tab).toBeFocused()
-  await tab.press("Shift+F10")
-  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
-  const input = page.locator('[data-slot="tab-title"][contenteditable="true"]')
-  await expect(input).toBeFocused()
-  await input.fill("Renamed from tab")
-  await input.press("Enter")
-  await expect(page.getByRole("heading", { name: "Renamed from tab", exact: true })).toBeVisible()
-  await page.reload()
-  await expect(page.getByRole("heading", { name: "Renamed from tab", exact: true })).toBeVisible()
-  const renamed = page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: "Renamed from tab" })
-  await renamed.click({ button: "right" })
-  await page.getByRole("menuitem", { name: "Close tab", exact: true }).click()
-  await expect(renamed).toBeHidden()
-  await page.getByRole("button", { name: "Home", exact: true }).click()
-  await expect(
-    page.locator('[data-component="home-session-row"]').filter({ hasText: "Renamed from tab" }),
-  ).toBeVisible()
-})
-
-test("renames an inactive tab without switching sessions", async ({ page }) => {
-  await page.getByRole("button", { name: "Home", exact: true }).click()
-  await page.locator('[data-component="home-session-row"]').filter({ hasText: fixture.expected.sourceTitle }).click()
-  await expect(page.getByRole("heading", { name: fixture.expected.sourceTitle, exact: true })).toBeVisible()
-  const tab = page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: fixture.expected.targetTitle })
-  await tab.click({ button: "right" })
-  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
-  const input = page.locator('[data-slot="tab-title"][contenteditable="true"]')
-  await expect(input).toBeFocused()
-  await input.fill("Inactive tab renamed")
-  await input.press("Tab")
-  await expect(page.getByRole("heading", { name: fixture.expected.sourceTitle, exact: true })).toBeVisible()
-  await expect(page).toHaveURL(new RegExp(`/session/${fixture.sourceID}$`))
-  await page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: "Inactive tab renamed" }).click()
-  await expect(page.getByRole("heading", { name: "Inactive tab renamed", exact: true })).toBeVisible()
-  await page.reload()
-  await expect(page.getByRole("heading", { name: "Inactive tab renamed", exact: true })).toBeVisible()
 })
