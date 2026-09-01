@@ -26,6 +26,7 @@ import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { PluginRuntimeProvider } from "@opencode-ai/core/plugin/runtime-provider"
 import { PluginUpdate } from "@opencode-ai/core/plugin/update"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { WellKnown } from "@opencode-ai/core/wellknown"
@@ -60,7 +61,7 @@ const applicationServiceNodes = [
   Session.node,
   Instance.byLocationNode,
   SessionTransfer.node,
-  PluginRuntime.providerNode,
+  PluginRuntimeProvider.node,
   SdkPlugins.node,
   PluginUpdate.node,
   PermissionSaved.node,
@@ -130,7 +131,7 @@ function makeRoutes<AuthError, AuthServices>(
       }),
     ),
     PluginRuntime.node.replace(PluginRuntime.layerWithCell(pluginRuntimeCell)),
-    PluginRuntime.providerNode.replace(PluginRuntime.providerNodeWithCell(pluginRuntimeCell)),
+    PluginRuntimeProvider.node.replace(PluginRuntimeProvider.configured(pluginRuntimeCell)),
   ]
   const replacements: LayerNode.Replacements = [...standard, ...overrides]
   const serviceLayer = options.simulation
@@ -147,9 +148,13 @@ function makeRoutes<AuthError, AuthServices>(
       const services = Layer.succeedContext(context)
       const requestServices = Layer.merge(
         Layer.succeedContext(
-          Context.pick(Database.Service, PermissionSaved.Service, PluginUpdate.Service, Project.Service, WellKnown.Service)(
-            context,
-          ),
+          Context.pick(
+            Database.Service,
+            PermissionSaved.Service,
+            PluginUpdate.Service,
+            Project.Service,
+            WellKnown.Service,
+          )(context),
         ),
         ServerInfo.layer(serviceURLs, options.app),
       )

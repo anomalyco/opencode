@@ -2,9 +2,10 @@ export * as SessionRevert from "./revert.js"
 
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
-import { PluginSupervisor } from "../plugin/supervisor-service.js"
+import { Plugin } from "../plugin.js"
 import { RelativePath } from "../schema.js"
 import { Snapshot } from "../snapshot.js"
 import { SessionEvent } from "./event.js"
@@ -34,7 +35,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 export const make = Effect.fn("SessionRevert.make")(function* () {
   const database = yield* Database.Service
   const bus = yield* Bus.Service
-  const plugins = yield* PluginSupervisor.Service
+  const plugins = yield* Plugin.Service
   const snapshot = yield* Snapshot.Service
 
   const stage: Interface["stage"] = Effect.fn("SessionRevert.stage")(function* (input) {
@@ -82,6 +83,12 @@ export const make = Effect.fn("SessionRevert.make")(function* () {
 })
 
 export const layer = Layer.effect(Service, make())
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Database.node, Bus.node, Plugin.node, Snapshot.node],
+})
 
 export const commit = Effect.fn("SessionRevert.commit")(function* (bus: Bus.Interface, session: SessionSchema.Info) {
   if (!session.revert) return

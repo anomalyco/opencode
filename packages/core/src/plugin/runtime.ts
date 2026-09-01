@@ -1,14 +1,13 @@
 export * as PluginRuntime from "./runtime.js"
 
 import { Context, Effect, Layer } from "effect"
-import { Agent } from "../agent.js"
+import type { Agent } from "../agent.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Job } from "../job.js"
-import { Location } from "../location.js"
-import { LocationServiceMap } from "../location-service-map.js"
-import { Mcp } from "../mcp/index.js"
-import { PersistentPty } from "../persistent-pty.js"
-import { Session } from "../session.js"
+import type { Job } from "../job.js"
+import type { Location } from "../location.js"
+import type { Mcp } from "../mcp/index.js"
+import type { PersistentPty } from "../persistent-pty.js"
+import type { Session } from "../session.js"
 
 export interface Interface {
   readonly session: Pick<
@@ -60,7 +59,7 @@ const require = <A, E, R>(cell: Cell, f: (runtime: Interface) => Effect.Effect<A
     return f(runtime)
   })
 
-const defaultCell = makeCell()
+export const defaultCell = makeCell()
 
 export const layerWithCell = (cell: Cell): Layer.Layer<Service> =>
   Layer.succeed(
@@ -106,70 +105,6 @@ export const layerWithCell = (cell: Cell): Layer.Layer<Service> =>
     }),
   )
 
-export const providerLayerWithCell = (cell: Cell) =>
-  Layer.effectDiscard(
-    Effect.gen(function* () {
-      const sessions = yield* Session.Service
-      const jobs = yield* Job.Service
-      const locations = yield* LocationServiceMap.Service
-      const persistentPty = yield* PersistentPty.Service
-      const runtime: Interface = {
-        session: sessions,
-        job: jobs,
-        persistentPty,
-        location: {
-          agent: {
-            list: (ref) =>
-              Effect.gen(function* () {
-                const location = yield* Location.Service
-                const agents = yield* Agent.Service
-                return {
-                  location: new Location.Info({
-                    directory: location.directory,
-                    workspaceID: location.workspaceID,
-                    project: location.project,
-                  }),
-                  data: yield* agents.list(),
-                }
-              }).pipe(Effect.provide(locations.get(ref)), Effect.orDie),
-          },
-          mcp: {
-            list: (ref) =>
-              Effect.gen(function* () {
-                const location = yield* Location.Service
-                const mcp = yield* Mcp.Service
-                return {
-                  location: new Location.Info({
-                    directory: location.directory,
-                    workspaceID: location.workspaceID,
-                    project: location.project,
-                  }),
-                  data: yield* mcp.servers(),
-                }
-              }).pipe(Effect.provide(locations.get(ref))),
-          },
-        },
-      }
-      cell.runtime = runtime
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          if (cell.runtime === runtime) cell.runtime = undefined
-        }),
-      )
-    }),
-  )
-
 export const layer = layerWithCell(defaultCell)
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })
-
-// Raw layer replacements are compiled without dependencies, so cell-scoped
-// provider replacements must go through this node to keep their deps wired.
-export const providerNodeWithCell = (cell: Cell) =>
-  makeGlobalNode({
-    name: "plugin-runtime-provider",
-    layer: providerLayerWithCell(cell),
-    deps: [node, Session.node, Job.node, LocationServiceMap.node, PersistentPty.node],
-  })
-
-export const providerNode = providerNodeWithCell(defaultCell)

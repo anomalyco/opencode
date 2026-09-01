@@ -381,12 +381,6 @@ const layer = Layer.unwrap(
         }),
       }),
     ])
-    const pluginSupervisor = Layer.succeed(
-      PluginSupervisor.Service,
-      PluginSupervisor.Service.of({
-        awaitActivation: Effect.void,
-      }),
-    )
     const promptCatalog = Layer.mock(Catalog.Service, {
       provider: {
         get: () => Effect.undefined,
@@ -412,7 +406,7 @@ const layer = Layer.unwrap(
       ReferenceInstructions.node.replace(referenceInstructions),
       Permission.node.replace(permission),
       Config.node.replace(config),
-      PluginSupervisor.node.replace(pluginSupervisor),
+      PluginSupervisor.node.replace(Layer.empty),
       SessionModelTransport.node.replace(modelTransport),
     ]
     const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [

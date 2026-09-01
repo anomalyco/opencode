@@ -1,5 +1,4 @@
 import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { PluginUpdate } from "@opencode-ai/core/plugin/update"
 import { InvalidRequestError, ServiceUnavailableError } from "@opencode-ai/protocol/errors"
 import { Cause, Effect } from "effect"
@@ -16,14 +15,11 @@ export const PluginHandler = HttpApiBuilder.group(Api, "server.plugin", (handler
     )
     .handle("plugin.check", (ctx) =>
       Effect.gen(function* () {
-        const supervisor = yield* PluginSupervisor.Service
-        yield* supervisor.awaitActivation
         const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
         const inventory = yield* plugins.list()
         const targets = [
-          ...new Set(
-            inventory.flatMap((plugin) => (plugin.source.type === "package" ? [plugin.source.target] : [])),
-          ),
+          ...new Set(inventory.flatMap((plugin) => (plugin.source.type === "package" ? [plugin.source.target] : []))),
         ].filter((target) => ctx.payload.target === undefined || target === ctx.payload.target)
         if (ctx.payload.target !== undefined && !targets.length)
           return yield* new InvalidRequestError({
@@ -58,9 +54,8 @@ export const PluginHandler = HttpApiBuilder.group(Api, "server.plugin", (handler
     )
     .handle("plugin.update", (ctx) =>
       Effect.gen(function* () {
-        const supervisor = yield* PluginSupervisor.Service
-        yield* supervisor.awaitActivation
         const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
         if (
           !(yield* plugins.list()).some(
             (plugin) => plugin.source.type === "package" && plugin.source.target === ctx.payload.target,

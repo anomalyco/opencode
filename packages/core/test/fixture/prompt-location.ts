@@ -2,8 +2,8 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Image } from "@opencode-ai/core/image"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
 import { Reference } from "@opencode-ai/core/reference"
 import { SessionPrompt } from "@opencode-ai/core/session/prompt"
 import { Skill } from "@opencode-ai/core/skill"
@@ -30,9 +30,7 @@ export const promptLocationNode = makeGlobalNode({
                   replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
                 }),
                 Layer.succeed(FSUtil.Service, fs),
-                Layer.succeed(PluginSupervisor.Service, {
-                  awaitActivation: Effect.void,
-                }),
+                Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
                 Layer.mock(Reference.Service, { refresh: () => Effect.void }),
               ),
             ),

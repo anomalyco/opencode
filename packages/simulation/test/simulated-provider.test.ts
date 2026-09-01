@@ -11,8 +11,8 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -241,7 +241,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           Layer.build(locations.get(Location.Ref.make({ directory: AbsolutePath.make(secondDirectory) }))),
         ])
         yield* Effect.forEach([primary, secondary], (context) =>
-          PluginSupervisor.Service.use((supervisor) => supervisor.awaitActivation).pipe(Effect.provide(context)),
+          Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(Effect.provide(context)),
         )
 
         yield* Effect.gen(function* () {

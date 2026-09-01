@@ -12,7 +12,7 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Project } from "@opencode-ai/core/project"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -52,9 +52,7 @@ const locations = makeGlobalNode({
               get: (id) => Effect.succeed(id === info.id ? info : undefined),
               list: () => Effect.succeed([info]),
             }),
-            Layer.succeed(PluginSupervisor.Service, {
-              awaitActivation: Effect.void,
-            }),
+            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
             Layer.mock(Reference.Service, { refresh: () => Effect.void }),
           ),
         ),

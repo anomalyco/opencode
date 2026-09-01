@@ -5,32 +5,23 @@ import { Command } from "@opencode-ai/core/command"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginModule } from "@opencode-ai/core/plugin/module"
 import { Session } from "@opencode-ai/schema/session"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Npm } from "@opencode-ai/util/npm"
 import { testEffect } from "./lib/effect"
-import { host } from "./plugin/host"
+import { PluginTestLayer } from "./plugin/fixture"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([Plugin.node, Command.node, Npm.node])))
+const it = testEffect(PluginTestLayer)
 
 it.live("loads a local plugin with its configured options", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
+    yield* plugins.awaitActivation
     const definition = yield* PluginModule.load({
       type: "add",
       target: path.join(import.meta.dir, "plugin/fixtures/greeting.ts"),
       options: { description: "Configured greeting" },
     })
     if ("pending" in definition) return yield* Effect.die("Local plugin was not loaded")
-    const context = host({
-      command: {
-        transform: commands.transform,
-        reload: commands.reload,
-        list: () => Effect.die("Unused by greeting plugin"),
-      },
-    })
-
-    yield* plugins.activate([{ ...definition, effect: Effect.suspend(() => definition.effect(context)) }])
+    yield* plugins.activate([definition])
 
     expect(yield* commands.get("greet")).toMatchObject({ description: "Configured greeting" })
   }),
@@ -45,14 +36,15 @@ it.effect("unloading a plugin removes its commands and runs cleanup", () =>
       {
         id: "greeting",
         revision: "1",
-        effect: Effect.gen(function* () {
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              cleaned = true
-            }),
-          )
-          yield* commands.transform((draft) => draft.add({ name: "greet", execute: () => Effect.void }))
-        }),
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                cleaned = true
+              }),
+            )
+            yield* ctx.command.transform((draft) => draft.add({ name: "greet", execute: () => Effect.void }))
+          }),
       },
     ])
     expect(yield* commands.get("greet")).toBeDefined()
@@ -70,13 +62,14 @@ it.effect("reports a failed plugin without blocking a healthy plugin", () =>
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
     yield* plugins.activate([
-      { id: "broken", revision: "1", effect: Effect.die(new Error("Setup failed")) },
+      { id: "broken", revision: "1", effect: () => Effect.die(new Error("Setup failed")) },
       {
         id: "greeting",
         revision: "1",
-        effect: commands
-          .transform((draft) => draft.add({ name: "greet", execute: () => Effect.void }))
-          .pipe(Effect.asVoid),
+        effect: (ctx) =>
+          ctx.command
+            .transform((draft) => draft.add({ name: "greet", execute: () => Effect.void }))
+            .pipe(Effect.asVoid),
       },
     ])
 
@@ -98,17 +91,18 @@ it.effect("reloading a plugin replaces its command implementation", () =>
         {
           id: "greeting",
           revision,
-          effect: commands
-            .transform((draft) =>
-              draft.add({
-                name: "greet",
-                execute: () =>
-                  Effect.sync(() => {
-                    output.push(text)
-                  }),
-              }),
-            )
-            .pipe(Effect.asVoid),
+          effect: (ctx) =>
+            ctx.command
+              .transform((draft) =>
+                draft.add({
+                  name: "greet",
+                  execute: () =>
+                    Effect.sync(() => {
+                      output.push(text)
+                    }),
+                }),
+              )
+              .pipe(Effect.asVoid),
         },
       ])
     const request = {

@@ -8,7 +8,7 @@ import { Bus } from "../bus.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "../git.js"
 import { Location } from "../location.js"
-import { PluginSupervisor } from "../plugin/supervisor.js"
+import { Plugin } from "../plugin.js"
 import { LocationWatcherPolicy } from "./location-watcher-policy.js"
 import { Watcher } from "./watcher.js"
 
@@ -24,7 +24,7 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
-    const plugins = yield* PluginSupervisor.Service
+    const plugins = yield* Plugin.Service
     const policy = yield* LocationWatcherPolicy.Service
     const publish = (update: { type: "create" | "update" | "delete"; path: string }) =>
       bus.publish(FileSystem.Event.Changed, {
@@ -109,13 +109,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [
-    Watcher.node,
-    FSUtil.node,
-    Location.node,
-    Git.node,
-    Bus.node,
-    PluginSupervisor.node,
-    LocationWatcherPolicy.node,
-  ],
+  deps: [Watcher.node, FSUtil.node, Location.node, Git.node, Bus.node, Plugin.node, LocationWatcherPolicy.node],
 })

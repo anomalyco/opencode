@@ -102,7 +102,6 @@ const discovery = Layer.mock(InstructionDiscovery.Service, {
 const skills = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const references = Layer.mock(ReferenceInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const mcp = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
-const plugins = Layer.mock(PluginSupervisor.Service, { awaitActivation: Effect.void })
 const tools = Layer.mock(Tool.Service, {
   snapshot: () =>
     Effect.succeed({
@@ -143,7 +142,7 @@ const it = testEffect(
       SkillInstructions.node.replace(skills),
       ReferenceInstructions.node.replace(references),
       McpInstructions.node.replace(mcp),
-      PluginSupervisor.node.replace(plugins),
+      PluginSupervisor.node.replace(Layer.empty),
       Tool.node.replace(tools),
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
     ],

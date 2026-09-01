@@ -100,4 +100,4 @@ export const PluginTestLayer = LayerNode.compile(
       Permission.node.replace(permissionLayer),
     ],
   },
-) as unknown as Layer.Layer<unknown, never>
+)

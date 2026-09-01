@@ -6,7 +6,7 @@ import type { Model } from "@opencode-ai/schema/model"
 import { Event } from "@opencode-ai/schema/event"
 import { Bus } from "../bus.js"
 import { Instance } from "../instance/service.js"
-import { PluginSupervisor } from "../plugin/supervisor-service.js"
+import { Plugin } from "../plugin.js"
 import { Shell } from "../shell.js"
 import { ShellResult } from "../shell/result.js"
 import { Skill } from "../skill.js"
@@ -195,7 +195,7 @@ export const make = Effect.fn("Session.make")(function* () {
     const running = yield* Effect.gen(function* () {
       // Resolve shell services here without pinning Session events to this Location after a move.
       const shell = yield* Effect.gen(function* () {
-        const plugins = yield* PluginSupervisor.Service
+        const plugins = yield* Plugin.Service
         yield* plugins.awaitActivation
         return yield* Shell.Service
       }).pipe(instances.provide(session))

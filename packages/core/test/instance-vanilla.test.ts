@@ -10,7 +10,7 @@ import { Instance } from "@opencode-ai/core/instance"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
@@ -73,8 +73,8 @@ describe("Instance vanilla", () => {
 
           const read = (ref: Location.Ref) =>
             Effect.gen(function* () {
-              const supervisor = yield* PluginSupervisor.Service
-              yield* supervisor.awaitActivation
+              const plugins = yield* Plugin.Service
+              yield* plugins.awaitActivation
               const config = yield* Config.Service
               const discovery = yield* InstructionDiscovery.Service
               const entries = yield* config.entries()

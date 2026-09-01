@@ -29,11 +29,6 @@ const describeNative = process.env.CI ? describe.skip : describe
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.node])))
 
 const configLayer = Config.testLayer()
-const pluginNode = makeLocationNode({
-  service: PluginSupervisor.Service,
-  layer: Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ awaitActivation: Effect.void })),
-  deps: [],
-})
 
 function withNative(native: Watcher.NativeInterface) {
   return Effect.provide(Watcher.layer().pipe(Layer.provide(Layer.succeed(Watcher.Native, native))))
@@ -129,18 +124,18 @@ function provide(
   vcs?: Location.Interface["vcs"],
   watcher?: Layer.Layer<Watcher.Service>,
   config: Layer.Layer<Config.Service> = configLayer,
-  plugins: typeof pluginNode = pluginNode,
+  plugins?: typeof PluginSupervisor.node,
 ) {
   const locationLayer = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) }, { vcs })),
   )
   const built = AppNodeBuilder.build(
-    LayerNode.group([LocationWatcher.node, LocationWatcherPolicy.node, Bus.node, Config.node]),
+    LayerNode.group([PluginSupervisor.node, LocationWatcher.node, LocationWatcherPolicy.node, Bus.node, Config.node]),
     [
       Config.node.replace(config),
       Location.node.replace(locationLayer),
-      PluginSupervisor.node.replace(plugins),
+      PluginSupervisor.node.replace(plugins ?? Layer.empty),
       ...(watcher ? ([Watcher.node.replace(watcher)] as const) : []),
     ],
   )
@@ -154,7 +149,7 @@ function withTmp<A, E, R>(
     init?: (directory: string) => Promise<void>
     watcher?: Layer.Layer<Watcher.Service>
     config?: Layer.Layer<Config.Service>
-    plugins?: typeof pluginNode
+    plugins?: typeof PluginSupervisor.node
   },
 ) {
   return Effect.acquireRelease(
@@ -307,13 +302,11 @@ describe("LocationWatcher subscriptions", () => {
       }),
     )
     const plugins = makeLocationNode({
-      service: PluginSupervisor.Service,
-      layer: Layer.effect(
-        PluginSupervisor.Service,
+      name: "test/watcher-plugins",
+      layer: Layer.effectDiscard(
         Effect.gen(function* () {
           const policy = yield* LocationWatcherPolicy.Service
           yield* policy.transform((draft) => draft.add([".git"]))
-          return PluginSupervisor.Service.of({ awaitActivation: Effect.void })
         }),
       ),
       deps: [LocationWatcherPolicy.node],

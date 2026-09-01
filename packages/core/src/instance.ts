@@ -46,8 +46,8 @@ import { InstructionBuiltIns } from "./instructions/builtins.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 import { SessionInstructions } from "./session/instructions.js"
 import { SessionGenerateNode } from "./session/generate-node.js"
-import { SessionPromptNode } from "./session/prompt-node.js"
-import { SessionRevertNode } from "./session/revert-node.js"
+import { SessionPrompt } from "./session/prompt.js"
+import { SessionRevert } from "./session/revert.js"
 import { McpTool } from "./tool/mcp.js"
 import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
@@ -97,8 +97,8 @@ const nodes = [
   Form.node,
   Generate.node,
   SessionGenerateNode.node,
-  SessionPromptNode.node,
-  SessionRevertNode.node,
+  SessionPrompt.node,
+  SessionRevert.node,
   ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,

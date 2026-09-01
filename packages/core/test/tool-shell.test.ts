@@ -30,7 +30,9 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { PluginRuntimeProvider } from "@opencode-ai/core/plugin/runtime-provider"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
@@ -125,11 +127,8 @@ const executionNode = makeGlobalNode({
 })
 
 const shellPluginSupervisor = makeLocationNode({
-  service: PluginSupervisor.Service,
-  layer: Layer.effect(
-    PluginSupervisor.Service,
-    registerToolPlugin(ShellTool.Plugin).pipe(Effect.as(PluginSupervisor.Service.of({ awaitActivation: Effect.void }))),
-  ),
+  name: "test/shell-plugins",
+  layer: Layer.effectDiscard(registerToolPlugin(ShellTool.Plugin)),
   deps: [
     Config.node,
     Environment.node,
@@ -148,7 +147,7 @@ const nodes = LayerNode.group([
   Job.node,
   Session.node,
   SessionExecution.node,
-  PluginRuntime.providerNode,
+  PluginRuntimeProvider.node,
   LocationServiceMap.node,
   filesystem,
   FSUtil.node,
@@ -215,7 +214,7 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
     const locations = yield* LocationServiceMap.Service
     const locationLayer = locations.get(location)
     return yield* Effect.gen(function* () {
-      const plugins = yield* PluginSupervisor.Service
+      const plugins = yield* Plugin.Service
       yield* plugins.awaitActivation
       const registry = yield* Tool.Service
       return yield* body(registry)

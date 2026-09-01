@@ -10,6 +10,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Permission } from "@opencode-ai/core/permission"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { PluginRuntimeProvider } from "@opencode-ai/core/plugin/runtime-provider"
 import { Session } from "@opencode-ai/core/session"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { Plugin } from "@opencode-ai/plugin/effect"
@@ -59,7 +60,7 @@ it.live(
         ModelsDev.node.replace(ModelsDev.configured({ fetch: false })),
         Watcher.node.replace(Watcher.configured({ enabled: false })),
         PluginRuntime.node.replace(PluginRuntime.layerWithCell(cell)),
-        PluginRuntime.providerNode.replace(PluginRuntime.providerNodeWithCell(cell)),
+        PluginRuntimeProvider.node.replace(PluginRuntimeProvider.configured(cell)),
         llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
         SessionRunnerModel.node.replace(
           Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),

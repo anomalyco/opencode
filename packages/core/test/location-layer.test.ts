@@ -13,7 +13,7 @@ import { Global } from "@opencode-ai/util/global"
 import { LocationServiceMap, type LocationServices } from "@opencode-ai/core/location-services"
 import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { Location } from "@opencode-ai/core/location"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { Model } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
@@ -271,8 +271,8 @@ describe("LocationServiceMap", () => {
               yield* Reference.Service
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
-              const supervisor = yield* PluginSupervisor.Service
-              yield* supervisor.awaitActivation
+              const plugins = yield* Plugin.Service
+              yield* plugins.awaitActivation
               const registry = yield* Tool.Service
               return {
                 providers: yield* catalog.provider.all(),
@@ -340,8 +340,8 @@ describe("LocationServiceMap", () => {
             ),
           )
           yield* Effect.gen(function* () {
-            const supervisor = yield* PluginSupervisor.Service
-            yield* supervisor.awaitActivation
+            const plugins = yield* Plugin.Service
+            yield* plugins.awaitActivation
             const agents = yield* Agent.Service
             expect(yield* agents.get(Agent.ID.make("plan"))).toBeUndefined()
           }).pipe(

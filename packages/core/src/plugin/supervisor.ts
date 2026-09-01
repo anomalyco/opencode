@@ -1,8 +1,7 @@
 export * as PluginSupervisor from "./supervisor.js"
-export { Service, type Interface } from "./supervisor-service.js"
 
 import { Event } from "@opencode-ai/schema/config"
-import { Cause, Effect, Latch, Layer, Stream } from "effect"
+import { Cause, Effect, Layer, Stream } from "effect"
 import path from "path"
 import { ConfigPluginSource } from "../config/plugin/source.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -12,14 +11,12 @@ import { Plugin } from "../plugin.js"
 import { InstancePlugins } from "./instance.js"
 import { PluginInternal } from "./internal.js"
 import { PluginModule } from "./module.js"
-import { PluginHost } from "./host.js"
 import { SdkPlugins } from "./sdk.js"
-import { Service } from "./supervisor-service.js"
 import { PluginUpdate } from "./update.js"
 
 const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
-  pre: readonly PluginModule.Definition[],
-  post: readonly PluginModule.Definition[],
+  pre: readonly Plugin.Generation[],
+  post: readonly Plugin.Generation[],
   operations: readonly ConfigPluginSource.Operation[],
   install: boolean,
 ) {
@@ -27,7 +24,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
   const definitions = [...pre, ...post]
   const enabled = new Set(definitions.map((plugin) => plugin.id))
-  const packages = new Map<string, PluginModule.Definition>()
+  const packages = new Map<string, Plugin.Generation>()
   const pending = new Set<string>()
   const failures = new Map<
     string,
@@ -94,8 +91,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   }
 })
 
-export const layer = Layer.effect(
-  Service,
+export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const registry = yield* Plugin.Service
     const sdk = yield* SdkPlugins.Service
@@ -103,10 +99,11 @@ export const layer = Layer.effect(
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
     const updates = yield* PluginUpdate.Service
-    // Bind application services here; the registry only runs prepared Effects.
-    const prepare = yield* PluginHost.prepare(registry)
     const internal = yield* PluginInternal.list()
-    const ready = yield* Latch.make()
+    let release: Effect.Effect<void> | undefined = yield* registry.hold()
+    yield* Effect.addFinalizer(() => release ?? Effect.void)
+    // Built-ins capture services from this layer; unload them before those services close.
+    yield* Effect.addFinalizer(registry.close)
     let packages = new Set<string>()
     let outdated = new Set<string>()
     let generation = 0
@@ -134,9 +131,7 @@ export const layer = Layer.effect(
         source.type === "package" && outdated.has(source.target) ? { ...source, outdated: true as const } : source
       const apply = (resolved: typeof immediate) =>
         registry.activate(
-          resolved.plugins.map((plugin) =>
-            prepare(plugin.source ? { ...plugin, source: source(plugin.source) } : plugin),
-          ),
+          resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
           resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
         )
       yield* apply(immediate)
@@ -177,7 +172,7 @@ export const layer = Layer.effect(
       Stream.mapEffect(() =>
         Effect.gen(function* () {
           observed++
-          yield* ready.close
+          if (!release) release = yield* registry.hold()
           return observed
         }),
       ),
@@ -189,13 +184,25 @@ export const layer = Layer.effect(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
           yield* activate().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause })))
-          if (observed === target) yield* ready.open
+          if (observed !== target) return
+          const settled = release
+          release = undefined
+          if (settled) yield* settled
         }),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* Effect.sleep("24 hours").pipe(Effect.andThen(activate()), Effect.forever, Effect.forkScoped)
-    return Service.of({ awaitActivation: ready.await })
+    yield* Effect.sleep("24 hours").pipe(
+      Effect.andThen(
+        Effect.acquireUseRelease(
+          registry.hold(),
+          () => activate(),
+          (release) => release,
+        ),
+      ),
+      Effect.forever,
+      Effect.forkScoped,
+    )
   }),
 )
 
@@ -208,7 +215,6 @@ const nodeDeps = [
   Bus.node,
   Npm.node,
   PluginInternal.requirements,
-  PluginHost.requirements,
 ] as const
 
 function pluginSource(target: string): Plugin.Source {
@@ -216,4 +222,4 @@ function pluginSource(target: string): Plugin.Source {
   return { type: "package", target }
 }
 
-export const node = makeLocationNode({ service: Service, layer, deps: nodeDeps })
+export const node = makeLocationNode({ name: "plugin-supervisor", layer, deps: nodeDeps })

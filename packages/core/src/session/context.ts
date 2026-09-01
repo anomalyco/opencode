@@ -13,7 +13,7 @@ import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
 import { McpInstructions } from "../mcp/instructions.js"
 import { McpTool } from "../tool/mcp.js"
-import { PluginSupervisor } from "../plugin/supervisor.js"
+import { Plugin } from "../plugin.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
@@ -85,7 +85,7 @@ const layer = Layer.effect(
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
     const modelRequests = yield* SessionModelRequest.Service
-    const plugins = yield* PluginSupervisor.Service
+    const plugins = yield* Plugin.Service
     const referenceInstructions = yield* ReferenceInstructions.Service
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
@@ -190,7 +190,7 @@ export const node = makeLocationNode({
     Location.node,
     McpInstructions.node,
     McpTool.node,
-    PluginSupervisor.node,
+    Plugin.node,
     ReferenceInstructions.node,
     SessionRunnerModel.node,
     SessionModelRequest.node,

@@ -49,7 +49,7 @@ import { SessionGenerate } from "./session/generate.js"
 import { Snapshot } from "./snapshot.js"
 import { Session } from "./session/session.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { PluginSupervisor } from "./plugin/supervisor-service.js"
+import { Plugin } from "./plugin.js"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { Job } from "./job.js"
 import { Command } from "./command.js"
@@ -406,7 +406,7 @@ const layer = Layer.effect(
       command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const commands = yield* Effect.gen(function* () {
-          const plugins = yield* PluginSupervisor.Service
+          const plugins = yield* Plugin.Service
           yield* plugins.awaitActivation
           return yield* Command.Service
         }).pipe(instances.provide(session))

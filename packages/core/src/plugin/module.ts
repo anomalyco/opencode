@@ -11,8 +11,6 @@ import type { ConfigPluginSource } from "../config/plugin/source.js"
 import type { Generation } from "../plugin.js"
 import { PluginPromise } from "./promise.js"
 
-export type Definition = Plugin & Omit<Generation, "effect">
-
 const Module = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
@@ -85,7 +83,7 @@ export const load = Effect.fn("PluginModule.load")(function* (
           ...(installed.version ? { version: installed.version } : {}),
         },
     effect: (host) => plugin.effect({ ...host, options: operation.options }),
-  } satisfies Definition
+  } satisfies Generation
 })
 
 function localFeatures(entrypoint: string) {

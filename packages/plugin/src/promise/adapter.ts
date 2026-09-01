@@ -204,7 +204,7 @@ function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
 
 /**
  * Adapts a Promise plugin into an Effect plugin so the existing Effect-only
- * loader (`Plugin` / `PluginSupervisor`) can run it unchanged.
+ * Core plugin runtime can run it unchanged.
  *
  * Hook registrations created during the async `setup` attach to the plugin's
  * scope, so unloading the plugin disposes them. The captured fiber context

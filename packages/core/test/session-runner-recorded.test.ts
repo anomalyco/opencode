@@ -84,10 +84,6 @@ const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
 })
 const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const config = Config.testLayer()
-const pluginSupervisor = Layer.succeed(
-  PluginSupervisor.Service,
-  PluginSupervisor.Service.of({ awaitActivation: Effect.void }),
-)
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {
     get: () => Effect.undefined,
@@ -115,7 +111,7 @@ const runnerLayer = (llmClient: Layer.Layer<LLMClientService>) =>
     McpInstructions.node.replace(mcpInstructions),
     Config.node.replace(config),
     Permission.node.replace(permission),
-    PluginSupervisor.node.replace(pluginSupervisor),
+    PluginSupervisor.node.replace(Layer.empty),
   ])
 const execution = (llmClient: Layer.Layer<LLMClientService>) =>
   Layer.effect(
@@ -170,7 +166,7 @@ const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
       ReferenceInstructions.node.replace(referenceInstructions),
       Config.node.replace(config),
       Snapshot.node.replace(Snapshot.noopLayer),
-      PluginSupervisor.node.replace(pluginSupervisor),
+      PluginSupervisor.node.replace(Layer.empty),
       SessionExecution.node.replace(execution(llmClient)),
     ],
   )

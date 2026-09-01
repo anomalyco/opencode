@@ -6,13 +6,14 @@ import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Image } from "../image.js"
 import { Mime } from "../mime.js"
 import { PluginHooks } from "../plugin/hooks.js"
-import { PluginSupervisor } from "../plugin/supervisor-service.js"
+import { Plugin } from "../plugin.js"
 import { Skill } from "../skill.js"
 import { AttachmentError, SkillNotFoundError } from "./error.js"
 
@@ -27,7 +28,7 @@ export type Input = {
 
 export const make = Effect.fn("SessionPrompt.make")(function* () {
   const fs = yield* FSUtil.Service
-  const plugins = yield* PluginSupervisor.Service
+  const plugins = yield* Plugin.Service
   const hooks = yield* PluginHooks.Service
   const image = yield* Image.Service
   const skillService = yield* Skill.Service
@@ -204,6 +205,12 @@ export type Interface = Effect.Success<ReturnType<typeof make>>
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
 
 export const layer = Layer.effect(Service, make())
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [FSUtil.node, Plugin.node, PluginHooks.node, Image.node, Skill.node],
+})
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 

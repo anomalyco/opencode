@@ -9,7 +9,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Model } from "@opencode-ai/core/model"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -66,7 +66,7 @@ describe("Session.revert files", () => {
         expect(yield* SessionRevert.Service.pipe(Effect.provide(services))).toBe(revert)
 
         yield* Effect.gen(function* () {
-          const plugins = yield* PluginSupervisor.Service
+          const plugins = yield* Plugin.Service
           yield* plugins.awaitActivation
           const snapshot = yield* Snapshot.Service
           const before = yield* snapshot.capture()

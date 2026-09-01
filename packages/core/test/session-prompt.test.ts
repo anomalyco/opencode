@@ -31,7 +31,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Image } from "@opencode-ai/core/image"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Skill } from "@opencode-ai/core/skill"
@@ -106,12 +106,7 @@ const locations = (references: Layer.Layer<Reference.Service>) =>
                       capture: () => Effect.undefined,
                       restore: () => Effect.void,
                     }),
-                    Layer.succeed(
-                      PluginSupervisor.Service,
-                      PluginSupervisor.Service.of({
-                        awaitActivation: Effect.void,
-                      }),
-                    ),
+                    Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
                   ),
                 ),
                 Layer.provide(shared),

@@ -31,8 +31,7 @@ import { WebSearch } from "../websearch.js"
 import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
-import type { Generation, Interface } from "../plugin.js"
-import type { Definition } from "./module.js"
+import type { Interface } from "../plugin.js"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
@@ -458,20 +457,6 @@ export const make = Effect.fn("PluginHost.make")(function* (
     },
   }
   return context
-})
-
-export const prepare = Effect.fn("PluginHost.prepare")(function* (plugin: Pick<Interface, "list" | "close">) {
-  const context = yield* make(plugin)
-  const kv = yield* KV.Service
-  // Stop prepared plugins before this scope releases the services they use.
-  yield* Effect.addFinalizer(plugin.close)
-  return (definition: Definition): Generation => ({
-    id: definition.id,
-    revision: definition.revision,
-    source: definition.source,
-    features: definition.features,
-    effect: Effect.suspend(() => definition.effect({ ...context, storage: storage(kv, definition.id) })),
-  })
 })
 
 export const requirements = LayerNode.group([

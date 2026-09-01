@@ -17,8 +17,8 @@ import { EventTable } from "../src/event/sql.js"
 import { Image } from "../src/image.js"
 import { Instance } from "../src/instance/service.js"
 import { Location } from "../src/location.js"
+import { Plugin } from "../src/plugin.js"
 import { PluginHooks } from "../src/plugin/hooks.js"
-import { PluginSupervisor } from "../src/plugin/supervisor-service.js"
 import { ProjectTable } from "../src/project/sql.js"
 import { Reference } from "../src/reference.js"
 import { AbsolutePath, RelativePath } from "../src/schema.js"
@@ -142,7 +142,7 @@ const setup = Effect.fnUntraced(function* (options?: {
               get: (id) => Effect.succeed(id === skillInfo.id ? skillInfo : undefined),
             }),
           options?.snapshot?.(ref) ?? Layer.mock(Snapshot.Service, {}),
-          Layer.succeed(PluginSupervisor.Service, {
+          Layer.mock(Plugin.Service, {
             awaitActivation: Effect.sync(() => {
               activationWaits.push(ref)
             }),
@@ -764,9 +764,7 @@ describe("SessionPrompt construction", () => {
             Layer.provide(
               Layer.mergeAll(
                 Layer.succeed(PluginHooks.Service, fixture.hooks),
-                Layer.succeed(PluginSupervisor.Service, {
-                  awaitActivation: Effect.void,
-                }),
+                Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
                 Layer.mock(Image.Service, {}),
                 Layer.mock(Skill.Service, {}),
               ),
@@ -802,9 +800,7 @@ describe("SessionRevert construction", () => {
       const revert = yield* SessionRevert.make().pipe(
         Effect.provide(
           Layer.merge(
-            Layer.succeed(PluginSupervisor.Service, {
-              awaitActivation: Effect.void,
-            }),
+            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
             Layer.mock(Snapshot.Service, {
               capture: () =>
                 Effect.sync(() => {
