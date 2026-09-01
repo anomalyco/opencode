@@ -122,7 +122,10 @@ export const estimateTokens = (input: RequiredInput) => {
   )
   const last = input.messages[index]
   // Keep the anchor's local tool results: they are not covered by its provider usage.
-  const added = toLLMMessages(input.messages.slice(Math.max(0, index)), input.resolved.ref)
+  const added = SessionModelRequest.unsupportedParts(
+    toLLMMessages(input.messages.slice(Math.max(0, index)), input.resolved.ref),
+    input.resolved.capabilities,
+  )
     .filter((message) => message.role !== "assistant" || message.id !== last?.id)
     .reduce((sum, message) => sum + message.content.reduce((sum, part) => sum + estimatePart(part), 0), 0)
   if (last?.type === "assistant" && last.tokens)

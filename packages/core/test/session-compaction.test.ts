@@ -164,7 +164,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
     const input = (tokens: number, limit: { context: number; input?: number; output: number }) => ({
       session,
       resolved: SessionRunnerModel.resolved(model, {
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
         cost: [],
         limit,
       }),
@@ -231,6 +231,18 @@ it.effect("auto compaction estimates current content against the buffered prompt
       time: { created: 0 },
     })
     expect(SessionCompaction.estimateTokens({ ...grown, messages: [...messages, user] })).toBe(86_000)
+    for (const [modalities, tokens, fallback] of [
+      [["text", "image"], 82_040, 1_520],
+      [["text", "pdf"], 83_042, 2_021],
+      [["text"], 79_082, 41],
+    ] as const) {
+      const selected = {
+        ...grown,
+        resolved: { ...grown.resolved, capabilities: { ...grown.resolved.capabilities, input: modalities } },
+      }
+      expect(SessionCompaction.estimateTokens({ ...selected, messages: [...messages, user] })).toBe(tokens)
+      expect(SessionCompaction.estimateTokens({ ...selected, messages: [user] })).toBe(fallback)
+    }
 
     const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
       id: SessionMessage.ID.create(),
