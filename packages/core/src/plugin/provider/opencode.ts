@@ -163,7 +163,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
                 existing.settings = Provider.mergeOverlay(existing.settings, withoutCredentials(variant.settings))
               if (variant.headers !== undefined)
                 existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
-              if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)
+              if (variant.body !== undefined)
+                existing.body = Provider.mergeOverlay(
+                  existing.body,
+                  variantBody(variant.body, model.package ?? item.package ?? source?.provider.package),
+                )
             }
             if (config.cost !== undefined)
               model.cost = (Array.isArray(config.cost) ? config.cost : [config.cost]).map((cost) => ({
@@ -230,6 +234,18 @@ function fetchProviders(http: HttpClient.HttpClient, value: Credential.Value) {
         )
       }),
     )
+}
+
+function variantBody(body: Readonly<Record<string, unknown>>, packageName: string | undefined) {
+  if (packageName !== Provider.aisdk("@ai-sdk/openai")) return body
+  const { reasoningEffort, reasoningSummary, ...native } = body
+  const reasoning = {
+    ...(typeof reasoningEffort === "string" ? { effort: reasoningEffort } : {}),
+    ...(typeof reasoningSummary === "string" ? { summary: reasoningSummary } : {}),
+  }
+  if (Object.keys(reasoning).length === 0) return body
+  // Existing Console variants stored SDK options here before V2 consumed raw bodies.
+  return Provider.mergeOverlay({ reasoning }, native)
 }
 
 function withoutCredentials<Value>(body: Readonly<Record<string, Value>> | undefined) {
