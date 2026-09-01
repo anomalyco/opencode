@@ -567,7 +567,7 @@ const toolCallContent = (event: ToolCall): ContentPart =>
   ToolCallPart.make({
     id: event.id,
     name: event.name,
-    ...(event.namespace === undefined ? {} : { namespace: event.namespace }),
+    namespace: event.namespace,
     input: event.input,
     ...(event.providerExecuted === undefined ? {} : { providerExecuted: event.providerExecuted }),
     ...(event.providerMetadata === undefined ? {} : { providerMetadata: event.providerMetadata }),
@@ -577,7 +577,7 @@ const toolResultContent = (event: ToolResult): ContentPart =>
   ToolResultPart.make({
     id: event.id,
     name: event.name,
-    ...(event.namespace === undefined ? {} : { namespace: event.namespace }),
+    namespace: event.namespace,
     result: event.result,
     ...(event.providerExecuted === undefined ? {} : { providerExecuted: event.providerExecuted }),
     ...(event.providerMetadata === undefined ? {} : { providerMetadata: event.providerMetadata }),

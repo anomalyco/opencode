@@ -55,7 +55,7 @@ const inputStart = (tool: PendingTool) =>
   LLMEvent.toolInputStart({
     id: tool.id,
     name: tool.name,
-    ...(tool.namespace === undefined ? {} : { namespace: tool.namespace }),
+    namespace: tool.namespace,
     providerExecuted: tool.providerExecuted ? true : undefined,
     providerMetadata: tool.providerMetadata,
   })
@@ -64,7 +64,7 @@ const inputDelta = (tool: PendingTool, text: string) =>
   LLMEvent.toolInputDelta({
     id: tool.id,
     name: tool.name,
-    ...(tool.namespace === undefined ? {} : { namespace: tool.namespace }),
+    namespace: tool.namespace,
     text,
     input: Option.getOrElse(parsePartialInput(tool.input), () => ({})),
   })
@@ -87,7 +87,7 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
         LLMEvent.toolCall({
           id: tool.id,
           name: tool.name,
-          ...(tool.namespace === undefined ? {} : { namespace: tool.namespace }),
+          namespace: tool.namespace,
           input,
           providerExecuted: tool.providerExecuted ? true : undefined,
           providerMetadata: tool.providerMetadata,
@@ -100,7 +100,7 @@ const finishEvents = (tool: PendingTool, event: ToolCall): ReadonlyArray<LLMEven
   LLMEvent.toolInputEnd({
     id: tool.id,
     name: tool.name,
-    ...(tool.namespace === undefined ? {} : { namespace: tool.namespace }),
+    namespace: tool.namespace,
     providerMetadata: tool.providerMetadata,
   }),
   event,

@@ -170,7 +170,7 @@ export const ToolResultPart = Object.assign(
       type: "tool-result",
       id: input.id,
       name: input.name,
-      ...(input.namespace === undefined ? {} : { namespace: input.namespace }),
+      namespace: input.namespace,
       result: ToolResultValue.make(input.result, input.resultType),
       providerExecuted: input.providerExecuted,
       cache: input.cache,

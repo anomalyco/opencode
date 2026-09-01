@@ -42,7 +42,7 @@ const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<Tool
       tool.execute!(decoded, {
         id: call.id,
         name: call.name,
-        ...(call.namespace === undefined ? {} : { namespace: call.namespace }),
+        namespace: call.namespace,
       }).pipe(
         Effect.flatMap((value) =>
           tool._encode(value).pipe(
@@ -76,7 +76,7 @@ const result = (call: ToolCallPart, value: ToolResultValueType | ToolSettlement,
             LLMEvent.toolError({
               id: call.id,
               name: call.name,
-              ...(call.namespace === undefined ? {} : { namespace: call.namespace }),
+              namespace: call.namespace,
               message: String(settlement.result.value),
               error,
               providerMetadata: call.providerMetadata,
@@ -84,7 +84,7 @@ const result = (call: ToolCallPart, value: ToolResultValueType | ToolSettlement,
             LLMEvent.toolResult({
               id: call.id,
               name: call.name,
-              ...(call.namespace === undefined ? {} : { namespace: call.namespace }),
+              namespace: call.namespace,
               result: settlement.result,
               providerMetadata: call.providerMetadata,
             }),
@@ -93,7 +93,7 @@ const result = (call: ToolCallPart, value: ToolResultValueType | ToolSettlement,
             LLMEvent.toolResult({
               id: call.id,
               name: call.name,
-              ...(call.namespace === undefined ? {} : { namespace: call.namespace }),
+              namespace: call.namespace,
               result: settlement.result,
               output: settlement.output,
               providerMetadata: call.providerMetadata,
