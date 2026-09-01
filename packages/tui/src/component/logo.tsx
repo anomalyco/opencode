@@ -1,28 +1,72 @@
+import { createSignal, onMount, onCleanup, For } from "solid-js"
 import { useTheme } from "../context/theme"
+
+const LOGO_LINES = [
+  { ziq: "███████╗██╗ ██████╗ ", code: "  ██████╗ ██████╗ ██████╗ ███████╗" },
+  { ziq: "╚══███╔╝██║██╔═══██╗", code: " ██╔════╝██╔═══██╗██╔══██╗██╔════╝" },
+  { ziq: "  ███╔╝ ██║██║   ██║", code: " ██║     ██║   ██║██║  ██║█████╗  " },
+  { ziq: " ███╔╝  ██║██║▄▄ ██║", code: " ██║     ██║   ██║██║  ██║██╔══╝  " },
+  { ziq: "███████╗██║╚██████╔╝", code: " ╚██████╗╚██████╔╝██████╔╝███████╗" },
+  { ziq: "╚══════╝╚═╝ ╚══▀▀═╝ ", code: "  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝" },
+]
 
 export function Logo() {
   const { theme } = useTheme()
+  const [pulse, setPulse] = createSignal(0)
+
+  onMount(() => {
+    const timer = setInterval(() => {
+      setPulse((p) => (p + 1) % LOGO_LINES.length)
+    }, 280)
+    onCleanup(() => clearInterval(timer))
+  })
+
   return (
     <box alignItems="center" gap={1}>
-      {/* Brand Header with Sleek Icon Badge */}
-      <box flexDirection="row" alignItems="center" gap={1}>
+      {/* ── Block Logo Hero with Timed Glow & Yellow Contrast Shadow ── */}
+      <box
+        flexDirection="column"
+        alignItems="center"
+        paddingTop={1}
+        paddingBottom={1}
+      >
+        <For each={LOGO_LINES}>
+          {(line, idx) => {
+            const isPulsing = () => idx() === pulse()
+            return (
+              <box flexDirection="row" alignItems="center">
+                {/* ZIQ Part */}
+                <text
+                  fg={isPulsing() ? theme.warning : theme.accent}
+                >
+                  <b>{line.ziq}</b>
+                </text>
+
+                {/* Hyphen Bridge */}
+                <text fg={theme.warning}>
+                  <b>{idx() === 2 ? " ── " : "    "}</b>
+                </text>
+
+                {/* CODE Part */}
+                <text
+                  fg={isPulsing() ? theme.warning : theme.primary}
+                >
+                  <b>{line.code}</b>
+                </text>
+              </box>
+            )
+          }}
+        </For>
+
+        {/* Contrast Yellow / Amber Shadow Underline */}
         <box
-          border={["top", "bottom", "left", "right"]}
-          borderColor={theme.accent}
-          backgroundColor={theme.backgroundElement}
-          paddingLeft={1}
-          paddingRight={1}
+          flexDirection="row"
+          paddingTop={0}
         >
-          <text fg={theme.accent}>
-            <b>{"⚡"}</b>
+          <text fg={theme.warning}>
+            {"▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"}
           </text>
         </box>
-        <text fg={theme.text}>
-          <b>
-            <span style={{ fg: theme.primary }}>ZIQ</span>
-            <span style={{ fg: theme.text }}>-CODE</span>
-          </b>
-        </text>
       </box>
 
       {/* Feature Badges */}
