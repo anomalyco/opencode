@@ -1,7 +1,8 @@
-import type { PermissionApi } from "@opencode-ai/client/effect/api"
+import type { PermissionApi, PermissionCreateInput } from "@opencode-ai/client/effect/api"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Permission } from "@opencode-ai/schema/permission"
 import type { Session } from "@opencode-ai/schema/session"
+import type { Effect } from "effect"
 import type { Hooks } from "./registration.js"
 
 export interface PermissionEvaluation {
@@ -20,5 +21,6 @@ export interface PermissionHooks {
 }
 
 export type PermissionDomain = Pick<PermissionApi<unknown>, "list" | "get" | "reply"> & {
+  readonly assert: (input: PermissionCreateInput) => Effect.Effect<void, unknown>
   readonly hook: Hooks<PermissionHooks>
 }
