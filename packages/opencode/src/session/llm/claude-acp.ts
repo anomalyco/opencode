@@ -19,7 +19,7 @@ type RequestPermissionRequest = Parameters<ACPClient["requestPermission"]>[0]
 type RequestPermissionResponse = Awaited<ReturnType<ACPClient["requestPermission"]>>
 type CreateElicitationRequest = Parameters<ACPClient["unstable_createElicitation"]>[0]
 type CreateElicitationResponse = Awaited<ReturnType<ACPClient["unstable_createElicitation"]>>
-type FormElicitation = Extract<CreateElicitationRequest, { mode: "form" }>
+type FormElicitation = Extract<CreateElicitationRequest, { mode: "form" }> & { readonly sessionId: string }
 type ElicitationPropertySchema = NonNullable<FormElicitation["requestedSchema"]["properties"]>[string]
 type ElicitationContentValue = NonNullable<Extract<CreateElicitationResponse, { action: "accept" }>["content"]>[string]
 type SessionConfigOption = NonNullable<Awaited<ReturnType<ClaudeAgent["newSession"]>>["configOptions"]>[number]
@@ -80,7 +80,6 @@ type StreamInput = {
   readonly historyID?: string
   readonly resume: boolean
   readonly mcpServers: readonly McpServer[]
-  readonly system: readonly string[]
   readonly messages: ModelMessage[]
   readonly abort: AbortSignal
   readonly question: QuestionBridge
@@ -321,7 +320,6 @@ async function createConnection(input: StreamInput, fingerprint: string, agentFa
         systemPrompt: {
           type: "preset" as const,
           preset: "claude_code" as const,
-          append: input.system.join("\n"),
         },
         claudeCode: {
           emitRawSDKMessages: [{ type: "system", subtype: "session_state_changed" }],
@@ -399,7 +397,7 @@ function connectionFingerprint(input: StreamInput) {
           ],
     )
     .toSorted(([a], [b]) => String(a).localeCompare(String(b)))
-  return Hash.sha256(JSON.stringify([input.cwd, input.modelID, input.agent, servers, input.system]))
+  return Hash.sha256(JSON.stringify([input.cwd, input.modelID, input.agent, servers]))
 }
 
 function continues(previous: Transcript | undefined, messages: ModelMessage[], historyID: string | undefined) {
@@ -935,7 +933,7 @@ async function createElicitation(
   signal?: AbortSignal,
 ): Promise<CreateElicitationResponse> {
   if (!active || active.abort.aborted || signal?.aborted) return { action: "cancel" }
-  if (params.mode !== "form" || !("sessionId" in params)) return { action: "decline" }
+  if (!isFormElicitation(params)) return { action: "decline" }
   const fields = claudeACPElicitationFields(params)
   if (fields.length === 0) return { action: "accept", content: {} }
   try {
@@ -967,8 +965,8 @@ function stringRecord(value: unknown): value is Record<string, string> {
 }
 
 export function claudeACPElicitationFields(params: FormElicitation): ElicitationField[] {
-  return Object.entries(params.requestedSchema.properties ?? {}).map(([key, property]) =>
-    elicitationField(key, property, params),
+  return Object.entries(params.requestedSchema.properties ?? {}).flatMap(
+    ([key, property]) => elicitationField(key, property, params) ?? [],
   )
 }
 
@@ -985,10 +983,11 @@ export function claudeACPElicitationContent(
 }
 
 function elicitationField(key: string, property: ElicitationPropertySchema, params: FormElicitation) {
-  const title = property.title ?? key
-  const description = property.description ?? params.message
+  const raw = recordValue(property)
+  const title = stringValue(raw.title) ?? key
+  const description = stringValue(raw.description) ?? params.message
   const base = { header: title.slice(0, 30), question: title }
-  if (property.type === "string") {
+  if (isElicitationProperty(property, "string")) {
     const choices =
       property.oneOf?.map((item) => [item.title, item.const] as const) ??
       property.enum?.map((item) => [item, item] as const)
@@ -1002,11 +1001,16 @@ function elicitationField(key: string, property: ElicitationPropertySchema, para
       value: (answers: ReadonlyArray<string>) => valueFromLabels(choices, answers, property.default),
     } satisfies ElicitationField
   }
-  if (property.type === "array") {
-    const raw = "anyOf" in property.items ? property.items.anyOf : property.items.enum
-    const choices = raw.map((item) =>
-      typeof item === "string" ? ([item, item] as const) : ([item.title, item.const] as const),
-    )
+  if (isElicitationProperty(property, "array")) {
+    const items = recordValue(property.items)
+    const raw = Array.isArray(items.anyOf) ? items.anyOf : Array.isArray(items.enum) ? items.enum : []
+    const choices = raw.flatMap((item) => {
+      if (typeof item === "string") return [[item, item] as const]
+      const option = recordValue(item)
+      const title = stringValue(option.title)
+      const value = stringValue(option.const)
+      return title && value ? [[title, value] as const] : []
+    })
     return {
       key,
       question: {
@@ -1018,7 +1022,7 @@ function elicitationField(key: string, property: ElicitationPropertySchema, para
       value: (answers: ReadonlyArray<string>) => valueFromLabels(choices, answers, property.default ?? []),
     } satisfies ElicitationField
   }
-  if (property.type === "boolean") {
+  if (isElicitationProperty(property, "boolean")) {
     return {
       key,
       question: {
@@ -1033,6 +1037,7 @@ function elicitationField(key: string, property: ElicitationPropertySchema, para
         answers[0] === "Yes" ? true : answers[0] === "No" ? false : (property.default ?? undefined),
     } satisfies ElicitationField
   }
+  if (!isElicitationProperty(property, "integer") && !isElicitationProperty(property, "number")) return
   return {
     key,
     question: { ...base, options: [], custom: true },
@@ -1043,6 +1048,17 @@ function elicitationField(key: string, property: ElicitationPropertySchema, para
       return Number.isNaN(parsed) ? (property.default ?? undefined) : parsed
     },
   } satisfies ElicitationField
+}
+
+function isFormElicitation(params: CreateElicitationRequest): params is FormElicitation {
+  return params.mode === "form" && "sessionId" in params
+}
+
+function isElicitationProperty<T extends string>(
+  property: ElicitationPropertySchema,
+  type: T,
+): property is Extract<ElicitationPropertySchema, { type: T }> {
+  return property.type === type
 }
 
 function valueFromLabels(

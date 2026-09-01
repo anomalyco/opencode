@@ -47,7 +47,7 @@ describe("Claude ACP", () => {
             cwd: "/workspace",
             mcpServers: [{ name: "tools", command: "bun" }],
             _meta: {
-              systemPrompt: { type: "preset", preset: "claude_code", append: "Follow OpenCode instructions." },
+              systemPrompt: { type: "preset", preset: "claude_code" },
             },
           })
           return { sessionId: sessionID, configOptions: [] }
@@ -455,10 +455,12 @@ describe("Claude ACP", () => {
             items: { anyOf: [{ title: "Economy", const: "economy" }] },
           },
           limit: { type: "integer", title: "Limit" },
+          future: { type: "_future", title: "Future" },
         },
       },
     })
 
+    expect(fields).toHaveLength(3)
     expect(fields[0]?.question.options).toEqual([
       { label: "Quick", description: "quick" },
       { label: "Deep", description: "deep" },
@@ -531,7 +533,6 @@ function streamInput(overrides: Partial<StreamInput> = {}): StreamInput {
     agent: "build",
     resume: true,
     mcpServers: [{ name: "tools", command: "bun", args: ["server.ts"], env: [] }],
-    system: ["Follow OpenCode instructions."],
     messages: [{ role: "user", content: "hello" }],
     abort: new AbortController().signal,
     question: { ask: async () => [] },

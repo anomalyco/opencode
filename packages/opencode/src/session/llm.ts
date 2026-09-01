@@ -244,7 +244,6 @@ const live: Layer.Layer<
             agent: input.agent.name,
             resume,
             mcpServers: claudeMcpServers(yield* config.get()),
-            system: yield* LLMRequestPrep.prepareSystem({ ...input, plugin, providerPrompt: false }),
             messages: input.messages,
             abort: input.abort,
             // Claude ACP owns tool execution through Claude Code plus MCP servers;
