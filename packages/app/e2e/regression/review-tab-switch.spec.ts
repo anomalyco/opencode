@@ -68,6 +68,17 @@ test("keeps review visibility per tab and the pane mounted across tab switches",
   await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   expect(await readProbe(page)).toBe(PROBE)
 
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ key }) => {
+          const panes = JSON.parse(localStorage.getItem("opencode.window.browser.dat:tabs.panes") ?? "{}")
+          return panes[key]?.review
+        },
+        { key: `${server}\n${sessionHref(sessionA)}` },
+      ),
+    )
+    .toBe(true)
   await page.reload()
   await expectSessionTitle(page, titleA)
   await expectAppVisible(review)
