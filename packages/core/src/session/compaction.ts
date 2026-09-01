@@ -23,6 +23,8 @@ const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 15_000
 const OUTPUT_TOKEN_MAX = 32_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
+const IMAGE_TOKEN_ESTIMATE = 1_500
+const PDF_TOKEN_ESTIMATE = 2_000
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -152,7 +154,7 @@ export const estimateTokens = (input: RequiredInput) => {
 
 const estimateMedia = (mime: string) => {
   const type = mime.toLowerCase()
-  return type.startsWith("image/") ? 1_500 : type === "application/pdf" ? 2_000 : 0
+  return type.startsWith("image/") ? IMAGE_TOKEN_ESTIMATE : type === "application/pdf" ? PDF_TOKEN_ESTIMATE : 0
 }
 
 const estimatePart = (part: ContentPart): number => {
