@@ -162,7 +162,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     setSuggestionsOpen(false)
     setActiveSuggestion(-1)
     setRoot(value)
-    setInput(displayPickerPath(value, value, home()))
+    setInput(displayPickerPath(value, "", home()))
     listings.clear()
     advanced.clear()
     tree?.resetPaths([])
@@ -172,19 +172,6 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     setLoading(false)
   }
 
-  function complete() {
-    const items = currentSuggestions()
-    const match = items[activeSuggestion()] ?? items[0]
-    if (!match) return
-    const value = displayPickerPath(match.absolute, input(), home())
-    setInput(match.type === "directory" && !value.endsWith("/") ? value + "/" : value)
-    if (match.type === "file") {
-      setSelected(policy.selection(root(), pickerFileSearchQuery(root(), match.absolute, home())) ?? "")
-      setSuggestionsOpen(false)
-      setActiveSuggestion(-1)
-    }
-  }
-
   function chooseSuggestion(suggestion: { absolute: string; type: "file" | "directory" }) {
     if (suggestion.type === "directory") {
       void navigate(suggestion.absolute)
@@ -192,8 +179,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     }
     setInput(displayPickerPath(suggestion.absolute, input(), home()))
     setSelected(policy.selection(root(), pickerFileSearchQuery(root(), suggestion.absolute, home())) ?? "")
-    setSuggestionsOpen(false)
-    setActiveSuggestion(-1)
+    resolve()
   }
 
   function moveSuggestion(delta: -1 | 1) {
@@ -212,9 +198,9 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     Enter: () => {
       const suggestion = activeSuggestionValue()
       if (suggestion) chooseSuggestion(suggestion)
-      if (!suggestion) void navigate(input())
+      else void navigate(input())
     },
-    Tab: complete,
+    Tab: () => moveSuggestion(1),
   }
 
   function handleInputKey(event: KeyboardEvent) {
