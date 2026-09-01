@@ -10,10 +10,11 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { Worktree } from "@/worktree"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -49,6 +50,17 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  allowed_tools: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description:
+      "Restrict the subagent to only these tool IDs. Cannot override system denies (todowrite, task). Overrides forbidden_tools if both are set.",
+  }),
+  forbidden_tools: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "Prevent the subagent from using these specific tool IDs. Cannot override parent allow rules.",
+  }),
+  workspace_mode: Schema.optional(Schema.Literals(["inherit", "branch"])).annotate({
+    description:
+      "Workspace isolation mode. 'inherit' (default) shares the parent filesystem. 'branch' creates an isolated git worktree for this subagent.",
+  }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -139,6 +151,8 @@ export const TaskTool = Tool.define(
       const childPermission = deriveSubagentSessionPermission({
         parentSessionPermission: parent.permission ?? [],
         subagent: next,
+        allowed_tools: params.allowed_tools,
+        forbidden_tools: params.forbidden_tools,
       })
       const childToolDenies = [
         ...(next.permission.some((rule) => rule.permission === "todowrite")
@@ -224,6 +238,39 @@ export const TaskTool = Tool.define(
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
 
+      // Workspace isolation: create a git worktree when workspace_mode is "branch"
+      // and this is a fresh session (not a resume). Falls back gracefully if
+      // Worktree.Service is not available in the current layer.
+      const shouldIsolate = params.workspace_mode === "branch" && !session
+      const worktreeOpt = yield* Effect.serviceOption(Worktree.Service)
+      const worktreeInfo = shouldIsolate
+        ? yield* Option.match(worktreeOpt, {
+            onNone: () => Effect.succeed(Option.none<Worktree.Info>()),
+            onSome: (svc) =>
+              svc
+                .create({ name: `task-${nextSession.id.slice(0, 8)}` })
+                .pipe(
+                  Effect.map(Option.some),
+                  Effect.catchAll(() => Effect.succeed(Option.none<Worktree.Info>())),
+                ),
+          })
+        : Effect.succeed(Option.none<Worktree.Info>())
+
+      const isolatedInfo = yield* worktreeInfo
+
+      // Wrap runTask with worktree cleanup if isolation is active
+      const runTaskWithCleanup = isolatedInfo
+        ? runTask().pipe(
+            Effect.ensuring(
+              yield* Option.match(worktreeOpt, {
+                onNone: () => Effect.void,
+                onSome: (svc) =>
+                  svc.remove({ directory: isolatedInfo.directory }).pipe(Effect.catchAll(() => Effect.void)),
+              }),
+            ),
+          )
+        : runTask()
+
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
         state: "completed" | "error",
         text: string,
@@ -264,7 +311,7 @@ export const TaskTool = Tool.define(
         )
       })
 
-      if (yield* background.extend({ id: nextSession.id, run: runTask() })) {
+      if (yield* background.extend({ id: nextSession.id, run: runTaskWithCleanup })) {
         return {
           title: params.description,
           metadata: {
@@ -293,7 +340,7 @@ export const TaskTool = Tool.define(
           }),
           notify(nextSession.id),
         ]),
-        run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
+        run: runTaskWithCleanup.pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
       })
 
       function backgroundResult() {

@@ -652,6 +652,158 @@ describe("tool.task", () => {
     },
   )
 
+  it.instance("execute applies allowed_tools restriction to child session permissions", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          allowed_tools: ["read", "glob", "grep"],
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.permission).toBeDefined()
+      const perms = child.permission ?? []
+
+      const catchAllDeny = perms.find((r) => r.permission === "*" && r.action === "deny")
+      expect(catchAllDeny).toBeDefined()
+
+      const readAllow = perms.find((r) => r.permission === "read" && r.action === "allow")
+      expect(readAllow).toBeDefined()
+
+      const globAllow = perms.find((r) => r.permission === "glob" && r.action === "allow")
+      expect(globAllow).toBeDefined()
+
+      const grepAllow = perms.find((r) => r.permission === "grep" && r.action === "allow")
+      expect(grepAllow).toBeDefined()
+
+      const taskDeny = perms.find((r) => r.permission === "task" && r.action === "deny")
+      expect(taskDeny).toBeDefined()
+    }),
+  )
+
+  it.instance("execute applies forbidden_tools restriction to child session permissions", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          forbidden_tools: ["bash", "write"],
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const child = yield* sessions.get(result.metadata.sessionId)
+      const perms = child.permission ?? []
+      const bashRule = perms.find((r) => r.permission === "bash" && r.action === "deny")
+      const writeRule = perms.find((r) => r.permission === "write" && r.action === "deny")
+      const readRule = perms.find((r) => r.permission === "read" && r.action === "allow")
+      expect(bashRule).toBeDefined()
+      expect(writeRule).toBeDefined()
+      expect(readRule).toBeUndefined()
+    }),
+  )
+
+  it.instance("execute defaults workspace_mode to inherit when not specified", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain('state="completed"')
+      expect(result.metadata.sessionId).toBeDefined()
+    }),
+  )
+
+  it.instance("execute ignores workspace_mode branch when task_id is provided (resume)", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps({ text: "resumed" })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          task_id: child.id,
+          workspace_mode: "branch",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.metadata.sessionId).toBe(child.id)
+      expect(result.output).toContain('state="completed"')
+    }),
+  )
+
   it.instance("rejects background execution when the experiment is disabled", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
