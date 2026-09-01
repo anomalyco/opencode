@@ -6126,6 +6126,7 @@ body {
   grid-template-columns: 6px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+  align-self: stretch;
   min-width: 0;
 }
 
@@ -6145,7 +6146,8 @@ body {
 [data-page="stats"] [data-slot="compare-radar-legend"] small {
   font-size: 13px;
   line-height: 18px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 [data-page="stats"] [data-slot="compare-radar-legend"] strong {
