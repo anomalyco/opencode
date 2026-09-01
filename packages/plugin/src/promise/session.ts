@@ -1,6 +1,7 @@
 import type { SessionApi } from "@opencode/client/promise/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai"
 import type { Agent } from "@opencode/schema/agent"
+import type { Form } from "@opencode/schema/form"
 import type { Model } from "@opencode/schema/model"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
@@ -109,6 +110,21 @@ export interface SessionHooks {
   readonly retry: SessionRetry
 }
 
+/** Intentional subset of SessionApi["list"]: in-process only, no cursor/pagination. */
+export interface SessionList {
+  /** Filter to sessions created in this directory. Must be absolute; relative paths reject. */
+  readonly directory?: string
+  readonly search?: string
+  readonly order?: "asc" | "desc"
+  /** Maximum sessions to return. Truncates without a cursor; there is no pagination. */
+  readonly limit?: number
+}
+
+/** In-process session listing — data layer shape, without HTTP cursor encoding. Truncated at `limit`. */
+export type SessionListResult = {
+  readonly data: Session.Info[]
+}
+
 export type SessionDomain = Pick<
   SessionApi,
   | "create"
@@ -123,7 +139,24 @@ export type SessionDomain = Pick<
   | "rename"
   | "move"
   | "wait"
+  | "compact"
+  | "skill"
+  | "revert"
   | "context"
 > & {
+  readonly list: (input?: SessionList) => Promise<SessionListResult>
   readonly hook: ModelHooks<SessionHooks>
+  readonly form: FormDomain
+}
+
+export interface FormDomain {
+  readonly list: (input: { readonly sessionID: string }) => Promise<ReadonlyArray<Form.Info>>
+  readonly get: (input: { readonly sessionID: string; readonly formID: string }) => Promise<Form.Info>
+  readonly state: (input: { readonly sessionID: string; readonly formID: string }) => Promise<Form.State>
+  readonly reply: (input: {
+    readonly sessionID: string
+    readonly formID: string
+    readonly answer: Form.Answer
+  }) => Promise<void>
+  readonly cancel: (input: { readonly sessionID: string; readonly formID: string }) => Promise<void>
 }

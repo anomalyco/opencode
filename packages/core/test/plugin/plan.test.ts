@@ -84,6 +84,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
       },
       event: {
         subscribe: () => Stream.fromIterable(events),
+        subscribeGlobal: () => Stream.empty,
       },
       session: {
         hook: (name, callback) => {

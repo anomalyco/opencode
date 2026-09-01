@@ -147,6 +147,12 @@ export interface Interface {
   ) => Effect.Effect<PublishResult<I>>
   readonly subscribe: Subscribe
   /**
+   * Unfiltered live channel: every event published from now on, across all
+   * locations. Prefer `subscribe` for location-scoped consumers; use this for
+   * cross-location observers that must not miss other directories.
+   */
+  readonly subscribeGlobal: Subscribe
+  /**
    * Durable, ordered per-aggregate log read. Forked aggregates may reserve an
    * inherited prefix before their first child-authored event. `follow: false`
    * completes at the end of the log; `follow: true` replays then transitions
@@ -761,6 +767,24 @@ export function configured(options?: Options) {
 
         const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))
 
+        const streamLiveGlobal = (): Stream.Stream<Event.Payload> => Stream.fromPubSub(pubsub.live)
+
+        function subscribeGlobal(): Stream.Stream<Event.Payload>
+        function subscribeGlobal<D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>
+        function subscribeGlobal<const D extends readonly [Event.Definition, ...Event.Definition[]]>(
+          definitions: D,
+        ): Stream.Stream<SubscribePayload<D>>
+        function subscribeGlobal(
+          input?: Event.Definition | readonly Event.Definition[],
+        ): Stream.Stream<Event.Payload> {
+          if (input === undefined) return streamLiveGlobal()
+          if (isDefinition(input)) {
+            return Stream.unwrap(getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub))))
+          }
+          const types = new Set(input.map((definition) => definition.type))
+          return streamLiveGlobal().pipe(Stream.filter((event) => types.has(event.type)))
+        }
+
         const readAfter = (
           aggregateID: string,
           after: number,
@@ -893,6 +917,7 @@ export function configured(options?: Options) {
           publish,
           publishAll,
           subscribe,
+          subscribeGlobal,
           log,
           listen,
           project,
