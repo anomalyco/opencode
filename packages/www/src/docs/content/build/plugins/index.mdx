@@ -821,9 +821,6 @@ const registration = await ctx.tool.transform((draft) => {
 })
 ```
 
-Register a namespace once to show its description in the CodeMode catalog and match it in tool search. Tools continue
-to reference the namespace by its string name. Namespace registration is optional when no description is needed.
-
 Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
 changing their order; it does not rerun plugin setup.
 
