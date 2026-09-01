@@ -3,7 +3,7 @@ export * as CodeModeCatalog from "./catalog.js"
 import { Schema } from "effect"
 
 export const Tool = Schema.Struct({
-  type: Schema.Literal("function"),
+  type: Schema.Literal("tool"),
   name: Schema.String,
   description: Schema.String,
   signature: Schema.String,
@@ -143,9 +143,9 @@ function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<s
   const tools: Array<Omit<Tool, "name"> & { readonly path: string }> = []
   const namespaces = new Map<string, Namespace>()
   for (const entry of entries) {
-    if (entry.type === "function") {
+    if (entry.type === "tool") {
       tools.push({
-        type: "function",
+        type: "tool",
         path: [...path, entry.name].join("."),
         description: entry.description,
         signature: entry.signature,

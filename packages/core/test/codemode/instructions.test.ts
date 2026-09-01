@@ -10,14 +10,14 @@ import { it } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
 
 const echo: CodeModeCatalog.Tool = {
-  type: "function",
+  type: "tool",
   name: "notes.echo",
   description: "Echo text",
   signature: "tools.notes.echo(input: {\n  text: string,\n}): Promise<string>",
 }
 
 const lookup: CodeModeCatalog.Tool = {
-  type: "function",
+  type: "tool",
   name: "orders.lookup",
   description: "Look up an order",
   signature: "tools.orders.lookup(input: {\n  id: string,\n}): Promise<unknown>",

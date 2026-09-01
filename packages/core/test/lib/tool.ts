@@ -22,7 +22,7 @@ export const codeModeTools = (
   path: ReadonlyArray<string> = [],
 ): ReadonlyArray<CodeModeCatalog.Tool & { readonly path: string }> =>
   catalog.tools.flatMap((tool) => {
-    if (tool.type === "function") return [{ ...tool, path: [...path, tool.name].join(".") }]
+    if (tool.type === "tool") return [{ ...tool, path: [...path, tool.name].join(".") }]
     return codeModeTools({ tools: tool.tools }, [...path, tool.name])
   })
 

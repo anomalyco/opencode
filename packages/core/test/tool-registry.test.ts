@@ -569,19 +569,19 @@ describe("Tool", () => {
         {
           type: "namespace",
           name: "legacy",
-          tools: [expect.objectContaining({ type: "function", name: "plain" })],
+          tools: [expect.objectContaining({ type: "tool", name: "plain" })],
         },
         {
           type: "namespace",
           name: "registry",
           description: "Package publishing and discovery",
           tools: [
-            expect.objectContaining({ type: "function", name: "search" }),
+            expect.objectContaining({ type: "tool", name: "search" }),
             {
               type: "namespace",
               name: "search",
               description: "Pricing operations",
-              tools: [expect.objectContaining({ type: "function", name: "sales" })],
+              tools: [expect.objectContaining({ type: "tool", name: "sales" })],
             },
           ],
         },

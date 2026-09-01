@@ -3,7 +3,7 @@ import { CodeModeCatalog } from "@opencode-ai/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 
 const entry = (path: string, description: string, signature?: string, pinned = false): CodeModeCatalog.Tool => ({
-  type: "function",
+  type: "tool",
   name: path,
   description,
   signature: signature ?? `tools.${path}(input: {\n  q: string,\n}): Promise<string>`,

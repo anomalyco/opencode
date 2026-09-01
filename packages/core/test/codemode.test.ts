@@ -27,7 +27,7 @@ describe("CodeMode", () => {
       expect(snapshot.codeModeCatalog).toStrictEqual({
         tools: [
           {
-            type: "function",
+            type: "tool",
             name: "echo",
             description: "Echo text",
             signature: "tools.echo(input: {\n  text: string,\n}): Promise<string>",

@@ -168,7 +168,7 @@ export const catalog = (inventory: Inventory) => {
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const tool of runtime(inventory, () => Effect.fail(toolError("Execute context is unavailable"))).catalog())
     getNode(root, tool.path).tool = {
-      type: "function",
+      type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
       description: tool.description,
       signature: tool.signature,
