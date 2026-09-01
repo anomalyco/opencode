@@ -4,13 +4,13 @@
 #
 # Log: ~/.jules/jules_monitor.log   (append-only transition + stuck-duration records)
 # State: ~/.jules/monitor_state     (id -> last-seen status)
-# Tracked: ~/.jules/tracked_sessions (one session ID per line, add/remove at runtime)
+# Tracked: ~/.jules/tracked_sessions ("id workspace" per line, add/remove at runtime)
 #
 # Usage:
-#   jules_monitor.sh                  poll all tracked sessions (cron mode)
-#   jules_monitor.sh add <session-id> start tracking a session
-#   jules_monitor.sh remove <id>      stop tracking a session
-#   jules_monitor.sh list             list tracked sessions with repo + status
+#   jules_monitor.sh                       poll all tracked sessions (cron mode)
+#   jules_monitor.sh add <id> [workspace]  start tracking a session (workspace defaults to $PWD)
+#   jules_monitor.sh remove <id>           stop tracking a session
+#   jules_monitor.sh list [workspace]      list tracked sessions (filtered to workspace if given)
 set -u
 
 JULES_BIN="${JULES_BIN:-$HOME/.npm-global/bin/jules}"
@@ -70,25 +70,28 @@ normalize() {
 
 case "${1:-}" in
     add)
-        [ -n "${2:-}" ] || { echo "usage: jules_monitor.sh add <session-id>"; exit 1; }
-        if grep -qx "$2" "$TRACKED"; then
+        [ -n "${2:-}" ] || { echo "usage: jules_monitor.sh add <session-id> [workspace]"; exit 1; }
+        ws="${3:-${PWD}}"
+        if grep -qE "^${2} " "$TRACKED"; then
             echo "already tracking $2"
         else
-            echo "$2" >> "$TRACKED"
-            echo "tracking $2"
+            echo "$2 $ws" >> "$TRACKED"
+            echo "tracking $2 ($ws)"
         fi
         exit 0
         ;;
     remove)
         [ -n "${2:-}" ] || { echo "usage: jules_monitor.sh remove <session-id>"; exit 1; }
-        sed -i "/^$2$/d" "$TRACKED"
+        sed -i "/^$2 /d" "$TRACKED"
         echo "stopped tracking $2"
         exit 0
         ;;
     list)
-        while read -r id; do
+        ws="${2:-}"
+        while read -r id tracked_ws; do
             [ -z "$id" ] && continue
-            echo "$id  $(repo_for "$id")  $(normalize "$(status_for "$id")")"
+            [ -n "$ws" ] && [ "$tracked_ws" != "$ws" ] && continue
+            echo "$id  ${tracked_ws:-?}  $(repo_for "$id")  $(normalize "$(status_for "$id")")"
         done < "$TRACKED"
         exit 0
         ;;
@@ -101,7 +104,7 @@ NOW="$(date +%s)"
 awk 'NR==FNR { keep[$1]=1; next } keep[$1]' "$TRACKED" "$STATE" > "$STATE.tmp" \
   && mv "$STATE.tmp" "$STATE"
 
-while read -r id; do
+while read -r id _ws; do
     [ -z "$id" ] && continue
     raw="$(status_for "$id")"
     [ -z "$raw" ] && continue
