@@ -3515,11 +3515,27 @@ describe("ProviderTransform.reasoningVariants", () => {
     ["ai-gateway-provider", { reasoningEffort: "high" }],
     ["merge-gateway-ai-sdk-provider", { reasoningEffort: "high" }],
     ["@ai-sdk/amazon-bedrock", { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } }],
+    [
+      "@ai-sdk/amazon-bedrock",
+      {
+        reasoningConfig: { type: "enabled", maxReasoningEffort: "high" },
+        additionalModelRequestFields: { reasoning: { summary: "auto" } },
+      },
+      "global.openai.gpt-5.6-luna",
+    ],
   ])("converts effort for %s", (npm, expected, ...args) => {
     const id = args[0] as string | undefined
     expect(ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target(npm, id))).toEqual(
       { high: expected },
     )
+  })
+
+  test("requests summaries for Bedrock GPT-5 fallback variants", () => {
+    const variants = ProviderTransform.variants(target("@ai-sdk/amazon-bedrock", "global.openai.gpt-5.6-luna"))
+    expect(variants.high).toEqual({
+      reasoningConfig: { type: "enabled", maxReasoningEffort: "high" },
+      additionalModelRequestFields: { reasoning: { summary: "auto" } },
+    })
   })
 
   test("combines effort with extended thinking for Claude Opus 4.5", () => {

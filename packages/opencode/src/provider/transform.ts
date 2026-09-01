@@ -1069,6 +1069,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               type: "enabled",
               maxReasoningEffort: effort,
             },
+            ...(model.api.id.includes("openai.gpt-5")
+              ? { additionalModelRequestFields: { reasoning: { summary: "auto" } } }
+              : {}),
           },
         ]),
       )
@@ -1743,7 +1746,12 @@ function reasoningEffort(model: Provider.Model, effort: string) {
           },
         }
       if (model.api.id.includes("anthropic")) return
-      return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
+      return {
+        reasoningConfig: { type: "enabled", maxReasoningEffort: effort },
+        ...(model.api.id.includes("openai.gpt-5")
+          ? { additionalModelRequestFields: { reasoning: { summary: "auto" } } }
+          : {}),
+      }
     case "@ai-sdk/gateway":
       if (model.id.includes("anthropic")) return { thinking: { type: "adaptive", display: "summarized" }, effort }
       if (model.id.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
