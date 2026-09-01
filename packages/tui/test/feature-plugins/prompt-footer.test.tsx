@@ -40,7 +40,7 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     },
   } as unknown as Context
   const app = await testRender(
-    () => <PromptFooter context={context} sessionID="session" mode="normal" details={true} />,
+    () => <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />,
     {
       width: 80,
       height: 2,
@@ -104,7 +104,7 @@ test("prompt footer can hide details", async () => {
       },
     },
   } as unknown as Context
-  const [details, setDetails] = createSignal(true)
+  const [showDetails, setShowDetails] = createSignal(true)
   const [sessionID, setSessionID] = createSignal<string | undefined>("session")
   const app = await testRender(
     () => (
@@ -113,7 +113,7 @@ test("prompt footer can hide details", async () => {
           context={context}
           sessionID={sessionID()}
           mode="normal"
-          details={details()}
+          showDetails={showDetails()}
         />
       </box>
     ),
@@ -128,7 +128,7 @@ test("prompt footer can hide details", async () => {
     expect(app.captureCharFrame()).toContain("1.0K (10%) · $1.00")
     expect(app.captureCharFrame()).toContain("ctrl+p commands")
 
-    setDetails(false)
+    setShowDetails(false)
     await app.renderOnce()
     const frame = app.captureCharFrame()
     expect(frame).not.toContain("1.0K (10%)")

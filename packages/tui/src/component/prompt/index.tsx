@@ -1598,7 +1598,7 @@ export function Prompt(props: PromptProps) {
   const footerInput = () => ({
     sessionID: props.sessionID,
     mode: store.mode,
-    details: store.interrupt === 0 || dimensions().width >= 80,
+    showDetails: store.interrupt === 0 || dimensions().width >= 80,
   })
 
   const placeholderText = createMemo(() => {
