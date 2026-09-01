@@ -241,7 +241,7 @@ describe("plugin.azure", () => {
 
   test("keeps the existing API-key method and adds Entra ID", () => {
     delete process.env.AZURE_RESOURCE_NAME
-    const hooks = createAzureAuthHooks(azureShell([]))
+    const hooks = createAzureAuthHooks(azureShell([]), fetch, [], true)
 
     expect(hooks.auth?.provider).toBe("azure")
     expect(hooks.provider?.id).toBe("azure")
@@ -272,10 +272,15 @@ describe("plugin.azure", () => {
 
   test("lists Azure CLI resources and allows entering another resource", () => {
     delete process.env.AZURE_RESOURCE_NAME
-    const hooks = createAzureAuthHooks(azureShell([]), fetch, [
-      { name: "first-resource", resourceGroup: "first-group" },
-      { name: "second-resource", resourceGroup: "second-group" },
-    ])
+    const hooks = createAzureAuthHooks(
+      azureShell([]),
+      fetch,
+      [
+        { name: "first-resource", resourceGroup: "first-group" },
+        { name: "second-resource", resourceGroup: "second-group" },
+      ],
+      true,
+    )
 
     expect(oauthMethod(hooks).prompts).toEqual([
       {
@@ -299,9 +304,12 @@ describe("plugin.azure", () => {
   })
 
   test("uses the selected Azure CLI resource", async () => {
-    const hooks = createAzureAuthHooks(azureShell([]), fetch, [
-      { name: "selected-resource", resourceGroup: "selected-group" },
-    ])
+    const hooks = createAzureAuthHooks(
+      azureShell([]),
+      fetch,
+      [{ name: "selected-resource", resourceGroup: "selected-group" }],
+      true,
+    )
     const authorization = await oauthMethod(hooks).authorize({ resourceSelection: "selected-resource" })
     if (authorization.method !== "auto") throw new Error("Unexpected Azure authorization method")
 
@@ -309,7 +317,12 @@ describe("plugin.azure", () => {
   })
 
   test("uses a manually entered Azure resource that was not listed", async () => {
-    const hooks = createAzureAuthHooks(azureShell([]), fetch, [{ name: "listed-resource", resourceGroup: "group" }])
+    const hooks = createAzureAuthHooks(
+      azureShell([]),
+      fetch,
+      [{ name: "listed-resource", resourceGroup: "group" }],
+      true,
+    )
     const authorization = await oauthMethod(hooks).authorize({
       resourceSelection: "__manual__",
       resourceName: "unlisted-resource",
@@ -321,7 +334,7 @@ describe("plugin.azure", () => {
 
   test("checks Azure CLI and stores the resource name", async () => {
     const scopes: string[] = []
-    const hooks = createAzureAuthHooks(azureShell(scopes))
+    const hooks = createAzureAuthHooks(azureShell(scopes), fetch, [], true)
     const authorization = await oauthMethod(hooks).authorize({ resourceName: "test-resource" })
     if (authorization.method !== "auto") throw new Error("Unexpected Azure authorization method")
 
@@ -335,10 +348,15 @@ describe("plugin.azure", () => {
   })
 
   test("supports Azure CLI versions that only provide expiresOn", async () => {
-    const hooks = createAzureAuthHooks(async () => ({
-      accessToken: "legacy-token",
-      expiresOn: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    }))
+    const hooks = createAzureAuthHooks(
+      async () => ({
+        accessToken: "legacy-token",
+        expiresOn: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      }),
+      fetch,
+      [],
+      true,
+    )
     const authorization = await oauthMethod(hooks).authorize({ resourceName: "test-resource" })
     if (authorization.method !== "auto") throw new Error("Unexpected Azure authorization method")
 
@@ -346,7 +364,7 @@ describe("plugin.azure", () => {
   })
 
   test("rejects Azure CLI tokens without a usable expiration", async () => {
-    const hooks = createAzureAuthHooks(async () => ({ accessToken: "invalid-token" }))
+    const hooks = createAzureAuthHooks(async () => ({ accessToken: "invalid-token" }), fetch, [], true)
     const authorization = await oauthMethod(hooks).authorize({ resourceName: "test-resource" })
     if (authorization.method !== "auto") throw new Error("Unexpected Azure authorization method")
 
@@ -379,6 +397,9 @@ describe("plugin.azure", () => {
         ],
         commands,
       ),
+      fetch,
+      [],
+      true,
     )
     const list = hooks.provider?.models
     if (!list) throw new Error("Azure provider model hook is missing")
@@ -410,6 +431,9 @@ describe("plugin.azure", () => {
         [{ name: "gpt-production", properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" } }],
         commands,
       ),
+      fetch,
+      [],
+      true,
     )
     const list = hooks.provider?.models
     if (!list) throw new Error("Azure provider model hook is missing")
@@ -433,6 +457,9 @@ describe("plugin.azure", () => {
         ],
         [],
       ),
+      fetch,
+      [],
+      true,
     )
     const list = hooks.provider?.models
     if (!list) throw new Error("Azure provider model hook is missing")
@@ -446,9 +473,14 @@ describe("plugin.azure", () => {
   })
 
   test("keeps configured models available when Azure discovery fails", async () => {
-    const hooks = createAzureAuthHooks(async () => {
-      throw new Error("Azure CLI failed")
-    })
+    const hooks = createAzureAuthHooks(
+      async () => {
+        throw new Error("Azure CLI failed")
+      },
+      fetch,
+      [],
+      true,
+    )
     const list = hooks.provider?.models
     if (!list) throw new Error("Azure provider model hook is missing")
 
@@ -456,9 +488,28 @@ describe("plugin.azure", () => {
     expect(await list({ ...provider, models: catalog }, { auth: oauth })).toBe(catalog)
   })
 
+  test("skips model discovery when the Azure CLI is unavailable", async () => {
+    const calls: string[][] = []
+    const hooks = createAzureAuthHooks(
+      async (args) => {
+        calls.push(args)
+        throw new Error("spawn az ENOENT")
+      },
+      fetch,
+      [],
+      false,
+    )
+    const list = hooks.provider?.models
+    if (!list) throw new Error("Azure provider model hook is missing")
+
+    const catalog = models("gpt-5-mini")
+    expect(await list({ ...provider, models: catalog }, { auth: oauth })).toBe(catalog)
+    expect(calls).toEqual([])
+  })
+
   test("does not change API-key loading", async () => {
     const scopes: string[] = []
-    const hooks = createAzureAuthHooks(azureShell(scopes))
+    const hooks = createAzureAuthHooks(azureShell(scopes), fetch, [], true)
     const catalog = models("gpt-5-mini")
     const list = hooks.provider?.models
     if (!list) throw new Error("Azure provider model hook is missing")
@@ -471,10 +522,15 @@ describe("plugin.azure", () => {
   test("uses Azure CLI bearer tokens for Azure inference endpoints", async () => {
     const scopes: string[] = []
     const requests: Headers[] = []
-    const hooks = createAzureAuthHooks(azureShell(scopes), async (_input, init) => {
-      requests.push(new Headers(init?.headers))
-      return new Response(null, { status: 200 })
-    })
+    const hooks = createAzureAuthHooks(
+      azureShell(scopes),
+      async (_input, init) => {
+        requests.push(new Headers(init?.headers))
+        return new Response(null, { status: 200 })
+      },
+      [],
+      true,
+    )
     const options = await loader(hooks)(async () => oauth, provider)
     const request = customFetch(options)
 
