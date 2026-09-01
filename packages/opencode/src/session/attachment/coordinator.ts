@@ -56,20 +56,6 @@ export interface Scope extends AttachmentContract.Scope {
    * admission failure and is deliberately unchanged.
    */
   readonly own: (messageID: MessageID) => Effect.Effect<boolean>
-  /**
-   * This scope has already published its return-eligibility resolution.
-   *
-   * The gate is ONE-SHOT: it resolves once and latches. A scope outlives the run that resolved it —
-   * R-23 requires an opened scope to stay live through its descendants — so a later, sequential run
-   * on the same session can find a scope that has already spoken. That resolution was computed for a
-   * different turn and cannot speak for this one; a run that consumed it anyway would file at the
-   * earlier turn position, hit the filing guard, and lose its own answer silently.
-   *
-   * A thunk on the coordinator's own `Scope`, NOT a field on `AttachmentContract.Current`: return
-   * eligibility is a Task-boundary concern, while `Current` is the narrow read-only snapshot the
-   * closure observer contract consumes. Same reasoning as the registry entry's `resolved` below.
-   */
-  readonly resolved: () => boolean
   readonly owns: (messageID: MessageID) => boolean
   readonly reserve: (jobID: SessionID) => Effect.Effect<Reservation>
   readonly reject: (reservation: Reservation) => Effect.Effect<void>
@@ -192,10 +178,27 @@ type State = {
   degraded: boolean
   fallback?: SessionV1.WithParts
   cancellationStatus?: string
-  cancelled: boolean
-  closed: boolean
-  resolution?: Resolution
-}
+    cancelled: boolean
+    closed: boolean
+    /**
+     * CP-032 §3.3.2 — every Assistant a future resolution would legitimately speak for.
+     *
+     * Monotonic and append-only before publication: an accepted `observeTurn` enrols its Assistant,
+     * and so does every `result()` call that enters while unresolved, including waiters whose
+     * fallback never latches. `invalidate()` deliberately does NOT clear it. Candidate and observed
+     * are single replaceable slots, so a superseded or yielded Assistant disappears from them while
+     * remaining something the eventual resolution speaks for; membership is the history those slots
+     * cannot keep.
+     */
+    readonly members: Set<MessageID>
+    /**
+     * The membership frozen at evidence publication: a new non-aliasing set, never mutated
+     * afterwards, so a delayed fiber reading it after `close` still sees what the resolution covered.
+     * Cancellation publishes none — it has no controlling Assistant to speak for.
+     */
+    publishedMembers?: ReadonlySet<MessageID>
+    resolution?: Resolution
+  }
 
 type RegistryState = {
   readonly scopes: Map<
@@ -249,11 +252,12 @@ export const make = Effect.gen(function* () {
       everAttached: false,
       active: 0,
       wakes: 0,
-      order: 0,
-      degraded: false,
-      cancelled: false,
-      closed: false,
-    }
+        order: 0,
+        degraded: false,
+        cancelled: false,
+        closed: false,
+        members: new Set(),
+      }
 
     /** A synchronous critical section: no yield, Promise, callback, or IO can interleave it. */
     const transition = <A>(fn: () => A): A => fn()
@@ -288,10 +292,13 @@ export const make = Effect.gen(function* () {
           type: "evidence",
           candidate: state.candidate,
           observed: state.observed,
-          degraded: true,
-        }
-        state.closed = true
-        return
+            degraded: true,
+          }
+          // A new set, never aliased to the mutable history, so `close` cannot reach back into what
+          // this resolution covered.
+          state.publishedMembers = new Set(state.members)
+          state.closed = true
+          return
       }
       if (!state.everAttached) return
       if (!state.candidate && !(state.observed && state.wakeEpoch === state.epoch)) return
@@ -305,10 +312,11 @@ export const make = Effect.gen(function* () {
         type: "evidence",
         candidate: state.candidate,
         observed: state.observed,
-        degraded: false,
+          degraded: false,
+        }
+        state.publishedMembers = new Set(state.members)
+        state.closed = true
       }
-      state.closed = true
-    }
 
     const closeNow = () => {
       if (registry.scopes.get(sessionID)?.scope.id === state.scopeID) registry.scopes.delete(sessionID)
@@ -317,9 +325,14 @@ export const make = Effect.gen(function* () {
       state.fence = undefined
       state.jobs.clear()
       state.observers.clear()
-      state.undelivered.clear()
-      state.messages.clear()
-    }
+        state.undelivered.clear()
+        state.messages.clear()
+        // Only once the snapshot is frozen. `closeNow` can itself degrade an unresolved scope, and
+        // `apply` runs `gate()` AFTER this body, so clearing unconditionally would let that
+        // publication freeze an empty membership and make every later caller falsely fresh. The
+        // frozen `publishedMembers` is never touched here: delayed exact-scope fibers still read it.
+        if (state.resolution) state.members.clear()
+      }
 
     const apply = <A>(fn: () => A) =>
       Effect.uninterruptible(
@@ -342,8 +355,6 @@ export const make = Effect.gen(function* () {
       failed: state.degraded,
       cancelled: state.cancelled,
     }))
-
-  const resolved: Scope["resolved"] = () => state.resolution !== undefined
 
     const own: Scope["own"] = (messageID) =>
       apply(() => {
@@ -483,10 +494,14 @@ export const make = Effect.gen(function* () {
     const observeTurn: Scope["observeTurn"] = (input) => {
       const assistant = structuredClone(input.assistant)
       return apply(() => {
-        if (state.degraded || state.cancelled || state.closed) return
-        const evidence = { epoch: state.epoch, order: ++state.order, assistant }
-        if (input.clean) state.candidate = evidence
-        if (!input.clean) state.observed = evidence
+          if (state.degraded || state.cancelled || state.closed) return
+          // Enrolled before `apply` runs `gate()`, so any resolution this observation enables is
+          // frozen with it already inside. A refused observation above never enrols, and `closed`
+          // covers the post-resolution case because every publication sets it.
+          state.members.add(assistant.info.id)
+          const evidence = { epoch: state.epoch, order: ++state.order, assistant }
+          if (input.clean) state.candidate = evidence
+          if (!input.clean) state.observed = evidence
       })
     }
 
@@ -561,10 +576,47 @@ export const make = Effect.gen(function* () {
     const complete = (resolution: Resolution, fallback: SessionV1.WithParts): TaskSelectedReturn =>
       resolution.type === "cancelled" ? resolution : { ...resolution, fallback }
 
+    /**
+     * CP-032 §3.3.2 Admission Freshness.
+     *
+     * The whole decision lives inside the existing synchronous transition, before any await or
+     * caller-visible selection, because the question it answers — was this scope already resolved
+     * when I arrived? — cannot be asked from outside and still be true when `result()` runs. A
+     * caller that samples first and calls second has no way to bind the two.
+     *
+     * The discriminator is `published`: the resolution as it stood when the transition BEGAN, read
+     * before the first-fallback latch and before `gate()`. A resolution that `gate()` publishes
+     * during this call was computed for THIS turn and is consumed unconditionally; only a resolution
+     * that predates the call is a candidate for freshness.
+     */
     const result: Scope["result"] = (fallback) =>
       Effect.gen(function* () {
         const cloned = structuredClone(fallback)
         const immediate = transition(() => {
+          const published = state.resolution
+          if (published) {
+            // Cancellation is global: it carries no controlling Assistant, speaks for no membership,
+            // and outranks any turn arriving after it. Nothing files.
+            if (published.type === "cancelled") return complete(published, state.fallback ?? cloned)
+            // Evidence, clean or degraded alike. The question is not how good the resolution is, but
+            // whether it speaks for THIS Assistant. Membership answers that directly; the published
+            // candidate/observed/fallback slots cannot, because they are replaceable — an Assistant
+            // observed and then superseded is still covered by the resolution while no longer visible
+            // in any slot, and testing the slots would falsely revive it as fresh.
+            if (state.publishedMembers?.has(fallback.info.id)) {
+              return complete(published, state.fallback ?? cloned)
+            }
+            // Not covered: this run was admitted while unresolved but had not yet reached `result()`
+            // when the resolution minted, so nothing it produced is inside that answer. Returning it
+            // fresh is what keeps it from vanishing behind the already-filed position. Deliberately
+            // no mutation of fallback, history, or resolution — a fresh post-publication result never
+            // enrols itself, or a later arrival would match retroactively.
+            return { type: "evidence", fallback: cloned, degraded: false } satisfies TaskSelectedReturn
+          }
+          // Unresolved at entry: enrol before anything else, so any resolution this call enables is
+          // frozen with this Assistant inside. Every caller enrols, including waiters whose fallback
+          // never latches, because each of them is one the eventual resolution will speak for.
+          state.members.add(fallback.info.id)
           state.fallback ??= cloned
           gate()
           if (state.resolution) return complete(state.resolution, state.fallback)
@@ -576,6 +628,9 @@ export const make = Effect.gen(function* () {
               degraded: state.degraded,
             }
             state.resolution = resolution
+            // The third evidence publication point, alongside the two in `gate()`. This one mints
+            // immediately for a never-attached scope, so its membership is usually just this caller.
+            state.publishedMembers = new Set(state.members)
             state.closed = true
             return complete(resolution, state.fallback)
           }
@@ -592,7 +647,6 @@ export const make = Effect.gen(function* () {
       id: state.scopeID,
     sessionID,
     current,
-    resolved,
     own,
     owns,
       reserve,

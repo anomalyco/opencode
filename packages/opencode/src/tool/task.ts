@@ -381,23 +381,19 @@ export const TaskTool = Tool.define(
        */
       const eligible = (invocation: AttachmentCoordinator.Scope | undefined, result: SessionV1.WithParts) =>
         Effect.gen(function* () {
-          // No scope, or a scope that has ALREADY published its resolution, means nothing is pending
-          // on this turn and it is immediately eligible.
-          //
-          // The gate is one-shot, and a scope outlives the run that resolved it (R-23 keeps an
-          // opened scope live through its descendants). So a second, sequential run on the same
-          // session can reach a scope that has already spoken for an EARLIER turn. Consuming that
-          // resolution would key this answer to the earlier turn position, where the filing guard
-          // would swallow it — the run would execute, produce a real answer, and deliver nothing.
-          //
-          // `locateBorrowable` refuses a scope already resolved at LOOKUP; this covers the scope
-          // that resolves while a borrowed run is still in flight. Immediate eligibility rather than
-          // refusal, because unlike the admission boundary this run has already produced a genuine
-          // answer: refusing here would discard it. Truthful too — a resolved scope accepts no new
-          // attachments, so this turn has no outstanding work on it to wait for.
-          if (!invocation || invocation.resolved()) {
+          // Scope-less: nothing can be pending on this turn, so the run-final Assistant IS the
+          // answer. This is the only place Task constructs evidence itself, and it is safe precisely
+          // because there is no coordinator to disagree with.
+          if (!invocation) {
             return toDetected({ type: "evidence", fallback: result, degraded: false }, result)
           }
+          // Scoped: announce, then exactly ONE atomic `Scope.result(result)`. Task deliberately does
+          // not sample scope resolution and pick a result from that sample (CP-032 R-13). A sample
+          // cannot bind its observation to the later call — the scope can resolve in between — and it
+          // cannot tell a resolution published FOR THIS TURN from one latched for an earlier turn, so
+          // acting on it either discards CP-028 structural selection or swallows a distinct answer.
+          // Both questions are answerable only inside the coordinator transition, which is where
+          // §3.3.2 now decides them.
           const announce = yield* BackgroundJob.Announce
           yield* announce()
           const selected = yield* invocation.result(result)

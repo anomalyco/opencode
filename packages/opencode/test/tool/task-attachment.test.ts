@@ -282,6 +282,43 @@ function context(input: {
   }
 }
 
+/**
+ * Reads a settled selection under CP-032 v0.12 Admission Freshness.
+ *
+ * `Scope.result` is an ELIGIBILITY operation, not a settled-state reader: an Assistant that was
+ * never enrolled before publication is the fresh-answer case, so it comes back as its own evidence.
+ * These rows previously read the parent's settled answer by calling `result()` afterwards with a
+ * throwaway `"wrong fallback"` Assistant, which now legitimately returns that throwaway.
+ *
+ * Forking BEFORE the release that lets the gate resolve makes the probe a genuine unresolved
+ * entrant: it enrols, latches as first fallback, and parks on the one-shot Deferred. Its text stays
+ * distinguishable, so a selection that returned the caller's own Assistant still shows up as
+ * "wrong fallback" rather than silently matching. The `yieldNow` is load-bearing -- `forkChild` only
+ * schedules the fiber, so without it the probe would not have entered `result()` yet and would
+ * arrive post-publication, passing for the wrong reason.
+ */
+const parkedRead = (scope: AttachmentCoordinator.Scope, sessionID: SessionID, probeText: string) =>
+  Effect.gen(function* () {
+    const settled = yield* Deferred.make<void>()
+    const answer: { value: TaskSelectedReturn | undefined } = { value: undefined }
+    yield* scope.result(reply({ sessionID, parts: [] } as SessionPrompt.PromptInput, probeText)).pipe(
+      Effect.tap((value) =>
+        Effect.sync(() => {
+          answer.value = value
+        }),
+      ),
+      Effect.ensuring(Deferred.succeed(settled, undefined)),
+      Effect.forkChild,
+    )
+    yield* Effect.yieldNow
+    expect(yield* Deferred.isDone(settled)).toBe(false)
+    return Effect.gen(function* () {
+      yield* Deferred.await(settled)
+      if (!answer.value) return yield* Effect.die("the parked result never resolved")
+      return answer.value
+    })
+  })
+
 function basicOps(input: {
   prompt: TaskPromptOps["prompt"]
   // Required, mirroring `TaskPromptOps` itself, so a test cannot omit it and end up exercising a
@@ -374,8 +411,11 @@ describe("task attachment integration", () => {
       expect(parent.current()).toMatchObject({ undelivered: 0, candidate: false })
       expect(parentPrompts).toBe(1)
       expect(wakes).toBe(1)
+      // Enter `result()` before the wake is released, so this probe parks as a genuine unresolved
+      // entrant rather than reading back after the gate has already published.
+      const settled = yield* parkedRead(parent, chat.id, "wrong fallback")
       yield* Deferred.succeed(wakeRelease, undefined)
-      expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("fresh wake final")
+      expect(selectedText(yield* settled)).toBe("fresh wake final")
       expect(parent.current().candidate).toBe(true)
       yield* parent.close()
     }),
@@ -430,6 +470,8 @@ describe("task attachment integration", () => {
       )
       expect(updated.output).toContain("Async task updated")
 
+      // Parks as a genuine unresolved entrant before the release that lets the gate publish.
+      const settled = yield* parkedRead(parent, chat.id, "wrong fallback")
       yield* Deferred.succeed(firstRelease, undefined)
       yield* Deferred.await(secondReady)
       const cancelled = yield* jobs.cancel(started.metadata.sessionId)
@@ -447,7 +489,7 @@ describe("task attachment integration", () => {
         expect(text.text).toContain(`state="completed"`)
         expect(text.text).toContain("final TextPart was absent")
       }
-      expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("parent final")
+      expect(selectedText(yield* settled)).toBe("parent final")
       expect(parent.current()).toMatchObject({ attached: 0, undelivered: 0 })
       expect(parent.current().failed).toBe(false)
       // Two deliveries: the retained answer, then the cancellation envelope. Previously the answer
@@ -843,6 +885,8 @@ describe("task attachment integration", () => {
       yield* Deferred.await(acquireEntered)
       const child = (yield* sessions.children(chat.id))[0]
       if (!child) return yield* Effect.die("missing child")
+      // Parks as a genuine unresolved entrant before the release that lets the gate publish.
+      const settled = yield* parkedRead(parent, chat.id, "wrong fallback")
       yield* Deferred.succeed(childRelease, undefined)
       const originalTerminal = yield* jobs.wait({ id: child.id })
       expect(originalTerminal.info?.status).toBe("completed")
@@ -869,7 +913,7 @@ describe("task attachment integration", () => {
       expect(text?.text).toContain(original)
       expect(text?.text).not.toContain(replacementOutput)
       expect(notification.attachmentScope).toBe(parent)
-      expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("parent final")
+      expect(selectedText(yield* settled)).toBe("parent final")
       yield* awaitSettled(log)
       expect(acquisitions).toBe(1)
       expect(parentPrompts).toEqual([notification])
@@ -1107,6 +1151,8 @@ describe("task attachment integration", () => {
         context({ sessionID: chat.id, messageID: assistant.id, promptOps, attachment: parent }),
       )
       expect(updated.output).toContain("Async task updated")
+      // Parks as a genuine unresolved entrant before the releases that let the gate publish.
+      const settled = yield* parkedRead(parent, chat.id, "wrong fallback")
       const promoted = yield* Fiber.join(foreground)
       expect(promoted.metadata.background).toBe(true)
       expect(promoted.output).toContain("Async task started")
@@ -1131,7 +1177,7 @@ describe("task attachment integration", () => {
         expect(part.text).toContain("Any further answer it produces will be delivered separately.")
         expect(part.text).not.toContain("<summary>")
       }
-      expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("parent promoted final")
+      expect(selectedText(yield* settled)).toBe("parent promoted final")
 
       // POSITIVE PRODUCTION TOPOLOGY: both actual Task prompts ran against one physical Lifetime,
       // and sequence zero plus its adjacent extension are accepted before any identity assertion.
@@ -1267,6 +1313,8 @@ describe("task attachment integration", () => {
         .pipe(Effect.forkChild)
       yield* Deferred.await(secondClaimEntered)
 
+      // Parks as a genuine unresolved entrant before the releases that let the gate publish.
+      const settled = yield* parkedRead(parent, chat.id, "wrong fallback")
       yield* Deferred.succeed(firstRelease, undefined)
       yield* Deferred.await(secondReady)
       yield* Deferred.succeed(secondRelease, undefined)
@@ -1292,7 +1340,7 @@ describe("task attachment integration", () => {
 
       // The second answer's delivery is the later evidence, so selection resolves to its reply
       // rather than the first one's. The single-observer invariants below are this test's subject.
-      expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("later answer delivery")
+      expect(selectedText(yield* settled)).toBe("later answer delivery")
       expect(observerClaims).toBe(2)
       // Three exact waits, one observer. The blocking wait is the observer's; the second is the
       // supplemental prompt's receipt reading the accepted lifetime's own record with a zero
@@ -1805,9 +1853,10 @@ describe("task edge coordinates for branch closure", () => {
       // (R-08), not closed.
       const predecessor = yield* coordinator.open(chat.id)
       yield* predecessor.result(answer("predecessor answer"))
-      expect(predecessor.resolved()).toBe(true)
 
-      // Generation N+1 atomically replaces it.
+      // Generation N+1 atomically replaces it. That this `open` SUCCEEDS is the outcome-based proof
+      // that the predecessor resolved: replacement admits only a resolved incumbent, and a live one
+      // still loses the exclusive open (CP-032 R-08). No Task-facing resolution sample is used.
       const successor = yield* coordinator.open(chat.id)
       expect(yield* coordinator.locate(chat.id)).toBe(successor)
 

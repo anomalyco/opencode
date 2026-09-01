@@ -72,6 +72,50 @@ const markTerminal = Effect.fn("AttachmentCoordinatorTest.markTerminal")(functio
   return marker
 })
 
+/**
+ * Reads a settled selection the way CP-032 v0.12 requires.
+ *
+ * `Scope.result` is an ELIGIBILITY operation, not a settled-state reader: a foreign Assistant
+ * arriving after publication is the fresh-answer case Admission Freshness exists to preserve, so it
+ * returns that Assistant rather than the settled selection. A test that wants to inspect the
+ * selection must therefore be a genuine pre-publication entrant.
+ *
+ * This forks `result()` BEFORE the publishing step, so the probe enrols as an unresolved entrant,
+ * latches as first fallback, and parks on the one-shot Deferred. Its text is deliberately
+ * distinguishable: a selection bug that returned the caller's own Assistant surfaces as that text
+ * instead of silently matching the expected value, which is the confusable negative the original
+ * post-publication `"wrong fallback"` probes provided.
+ *
+ * The `yieldNow` is load-bearing. `forkChild` only SCHEDULES the fiber, so without it the probe has
+ * not entered `result()` yet, the park is never established, and the call would actually arrive
+ * post-publication -- passing for the wrong reason. Asserting `isDone === false` after the yield
+ * makes the helper fail loudly if it is used where `result()` resolves immediately.
+ *
+ * Returns a thunk to await after the publishing step. Calls the real `Scope.result()` and touches no
+ * product state or surface.
+ */
+const parkedRead = (scope: AttachmentCoordinator.Scope, probeText: string) =>
+  Effect.gen(function* () {
+    const settled = yield* Deferred.make<void>()
+    const answer: { value: TaskSelectedReturn | undefined } = { value: undefined }
+    yield* scope.result(assistant(scope.sessionID, probeText)).pipe(
+      Effect.tap((value) =>
+        Effect.sync(() => {
+          answer.value = value
+        }),
+      ),
+      Effect.ensuring(Deferred.succeed(settled, undefined)),
+      Effect.forkChild,
+    )
+    yield* Effect.yieldNow
+    expect(yield* Deferred.isDone(settled)).toBe(false)
+    return Effect.gen(function* () {
+      yield* Deferred.await(settled)
+      if (!answer.value) return yield* Effect.die("the parked result never resolved")
+      return answer.value
+    })
+  })
+
 describe("attachment coordinator", () => {
   test("isScope requires all five duck-typed methods including literal result", async () => {
     await runAttached(
@@ -201,6 +245,11 @@ describe("attachment coordinator", () => {
         const result = yield* scope
           .result(assistant(scope.sessionID, "fallback"))
           .pipe(Effect.ensuring(Deferred.succeed(done, undefined)), Effect.forkChild)
+        // Let the forked call actually REACH `result()` before asserting it is parked. Without this
+        // the fiber has merely been scheduled, so `isDone` is false because nothing ran -- and the
+        // call would then enter after `finishContinuation` published, which is a different path than
+        // this row is about. Reaching `result()` while unresolved is also what enrols this Assistant.
+        yield* Effect.yieldNow
         expect(yield* Deferred.isDone(done)).toBe(false)
         yield* scope.finishContinuation()
         const value = yield* Fiber.join(result)
@@ -239,6 +288,9 @@ describe("attachment coordinator", () => {
         const result = yield* scope
           .result(assistant(scope.sessionID, "fallback"))
           .pipe(Effect.ensuring(Deferred.succeed(done, undefined)), Effect.forkChild)
+        // Reach `result()` while U and active still block the gate, so the park is real and this
+        // Assistant is enrolled before any publication.
+        yield* Effect.yieldNow
         yield* Deferred.await(promptStarted)
 
         // The parent prompt is held after terminal observation: U=1 and active=1 jointly block result.
@@ -272,6 +324,9 @@ describe("attachment coordinator", () => {
         const result = yield* scope
           .result(assistant(scope.sessionID, "fallback"))
           .pipe(Effect.ensuring(Deferred.succeed(done, undefined)), Effect.forkChild)
+        // Reach `result()` while still unresolved, so the park below is real and this Assistant is
+        // enrolled. Without it the fiber is only scheduled and would instead arrive after publication.
+        yield* Effect.yieldNow
         expect(yield* Deferred.isDone(done)).toBe(false)
 
         const marker = yield* markTerminal(scope, descendant)
@@ -336,6 +391,9 @@ describe("attachment coordinator", () => {
         const result = yield* scope
           .result(assistant(scope.sessionID, "fallback"))
           .pipe(Effect.ensuring(Deferred.succeed(done, undefined)), Effect.forkChild)
+        // Reach `result()` while the wake still blocks the gate, so the park is real and this
+        // Assistant is enrolled before any publication.
+        yield* Effect.yieldNow
         yield* scope.endWake()
         expect(yield* Deferred.isDone(done)).toBe(false)
         yield* scope.finishContinuation()
@@ -498,8 +556,12 @@ describe("attachment coordinator", () => {
         yield* scope.settleTerminal(yield* markTerminal(scope, reservation))
         yield* scope.observeTurn({ assistant: assistant(scope.sessionID, ""), clean: true })
         expect(scope.current().candidate).toBe(true)
+        // Enter `result()` before the continuation finishes, so this probe is a genuine unresolved
+        // entrant. Its distinguishable text is the confusable negative: falling back would return
+        // "wrong fallback" rather than the empty candidate.
+        const settled = yield* parkedRead(scope, "wrong fallback")
         yield* scope.finishContinuation()
-        expect(selectedText(yield* scope.result(assistant(scope.sessionID, "wrong fallback")))).toBe("")
+        expect(selectedText(yield* settled)).toBe("")
         yield* scope.close()
       }),
     )
@@ -518,8 +580,11 @@ describe("attachment coordinator", () => {
         const part = observed.parts[0]
         if (!part || part.type !== "text") return yield* Effect.die("missing text part")
         part.text = "mutated after observation"
+        // Three-way discrimination is preserved: "stable candidate" proves the snapshot, "mutated
+        // after observation" would prove aliasing, "wrong fallback" would prove selection fell back.
+        const settled = yield* parkedRead(scope, "wrong fallback")
         yield* scope.finishContinuation()
-        expect(selectedText(yield* scope.result(assistant(scope.sessionID, "wrong fallback")))).toBe("stable candidate")
+        expect(selectedText(yield* settled)).toBe("stable candidate")
         yield* scope.close()
       }),
     )
@@ -593,8 +658,9 @@ describe("attachment coordinator", () => {
         expect(yield* scope.beginWake()).toBe(true)
         yield* scope.endWake()
         yield* scope.exhaustWake()
+        const settled = yield* parkedRead(scope, "fallback")
         yield* scope.finishContinuation()
-        const result = yield* scope.result(assistant(scope.sessionID, "fallback"))
+        const result = yield* settled
         expect(selectedText(result)).toBe("dirty")
         expect(result).toMatchObject({ type: "evidence", degraded: false })
         expect(scope.current().failed).toBe(false)
@@ -700,7 +766,7 @@ describe("attachment coordinator", () => {
     )
   })
 
-  test("R-08: borrowing a resolved scope replays the earlier answer; the successor files its own", async () => {
+  test("R-08: a resolved scope is not borrowable and the successor files its own answer", async () => {
     await runAttached(
       Effect.gen(function* () {
         const coordinator = yield* AttachmentCoordinator.make
@@ -708,15 +774,20 @@ describe("attachment coordinator", () => {
         const old = yield* coordinator.open(sessionID)
         expect(selectedText(yield* resolve(old, sessionID, "first"))).toBe("first")
 
-        // THE DEFECT, demonstrated rather than asserted against private state. A borrower of the
-        // resolved scope gets the EARLIER resolution back: `own()` returns on the `closed` guard
-        // without minting a typed refusal, and `result()` short-circuits on `state.resolution`. Its
-        // own distinct answer never reaches selection, so it files a position the guard already
-        // holds and disappears with no note and no error.
-        expect(selectedText(yield* resolve(old, sessionID, "second"))).toBe("first")
+        // RETIRED (CP-032 v0.12): this row previously asserted that a second caller on the resolved
+        // scope got "first" back -- the replay that made R-08's borrow refusal load-bearing. That
+        // replay is now gone at the coordinator itself: "second" is absent from the frozen membership
+        // of the published resolution, so Admission Freshness returns it as its own fresh evidence,
+        // without mutating the retained fallback, history, or resolution. It can no longer be keyed
+        // to the earlier position and swallowed by the filing guard. The foreign-ID behaviour is
+        // owned by the nonmember-fresh arm of the Admission Freshness matrix and asserted here too,
+        // because this is the exact scope that used to swallow it.
+        expect(selectedText(yield* resolve(old, sessionID, "second"))).toBe("second")
 
-        // THE REPAIR: the borrow lookup refuses it, so the supplement opens its own scope and its
-        // distinct answer is the one selected.
+        // UNCHANGED and still load-bearing: R-08's borrow lookup refuses a resolved scope, so a
+        // supplement opens its own rather than joining one that has already spoken. Freshness makes
+        // the failure mode benign; it does not make the refusal unnecessary, because a borrower would
+        // otherwise attach to a scope that can never gate its descendants.
         expect(yield* coordinator.locateBorrowable(sessionID)).toBeUndefined()
         const replacement = yield* coordinator.open(sessionID)
         expect(selectedText(yield* resolve(replacement, sessionID, "second"))).toBe("second")
@@ -842,7 +913,7 @@ describe("attachment coordinator", () => {
     )
   })
 
-  test("R-08: a scope resolving between borrow discovery and ownership refuses instead of replaying", async () => {
+  test("R-08: a scope resolving between borrow discovery and ownership refuses the late claim", async () => {
     await runAttached(
       Effect.gen(function* () {
         const coordinator = yield* AttachmentCoordinator.make
@@ -860,23 +931,35 @@ describe("attachment coordinator", () => {
         // PHASE 2 — the capture-to-use window. In production this is where `promptAdmitted` runs
         // `revert.cleanup` and `createUserMessage`, durably persisting the supplement's User
         // message. The owner's outstanding work quiesces underneath it and the gate resolves.
+        // A genuine pre-publication entrant, so the settled selection is observable without asking
+        // `result()` to behave as a reader after the fact.
+        const settled = yield* parkedRead(scope, "stale replay")
         yield* scope.settleTerminal(marker)
         yield* scope.finishContinuation()
+        expect(selectedText(yield* settled)).toBe("settled answer")
 
-        // PHASE 3 — ownership, now against a scope that resolved mid-flight. It must REPORT the
+        // PHASE 3 - ownership, now against a scope that resolved mid-flight. It must REPORT the
         // refusal rather than silently drop the claim: a bare no-op here is what let the run
-        // continue onto a dead scope and replay its earlier answer.
+        // continue onto a dead scope and file into the earlier position.
+        const before = scope.current()
         const persisted = MessageID.ascending()
         expect(yield* scope.own(persisted)).toBe(false)
         expect(scope.owns(persisted)).toBe(false)
 
-        // Both halves hold at once. The settled answer stays immutable — had ownership been taken,
-        // `invalidate()` would have cleared the candidate and this would read "stale replay" — and
-        // the caller still gets a signal it can act on. `promptAdmitted` turns that `false` into
+        // Both halves hold at once. The refused claim is reported rather than dropped, and
+        // the caller gets a signal it can act on:
+        // `promptAdmitted` turns that `false` into
         // `SessionScopeOwnRefused` after durable persistence of the User message and its Parts but
         // before Task's `onAdmitted` flag, so the supplement receives the sanctioned B-7 note
         // instead of filing into the earlier position.
-        expect(selectedText(yield* scope.result(assistant(sessionID, "stale replay")))).toBe("settled answer")
+        //
+        // RETIRED (CP-032 v0.12): this row previously re-called `result()` with a "stale replay"
+        // Assistant and asserted it returned "settled answer". That was reader-idempotence, which
+        // v0.12 removes -- a nonmember arriving after publication now legitimately gets its own
+        // evidence back. The property that assertion protected is that the REFUSED claim left the
+        // settled state alone, asserted here directly and more strongly: had ownership been taken,
+        // `invalidate()` would have cleared the candidate and moved this snapshot.
+        expect(scope.current()).toEqual(before)
         expect(yield* coordinator.locateBorrowable(sessionID)).toBeUndefined()
       }),
     )
@@ -944,12 +1027,26 @@ describe("attachment coordinator", () => {
         const marker = yield* markTerminal(scope, reservation)
         yield* scope.observeTurn({ assistant: assistant(scope.sessionID, "frozen return"), clean: true })
         yield* scope.settleTerminal(marker)
+        // A genuine pre-publication entrant, so the settled selection is observable without asking
+        // `result()` to behave as a reader.
+        const settled = yield* parkedRead(scope, "wrong fallback")
         yield* scope.finishContinuation()
+        expect(selectedText(yield* settled)).toBe("frozen return")
 
+        // RETIRED (CP-032 v0.12): this row previously re-called `result()` with a foreign Assistant
+        // and asserted it returned "frozen return". That assertion WAS reader-idempotence, which
+        // v0.12 deliberately removes -- a foreign Assistant arriving after publication is the
+        // fresh-answer case Admission Freshness exists to preserve. The foreign-ID behaviour now
+        // belongs to the nonmember-fresh matrix; what this row still owns is that a late claim is
+        // inert, asserted directly below.
+        const before = scope.current()
         const late = MessageID.ascending()
         yield* scope.own(late)
         expect(scope.owns(late)).toBe(false)
-        expect(selectedText(yield* scope.result(assistant(scope.sessionID, "wrong fallback")))).toBe("frozen return")
+        // Strictly stronger than the retired read-back: the late claim moved NOTHING observable,
+        // rather than merely leaving one selection text unchanged. An `invalidate()` on this path
+        // would clear the candidate and fail here.
+        expect(scope.current()).toEqual(before)
         yield* scope.close()
       }),
     )
@@ -1047,5 +1144,314 @@ describe("attachment coordinator", () => {
         expect(selectedText(resolved)).toBe(stale)
       }),
     )
+  })
+
+  // CP-032 §3.3.2 — the Admission Freshness matrix.
+  //
+  // Every arm drives the ONE atomic `Scope.result()` transition and differs only in what the scope
+  // had already published when that transition BEGAN. That is the discriminator the design turns on:
+  // a resolution published during this call was computed for this turn, while one that predates the
+  // call was computed for another.
+  describe("Admission Freshness (CP-032 §3.3.2)", () => {
+    // Publishes a DEGRADED resolution with a known frozen cohort, then hands back its members.
+    const publishedDegraded = (input: { candidate?: string; observed?: string }) =>
+      Effect.gen(function* () {
+        const coordinator = yield* AttachmentCoordinator.make
+        const scope = yield* coordinator.open(SessionID.create())
+        // A registered job blocks the never-attached immediate path so `result` genuinely parks and
+        // latches the first fallback. The degraded gate does not require an empty job set, and both
+        // gate branches park while `active` or `wakes` is positive -- neither is touched here.
+        yield* scope.reserve(SessionID.create())
+        const first = assistant(scope.sessionID, "frozen first fallback")
+        const parked = yield* Deferred.make<void>()
+        const held: { value: TaskSelectedReturn | undefined } = { value: undefined }
+        yield* scope.result(first).pipe(
+          Effect.tap((value) =>
+            Effect.sync(() => {
+              held.value = value
+            }),
+          ),
+          Effect.ensuring(Deferred.succeed(parked, undefined)),
+          Effect.forkChild,
+        )
+        yield* Effect.yieldNow
+        expect(yield* Deferred.isDone(parked)).toBe(false)
+        const candidate = input.candidate ? assistant(scope.sessionID, input.candidate) : undefined
+        if (candidate) yield* scope.observeTurn({ assistant: candidate, clean: true })
+        const observed = input.observed ? assistant(scope.sessionID, input.observed) : undefined
+        if (observed) yield* scope.observeTurn({ assistant: observed, clean: false })
+        yield* scope.degrade()
+        yield* Deferred.await(parked)
+        return { scope, first, candidate, observed, held }
+      })
+
+    test("consumes a pre-published CLEAN resolution when the incoming Assistant is a frozen member", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          const reservation = yield* scope.reserve(SessionID.create())
+          yield* owner(scope, reservation)
+          yield* scope.settleTerminal(yield* markTerminal(scope, reservation))
+          // Enrolled by `observeTurn` before the gate runs (invariant 1), so this Assistant is inside
+          // the membership frozen into the clean resolution published below.
+          const observed = assistant(scope.sessionID, "current run answer")
+          yield* scope.observeTurn({ assistant: observed, clean: true })
+          yield* scope.finishContinuation()
+
+          // A MEMBER arriving after publication consumes the settled structural selection instead of
+          // being handed its own Assistant back. This is the positive half of invariant 5; the
+          // nonmember half is owned by the DISTINCT-admitted arm below. A degraded-only
+          // implementation fails here by treating a clean resolution as unconditionally consumable
+          // without checking membership, and an always-fresh implementation fails by returning the
+          // caller's Assistant.
+          const selected = yield* scope.result(observed)
+          expect(selected.type).toBe("evidence")
+          if (selected.type !== "evidence") return
+          expect(selected.degraded).toBe(false)
+          expect(selectedText(selected)).toBe("current run answer")
+          // Text alone cannot discriminate here: an always-fresh implementation would hand back this
+          // same Assistant as its own fallback and read identically. The STRUCTURAL evidence is what
+          // separates them -- a consumed resolution carries the published candidate, while a fresh
+          // one carries only the caller's fallback.
+          expect(selected.candidate).toBeDefined()
+        }),
+      )
+    })
+
+    test("consumes a pre-published CANCELLATION and yields no controlling Assistant", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          yield* scope.claimCancellation("cancelled")
+          const late = assistant(scope.sessionID, "answer after cancellation")
+          const selected = yield* scope.result(late)
+          // No controlling Assistant means Task files nothing. An always-fresh implementation fails
+          // here by manufacturing completed evidence for a cancelled scope.
+          expect(selected.type).toBe("cancelled")
+          expect(selectedText(selected)).toBeUndefined()
+          expect(JSON.stringify(selected)).not.toContain("answer after cancellation")
+        }),
+      )
+    })
+
+    test("returns a DISTINCT admitted Assistant as fresh non-degraded evidence", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const { scope } = yield* publishedDegraded({})
+          const r2 = assistant(scope.sessionID, "distinct admitted R2")
+          const selected = yield* scope.result(r2)
+          expect(selected.type).toBe("evidence")
+          if (selected.type !== "evidence") return
+          // R2 matches no frozen cohort member, so it speaks for itself instead of disappearing
+          // behind R1's already-filed position. Unconditional consumption fails here.
+          expect(selected.degraded).toBe(false)
+          expect(selectedText(selected)).toBe("distinct admitted R2")
+        }),
+      )
+    })
+
+    test("consumes the degraded result when the incoming Assistant is the frozen FALLBACK", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const { scope, first } = yield* publishedDegraded({})
+          const selected = yield* scope.result(first)
+          expect(selected.type).toBe("evidence")
+          if (selected.type !== "evidence") return
+          expect(selected.degraded).toBe(true)
+          expect(selectedText(selected)).toBe("frozen first fallback")
+        }),
+      )
+    })
+
+    test("consumes the degraded result when the incoming Assistant is the frozen CANDIDATE", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const { scope, candidate } = yield* publishedDegraded({ candidate: "frozen candidate" })
+          if (!candidate) throw new Error("fixture did not build a candidate")
+          const selected = yield* scope.result(candidate)
+          expect(selected.type).toBe("evidence")
+          if (selected.type !== "evidence") return
+          expect(selected.degraded).toBe(true)
+          expect(selectedText(selected)).toBe("frozen candidate")
+        }),
+      )
+    })
+
+    test("consumes the degraded result when the incoming Assistant is the frozen OBSERVED", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const { scope, observed } = yield* publishedDegraded({ observed: "frozen observed" })
+          if (!observed) throw new Error("fixture did not build an observed turn")
+          const selected = yield* scope.result(observed)
+          expect(selected.type).toBe("evidence")
+          if (selected.type !== "evidence") return
+          expect(selected.degraded).toBe(true)
+          expect(selectedText(selected)).toBe("frozen observed")
+        }),
+      )
+    })
+
+    test("shared waiters entering while UNRESOLVED consume one first-latched resolution", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          yield* scope.reserve(SessionID.create())
+          const park = (value: SessionV1.WithParts) =>
+            Effect.gen(function* () {
+              const done = yield* Deferred.make<void>()
+              const held: { value: TaskSelectedReturn | undefined } = { value: undefined }
+              yield* scope.result(value).pipe(
+                Effect.tap((selected) =>
+                  Effect.sync(() => {
+                    held.value = selected
+                  }),
+                ),
+                Effect.ensuring(Deferred.succeed(done, undefined)),
+                Effect.forkChild,
+              )
+              return { done, held }
+            })
+
+          const w1 = yield* park(assistant(scope.sessionID, "first waiter"))
+          const w2 = yield* park(assistant(scope.sessionID, "second waiter"))
+          yield* Effect.yieldNow
+          expect(yield* Deferred.isDone(w1.done)).toBe(false)
+          expect(yield* Deferred.isDone(w2.done)).toBe(false)
+
+          yield* scope.degrade()
+          yield* Deferred.await(w1.done)
+          yield* Deferred.await(w2.done)
+
+          // Both entered unresolved, so both take the first-latch/park path and consume ONE
+          // resolution. The identity check must not fire merely because the later waiter passed a
+          // different Assistant -- that would manufacture a second answer from one run.
+          expect(selectedText(w1.held.value!)).toBe("first waiter")
+          expect(selectedText(w2.held.value!)).toBe("first waiter")
+        }),
+      )
+    })
+
+    // Invariant 5, no-retained half. Nothing entered `result()` unresolved before this publication,
+    // so the resolution carries NO retained fallback. v0.12 removed the exception that let such a
+    // resolution be consumed by anyone; membership still governs, so a distinct first consumer is
+    // fresh. The no-retained-exception mutant fails here by handing back the published selection.
+    test("a DISTINCT first consumer of a no-retained resolution is fresh", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          const reservation = yield* scope.reserve(SessionID.create())
+          yield* owner(scope, reservation)
+          yield* scope.settleTerminal(yield* markTerminal(scope, reservation))
+          yield* scope.observeTurn({ assistant: assistant(scope.sessionID, "clean answer"), clean: true })
+          yield* scope.finishContinuation()
+
+          const distinct = assistant(scope.sessionID, "distinct first consumer")
+          const selected = yield* scope.result(distinct)
+          expect(selected.type).toBe("evidence")
+          if (selected.type !== "evidence") return
+          expect(selected.degraded).toBe(false)
+          expect(selectedText(selected)).toBe("distinct first consumer")
+        }),
+      )
+    })
+
+    // Invariant 7. A fresh post-publication result must NOT enrol its own Assistant, or the second
+    // arrival of the same run would start consuming a resolution computed for a different turn. The
+    // repeat is the oracle: it must be fresh BOTH times.
+    test("a fresh post-publication result does not self-enrol, so a repeat stays fresh", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const { scope } = yield* publishedDegraded({})
+          const distinct = assistant(scope.sessionID, "never a member")
+
+          const first = yield* scope.result(distinct)
+          expect(first.type).toBe("evidence")
+          if (first.type !== "evidence") return
+          expect(first.degraded).toBe(false)
+          expect(selectedText(first)).toBe("never a member")
+
+          const again = yield* scope.result(distinct)
+          expect(again.type).toBe("evidence")
+          if (again.type !== "evidence") return
+          // Self-enrolment would make this consume the frozen degraded result instead.
+          expect(again.degraded).toBe(false)
+          expect(selectedText(again)).toBe("never a member")
+        }),
+      )
+    })
+
+    // Invariant 3, the displaced-observed case. A1 is observed, then a later scoped admission calls
+    // `own()`, whose `invalidate()` clears candidate and observed. Membership is HISTORY, not current
+    // evidence, so A1 must remain a member: when A2's turn publishes, A1 arriving consumes A2's
+    // selection rather than being revived as a fresh answer of its own. This is the row that kills
+    // the clear-on-invalidate mutant, and the reason a frozen {fallback, candidate, observed} trio
+    // was insufficient -- those slots are replaceable, and A1 no longer occupies one.
+    test("an OBSERVED Assistant displaced by a later admission stays a member and consumes the new selection", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const scope = yield* coordinator.open(SessionID.create())
+          const reservation = yield* scope.reserve(SessionID.create())
+          yield* owner(scope, reservation)
+          // Take the terminal marker BEFORE the displacement: `own()` invalidates, which moves the
+          // epoch, and a marker taken afterwards would no longer settle -- leaving an undelivered
+          // entry that the clean gate waits on forever.
+          const marker = yield* markTerminal(scope, reservation)
+
+          const a1 = assistant(scope.sessionID, "displaced observed")
+          yield* scope.observeTurn({ assistant: a1, clean: true })
+          expect(scope.current().candidate).toBe(true)
+
+          // A later scoped admission displaces A1 as current evidence.
+          yield* scope.own(MessageID.ascending())
+          expect(scope.current().candidate).toBe(false)
+
+          const a2 = assistant(scope.sessionID, "later clean answer")
+          yield* scope.observeTurn({ assistant: a2, clean: true })
+          yield* scope.settleTerminal(marker)
+          yield* scope.finishContinuation()
+
+          const selected = yield* scope.result(a1)
+          expect(selected.type).toBe("evidence")
+          if (selected.type !== "evidence") return
+          expect(selected.degraded).toBe(false)
+          // A2's selection, not A1 handed back as its own fresh answer.
+          expect(selectedText(selected)).toBe("later clean answer")
+        }),
+      )
+    })
+
+    // Invariant 8. Closing clears the scope's mutable membership, but must not reach into the frozen
+    // snapshot a delayed fiber is still holding, and a later scope for the same session is a new
+    // generation with its own membership rather than inheriting the old one (ABA).
+    test("exact close leaves a consumed snapshot intact and grants the successor no membership", async () => {
+      await runAttached(
+        Effect.gen(function* () {
+          const coordinator = yield* AttachmentCoordinator.make
+          const sessionID = SessionID.create()
+          const scope = yield* coordinator.open(sessionID)
+          yield* scope.reserve(SessionID.create())
+
+          const parked = yield* parkedRead(scope, "first latched")
+          yield* scope.degrade()
+          const consumed = yield* parked
+          expect(selectedText(consumed)).toBe("first latched")
+
+          yield* scope.close()
+          // The value a delayed fiber already consumed is unchanged by the close.
+          expect(selectedText(consumed)).toBe("first latched")
+
+          // Same session id, new generation: the predecessor's members carry no authority here, so
+          // this scope resolves on its own evidence rather than inheriting anything.
+          const successor = yield* coordinator.open(sessionID)
+          expect(successor).not.toBe(scope)
+          expect(selectedText(yield* resolve(successor, sessionID, "successor answer"))).toBe("successor answer")
+        }),
+      )
+    })
   })
 })

@@ -605,7 +605,10 @@ describe("task attachment owner-scope lifetime", () => {
       const located = yield* coordinator.locate(child)
       expect(located).toBeDefined()
       expect(located?.id).toBe(scope.id)
-        expect(scope.resolved()).toBe(false)
+      // Unresolved is proven through OUTCOMES, never a Task-facing resolution sample (CP-032 R-13):
+      // the lifetime is still running with zero deliveries above, and the scope still holds the
+      // grandchild's outstanding attachment here, which is why eligibility cannot have resolved.
+      expect(located?.current()).toMatchObject({ attached: 1, failed: false, cancelled: false })
 
       // PHASE 4 — the grandchild finishes and reaches the child through the STILL-LIVE attachment
       // route, not the degraded ordinary one. The old oracle canonized `attached: false` here.
