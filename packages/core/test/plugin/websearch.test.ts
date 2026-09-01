@@ -42,8 +42,10 @@ describe("built-in web search providers", () => {
           )
           yield* websearch.select("random")
           expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
-          expect(signals).toHaveLength(1)
-          expect(signals[0]?.aborted).toBe(true)
+          // A rate-limited provider is put on cooldown and the query fails over to the
+          // next one, so a plugin that registers several providers makes several requests.
+          expect(signals).toHaveLength((yield* websearch.providers()).length)
+          expect(signals.every((signal) => signal.aborted)).toBe(true)
         }),
       )
     },
