@@ -69,9 +69,9 @@ export async function AzureAuthPlugin(): Promise<Hooks> {
 
 export function createAzureAuthHooks(
   run: AzureCommand,
-  request: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = fetch,
-  accounts: readonly AzureAccount[] = [],
-  available = true,
+  request: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  accounts: readonly AzureAccount[],
+  available: boolean,
 ): Hooks {
   const tokens = new Map<string, { token: string; expires: number }>()
   async function token(scope: string) {
