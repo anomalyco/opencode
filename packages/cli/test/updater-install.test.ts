@@ -198,13 +198,7 @@ test("Node distribution honors the compile-time CLI name", async () => {
       "--test-name-pattern",
       "^Node distribution resolves the published npm package$",
     ],
-    {
-      cwd: path.join(import.meta.dir, ".."),
-      stdout: "ignore",
-      stderr: "pipe",
-      // Bun 1.4 can reuse cached modules compiled with different --define values.
-      env: { ...process.env, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" },
-    },
+    { cwd: path.join(import.meta.dir, ".."), stdout: "ignore", stderr: "pipe" },
   )
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()])
   expect(code, stderr).toBe(0)
