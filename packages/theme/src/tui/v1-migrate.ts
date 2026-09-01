@@ -75,6 +75,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
     text: {
       default: text,
       subdued: textMuted,
+      emphasis: mode === "light" ? "$hue.accent.800" : "$hue.accent.200",
       action: {
         primary: {
           default: "$text.default",

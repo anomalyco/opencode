@@ -109,6 +109,7 @@ export const DEFAULT_THEME = {
     text: {
       default: "$hue.neutral.800",
       subdued: "$hue.neutral.600",
+      emphasis: "$hue.accent.600",
       action: {
         primary: { default: "$hue.neutral.200", $disabled: "$hue.neutral.500" },
         secondary: { default: "$text.subdued", $hovered: "$text.default" },
@@ -330,6 +331,7 @@ export const DEFAULT_THEME = {
     text: {
       default: "$hue.neutral.200",
       subdued: "$hue.neutral.400",
+      emphasis: "$hue.accent.400",
       action: {
         primary: { default: "$hue.neutral.200", $disabled: "$hue.neutral.500" },
         secondary: { default: "$text.subdued", $hovered: "$text.default" },

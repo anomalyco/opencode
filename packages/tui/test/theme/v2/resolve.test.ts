@@ -10,6 +10,7 @@ import {
   type ThemeDefinition,
 } from "@opencode-ai/theme/tui"
 import { parseTheme, type ThemeDocumentSource } from "../../../src/theme"
+import opencode from "../../../src/theme/assets/opencode.json"
 
 const light = selectTheme(DEFAULT_THEME, "light")
 const dark = selectTheme(DEFAULT_THEME, "dark")
@@ -17,6 +18,35 @@ const dark = selectTheme(DEFAULT_THEME, "dark")
 function resolveSource(source: ThemeDocumentSource, mode?: Mode, name?: string) {
   return resolveThemeDocument(parseTheme(source, name), mode)
 }
+
+test.each(["light", "dark"] as const)(
+  "resolves emphasis from the accent in %s defaults and built-in themes",
+  (mode) => {
+    const step = mode === "light" ? 600 : 400
+    const defaults = resolveTheme(selectTheme(DEFAULT_THEME, mode))
+    const builtin = resolveSource(opencode, mode)
+    expect(defaults.text.emphasis).toBe(defaults.hue.accent[step])
+    expect(builtin.text.emphasis).toBe(builtin.hue.accent[mode === "light" ? 800 : 200])
+    expect(
+      builtin.text.emphasis.equals(RGBA.fromHex(opencode.defs[mode === "light" ? "lightAccent" : "darkAccent"])),
+    ).toBeTrue()
+    expect(builtin.contextual.elevated.text.emphasis).toBe(builtin.text.emphasis)
+  },
+)
+
+test.each(["light", "dark"] as const)("inherits and overrides emphasis in %s custom themes", (mode) => {
+  const step = mode === "light" ? 600 : 400
+  const custom = resolveSource({ version: 2, [mode]: { hue: { accent: "$hue.green" } } }, mode)
+  const standalone = resolveSource(
+    { version: 2, standalone: true, [mode]: { hue: selectTheme(DEFAULT_THEME, mode).hue } },
+    mode,
+  )
+  const override = resolveSource({ version: 2, [mode]: { text: { emphasis: "#123456" } } }, mode)
+  expect(custom.text.emphasis).toBe(custom.hue.accent[step])
+  expect(custom.text.emphasis.equals(custom.hue.green[step])).toBeTrue()
+  expect(standalone.text.emphasis).toBe(standalone.hue.accent[step])
+  expect(override.text.emphasis.toInts()).toEqual([18, 52, 86, 255])
+})
 
 test("resolves one-mode documents with defaults for the available mode", () => {
   const resolvedLight = resolveSource({ version: 2, light: {} }, "dark")
