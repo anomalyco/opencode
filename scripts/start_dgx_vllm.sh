@@ -12,7 +12,7 @@ DGX_PORT="${DGX_PORT:-8080}"
 MODEL_PATH="${MODEL_PATH:-/home/root-ziq/Qwen3.8-27B-FP8}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-qwen3.8-27b}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-131072}"
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.40}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.34}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-2}"
 
 echo "========================================================================="
