@@ -40,7 +40,7 @@ const setup = Effect.gen(function* () {
   )
   yield* Effect.addFinalizer(() => unsubscribe)
   const ready = yield* Deferred.make<Context>()
-  yield* plugins.activate([{ id: "permission-test", version: "1", effect: (ctx) => Deferred.succeed(ready, ctx) }])
+  yield* plugins.activate([{ id: "permission-test", revision: "1", effect: (ctx) => Deferred.succeed(ready, ctx) }])
   const ctx = yield* Deferred.await(ready)
   yield* ctx.agent.transform((draft) =>
     draft.update("permission-test", (agent) => {
