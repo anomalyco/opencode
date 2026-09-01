@@ -311,7 +311,7 @@ export function SessionScreen(props: { session: SessionModel }) {
             </Show>
           </div>
 
-          <Show when={sidePresence.present() || store.sideTerminalPresent}>
+          <Show when={sidePresence.present() || store.sideReviewPresent || store.sideTerminalPresent}>
             <div
               ref={(element) => setElements("side", element)}
               data-slot="session-side-panel-presence"
@@ -407,7 +407,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                             fill
                             framed={false}
                             present={store.sideTerminalPresent}
-                            animate={sideMotion().animateTerminal}
+                            animate={sidePresence.animate() || sideMotion().animateTerminal}
                             contentHeight={screen.side.terminal.contentHeight()}
                           />
                         </div>
