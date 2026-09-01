@@ -407,6 +407,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                             fill
                             framed={false}
                             present={store.sideTerminalPresent}
+                            animate={sideMotion().animateTerminal}
                             contentHeight={screen.side.terminal.contentHeight()}
                           />
                         </div>
@@ -446,7 +447,11 @@ export function SessionScreen(props: { session: SessionModel }) {
                 />
               </div>
             </Show>
-            <TerminalPanel stacked={isDesktop()} present={store.bottomTerminalCached} />
+            <TerminalPanel
+              stacked={isDesktop()}
+              present={store.bottomTerminalCached}
+              animate={bottomTerminalPresence.animate()}
+            />
           </div>
         </Show>
       </div>

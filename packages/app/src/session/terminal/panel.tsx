@@ -23,7 +23,6 @@ import { terminalTabLabel } from "@/session/terminal/terminal-label"
 import { createSizing, focusTerminalById } from "@/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/session/handoff"
 import { useSessionLayout } from "@/session/session-layout"
-import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { TerminalSurface } from "./surface"
 
 const MAX_CACHED_TERMINAL_WORKSPACES = 20
@@ -45,13 +44,14 @@ export function TerminalPanel(
     present?: boolean
     contentHeight?: string
     embedded?: boolean
+    animate?: boolean
   } = {},
 ) {
   const terminal = useTerminal()
   const sdk = useWorkspaceLocation()
   const language = useLanguage()
   const command = useCommand()
-  const { workspaceKey, view, tabKey } = useSessionLayout()
+  const { workspaceKey, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const opened = createMemo(() => view().terminal.opened())
@@ -60,11 +60,6 @@ export function TerminalPanel(
   const close = () => view().terminal.close()
   let root: HTMLElement | undefined
   let tabList: HTMLDivElement | undefined
-  const motion = createAnimatedPresence(
-    () => opened() || undefined,
-    () => root ?? null,
-    tabKey,
-  )
 
   onCleanup(() => terminal.cancelFocus())
 
@@ -242,7 +237,7 @@ export function TerminalPanel(
       pane={pane()}
       max={max()}
       resizing={size.active()}
-      animate={motion.animate()}
+      animate={props.animate}
       onResizeStart={size.start}
       onResize={(next) => {
         size.touch()

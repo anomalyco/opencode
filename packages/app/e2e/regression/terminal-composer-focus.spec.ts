@@ -252,10 +252,14 @@ test("focuses a terminal created from the new-terminal button", async ({ page })
 
 function seedCachedTerminal(page: Page) {
   return page.addInitScript(
-    ({ terminalKey, ptyID, tabKey }) => {
+    ({ terminalKey, ptyID, tabKey, server, sessionID }) => {
       localStorage.setItem(
         "opencode.window.browser.dat:tabs.panes",
         JSON.stringify({ [tabKey]: { terminal: true, terminalHeight: 320 } }),
+      )
+      localStorage.setItem(
+        "opencode.window.browser.dat:tabs",
+        JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
       )
       localStorage.setItem(
         terminalKey,
@@ -269,6 +273,8 @@ function seedCachedTerminal(page: Page) {
       terminalKey: terminalStorageKey(),
       ptyID,
       tabKey: `${server}\n/server/${base64Encode(server)}/session/${sessionID}`,
+      server,
+      sessionID,
     },
   )
 }

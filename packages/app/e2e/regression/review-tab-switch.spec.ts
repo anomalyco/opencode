@@ -41,7 +41,7 @@ test("keeps review visibility per tab and the pane mounted across tab switches",
   await expect(reviewTabPanel).toHaveAttribute("id", "session-side-panel-review-tabpanel")
   const review = page.locator('#review-panel [data-component="session-review-v2"]')
   await expectAppVisible(review)
-  await expect(chatPanel).toHaveCSS("width", "700px")
+  await expect(chatPanel).toHaveCSS("width", "580px")
   await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   await writeProbe(page)
 
@@ -64,14 +64,14 @@ test("keeps review visibility per tab and the pane mounted across tab switches",
   await switchTab(page, titleA)
   await expectSessionTitle(page, titleA)
   await expectAppVisible(review)
-  await expect(chatPanel).toHaveCSS("width", "700px")
+  await expect(chatPanel).toHaveCSS("width", "580px")
   await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   expect(await readProbe(page)).toBe(PROBE)
 
   await page.reload()
   await expectSessionTitle(page, titleA)
   await expectAppVisible(review)
-  await expect(chatPanel).toHaveCSS("width", "700px")
+  await expect(chatPanel).toHaveCSS("width", "580px")
 
   const viewport = page.locator('#review-panel [data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
   await viewport.hover()
@@ -145,7 +145,7 @@ async function setup(page: Page) {
       server,
       sessions: [sessionA, sessionB],
       panes: {
-        [`${server}\n${sessionHref(sessionA)}`]: { sessionWidth: 700 },
+        [`${server}\n${sessionHref(sessionA)}`]: { sessionWidth: 580 },
         [`${server}\n${sessionHref(sessionB)}`]: { sessionWidth: 520 },
       },
     },
