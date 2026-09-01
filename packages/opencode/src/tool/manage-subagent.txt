@@ -1,0 +1,10 @@
+Manage running subagent tasks.
+
+Use this tool to view, check, or cancel background subagent tasks.
+
+Actions:
+- list: Show all currently running subagent tasks
+- status: Check details of a specific task by its task_id
+- cancel: Abort a running task by its task_id
+
+Background tasks run independently and notify you automatically when they complete. Use this tool to monitor or control them.
