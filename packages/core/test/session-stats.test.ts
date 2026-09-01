@@ -213,8 +213,8 @@ describe("SessionStats", () => {
       expect(stats.subagents).toBe(1)
       expect(stats.prompts).toBe(1)
       expect(stats.steps).toBe(3)
-      expect(stats.tokens).toEqual({ input: 42, output: 22, reasoning: 10, cache: { read: 18, write: 6 } })
-      expect(stats.cost).toBe(Money.USD.make(6.25))
+      expect(stats.tokens).toEqual({ input: 43, output: 23, reasoning: 11, cache: { read: 19, write: 7 } })
+      expect(stats.cost).toBe(Money.USD.make(6.75))
       expect(stats.tools).toMatchObject({
         mode: "detail",
         totals: { calls: 3, succeeded: 1, failed: 1, unfinished: 1 },
@@ -266,6 +266,65 @@ describe("SessionStats", () => {
       const future = yield* Effect.flip(SessionStats.get({ from: Number.MAX_SAFE_INTEGER, tools: "none" }))
       expect(future._tag).toBe("SessionStats.InvalidRangeError")
     }),
+  )
+
+  it.effect(
+    "includes transient generation usage in totals",
+    () =>
+      Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const generateProjectID = Project.ID.make("stats-generate-project")
+        const generateSessionID = Session.ID.make("ses_stats_generate")
+        yield* db
+          .insert(ProjectTable)
+          .values([
+            { id: generateProjectID, worktree: AbsolutePath.make("/generate"), name: "generate", sandboxes: [] },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionTable)
+          .values([
+            { id: generateSessionID, project_id: generateProjectID, slug: "generate", directory: "/generate", version: "test" },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(EventSequenceTable)
+          .values([{ aggregate_id: generateSessionID, seq: 0 }])
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(EventTable)
+          .values([
+            {
+              id: Event.ID.make("evt_stats_generate"),
+              aggregate_id: generateSessionID,
+              seq: 0,
+              created: Date.UTC(2026, 0, 2, 11),
+              type: SessionEvent.UsageRecorded.type,
+              data: encodeUsage({
+                sessionID: generateSessionID,
+                source: "generate",
+                cost: Money.USD.make(1.25),
+                tokens: { input: 7, output: 5, reasoning: 3, cache: { read: 2, write: 1 } },
+              }),
+            },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+
+        const stats = yield* SessionStats.get({
+          from: Date.UTC(2026, 0, 1),
+          to: Date.UTC(2026, 1, 1),
+          timezone: "UTC",
+          projectID: generateProjectID,
+          tools: "none",
+        })
+
+        expect(stats.tokens).toEqual({ input: 7, output: 5, reasoning: 3, cache: { read: 2, write: 1 } })
+        expect(stats.cost).toBe(Money.USD.make(1.25))
+      }),
   )
 })
 

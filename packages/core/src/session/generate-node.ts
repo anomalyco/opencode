@@ -5,14 +5,18 @@ import { Effect, Layer } from "effect"
 import { Database } from "../database/database.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform.js"
+import { Bus } from "../bus.js"
 import { SessionContext } from "./context.js"
+import { SessionEvent } from "./event.js"
 import { SessionGenerate } from "./generate.js"
 import { SessionHistory } from "./history.js"
 import { SessionModelRequest } from "./model-request.js"
+import { SessionUsage } from "./usage.js"
 
 export const layer = Layer.effect(
   SessionGenerate.Service,
   Effect.gen(function* () {
+    const bus = yield* Bus.Service
     const context = yield* SessionContext.Service
     const database = yield* Database.Service
     const llm = yield* LLMClient.Service
@@ -47,6 +51,13 @@ export const layer = Layer.effect(
         })
         const response = yield* llm.generate(prepared.request, prepared.options)
         yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })
+        if (response.usage !== undefined) {
+          yield* bus.publish(SessionEvent.UsageRecorded, {
+            sessionID: input.sessionID,
+            source: "generate",
+            ...SessionUsage.record(response.usage, model.cost),
+          })
+        }
         return response.text
       }),
     })
@@ -56,5 +67,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: SessionGenerate.Service,
   layer,
-  deps: [SessionContext.node, Database.node, llmClient],
+  deps: [Bus.node, SessionContext.node, Database.node, llmClient],
 })
