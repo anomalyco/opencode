@@ -1,5 +1,7 @@
-import { Plugin, Session, Tool } from "@opencode-ai/plugin/effect"
+import { Plugin } from "@opencode-ai/plugin/effect"
 import type { RpcRegistration } from "@opencode-ai/plugin/effect/rpc"
+import type { Session } from "@opencode-ai/schema/session"
+import { Tool } from "@opencode-ai/schema/tool"
 import { Deferred, Effect, Encoding, Stream } from "effect"
 import { Browser } from "@opencode-ai/schema/browser"
 
