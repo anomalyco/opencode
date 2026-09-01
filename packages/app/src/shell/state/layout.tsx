@@ -59,6 +59,16 @@ export type HomeProjectSelection = { server: ServerConnection.Key; directory?: s
 export type ReviewDiffStyle = "unified" | "split"
 export type ReviewChangeMode = "git" | "branch" | "turn"
 export type ReviewPanelSource = "context-button" | "other"
+export type TabPanes = {
+  terminalOpened: Accessor<boolean>
+  setTerminalOpened(opened: boolean): void
+  terminalHeight: Accessor<number | undefined>
+  setTerminalHeight(height: number): void
+  reviewOpened: Accessor<boolean>
+  setReviewOpened(opened: boolean): void
+  sessionWidth: Accessor<number | undefined>
+  setSessionWidth(width: number): void
+}
 
 export type LayoutRoute =
   | { type: "home" }
@@ -508,7 +518,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return message
         },
       },
-      view(sessionKey: string | Accessor<string>) {
+      view(sessionKey: string | Accessor<string>, panes?: TabPanes) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const reviewMode = createMemo(() => {
@@ -519,11 +529,24 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const file = s().reviewFile
           if (typeof file === "string") return file
         })
-        const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
+        const terminalOpened = panes?.terminalOpened ?? createMemo(() => store.terminal?.opened ?? false)
+        const terminalHeight = createMemo(() =>
+          panes
+            ? (panes.terminalHeight() ?? DEFAULT_TERMINAL_HEIGHT)
+            : (store.terminal?.height ?? DEFAULT_TERMINAL_HEIGHT),
+        )
+        const reviewPanelOpened =
+          panes?.reviewOpened ?? createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
+        const sessionWidth = createMemo(() =>
+          panes ? (panes.sessionWidth() ?? DEFAULT_SESSION_WIDTH) : store.session.width,
+        )
         const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
 
         function setTerminalOpened(next: boolean) {
+          if (panes) {
+            panes.setTerminalOpened(next)
+            return
+          }
           const current = store.terminal
           if (!current) {
             setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
@@ -537,6 +560,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
         function setReviewPanelOpened(next: boolean, source: ReviewPanelSource) {
           const nextSource = next ? source : "other"
+          if (panes) {
+            batch(() => {
+              panes.setReviewOpened(next)
+              setEphemeral("reviewPanelSource", nextSource)
+            })
+            return
+          }
           const current = store.review
           if (!current) {
             batch(() => {
@@ -566,6 +596,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           terminal: {
             opened: terminalOpened,
+            height: terminalHeight,
+            resize(height: number) {
+              if (panes) {
+                panes.setTerminalHeight(height)
+                return
+              }
+              setStore("terminal", "height", height)
+            },
             open() {
               setTerminalOpened(true)
             },
@@ -579,6 +617,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           reviewPanel: {
             opened: reviewPanelOpened,
             source: reviewPanelSource,
+            width: sessionWidth,
+            resize(width: number) {
+              if (panes) {
+                panes.setSessionWidth(width)
+                return
+              }
+              setStore("session", "width", width)
+            },
             open(source: ReviewPanelSource = "other") {
               setReviewPanelOpened(true, source)
             },
