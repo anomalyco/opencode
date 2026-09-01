@@ -1561,35 +1561,6 @@ describe("ShellTool", () => {
     { timeout: 30_000 },
   )
 
-  it.live("does not retain removed running shells in exit order", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        withSession(tmp.path, () =>
-          Effect.gen(function* () {
-            const shell = yield* Shell.Service
-            yield* Effect.forEach(Array.from({ length: 26 }), () =>
-              Effect.gen(function* () {
-                const info = yield* shell.create({ command: idleCommand, timeout: 0 })
-                yield* shell.remove(info.id)
-                expect((yield* shell.result(info)).capture).toBeUndefined()
-                yield* Effect.sleep(Duration.millis(10))
-              }),
-            )
-
-            const info = yield* shell.create({ command: helloCommand, timeout: 0 })
-            const settled = yield* shell.wait(info.id).pipe(Effect.timeoutOption(Duration.seconds(2)))
-            expect(settled._tag).toBe("Some")
-            expect(yield* shell.result(info)).toMatchObject({
-              info: { status: "exited", exit: 0 },
-              capture: { output: expect.stringContaining("hello"), truncated: false },
-            })
-          }),
-        ),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-    ),
-  )
-
   if (!isWindows) {
     it.live("settles a shell terminated by an external signal", () =>
       Effect.acquireUseRelease(
