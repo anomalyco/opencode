@@ -72,10 +72,6 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
-  // Inline <think> block tracking for models that emit reasoning inside text-delta
-  inlineReasoning: SessionV1.ReasoningPart | undefined
-  inThinkingBlock: boolean
-  pendingBuffer: string
 }
 
 type StreamEvent = LLMEvent
@@ -112,9 +108,6 @@ const layer = Layer.effect(
         shouldBreak: false,
         snapshot: initialSnapshot,
         blocked: false,
-        inlineReasoning: undefined,
-        inThinkingBlock: false,
-        pendingBuffer: "",
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
@@ -503,112 +496,21 @@ const layer = Layer.effect(
             yield* session.updatePart(ctx.currentText)
             return
 
-          case "text-delta": {
+          case "text-delta":
             if (!ctx.currentText) return
-            // Real-time <think> block extraction:
-            // Process the incoming delta through the pending buffer to split
-            // thinking tokens (→ ReasoningPart) from real tokens (→ TextPart).
-            ctx.pendingBuffer += value.text
-            let remaining = ctx.pendingBuffer
-            ctx.pendingBuffer = ""
-            let textOut = ""
-
-            while (remaining.length > 0) {
-              if (ctx.inThinkingBlock) {
-                const closeIdx = remaining.indexOf("</think>")
-                if (closeIdx === -1) {
-                  // Still inside <think>, buffer unknown tail in case it's a partial </think>
-                  const safeEnd = Math.max(0, remaining.length - 8)
-                  const safeText = remaining.slice(0, safeEnd)
-                  const tail = remaining.slice(safeEnd)
-                  if (safeText) {
-                    ctx.inlineReasoning!.text += safeText
-                    yield* session.updatePartDelta({
-                      sessionID: ctx.inlineReasoning!.sessionID,
-                      messageID: ctx.inlineReasoning!.messageID,
-                      partID: ctx.inlineReasoning!.id,
-                      field: "text",
-                      delta: safeText,
-                    })
-                  }
-                  ctx.pendingBuffer = tail
-                  remaining = ""
-                } else {
-                  const thinkContent = remaining.slice(0, closeIdx)
-                  if (thinkContent) {
-                    ctx.inlineReasoning!.text += thinkContent
-                    yield* session.updatePartDelta({
-                      sessionID: ctx.inlineReasoning!.sessionID,
-                      messageID: ctx.inlineReasoning!.messageID,
-                      partID: ctx.inlineReasoning!.id,
-                      field: "text",
-                      delta: thinkContent,
-                    })
-                  }
-                  ctx.inlineReasoning!.time = {
-                    start: ctx.inlineReasoning!.time.start,
-                    end: Date.now(),
-                  }
-                  yield* session.updatePart(ctx.inlineReasoning!)
-                  ctx.inThinkingBlock = false
-                  ctx.inlineReasoning = undefined
-                  remaining = remaining.slice(closeIdx + 8)
-                }
-              } else {
-                const openIdx = remaining.indexOf("<think>")
-                if (openIdx === -1) {
-                  textOut += remaining
-                  remaining = ""
-                } else {
-                  textOut += remaining.slice(0, openIdx)
-                  ctx.inlineReasoning = {
-                    id: PartID.ascending(),
-                    messageID: ctx.currentText.messageID,
-                    sessionID: ctx.currentText.sessionID,
-                    type: "reasoning",
-                    text: "",
-                    time: { start: Date.now() },
-                    metadata: undefined,
-                  }
-                  yield* session.updatePart(ctx.inlineReasoning)
-                  ctx.inThinkingBlock = true
-                  remaining = remaining.slice(openIdx + 7)
-                }
-              }
-            }
-
-            if (textOut) {
-              ctx.currentText.text += textOut
-              if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
-              yield* session.updatePartDelta({
-                sessionID: ctx.currentText.sessionID,
-                messageID: ctx.currentText.messageID,
-                partID: ctx.currentText.id,
-                field: "text",
-                delta: textOut,
-              })
-            }
+            ctx.currentText.text += value.text
+            if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
+            yield* session.updatePartDelta({
+              sessionID: ctx.currentText.sessionID,
+              messageID: ctx.currentText.messageID,
+              partID: ctx.currentText.id,
+              field: "text",
+              delta: value.text,
+            })
             return
-          }
 
           case "text-end":
             if (!ctx.currentText) return
-            // Finalise any still-open inline <think> block (e.g. model emitted <think> but no </think>)
-            if (ctx.inThinkingBlock && ctx.inlineReasoning) {
-              if (ctx.pendingBuffer) {
-                ctx.inlineReasoning.text += ctx.pendingBuffer
-                ctx.pendingBuffer = ""
-              }
-              ctx.inlineReasoning.time = { start: ctx.inlineReasoning.time.start, end: Date.now() }
-              yield* session.updatePart(ctx.inlineReasoning)
-              ctx.inThinkingBlock = false
-              ctx.inlineReasoning = undefined
-            }
-            // Fallback: strip any leftover <think>...</think> blocks that were
-            // somehow not caught at delta time (e.g. buffered all at once)
-            if (ctx.currentText.text.includes("<think>")) {
-              ctx.currentText.text = ctx.currentText.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim()
-            }
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.currentText.text = ctx.currentText.text
             ctx.currentText.text = (yield* plugin.trigger(
