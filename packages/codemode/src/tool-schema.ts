@@ -63,8 +63,18 @@ const docTags = (schema: JsonSchema): Array<string> => {
     } catch {}
   }
   if (typeof schema.format === "string") tags.push(`@format ${schema.format}`)
+  if (schema.type === "integer") tags.push("@integer")
+  if (typeof schema.minimum === "number") tags.push(`@minimum ${schema.minimum}`)
+  if (typeof schema.maximum === "number") tags.push(`@maximum ${schema.maximum}`)
+  if (typeof schema.exclusiveMinimum === "number") tags.push(`@exclusiveMinimum ${schema.exclusiveMinimum}`)
+  if (typeof schema.exclusiveMaximum === "number") tags.push(`@exclusiveMaximum ${schema.exclusiveMaximum}`)
+  if (typeof schema.multipleOf === "number") tags.push(`@multipleOf ${schema.multipleOf}`)
+  if (typeof schema.minLength === "number") tags.push(`@minLength ${schema.minLength}`)
+  if (typeof schema.maxLength === "number") tags.push(`@maxLength ${schema.maxLength}`)
+  if (typeof schema.pattern === "string") tags.push(`@pattern ${schema.pattern}`)
   if (typeof schema.minItems === "number") tags.push(`@minItems ${schema.minItems}`)
   if (typeof schema.maxItems === "number") tags.push(`@maxItems ${schema.maxItems}`)
+  if (schema.uniqueItems === true) tags.push("@uniqueItems true")
   return tags
 }
 
