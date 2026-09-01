@@ -2,7 +2,6 @@ import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Global } from "@opencode-ai/util/global"
 import { Effect, FileSystem } from "effect"
-import { statsFixture } from "../src/feature-plugins/system/storybook/stats"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
@@ -15,7 +14,22 @@ test("stats shows only this year and returns after errors or success", async () 
     if (url.pathname !== "/api/session/stats") return undefined
     requests.push(url)
     if (requests.length === 1) return json({ message: "offline" }, { status: 503 })
-    return json({ data: { ...statsFixture, sessions: url.searchParams.has("from") ? 123 : statsFixture.sessions } })
+    return json({
+      data: {
+        range: { from: new Date(new Date().getFullYear(), 0, 1).getTime(), to: Date.now() },
+        sessions: 123,
+        subagents: 0,
+        prompts: 1,
+        steps: 1,
+        tokens: { input: 10, output: 5, reasoning: 2, cache: { read: 20, write: 0 } },
+        cost: 0,
+        tools: { mode: "none" },
+        activeDays: 1,
+        streak: 1,
+        activity: [{ date: `${new Date().getFullYear()}-01-01`, steps: 1 }],
+        models: [],
+      },
+    })
   }, createEventStream())
   const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
   const { run } = await import("../src/app")

@@ -13,7 +13,6 @@
     "dev:web": "bun --cwd packages/app dev",
     "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
     "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
-    "dev:stats-tui": "bun run packages/cli/script/stats-demo.ts",
     "dev:www": "bun run --cwd packages/www dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "bench:devex": "bun run --cwd packages/app test:bench:devex",
