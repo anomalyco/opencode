@@ -12,10 +12,9 @@ export function PromptFooter(props: {
   context: Plugin.Context
   sessionID?: string
   mode: "normal" | "shell"
-  interruptArmed: boolean
+  confirmingInterrupt: boolean
 }) {
   const dimensions = useTerminalDimensions()
-  const showDetails = () => !props.interruptArmed || dimensions().width >= 80
   const [liveHovered, setLiveHovered] = createSignal(false)
   const subagents = createMemo(() => {
     if (!props.sessionID) return 0
@@ -75,7 +74,7 @@ export function PromptFooter(props: {
                   </text>
                 </box>
               </Show>
-              <Show when={showDetails() && status().length > 0}>
+              <Show when={!props.confirmingInterrupt && status().length > 0}>
                 <text fg={props.context.theme.text.subdued} wrapMode="none" truncate flexShrink={1}>
                   <Show when={live()}> · </Show>
                   {status().join(" · ")}
@@ -89,7 +88,7 @@ export function PromptFooter(props: {
             </text>
           </Match>
         </Switch>
-        <Show when={showDetails()}>
+        <Show when={!props.confirmingInterrupt}>
           <text fg={props.context.theme.text.default} wrapMode="none" flexShrink={0}>
             {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
           </text>
@@ -117,7 +116,7 @@ export default Plugin.define({
           context={context}
           sessionID={props.sessionID}
           mode={props.mode}
-          interruptArmed={props.interruptArmed}
+          confirmingInterrupt={props.confirmingInterrupt}
         />
       ),
     })

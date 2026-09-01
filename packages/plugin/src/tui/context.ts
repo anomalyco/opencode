@@ -159,7 +159,7 @@ export interface Page {
 type PromptFooterInput = {
   readonly sessionID?: string
   readonly mode: "normal" | "shell"
-  readonly interruptArmed: boolean
+  readonly confirmingInterrupt: boolean
 }
 
 /**
