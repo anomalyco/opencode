@@ -1,25 +1,21 @@
 import type { FileContent } from "@/runtime/server/types"
-import { Schema, Struct } from "effect"
+import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 
-export const FileSelection = Schema.Struct({
+export const FileSelection = Persistence.struct({
   startLine: Schema.Number,
   startChar: Schema.Number,
   endLine: Schema.Number,
   endChar: Schema.Number,
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 export type FileSelection = typeof FileSelection.Type
 
-export const SelectedLineRange = Schema.Struct({
+export const SelectedLineRange = Persistence.struct({
   start: Schema.Number,
   end: Schema.Number,
-  side: Schema.optional(
-    Persistence.defaulted(Schema.UndefinedOr(Schema.Literals(["additions", "deletions"])), () => undefined),
-  ),
-  endSide: Schema.optional(
-    Persistence.defaulted(Schema.UndefinedOr(Schema.Literals(["additions", "deletions"])), () => undefined),
-  ),
-}).mapFields(Struct.map(Schema.mutableKey))
+  side: Persistence.optional(Schema.Literals(["additions", "deletions"])),
+  endSide: Persistence.optional(Schema.Literals(["additions", "deletions"])),
+})
 export type SelectedLineRange = typeof SelectedLineRange.Type
 
 export type FileViewState = {

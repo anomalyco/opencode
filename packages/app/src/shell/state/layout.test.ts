@@ -51,6 +51,29 @@ describe("layout persistence", () => {
     expect(value.fileTree).toEqual({ opened: true, width: 260, tab: "all" })
   })
 
+  test("distinguishes an invalid panel field from an invalid review section", () => {
+    const fileTree = { opened: true, tab: "all" }
+    expect(decode({ review: { panelOpened: "bad" }, fileTree }).review.panelOpened).toBe(true)
+    expect(decode({ review: null, fileTree }).review.panelOpened).toBe(false)
+  })
+
+  test("preserves whole-record and whole-entry recovery for strict fields", () => {
+    const key = "local\u0000L3Byb2plY3Q/session"
+    const scroll = { good: { x: 1, y: 2 }, bad: { x: "bad", y: 3 } }
+    expect(
+      decode({
+        sidebar: { workspaces: { good: true, bad: "bad" } },
+        sessionView: { [key]: { scroll, reviewMode: "git" } },
+      }),
+    ).toMatchObject({
+      sidebar: { workspaces: {} },
+      sessionView: { [key]: { scroll: {}, reviewMode: "git" } },
+    })
+    expect(
+      decode({ sessionView: { [key]: { scroll: { good: { x: 1, y: 2 } }, reviewMode: "bad" } } }).sessionView,
+    ).toEqual({ [key]: { scroll: {} } })
+  })
+
   test("keeps scoped state and salvages valid tab entries", () => {
     const key = "local\u0000L3Byb2plY3Q/session"
     const value = decode({

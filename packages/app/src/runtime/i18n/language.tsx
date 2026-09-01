@@ -164,8 +164,8 @@ export function normalizeLocale(value: string): Locale {
 }
 
 export function languageSchema(initial: Locale) {
-  return Schema.Struct({
-    locale: Schema.mutableKey(Persistence.defaulted(StoredLocaleSchema.fields.locale, () => initial)),
+  return Persistence.struct({
+    locale: Persistence.fallback(StoredLocaleSchema.fields.locale, () => initial),
   })
 }
 

@@ -22,10 +22,7 @@ type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 const PROVIDER_ICON_SIZE = 16
 
 export const ModelProvidersSchema = Schema.Struct({
-  collapsed: Persistence.defaulted(
-    Schema.Record(Schema.String, Schema.mutableKey(Persistence.defaulted(Schema.Boolean, () => false))),
-    () => ({}),
-  ),
+  collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
 })
 
 export const SettingsModels: Component = () => {

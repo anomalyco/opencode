@@ -1,13 +1,9 @@
-import { Schema, SchemaGetter, Struct } from "effect"
+import { Schema, SchemaGetter } from "effect"
 import { checksum } from "@opencode-ai/util/encode"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Persistence } from "@/runtime/persistence/schema"
 import { FileSelection, SelectedLineRange } from "@/workspaces/files/types"
-
-function optional<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
-  return Schema.optional(Persistence.defaulted(Schema.UndefinedOr(schema), () => undefined))
-}
 
 const PartBase = {
   content: Schema.String,
@@ -30,54 +26,52 @@ const FilePartSource = Schema.Union([
   Schema.Struct({ type: Schema.Literal("resource"), text: SourceText, clientName: Schema.String, uri: Schema.String }),
 ])
 
-export const TextPart = Schema.Struct({ type: Schema.Literal("text"), ...PartBase }).mapFields(
-  Struct.map(Schema.mutableKey),
-)
+export const TextPart = Persistence.struct({ type: Schema.Literal("text"), ...PartBase })
 export type TextPart = typeof TextPart.Type
 
-export const FileAttachmentPart = Schema.Struct({
+export const FileAttachmentPart = Persistence.struct({
   type: Schema.Literal("file"),
   ...PartBase,
   path: Schema.String,
-  selection: optional(FileSelection),
-  mime: optional(Schema.String),
-  filename: optional(Schema.String),
-  url: optional(Schema.String),
-  source: optional(FilePartSource),
-}).mapFields(Struct.map(Schema.mutableKey))
+  selection: Persistence.optional(FileSelection),
+  mime: Persistence.optional(Schema.String),
+  filename: Persistence.optional(Schema.String),
+  url: Persistence.optional(Schema.String),
+  source: Persistence.optional(FilePartSource),
+})
 export type FileAttachmentPart = typeof FileAttachmentPart.Type
 
-export const AgentPart = Schema.Struct({ type: Schema.Literal("agent"), ...PartBase, name: Schema.String }).mapFields(
-  Struct.map(Schema.mutableKey),
-)
+export const AgentPart = Persistence.struct({ type: Schema.Literal("agent"), ...PartBase, name: Schema.String })
 export type AgentPart = typeof AgentPart.Type
 
-export const SkillPart = Schema.Struct({
+export const SkillPart = Persistence.struct({
   type: Schema.Literal("skill"),
   ...PartBase,
   id: Skill.ID,
   name: Skill.Name,
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 export type SkillPart = typeof SkillPart.Type
 
 const ImageFields = {
   type: Schema.Literal("image"),
   id: Schema.String,
   filename: Schema.String,
-  sourcePath: optional(Schema.String),
+  sourcePath: Persistence.optional(Schema.String),
   mime: Schema.String,
 }
-const Image = Schema.Struct({
+const Image = Persistence.struct({
   ...ImageFields,
   blob: Schema.Struct({ id: Schema.NonEmptyString, url: Schema.String.check(Schema.isPattern(/^(blob:|data:)/)) }),
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 
 // Draft storage hydrates content-addressed blobs before this codec runs. Legacy
 // inline data remains usable, but unresolved references are not renderable.
 export const ImageAttachmentPart = Schema.Struct({
   ...ImageFields,
-  blob: optional(Schema.Struct({ id: optional(Schema.String), url: optional(Schema.String) })),
-  dataUrl: optional(Schema.String),
+  blob: Persistence.optional(
+    Schema.Struct({ id: Persistence.optional(Schema.String), url: Persistence.optional(Schema.String) }),
+  ),
+  dataUrl: Persistence.optional(Schema.String),
 }).pipe(
   Schema.decodeTo(Schema.toType(Image), {
     decode: SchemaGetter.transform((value) => {
@@ -105,22 +99,22 @@ export type ContentPart = typeof ContentPart.Type
 export const Prompt = Persistence.array(ContentPart)
 export type Prompt = typeof Prompt.Type
 
-export const PromptModel = Schema.Struct({
+export const PromptModel = Persistence.struct({
   providerID: Schema.String,
   modelID: Schema.String,
-  variant: optional(Schema.NullOr(Schema.String)),
-}).mapFields(Struct.map(Schema.mutableKey))
+  variant: Persistence.optional(Schema.NullOr(Schema.String)),
+})
 export type PromptModel = typeof PromptModel.Type
 
-export const FileContextItem = Schema.Struct({
+export const FileContextItem = Persistence.struct({
   type: Schema.Literal("file"),
   path: Schema.String,
-  selection: optional(FileSelection),
-  comment: optional(Schema.String),
-  commentID: optional(Schema.String),
-  commentOrigin: optional(Schema.Literals(["review", "file"])),
-  preview: optional(Schema.String),
-}).mapFields(Struct.map(Schema.mutableKey))
+  selection: Persistence.optional(FileSelection),
+  comment: Persistence.optional(Schema.String),
+  commentID: Persistence.optional(Schema.String),
+  commentOrigin: Persistence.optional(Schema.Literals(["review", "file"])),
+  preview: Persistence.optional(Schema.String),
+})
 export type FileContextItem = typeof FileContextItem.Type
 export type ContextItem = FileContextItem
 
@@ -133,21 +127,16 @@ export function contextItemKey(item: ContextItem) {
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
-const ContextEntry = Schema.Struct({ ...FileContextItem.fields, key: optional(Schema.String) }).pipe(
-  Schema.decodeTo(
-    Schema.Struct({ ...FileContextItem.fields, key: Schema.String })
-      .mapFields(Struct.map(Schema.mutableKey))
-      .pipe(Schema.toType),
-    {
-      decode: SchemaGetter.transform((item) => ({ ...item, key: contextItemKey(item) })),
-      encode: SchemaGetter.transform((item) => item),
-    },
-  ),
+const ContextEntry = Schema.Struct({ ...FileContextItem.fields, key: Persistence.optional(Schema.String) }).pipe(
+  Schema.decodeTo(Persistence.struct({ ...FileContextItem.fields, key: Schema.String }).pipe(Schema.toType), {
+    decode: SchemaGetter.transform((item) => ({ ...item, key: contextItemKey(item) })),
+    encode: SchemaGetter.transform((item) => item),
+  }),
 )
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
-export const ComposerStore = Schema.Struct({
+export const ComposerStore = Persistence.struct({
   prompt: Prompt.pipe(
     Schema.decode({
       decode: SchemaGetter.transform((prompt) =>
@@ -156,7 +145,7 @@ export const ComposerStore = Schema.Struct({
       encode: SchemaGetter.transform((prompt) => prompt),
     }),
   ),
-  cursor: optional(
+  cursor: Persistence.optional(
     Schema.Finite.pipe(
       Schema.decode({
         decode: SchemaGetter.transform((cursor) => Math.max(0, cursor)),
@@ -164,53 +153,50 @@ export const ComposerStore = Schema.Struct({
       }),
     ),
   ),
-  model: optional(PromptModel),
-  mode: optional(Schema.Literals(["normal", "shell"])),
-  retry: optional(
+  model: Persistence.optional(PromptModel),
+  mode: Persistence.optional(Schema.Literals(["normal", "shell"])),
+  retry: Persistence.optional(
     Schema.Struct({
       id: SessionMessage.ID,
       agent: Schema.String,
       providerID: Schema.String,
       modelID: Schema.String,
-      variant: optional(Schema.String),
+      variant: Persistence.optional(Schema.String),
     }),
   ),
-  context: Persistence.defaulted(Schema.Struct({ items: Schema.mutableKey(Persistence.array(ContextEntry)) }), () => ({
+  context: Persistence.fallback(Persistence.struct({ items: Persistence.array(ContextEntry) }), () => ({
     items: [],
   })),
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 export type ComposerStore = typeof ComposerStore.Type
 
-export const LineComment = Schema.Struct({
+export const LineComment = Persistence.struct({
   id: Schema.String,
   file: Schema.String,
   selection: SelectedLineRange,
   comment: Schema.String,
   time: Schema.Number,
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 export type LineComment = typeof LineComment.Type
 
-export const CommentStore = Schema.Struct({
-  comments: Persistence.defaulted(
-    Schema.Record(Schema.String, Schema.mutableKey(Persistence.array(LineComment))),
-    () => ({}),
-  ),
-}).mapFields(Struct.map(Schema.mutableKey))
+export const CommentStore = Persistence.struct({
+  comments: Persistence.record(Persistence.array(LineComment)),
+})
 export type CommentStore = typeof CommentStore.Type
 
-export const PromptHistoryComment = Schema.Struct({
+export const PromptHistoryComment = Persistence.struct({
   id: Schema.String,
   path: Schema.String,
   selection: SelectedLineRange,
   comment: Schema.String,
   time: Schema.Number,
-  origin: optional(Schema.Literals(["review", "file"])),
-  preview: optional(Schema.String),
-}).mapFields(Struct.map(Schema.mutableKey))
+  origin: Persistence.optional(Schema.Literals(["review", "file"])),
+  preview: Persistence.optional(Schema.String),
+})
 export type PromptHistoryComment = typeof PromptHistoryComment.Type
 
 // History entries require a prompt array; only its individual parts recover.
-const HistoryPrompt = Schema.Array(Persistence.defaulted(Schema.UndefinedOr(ContentPart), () => undefined)).pipe(
+const HistoryPrompt = Schema.Array(Persistence.fallback(Schema.UndefinedOr(ContentPart), () => undefined)).pipe(
   Schema.decodeTo(Schema.toType(Prompt), {
     decode: SchemaGetter.transform((parts) => parts.filter((part) => part !== undefined)),
     encode: SchemaGetter.transform((parts) => parts),
@@ -225,4 +211,4 @@ export const PromptHistoryEntry = Schema.Union([HistoryEntry, HistoryPrompt]).pi
 )
 export type PromptHistoryEntry = typeof PromptHistoryEntry.Type
 
-export const PromptHistoryState = Schema.Struct({ entries: Schema.mutableKey(Persistence.array(PromptHistoryEntry)) })
+export const PromptHistoryState = Persistence.struct({ entries: Persistence.array(PromptHistoryEntry) })

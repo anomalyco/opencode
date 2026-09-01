@@ -9,18 +9,18 @@ import { defaultTitle, titleNumber } from "./title"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
 import { Persistence } from "@/runtime/persistence/schema"
-import { Schema, SchemaGetter, Struct } from "effect"
+import { Schema, SchemaGetter } from "effect"
 
-const PTY = Schema.Struct({
+const PTY = Persistence.struct({
   id: Schema.NonEmptyString,
-  title: Persistence.defaulted(Schema.String, () => ""),
-  titleNumber: Persistence.defaulted(Schema.Finite, () => 0),
-  rows: Persistence.defaulted(Schema.optional(Schema.Finite), () => undefined),
-  cols: Persistence.defaulted(Schema.optional(Schema.Finite), () => undefined),
-  buffer: Persistence.defaulted(Schema.optional(Schema.String), () => undefined),
-  scrollY: Persistence.defaulted(Schema.optional(Schema.Finite), () => undefined),
-  cursor: Persistence.defaulted(Schema.optional(Schema.Finite), () => undefined),
-}).mapFields(Struct.map(Schema.mutableKey))
+  title: Persistence.fallback(Schema.String, () => ""),
+  titleNumber: Persistence.fallback(Schema.Finite, () => 0),
+  rows: Persistence.optional(Schema.Finite),
+  cols: Persistence.optional(Schema.Finite),
+  buffer: Persistence.optional(Schema.String),
+  scrollY: Persistence.optional(Schema.Finite),
+  cursor: Persistence.optional(Schema.Finite),
+})
 
 export type LocalPTY = typeof PTY.Type
 
@@ -31,10 +31,10 @@ function numberFromTitle(title: string) {
   return titleNumber(title, MAX_TERMINAL_SESSIONS)
 }
 
-const State = Schema.Struct({
-  active: Persistence.defaulted(Schema.optional(Schema.String), () => undefined),
+const State = Persistence.struct({
+  active: Persistence.optional(Schema.String),
   all: Persistence.array(PTY),
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 
 export const TerminalState = State.pipe(
   Schema.decodeTo(Schema.toType(State), {

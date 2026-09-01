@@ -2,7 +2,8 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type Accessor, createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Schema, Struct } from "effect"
+import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
@@ -101,14 +102,14 @@ export function resolveKeybindOption(candidates: CommandOption[] | undefined, ev
 
 type CommandSource = "palette" | "keybind" | "slash"
 
-export const CommandCatalogItem = Schema.Struct({
+export const CommandCatalogItem = Persistence.struct({
   title: Schema.String,
   description: Schema.optional(Schema.String),
   category: Schema.optional(Schema.String),
   keybind: Schema.optional(Schema.String),
   slash: Schema.optional(Schema.String),
   hidden: Schema.optional(Schema.Boolean),
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 export type CommandCatalogItem = typeof CommandCatalogItem.Type
 export const CommandCatalog = Schema.Record(Schema.String, Schema.mutableKey(CommandCatalogItem))
 export type CommandCatalog = typeof CommandCatalog.Type

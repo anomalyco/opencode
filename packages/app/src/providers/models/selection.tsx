@@ -25,20 +25,20 @@ const ModelKeySchema = Schema.Struct({
 export type ModelKey = typeof ModelKeySchema.Type
 
 const StateSchema = Schema.Struct({
-  agent: Persistence.defaulted(Schema.optional(Schema.String), () => undefined),
-  model: Persistence.defaulted(Schema.optional(ModelKeySchema), () => undefined),
-  variant: Persistence.defaulted(Schema.optional(Schema.NullOr(Schema.String)), () => undefined),
+  agent: Persistence.optional(Schema.String),
+  model: Persistence.optional(ModelKeySchema),
+  variant: Persistence.optional(Schema.NullOr(Schema.String)),
 })
 type State = typeof StateSchema.Type
 
 const SessionsSchema = Schema.Record(
   Schema.String,
-  Schema.mutableKey(Persistence.defaulted(Schema.UndefinedOr(StateSchema), () => undefined)),
+  Schema.mutableKey(Persistence.fallback(Schema.UndefinedOr(StateSchema), () => undefined)),
 )
 
 export const ModelSelectionSchema = Schema.Struct({
-  session: Persistence.defaulted(Schema.optional(SessionsSchema), () => undefined),
-  pick: Persistence.defaulted(Schema.optional(SessionsSchema), () => undefined),
+  session: Persistence.optional(SessionsSchema),
+  pick: Persistence.optional(SessionsSchema),
 }).pipe(
   Schema.decodeTo(Schema.Struct({ session: SessionsSchema }), {
     decode: SchemaGetter.transform((value) => ({

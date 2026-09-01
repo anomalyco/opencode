@@ -6,8 +6,8 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 
 const Current = Schema.Struct({
-  enabled: Persistence.defaulted(Schema.Boolean, () => true),
-  label: Persistence.defaulted(Schema.String, () => "default"),
+  enabled: Persistence.fallback(Schema.Boolean, () => true),
+  label: Persistence.fallback(Schema.String, () => "default"),
 })
 const Stored = Schema.Union([Schema.Struct({ oldLabel: Schema.String }), Current]).pipe(
   Schema.decodeTo(Schema.toType(Current), {

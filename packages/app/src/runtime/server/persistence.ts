@@ -1,20 +1,20 @@
-import { Schema, SchemaGetter, Struct } from "effect"
+import { Schema, SchemaGetter } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 
 export const ServerKey = Schema.String.pipe(Schema.brand("ServerConnection.Key"))
 
-export const ServerHttpBase = Schema.Struct({
+export const ServerHttpBase = Persistence.struct({
   url: Schema.String,
   password: Schema.optional(Schema.String),
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 
-export const ServerHttp = Schema.Struct({
+export const ServerHttp = Persistence.struct({
   type: Schema.Literal("http"),
   http: ServerHttpBase,
   authToken: Schema.optional(Schema.Boolean),
   displayName: Schema.optional(Schema.String),
   label: Schema.optional(Schema.String),
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 
 const StoredServer = Schema.Union([ServerHttp, ServerHttpBase, Schema.String]).pipe(
   Schema.decodeTo(ServerHttp, {
@@ -27,29 +27,20 @@ const StoredServer = Schema.Union([ServerHttp, ServerHttpBase, Schema.String]).p
   }),
 )
 
-const State = Schema.Struct({
+const State = Persistence.struct({
   list: Persistence.array(StoredServer),
-  hidden: Persistence.defaulted(Schema.Record(Schema.String, Schema.mutableKey(Schema.Boolean)), () => ({})),
-  projects: Persistence.defaulted(
-    Schema.Record(
-      Schema.String,
-      Schema.mutableKey(
-        Persistence.array(
-          Schema.Struct({
-            worktree: Schema.String,
-            expanded: Persistence.defaulted(Schema.Boolean, () => true),
-          }).mapFields(Struct.map(Schema.mutableKey)),
-        ),
-      ),
+  hidden: Persistence.record(Schema.Boolean),
+  projects: Persistence.record(
+    Persistence.array(
+      Persistence.struct({
+        worktree: Schema.String,
+        expanded: Persistence.fallback(Schema.Boolean, () => true),
+      }),
     ),
-    () => ({}),
   ),
-  lastProject: Persistence.defaulted(Schema.Record(Schema.String, Schema.mutableKey(Schema.String)), () => ({})),
-  recentlyClosed: Persistence.defaulted(
-    Schema.Record(Schema.String, Schema.mutableKey(Persistence.array(Schema.String))),
-    () => ({}),
-  ),
-}).mapFields(Struct.map(Schema.mutableKey))
+  lastProject: Persistence.record(Schema.String),
+  recentlyClosed: Persistence.record(Persistence.array(Schema.String)),
+})
 
 export function serverState(canonicalLocalServer: () => string | undefined = () => undefined) {
   return State.pipe(
@@ -87,53 +78,46 @@ export function serverState(canonicalLocalServer: () => string | undefined = () 
   )
 }
 
-export const ModelState = Schema.Struct({
+export const ModelState = Persistence.struct({
   user: Persistence.array(
-    Schema.Struct({
+    Persistence.struct({
       providerID: Schema.String,
       modelID: Schema.String,
       visibility: Schema.Literals(["show", "hide"]),
       favorite: Schema.optional(Schema.Boolean),
-    }).mapFields(Struct.map(Schema.mutableKey)),
+    }),
   ),
-  recent: Persistence.array(
-    Schema.Struct({ providerID: Schema.String, modelID: Schema.String }).mapFields(Struct.map(Schema.mutableKey)),
-  ),
-  variant: Persistence.defaulted(
-    Schema.Record(Schema.String, Schema.mutableKey(Schema.UndefinedOr(Schema.String))),
-    () => ({}),
-  ),
-}).mapFields(Struct.map(Schema.mutableKey))
+  recent: Persistence.array(Persistence.struct({ providerID: Schema.String, modelID: Schema.String })),
+  variant: Persistence.record(Schema.UndefinedOr(Schema.String)),
+})
 
-export const VcsState = Schema.Struct({
-  value: Persistence.defaulted(
+export const VcsState = Persistence.struct({
+  value: Persistence.fallback(
     Schema.UndefinedOr(
-      Schema.Struct({
+      Persistence.struct({
         branch: Schema.optional(Schema.String),
         default_branch: Schema.optional(Schema.String),
-      }).mapFields(Struct.map(Schema.mutableKey)),
+      }),
     ),
     () => undefined,
   ),
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 
-const ProjectMeta = Schema.Struct({
+const ProjectMeta = Persistence.struct({
   name: Schema.optional(Schema.String),
   icon: Schema.optional(
-    Schema.Struct({
+    Persistence.struct({
       override: Schema.optional(Schema.String),
       color: Schema.optional(Schema.String),
-    }).mapFields(Struct.map(Schema.mutableKey)),
+    }),
   ),
-  commands: Schema.optional(
-    Schema.Struct({ start: Schema.optional(Schema.String) }).mapFields(Struct.map(Schema.mutableKey)),
-  ),
-}).mapFields(Struct.map(Schema.mutableKey))
+  commands: Schema.optional(Persistence.struct({ start: Schema.optional(Schema.String) })),
+})
 
-export const ProjectState = Schema.Struct({
-  value: Persistence.defaulted(Schema.UndefinedOr(ProjectMeta), () => undefined),
-}).mapFields(Struct.map(Schema.mutableKey))
+export const ProjectState = Persistence.struct({
+  value: Persistence.fallback(Schema.UndefinedOr(ProjectMeta), () => undefined),
+})
 
-export const IconState = Schema.Struct({
-  value: Persistence.defaulted(Schema.UndefinedOr(Schema.String), () => undefined),
-}).mapFields(Struct.map(Schema.mutableKey))
+export const IconState = Persistence.struct({
+  value: Persistence.fallback(Schema.UndefinedOr(Schema.String), () => undefined),
+})

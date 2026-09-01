@@ -1,6 +1,6 @@
 import { reconcile } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
-import { Effect, Option, Schema, SchemaGetter, Struct } from "effect"
+import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { ReasoningMode } from "@opencode-ai/session-ui/timeline/projection"
 import { persisted } from "@/runtime/persistence/storage"
@@ -70,33 +70,31 @@ export function terminalFontFamily(font: string | undefined) {
 
 const reasoningModeSchema = Schema.Literals(["hidden", "compact", "full"])
 
-const generalSchema = Schema.Struct({
-  autoSave: Persistence.defaulted(Schema.Boolean, () => true),
-  releaseNotes: Persistence.defaulted(Schema.Boolean, () => true),
-  showFileTree: Persistence.defaulted(Schema.Boolean, () => false),
-  showNavigation: Persistence.defaulted(Schema.Boolean, () => false),
-  showSearch: Persistence.defaulted(Schema.Boolean, () => false),
-  showStatus: Persistence.defaulted(Schema.Boolean, () => false),
-  showProjectIcon: Persistence.defaulted(Schema.Boolean, () => false),
-  showTerminal: Persistence.defaulted(Schema.Boolean, () => false),
-  reasoningMode: Persistence.defaulted(reasoningModeSchema, () => "compact" as const),
-  shellToolPartsExpanded: Persistence.defaulted(Schema.Boolean, () => false),
-  editToolPartsExpanded: Persistence.defaulted(Schema.Boolean, () => false),
-  showCustomAgents: Persistence.defaulted(Schema.Boolean, () => false),
-  mobileTitlebarPosition: Persistence.defaulted(Schema.Literals(["top", "bottom"]), () => "top" as const),
-  mobileDiffWrap: Persistence.defaulted(Schema.Boolean, () => true),
-  terminalPlacement: Persistence.defaulted(Schema.Literals(["side", "bottom"]), () => "side" as const),
-  followUpBehavior: Persistence.defaulted(Schema.Literals(["queue", "steer"]), () => "steer" as const),
-}).mapFields(Struct.map(Schema.mutableKey))
+const generalSchema = Persistence.struct({
+  autoSave: Persistence.fallback(Schema.Boolean, () => true),
+  releaseNotes: Persistence.fallback(Schema.Boolean, () => true),
+  showFileTree: Persistence.fallback(Schema.Boolean, () => false),
+  showNavigation: Persistence.fallback(Schema.Boolean, () => false),
+  showSearch: Persistence.fallback(Schema.Boolean, () => false),
+  showStatus: Persistence.fallback(Schema.Boolean, () => false),
+  showProjectIcon: Persistence.fallback(Schema.Boolean, () => false),
+  showTerminal: Persistence.fallback(Schema.Boolean, () => false),
+  reasoningMode: Persistence.fallback(reasoningModeSchema, () => "compact" as const),
+  shellToolPartsExpanded: Persistence.fallback(Schema.Boolean, () => false),
+  editToolPartsExpanded: Persistence.fallback(Schema.Boolean, () => false),
+  showCustomAgents: Persistence.fallback(Schema.Boolean, () => false),
+  mobileTitlebarPosition: Persistence.fallback(Schema.Literals(["top", "bottom"]), () => "top" as const),
+  mobileDiffWrap: Persistence.fallback(Schema.Boolean, () => true),
+  terminalPlacement: Persistence.fallback(Schema.Literals(["side", "bottom"]), () => "side" as const),
+  followUpBehavior: Persistence.fallback(Schema.Literals(["queue", "steer"]), () => "steer" as const),
+})
 
 const persistedGeneralSchema = Schema.Struct({
   ...generalSchema.fields,
   reasoningMode: Schema.optional(reasoningModeSchema).pipe(
     Schema.catchDecoding(() => Effect.succeed(Option.some("compact" as const))),
   ),
-  showReasoningSummaries: Schema.optional(Schema.Boolean).pipe(
-    Schema.catchDecoding(() => Effect.succeed(Option.none())),
-  ),
+  showReasoningSummaries: Persistence.optional(Schema.Boolean),
 }).pipe(
   Schema.decodeTo(Schema.toType(generalSchema), {
     decode: SchemaGetter.transform((value) => ({
@@ -107,65 +105,49 @@ const persistedGeneralSchema = Schema.Struct({
   }),
 )
 
-const appearanceSchema = Schema.Struct({
-  fontSize: Persistence.defaulted(Schema.Number, () => 14),
-  mono: Persistence.defaulted(Schema.String, () => ""),
-  sans: Persistence.defaulted(Schema.String, () => ""),
-  terminal: Persistence.defaulted(Schema.String, () => ""),
-  tabLayout: Persistence.defaulted(Schema.Literals(["horizontal", "vertical"]), () => "horizontal" as const),
-}).mapFields(Struct.map(Schema.mutableKey))
+const appearanceSchema = Persistence.struct({
+  fontSize: Persistence.fallback(Schema.Number, () => 14),
+  mono: Persistence.fallback(Schema.String, () => ""),
+  sans: Persistence.fallback(Schema.String, () => ""),
+  terminal: Persistence.fallback(Schema.String, () => ""),
+  tabLayout: Persistence.fallback(Schema.Literals(["horizontal", "vertical"]), () => "horizontal" as const),
+})
 
-const permissionsSchema = Schema.Struct({
-  autoApprove: Persistence.defaulted(Schema.Boolean, () => false),
-}).mapFields(Struct.map(Schema.mutableKey))
+const permissionsSchema = Persistence.struct({
+  autoApprove: Persistence.fallback(Schema.Boolean, () => false),
+})
 
-const workspacesSchema = Schema.Struct({
-  defaultDestination: Persistence.defaulted(Schema.Literals(["last-used", "local", "new"]), () => "last-used" as const),
-  lastUsed: Persistence.defaulted(
-    Schema.Record(
-      Schema.String,
-      Schema.Literals(["local", "workspace"]).pipe(
-        Schema.catchDecoding(() => Effect.succeed(Option.none())),
-        Schema.mutableKey,
-      ),
-    ),
-    () => ({}),
+const workspacesSchema = Persistence.struct({
+  defaultDestination: Persistence.fallback(Schema.Literals(["last-used", "local", "new"]), () => "last-used" as const),
+  lastUsed: Persistence.record(
+    Schema.Literals(["local", "workspace"]).pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
   ),
-}).mapFields(Struct.map(Schema.mutableKey))
+})
 
-const notificationsSchema = Schema.Struct({
-  agent: Persistence.defaulted(Schema.Boolean, () => true),
-  permissions: Persistence.defaulted(Schema.Boolean, () => true),
-  errors: Persistence.defaulted(Schema.Boolean, () => false),
-}).mapFields(Struct.map(Schema.mutableKey))
+const notificationsSchema = Persistence.struct({
+  agent: Persistence.fallback(Schema.Boolean, () => true),
+  permissions: Persistence.fallback(Schema.Boolean, () => true),
+  errors: Persistence.fallback(Schema.Boolean, () => false),
+})
 
-const soundsSchema = Schema.Struct({
-  agentEnabled: Persistence.defaulted(Schema.Boolean, () => true),
-  agent: Persistence.defaulted(Schema.String, () => "staplebops-01"),
-  permissionsEnabled: Persistence.defaulted(Schema.Boolean, () => true),
-  permissions: Persistence.defaulted(Schema.String, () => "staplebops-02"),
-  errorsEnabled: Persistence.defaulted(Schema.Boolean, () => true),
-  errors: Persistence.defaulted(Schema.String, () => "nope-03"),
-}).mapFields(Struct.map(Schema.mutableKey))
+const soundsSchema = Persistence.struct({
+  agentEnabled: Persistence.fallback(Schema.Boolean, () => true),
+  agent: Persistence.fallback(Schema.String, () => "staplebops-01"),
+  permissionsEnabled: Persistence.fallback(Schema.Boolean, () => true),
+  permissions: Persistence.fallback(Schema.String, () => "staplebops-02"),
+  errorsEnabled: Persistence.fallback(Schema.Boolean, () => true),
+  errors: Persistence.fallback(Schema.String, () => "nope-03"),
+})
 
-export const settingsSchema = Schema.Struct({
-  general: Persistence.defaulted(persistedGeneralSchema, () => Schema.decodeUnknownSync(generalSchema)({})),
-  appearance: Persistence.defaulted(appearanceSchema, () => Schema.decodeUnknownSync(appearanceSchema)({})),
-  keybinds: Persistence.defaulted(
-    Schema.Record(
-      Schema.String,
-      Schema.String.pipe(
-        Schema.catchDecoding(() => Effect.succeed(Option.none())),
-        Schema.mutableKey,
-      ),
-    ),
-    () => ({}),
-  ),
-  permissions: Persistence.defaulted(permissionsSchema, () => Schema.decodeUnknownSync(permissionsSchema)({})),
-  workspaces: Persistence.defaulted(workspacesSchema, () => Schema.decodeUnknownSync(workspacesSchema)({})),
-  notifications: Persistence.defaulted(notificationsSchema, () => Schema.decodeUnknownSync(notificationsSchema)({})),
-  sounds: Persistence.defaulted(soundsSchema, () => Schema.decodeUnknownSync(soundsSchema)({})),
-}).mapFields(Struct.map(Schema.mutableKey))
+export const settingsSchema = Persistence.struct({
+  general: Persistence.fallback(persistedGeneralSchema, () => Schema.decodeUnknownSync(generalSchema)({})),
+  appearance: Persistence.fallback(appearanceSchema, () => Schema.decodeUnknownSync(appearanceSchema)({})),
+  keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
+  permissions: Persistence.fallback(permissionsSchema, () => Schema.decodeUnknownSync(permissionsSchema)({})),
+  workspaces: Persistence.fallback(workspacesSchema, () => Schema.decodeUnknownSync(workspacesSchema)({})),
+  notifications: Persistence.fallback(notificationsSchema, () => Schema.decodeUnknownSync(notificationsSchema)({})),
+  sounds: Persistence.fallback(soundsSchema, () => Schema.decodeUnknownSync(soundsSchema)({})),
+})
 
 const defaultSettings = Schema.decodeUnknownSync(settingsSchema)({})
 

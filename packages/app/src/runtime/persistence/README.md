@@ -6,8 +6,10 @@ initialization result, and readiness accessor. Both web and desktop use this
 boundary, including cross-window updates.
 
 ```ts
-const Preferences = Schema.Struct({
-  visible: Persistence.defaulted(Schema.Boolean, () => true),
+const Preferences = Persistence.struct({
+  visible: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  mode: Persistence.fallback(Schema.Literals(["normal", "shell"]), () => "normal" as const),
+  directory: Persistence.optional(Schema.String),
   recent: Persistence.array(Schema.String),
 })
 
@@ -20,14 +22,22 @@ Without an explicit initial value, initialization decodes `{}` through the schem
 Dynamic initial values must already satisfy the decoded type. There is no generic
 merge with initial state: schemas own missing fields and recovery policies.
 
-- `Persistence.defaulted(schema, factory)` recovers missing, undefined, or invalid
-  values. Return fresh collections from the factory.
+- Use `Schema.withDecodingDefault` for missing or undefined input. It already makes
+  the input optional and still rejects invalid values. Use `withDecodingDefaultType`
+  when the default is already in the decoded representation of a transformation.
+- `Persistence.fallback(schema, factory)` deliberately recovers invalid values as
+  well as missing or undefined input. Return fresh collections from the factory.
+- `Persistence.optional(schema)` omits invalid fields as well as accepting missing
+  or undefined input. Use ordinary `Schema.optional` when invalid values should fail.
+- `Persistence.struct(fields)` makes fields mutable for Solid stores while preserving
+  each field's optionality and codec. It does not add defaults or error recovery.
+- `Persistence.record(valueSchema)` creates a mutable string-keyed record, defaulting
+  missing or invalid records to a fresh `{}`. Its value schema determines entry
+  recovery: pass `Persistence.optional(valueSchema)` to discard only invalid entries,
+  or `Persistence.fallback(valueSchema, factory)` to replace those entries.
 - `Persistence.array(schema)` defaults to an empty mutable array and discards
   invalid entries individually. Valid entries still pass through their codecs.
-- Use ordinary strict schemas where invalid data should reject the document, and
-  `Schema.optional` where absence is meaningful. Recovery is not a substitute for
-  an explicit historical shape transformation.
-- Use mutable array/field schemas when state is edited through Solid `produce`.
+- Recovery is not a substitute for an explicit historical shape transformation.
 
 ## Migrations
 

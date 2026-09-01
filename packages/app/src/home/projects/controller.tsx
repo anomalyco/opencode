@@ -16,10 +16,7 @@ import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
 
 export const HomeServersSchema = Schema.Struct({
-  collapsed: Persistence.defaulted(
-    Schema.Record(Schema.String, Schema.mutableKey(Persistence.defaulted(Schema.Boolean, () => false))),
-    () => ({}),
-  ),
+  collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
 })
 
 export function createHomeProjectsController(home: HomeController) {

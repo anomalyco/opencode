@@ -5,7 +5,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useServer } from "@/runtime/server/current"
-import { Schema, Struct } from "effect"
+import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 
 export const OPEN_APPS = [
@@ -28,9 +28,9 @@ export const OPEN_APPS = [
 export type OpenApp = (typeof OPEN_APPS)[number]
 export type OpenAppOS = "macos" | "windows" | "linux" | "unknown"
 
-export const OpenAppPreferences = Schema.Struct({
-  app: Persistence.defaulted(Schema.Literals(OPEN_APPS), () => "finder" as const),
-}).mapFields(Struct.map(Schema.mutableKey))
+export const OpenAppPreferences = Persistence.struct({
+  app: Persistence.fallback(Schema.Literals(OPEN_APPS), () => "finder" as const),
+})
 
 export const MAC_OPEN_APPS = [
   {

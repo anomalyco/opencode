@@ -11,19 +11,14 @@ const WORKSPACE_KEY = "__workspace__"
 const MAX_FILE_VIEW_SESSIONS = 20
 const MAX_VIEW_FILES = 500
 
-const FileViewSchema = Schema.Struct({
-  scrollTop: Schema.mutableKey(Persistence.defaulted(Schema.optional(Schema.Finite), () => undefined)),
-  scrollLeft: Schema.mutableKey(Persistence.defaulted(Schema.optional(Schema.Finite), () => undefined)),
-  selectedLines: Schema.mutableKey(
-    Persistence.defaulted(Schema.optional(Schema.NullOr(SelectedLineRange)), () => undefined),
-  ),
+const FileViewSchema = Persistence.struct({
+  scrollTop: Persistence.optional(Schema.Finite),
+  scrollLeft: Persistence.optional(Schema.Finite),
+  selectedLines: Persistence.optional(Schema.NullOr(SelectedLineRange)),
 })
 
 export const FileViewsSchema = Schema.Struct({
-  file: Persistence.defaulted(
-    Schema.Record(Schema.String, Schema.mutableKey(Persistence.defaulted(FileViewSchema, () => ({})))),
-    () => ({}),
-  ),
+  file: Persistence.record(Persistence.fallback(FileViewSchema, () => ({}))),
 })
 
 function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {

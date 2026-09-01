@@ -11,8 +11,8 @@ import { DialogReleaseNotes, type Highlight } from "@/shell/updates/release-note
 
 const CHANGELOG_URL = "https://opencode.ai/changelog.json"
 
-export const HighlightsStore = Schema.Struct({
-  version: Schema.mutableKey(Persistence.defaulted(Schema.UndefinedOr(Schema.String), () => undefined)),
+export const HighlightsStore = Persistence.struct({
+  version: Persistence.fallback(Schema.UndefinedOr(Schema.String), () => undefined),
 })
 
 type ParsedRelease = {

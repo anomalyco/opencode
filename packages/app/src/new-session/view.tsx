@@ -25,12 +25,12 @@ import type { NewSessionWorkspaceController } from "./workspace/controller"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
-export const WorkspaceOnboardingSchema = Schema.Struct({
-  used: Schema.mutableKey(Persistence.defaulted(Schema.Boolean, () => false)),
+export const WorkspaceOnboardingSchema = Persistence.struct({
+  used: Persistence.fallback(Schema.Boolean, () => false),
 })
 
-export const ProviderTipSchema = Schema.Struct({
-  dismissedAt: Schema.mutableKey(Persistence.defaulted(Schema.Finite, () => 0)),
+export const ProviderTipSchema = Persistence.struct({
+  dismissedAt: Persistence.fallback(Schema.Finite, () => 0),
 })
 
 export function NewSessionView(props: {

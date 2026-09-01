@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Schema, SchemaGetter, Struct } from "effect"
+import { Schema, SchemaGetter } from "effect"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -130,83 +130,70 @@ export const useCurrentRoute = () => {
 }
 
 export function createLayoutSchema(server: ServerConnection.Key) {
-  const sidebar = Schema.Struct({
-    opened: Persistence.defaulted(Schema.Boolean, () => false),
-    width: Persistence.defaulted(Schema.Finite, () => DEFAULT_SIDEBAR_WIDTH),
-    workspaces: Persistence.defaulted(Schema.Record(Schema.String, Schema.mutableKey(Schema.Boolean)), () => ({})),
-    workspacesDefault: Persistence.defaulted(Schema.Boolean, () => false),
-  }).mapFields(Struct.map(Schema.mutableKey))
-  const review = Schema.Struct({
-    diffStyle: Persistence.defaulted(Schema.Literals(["unified", "split"]), () => "split" as const),
-    panelOpened: Persistence.defaulted(Schema.Boolean, () => DEFAULT_REVIEW_PANEL_OPENED),
-  }).mapFields(Struct.map(Schema.mutableKey))
-  const fileTree = Schema.Struct({
-    opened: Persistence.defaulted(Schema.Boolean, () => false),
-    width: Persistence.defaulted(Schema.Finite, () => DEFAULT_FILE_TREE_WIDTH),
-    tab: Persistence.defaulted(Schema.Literals(["changes", "all"]), () => "changes" as const),
-  }).mapFields(Struct.map(Schema.mutableKey))
-  const tabs = Schema.Struct({
+  const sidebar = Persistence.struct({
+    opened: Persistence.fallback(Schema.Boolean, () => false),
+    width: Persistence.fallback(Schema.Finite, () => DEFAULT_SIDEBAR_WIDTH),
+    workspaces: Persistence.record(Schema.Boolean),
+    workspacesDefault: Persistence.fallback(Schema.Boolean, () => false),
+  })
+  const review = Persistence.struct({
+    diffStyle: Persistence.fallback(Schema.Literals(["unified", "split"]), () => "split" as const),
+    panelOpened: Persistence.fallback(Schema.Boolean, () => DEFAULT_REVIEW_PANEL_OPENED),
+  })
+  const fileTree = Persistence.struct({
+    opened: Persistence.fallback(Schema.Boolean, () => false),
+    width: Persistence.fallback(Schema.Finite, () => DEFAULT_FILE_TREE_WIDTH),
+    tab: Persistence.fallback(Schema.Literals(["changes", "all"]), () => "changes" as const),
+  })
+  const tabs = Persistence.struct({
     all: Persistence.array(Schema.String),
-    active: Schema.optional(Persistence.defaulted(Schema.UndefinedOr(Schema.String), () => undefined)),
-  }).mapFields(Struct.map(Schema.mutableKey))
-  const view = Schema.Struct({
-    scroll: Persistence.defaulted(
-      Schema.Record(Schema.String, Schema.mutableKey(Schema.Struct({ x: Schema.Finite, y: Schema.Finite }))),
-      () => ({}),
-    ),
+    active: Persistence.optional(Schema.String),
+  })
+  const view = Persistence.struct({
+    scroll: Persistence.record(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
     reviewOpen: Schema.optional(Persistence.array(Schema.String)),
     reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
     reviewFile: Schema.optional(Schema.String),
     pendingMessage: Schema.optional(Schema.String),
     pendingMessageAt: Schema.optional(Schema.Finite),
-  }).mapFields(Struct.map(Schema.mutableKey))
-  const layout = Schema.Struct({
-    sidebar: Persistence.defaulted(sidebar, () => Schema.decodeUnknownSync(sidebar)({})),
-    terminal: Persistence.defaulted(
-      Schema.Struct({
-        height: Persistence.defaulted(Schema.Finite, () => DEFAULT_TERMINAL_HEIGHT),
-        opened: Persistence.defaulted(Schema.Boolean, () => false),
-      }).mapFields(Struct.map(Schema.mutableKey)),
+  })
+  const layout = Persistence.struct({
+    sidebar: Persistence.fallback(sidebar, () => Schema.decodeUnknownSync(sidebar)({})),
+    terminal: Persistence.fallback(
+      Persistence.struct({
+        height: Persistence.fallback(Schema.Finite, () => DEFAULT_TERMINAL_HEIGHT),
+        opened: Persistence.fallback(Schema.Boolean, () => false),
+      }),
       () => ({ height: DEFAULT_TERMINAL_HEIGHT, opened: false }),
     ),
-    review: Persistence.defaulted(review, () => Schema.decodeUnknownSync(review)({})),
-    fileTree: Persistence.defaulted(fileTree, () => Schema.decodeUnknownSync(fileTree)({})),
-    session: Persistence.defaulted(
-      Schema.Struct({ width: Persistence.defaulted(Schema.Finite, () => DEFAULT_SESSION_WIDTH) }).mapFields(
-        Struct.map(Schema.mutableKey),
-      ),
+    review: Persistence.fallback(review, () => Schema.decodeUnknownSync(review)({})),
+    fileTree: Persistence.fallback(fileTree, () => Schema.decodeUnknownSync(fileTree)({})),
+    session: Persistence.fallback(
+      Persistence.struct({ width: Persistence.fallback(Schema.Finite, () => DEFAULT_SESSION_WIDTH) }),
       () => ({ width: DEFAULT_SESSION_WIDTH }),
     ),
-    mobileSidebar: Persistence.defaulted(
-      Schema.Struct({ opened: Persistence.defaulted(Schema.Boolean, () => false) }).mapFields(
-        Struct.map(Schema.mutableKey),
-      ),
+    mobileSidebar: Persistence.fallback(
+      Persistence.struct({ opened: Persistence.fallback(Schema.Boolean, () => false) }),
       () => ({ opened: false }),
     ),
-    sessionTabs: Persistence.defaulted(
-      Schema.Record(Schema.String, Schema.mutableKey(Persistence.defaulted(tabs, () => ({ all: [] })))),
-      () => ({}),
-    ),
-    sessionView: Persistence.defaulted(
-      Schema.Record(Schema.String, Schema.mutableKey(Persistence.defaulted(view, () => ({ scroll: {} })))),
-      () => ({}),
-    ),
-    home: Persistence.defaulted(
-      Schema.Struct({
-        selection: Persistence.defaulted(
-          Schema.Struct({
-            server: Persistence.defaulted(TabStorage.ServerKey, () => server),
+    sessionTabs: Persistence.record(Persistence.fallback(tabs, () => ({ all: [] }))),
+    sessionView: Persistence.record(Persistence.fallback(view, () => ({ scroll: {} }))),
+    home: Persistence.fallback(
+      Persistence.struct({
+        selection: Persistence.fallback(
+          Persistence.struct({
+            server: Persistence.fallback(TabStorage.ServerKey, () => server),
             directory: Schema.optional(Schema.String),
-          }).mapFields(Struct.map(Schema.mutableKey)),
+          }),
           () => ({ server }),
         ),
-      }).mapFields(Struct.map(Schema.mutableKey)),
+      }),
       () => ({ selection: { server } }),
     ),
-  }).mapFields(Struct.map(Schema.mutableKey))
+  })
   const legacySidebar = Schema.Struct({
     ...sidebar.fields,
-    workspaces: Persistence.defaulted(
+    workspaces: Persistence.fallback(
       Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Schema.Boolean)]),
       () => ({}),
     ),
@@ -222,19 +209,19 @@ export function createLayoutSchema(server: ServerConnection.Key) {
   )
   return Schema.Struct({
     ...layout.fields,
-    sidebar: Persistence.defaulted(legacySidebar, () => Schema.decodeUnknownSync(sidebar)({})),
-    review: Persistence.defaulted(
+    sidebar: Persistence.fallback(legacySidebar, () => Schema.decodeUnknownSync(sidebar)({})),
+    review: Persistence.fallback(
       Schema.Struct({
         ...review.fields,
-        panelOpened: Persistence.defaulted(Schema.UndefinedOr(Schema.Boolean), () => undefined),
+        panelOpened: Persistence.fallback(Schema.UndefinedOr(Schema.Boolean), () => undefined),
       }),
       () => ({ diffStyle: "split" as const, panelOpened: DEFAULT_REVIEW_PANEL_OPENED }),
     ),
-    fileTree: Persistence.defaulted(
+    fileTree: Persistence.fallback(
       Schema.UndefinedOr(
         Schema.Struct({
           ...fileTree.fields,
-          tab: Persistence.defaulted(Schema.UndefinedOr(Schema.Literals(["changes", "all"])), () => undefined),
+          tab: Persistence.fallback(Schema.UndefinedOr(Schema.Literals(["changes", "all"])), () => undefined),
         }),
       ),
       () => undefined,

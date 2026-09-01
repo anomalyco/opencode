@@ -1,5 +1,5 @@
 import { createStore, reconcile } from "solid-js/store"
-import { Schema, Struct } from "effect"
+import { Schema } from "effect"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { type Accessor, batch, createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -27,15 +27,11 @@ const NotificationBase = {
   viewed: Schema.Boolean,
 }
 export const Notification = Schema.Union([
-  Schema.Struct({ ...NotificationBase, type: Schema.Literal("turn-complete") }).mapFields(
-    Struct.map(Schema.mutableKey),
-  ),
-  Schema.Struct({ ...NotificationBase, type: Schema.Literal("error"), error: SessionError.Error }).mapFields(
-    Struct.map(Schema.mutableKey),
-  ),
+  Persistence.struct({ ...NotificationBase, type: Schema.Literal("turn-complete") }),
+  Persistence.struct({ ...NotificationBase, type: Schema.Literal("error"), error: SessionError.Error }),
 ])
 export type Notification = typeof Notification.Type
-export const NotificationStore = Schema.Struct({ list: Schema.mutableKey(Persistence.array(Notification)) })
+export const NotificationStore = Persistence.struct({ list: Persistence.array(Notification) })
 
 type NotificationIndex = {
   session: {
