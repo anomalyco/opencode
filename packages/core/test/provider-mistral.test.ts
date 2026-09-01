@@ -1,6 +1,114 @@
 import { createMistral } from "@ai-sdk/mistral"
 import { expect, test } from "bun:test"
 
+test.each([false, true])(
+  "Mistral accumulates fragmented tool calls with native reasoning (parallel: %s)",
+  async (parallel) => {
+    const thinking = {
+      type: "thinking" as const,
+      thinking: [{ type: "text", text: "Check the weather." }],
+      closed: true,
+      signature: "sig-123",
+    }
+    const calls = ["Paris", ...(parallel ? ["London"] : [])].map((city, index) => ({
+      index,
+      id: `call0000${index}`,
+      city,
+    }))
+    const chunks = [
+      { content: [thinking] },
+      {
+        tool_calls: calls.map((call) => ({
+          index: call.index,
+          id: call.id,
+          type: "function",
+          function: { name: "weather", arguments: '{"city":"' },
+        })),
+      },
+      ...calls.toReversed().map((call) => ({
+        content: "",
+        tool_calls: [{ index: call.index, function: { name: "", arguments: call.city } }],
+      })),
+      { tool_calls: calls.map((call) => ({ index: call.index, function: { arguments: '"}' } })) },
+    ].map((delta) => ({
+      id: "response-1",
+      created: 0,
+      model: "zai-glm-5-2",
+      choices: [{ index: 0, delta }],
+    }))
+    const body: { messages?: unknown[] }[] = []
+    const mockFetch = Object.assign(
+      async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        if (typeof init?.body !== "string") throw new Error("Expected JSON request body")
+        body.push(JSON.parse(init.body))
+        return new Response(
+          [...chunks, { choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] }]
+            .map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)
+            .join(""),
+          { headers: { "Content-Type": "text/event-stream" } },
+        )
+      },
+      { preconnect: fetch.preconnect },
+    )
+    const model = createMistral({ apiKey: "test", fetch: mockFetch })("zai-glm-5-2")
+    const result = await model.doStream({
+      prompt: [{ role: "user", content: [{ type: "text", text: "Check the weather" }] }],
+    })
+    const events = []
+    for await (const event of result.stream) events.push(event)
+
+    expect(events.filter((event) => event.type === "error")).toEqual([])
+    const tools = events.filter((event) => event.type === "tool-call")
+    expect(tools).toEqual(
+      calls.map((call) => ({
+        type: "tool-call",
+        toolCallId: call.id,
+        toolName: "weather",
+        input: JSON.stringify({ city: call.city }),
+      })),
+    )
+    expect(events.filter((event) => event.type === "tool-input-start")).toHaveLength(calls.length)
+    expect(events.filter((event) => event.type === "tool-input-end")).toHaveLength(calls.length)
+    const reasoning = events.find((event) => event.type === "reasoning-end")
+    expect(reasoning?.providerMetadata).toEqual({ mistral: { thinking } })
+
+    const next = await model.doStream({
+      prompt: [
+        { role: "user", content: [{ type: "text", text: "Check the weather" }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "Check the weather.", providerOptions: reasoning?.providerMetadata },
+            ...tools.map((tool) => ({ ...tool, input: JSON.parse(tool.input) })),
+          ],
+        },
+        {
+          role: "tool",
+          content: tools.map((tool) => ({
+            type: "tool-result",
+            toolCallId: tool.toolCallId,
+            toolName: tool.toolName,
+            output: { type: "text", value: "Sunny" },
+          })),
+        },
+      ],
+    })
+    await next.stream.cancel()
+    expect(body[1]?.messages?.slice(1)).toEqual([
+      {
+        role: "assistant",
+        content: [thinking],
+        tool_calls: calls.map((call) => ({
+          id: call.id,
+          type: "function",
+          function: { name: "weather", arguments: JSON.stringify({ city: call.city }) },
+        })),
+      },
+      ...calls.map((call) => ({ role: "tool", name: "weather", tool_call_id: call.id, content: "Sunny" })),
+    ])
+  },
+)
+
 test("Mistral sends promptCacheKey as prompt_cache_key", async () => {
   let body: Record<string, unknown> | undefined
   const mockFetch = Object.assign(
@@ -154,7 +262,13 @@ test("Mistral round-trips native reasoning in assistant history", async () => {
       { role: "user", content: [{ type: "text", text: "Hello again" }] },
     ],
   })
-  expect(body?.messages?.[1]).toEqual({ role: "assistant", content: "thinkingHi" })
+  expect(body?.messages?.[1]).toEqual({
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: [{ type: "text", text: "thinking" }], closed: true },
+      { type: "text", text: "Hi" },
+    ],
+  })
 })
 
 test("Mistral preserves native reasoning metadata while streaming", async () => {
