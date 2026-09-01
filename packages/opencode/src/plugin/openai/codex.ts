@@ -300,9 +300,8 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
               const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
               return match ? parseFloat(match[1]) > 5.4 : false
             })
-            .map(([modelID, model]) => [
-              modelID,
-              {
+            .flatMap(([modelID, model]) => {
+              const transformed = {
                 ...model,
                 cost: {
                   input: 0,
@@ -317,8 +316,27 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
                         output: 128_000,
                       }
                     : model.limit,
-              },
-            ]),
+              }
+              if (!/^gpt-5\.6-(sol|terra|luna)(-fast)?$/.test(modelID)) return [[modelID, transformed]]
+
+              const longContextID = `${modelID}-1m`
+              return [
+                [modelID, transformed],
+                [
+                  longContextID,
+                  {
+                    ...transformed,
+                    id: longContextID,
+                    name: `${model.name} 1M`,
+                    limit: {
+                      context: 1_000_000,
+                      input: 872_000,
+                      output: 128_000,
+                    },
+                  },
+                ],
+              ]
+            }),
         )
       },
     },
