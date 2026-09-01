@@ -165,7 +165,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                         baseBranch={
                           session.shared.data.location.vcs.info({ directory: project().worktree })?.branch.current
                         }
-                        diffs={project().vcs === "git" ? review.details.diffs() : []}
+                        diffs={project().vcs ? review.details.diffs() : []}
                         sessionID={session.identity.params.id ?? ""}
                         moveEligible={composer.workspaceMoveEligible()}
                         moveDismissed={store.mobileMoveDismissed}
