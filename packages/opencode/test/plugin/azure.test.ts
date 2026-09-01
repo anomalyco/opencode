@@ -456,6 +456,25 @@ describe("plugin.azure", () => {
     expect(await list({ ...provider, models: catalog }, { auth: oauth })).toBe(catalog)
   })
 
+  test("skips model discovery when the Azure CLI is unavailable", async () => {
+    const calls: string[][] = []
+    const hooks = createAzureAuthHooks(
+      async (args) => {
+        calls.push(args)
+        throw new Error("spawn az ENOENT")
+      },
+      fetch,
+      [],
+      false,
+    )
+    const list = hooks.provider?.models
+    if (!list) throw new Error("Azure provider model hook is missing")
+
+    const catalog = models("gpt-5-mini")
+    expect(await list({ ...provider, models: catalog }, { auth: oauth })).toBe(catalog)
+    expect(calls).toEqual([])
+  })
+
   test("does not change API-key loading", async () => {
     const scopes: string[] = []
     const hooks = createAzureAuthHooks(azureShell(scopes))

@@ -5,7 +5,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { which } from "@opencode-ai/core/util/which"
 import type { Hooks } from "@opencode-ai/plugin"
 import type { Provider } from "@opencode-ai/sdk/v2"
-import { Effect, Schema } from "effect"
+import { Schema } from "effect"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import { Process } from "../util/process"
 
@@ -128,17 +128,13 @@ export function createAzureAuthHooks(
       id: "azure",
       async models(provider, context) {
         if (context.auth?.type !== "oauth") return provider.models
+        // Discovery shells out to the Azure CLI, so skip it when the CLI is missing.
+        if (!available) return provider.models
         const resource = context.auth.accountId
         if (!resource) return {}
-        return discoverAzureModels(provider.models, resource, run).catch((error: unknown) => {
-          Effect.runSync(
-            Effect.logWarning("Azure model discovery failed", {
-              resource,
-              error: error instanceof Error ? error.message : String(error),
-            }),
-          )
-          return provider.models
-        })
+        // This hook runs outside the app's Effect runtime, so logging here would go to the
+        // console. Fall back to the configured models silently.
+        return discoverAzureModels(provider.models, resource, run).catch(() => provider.models)
       },
     },
     auth: {
