@@ -19,7 +19,7 @@ export async function GET(input: APIEvent) {
     if (decoded.err) throw new Error(decoded.err.message)
     const session = await useAuthSession()
     const id = decoded.subject.properties.accountID
-    await session.update((value) => {
+    await session.update((value: any) => {
       return {
         ...value,
         account: {

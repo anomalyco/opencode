@@ -11,6 +11,7 @@ export const AuthClient = createClient({
   issuer: import.meta.env.VITE_AUTH_URL,
 })
 
+// @ts-ignore
 import { useSession } from "@solidjs/start/http"
 import { Resource } from "@opencode-ai/console-resource"
 
@@ -57,8 +58,8 @@ export const getActor = async (workspace?: string): Promise<Actor.Info> => {
         }
       }
       if (Object.keys(account).length > 0) {
-        const current = Object.values(account)[0]
-        await auth.update((val) => ({
+        const current: any = Object.values(account)[0]
+        await auth.update((val: any) => ({
           ...val,
           current: current.id,
         }))

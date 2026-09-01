@@ -1,3 +1,4 @@
+// @ts-ignore
 import { APIEvent } from "@solidjs/start"
 import { useAuthSession } from "~/context/auth"
 

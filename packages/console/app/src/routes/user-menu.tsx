@@ -12,7 +12,7 @@ const _logout = action(async () => {
   const event = getRequestEvent()
   const current = auth.data.current
   if (current)
-    await auth.update((val) => {
+    await auth.update((val: any) => {
       delete val.account?.[current]
       const first = Object.keys(val.account ?? {})[0]
       val.current = first

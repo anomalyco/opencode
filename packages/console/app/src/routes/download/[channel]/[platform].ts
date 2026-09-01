@@ -1,3 +1,4 @@
+// @ts-ignore
 import type { APIEvent } from "@solidjs/start"
 import type { DownloadPlatform } from "../types"
 
