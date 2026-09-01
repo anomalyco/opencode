@@ -4,36 +4,25 @@ export function Logo() {
   const { theme } = useTheme()
   return (
     <box alignItems="center" gap={1}>
-      {/* Brand Header with Geometric Monogram Icon */}
-      <box flexDirection="row" alignItems="center" gap={2}>
-        {/* Monogram Icon Badge */}
+      {/* Brand Header with Sleek Icon Badge */}
+      <box flexDirection="row" alignItems="center" gap={1}>
         <box
           border={["top", "bottom", "left", "right"]}
           borderColor={theme.accent}
           backgroundColor={theme.backgroundElement}
           paddingLeft={1}
           paddingRight={1}
-          flexDirection="row"
-          alignItems="center"
         >
           <text fg={theme.accent}>
-            <b>{"⚡ ZIQ"}</b>
+            <b>{"⚡"}</b>
           </text>
         </box>
-
-        {/* Brand Text */}
-        <box flexDirection="column" gap={0}>
-          <box flexDirection="row" alignItems="center" gap={1}>
-            <text fg={theme.primary}>
-              <b>{"ZIQ"}</b>
-            </text>
-            <text fg={theme.text}>
-              <b>{"-CODE"}</b>
-            </text>
-            <text fg={theme.textMuted}>{"·"}</text>
-            <text fg={theme.textMuted}>{"Autonomous Engineering Agent"}</text>
-          </box>
-        </box>
+        <text fg={theme.text}>
+          <b>
+            <span style={{ fg: theme.primary }}>ZIQ</span>
+            <span style={{ fg: theme.text }}>-CODE</span>
+          </b>
+        </text>
       </box>
 
       {/* Feature Badges */}
