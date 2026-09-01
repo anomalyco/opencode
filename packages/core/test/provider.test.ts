@@ -22,4 +22,25 @@ describe("Provider", () => {
       expect(loaded.model).toBeFunction()
     }
   })
+
+  test("detects unprefixed @ai-sdk packages only", () => {
+    expect(Provider.looksLikeAISDK("@ai-sdk/openai")).toBe(true)
+    expect(Provider.looksLikeAISDK("@ai-sdk/openai-compatible")).toBe(true)
+    expect(Provider.looksLikeAISDK("aisdk:@ai-sdk/openai")).toBe(false)
+    expect(Provider.looksLikeAISDK("@opencode-ai/ai/providers/openai")).toBe(false)
+    expect(Provider.looksLikeAISDK("file:///provider")).toBe(false)
+    expect(Provider.looksLikeAISDK("@scope/ai-sdk-provider")).toBe(false)
+    expect(Provider.looksLikeAISDK("openai")).toBe(false)
+    expect(Provider.looksLikeAISDK("")).toBe(false)
+    expect(Provider.looksLikeAISDK(undefined)).toBe(false)
+  })
+
+  test("normalizes unprefixed @ai-sdk packages and leaves others alone", () => {
+    expect(Provider.normalizeAISDK("@ai-sdk/openai-compatible")).toBe("aisdk:@ai-sdk/openai-compatible")
+    expect(Provider.normalizeAISDK("aisdk:@ai-sdk/openai")).toBe("aisdk:@ai-sdk/openai")
+    expect(Provider.normalizeAISDK("@opencode-ai/ai/providers/openai")).toBe("@opencode-ai/ai/providers/openai")
+    expect(Provider.normalizeAISDK("file:///provider")).toBe("file:///provider")
+    expect(Provider.normalizeAISDK("")).toBe("")
+    expect(Provider.normalizeAISDK(undefined)).toBeUndefined()
+  })
 })

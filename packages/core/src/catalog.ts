@@ -74,7 +74,9 @@ const layer = Layer.effect(
     const projectModel = (model: Model.Info, provider: Provider.Info) => {
       return {
         ...model,
-        package: model.package ?? provider.package,
+        // Normalize here too so catalog entries injected without config parsing (tests, plugins)
+        // still resolve through the AI SDK loader instead of the native one.
+        package: Provider.normalizeAISDK(model.package ?? provider.package),
         settings: Provider.mergeOverlay(provider.settings, model.settings),
         headers: Provider.mergeHeaders(provider.headers, model.headers),
         body: Provider.mergeOverlay(provider.body, model.body),

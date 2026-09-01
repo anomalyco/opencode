@@ -226,6 +226,31 @@ describe("Catalog", () => {
     }),
   )
 
+  it.effect("normalizes unprefixed AI SDK packages when projecting models", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("test")
+      const modelID = Model.ID.make("model")
+      const fallbackID = Model.ID.make("fallback")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(providerID, (provider) => {
+          provider.package = "@ai-sdk/openai-compatible"
+        })
+        catalog.model.update(providerID, modelID, (model) => {
+          model.package = "@ai-sdk/openai"
+        })
+        catalog.model.update(providerID, fallbackID, () => {})
+      })
+
+      expect(required(yield* catalog.model.get(providerID, modelID))).toMatchObject({
+        package: Provider.aisdk("@ai-sdk/openai"),
+      })
+      expect(required(yield* catalog.model.get(providerID, fallbackID))).toMatchObject({
+        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+      })
+    }),
+  )
+
   it.effect("resolves provider and model overlay merges", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
