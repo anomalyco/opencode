@@ -74,23 +74,23 @@ function buildRetentionQuery(
   const scanEndValue = sqlString(last.returnEnd.toISOString())
   const ingestEndValue = sqlString(new Date(last.returnEnd.getTime() + DAY_MS).toISOString())
   const sourceTable = [source.namespace, source.table].map(sqlIdentifier).join(".")
-  const activityDates = [
+  const activityWeeks = [
     ...new Map(
       periods.flatMap((period) => [period.start, period.returnStart]).map((date) => [date.toISOString(), date]),
     ).values(),
   ].toSorted((a, b) => a.getTime() - b.getTime())
-  const activityDateSql = `CASE
-${activityDates
+  const activityWeekSql = `CASE
+${activityWeeks
   .map(
     (date) =>
-      `      WHEN started_at >= ${sqlString(date.toISOString())} AND started_at < ${sqlString(new Date(date.getTime() + DAY_MS).toISOString())} THEN ${sqlString(date.toISOString().slice(0, 10))}`,
+      `      WHEN started_at >= ${sqlString(date.toISOString())} AND started_at < ${sqlString(new Date(date.getTime() + WEEK_MS).toISOString())} THEN ${sqlString(date.toISOString().slice(0, 10))}`,
   )
   .join("\n")}
       ELSE null
     END`
   const cohortDates = periods.map((period) => sqlString(period.start.toISOString().slice(0, 10))).join(", ")
   const returnDates = periods.map((period) => sqlString(period.returnStart.toISOString().slice(0, 10))).join(", ")
-  const returnCohortSql = `CASE activity_date
+  const returnCohortSql = `CASE activity_week
 ${periods
   .map(
     (period) =>
@@ -102,12 +102,11 @@ ${periods
   return `
 WITH normalized AS (
   SELECT
-    ${activityDateSql} AS activity_date,
+    ${activityWeekSql} AS activity_week,
     ${statModelSql("model_requested", "route_model")} AS model,
     COALESCE(NULLIF(route_model, ''), '') AS provider_model,
     COALESCE(NULLIF(provider_id, ''), '') AS raw_provider,
-    COALESCE(NULLIF(user_id, ''), NULLIF(workspace_id, ''), NULLIF(service_api_key_id, '')) AS user_key,
-    COALESCE(tokens_cache_read, 0) + COALESCE(tokens_cache_write, 0) + COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0) AS tokens_total
+    COALESCE(NULLIF(user_id, ''), NULLIF(workspace_id, ''), NULLIF(service_api_key_id, '')) AS user_key
   FROM ${sourceTable}
   WHERE event_type = 'generation.completed'
     AND source IN ('inference', 'inference-legacy')
@@ -115,7 +114,7 @@ WITH normalized AS (
       (source = 'inference-legacy' AND started_at < ${sqlString(LIVE_SOURCE_START)})
       OR (source = 'inference' AND started_at >= ${sqlString(LIVE_SOURCE_START)})
     )
-    AND (product = 'go' OR (${freeTierSql("model_tier", "model_requested")}))
+    AND product = 'go'
     AND model_requested IS NOT NULL
     AND model_requested <> ''
     AND __ingest_ts >= ${scanStartValue}
@@ -124,53 +123,52 @@ WITH normalized AS (
     AND started_at < ${scanEndValue}
 ), filtered AS (
   SELECT
-    activity_date,
+    activity_week,
     ${statProviderSql("model", "provider_model", "raw_provider")} AS provider,
     model,
-    user_key,
-    tokens_total
+    user_key
   FROM normalized
-  WHERE activity_date IS NOT NULL
+  WHERE activity_week IS NOT NULL
     AND user_key <> ''
     AND lower(model) NOT IN (${[...EXCLUDED_MODELS].map(sqlString).join(", ")})
 ), model_usage AS (
   SELECT
-    activity_date AS cohort_date,
+    activity_week AS cohort_date,
     user_key,
     provider,
     model,
-    SUM(tokens_total) AS total_tokens,
-    COUNT(*) AS requests
+    COUNT(*) AS model_requests
   FROM filtered
-  WHERE activity_date IN (${cohortDates})
-  GROUP BY activity_date, user_key, provider, model
-), ranked_models AS (
+  WHERE activity_week IN (${cohortDates})
+  GROUP BY activity_week, user_key, provider, model
+), user_totals AS (
   SELECT
     cohort_date,
     user_key,
-    provider,
-    model,
-    ROW_NUMBER() OVER (
-      PARTITION BY cohort_date, user_key
-      ORDER BY total_tokens DESC, requests DESC, model ASC
-    ) AS model_rank
+    SUM(model_requests) AS total_requests,
+    MAX(model_requests) AS max_model_requests
   FROM model_usage
+  GROUP BY cohort_date, user_key
 ), primary_models AS (
-  SELECT cohort_date, user_key, provider, model
-  FROM ranked_models
-  WHERE model_rank = 1
+  SELECT model_usage.cohort_date, model_usage.user_key, model_usage.provider, model_usage.model
+  FROM model_usage
+  INNER JOIN user_totals ON model_usage.cohort_date = user_totals.cohort_date
+    AND model_usage.user_key = user_totals.user_key
+    AND model_usage.model_requests = user_totals.max_model_requests
+  WHERE user_totals.total_requests >= 10
+    AND CAST(model_usage.model_requests AS double) / NULLIF(user_totals.total_requests, 0) >= 0.8
 ), returned AS (
   SELECT
     ${returnCohortSql} AS cohort_date,
     user_key
   FROM filtered
-  WHERE activity_date IN (${returnDates})
+  WHERE activity_week IN (${returnDates})
   GROUP BY ${returnCohortSql}, user_key
 )
 SELECT
   primary_models.cohort_date,
   ${sqlString(source.dataset)} AS dataset,
-  'all' AS tier,
+  'Go' AS tier,
   primary_models.provider,
   primary_models.model,
   COUNT(*) AS eligible_users,
@@ -453,25 +451,27 @@ function statPeriods(grain: "day" | "week", periodStart: Date, periodEnd: Date) 
 }
 
 function retentionPeriods(periodStart: Date, periodEnd: Date) {
-  const first = startOfUtcDay(periodStart)
-  const last = new Date(startOfUtcDay(periodEnd).getTime() - WEEK_MS)
-  const count = Math.max(0, Math.floor((last.getTime() - first.getTime()) / DAY_MS))
+  const first = startOfIsoWeek(periodStart)
+  const completeEnd = startOfIsoWeek(periodEnd)
+  const count = Math.max(0, Math.floor((completeEnd.getTime() - first.getTime()) / WEEK_MS) - 1)
   return Array.from({ length: count }, (_, index) => {
-    const start = new Date(first.getTime() + index * DAY_MS)
-    const end = new Date(start.getTime() + DAY_MS)
-    const returnStart = new Date(start.getTime() + WEEK_MS)
-    return { start, end, returnStart, returnEnd: new Date(returnStart.getTime() + DAY_MS) }
+    const start = new Date(first.getTime() + index * WEEK_MS)
+    const end = new Date(start.getTime() + WEEK_MS)
+    return { start, end, returnStart: end, returnEnd: new Date(end.getTime() + WEEK_MS) }
   })
 }
 
 function statModelSql(model: string, providerModel: string) {
-  return `COALESCE(NULLIF(regexp_replace(CASE
+  const normalized = `regexp_replace(CASE
       WHEN lower(${model}) = 'big-pickle' THEN regexp_replace(NULLIF(${providerModel}, ''), '^.*/', '')
-${Object.entries(MODEL_NAME_ALIASES)
-  .map(([from, to]) => `      WHEN lower(${model}) = ${sqlString(from)} THEN ${sqlString(to)}`)
-  .join("\n")}
       ELSE ${model}
-    END, '(-free|:free|:global)+$', ''), ''), 'unknown')`
+    END, '(-free|:free|:global)+$', '')`
+  return `COALESCE(NULLIF(CASE
+${Object.entries(MODEL_NAME_ALIASES)
+  .map(([from, to]) => `      WHEN lower(${normalized}) = ${sqlString(from)} THEN ${sqlString(to)}`)
+  .join("\n")}
+      ELSE ${normalized}
+    END, ''), 'unknown')`
 }
 
 function freeTierSql(tier: string, model: string) {

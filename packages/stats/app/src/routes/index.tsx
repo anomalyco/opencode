@@ -626,17 +626,13 @@ function RetentionSection(props: { data: RetentionEntry[] }) {
 
   return (
     <section id="retention" data-section="retention">
-      <SectionTitle
-        id="retention"
-        title="7-Day Retention"
-        description="Share of users returning to any OpenCode model seven days later, grouped by their primary model. Latest seven complete cohorts; minimum 100 eligible user-days."
-      />
+      <SectionTitle id="retention" title="Weekly Retention" description="Weekly users returning the next week." />
       <Show
         when={props.data.length > 0}
         fallback={
           <EmptyState
             title="No retention data"
-            description="Retention appears after seven complete user cohorts are available."
+            description="Retention appears after a complete return week is available."
           />
         }
       >
@@ -660,13 +656,13 @@ function RetentionSection(props: { data: RetentionEntry[] }) {
                     onPointerEnter={() => setActiveIndex(index())}
                     onFocus={() => setActiveIndex(index())}
                     onClick={() => setActiveIndex(index())}
-                    aria-label={`${item.model}, ${formatRetentionRate(item.rate)} seven-day retention, ${formatUsers(item.eligibleUserDays)} eligible user-days`}
+                    aria-label={`${item.model}, ${formatRetentionRate(item.rate)} weekly retention, ${formatUsers(item.eligibleUserWeeks)} eligible user-weeks`}
                   >
                     <span>{item.rank === null ? "–" : String(item.rank).padStart(2, "0")}</span>
                     <strong>{item.model}</strong>
                     <RetentionMarker rate={item.rate} active={activeIndex() === index()} />
                     <b>{formatRetentionRate(item.rate)}</b>
-                    <em>{formatUsers(item.eligibleUserDays)}</em>
+                    <em>{formatUsers(item.eligibleUserWeeks)}</em>
                   </a>
                 </li>
               )}

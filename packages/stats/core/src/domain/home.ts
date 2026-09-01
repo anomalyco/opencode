@@ -29,8 +29,8 @@ export type RetentionEntry = {
   provider: string
   author: string
   rate: number
-  eligibleUserDays: number
-  retainedUserDays: number
+  eligibleUserWeeks: number
+  retainedUserWeeks: number
   rank: number | null
 }
 export type CountryEntry = { country: string; continent: string; tokens: number; share: number; rank: number }
@@ -64,7 +64,7 @@ export type StatsModelData = {
   totalModels: number
   tokenShare: number
   tokenChange: number
-  retention7d: RetentionEntry | null
+  weeklyRetention: RetentionEntry | null
   totals: {
     sessions: number
     uniqueUsers: number
@@ -105,6 +105,7 @@ export type StatsModelComparisonEntry = {
   totalModels: number
   tokenShare: number
   tokenChange: number
+  weeklyRetention: RetentionEntry | null
   totals: StatsModelData["totals"]
   usage: ModelUsagePoint[]
 }
@@ -142,8 +143,8 @@ const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const METRIC_MODEL_LIMIT = 10
 const RETENTION_MODEL_LIMIT = 15
-const RETENTION_MIN_ELIGIBLE_USER_DAYS = 100
-const RETENTION_COHORT_DAYS = 7
+const RETENTION_MIN_ELIGIBLE_USER_WEEKS = 100
+const RETENTION_COHORT_WEEKS = 7
 const TOP_MODEL_SEGMENT_LIMIT = 9
 // Preserve the response shape while the public site presents Go and Free as one cohort.
 const SITE_PRODUCT = "Go"
@@ -193,7 +194,7 @@ export function getStatsHomeData(): Effect.Effect<StatsHomeData, StatsDataError>
       const [modelRows, geoRows, retentionRows] = await Promise.all([
         listModelDaily(),
         listGeoDaily(),
-        listRetentionDaily(),
+        listRetentionWeekly(),
       ])
       return buildStatsHomeData(modelRows, geoRows, retentionRows)
     },
@@ -207,7 +208,7 @@ export function getStatsModelData(
 ): Effect.Effect<StatsModelData | null, StatsDataError> {
   return Effect.tryPromise({
     try: async () => {
-      const [modelRows, retentionRows] = await Promise.all([listModelDaily(), listRetentionDaily()])
+      const [modelRows, retentionRows] = await Promise.all([listModelDaily(), listRetentionWeekly()])
       const normalized = modelRows.flatMap(normalizeStatRow)
       const resolvedModel = resolveModelName(model, normalized, provider)
       if (!resolvedModel) return null
@@ -288,12 +289,12 @@ async function listGeoDaily(opts?: { provider?: string; model?: string }): Promi
   }))
 }
 
-async function listRetentionDaily(): Promise<RetentionMetricRow[]> {
+async function listRetentionWeekly(): Promise<RetentionMetricRow[]> {
   try {
     return (
       await queryRows(
         `select cohort_date, updated_at, provider, model, eligible_users, retained_users
-      from model_retention where dataset = 'zen' and tier = 'all' order by cohort_date`,
+      from model_retention where dataset = 'zen' and tier = 'Go' order by cohort_date`,
       )
     ).map((row) => ({
       cohortDate: stringValue(row.cohort_date),
@@ -334,8 +335,16 @@ export const getStatsModelsComparisonData: (
 ) => Effect.Effect<StatsModelComparisonData, DatabaseError, ModelStatRepo> = Effect.fn("StatsModelsComparison.getData")(
   function* (models) {
     const modelStats = yield* ModelStatRepo
-    const rows = yield* modelStats.listDaily()
-    const entries = models.map((model) => toComparisonEntry(buildStatsModelData(model.model, rows, [], model.provider)))
+    const [rows, retentionRows] = yield* Effect.all([
+      modelStats.listDaily(),
+      Effect.tryPromise({
+        try: listRetentionWeekly,
+        catch: (cause) => DatabaseError.make({ cause }),
+      }),
+    ])
+    const entries = models.map((model) =>
+      toComparisonEntry(buildStatsModelData(model.model, rows, [], model.provider, retentionRows)),
+    )
     const latest = entries
       .map((model) => model?.updatedAt)
       .flatMap((value) => (value ? [dateTime(value)] : []))
@@ -458,7 +467,7 @@ function buildStatsModelData(
   const peerRank = rankIndex >= 0 ? rankIndex + 1 : 1
   const totalTokens = windowPeers.reduce((sum, item) => sum + item.totalTokens, 0)
   const peerTokens = rankPeers.reduce((sum, item) => sum + item.totalTokens, 0)
-  const retention7d = buildRetentionEntries(retentionRows).find((item) => item.model === model) ?? null
+  const weeklyRetention = buildRetentionEntries(retentionRows).find((item) => item.model === model) ?? null
 
   return {
     updatedAt: Number.isFinite(latestUpdate) ? new Date(latestUpdate).toISOString() : null,
@@ -471,7 +480,7 @@ function buildStatsModelData(
     totalModels: windowPeers.length,
     tokenShare: totalTokens > 0 ? round((current.totalTokens / totalTokens) * 100, 2) : 0,
     tokenChange: percentChange(current.totalTokens, previous.totalTokens),
-    retention7d,
+    weeklyRetention,
     totals: {
       sessions: current.sessions,
       uniqueUsers: current.uniqueUsers,
@@ -553,6 +562,7 @@ function toComparisonEntry(data: StatsModelData | null): StatsModelComparisonEnt
     totalModels: data.totalModels,
     tokenShare: data.tokenShare,
     tokenChange: data.tokenChange,
+    weeklyRetention: data.weeklyRetention,
     totals: data.totals,
     usage: data.usage,
   }
@@ -574,7 +584,7 @@ function emptyStatsHomeData(): StatsHomeData {
 }
 
 export function buildRetentionEntries(rows: RetentionMetricRow[]): RetentionEntry[] {
-  const cohortDates = [...new Set(rows.map((row) => row.cohortDate))].toSorted().slice(-RETENTION_COHORT_DAYS)
+  const cohortDates = [...new Set(rows.map((row) => row.cohortDate))].toSorted().slice(-RETENTION_COHORT_WEEKS)
   const aggregate = rows
     .filter((row) => cohortDates.includes(row.cohortDate))
     .reduce<Map<string, Omit<RetentionEntry, "author" | "rate" | "rank">>>((result, row) => {
@@ -582,20 +592,22 @@ export function buildRetentionEntries(rows: RetentionMetricRow[]): RetentionEntr
       result.set(row.model, {
         model: row.model,
         provider: current?.provider ?? row.provider,
-        eligibleUserDays: (current?.eligibleUserDays ?? 0) + row.eligibleUsers,
-        retainedUserDays: (current?.retainedUserDays ?? 0) + row.retainedUsers,
+        eligibleUserWeeks: (current?.eligibleUserWeeks ?? 0) + row.eligibleUsers,
+        retainedUserWeeks: (current?.retainedUserWeeks ?? 0) + row.retainedUsers,
       })
       return result
     }, new Map())
   const entries = [...aggregate.values()].map((item) => ({
     ...item,
     author: formatProvider(item.provider),
-    rate: item.eligibleUserDays > 0 ? round((item.retainedUserDays / item.eligibleUserDays) * 100, 1) : 0,
+    rate: item.eligibleUserWeeks > 0 ? round((item.retainedUserWeeks / item.eligibleUserWeeks) * 100, 1) : 0,
   }))
   const ranks = new Map(
     entries
-      .filter((item) => item.eligibleUserDays >= RETENTION_MIN_ELIGIBLE_USER_DAYS)
-      .toSorted((a, b) => b.rate - a.rate || b.eligibleUserDays - a.eligibleUserDays || a.model.localeCompare(b.model))
+      .filter((item) => item.eligibleUserWeeks >= RETENTION_MIN_ELIGIBLE_USER_WEEKS)
+      .toSorted(
+        (a, b) => b.rate - a.rate || b.eligibleUserWeeks - a.eligibleUserWeeks || a.model.localeCompare(b.model),
+      )
       .map((item, index) => [item.model, index + 1]),
   )
   return entries
