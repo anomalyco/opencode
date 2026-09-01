@@ -665,12 +665,14 @@ export default function Page() {
     list.push("turn")
     return list
   })
-  const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const mobileChanges = createMemo(() =>
+    !isDesktop() && (newSessionDesign() ? view().reviewPanel.opened() : store.mobileTab === "changes"),
+  )
   const wantsReview = createMemo(() =>
     isDesktop()
       ? desktopFileTreeOpen() ||
         (desktopReviewOpen() && (activeTab() === "review" || (newSessionDesign() && !!activeFileTab())))
-      : store.mobileTab === "changes",
+      : mobileChanges(),
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
     const mode = reviewMode()
@@ -2049,9 +2051,19 @@ export default function Page() {
       </Tabs.List>
     </Tabs>
   )
-  const mobileTabsBottom = createMemo(
-    () => !isDesktop() && settings.general.newLayoutDesigns() && settings.general.mobileTitlebarPosition() === "bottom",
-  )
+  const compactChangesCover = () =>
+    newSessionDesign() && mobileChanges()
+      ? reviewContent({
+          diffStyle: "unified",
+          classes: {
+            root: "h-full pb-8 [&_[data-slot=session-review-list]]:pb-0",
+            header: "px-4 !h-16 !pb-4",
+            container: "px-4",
+          },
+          loadingClass: "px-4 py-4 text-text-weak",
+          emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
+        })
+      : undefined
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
     createEffect(on(sessionKey, reset, { defer: true }))
@@ -2061,12 +2073,9 @@ export default function Page() {
   const sessionPanelContent = () => (
     <>
       {sessionSync() ?? ""}
-      <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
-        {mobileTabs(true)}
-      </Show>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
-          <Match when={params.id && mobileChanges()}>
+          <Match when={params.id && mobileChanges() && !newSessionDesign()}>
             <div class="relative h-full overflow-hidden">
               {reviewContent({
                 diffStyle: "unified",
@@ -2118,6 +2127,7 @@ export default function Page() {
                   setScrollToEnd={(fn) => {
                     scrollToEnd = fn
                   }}
+                  cover={compactChangesCover()}
                 />
               )}
             </Show>
@@ -2248,7 +2258,6 @@ export default function Page() {
           )
         }}
       </Show>
-      <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
     </>
   )
 

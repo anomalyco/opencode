@@ -11,6 +11,7 @@ import {
   historyTreeTitlePadding,
   historyTreeTitleShift,
   historyTreeWindowChromeStart,
+  historyTreeWindowToggle,
 } from "./history-tree-chrome"
 
 describe("history tree chrome", () => {
@@ -46,5 +47,13 @@ describe("history tree chrome", () => {
     )
     expect(historyTreeTitlePadding(false, false)).toBe(HISTORY_TREE_TITLE_PAD)
     expect(historyTreeTitlePadding(true, false)).toBe(HISTORY_TREE_TITLE_PAD + historyTreeTitleShift(false))
+  })
+
+  test("session title hosts the tree toggle on compact sessions, not a drawer menu", () => {
+    expect(historyTreeWindowToggle({ mobile: true, treeOpened: false, session: true })).toBe(false)
+    expect(historyTreeWindowToggle({ mobile: true, treeOpened: true, session: true })).toBe(false)
+    expect(historyTreeWindowToggle({ mobile: true, treeOpened: false, session: false })).toBe(true)
+    expect(historyTreeWindowToggle({ mobile: false, treeOpened: false, session: true })).toBe(true)
+    expect(historyTreeWindowToggle({ mobile: false, treeOpened: true, session: true })).toBe(false)
   })
 })

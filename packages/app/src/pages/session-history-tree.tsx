@@ -34,6 +34,7 @@ import {
   HISTORY_TREE_SIDEBAR_INSET,
   historyTreeMacLights,
   historyTreeWindowChromeStart,
+  historyTreeWindowToggle,
 } from "@/pages/layout/history-tree-chrome"
 import { useV2SessionChrome } from "@/pages/layout/session-chrome"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
@@ -108,13 +109,16 @@ export function SessionHistoryTree(props: { update?: TitlebarUpdate }) {
   const projects = createMemo(() => home.project.list())
   const groups = createMemo(() => historyTreeGroups(projects(), sessions()))
   const route = () => layout.route()
-  const visible = () => !mobile() || layout.mobileSidebar.opened()
-  const railOpen = () => mobile() || layout.historyTree.opened()
+  const railOpen = () => layout.historyTree.opened()
   const macLights = () => historyTreeMacLights(platform)
   const chromeStart = () => historyTreeWindowChromeStart(macLights())
   const headerPad = () => ({ ...TREE_TRACK, "padding-inline-start": `${chromeStart()}px` })
-  const sidebarOpen = () => (mobile() ? layout.mobileSidebar.opened() : layout.historyTree.opened())
-  const overlayToggle = () => mobile() || !layout.historyTree.opened()
+  const overlayToggle = () =>
+    historyTreeWindowToggle({
+      mobile: mobile(),
+      treeOpened: layout.historyTree.opened(),
+      session: route().type === "session",
+    })
   const fadeClass = () => ({
     [TREE_FADE]: true,
     "opacity-100 [transform:translateX(0)]": railOpen(),
@@ -132,7 +136,6 @@ export function SessionHistoryTree(props: { update?: TitlebarUpdate }) {
     if (!current || !ctx) return
     ctx.projects.open(session.directory)
     ctx.projects.touch(session.directory)
-    layout.mobileSidebar.hide()
     void startTransition(() => {
       const tab = tabs.addSessionTab({ server: ServerConnection.key(current), sessionId: session.id })
       tabs.select(tab)
@@ -143,7 +146,6 @@ export function SessionHistoryTree(props: { update?: TitlebarUpdate }) {
     const current = conn()
     if (!current) return
     setCollapsed(pathKey(project.worktree), false)
-    layout.mobileSidebar.hide()
     home.project.openProjectNewSession(current, project.worktree)
   }
 
@@ -205,55 +207,37 @@ export function SessionHistoryTree(props: { update?: TitlebarUpdate }) {
 
   return (
     <>
-    <Show when={visible()}>
-      <Show when={mobile()}>
-        <button
-          type="button"
-          class="absolute inset-0 z-30 bg-v2-background-bg-deep/70 md:hidden"
-          aria-label={language.t("common.close")}
-          onClick={() => layout.mobileSidebar.hide()}
-        />
-      </Show>
       <nav
         data-slot="session-history-tree"
         aria-label={language.t("sidebar.nav.projectsAndSessions")}
         style={{ width: railOpen() ? `${HISTORY_TREE_OPEN_WIDTH}px` : "0px" }}
-        classList={{
-          "flex h-full min-h-0 shrink-0 flex-col overflow-hidden bg-v2-background-bg-deep pt-2 transition-[width] duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:duration-[0ms]":
-            true,
-          "absolute inset-y-0 start-0 z-40 md:static": mobile(),
-        }}
+        class="flex h-full min-h-0 shrink-0 flex-col overflow-hidden bg-v2-background-bg-deep pt-2 transition-[width] duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:duration-[0ms]"
       >
         <div class="flex h-full min-h-0 w-[244px] shrink-0 flex-col">
           <Show when={railOpen()}>
-            <div class="flex h-12 shrink-0 items-center gap-3" style={headerPad()} classList={fadeClass()}>
-              <Show when={!mobile()}>
-                <TooltipV2
-                  class="inline-flex shrink-0 items-center"
-                  placement="right"
-                  value={
-                    <>
-                      {language.t("command.sidebar.toggle")}
-                      <KeybindV2 keys={command.keybindParts("sidebar.toggle")} variant="neutral" />
-                    </>
-                  }
-                >
-                  <IconButtonV2
-                    type="button"
-                    data-action="sidebar-toggle"
-                    variant="ghost-muted"
-                    size="large"
-                    class={TREE_TOGGLE}
-                    icon={<IconV2 name="sidebar-right" />}
-                    aria-label={language.t("command.sidebar.toggle")}
-                    aria-expanded={layout.historyTree.opened()}
-                    onClick={() => layout.historyTree.toggle()}
-                  />
-                </TooltipV2>
-              </Show>
-              <Show when={mobile()}>
-                <div class="size-7 shrink-0" aria-hidden="true" />
-              </Show>
+            <div class="flex h-12 shrink-0 items-center gap-2" style={headerPad()} classList={fadeClass()}>
+              <TooltipV2
+                class="inline-flex shrink-0 items-center"
+                placement="right"
+                value={
+                  <>
+                    {language.t("command.sidebar.toggle")}
+                    <KeybindV2 keys={command.keybindParts("sidebar.toggle")} variant="neutral" />
+                  </>
+                }
+              >
+                <IconButtonV2
+                  type="button"
+                  data-action="sidebar-toggle"
+                  variant="ghost-muted"
+                  size="large"
+                  class={TREE_TOGGLE}
+                  icon={<IconV2 name="sidebar-right" />}
+                  aria-label={language.t("command.sidebar.toggle")}
+                  aria-expanded={layout.historyTree.opened()}
+                  onClick={() => layout.historyTree.toggle()}
+                />
+              </TooltipV2>
               <Logo class="h-3.5 w-auto min-w-0 shrink opacity-60" aria-hidden="true" />
             </div>
           </Show>
@@ -276,7 +260,6 @@ export function SessionHistoryTree(props: { update?: TitlebarUpdate }) {
                 aria-pressed={route().type === "draft"}
                 aria-label={language.t("command.session.new")}
                 onClick={() => {
-                  layout.mobileSidebar.hide()
                   chrome.openNewTab()
                 }}
               >
@@ -392,50 +375,42 @@ export function SessionHistoryTree(props: { update?: TitlebarUpdate }) {
           </Show>
         </div>
       </nav>
-    </Show>
-    <Show when={overlayToggle()}>
-      <div
-        data-slot="history-tree-window-chrome"
-        class="pointer-events-none absolute z-20 flex shrink-0 items-center md:z-40"
-        style={{
-          top: `${HISTORY_TREE_CARD_INSET}px`,
-          height: `${HISTORY_TREE_HEADER}px`,
-          "inset-inline-start": `${chromeStart()}px`,
-        }}
-      >
-        <div class="pointer-events-auto shrink-0">
-          <TooltipV2
-            class="inline-flex shrink-0 items-center"
-            placement="right"
-            value={
-              <Show
-                when={mobile()}
-                fallback={
-                  <>
-                    {language.t("command.sidebar.toggle")}
-                    <KeybindV2 keys={command.keybindParts("sidebar.toggle")} variant="neutral" />
-                  </>
-                }
-              >
-                {language.t("sidebar.menu.toggle")}
-              </Show>
-            }
-          >
-            <IconButtonV2
-              type="button"
-              data-action="sidebar-toggle"
-              variant="ghost-muted"
-              size="large"
-              class={TREE_TOGGLE}
-              icon={<IconV2 name={mobile() ? "menu" : "sidebar-right"} />}
-              aria-label={mobile() ? language.t("sidebar.menu.toggle") : language.t("command.sidebar.toggle")}
-              aria-expanded={sidebarOpen()}
-              onClick={() => (mobile() ? layout.mobileSidebar.toggle() : layout.historyTree.toggle())}
-            />
-          </TooltipV2>
+      <Show when={overlayToggle()}>
+        <div
+          data-slot="history-tree-window-chrome"
+          class="pointer-events-none absolute z-20 flex shrink-0 items-center md:z-40"
+          style={{
+            top: `${HISTORY_TREE_CARD_INSET}px`,
+            height: `${HISTORY_TREE_HEADER}px`,
+            "inset-inline-start": `${chromeStart()}px`,
+          }}
+        >
+          <div class="pointer-events-auto shrink-0">
+            <TooltipV2
+              class="inline-flex shrink-0 items-center"
+              placement="right"
+              value={
+                <>
+                  {language.t("command.sidebar.toggle")}
+                  <KeybindV2 keys={command.keybindParts("sidebar.toggle")} variant="neutral" />
+                </>
+              }
+            >
+              <IconButtonV2
+                type="button"
+                data-action="sidebar-toggle"
+                variant="ghost-muted"
+                size="large"
+                class={TREE_TOGGLE}
+                icon={<IconV2 name="sidebar-right" />}
+                aria-label={language.t("command.sidebar.toggle")}
+                aria-expanded={layout.historyTree.opened()}
+                onClick={() => layout.historyTree.toggle()}
+              />
+            </TooltipV2>
+          </div>
         </div>
-      </div>
-    </Show>
+      </Show>
     </>
   )
 }

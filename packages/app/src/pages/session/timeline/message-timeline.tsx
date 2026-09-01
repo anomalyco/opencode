@@ -33,6 +33,8 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -59,9 +61,11 @@ import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
+import { SessionChangesToggle } from "@/components/session/session-changes-toggle"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSessionKey } from "@/pages/session/session-layout"
@@ -69,7 +73,12 @@ import { useSessionArchive } from "@/pages/session/session-archive"
 import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
-import { historyTreeChromeOnCard, historyTreeMacLights, historyTreeTitlePadding } from "@/pages/layout/history-tree-chrome"
+import {
+  HISTORY_TREE_TITLE_PAD,
+  historyTreeChromeOnCard,
+  historyTreeMacLights,
+  historyTreeTitlePadding,
+} from "@/pages/layout/history-tree-chrome"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -258,6 +267,7 @@ export function MessageTimeline(props: {
   setRevealMessage?: (fn: (id: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
   setHistoryAnchor?: (handlers: { capture: () => void; restore: (done: boolean) => void }) => void
+  cover?: JSX.Element
 }) {
   let touchGesture: number | undefined
 
@@ -269,6 +279,7 @@ export function MessageTimeline(props: {
   const dialog = useDialog()
   const sessionArchive = useSessionArchive()
   const language = useLanguage()
+  const command = useCommand()
   const { params, sessionKey } = useSessionKey()
   const ownerSessionKey = sessionKey()
   const cached = timelineCache.get(ownerSessionKey)
@@ -277,11 +288,14 @@ export function MessageTimeline(props: {
   const platform = usePlatform()
   const layout = useLayout()
   const mobile = createMediaQuery("(max-width: 767px)")
-  const titlePadding = () =>
-    historyTreeTitlePadding(
+  const titlePadding = () => {
+    if (mobile()) return HISTORY_TREE_TITLE_PAD
+    return historyTreeTitlePadding(
       historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
-      !mobile() && historyTreeMacLights(platform),
+      historyTreeMacLights(platform),
     )
+  }
+  const titleToggle = () => settings.general.newLayoutDesigns() && mobile() && !layout.historyTree.opened()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const sessionID = createMemo(() => params.id)
@@ -339,7 +353,10 @@ export function MessageTimeline(props: {
     if (value) return value
     return language.t("command.session.new")
   })
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const showHeader = createMemo(() => {
+    if (titleToggle()) return true
+    return !!(titleValue() || parentID())
+  })
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,
@@ -1308,6 +1325,7 @@ export function MessageTimeline(props: {
 
   return (
     <div class="relative w-full h-full min-w-0">
+      <Show when={!props.cover}>
       <div
         class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out"
         classList={{
@@ -1360,6 +1378,7 @@ export function MessageTimeline(props: {
           </button>
         </Show>
       </div>
+      </Show>
       <ScrollView
         viewportRef={bindListRoot}
         onWheel={handleListWheel}
@@ -1407,6 +1426,30 @@ export function MessageTimeline(props: {
                   "pr-3": !settings.general.newLayoutDesigns(),
                 }}
               >
+                <Show when={titleToggle()}>
+                  <TooltipV2
+                    class="inline-flex shrink-0 items-center"
+                    placement="right"
+                    value={
+                      <>
+                        {language.t("command.sidebar.toggle")}
+                        <KeybindV2 keys={command.keybindParts("sidebar.toggle")} variant="neutral" />
+                      </>
+                    }
+                  >
+                    <IconButtonV2
+                      type="button"
+                      data-action="sidebar-toggle"
+                      variant="ghost-muted"
+                      size="large"
+                      class="shrink-0 transition-transform duration-[160ms] ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] motion-reduce:transform-none"
+                      icon={<IconV2 name="sidebar-right" />}
+                      aria-label={language.t("command.sidebar.toggle")}
+                      aria-expanded={layout.historyTree.opened()}
+                      onClick={() => layout.historyTree.toggle()}
+                    />
+                  </TooltipV2>
+                </Show>
                 <div class="flex items-center min-w-0 flex-1 w-full">
                   <Show when={parentID()}>
                     <button
@@ -1437,9 +1480,10 @@ export function MessageTimeline(props: {
                               settings.general.newLayoutDesigns(),
                             "px-2":
                               settings.general.newLayoutDesigns() &&
-                              !historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
+                              (titleToggle() || !historyTreeChromeOnCard(mobile(), layout.historyTree.opened())),
                             "pe-2":
                               settings.general.newLayoutDesigns() &&
+                              !titleToggle() &&
                               historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
                             "grow-1 min-w-0": !settings.general.newLayoutDesigns(),
                           }}
@@ -1463,9 +1507,10 @@ export function MessageTimeline(props: {
                             settings.general.newLayoutDesigns(),
                           "px-2":
                             settings.general.newLayoutDesigns() &&
-                            !historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
+                            (titleToggle() || !historyTreeChromeOnCard(mobile(), layout.historyTree.opened())),
                           "pe-2":
                             settings.general.newLayoutDesigns() &&
+                            !titleToggle() &&
                             historyTreeChromeOnCard(mobile(), layout.historyTree.opened()),
                         }}
                         style={{
@@ -1506,6 +1551,7 @@ export function MessageTimeline(props: {
                       placement="bottom"
                       buttonAppearance={settings.general.newLayoutDesigns() ? "v2" : "default"}
                     />
+                    <SessionChangesToggle />
                     <Show when={!parentID()}>
                       <Show
                         when={settings.general.newLayoutDesigns()}
@@ -1870,6 +1916,14 @@ export function MessageTimeline(props: {
           </Show>
         </div>
       </ScrollView>
+      <Show when={props.cover}>
+        <div
+          class="absolute inset-x-0 bottom-0 z-[70] overflow-hidden bg-v2-background-bg-base"
+          style={{ top: showHeader() ? "48px" : "0px" }}
+        >
+          {props.cover}
+        </div>
+      </Show>
     </div>
   )
 }

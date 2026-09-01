@@ -44,3 +44,15 @@ export function historyTreeTitlePadding(collapsed: boolean, macLights: boolean) 
   if (!collapsed) return HISTORY_TREE_TITLE_PAD
   return HISTORY_TREE_TITLE_PAD + historyTreeTitleShift(macLights)
 }
+
+export function historyTreeWindowToggle(input: {
+  mobile: boolean
+  treeOpened: boolean
+  session: boolean
+}) {
+  if (input.treeOpened) return false
+  // Compact sessions keep the toggle in the title bar, same as the collapsed
+  // desktop tree. Home still needs the in-window control.
+  if (input.mobile && input.session) return false
+  return true
+}
