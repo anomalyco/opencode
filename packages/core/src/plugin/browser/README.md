@@ -28,6 +28,9 @@ Control events use OpenCode's existing authenticated, server-wide event feed.
 Consumers filter by `connectionID`; this identifier is correlation, not private
 event delivery. State and results use RPC calls rather than broadcast events.
 
-The plugin requests normal agent permissions before acting on a URL. Browser
-content is untrusted. Pages use the desktop's network, with no server-side tunnel.
-The desktop owns Chromium, page isolation, and native controls.
+Per-URL permission checks are deferred to the final permission layer (#46530).
+Until that layer lands, browser actions do not enforce URL-specific ask or deny
+rules. Attachment ownership, page validation, and cancellation remain enforced.
+
+Browser content is untrusted. Pages use the desktop's network, with no server-side
+tunnel. The desktop owns Chromium, page isolation, and native controls.
