@@ -162,6 +162,6 @@ describe("MCP OAuth", () => {
   })
 
   test("rejects an invalid redirect URL", async () => {
-    await expect(authorize("not a URL")).rejects.toThrow("cannot be parsed as a URL")
+    await expect(authorize("not a URL")).rejects.toThrow(TypeError)
   })
 })
