@@ -35,7 +35,7 @@ export function waitForCodeModeTool(
 ): Effect.Effect<Tool.Snapshot, Error> {
   return Effect.gen(function* () {
     const toolSet = yield* registry.snapshot()
-    if (toolSet.codeModeCatalog?.some((tool) => tool.path === path)) return toolSet
+    if (toolSet.codeModeCatalog?.tools.some((tool) => tool.path === path)) return toolSet
     if (remaining === 0) {
       return yield* Effect.fail(new Error(`Timed out waiting for Code Mode tool: ${path}`))
     }

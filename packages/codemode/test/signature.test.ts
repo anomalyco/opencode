@@ -139,6 +139,81 @@ describe("pretty signature rendering", () => {
     expect(pretty).toBe(["{", "  size?: number,", "}"].join("\n"))
   })
 
+  test.each([
+    [{ type: "number", minimum: 0 }, "@minimum 0", "number"],
+    [{ type: "number", maximum: 0 }, "@maximum 0", "number"],
+    [{ type: "number", exclusiveMinimum: 0 }, "@exclusiveMinimum 0", "number"],
+    [{ type: "number", exclusiveMaximum: 0 }, "@exclusiveMaximum 0", "number"],
+    [{ type: "number", multipleOf: 0.25 }, "@multipleOf 0.25", "number"],
+    [{ type: "string", minLength: 0 }, "@minLength 0", "string"],
+    [{ type: "string", maxLength: 0 }, "@maxLength 0", "string"],
+    [{ type: "string", pattern: "^[a-z]+$" }, "@pattern ^[a-z]+$", "string"],
+    [{ type: "array", minItems: 0 }, "@minItems 0", "Array<unknown>"],
+    [{ type: "array", maxItems: 0 }, "@maxItems 0", "Array<unknown>"],
+    [{ type: "array", uniqueItems: true }, "@uniqueItems true", "Array<unknown>"],
+  ] as const)("renders constraint %j without changing the compact type", (value, tag, type) => {
+    const schema = { type: "object", properties: { value } }
+    expect(jsonSchemaToTypeScript(schema, true)).toBe(["{", `  /** ${tag} */`, `  value?: ${type},`, "}"].join("\n"))
+    expect(jsonSchemaToTypeScript(schema)).toBe(`{ value?: ${type} }`)
+  })
+
+  test("documents integer numbers without adding redundant types or requiring uniqueness when false", () => {
+    expect(
+      jsonSchemaToTypeScript(
+        {
+          type: "object",
+          properties: {
+            count: { type: "integer" },
+            amount: { type: "number" },
+            name: { type: "string" },
+            enabled: { type: "boolean" },
+            values: { type: "array", uniqueItems: false },
+            choice: { type: ["integer", "string"] },
+          },
+        },
+        true,
+      ),
+    ).toBe(
+      [
+        "{",
+        "  /** @integer */",
+        "  count?: number,",
+        "  amount?: number,",
+        "  name?: string,",
+        "  enabled?: boolean,",
+        "  values?: Array<unknown>,",
+        "  choice?: number | string,",
+        "}",
+      ].join("\n"),
+    )
+  })
+
+  test.each([false, null, ""])("preserves default %j alongside constraint tags", (value) => {
+    expect(jsonSchemaToTypeScript({ properties: { value: { default: value, minLength: 0 } } }, true)).toContain(
+      `   * @default ${JSON.stringify(value)}\n   * @minLength 0\n`,
+    )
+  })
+
+  test("escapes comment terminators in tag values", () => {
+    expect(
+      jsonSchemaToTypeScript(
+        { properties: { value: { type: "string", default: "*/", format: "*/", pattern: "^a*/b$" } } },
+        true,
+      ),
+    ).toBe(
+      [
+        "{",
+        "  /**",
+        '   * @default "* /"',
+        "   * @format * /",
+        "   * @pattern ^a* /b$",
+        "   */",
+        "  value?: string,",
+        "}",
+      ].join("\n"),
+    )
+  })
+
   test("neutralizes */ inside descriptions so nothing closes the comment early", () => {
     const pretty = jsonSchemaToTypeScript(
       { type: "object", properties: { note: { type: "string", description: "Ends */ early" } } },
@@ -377,6 +452,67 @@ describe("union schemas render every alternative", () => {
 })
 
 describe("JSDoc signatures in catalogs and search results", () => {
+  test.each([
+    {
+      source: "JSON Schema",
+      schema: {
+        type: "object",
+        properties: {
+          count: { type: "integer", minimum: 0, maximum: 10 },
+          name: { type: "string", minLength: 1, maxLength: 20, pattern: "^[a-z]+$" },
+          labels: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
+        },
+        required: ["count", "name", "labels"],
+      },
+    },
+    {
+      source: "Effect",
+      schema: Schema.Struct({
+        count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(10)),
+        name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20), Schema.isPattern(/^[a-z]+$/)),
+        labels: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(5)),
+      }),
+    },
+  ])("$source constraints survive input/output catalog and search signatures", async ({ schema }) => {
+    const runtime = CodeMode.make({
+      tools: {
+        constrained: Tool.make({
+          description: "Constrained tool",
+          input: schema,
+          output: schema,
+          execute: () => Effect.succeed({ count: 1, name: "test", labels: ["test"] }),
+        }),
+      },
+    })
+    const type = [
+      "{",
+      "  /**",
+      "   * @integer",
+      "   * @minimum 0",
+      "   * @maximum 10",
+      "   */",
+      "  count: number,",
+      "  /**",
+      "   * @minLength 1",
+      "   * @maxLength 20",
+      "   * @pattern ^[a-z]+$",
+      "   */",
+      "  name: string,",
+      "  /**",
+      "   * @minItems 1",
+      "   * @maxItems 5",
+      "   */",
+      "  labels: Array<string>,",
+      "}",
+    ].join("\n")
+    const signature = `tools.constrained(input: ${type}): Promise<${type}>`
+    expect(runtime.catalog()[0]?.signature).toBe(signature)
+    const result = await Effect.runPromise(runtime.execute('return search({ query: "tools.constrained" })'))
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("search failed")
+    expect(result.value).toMatchObject({ items: [{ signature }] })
+  })
+
   const runtime = CodeMode.make({ tools: { github: { list_issues: listIssues }, orders: { lookup: lookupOrder } } })
 
   const search = async (query: string) => {

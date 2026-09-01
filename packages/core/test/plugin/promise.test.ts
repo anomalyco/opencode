@@ -963,7 +963,7 @@ describe("fromPromise", () => {
       })
       const original = yield* registry.snapshot()
       expect(original.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
-      expect(original.codeModeCatalog).toEqual([])
+      expect(original.codeModeCatalog?.tools).toEqual([])
 
       yield* PluginPromise.fromPromise(
         define({
@@ -981,7 +981,7 @@ describe("fromPromise", () => {
 
       const snapshot = yield* registry.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["acme.hello"])
+      expect(snapshot.codeModeCatalog?.tools.map((tool) => tool.path)).toEqual(["acme.hello"])
       expect(original.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
       expect(
         yield* snapshot.execute({

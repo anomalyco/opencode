@@ -1,22 +1,29 @@
 export * as CodeModeCatalog from "./catalog.js"
 
+import type { Namespace } from "@opencode-ai/schema/tool"
 import { Schema } from "effect"
 
-export const Entry = Schema.Struct({
+export const Tool = Schema.Struct({
   path: Schema.String,
   description: Schema.String,
   signature: Schema.String,
   pinned: Schema.optionalKey(Schema.Boolean),
 })
-export type Entry = typeof Entry.Type
+export type Tool = typeof Tool.Type
+
+export type Inventory = {
+  readonly tools: ReadonlyArray<Tool>
+  readonly namespaces?: ReadonlyMap<string, Namespace>
+}
 
 const Listing = Schema.Struct({
   path: Schema.String,
   line: Schema.String,
 })
 
-const Namespace = Schema.Struct({
+const NamespaceSummary = Schema.Struct({
   name: Schema.String,
+  description: Schema.optionalKey(Schema.String),
   count: Schema.Number,
   entries: Schema.Array(Listing),
 })
@@ -24,24 +31,30 @@ const Namespace = Schema.Struct({
 export const Summary = Schema.Struct({
   total: Schema.Number,
   shown: Schema.Number,
-  namespaces: Schema.Array(Namespace),
+  namespaces: Schema.Array(NamespaceSummary),
 })
 export type Summary = typeof Summary.Type
+
+export type Options = {
+  readonly budget?: number
+}
 
 const DESCRIPTION_LIMIT = 120
 const CHARACTERS_PER_TOKEN = 4
 const INLINE_BUDGET = 2_000
 
-// Keep every namespace searchable, then select full listings one per namespace per round,
+// Keep every namespace visible, then select full listings one per namespace per round,
 // considering shorter listings first until the inline budget is exhausted.
-export function summarize(entries: ReadonlyArray<Entry>, budget = INLINE_BUDGET): Summary {
-  const namespaces = [...Map.groupBy(entries, (entry) => entry.path.split(".", 1)[0] ?? entry.path)]
+export function summarize(inventory: Inventory, options: Options = {}): Summary {
+  const budget = options.budget ?? INLINE_BUDGET
+  const namespaces = [...Map.groupBy(inventory.tools, (tool) => tool.path.split(".", 1)[0] ?? tool.path)]
     .sort(([left], [right]) => {
       if (left < right) return -1
       if (left > right) return 1
       return 0
     })
     .map(([name, namespaceEntries]) => {
+      const description = inventory.namespaces?.get(name)?.description
       const listings = namespaceEntries
         .map((entry) => {
           const firstLine = entry.description.split("\n", 1)[0]?.trim() ?? ""
@@ -64,6 +77,7 @@ export function summarize(entries: ReadonlyArray<Entry>, budget = INLINE_BUDGET)
       )
       return {
         name,
+        ...(description === undefined ? {} : { description }),
         listings,
         selectionOrder: ranked.filter((candidate) => !pinned.has(candidate.listing)),
         selectedListings: pinned,
@@ -72,11 +86,25 @@ export function summarize(entries: ReadonlyArray<Entry>, budget = INLINE_BUDGET)
     })
 
   const active = new Set(namespaces)
+  // TODO: Bound namespace discovery once large namespace inventories and descriptions can no longer stay inline.
   let remaining =
     budget -
+    namespaces.reduce(
+      (total, namespace) =>
+        total +
+        cost(
+          namespaceLine({
+            name: namespace.name,
+            ...(namespace.description === undefined ? {} : { description: namespace.description }),
+            count: namespace.listings.length,
+            entries: [],
+          }),
+        ),
+      0,
+    ) -
     namespaces
       .flatMap((namespace) => namespace.listings.filter((listing) => namespace.selectedListings.has(listing)))
-      .reduce((total, listing) => total + Math.round(listing.line.length / CHARACTERS_PER_TOKEN), 0)
+      .reduce((total, listing) => total + cost(listing.line), 0)
   while (active.size > 0) {
     for (const namespace of active) {
       const candidate = namespace.selectionOrder[namespace.selectionIndex]
@@ -93,23 +121,39 @@ export function summarize(entries: ReadonlyArray<Entry>, budget = INLINE_BUDGET)
 
   const namespaceSummaries = namespaces.map((namespace) => ({
     name: namespace.name,
+    ...(namespace.description === undefined ? {} : { description: namespace.description }),
     count: namespace.listings.length,
     entries: namespace.listings.filter((listing) => namespace.selectedListings.has(listing)),
   }))
   return {
-    total: entries.length,
+    total: inventory.tools.length,
     shown: namespaceSummaries.reduce((total, namespace) => total + namespace.entries.length, 0),
     namespaces: namespaceSummaries,
   }
 }
 
+export function namespaceLine(namespace: typeof NamespaceSummary.Type) {
+  const count = namespace.count === 1 ? "1 tool" : `${namespace.count} tools`
+  const label =
+    namespace.entries.length === namespace.count
+      ? count
+      : namespace.entries.length === 0
+        ? `${count}, none shown`
+        : `${count}, ${namespace.entries.length} shown`
+  return `- ${namespace.name} (${label})${namespace.description === undefined ? "" : ` // ${namespace.description}`}`
+}
+
 function rankListings(listings: ReadonlyArray<typeof Listing.Type>) {
   return listings
-    .map((listing) => ({ listing, cost: Math.round(listing.line.length / CHARACTERS_PER_TOKEN) }))
+    .map((listing) => ({ listing, cost: cost(listing.line) }))
     .toSorted((left, right) => {
       if (left.cost !== right.cost) return left.cost - right.cost
       if (left.listing.path < right.listing.path) return -1
       if (left.listing.path > right.listing.path) return 1
       return 0
     })
+}
+
+function cost(text: string) {
+  return Math.round(text.length / CHARACTERS_PER_TOKEN)
 }
