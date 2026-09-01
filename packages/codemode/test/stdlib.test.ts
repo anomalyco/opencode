@@ -17,7 +17,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import { IteratorSymbol } from "../src/interpreter/model.js"
+import { AsyncIteratorSymbol, IteratorSymbol } from "../src/interpreter/model.js"
 import { invokeObjectMethod } from "../src/stdlib/object.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
@@ -863,6 +863,49 @@ describe("stdlib integration", () => {
     expect(Object.hasOwn(target, "nested")).toBe(false)
   })
 
+  test("Object.assign cycle checks traverse sparse keys lazily", () => {
+    const target = {}
+    const reads: Array<boolean> = []
+    const nested = Object.defineProperties([], {
+      4294967294: { enumerable: true, value: target },
+      later: {
+        enumerable: true,
+        get() {
+          reads.push(true)
+          return null
+        },
+      },
+    })
+    expect(() => invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression" })).toThrow(
+      "Object.assign result contains a circular value.",
+    )
+    expect(reads).toEqual([])
+  })
+
+  test("Object.assign stops after a supported symbol write fails", () => {
+    const previous = () => ({ done: true })
+    const target = Object.defineProperty({}, IteratorSymbol, { value: previous })
+    const reads: Array<boolean> = []
+    const source = Object.defineProperties(
+      {},
+      {
+        [IteratorSymbol]: { enumerable: true, value: () => ({ done: false }) },
+        [AsyncIteratorSymbol]: {
+          enumerable: true,
+          get() {
+            reads.push(true)
+            return () => ({ done: true })
+          },
+        },
+      },
+    )
+    expect(() => invokeObjectMethod("assign", [target, source], { type: "CallExpression" })).toThrow(
+      "Object.assign could not assign property",
+    )
+    expect(Reflect.get(target, IteratorSymbol)).toBe(previous)
+    expect(reads).toEqual([])
+  })
+
   test("Object.assign rejects direct and nested cycles", async () => {
     expect(
       await value(`
@@ -932,6 +975,23 @@ describe("stdlib integration", () => {
         return [result === target, result.left === shared, result.left === result.right, shared.count]
       `),
     ).toEqual([true, true, true, 2])
+  })
+
+  test("Object.assign traverses shared aliases once", () => {
+    const reads: Array<boolean> = []
+    const shared = Object.defineProperty({}, "value", {
+      enumerable: true,
+      get() {
+        reads.push(true)
+        return 1
+      },
+    })
+    const target = {}
+    expect(invokeObjectMethod("assign", [target, { left: shared, right: shared }], { type: "CallExpression" })).toBe(
+      target,
+    )
+    expect(target).toEqual({ left: shared, right: shared })
+    expect(reads).toEqual([true])
   })
 
   test("assignment resolves and reads its left side before evaluating the right side", async () => {

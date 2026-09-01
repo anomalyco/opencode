@@ -45,19 +45,10 @@ export const isRuntimeReference = (value: unknown): boolean =>
   isCodeModeValue(value)
 
 function* childValues(value: object): Generator {
-  if (Array.isArray(value)) {
-    const length = value.length
-    for (let index = 0; index < length; index++) yield value[index]
-  } else {
-    yield* Object.values(value)
-  }
-  for (const symbol of Object.getOwnPropertySymbols(value)) {
-    if (
-      (symbol === AsyncIteratorSymbol || symbol === IteratorSymbol) &&
-      Object.prototype.propertyIsEnumerable.call(value, symbol)
-    ) {
-      yield Reflect.get(value, symbol)
-    }
+  for (const key of Reflect.ownKeys(value)) {
+    if (!Object.prototype.propertyIsEnumerable.call(value, key)) continue
+    if (typeof key === "symbol" && key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
+    yield Reflect.get(value, key)
   }
 }
 
@@ -100,9 +91,14 @@ export const containsOpaqueReference = (value: unknown): boolean => {
 }
 
 // Reject cycles before mutation so later boundary walks remain safe.
-export const rejectCircularInsertion = (container: object, value: unknown, label: string, node: AstNode): void => {
+export const rejectCircularInsertion = (
+  container: object,
+  value: unknown,
+  label: string,
+  node: AstNode,
+  seen = new Set<object>(),
+): void => {
   const pending: Array<Iterator<unknown>> = [[value].values()]
-  const seen = new Set<object>()
   while (pending.length > 0) {
     const next = pending.at(-1)!.next()
     if (next.done) {

@@ -31,11 +31,6 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
     }
     return input as Record<string, unknown>
   }
-  const guardedSet = (out: Record<string, unknown>, key: string, item: unknown): void => {
-    if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
-    rejectCircularInsertion(out, item, "Object.assign result", node)
-    out[key] = item
-  }
   switch (name) {
     case "keys":
       return Object.keys(requireObject())
@@ -59,6 +54,16 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
         throw new InterpreterRuntimeError("Object.assign expects a data object target.", node)
       }
       const out = target as Record<string, unknown>
+      const seen = new Set<object>()
+      const guardedSet = (key: PropertyKey, item: unknown): void => {
+        if (typeof key === "string" && isBlockedMember(key))
+          throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
+        rejectCircularInsertion(out, item, "Object.assign result", node, seen)
+        if (!Reflect.set(out, key, item))
+          throw new InterpreterRuntimeError(`Object.assign could not assign property '${String(key)}'.`, node).as(
+            "TypeError",
+          )
+      }
       for (const source of args.slice(1)) {
         if (source === null || source === undefined || isCodeModeValue(source)) continue
         if (typeof source !== "object" || Array.isArray(source)) {
@@ -66,14 +71,12 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
         }
         for (const key of Reflect.ownKeys(source)) {
           if (typeof key === "string") {
-            if (Object.prototype.propertyIsEnumerable.call(source, key)) guardedSet(out, key, Reflect.get(source, key))
+            if (Object.prototype.propertyIsEnumerable.call(source, key)) guardedSet(key, Reflect.get(source, key))
             continue
           }
           if (key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
           if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue
-          const item = Reflect.get(source, key)
-          rejectCircularInsertion(out, item, "Object.assign result", node)
-          Reflect.set(out, key, item)
+          guardedSet(key, Reflect.get(source, key))
         }
       }
       return out
