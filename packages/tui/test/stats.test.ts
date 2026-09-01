@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionStatsInfo } from "@opencode-ai/client"
-import { statsCalendar, statsMetrics, statsNumber, statsRange } from "../src/feature-plugins/system/stats-data"
+import { statsCalendar, statsMetrics, statsNumber } from "../src/feature-plugins/system/stats-data"
 
 const stats: SessionStatsInfo = {
   range: { from: new Date(2026, 0, 1).getTime(), to: new Date(2026, 0, 8).getTime() },
@@ -29,14 +29,6 @@ describe("stats poster", () => {
       { label: "sessions", value: 12 },
     ])
     expect([0, 685, 5284, 9_200_000_000].map(statsNumber)).toEqual(["0", "685", "5.3K", "9.2B"])
-  })
-
-  test("uses local calendar boundaries and a seven-day inclusive window", () => {
-    const now = new Date(2026, 2, 10, 12)
-    expect(statsRange("year", now).from).toBe(new Date(2026, 0, 1).getTime())
-    expect(statsRange("month", now).from).toBe(new Date(2026, 2, 1).getTime())
-    expect(statsRange("week", now).from).toBe(new Date(2026, 2, 4).getTime())
-    expect(statsRange("all", now)).toEqual({ from: undefined, to: now.getTime() + 1, label: "All time" })
   })
 
   test("aligns Monday-first weeks, excludes out-of-range cells, and preserves intensity", () => {

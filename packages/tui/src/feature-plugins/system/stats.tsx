@@ -6,7 +6,7 @@ import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { Logo } from "../../component/logo"
 import { useTheme } from "../../context/theme"
 import { tint } from "../../theme/color"
-import { periods, statsCalendar, statsMetrics, statsNumber, statsRange, type StatsPeriod } from "./stats-data"
+import { statsCalendar, statsMetrics, statsNumber } from "./stats-data"
 
 const digits: Record<string, string[]> = {
   "0": ["111", "101", "101", "101", "111"],
@@ -26,14 +26,19 @@ const digits: Record<string, string[]> = {
   T: ["111", "010", "010", "010", "010"],
 }
 
-export function StatsPoster(props: { stats: SessionStatsInfo; label: string; headline: number }) {
+export function StatsPoster(props: { stats: SessionStatsInfo }) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const width = () => Math.max(12, Math.min(110, dimensions().width - 8))
   const compact = () => dimensions().height < 38
   const metrics = createMemo(() => statsMetrics(props.stats))
-  const headline = () => metrics()[props.headline]
-  const number = () => statsNumber(headline().value)
+  const number = () => statsNumber(metrics()[0].value)
+  const dates = createMemo(() =>
+    new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).formatRange(
+      new Date(props.stats.range.from),
+      new Date(Math.max(props.stats.range.from, props.stats.range.to - 1)),
+    ),
+  )
   const letters = createMemo(() => Array.from(number()).map((char) => digits[char]))
   const large = () =>
     letters().every(Boolean) && letters().reduce((sum, char) => sum + char[0].length * 2 + 2, -2) <= width()
@@ -45,11 +50,11 @@ export function StatsPoster(props: { stats: SessionStatsInfo; label: string; hea
 
   return (
     <box width={width()} flexDirection="column" alignItems="center" flexShrink={0} gap={compact() ? 1 : 2}>
-      <box width="100%" flexDirection="row" justifyContent="space-between">
+      <box width="100%" flexDirection={width() < 44 ? "column" : "row"} justifyContent="space-between">
         <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
           opencode / stats
         </text>
-        <text fg={theme.text.subdued}>{props.label}</text>
+        <text fg={theme.text.subdued}>{dates()}</text>
       </box>
       <Show when={!compact()}>
         <Logo />
@@ -75,9 +80,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo; label: string; hea
             </For>
           </box>
         </Show>
-        <text fg={theme.text.subdued}>
-          {headline().label === "best streak" ? "DAY BEST STREAK" : headline().label.toUpperCase()}
-        </text>
+        <text fg={theme.text.subdued}>TOKENS</text>
       </box>
       <box alignItems="center">
         <text fg={theme.text.subdued}>{"    " + calendar().months}</text>
@@ -96,11 +99,11 @@ export function StatsPoster(props: { stats: SessionStatsInfo; label: string; hea
           )}
         </For>
         <Show when={calendar().clipped}>
-          <text fg={theme.text.subdued}>activity / latest {calendar().weeks.length} weeks</text>
+          <text fg={theme.text.subdued}>Your last {calendar().weeks.length} weeks</text>
         </Show>
       </box>
       <box width="100%" flexDirection="row" justifyContent="space-around">
-        <For each={metrics().filter((_, index) => index !== props.headline)}>
+        <For each={metrics().slice(1)}>
           {(metric) => (
             <box alignItems="center">
               <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
@@ -113,7 +116,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo; label: string; hea
         </For>
       </box>
       <box width="100%" flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text.subdued}>All projects</text>
+        <text fg={theme.text.subdued}>All time. All projects.</text>
         <text fg={theme.text.default}>opencode.ai</text>
       </box>
     </box>
@@ -121,67 +124,16 @@ export function StatsPoster(props: { stats: SessionStatsInfo; label: string; hea
 }
 
 function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
-  const dimensions = useTerminalDimensions()
-  const [period, setPeriod] = createSignal<StatsPeriod>("year")
-  const [headline, setHeadline] = createSignal(0)
-  const [presentation, setPresentation] = createSignal(false)
-  const [revision, setRevision] = createSignal(0)
-  const query = createMemo(() => {
-    revision()
-    return statsRange(period())
-  })
-  const [result] = createResource(query, async (range) => {
-    const response = await props.context.client.session.stats({
-      from: range.from,
-      to: range.to,
+  const [result] = createResource(() =>
+    props.context.client.session.stats({
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       tools: "none",
-    })
-    return { stats: response, label: range.label }
-  })
+    }),
+  )
   const theme = useTheme()
-  const changePeriod = (direction: number) =>
-    setPeriod((value) => periods[(periods.indexOf(value) + direction + periods.length) % periods.length])
 
   props.context.keymap.layer(() => ({
-    commands: [
-      { bind: "escape", title: "Back", run: () => (presentation() ? setPresentation(false) : props.onClose()) },
-      {
-        bind: "left",
-        title: "Previous period",
-        run: () => {
-          if (!presentation()) changePeriod(-1)
-        },
-      },
-      {
-        bind: "right",
-        title: "Next period",
-        run: () => {
-          if (!presentation()) changePeriod(1)
-        },
-      },
-      {
-        bind: "h",
-        title: "Change headline",
-        run: () => {
-          if (!presentation()) setHeadline((value) => (value + 1) % 4)
-        },
-      },
-      {
-        bind: "p",
-        title: "Presentation mode",
-        run: () => {
-          if (!result.loading && !result.error) setPresentation((value) => !value)
-        },
-      },
-      {
-        bind: "r",
-        title: "Refresh stats",
-        run: () => {
-          if (!presentation()) setRevision((value) => value + 1)
-        },
-      },
-    ],
+    commands: [{ bind: "escape", title: "Back", run: props.onClose }],
   }))
 
   return (
@@ -198,22 +150,17 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
       >
         <Show
           when={!result.error}
-          fallback={<text fg={theme.text.feedback.error.default}>Could not load stats. Press r to retry.</text>}
+          fallback={
+            <text fg={theme.text.feedback.error.default}>Could not load stats. Reopen /stats to try again.</text>
+          }
         >
           <Show when={result()} fallback={<text fg={theme.text.subdued}>Gathering your stats...</text>}>
-            {(value) => <StatsPoster stats={value().stats} label={value().label} headline={headline()} />}
+            {(value) => <StatsPoster stats={value()} />}
           </Show>
         </Show>
       </scrollbox>
-      <box height={dimensions().width < 72 ? 3 : 2} alignItems="center" flexShrink={0} paddingLeft={1} paddingRight={1}>
-        <Show when={!presentation()}>
-          <text fg={theme.text.subdued}>
-            {result.loading ? "loading / " : ""}
-            {dimensions().width < 72
-              ? "left/right period   h headline\np present   r refresh   esc back"
-              : "left/right period   h headline   p present   r refresh   esc back"}
-          </text>
-        </Show>
+      <box height={2} alignItems="center" flexShrink={0}>
+        <text fg={theme.text.subdued}>esc back</text>
       </box>
     </box>
   )

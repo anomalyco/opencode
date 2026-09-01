@@ -24,7 +24,6 @@ export const statsFixture: SessionStatsInfo = {
 }
 
 function StatsStory(props: { context: Plugin.Context }) {
-  const [headline, setHeadline] = createSignal(0)
   const [empty, setEmpty] = createSignal(false)
   const stats = () =>
     empty()
@@ -46,13 +45,11 @@ function StatsStory(props: { context: Plugin.Context }) {
         title: "Back",
         run: () => props.context.ui.router.navigate({ type: "plugin", name: "storybook" }),
       },
-      { bind: "h", title: "Headline", run: () => setHeadline((value) => (value + 1) % 4) },
       { bind: "e", title: "Empty", run: () => setEmpty((value) => !value) },
       {
         bind: "r",
         title: "Reset",
         run: () => {
-          setHeadline(0)
           setEmpty(false)
         },
       },
@@ -70,13 +67,12 @@ function StatsStory(props: { context: Plugin.Context }) {
           paddingBottom: 1,
         }}
       >
-        <StatsPoster stats={stats()} label="2026 so far" headline={headline()} />
+        <StatsPoster stats={stats()} />
       </scrollbox>
       <StoryFooter
         context={props.context}
         title="storybook / stats"
         controls={[
-          { shortcut: "h", label: "headline" },
           { shortcut: "e", label: "empty" },
           { shortcut: "r", label: "reset" },
           { shortcut: "esc", label: "back" },

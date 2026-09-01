@@ -1,23 +1,5 @@
 import type { SessionStatsInfo } from "@opencode-ai/client"
 
-export const periods = ["year", "month", "week", "all"] as const
-export type StatsPeriod = (typeof periods)[number]
-
-export function statsRange(period: StatsPeriod, now = new Date()) {
-  const to = now.getTime() + 1
-  if (period === "all") return { from: undefined, to, label: "All time" }
-  if (period === "year")
-    return { from: new Date(now.getFullYear(), 0, 1).getTime(), to, label: `${now.getFullYear()} so far` }
-  if (period === "month")
-    return {
-      from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
-      to,
-      label: now.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-    }
-  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
-  return { from: from.getTime(), to, label: "Last 7 days" }
-}
-
 export function statsMetrics(stats: SessionStatsInfo) {
   return [
     {

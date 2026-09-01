@@ -6,7 +6,7 @@ import { statsFixture } from "../src/feature-plugins/system/storybook/stats"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
-test("stats retries failures, freezes presentation, and returns to the original route", async () => {
+test("stats loads all-time tokens and returns to the original route after errors or success", async () => {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 34, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
@@ -39,21 +39,22 @@ test("stats retries failures, freezes presentation, and returns to the original 
     await setup.waitForFrame((frame) => frame.includes("Usage statistics"))
     setup.mockInput.pressKey("RETURN")
     await setup.waitForFrame((frame) => frame.includes("Could not load stats"))
-    await setup.mockInput.typeText("r")
+    setup.mockInput.pressKey("ESCAPE")
+    await setup.waitForFrame((frame) => frame.includes("commands") && !frame.includes("Could not load stats"))
+    await setup.mockInput.typeText("/stats")
+    await setup.waitForFrame((frame) => frame.includes("Usage statistics"))
+    setup.mockInput.pressKey("RETURN")
     await setup.waitForFrame((frame) => frame.includes("TOKENS") && frame.includes("All projects"))
     expect(requests[1].searchParams.get("tools")).toBe("none")
-    await setup.mockInput.typeText("h")
-    await setup.waitForFrame((frame) => frame.includes("DAY BEST STREAK"))
-    expect(setup.captureCharFrame()).toContain("9.2B")
-    await setup.mockInput.typeText("p")
-    await setup.waitForFrame((frame) => !frame.includes("p present"))
-    await setup.mockInput.typeText("rh")
+    expect(requests[1].searchParams.has("from")).toBe(false)
+    expect(requests[1].searchParams.has("to")).toBe(false)
+    expect(setup.captureCharFrame()).toContain("All time. All projects.")
+    await setup.mockInput.typeText("rhp")
     setup.mockInput.pressKey("RIGHT")
     await setup.waitForVisualIdle()
     expect(requests).toHaveLength(2)
-    expect(setup.captureCharFrame()).toContain("DAY BEST STREAK")
-    setup.mockInput.pressKey("ESCAPE")
-    await setup.waitForFrame((frame) => frame.includes("p present"))
+    expect(setup.captureCharFrame()).toContain("TOKENS")
+    expect(setup.captureCharFrame()).not.toContain("headline")
     setup.mockInput.pressKey("ESCAPE")
     await setup.waitForFrame((frame) => frame.includes("commands") && !frame.includes("opencode / stats"))
   } finally {
