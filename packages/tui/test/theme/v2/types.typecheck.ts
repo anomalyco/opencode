@@ -3,7 +3,6 @@ import type { BackgroundDefinition, TextDefinition, ThemeDefinition, ThemeDocume
 const text = {
   default: "$hue.neutral.900",
   subdued: "$hue.neutral.600",
-  emphasis: "$hue.accent.600",
   action: {
     primary: {
       default: "$hue.neutral.100",

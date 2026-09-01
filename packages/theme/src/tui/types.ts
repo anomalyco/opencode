@@ -28,8 +28,6 @@ export type ResolvedThemeTokens = {
   readonly text: {
     readonly default: RGBA
     readonly subdued: RGBA
-    /** Non-interactive emphasis, such as a headline metric. */
-    readonly emphasis: RGBA
     readonly action: Readonly<Record<ActionVariant, StatefulColor>>
     readonly formfield: FormfieldColor
     readonly status: {

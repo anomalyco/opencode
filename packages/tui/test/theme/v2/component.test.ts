@@ -15,7 +15,6 @@ test("provides reactive properties, states, contexts, and color operations", () 
   }
 
   expect(theme.text.default).toBe(resolved().text.default)
-  expect(theme.text.emphasis).toBe(resolved().text.emphasis)
   expect(theme.hue.accent[500]).toBe(resolved().hue.accent[500])
   expect(theme.hue.interactive[500]).toBe(resolved().hue.interactive[500])
   expect(theme.hue.gray[200]).toBe(resolved().hue.gray[200])
@@ -64,7 +63,6 @@ test("provides reactive properties, states, contexts, and color operations", () 
 
   setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
   setMode("dark")
-  expect(current().text.emphasis).toBe(resolved().contextual.elevated.text.emphasis)
   expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
   expect(current().decrease(current().background.surface.offset, 1)).toBe(resolved().hue.neutral[600])
   expect(current().raise(current().background.surface.offset)).toBe(resolved().hue.neutral[600])

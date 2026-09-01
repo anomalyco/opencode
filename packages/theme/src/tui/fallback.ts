@@ -8,7 +8,6 @@ export function fallback(mode: Mode): ThemeTokensDefinition {
   return {
     text: {
       default: red,
-      emphasis: DEFAULT_THEME[mode].text.emphasis,
       action: Object.fromEntries(ActionVariant.literals.map((variant) => [variant, { default: red }])),
       formfield: { default: red },
       status: DEFAULT_THEME[mode].text.status,

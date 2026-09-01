@@ -5,7 +5,7 @@ import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { Logo } from "../../component/logo"
-import { useTheme } from "../../context/theme"
+import { useTheme, useThemes } from "../../context/theme"
 import { tint } from "../../theme/color"
 import { statsMetrics, statsNumber } from "./stats-data"
 
@@ -30,6 +30,7 @@ const digits: Record<string, string[]> = {
 export function StatsPoster(props: { stats: SessionStatsInfo }) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
+  const themes = useThemes()
   const width = () => Math.max(12, Math.min(110, dimensions().width - 8))
   const compact = () => dimensions().height < 38
   const metrics = createMemo(() => statsMetrics(props.stats))
@@ -53,7 +54,9 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
   )
   const shades = createMemo(() => [
     theme.text.subdued,
-    ...[0.3, 0.5, 0.75, 1].map((alpha) => tint(theme.background.default, theme.text.emphasis, alpha)),
+    ...[0.3, 0.5, 0.75, 1].map((alpha) =>
+      tint(theme.background.default, theme.categorical[0][themes.mode() === "light" ? 800 : 200], alpha),
+    ),
   ])
 
   return (

@@ -106,7 +106,6 @@ const BackgroundFeedbackDefinition = Schema.Struct({
 const TextDefinition = Schema.Struct({
   default: Schema.optional(ColorValue),
   subdued: Schema.optional(ColorValue),
-  emphasis: Schema.optional(ColorValue),
   action: Schema.optional(ActionColorDefinition),
   formfield: Schema.optional(StatefulColorDefinition),
   status: Schema.optional(
