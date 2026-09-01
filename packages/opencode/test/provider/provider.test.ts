@@ -1548,6 +1548,57 @@ test("models.dev reasoning options replace generated variants and unsupported to
   expect(models["gemini-3-pro-fast"].variants).toEqual(models.override.variants)
 })
 
+test("built-in alibaba provider resolves to the bundled @ai-sdk/alibaba npm", () => {
+  const provider = {
+    id: "alibaba",
+    name: "Alibaba",
+    npm: "@ai-sdk/openai-compatible",
+    env: ["DASHSCOPE_API_KEY"],
+    models: {
+      "qwen3.8-max": {
+        id: "qwen3.8-max",
+        name: "Qwen3.8 Max",
+        reasoning: true,
+        reasoning_options: [{ type: "toggle" }],
+        limit: { context: 128_000, output: 64_000 },
+      },
+      "qwen3.8-instruct": {
+        id: "qwen3.8-instruct",
+        name: "Qwen3.8 Instruct",
+        reasoning: true,
+        reasoning_options: [{ type: "toggle" }],
+        // model-level catalog npm stays authoritative over the bundled correction
+        provider: { npm: "@ai-sdk/openai-compatible" },
+        limit: { context: 128_000, output: 64_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const models = Provider.fromModelsDevProvider(provider).models
+  expect(models["qwen3.8-max"].api.npm).toBe("@ai-sdk/alibaba")
+  expect(models["qwen3.8-instruct"].api.npm).toBe("@ai-sdk/openai-compatible")
+})
+
+test("providers without a bundled SDK keep the catalog npm fallback", () => {
+  const provider = {
+    id: "acme",
+    name: "Acme",
+    npm: "@ai-sdk/openai-compatible",
+    env: ["ACME_API_KEY"],
+    models: {
+      "acme-large": {
+        id: "acme-large",
+        name: "Acme Large",
+        reasoning: true,
+        reasoning_options: [{ type: "toggle" }],
+        limit: { context: 128_000, output: 64_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  expect(Provider.fromModelsDevProvider(provider).models["acme-large"].api.npm).toBe("@ai-sdk/openai-compatible")
+})
+
 test("MERGE Gateway exposes declared effort variants without model-specific handling", () => {
   const provider = {
     id: "merge-gateway",
