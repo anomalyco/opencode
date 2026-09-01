@@ -511,6 +511,25 @@ const layer = Layer.effect(
 
           case "text-end":
             if (!ctx.currentText) return
+            {
+              const thinkMatch = ctx.currentText.text.match(/<think>([\s\S]*?)<\/think>/)
+              if (thinkMatch) {
+                const thinkingContent = thinkMatch[1].trim()
+                if (thinkingContent) {
+                  const reasoningPart = {
+                    id: PartID.ascending(),
+                    messageID: ctx.assistantMessage.id,
+                    sessionID: ctx.assistantMessage.sessionID,
+                    type: "reasoning" as const,
+                    text: thinkingContent,
+                    time: { start: ctx.currentText.time?.start ?? Date.now(), end: Date.now() },
+                    metadata: ctx.currentText.metadata,
+                  }
+                  yield* session.updatePart(reasoningPart)
+                }
+                ctx.currentText.text = ctx.currentText.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim()
+              }
+            }
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.currentText.text = ctx.currentText.text
             ctx.currentText.text = (yield* plugin.trigger(
