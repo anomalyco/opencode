@@ -208,20 +208,41 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  plugin?: Layer.Layer<Plugin.Service>
+}) {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
     [RuntimeFlags.node, runtimeFlags],
   ] as const
+  if (input?.plugin) {
+    const withPlugin = [...replacements, [Plugin.node, input.plugin] as const] as const
+    if (input.processor === "blocking") {
+      return LayerNode.compile(promptRoot, [
+        ...withPlugin,
+        [SessionProcessor.node, blockingProcessor] as const,
+      ] as const)
+    }
+    return LayerNode.compile(promptRoot, withPlugin)
+  }
   if (input?.processor === "blocking") {
-    return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
+    return LayerNode.compile(promptRoot, [
+      ...replacements,
+      [SessionProcessor.node, blockingProcessor] as const,
+    ] as const)
   }
   return LayerNode.compile(promptRoot, replacements)
 }
 
-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttp(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  plugin?: Layer.Layer<Plugin.Service>
+}) {
   const root = LayerNode.group([promptRoot, testLLMServerNode])
   const replacements = [
     [SessionSummary.node, summary],
@@ -229,13 +250,24 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
     [MCP.node, makeMcp(input?.mcpInstructions)],
     [RuntimeFlags.node, runtimeFlags],
   ] as const
+  if (input?.plugin) {
+    const withPlugin = [...replacements, [Plugin.node, input.plugin] as const] as const
+    if (input.processor === "blocking") {
+      return LayerNode.compile(root, [...withPlugin, [SessionProcessor.node, blockingProcessor] as const] as const)
+    }
+    return LayerNode.compile(root, withPlugin)
+  }
   if (input?.processor === "blocking") {
-    return LayerNode.compile(root, [...replacements, [SessionProcessor.node, blockingProcessor]])
+    return LayerNode.compile(root, [...replacements, [SessionProcessor.node, blockingProcessor] as const] as const)
   }
   return LayerNode.compile(root, replacements)
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  plugin?: Layer.Layer<Plugin.Service>
+}) {
   return makePrompt(input)
 }
 
@@ -442,6 +474,30 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
   return { prompt, run, sessions, chat }
 })
 
+function sessionStoppingPlugin(outputs: readonly (readonly string[] | Error)[]) {
+  const state = {
+    calls: 0,
+    assistantPersisted: [] as boolean[],
+  }
+  const layer = Layer.mock(Plugin.Service)({
+    trigger: (<Name extends string, Input, Output>(name: Name, input: Input, output: Output) => {
+      if (name !== "experimental.session.stopping") return Effect.succeed(output)
+      return Effect.gen(function* () {
+        const messages = yield* Session.use.messages({ sessionID: (input as { sessionID: SessionID }).sessionID })
+        const last = messages.at(-1)
+        state.assistantPersisted.push(last?.info.role === "assistant" && last.info.finish === "stop")
+        const next = outputs[state.calls++] ?? []
+        if (next instanceof Error) return yield* Effect.die(next)
+        ;(output as { context: string[] }).context.push(...next)
+        return output
+      })
+    }) as Plugin.Interface["trigger"],
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  })
+  return { layer, state }
+}
+
 // Loop semantics
 
 noLLMServer.instance(
@@ -551,6 +607,94 @@ it.instance("loop calls LLM and returns assistant message", () =>
     const parts = result.parts.filter((p) => p.type === "text")
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
+  }),
+)
+
+const stoppingEmpty = sessionStoppingPlugin([[]])
+const stoppingEmptyIt = testEffect(makeHttp({ plugin: stoppingEmpty.layer }))
+
+stoppingEmptyIt.instance("session stopping without context leaves the completed assistant turn terminal", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* user(chat.id, "hello")
+    yield* llm.text("finished")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+
+    expect(result.info.role).toBe("assistant")
+    expect(stoppingEmpty.state.calls).toBe(1)
+    expect(stoppingEmpty.state.assistantPersisted).toEqual([true])
+    expect(messages.map((message) => message.info.role)).toEqual(["user", "assistant"])
+    expect(messages.flatMap((message) => message.parts).some((part) => part.type === "text" && part.synthetic)).toBe(
+      false,
+    )
+    expect(yield* llm.hits).toHaveLength(1)
+  }),
+)
+
+const stoppingContinue = sessionStoppingPlugin([["first instruction", "second instruction"], []])
+const stoppingContinueIt = testEffect(makeHttp({ plugin: stoppingContinue.layer }))
+
+stoppingContinueIt.instance("session stopping persists ordered hidden context and continues the loop", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* user(chat.id, "hello")
+    yield* llm.text("first answer")
+    yield* llm.text("second answer")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+    const hidden = messages[2]?.parts.find((part) => part.type === "text")
+    const requests = yield* llm.inputs
+
+    expect(result.parts.some((part) => part.type === "text" && part.text === "second answer")).toBe(true)
+    expect(stoppingContinue.state.calls).toBe(2)
+    expect(stoppingContinue.state.assistantPersisted).toEqual([true, true])
+    expect(messages.map((message) => message.info.role)).toEqual(["user", "assistant", "user", "assistant"])
+    expect(hidden).toMatchObject({
+      type: "text",
+      text: "first instruction\n\nsecond instruction",
+      synthetic: true,
+      metadata: { session_stopping: true },
+    })
+    expect(requests).toHaveLength(2)
+    const continuationRequest = JSON.stringify(requests[1])
+    expect(continuationRequest.indexOf("first instruction")).toBeLessThan(
+      continuationRequest.indexOf("second instruction"),
+    )
+  }),
+)
+
+const stoppingFailure = sessionStoppingPlugin([new Error("stopping hook failed")])
+const stoppingFailureIt = testEffect(makeHttp({ plugin: stoppingFailure.layer }))
+
+stoppingFailureIt.instance("session stopping hook failure fails the loop after preserving the assistant turn", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* user(chat.id, "hello")
+    yield* llm.text("finished before failure")
+
+    const exit = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.exit)
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toMatchObject({ message: "stopping hook failed" })
+    expect(stoppingFailure.state.calls).toBe(1)
+    expect(stoppingFailure.state.assistantPersisted).toEqual([true])
+    expect(messages.map((message) => message.info.role)).toEqual(["user", "assistant"])
+    expect(messages.at(-1)?.parts).toContainEqual(
+      expect.objectContaining({ type: "text", text: "finished before failure" }),
+    )
   }),
 )
 

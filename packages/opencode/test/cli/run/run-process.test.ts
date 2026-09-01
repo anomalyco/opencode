@@ -7,6 +7,9 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { testProviderConfig } from "../../lib/test-provider"
+
+const disposePlugin = new URL("../../fixture/dispose-plugin.ts", import.meta.url).href
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -19,6 +22,33 @@ describe("opencode run (non-interactive subprocess)", () => {
         const result = yield* opencode.run("say hi")
         opencode.expectExit(result, 0)
         expect(result.stdout).toBe("hello from the test llm\n")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "awaits external plugin dispose before the run process exits",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const marker = `${home}/plugin-disposed`
+        yield* llm.text("done")
+        const config = {
+          ...testProviderConfig(llm.url),
+          plugin: [disposePlugin],
+        }
+
+        const result = yield* opencode.run("finish and dispose", {
+          env: {
+            OPENCODE_PURE: "false",
+            OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
+            OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
+            OPENCODE_TEST_PLUGIN_DISPOSE_MARKER: marker,
+          },
+        })
+
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toBe("done\n")
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(true)
       }),
     60_000,
   )
