@@ -26,7 +26,7 @@ const digits: Record<string, string[]> = {
   T: ["111", "010", "010", "010", "010"],
 }
 
-export function StatsPoster(props: { stats: SessionStatsInfo; period: "all" | "year" }) {
+export function StatsPoster(props: { stats: SessionStatsInfo; onToggle?: () => void }) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const width = () => Math.max(12, Math.min(110, dimensions().width - 8))
@@ -54,7 +54,12 @@ export function StatsPoster(props: { stats: SessionStatsInfo; period: "all" | "y
         <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
           opencode / stats
         </text>
-        <text fg={theme.text.subdued}>{dates()}</text>
+        <text fg={theme.text.subdued} onMouseUp={props.onToggle}>
+          {dates()}
+          <Show when={props.onToggle}>
+            <span style={{ fg: theme.text.action.secondary.default }}>{"  tab"}</span>
+          </Show>
+        </text>
       </box>
       <Show when={!compact()}>
         <Logo />
@@ -115,8 +120,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo; period: "all" | "y
           )}
         </For>
       </box>
-      <box width="100%" flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text.subdued}>{props.period === "all" ? "All time" : "This year"}. All projects.</text>
+      <box width="100%" flexDirection="row" justifyContent="flex-end">
         <text fg={theme.text.default}>opencode.ai</text>
       </box>
     </box>
@@ -125,22 +129,27 @@ export function StatsPoster(props: { stats: SessionStatsInfo; period: "all" | "y
 
 function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
   const [period, setPeriod] = createSignal<"all" | "year">("all")
-  const toggle = () => setPeriod((value) => (value === "all" ? "year" : "all"))
-  const [result] = createResource(period, async (period) => {
+  const toggle = () => {
+    setPeriod((value) => (value === "all" ? "year" : "all"))
+  }
+  const [result] = createResource(period, (period) => {
     const now = new Date()
-    const stats = await props.context.client.session.stats({
+    return props.context.client.session.stats({
       from: period === "year" ? new Date(now.getFullYear(), 0, 1).getTime() : undefined,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       tools: "none",
     })
-    return { stats, period }
   })
   const theme = useTheme()
 
   props.context.keymap.layer(() => ({
     commands: [
-      { bind: "escape", title: "Back", run: props.onClose },
-      { bind: "tab", title: period() === "all" ? "Show this year" : "Show all time", run: toggle },
+      { bind: "escape", title: "back", run: props.onClose },
+      {
+        bind: "tab",
+        title: period() === "all" ? "show this year" : "show all time",
+        run: toggle,
+      },
     ],
   }))
 
@@ -163,16 +172,10 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
           }
         >
           <Show when={result()} fallback={<text fg={theme.text.subdued}>Gathering your stats...</text>}>
-            {(value) => <StatsPoster stats={value().stats} period={value().period} />}
+            {(value) => <StatsPoster stats={value()} onToggle={toggle} />}
           </Show>
         </Show>
       </scrollbox>
-      <box height={2} justifyContent="center" flexDirection="row" gap={3} flexShrink={0}>
-        <text fg={theme.text.subdued} onMouseUp={toggle}>
-          {result.loading ? "Loading stats..." : `tab ${period() === "all" ? "Show this year" : "Show all time"}`}
-        </text>
-        <text fg={theme.text.subdued}>esc Back</text>
-      </box>
     </box>
   )
 }

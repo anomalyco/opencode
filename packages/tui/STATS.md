@@ -22,6 +22,8 @@ bun run dev:stats-tui --light
 
 ## Controls
 
+A small `tab` hint sits beside the date range in the header. Click the date range or press `tab` to switch; there are no footer hints or range-toggle command-palette entries.
+
 - `tab`: show this year / show all time.
 - `esc`: return to the previous screen.
 - `ctrl+c`: normal TUI exit.
@@ -36,4 +38,4 @@ To explore the production poster with a fixed fixture and an empty-state toggle:
 OPENCODE_STORY=stats bun run dev:live
 ```
 
-This uses the existing live server connection but the story's stats stay local. `tab` toggles year / all-time copy, `e` toggles empty activity, `r` resets, and `esc` returns to storybook.
+This uses the existing live server connection but the story's stats stay local. `e` toggles empty activity, `r` resets, and `esc` returns to storybook.

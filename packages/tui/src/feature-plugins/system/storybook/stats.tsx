@@ -25,7 +25,6 @@ export const statsFixture: SessionStatsInfo = {
 
 function StatsStory(props: { context: Plugin.Context }) {
   const [empty, setEmpty] = createSignal(false)
-  const [period, setPeriod] = createSignal<"all" | "year">("all")
   const stats = () =>
     empty()
       ? {
@@ -48,16 +47,10 @@ function StatsStory(props: { context: Plugin.Context }) {
       },
       { bind: "e", title: "Empty", run: () => setEmpty((value) => !value) },
       {
-        bind: "tab",
-        title: "Toggle year / all time",
-        run: () => setPeriod((value) => (value === "all" ? "year" : "all")),
-      },
-      {
         bind: "r",
         title: "Reset",
         run: () => {
           setEmpty(false)
-          setPeriod("all")
         },
       },
     ],
@@ -74,13 +67,12 @@ function StatsStory(props: { context: Plugin.Context }) {
           paddingBottom: 1,
         }}
       >
-        <StatsPoster stats={stats()} period={period()} />
+        <StatsPoster stats={stats()} />
       </scrollbox>
       <StoryFooter
         context={props.context}
         title="storybook / stats"
         controls={[
-          { shortcut: "tab", label: "year / all time" },
           { shortcut: "e", label: "empty" },
           { shortcut: "r", label: "reset" },
           { shortcut: "esc", label: "back" },
