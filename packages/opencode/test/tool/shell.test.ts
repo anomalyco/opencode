@@ -1,5 +1,5 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
@@ -8,6 +8,7 @@ import path from "path"
 import { Config } from "@/config/config"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellTool } from "../../src/tool/shell"
+import { ShellPrompt } from "../../src/tool/shell/prompt"
 import { Filesystem } from "@/util/filesystem"
 import { provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
@@ -1197,3 +1198,84 @@ describe("tool.shell truncation", () => {
     ),
   )
 })
+
+// The quoting forms recommended in the Windows PowerShell 5.1 shell notes. Each is asserted
+// to appear in the notes and is separately executed through powershell.exe below, so the
+// advice cannot drift away from what actually survives the shell.
+const RECOMMENDED = [
+  {
+    label: "single quotes for the inner argument",
+    payload: `'grep -E ''a|b'' file'`,
+    argv: `grep -E 'a|b' file`,
+  },
+  {
+    label: "backslash-escaped double quotes",
+    payload: String.raw`'sed -i \"s/\r$//\" file'`,
+    argv: String.raw`sed -i "s/\r$//" file`,
+  },
+]
+
+describe("windows powershell quoting guidance", () => {
+  const notesFor = (name: string) =>
+    ShellPrompt.render(name, "win32", { maxLines: 100, maxBytes: 10_000 }, 60_000).description
+
+  test("5.1 notes recommend only forms that survive native argument passing", () => {
+    const notes = notesFor("powershell")
+    for (const item of RECOMMENDED) expect(notes).toContain(item.payload)
+  })
+
+  test("5.1 notes drop the backtick advice that makes this worse", () => {
+    const notes = notesFor("powershell")
+    expect(notes).not.toContain("- Escape special characters with the PowerShell backtick character.")
+    // the backtick is still correct for escaping inside PowerShell's own strings
+    expect(notes).toContain("backtick")
+  })
+
+  test("pwsh notes are untouched, 7.3+ does not have this defect", () => {
+    expect(notesFor("pwsh")).toContain("- Escape special characters with the PowerShell backtick character.")
+  })
+})
+
+// Documents the Windows PowerShell 5.1 native argument passing defect and proves the
+// workarounds recommended in the shell notes actually survive it. PowerShell 5.1 does not
+// escape double quotes when building the command line for an external program, so a quoted
+// segment loses its quotes and can split into several arguments. Fixed in 7.3 via
+// $PSNativeCommandArgumentPassing = 'Standard', which does not exist in 5.1.
+const powershell51 = shells.find((item) => item.label === "powershell")
+if (process.platform === "win32" && powershell51) {
+  describe("windows powershell 5.1 native argument passing", () => {
+    const probe = `& ${bin} -e ${squote("console.log(JSON.stringify(Bun.argv.slice(1)))")}`
+    const argvOf = (payload: string) => {
+      const proc = Bun.spawnSync([
+        powershell51.shell,
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `${probe} ${payload}`,
+      ])
+      return JSON.parse(proc.stdout.toString().trim()) as string[]
+    }
+
+    test("plain double quotes are stripped and the argument splits", () => {
+      expect(argvOf(`'a "b c" d'`)).toEqual(["a b", "c d"])
+    })
+
+    for (const item of RECOMMENDED) {
+      test(`the notes recommend a form that survives: ${item.label}`, () => {
+        expect(argvOf(item.payload)).toEqual([item.argv])
+      })
+    }
+
+    test("backslash-escaped quotes keep a quoted segment containing spaces intact", () => {
+      expect(argvOf(String.raw`'a \"b c\" d'`)).toEqual([`a "b c" d`])
+    })
+
+    test("backslash-escaped quotes keep a shell metacharacter intact", () => {
+      expect(argvOf(String.raw`'grep -E \"a|b\" file'`)).toEqual([`grep -E "a|b" file`])
+    })
+
+    test("single quotes are unaffected", () => {
+      expect(argvOf(String.raw`"echo 'a\nb'"`)).toEqual([String.raw`echo 'a\nb'`])
+    })
+  })
+}

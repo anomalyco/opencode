@@ -57,7 +57,8 @@ function powershellNotes(name: string) {
 - Prefer full cmdlet names like \`Get-ChildItem\`, \`Set-Content\`, \`Remove-Item\`, and \`New-Item\` over aliases.
 - Use \`$(...)\` for subexpressions. Use \`@(...)\` for array expressions.
 - To call a native executable whose path contains spaces, use the call operator: \`& "path/to/exe" args\`.
-- Escape special characters with the PowerShell backtick character.`
+- Escape characters inside PowerShell strings with the backtick; it does NOT protect quotes passed to an external program.
+- PowerShell 5.1 strips double quotes when building an external program's command line, silently splitting the argument. Use single quotes inside it: \`ssh host 'grep -E ''a|b'' file'\`. If double quotes are required, backslash-escape them: \`ssh host 'sed -i \\"s/\\r$//\\" file'\`. For longer scripts, write to a file and run the file.`
   }
   return ""
 }
