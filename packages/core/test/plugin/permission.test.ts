@@ -3,6 +3,7 @@ import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
 import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Permission } from "@opencode-ai/core/permission"
@@ -20,13 +21,11 @@ import { emptyMcpLayer } from "../fixture/mcp"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([Plugin.node, Database.node, Bus.node, Location.node]), {
-    replacements: [
-      Location.node.replace(tempLocationLayer),
-      Config.node.replace(Config.testLayer()),
-      Mcp.node.replace(emptyMcpLayer),
-    ],
-  }),
+  AppNodeBuilder.build(LayerNode.group([Plugin.node, Database.node, Bus.node, Location.node]), [
+    Location.node.replace(tempLocationLayer),
+    Config.node.replace(Config.testLayer()),
+    Mcp.node.replace(emptyMcpLayer),
+  ]),
 )
 
 const setup = Effect.gen(function* () {
