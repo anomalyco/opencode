@@ -319,6 +319,77 @@ it.instance(
   },
 )
 
+it.instance(
+  "Bedrock Mantle: Claude uses the Anthropic Messages API and skips region prefixing",
+  () =>
+    Effect.gen(function* () {
+      yield* set("AWS_PROFILE", "default")
+      const model = yield* Provider.use.getModel(
+        ProviderV2.ID.amazonBedrock,
+        ModelV2.ID.make("anthropic.claude-opus-4-8"),
+      )
+      const language = yield* Provider.use.getLanguage(model)
+      expect((language as { provider: string }).provider).toBe("anthropic.messages")
+      expect((language as { modelId: string }).modelId).toBe("anthropic.claude-opus-4-8")
+      expect((language as unknown as { config: { baseURL: string } }).config.baseURL).toBe(
+        "https://bedrock-mantle.us-east-1.api.aws/anthropic/v1",
+      )
+    }),
+  {
+    config: {
+      provider: {
+        "amazon-bedrock": {
+          options: { region: "us-east-1" },
+          models: {
+            "anthropic.claude-opus-4-8": {
+              provider: {
+                npm: "@ai-sdk/amazon-bedrock/mantle-anthropic",
+                api: "https://bedrock-mantle.${AWS_REGION}.api.aws/anthropic/v1",
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+// models.dev's amazon-bedrock entry has no `api` field, so with no explicit override the
+// Mantle base URL must come from the configured region inside createBedrockMantleAnthropic.
+const mantleAnthropicRegionTest = (region: string) =>
+  it.instance(
+    `Bedrock Mantle: Claude derives the ${region} base URL with no api override`,
+    () =>
+      Effect.gen(function* () {
+        yield* set("AWS_PROFILE", "default")
+        const model = yield* Provider.use.getModel(
+          ProviderV2.ID.amazonBedrock,
+          ModelV2.ID.make("anthropic.claude-opus-4-8"),
+        )
+        const language = yield* Provider.use.getLanguage(model)
+        expect((language as { provider: string }).provider).toBe("anthropic.messages")
+        expect((language as { modelId: string }).modelId).toBe("anthropic.claude-opus-4-8")
+        expect((language as unknown as { config: { baseURL: string } }).config.baseURL).toBe(
+          `https://bedrock-mantle.${region}.api.aws/anthropic/v1`,
+        )
+      }),
+    {
+      config: {
+        provider: {
+          "amazon-bedrock": {
+            options: { region },
+            models: {
+              "anthropic.claude-opus-4-8": { provider: { npm: "@ai-sdk/amazon-bedrock/mantle-anthropic" } },
+            },
+          },
+        },
+      },
+    },
+  )
+
+mantleAnthropicRegionTest("us-east-1")
+mantleAnthropicRegionTest("eu-west-1")
+
 // Direct unit tests for cross-region inference profile prefix detection.
 describe("Bedrock cross-region prefix detection", () => {
   const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]

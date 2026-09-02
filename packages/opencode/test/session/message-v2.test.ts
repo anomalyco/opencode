@@ -601,6 +601,105 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("keeps pdf tool-result media inline for Bedrock Mantle Anthropic models", async () => {
+    const mantleModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("amazon-bedrock/anthropic.claude-opus-4-8"),
+      providerID: ProviderV2.ID.make("amazon-bedrock"),
+      api: {
+        id: "anthropic.claude-opus-4-8",
+        url: "https://bedrock-mantle.us-east-1.api.aws/anthropic/v1",
+        npm: "@ai-sdk/amazon-bedrock/mantle-anthropic",
+      },
+      capabilities: {
+        ...model.capabilities,
+        attachment: true,
+        input: { ...model.capabilities.input, image: true, pdf: true },
+      },
+    }
+    const pdf = Buffer.from("%PDF-1.4\n").toString("base64")
+    const userID = "m-user-mantle-pdf"
+    const assistantID = "m-assistant-mantle-pdf"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1-mantle-pdf"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-mantle-pdf"),
+            type: "tool",
+            callID: "call-mantle-pdf-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/example.pdf" },
+              output: "PDF read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-mantle-pdf-1"),
+                  type: "file",
+                  mime: "application/pdf",
+                  filename: "example.pdf",
+                  url: `data:application/pdf;base64,${pdf}`,
+                },
+              ],
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    // Mantle accepts pdf parts inside tool_result, so nothing may be split out
+    // into a trailing user message.
+    expect(await MessageV2.toModelMessages(input, mantleModel)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-mantle-pdf-1",
+            toolName: "read",
+            input: { filePath: "/tmp/example.pdf" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-mantle-pdf-1",
+            toolName: "read",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "PDF read successfully" },
+                { type: "media", mediaType: "application/pdf", data: pdf },
+              ],
+            },
+          },
+        ],
+      },
+    ])
+  })
+
   test("omits provider metadata when assistant model differs", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
