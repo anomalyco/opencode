@@ -11,9 +11,6 @@ export const MoveInput = Schema.Struct({
   directory: AbsolutePath.check(Schema.isMinLength(1)).annotate({
     description: "Destination directory, relative to the target session's directory or absolute. Supports ~.",
   }),
-  queue: Schema.optionalKey(Schema.Boolean).annotate({
-    description: "Queue the move instead of steering it at the next safe boundary.",
-  }),
 })
 
 const MoveOutput = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePath })
@@ -37,7 +34,7 @@ export const Plugin = {
               yield* ctx.session.move({
                 sessionID,
                 directory: input.directory,
-                delivery: input.queue ? "queue" : "steer",
+                delivery: "steer",
               })
               return {
                 output: { sessionID, directory: input.directory },
