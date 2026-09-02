@@ -590,6 +590,64 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.tools.lookup.strict).toBe(false)
   })
 
+  const prepareWithTools = (model: any) =>
+    Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID: model.providerID, modelID: model.api.id },
+        } as any,
+        sessionID,
+        model,
+        agent: {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [],
+        } as any,
+        system: [],
+        messages: [{ role: "user", content: "Hello" }],
+        tools: {
+          lookup: {
+            description: "Look up a value",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+        },
+        provider: { id: model.providerID, options: {} } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { outputTokenMax: 32_000, client: "test" } as any,
+        isWorkflow: false,
+      }),
+    )
+
+  test("omits tools for a model that cannot call tools", async () => {
+    // Some providers reject a request carrying tool definitions at all rather
+    // than ignoring them: Vertex Gemini image models answer "Unable to submit
+    // request because the model does not support function calling", so every
+    // send fails until the definitions are dropped.
+    const model = createGpt5Model("gemini-2.5-flash-image")
+    model.capabilities.toolcall = false
+
+    const result = await prepareWithTools(model)
+
+    expect(result.tools).toEqual({})
+  })
+
+  test("keeps tools for a model that can call tools", async () => {
+    const result = await prepareWithTools(createGpt5Model("gpt-5.2"))
+
+    expect(Object.keys(result.tools)).toEqual(["lookup"])
+  })
+
   test("gpt-5.1 should have textVerbosity set to low", () => {
     const model = createGpt5Model("gpt-5.1")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
