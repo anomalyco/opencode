@@ -4,6 +4,7 @@ import { createComputed, createRoot } from "solid-js"
 import type { Platform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
+import { TabStorage } from "@/shell/tabs/schema"
 
 const Current = Schema.Struct({
   enabled: Schema.Boolean,
@@ -46,6 +47,23 @@ function desktop() {
 }
 
 describe("schema-backed persistence", () => {
+  test("clears the recent tab after restoring it from storage", () => {
+    const target = Persist.global("schema-recent-clear")
+    const key = `${target.storage}:${target.key}`
+    localStorage.setItem(key, JSON.stringify({ key: "session-tab" }))
+    createRoot((dispose) => {
+      const [state, setState] = persisted(target, TabStorage.Recent, { key: undefined }, web)
+      try {
+        expect(state.key).toBe("session-tab")
+        setState("key", undefined)
+        expect(state.key).toBeUndefined()
+        expect(localStorage.getItem(key)).toBe("{}")
+      } finally {
+        dispose()
+      }
+    })
+  })
+
   test("migrates sync storage and writes only the current representation", () => {
     const target = Persist.global("schema-sync")
     const key = `${target.storage}:${target.key}`

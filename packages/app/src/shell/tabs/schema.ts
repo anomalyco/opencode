@@ -40,7 +40,7 @@ const SessionCodec = Session.pipe(
 export const Tab = Schema.Union([Session, Draft])
 export const Tabs = Persistence.array(Schema.Union([SessionCodec, Draft]))
 export const Recent = Persistence.struct({
-  key: Schema.UndefinedOr(Schema.String),
+  key: Schema.optional(Schema.String),
 })
 export const Info = Persistence.struct({
   title: Schema.optional(Schema.String),
