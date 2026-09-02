@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { Effect, FileSystem, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { existsSync } from "node:fs"
@@ -23,13 +23,22 @@ function fixture(
     const fs = yield* FileSystem.FileSystem
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
-    const binary = typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode2"
-    const executable = path.join(root, "package", "bin", binary)
+    const executable = path.join(root, "package", "bin", "opencode")
     yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
-    yield* fs.writeFileString(executable, "")
     yield* fs.writeFileString(
       path.join(root, "package", "package.json"),
-      JSON.stringify({ name, bin: { [binary]: `bin/${binary}` } }),
+      JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
+    )
+    // The updater uses global fetch; scope this replacement to each install test.
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        spyOn(globalThis, "fetch").mockImplementation(
+          Object.assign(async () => Response.json({ version: "2.3.4", metadata: { package: name } }), {
+            preconnect: fetch.preconnect,
+          }),
+        ),
+      ),
+      (request) => Effect.sync(() => request.mockRestore()),
     )
     const global = Global.make({
       home: path.join(root, "home"),
@@ -91,7 +100,7 @@ installs.forEach(({ method, command }) => {
   it.live(`${method} installs the explicit V2 package version without a leading v`, () =>
     Effect.gen(function* () {
       const test = yield* fixture()
-      yield* test.updater.upgrade(method, { package: "@opencode-ai/cli", version: "v2.3.4-beta.1" })
+      yield* test.updater.upgrade(method, "v2.3.4-beta.1")
       expect(test.commands).toEqual([[...command]])
     }),
   )
@@ -104,9 +113,7 @@ installs.forEach(({ method, command }) => {
         expect(existsSync(command.args[4])).toBe(true)
         return { exitCode, stderr: Buffer.from("bun install failed") }
       })
-      const result = yield* test.updater
-        .upgrade("bun", { package: "@opencode-ai/cli", version: "v2.3.4-beta.1" })
-        .pipe(Effect.flip, Effect.option)
+      const result = yield* test.updater.upgrade("bun", "v2.3.4-beta.1").pipe(Effect.flip, Effect.option)
       const cache = test.commands[0]?.[5]
       expect(cache).toStartWith(path.join(test.global.cache, "update-"))
       expect(test.commands).toEqual([
@@ -129,9 +136,7 @@ installs.forEach(({ method, command }) => {
           stderr: Buffer.from(`${failure} failed`),
         }
       })
-      const result = yield* test.updater
-        .upgrade("curl", { package: "@opencode-ai/cli", version: "v2.3.4-beta.1" })
-        .pipe(Effect.flip, Effect.option)
+      const result = yield* test.updater.upgrade("curl", "v2.3.4-beta.1").pipe(Effect.flip, Effect.option)
       const installer = test.commands[0]?.[3]
       expect(installer).toStartWith(path.join(test.global.cache, "update-"))
       expect(test.commands).toEqual([
@@ -153,9 +158,7 @@ it.live("invalid version targets never execute a command or create a cache", () 
         ["", "latest", "2.3", "01.2.3", "vv2.3.4", "2.3.4; echo unsafe", "--global", "v2.3.4\n--force"],
         (version) =>
           Effect.gen(function* () {
-            const error = yield* test.updater
-              .upgrade(method, { package: "@opencode-ai/cli", version })
-              .pipe(Effect.flip)
+            const error = yield* test.updater.upgrade(method, version).pipe(Effect.flip)
             expect(error.message).toBe(`Invalid version: ${version}`)
           }),
       ),
@@ -168,14 +171,10 @@ it.live("invalid version targets never execute a command or create a cache", () 
 it.live("install failures expose stderr and process errors do not report success", () =>
   Effect.gen(function* () {
     const failed = yield* fixture(() => ({ exitCode: 1, stderr: Buffer.from("  registry denied access\n") }))
-    const error = yield* failed.updater
-      .upgrade("npm", { package: "@opencode-ai/cli", version: "2.3.4" })
-      .pipe(Effect.flip)
+    const error = yield* failed.updater.upgrade("npm", "2.3.4").pipe(Effect.flip)
     expect(error.message).toBe("registry denied access")
     const missing = yield* fixture(() => ({ error: new AppProcess.AppProcessError({ command: "npm" }) }))
-    const unavailable = yield* missing.updater
-      .upgrade("npm", { package: "@opencode-ai/cli", version: "2.3.4" })
-      .pipe(Effect.flip)
+    const unavailable = yield* missing.updater.upgrade("npm", "2.3.4").pipe(Effect.flip)
     expect(unavailable.message).toBe("Failed to update with npm")
     expect(failed.commands).toHaveLength(1)
     expect(missing.commands).toHaveLength(1)
@@ -244,8 +243,8 @@ if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-no
         "opencode-node",
       )
       expect(yield* test.updater.method()).toBe("npm")
-      yield* test.updater.upgrade("npm", { package: "opencode-node", version: "v2.3.4" })
-      yield* test.updater.upgrade("pnpm", { package: "opencode-node", version: "v2.3.4" })
+      yield* test.updater.upgrade("npm", "v2.3.4")
+      yield* test.updater.upgrade("pnpm", "v2.3.4")
       expect(test.commands).toEqual([
         ["npm", "list", "-g", "--depth=0", "opencode-node"],
         ["pnpm", "list", "-g", "--depth=0", "opencode-node"],

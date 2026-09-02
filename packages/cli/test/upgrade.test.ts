@@ -18,34 +18,27 @@ describe("upgrade command", () => {
   test("detects the installation method and resolves the latest version", async () => {
     const result = await cli([])
     expect(result.exitCode).toBe(0)
-    expect(result.events).toEqual([
-      "method",
-      "latest",
-      { method: "npm", package: "@opencode-ai/cli", version: "0.0.0-beta-new" },
-    ])
+    expect(result.events).toEqual(["method", "latest", { method: "npm", version: "0.0.0-beta-new" }])
     expect(result.stdout).toContain("Upgrade complete")
   })
 
-  test("accepts an explicit version and method while resolving the target package", async () => {
+  test("accepts an explicit version and method without detection or a version lookup", async () => {
     const result = await cli(["v0.0.0-beta-target", "--method", "pnpm"])
     expect(result.exitCode).toBe(0)
-    expect(result.events).toEqual([
-      "latest",
-      { method: "pnpm", package: "@opencode-ai/cli", version: "0.0.0-beta-target" },
-    ])
+    expect(result.events).toEqual([{ method: "pnpm", version: "v0.0.0-beta-target" }])
     expect(result.stdout).toContain("0.0.0-beta-old → 0.0.0-beta-target")
   })
 
   test("accepts the short method flag and an explicit major upgrade", async () => {
     const result = await cli(["2.0.0", "-m", "bun"])
     expect(result.exitCode).toBe(0)
-    expect(result.events).toEqual(["latest", { method: "bun", package: "@opencode-ai/cli", version: "2.0.0" }])
+    expect(result.events).toEqual([{ method: "bun", version: "2.0.0" }])
   })
 
   test("skips the already installed version", async () => {
     const result = await cli(["v0.0.0-beta-old"])
     expect(result.exitCode).toBe(0)
-    expect(result.events).toEqual(["method", "latest"])
+    expect(result.events).toEqual(["method"])
     expect(result.stdout).toContain("already installed")
   })
 

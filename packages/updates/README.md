@@ -19,11 +19,8 @@ The Worker has `workers_dev` and preview URLs disabled so the custom hostname is
 
 ## CLI package targets
 
-CLI builds set `OPENCODE_ARTIFACT` at compile time: `cli` for the native build and
-`cli-node` for the Node build. The updater looks up
-`/api/<channel>/<artifact>/npm`; the release channel remains independent of the build.
-Each artifact keeps the existing top-level `version` and includes a single package
-name in release metadata:
+Builds set `OPENCODE_ARTIFACT` to `cli` (native) or `cli-node` (Node). Each uses
+`/api/<channel>/<artifact>/npm`, returning a version and one package:
 
 ```json
 {
@@ -34,31 +31,18 @@ name in release metadata:
 }
 ```
 
-The publisher advertises each artifact after its package has finished publishing.
-The `cli-node` artifact currently points to `opencode-node`. Clients use their
-compile-time artifact to select the release and their locally detected package manager to install it.
-The curl installation method still uses the V2 installer.
-Explicit version upgrades also resolve the package from the endpoint, then use
-the requested version. A response without `metadata.package` fails the upgrade;
-there is no local fallback package name. Publish package metadata before rolling
-out clients that require it.
+The publisher advertises each artifact after its npm package is published. Package
+resolution stays inside the updater; callers still pass versions. Explicit-version
+installs also read the endpoint's package. Missing package metadata is an error,
+not a fallback to a hardcoded name. Installed-package detection reads the local manifest.
 
-Package-manager detection reads the installed wrapper's manifest, independently
-of the advertised target. If the installed package cannot be identified, automatic
-package-manager detection stops; manual upgrades can specify `--method`.
-npm package-name migrations allow replacement of the
-shared executable but retain the old global package: removing it can unlink the
-new executable. Cleanup is a separate migration step.
-pnpm and Yarn package-name changes currently require a manual reinstall: pnpm
-rejects the shared executable, while Yarn can leave it pointing at the old package.
-The updater reports an error for these migrations instead of claiming success.
+npm migrations retain the old package to avoid unlinking the replacement command.
+pnpm/Yarn package renames require a manual reinstall. The curl method still uses
+the V2 installer.
 
-Changing this metadata does not redirect pre-capability clients, which only read
-`version`. Before retiring the old package, publish a bridge release and add
-compatibility routing that keeps pre-bridge clients on that version. Until that
-routing is deployed, every advertised version must still exist under the old name.
-Older Node clients also continue to query `cli/npm` until they receive a build
-with the `cli-node` artifact identity.
+Old clients ignore package metadata, and old Node clients still query `cli/npm`.
+Publish a bridge release and add compatibility routing before retiring the old
+package name. Publish package metadata before releasing clients that require it.
 
 ## Request logging
 

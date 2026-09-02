@@ -14,8 +14,8 @@ it.live("installs and restarts after the final Session settles", () =>
       url: fixture.url,
       password: "test",
       managed: true,
-      inspect: () => Effect.succeed({ action: "upgrade", target: { package: "@opencode-ai/cli", version: "1.1.0" } }),
-      install: (target) => Deferred.succeed(installed, target.version).pipe(Effect.as(true)),
+      inspect: () => Effect.succeed({ action: "upgrade", version: "1.1.0" }),
+      install: (version) => Deferred.succeed(installed, version).pipe(Effect.as(true)),
       restart: () => Deferred.succeed(restarted, undefined).pipe(Effect.asVoid),
       notify: () => Effect.void,
     }).pipe(Effect.forkScoped)

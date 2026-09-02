@@ -9,18 +9,10 @@ import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
 import { action, parseReleaseVersion, type Action, type Policy } from "./updater-action"
 
-declare const OPENCODE_CLI_NAME: string | undefined
-
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
 export type Method = (typeof methods)[number]
 
-const binaryName =
-  typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-node" ? "opencode2-node" : "opencode2"
-
-export type Target = { readonly package: string; readonly version: string }
-
 export interface Interface {
-  readonly package: string | undefined
   readonly check: () => Effect.Effect<void>
   readonly monitor: (input: {
     readonly url: string
@@ -31,25 +23,25 @@ export interface Interface {
   }) => Effect.Effect<void>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
-  readonly latest: () => Effect.Effect<Target, Error>
-  readonly upgrade: (method: Method, target: Target) => Effect.Effect<void, Error>
+  readonly latest: () => Effect.Effect<string, Error>
+  readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
 }
 
 export type Inspection =
   | { readonly action: "none" }
-  | { readonly action: Exclude<Action, "none">; readonly target: Target }
+  | { readonly action: Exclude<Action, "none">; readonly version: string }
 
 type State =
   | { readonly type: "current" }
-  | { readonly type: "available"; readonly target: Target; readonly availableSince: number }
-  | { readonly type: "ready-to-restart"; readonly target: Target }
+  | { readonly type: "available"; readonly version: string; readonly availableSince: number }
+  | { readonly type: "ready-to-restart"; readonly version: string }
 
 export interface MonitorInput {
   readonly url: string
   readonly password: string
   readonly managed: boolean
   readonly inspect: () => Effect.Effect<Inspection, Error>
-  readonly install: (target: Target) => Effect.Effect<boolean, Error>
+  readonly install: (version: string) => Effect.Effect<boolean, Error>
   readonly restart: (handoff: PersistentPty.Handoff | null) => Effect.Effect<void>
   readonly interval?: Duration.Input
   readonly notificationThreshold?: Duration.Input
@@ -80,7 +72,7 @@ export const monitorServer = Effect.fnUntraced(function* (input: MonitorInput) {
           return
         }
         const installed = yield* input
-          .install(latest.target)
+          .install(latest.version)
           .pipe(
             Effect.catch((error) =>
               Effect.logWarning("automatic update failed", { cause: error }).pipe(Effect.as(false)),
@@ -93,7 +85,7 @@ export const monitorServer = Effect.fnUntraced(function* (input: MonitorInput) {
               catch: (cause) => new Error("Failed to prepare persistent terminals for restart", { cause }),
             })
           : undefined
-        yield* Ref.set(state, { type: "ready-to-restart", target: latest.target })
+        yield* Ref.set(state, { type: "ready-to-restart", version: latest.version })
         if (handoff) yield* input.restart(handoff.handoff)
       }),
     )
@@ -101,7 +93,7 @@ export const monitorServer = Effect.fnUntraced(function* (input: MonitorInput) {
   const checkServer = Effect.gen(function* () {
     const result = yield* input.inspect()
     if (result.action === "notify") {
-      yield* input.notify(result.target.version)
+      yield* input.notify(result.version)
       return
     }
     if (result.action !== "upgrade") {
@@ -112,15 +104,10 @@ export const monitorServer = Effect.fnUntraced(function* (input: MonitorInput) {
       return
     }
     yield* Ref.update(state, (current): State => {
-      if (
-        current.type === "ready-to-restart" &&
-        current.target.version === result.target.version &&
-        current.target.package === result.target.package
-      )
-        return current
+      if (current.type === "ready-to-restart" && current.version === result.version) return current
       return {
         type: "available",
-        target: result.target,
+        version: result.version,
         availableSince: current.type === "available" ? current.availableSince : Date.now(),
       }
     })
@@ -130,7 +117,7 @@ export const monitorServer = Effect.fnUntraced(function* (input: MonitorInput) {
       pending.type === "available" &&
       Date.now() - pending.availableSince >= Duration.toMillis(input.notificationThreshold ?? "3 days")
     )
-      yield* input.notify(pending.target.version)
+      yield* input.notify(pending.version)
   }).pipe(Effect.catch((cause) => Effect.logWarning("automatic update check failed", { cause })))
 
   const subscribe = Effect.suspend(() =>
@@ -188,16 +175,14 @@ const make = Effect.gen(function* () {
   const global = yield* Global.Service
   const appProcess = yield* AppProcess.Service
   const channel = OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
-  // Read the owning wrapper, not a platform package. This keeps detection working
-  // after endpoint-directed renames without baking every past name into the CLI.
   const installedPackage = yield* Effect.gen(function* () {
     const executable = yield* fs.realPath(process.execPath)
     const directory = path.dirname(path.dirname(executable))
     const manifest: { name: string; bin?: Record<string, string> } = yield* fs
       .readFileString(path.join(directory, "package.json"))
       .pipe(Effect.flatMap((text) => Effect.try(() => JSON.parse(text))))
-    const bin = manifest.bin?.[binaryName]
-    return bin && path.resolve(directory, bin) === executable ? manifest.name : undefined
+    if (Object.values(manifest.bin ?? {}).some((bin) => path.resolve(directory, bin) === executable))
+      return manifest.name
   }).pipe(Effect.orElseSucceed(() => undefined))
 
   const readPolicy = Effect.fnUntraced(function* () {
@@ -251,7 +236,7 @@ const make = Effect.gen(function* () {
     return results.find((result) => result.result.stdout.includes(installedPackage))?.check.method
   })
 
-  const latest = Effect.fnUntraced(function* () {
+  const release = Effect.fnUntraced(function* () {
     const response = yield* Effect.tryPromise({
       try: () =>
         fetch(
@@ -269,31 +254,29 @@ const make = Effect.gen(function* () {
       catch: (cause) => new Error("Failed to read update information", { cause }),
     })
     if (!data.metadata?.package) return yield* Effect.fail(new Error("Update information did not include a package"))
-    return { package: data.metadata.package, version: data.version.trim().replace(/^v/, "") }
+    return { package: data.metadata.package, version: data.version }
   })
 
-  const upgrade = Effect.fnUntraced(function* (method: Method, input: Target) {
-    if (!parseReleaseVersion(input.version)) return yield* Effect.fail(new Error(`Invalid version: ${input.version}`))
-    const version = input.version.trim().replace(/^v/, "")
-    const target = `${input.package}@${version}`
-    if (installedPackage && input.package !== installedPackage && (method === "pnpm" || method === "yarn")) {
-      return yield* Effect.fail(
-        new Error(
-          `Package migration with ${method} requires reinstalling ${target} after removing ${installedPackage}.`,
-        ),
-      )
+  const latest = () => release().pipe(Effect.map((data) => data.version))
+
+  const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
+    if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
+    const version = input.trim().replace(/^v/, "")
+    const packageName = (yield* release()).package
+    const target = `${packageName}@${version}`
+    if (installedPackage && packageName !== installedPackage && (method === "pnpm" || method === "yarn")) {
+      return yield* Effect.fail(new Error(`Reinstall ${target} with ${method} to migrate from ${installedPackage}.`))
     }
     const commands: Record<Exclude<Method, "bun" | "curl">, string[]> = {
-      // npm refuses to replace a command owned by a different global package.
-      // Retain the old package: uninstalling it can also unlink the new command.
+      // Keep the old package: uninstalling it can unlink the replacement command.
       npm: [
         "npm",
         "install",
         "--global",
-        ...(installedPackage && input.package !== installedPackage ? ["--force"] : []),
+        ...(installedPackage && packageName !== installedPackage ? ["--force"] : []),
         target,
       ],
-      pnpm: ["pnpm", "add", "--global", `--allow-build=${input.package}`, target],
+      pnpm: ["pnpm", "add", "--global", `--allow-build=${packageName}`, target],
       yarn: ["yarn", "global", "add", target],
     }
     const result = yield* Effect.scoped(
@@ -334,55 +317,43 @@ const make = Effect.gen(function* () {
       return { action: "none" }
     }
 
-    const target = yield* latest()
+    const version = yield* latest()
     yield* Effect.logInfo("update check", {
       current: OPENCODE_VERSION,
-      latest: target.version,
-      package: target.package,
+      latest: version,
     })
-    const next = action(OPENCODE_VERSION, target.version, policy)
+    const next = action(OPENCODE_VERSION, version, policy)
     if (next === "none") {
-      if (installedPackage && target.package !== installedPackage && (yield* method()) !== "curl") {
-        return { action: policy === "notify" ? "notify" : "upgrade", target }
-      }
       yield* Effect.logInfo("update check done", { action: "up-to-date" })
       return { action: "none" }
     }
     if (next === "notify") {
-      yield* Effect.logInfo("OpenCode update available", { current: OPENCODE_VERSION, latest: target.version })
-      return { action: next, target }
+      yield* Effect.logInfo("OpenCode update available", { current: OPENCODE_VERSION, latest: version })
+      return { action: next, version }
     }
-    return { action: next, target }
+    return { action: next, version }
   })
 
-  const install = Effect.fnUntraced(function* (target: Target) {
+  const install = Effect.fnUntraced(function* (version: string) {
     const detected = yield* method()
     if (!detected) {
       yield* Effect.logWarning("automatic update skipped: installation method not found")
       return false
     }
-    yield* upgrade(detected, target)
-    yield* Effect.logInfo("updated OpenCode", {
-      from: OPENCODE_VERSION,
-      to: target.version,
-      package: target.package,
-      method: detected,
-    })
+    yield* upgrade(detected, version)
+    yield* Effect.logInfo("updated OpenCode", { from: OPENCODE_VERSION, to: version, method: detected })
     return true
   })
 
   const apply = Effect.fn("cli.updater.apply")(function* (version: string) {
-    const target = yield* latest()
-    if (target.version !== version)
-      return yield* Effect.fail(new Error("Update target changed. Check for updates again."))
-    if (!(yield* install(target))) return yield* Effect.fail(new Error("Installation method not found"))
+    if (!(yield* install(version))) return yield* Effect.fail(new Error("Installation method not found"))
   })
 
   const check = Effect.fn("cli.updater.check")(
     function* () {
       const result = yield* inspect()
       if (result.action !== "upgrade") return
-      yield* install(result.target)
+      yield* install(result.version)
     },
     Effect.catchCause((cause) => Effect.logWarning("automatic update failed", { cause })),
   )
@@ -397,7 +368,7 @@ const make = Effect.gen(function* () {
     return yield* monitorServer({ ...input, inspect, install })
   })
 
-  return Service.of({ package: installedPackage, check, monitor, apply, method, latest, upgrade })
+  return Service.of({ check, monitor, apply, method, latest, upgrade })
 })
 
 export const layer = Layer.effect(Service, make)
