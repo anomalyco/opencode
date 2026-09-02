@@ -15,6 +15,8 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { re
         HttpServerRequest.HttpServerRequest.pipe(
           Effect.flatMap((request) => {
             const url = new URL(request.url, "http://localhost")
+            if (url.pathname === "/api" || url.pathname.startsWith("/api/"))
+              return Effect.succeed(HttpServerResponse.empty({ status: 404 }))
             return assets.pipe(Effect.flatMap((files) => serveUI(request, url, files)))
           }),
         ),

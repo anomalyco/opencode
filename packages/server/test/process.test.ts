@@ -53,15 +53,6 @@ it.live("allows browser preflight requests without credentials", () =>
     expect(health.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
     expect(yield* Effect.promise(() => health.json())).toMatchObject({ version: "test-version" })
 
-    const head = yield* Effect.promise(() =>
-      fetch(new URL("/api/server", HttpServer.formatAddress(server.address)), {
-        method: "HEAD",
-        headers: { authorization: `Basic ${btoa("opencode:secret")}` },
-      }),
-    )
-    expect(head.status).toBe(200)
-    expect(yield* Effect.promise(() => head.text())).toBe("")
-
     yield* Effect.forEach(
       ["http://192.168.1.10:3001", "https://example.com", "https://untrusted.example.com"],
       (origin) =>
@@ -114,6 +105,7 @@ it.live("allows browser preflight requests without credentials", () =>
       fetch(new URL("/missing", HttpServer.formatAddress(server.address)), {
         headers: {
           "accept-encoding": "br",
+          authorization: `Basic ${btoa("opencode:secret")}`,
         },
       }),
     )
@@ -123,7 +115,7 @@ it.live("allows browser preflight requests without credentials", () =>
     expect(missing.headers.get("vary")?.toLowerCase()).toContain("accept-encoding")
     expect(yield* Effect.promise(() => missing.text())).toBe(fallback)
 
-    yield* Effect.forEach(["/api", "/api/server", "/api/missing", "/openapi.json"], (pathname) =>
+    yield* Effect.forEach(["/api", "/api/missing", "/openapi.json"], (pathname) =>
       Effect.gen(function* () {
         const response = yield* Effect.promise(() => fetch(new URL(pathname, HttpServer.formatAddress(server.address))))
         expect(response.status).toBe(401)
