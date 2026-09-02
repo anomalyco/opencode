@@ -82,7 +82,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
             <text fg={theme.text.subdued}>An update is ready. Active sessions will be restarted.</text>
           </Match>
           <Match when={state.type === "installing"}>
-            <Spinner>Installing OpenCode {props.version}...</Spinner>
+            <Spinner>Installing OpenCode {props.version}…</Spinner>
           </Match>
           <Match when={state.type === "restarting"}>
             <Spinner>Restarting the background service...</Spinner>
