@@ -13,6 +13,8 @@ import { Env } from "@/env"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
 import { ProviderError } from "@/provider/error"
+import { MessageV2 } from "@/session/message-v2"
+import { SessionRetry } from "@/session/retry"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -46,7 +48,18 @@ it.live("headerTimeout does not abort delayed SSE body after headers arrive", ()
   }),
 )
 
-it.live("chunkTimeout raises a response stream error when SSE body stalls", () =>
+it.instance(
+  "chunkTimeout defaults to five minutes for custom providers",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      const configured = yield* provider.getProvider(ProviderV2.ID.make("test"))
+      expect(configured.options.chunkTimeout).toBe(300_000)
+    }),
+  { config: providerConfig("http://localhost:1234") },
+)
+
+it.live("configured chunkTimeout raises a retryable response stream error when SSE body stalls", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
       Effect.promise(() => delayedBodyServer(250)),
@@ -74,6 +87,9 @@ it.live("chunkTimeout raises a response stream error when SSE body stalls", () =
             }
           })
           expect(error).toBeInstanceOf(ProviderError.ResponseStreamError)
+          expect(
+            SessionRetry.retryable(MessageV2.fromError(error, { providerID: model.providerID }), model.providerID),
+          ).toEqual({ message: "SSE read timed out" })
         }),
       { config: providerConfig(server.url, { chunkTimeout: 50 }) },
     )
@@ -154,7 +170,7 @@ it.live("OpenAI Codex headerTimeout default can be disabled by config", () =>
   }),
 )
 
-it.live("OpenAI API auth gets default headerTimeout", () =>
+it.live("OpenAI API auth gets default header and chunk timeouts", () =>
   Effect.gen(function* () {
     yield* withAuthContent(
       Effect.gen(function* () {
@@ -163,6 +179,7 @@ it.live("OpenAI API auth gets default headerTimeout", () =>
             const provider = yield* Provider.Service
             const openai = yield* provider.getProvider(ProviderV2.ID.openai)
             expect(openai.options.headerTimeout).toBe(300_000)
+            expect(openai.options.chunkTimeout).toBe(300_000)
           }),
         )
       }),

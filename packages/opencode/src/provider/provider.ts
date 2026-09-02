@@ -1671,6 +1671,8 @@ const layer = Layer.effect(
             continue
           }
 
+          provider.options.chunkTimeout ??= 300_000
+
           const configProvider = cfg.provider?.[providerID]
 
           for (const [modelID, model] of Object.entries(provider.models)) {
