@@ -43,7 +43,6 @@ import { ReflectionState } from "./reflection-state"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
-import { ToolSettlement } from "./tool-settlement"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -126,6 +125,38 @@ const layer = Layer.effect(
     const getContext = Effect.fn("SessionRunner.getContext")(function* (sessionID: SessionSchema.ID) {
       return yield* store.context(sessionID)
     })
+    const failInterruptedTools = Effect.fn("SessionRunner.failInterruptedTools")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      for (const message of yield* getContext(sessionID)) {
+        if (message.type !== "assistant") continue
+        for (const tool of message.content) {
+          if (tool.type !== "tool" || (tool.state.status !== "pending" && tool.state.status !== "running")) continue
+          yield* events.publish(SessionEvent.Tool.Failed, {
+            sessionID,
+            timestamp: yield* DateTime.now,
+            assistantMessageID: message.id,
+            callID: tool.id,
+            error: { type: "unknown", message: "Tool execution interrupted" },
+            provider: {
+              executed: tool.provider?.executed === true,
+              ...(tool.provider?.metadata === undefined ? {} : { metadata: tool.provider.metadata }),
+            },
+          })
+        }
+      }
+    })
+
+    const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
+      Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
+
+    // Match V1: declining a user prompt halts the loop instead of becoming model-facing tool output.
+    const isUserDeclined = (cause: Cause.Cause<unknown>) =>
+      cause.reasons.some(
+        (reason) =>
+          Cause.isDieReason(reason) &&
+          (reason.defect instanceof PermissionV2.DeclinedError || reason.defect instanceof QuestionV2.RejectedError),
+      )
 
     type TurnTransition =
       // Automatic compaction completed; rebuild the request from compacted history.
@@ -333,21 +364,53 @@ const layer = Layer.effect(
             }
             needsContinuation = true
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
-            yield* ToolSettlement.settle({
-              sessionID: session.id,
-              agentID: agent.id,
-              assistantMessageID,
-              event,
-              toolMaterialization,
-              getWhyLoopBudget: () => whyLoopBudget,
-              decrementWhyLoopBudget: () => { whyLoopBudget-- },
-              setNeedsContinuation: (value) => { needsContinuation = value },
-              publish,
-              getRefreshedHistory: () => SessionHistory.entriesForRunner(db, session.id, system.baselineSeq).pipe(Effect.option),
-              lastAssistantText,
-              publishCycle,
-              whyLoop: (sessionID) => whyLoop(sessionID).pipe(Effect.option)
-            }).pipe(FiberSet.run(toolFibers))
+            yield* Effect.uninterruptibleMask((restore) =>
+              restore(
+                toolMaterialization.settle({
+                  sessionID: session.id,
+                  agent: agent.id,
+                  assistantMessageID,
+                  call: event,
+                }),
+              ).pipe(
+                Effect.flatMap((settlement) =>
+                  Effect.gen(function* () {
+                    yield* publish(
+                      LLMEvent.toolResult({
+                        id: event.id,
+                        name: event.name,
+                        result: settlement.result,
+                        output: settlement.output,
+                      }),
+                      settlement.outputPaths ?? [],
+                    )
+                    if (whyLoopBudget <= 0) return
+                    const refreshed = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq).pipe(
+                      Effect.option,
+                    )
+                    if (Option.isNone(refreshed)) return
+                    if (!containsHedge(lastAssistantText(refreshed.value))) {
+                      yield* publishCycle("why", session.id, true, false)
+                      return
+                    }
+                    whyLoopBudget--
+                    const whyResult = yield* whyLoop(session.id).pipe(Effect.option)
+                    if (Option.isNone(whyResult)) return
+                    if (whyResult.value.steered) {
+                      needsContinuation = true
+                      ReflectionState.clear(session.id)
+                    } else if (whyResult.value.converged) {
+                      const prev = ReflectionState.get(session.id)
+                      ReflectionState.set(session.id, {
+                        ...prev,
+                        lastWhyConverged: true,
+                        directionConfirmed: false,
+                      })
+                    }
+                  }),
+                ),
+              ),
+            ).pipe(FiberSet.run(toolFibers))
           }),
         ),
         Effect.ensuring(withPublication(publisher.flush())),
@@ -372,8 +435,8 @@ const layer = Layer.effect(
             yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
-          const settled = yield* restore(ToolSettlement.awaitToolFibers(toolFibers)).pipe(Effect.exit)
-          if (settled._tag === "Failure" && ToolSettlement.isUserDeclined(settled.cause)) {
+          const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
+          if (settled._tag === "Failure" && isUserDeclined(settled.cause)) {
             yield* FiberSet.clear(toolFibers)
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
             return yield* Effect.interrupt
@@ -703,7 +766,7 @@ const layer = Layer.effect(
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
-      yield* ToolSettlement.failInterruptedTools(input.sessionID)
+      yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
       let thenLoopBudget = maxReflectionBudget
