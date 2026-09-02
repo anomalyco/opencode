@@ -25,7 +25,7 @@ export interface Interface {
     readonly managed: boolean
     readonly notify: (version: string) => Effect.Effect<void>
     readonly restart: (handoff: PersistentPty.Handoff | null) => Effect.Effect<void>
-  }) => Effect.Effect<never>
+  }) => Effect.Effect<void>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
@@ -102,10 +102,13 @@ export const monitorServer = Effect.fnUntraced(function* (input: MonitorInput) {
       return
     }
     if (result.action !== "upgrade") {
-      yield* Ref.update(state, (current) => (current.type === "ready-to-restart" ? current : { type: "current" }))
+      yield* Ref.update(
+        state,
+        (current): State => (current.type === "ready-to-restart" ? current : { type: "current" }),
+      )
       return
     }
-    yield* Ref.update(state, (current) => {
+    yield* Ref.update(state, (current): State => {
       if (current.type === "ready-to-restart" && current.version === result.version) return current
       return {
         type: "available",
