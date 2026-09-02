@@ -62,6 +62,30 @@ describe("goal tool", () => {
     const result = await goal.execute({ action: "set" })
     expect(result).toBe("Provide a condition.")
   })
+
+  test("set with maxTurns", async () => {
+    const { goal } = createTestPlugin()
+    const result = await goal.execute({ action: "set", condition: "fix bug", maxTurns: 10 })
+    expect(result).toContain("max 10 turns")
+
+    const state = JSON.parse(await fs.readFile(path.join(tmpdir, ".opencode/harness/goal.json"), "utf-8"))
+    expect(state.maxTurns).toBe(10)
+
+    const status = await goal.execute({ action: "status" })
+    expect(status).toContain("Max: 10")
+  })
+
+  test("set with oneTaskPerTurn", async () => {
+    const { goal } = createTestPlugin()
+    const result = await goal.execute({ action: "set", condition: "write tests", oneTaskPerTurn: true })
+    expect(result).toContain("one task per turn")
+
+    const state = JSON.parse(await fs.readFile(path.join(tmpdir, ".opencode/harness/goal.json"), "utf-8"))
+    expect(state.oneTaskPerTurn).toBe(true)
+
+    const status = await goal.execute({ action: "status" })
+    expect(status).toContain("One task/turn")
+  })
 })
 
 describe("loop tool", () => {
