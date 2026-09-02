@@ -8,6 +8,9 @@ import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
+import { useTheme } from "../context/theme"
+import { modelStats, summarizeModelStat } from "../util/model-stats"
+import type { JSX } from "solid-js"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
@@ -17,6 +20,25 @@ export function DialogModel(props: { providerID?: string }) {
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
+  const { theme } = useTheme()
+
+  // Health/throughput footer from TUI-local observed history: a green dot with
+  // the average tok/s of recent responses, red if the model errored recently.
+  // Models with no local history render exactly as before.
+  function statFooter(providerID: string, modelID: string, existing?: string): JSX.Element | string | undefined {
+    const summary = summarizeModelStat(modelStats[`${providerID}/${modelID}`])
+    if (!summary) return existing
+    const dot = <span style={{ fg: summary.healthy ? theme.diffAdded : theme.error }}>●</span>
+    const speed = summary.avg ? ` ${summary.avg} tok/s` : " err"
+    const base = existing ? ` · ${existing}` : ""
+    return (
+      <span style={{ fg: theme.textMuted }}>
+        {dot}
+        {speed}
+        {base}
+      </span>
+    )
+  }
 
   const showExtra = createMemo(() => connected() && !props.providerID)
 
@@ -41,7 +63,11 @@ export function DialogModel(props: { providerID?: string }) {
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: statFooter(
+              provider.id,
+              item.modelID,
+              model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            ),
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -79,7 +105,7 @@ export function DialogModel(props: { providerID?: string }) {
               : undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: statFooter(provider.id, model, info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined),
             onSelect() {
               onSelect(provider.id, model)
             },
@@ -183,7 +209,7 @@ export function DialogModel(props: { providerID?: string }) {
   )
 }
 
-export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
+export function sortModelOptions<T extends { footer?: string | JSX.Element; releaseDate: string | number; title: string }>(
   options: T[],
   newestFirst: boolean,
 ) {
