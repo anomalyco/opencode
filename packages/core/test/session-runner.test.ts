@@ -1590,8 +1590,8 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
       defaultSystem,
-      "Initial context",
       expect.stringContaining("# Delegation"),
+      "Initial context",
     ])
   })
 
@@ -1611,8 +1611,8 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
       defaultSystem,
-      "Initial context",
       expect.stringContaining("# Delegation"),
+      "Initial context",
     ])
   })
 

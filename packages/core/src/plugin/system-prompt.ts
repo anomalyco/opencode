@@ -54,7 +54,7 @@ function make(
           const prompt = getPrompt(`${model?.modelID ?? event.model.id} ${model?.family ?? ""}`.toLowerCase())
           if (!prompt) return
           if (options.operation === "append") {
-            event.system.push(SystemPart.make(prompt))
+            event.system.splice(1, 0, SystemPart.make(prompt))
             return
           }
           event.system[0] = { ...system, text: prompt }
