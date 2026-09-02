@@ -4,6 +4,7 @@ import { LLMClient, Message, type AIError } from "@opencode-ai/ai"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
+import { Plugin } from "../plugin/service.js"
 import type { Instructions } from "../instructions/index.js"
 import { SessionContext } from "./context.js"
 import type { AgentNotFoundError } from "./error.js"
@@ -24,6 +25,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
   const llm = yield* LLMClient.Service
 
   return yield* Effect.gen(function* () {
+    yield* Plugin.awaitActivation
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
     const model = yield* context.resolveModel(selection.session)
