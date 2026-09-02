@@ -85,7 +85,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
             <Spinner>Installing OpenCode {props.version}…</Spinner>
           </Match>
           <Match when={state.type === "restarting"}>
-            <Spinner>Restarting the background service...</Spinner>
+            <Spinner>Restarting the background service…</Spinner>
           </Match>
           <Match when={state.type === "failed"}>
             <text fg={theme.text.feedback.error.default}>{state.type === "failed" ? state.message : ""}</text>
