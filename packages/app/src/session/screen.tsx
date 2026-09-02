@@ -34,7 +34,6 @@ import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createSessionBrowser } from "./browser/model"
-import { SessionBrowserPane } from "./browser/pane"
 
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
@@ -50,7 +49,7 @@ export function SessionScreen(props: { session: SessionModel }) {
   })
   const isDesktop = session.isDesktop
   const browser = createSessionBrowser(session)
-  const screen = createSessionScreenLayout(session, browser.opened)
+  const screen = createSessionScreenLayout(session)
   const timeline = createSessionTimelineInteraction(session)
   const timelineSearch = createTimelineSearchController({
     sessionID: session.identity.sessionID,
@@ -380,13 +379,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                         setStore("sideReviewPresent", false)
                       }}
                     >
-                      <Show
-                        when={browser.registration()}
-                        keyed
-                        fallback={<SessionDesktopReview review={review} present={store.sideReviewPresent} />}
-                      >
-                        {(registration) => <SessionBrowserPane registration={registration} browser={browser} />}
-                      </Show>
+                      <SessionDesktopReview review={review} browser={browser} present={store.sideReviewPresent} />
                     </div>
                   </Show>
                 </div>

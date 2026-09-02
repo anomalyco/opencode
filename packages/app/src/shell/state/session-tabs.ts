@@ -1,4 +1,5 @@
 export const SESSION_OPEN_FILE_TAB = "open-file"
+export const SESSION_BROWSER_TAB = "browser"
 
 export type SessionTabs = {
   active?: string

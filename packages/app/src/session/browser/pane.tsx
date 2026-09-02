@@ -14,6 +14,7 @@ import type { createSessionBrowser } from "./model"
 export function SessionBrowserPane(props: {
   registration: BrowserPaneRegistration
   browser: ReturnType<typeof createSessionBrowser>
+  visible: boolean
 }) {
   const platform = usePlatform()
   const language = useLanguage()
@@ -39,7 +40,7 @@ export function SessionBrowserPane(props: {
     const top = Math.round(rect.top * zoom)
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
-    const visible = store.visible && !dialog.active
+    const visible = props.visible && store.visible && !dialog.active
     const next = `${visible}:${left}:${top}:${right}:${bottom}`
     if (next !== layout) {
       layout = next
@@ -56,7 +57,11 @@ export function SessionBrowserPane(props: {
   }
 
   createEffect(() => !store.editing && setStore("address", state()?.url ?? ""))
-  createEffect(on([() => platform.webviewZoom?.(), () => dialog.active, () => store.visible], () => schedule(300)))
+  createEffect(
+    on([() => platform.webviewZoom?.(), () => dialog.active, () => store.visible, () => props.visible], () =>
+      schedule(300),
+    ),
+  )
   createResizeObserver(() => surface, schedule.bind(null, 0))
   createEventListener(window, "resize", () => schedule(300))
   createEventListener(document, "visibilitychange", () => setStore("visible", document.visibilityState === "visible"))
@@ -111,12 +116,6 @@ export function SessionBrowserPane(props: {
             onInput={(event) => setStore("address", event.currentTarget.value)}
           />
         </form>
-        <IconButton
-          {...button}
-          aria-label={language.t("session.browser.close")}
-          onClick={props.browser.close}
-          icon={<Icon name="close-small" size="small" />}
-        />
       </div>
       <Show when={props.browser.error()}>
         <div class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted">

@@ -5,17 +5,15 @@ import type { BrowserPaneCommand, BrowserPaneRegistration, BrowserPaneState } fr
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServer } from "@/runtime/server/current"
 import { useSettings } from "@/settings/model"
-import { useLayout } from "@/shell/state/layout"
 import type { SessionModel } from "../model"
+import { SESSION_BROWSER_TAB } from "../helpers"
 
 export function createSessionBrowser(session: SessionModel) {
   const platform = usePlatform()
   const settings = useSettings()
   const language = useLanguage()
   const server = useServer()
-  const layout = useLayout()
   const [state, setState] = createStore({
-    opened: false,
     registration: undefined as BrowserPaneRegistration | undefined,
     browser: null as BrowserPaneState,
     error: undefined as string | undefined,
@@ -29,16 +27,17 @@ export function createSessionBrowser(session: SessionModel) {
       !!session.identity.sessionID() &&
       !server.health?.incompatible,
   )
+  const opened = () => state.registration !== undefined && session.layout.tabs().all().includes(SESSION_BROWSER_TAB)
   const open = () => {
-    session.layout.view().reviewPanel.close()
-    layout.fileTree.close()
-    setState("opened", true)
+    session.layout.view().reviewPanel.open()
+    void session.layout.tabs().open(SESSION_BROWSER_TAB)
+    session.layout.tabs().setActive(SESSION_BROWSER_TAB)
   }
 
   createEffect(() => {
     const sessionID = session.identity.sessionID()
     const pane = platform.browserPane
-    setState({ opened: false, registration: undefined, browser: null, error: undefined })
+    setState({ registration: undefined, browser: null, error: undefined })
     if (!available() || !sessionID || !pane) return
     const owner = session.ownership.capture()
     const target = { sessionID, endpoint: server.conn.http }
@@ -61,20 +60,14 @@ export function createSessionBrowser(session: SessionModel) {
     })
   })
 
-  createEffect(() => {
-    if (state.opened && (session.layout.view().reviewPanel.opened() || layout.fileTree.opened())) {
-      setState("opened", false)
-    }
-  })
-
   return {
     available,
-    opened: () => state.opened,
+    opened,
     state: () => state.browser,
     error: () => state.error,
-    registration: () => (state.opened ? state.registration : undefined),
-    close: () => setState("opened", false),
-    toggle: () => (state.opened ? setState("opened", false) : open()),
+    registration: () => state.registration,
+    close: () => session.layout.tabs().close(SESSION_BROWSER_TAB),
+    open,
     command(command: BrowserPaneCommand) {
       setState("error", undefined)
       const owner = session.ownership.capture()
