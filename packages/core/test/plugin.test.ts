@@ -154,6 +154,48 @@ it.effect("reports a failed plugin without blocking a healthy plugin", () =>
   }),
 )
 
+it.effect("keeps the suffix after a failed plugin alive across identical activations", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const setups = { good1: 0, broken: 0, good2: 0 }
+    const good = (id: "good1" | "good2"): Plugin.Generation => ({
+      id,
+      revision: "1",
+      effect: () => Effect.sync(() => void setups[id]++),
+    })
+    const broken = (revision: string): Plugin.Generation => ({
+      id: "broken",
+      revision,
+      effect: () =>
+        Effect.suspend(() => {
+          setups.broken++
+          return Effect.die(new Error("Setup failed"))
+        }),
+    })
+    const failed = () =>
+      plugins.list().pipe(Effect.map((inventory) => inventory.find((plugin) => plugin.id === "broken")?.state))
+
+    yield* plugins.activate([good("good1"), broken("1"), good("good2")])
+    expect(setups).toEqual({ good1: 1, broken: 1, good2: 1 })
+    expect(yield* failed()).toMatchObject({ status: "failed", error: expect.stringContaining("Setup failed") })
+
+    // Identical definitions: nothing restarts and the failed revision is not retried.
+    yield* plugins.activate([good("good1"), broken("1"), good("good2")])
+    expect(setups).toEqual({ good1: 1, broken: 1, good2: 1 })
+    expect(yield* failed()).toMatchObject({ status: "failed", error: expect.stringContaining("Setup failed") })
+    expect((yield* plugins.list()).map((plugin) => `${plugin.id}:${plugin.state.status}`)).toEqual([
+      "good1:active",
+      "broken:failed",
+      "good2:active",
+    ])
+
+    // A new revision of the failed plugin is retried once, restarting only the suffix behind it.
+    yield* plugins.activate([good("good1"), broken("2"), good("good2")])
+    expect(setups).toEqual({ good1: 1, broken: 2, good2: 2 })
+    expect(yield* failed()).toMatchObject({ status: "failed" })
+  }),
+)
+
 it.effect("reloading a plugin replaces its command implementation", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service

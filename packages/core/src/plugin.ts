@@ -20,7 +20,9 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const kv = yield* KV.Service
     const scope = yield* Scope.make()
-    const active = new Map<Plugin.ID, { readonly plugin: Generation; readonly scope: Scope.Closeable }>()
+    // One slot per requested definition in activation order, including ones whose setup failed, so
+    // the prefix diff below stays index-aligned and a failed revision is not retried until it changes.
+    const active = new Map<Plugin.ID, Slot>()
     const lock = Semaphore.makeUnsafe(1)
     const ready = yield* Latch.make(true)
     const pending = new Set<object>()
@@ -90,7 +92,7 @@ const layer = Layer.effect(
                 if (entry) active.set(definition.id, { ...entry, plugin: definition })
               }
               if (prefix === definitions.length && active.size === definitions.length) {
-                const nextInventory = [...definitions.map(activeInfo), ...failures]
+                const nextInventory = [...Array.from(active.values()).map(slotInfo), ...failures]
                 if (JSON.stringify(inventory) === JSON.stringify(nextInventory)) return
                 inventory = nextInventory
                 yield* bus.publish(Plugin.Event.Updated, {})
@@ -103,33 +105,33 @@ const layer = Layer.effect(
                   const previous = new Map(Array.from(active.entries()).slice(prefix))
                   yield* Effect.forEach(
                     Array.from(previous.entries()).toReversed(),
-                    ([id, entry]) =>
+                    ([id, slot]) =>
                       Effect.gen(function* () {
                         active.delete(id)
-                        yield* Scope.close(entry.scope, Exit.void)
+                        if (slot.loaded) yield* Scope.close(slot.loaded.scope, Exit.void)
                       }),
                     { discard: true },
                   )
-                  const nextInventory = definitions.slice(0, prefix).map(activeInfo)
                   for (const definition of definitions.slice(prefix)) {
                     const loaded = yield* load(definition)
                     if (loaded.scope !== undefined) {
-                      active.set(definition.id, { plugin: definition, scope: loaded.scope })
-                      nextInventory.push(activeInfo(definition))
+                      active.set(definition.id, {
+                        plugin: definition,
+                        loaded: { plugin: definition, scope: loaded.scope },
+                      })
                       continue
                     }
-                    nextInventory.push({
-                      id: definition.id,
-                      source: definition.source ?? { type: "builtin" },
-                      state: { status: "failed", error: loaded.error },
-                      features: { server: true, ...definition.features },
-                    })
+                    active.set(definition.id, { plugin: definition, error: loaded.error })
 
-                    const fallback = previous.get(definition.id)
+                    const fallback = previous.get(definition.id)?.loaded
                     if (!fallback) continue
                     const restored = yield* load(fallback.plugin)
                     if (restored.scope !== undefined) {
-                      active.set(definition.id, { plugin: fallback.plugin, scope: restored.scope })
+                      active.set(definition.id, {
+                        plugin: definition,
+                        loaded: { plugin: fallback.plugin, scope: restored.scope },
+                        error: loaded.error,
+                      })
                       continue
                     }
                     yield* Effect.logError("failed to restore plugin; deactivating", {
@@ -137,7 +139,7 @@ const layer = Layer.effect(
                     })
                   }
 
-                  inventory = [...nextInventory, ...failures]
+                  inventory = [...Array.from(active.values()).map(slotInfo), ...failures]
                 }),
               )
               yield* bus.publish(Plugin.Event.Updated, {})
@@ -166,12 +168,20 @@ const layer = Layer.effect(
   }),
 )
 
-function activeInfo(plugin: Generation): Plugin.Info {
+// `plugin` is the definition the slot was last asked to run; `loaded` is the generation actually
+// running, which stays an older fallback while the requested revision keeps failing setup.
+type Slot = {
+  readonly plugin: Generation
+  readonly loaded?: { readonly plugin: Generation; readonly scope: Scope.Closeable }
+  readonly error?: string
+}
+
+function slotInfo(slot: Slot): Plugin.Info {
   return {
-    id: Plugin.ID.make(plugin.id),
-    source: plugin.source ?? { type: "builtin" },
-    state: { status: "active" },
-    features: { server: true, ...plugin.features },
+    id: Plugin.ID.make(slot.plugin.id),
+    source: slot.plugin.source ?? { type: "builtin" },
+    state: slot.error === undefined ? { status: "active" } : { status: "failed", error: slot.error },
+    features: { server: true, ...slot.plugin.features },
   }
 }
 
