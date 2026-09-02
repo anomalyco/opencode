@@ -63,7 +63,11 @@ for (const recovery of ["reconnect", "http-fallback", "ambiguous-send"] as const
               },
             }),
           ),
-          (server) => Effect.promise(() => server.stop(true)),
+          (server) =>
+            Effect.sync(() => {
+              // Bun 1.3 closes the sockets but can leave the stop promise unresolved after upgrades.
+              void server.stop(true)
+            }),
         )
         const transport = SessionModelTransport.makeLayer({
           open: (input) =>
