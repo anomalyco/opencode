@@ -7,7 +7,6 @@ import { InstanceState } from "@/effect/instance-state"
 import path from "path"
 import { mergeDeep } from "remeda"
 import { Config } from "@/config/config"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import { errorMessage } from "@/util/error"
 import * as Formatter from "./formatter"
 
@@ -33,7 +32,6 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* Config.Service
     const appProcess = yield* AppProcess.Service
-    const flags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make(
       Effect.fn("Format.state")(function* (ctx) {
@@ -43,7 +41,7 @@ const layer = Layer.effect(
         async function getCommand(item: Formatter.Info) {
           let cmd = commands[item.name]
           if (cmd === false || cmd === undefined) {
-            cmd = await item.enabled({ ...ctx, experimentalOxfmt: flags.experimentalOxfmt })
+            cmd = await item.enabled(ctx)
             commands[item.name] = cmd
           }
           return cmd
@@ -197,7 +195,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Config.node, AppProcess.node, RuntimeFlags.node],
+  deps: [Config.node, AppProcess.node],
 })
 
 export * as Format from "."
