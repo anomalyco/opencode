@@ -107,7 +107,7 @@ export function Titlebar(props: {
   const rightState = createMemo<TitlebarRightState>(() => ({
     update: updateState(),
   }))
-  const hideMacVerticalTitlebar = createMemo(() => macVerticalTabs() && !updateState().visible)
+  const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
 
   const back = () => {
     const next = backPath(history)
@@ -143,7 +143,7 @@ export function Titlebar(props: {
   return (
     <header
       data-slot="titlebar-v2"
-      hidden={hideMacVerticalTitlebar()}
+      hidden={hideVerticalTitlebar()}
       classList={{
         "shrink-0 relative flex flex-row h-9 bg-v2-background-bg-deep overflow-visible": true,
         "order-last": bottom(),
@@ -432,7 +432,7 @@ export function Titlebar(props: {
                   "md:pl-4": !macTrafficLights(),
                 }}
               >
-                <Show when={!mobile() && !macVerticalTabs()}>
+                <Show when={!mobile() && !props.verticalTabs}>
                   <ChannelIndicator debugTools={props.debugTools} />
                 </Show>
                 <Show when={windows() || linux()}>
@@ -626,7 +626,7 @@ export function Titlebar(props: {
                               <div
                                 class="relative w-full shrink-0"
                                 style={{ height: `${macTrafficLightsTopClearance / zoom()}px` }}
-                                data-tauri-drag-region={hideMacVerticalTitlebar() ? true : undefined}
+                                data-tauri-drag-region
                               >
                                 <div class="absolute right-0 top-0 flex h-full items-center [app-region:no-drag]">
                                   <TitlebarRightMount />
@@ -661,13 +661,11 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <Show when={macVerticalTabs()}>
-                              <div data-slot="vertical-tabs-footer" class="relative mt-auto h-9 w-full shrink-0">
-                                <div class="absolute bottom-0 left-0 flex h-9 items-center">
-                                  <ChannelIndicator debugTools={props.debugTools} />
-                                </div>
+                            <div data-slot="vertical-tabs-footer" class="relative mt-auto h-9 w-full shrink-0">
+                              <div class="absolute bottom-0 left-0 flex h-9 items-center">
+                                <ChannelIndicator debugTools={props.debugTools} />
                               </div>
-                            </Show>
+                            </div>
                           </Portal>
                         )}
                       </Show>

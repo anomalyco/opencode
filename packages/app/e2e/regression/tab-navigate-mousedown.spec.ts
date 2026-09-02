@@ -146,6 +146,8 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabB.locator('[data-slot="tab-project"]')).toHaveText("tab-project")
   await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toHaveText("Home")
   await expect(sidebar.getByRole("button", { name: "New session" })).toBeVisible()
+  await expect(sidebar.locator('[data-slot="vertical-tabs-footer"]')).toBeVisible()
+  await expect(page.locator('[data-slot="titlebar-v2"]')).toBeHidden()
   await expect
     .poll(async () => {
       const button = await sidebar.getByRole("button", { name: "New session" }).boundingBox()
