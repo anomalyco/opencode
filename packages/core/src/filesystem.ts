@@ -4,6 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Environment } from "./environment/index.js"
 import { Location } from "./location.js"
 import { PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
@@ -64,39 +65,38 @@ const baseLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
+    const environment = yield* Environment.Service
     const location = yield* Location.Service
     const search = yield* FileSystemSearch.Service
     // Workspace-placed directories exist only inside the workspace, so a host
     // realpath probe at boot consults the wrong filesystem and would block
     // construction on servers without a matching local directory. Treat the
     // configured directory as canonical; local placements keep symlink
-    // canonicalization. This skip is boot-only: resolve/read/list below still
-    // access the host filesystem per operation (tracked in #44568).
-    const root = location.workspaceID ? location.directory : yield* fs.realPath(location.directory).pipe(Effect.orDie)
+    // canonicalization. Execution-plane operations below resolve through the
+    // Location environment and may provision a workspace on first use.
+    const root = location.workspaceID ? undefined : yield* fs.realPath(location.directory).pipe(Effect.orDie)
     const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
       const absolute = path.resolve(location.directory, input ?? ".")
       if (!FSUtil.contains(location.directory, absolute))
         return yield* Effect.die(new Error("Path escapes the location"))
-      const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
-      if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
+      const canonicalRoot = root ?? (yield* environment.files.realpath(location.directory).pipe(Effect.orDie))
+      const real = yield* environment.files.realpath(absolute).pipe(Effect.orDie)
+      if (!FSUtil.contains(canonicalRoot, real)) return yield* Effect.die(new Error("Path escapes the location"))
       return { absolute, real, directory: location.directory }
     })
     return Service.of({
       find: search.find,
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
-        if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+        const result = yield* environment.files.read(target.real).pipe(Effect.orDie)
         return {
-          content: yield* fs.readFile(target.real).pipe(Effect.orDie),
+          content: result.bytes,
           mime: FSUtil.mimeType(target.real),
         }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
-        if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
-        return yield* fs.readDirectoryEntries(target.real).pipe(
+        return yield* environment.files.list(target.real).pipe(
           Effect.orDie,
           Effect.map((items) =>
             items
@@ -122,5 +122,5 @@ const baseLayer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer: baseLayer,
-  deps: [FSUtil.node, Location.node, FileSystemSearch.node],
+  deps: [FSUtil.node, Environment.node, Location.node, FileSystemSearch.node],
 })

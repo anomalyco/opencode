@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Environment } from "@opencode-ai/core/environment/index"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Workspace } from "@opencode-ai/core/workspace"
@@ -24,6 +25,27 @@ const provide = (directory: string, workspaceID?: Workspace.ID) =>
       ],
     }),
   )
+
+const provideMemory = (directory: string, memory: Environment.MemoryDriver) => {
+  const activeLocation = Layer.succeed(
+    Location.Service,
+    Location.Service.of(
+      location({ directory: AbsolutePath.make(directory), workspaceID: Workspace.ID.make("wrk_filesystem") }),
+    ),
+  )
+  return Effect.provide(
+    LayerNode.compile(FileSystem.node, [
+      [Location.node, activeLocation],
+      [
+        Environment.node,
+        Layer.succeed(
+          Environment.Service,
+          Environment.Service.of({ files: Environment.makeFiles(memory), spawner: memory.spawner }),
+        ),
+      ],
+    ]),
+  )
+}
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
   Effect.acquireRelease(
@@ -62,26 +84,74 @@ describe("FileSystem", () => {
     ),
   )
 
-  it.live("skips host canonicalization for workspace locations at boot", () =>
+  it.live("uses the workspace environment when the directory is absent on the host", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        // The directory exists only inside the workspace, so boot must not
-        // require it to exist on the host. Operations still access the host
-        // filesystem per call (#44568); only boot canonicalization is skipped.
+        if (process.platform === "win32") return
         const missing = path.join(directory, "workspace-only")
-        const workspace = yield* FileSystem.Service.pipe(
-          provide(missing, Workspace.ID.make("wrk_filesystem")),
-          Effect.exit,
-        )
-        expect(Exit.isSuccess(workspace)).toBe(true)
+        const memory = Environment.makeMemoryDriver()
+        const files = Environment.makeFiles(memory)
+        yield* files.write(path.join(missing, "remote.txt"), new TextEncoder().encode("remote"))
 
-        // A local ref with the same missing directory keeps failing boot:
-        // host realpath canonicalization stays load-bearing for local placements.
+        const workspace = yield* Effect.gen(function* () {
+          const service = yield* FileSystem.Service
+          return yield* service.read({ path: RelativePath.make("remote.txt") })
+        }).pipe(provideMemory(missing, memory), Effect.exit)
+        expect(Exit.isSuccess(workspace)).toBe(true)
+        if (Exit.isSuccess(workspace)) expect(new TextDecoder().decode(workspace.value.content)).toBe("remote")
+
+        // A local ref with the same missing directory still fails boot because
+        // host realpath canonicalization remains load-bearing locally.
         const local = yield* FileSystem.Service.pipe(provide(missing), Effect.exit)
         expect(Exit.isFailure(local)).toBe(true)
       }),
     ),
   )
+
+  it.live("reads and lists the workspace environment instead of a same-named host directory", () =>
+    withTmp((directory) => {
+      const memory = Environment.makeMemoryDriver()
+      return Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const files = Environment.makeFiles(memory)
+        yield* files.mkdir(directory)
+        yield* files.write(path.join(directory, "shared.txt"), new TextEncoder().encode("workspace"))
+        yield* files.write(path.join(directory, "workspace-only.txt"), new TextEncoder().encode("remote"))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "shared.txt"), "host"))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "host-only.txt"), "local"))
+
+        const service = yield* FileSystem.Service
+        const read = yield* service.read({ path: RelativePath.make("shared.txt") })
+        const entries = yield* service.list()
+
+        expect(new TextDecoder().decode(read.content)).toBe("workspace")
+        expect(entries.map((entry) => entry.path)).toEqual([
+          RelativePath.make("shared.txt"),
+          RelativePath.make("workspace-only.txt"),
+        ])
+      }).pipe(provideMemory(directory, memory))
+    }),
+  )
+
+  it.live("canonicalizes workspace paths before enforcing the location boundary", () => {
+    const memory = Environment.makeMemoryDriver()
+    return Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const files = Environment.makeFiles(memory)
+      yield* files.mkdir("/workspace/project")
+      yield* files.write("/workspace/project/inside.txt", new TextEncoder().encode("inside"))
+      yield* files.write("/outside.txt", new TextEncoder().encode("outside"))
+      yield* memory.symlink("inside.txt", "/workspace/project/inside-link")
+      yield* memory.symlink("/outside.txt", "/workspace/project/outside-link")
+
+      const service = yield* FileSystem.Service
+      const internal = yield* service.read({ path: RelativePath.make("inside-link") })
+      const escaped = yield* service.read({ path: RelativePath.make("outside-link") }).pipe(Effect.exit)
+
+      expect(new TextDecoder().decode(internal.content)).toBe("inside")
+      expect(Exit.isFailure(escaped)).toBe(true)
+    }).pipe(provideMemory("/workspace/project", memory))
+  })
 
   it.live("canonicalizes local symlinked directories", () =>
     withTmp((directory) =>
