@@ -1,0 +1,154 @@
+name: Delegation — create Windows release workflow (one-shot)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create_windows_workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure git user
+        run: |
+          git config user.name "repo-delegate[bot]"
+          git config user.email "noreply@github.com"
+
+      - name: Create branch ci/windows-release-workflow
+        run: |
+          git fetch origin
+          git checkout -b ci/windows-release-workflow
+
+      - name: Write windows-release workflow file
+        run: |
+          mkdir -p .github/workflows
+          cat > .github/workflows/windows-release.yml <<'YML'
+name: Build Windows NSIS installer (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version and installer name
+        id: get_version
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $version = $pkg.version
+          if (-not $version) { $version = "0.0.0" }
+          $installer = "oc-custom-setup-x64-$version.exe"
+          Write-Output "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Output "installer_name=$installer" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Ensure Bun is installed (bash)
+        shell: bash
+        run: |
+          if ! command -v bun >/dev/null 2>&1; then
+            curl -fsSL https://bun.sh/install | bash
+            export BUN_INSTALL="$HOME/.bun"
+            export PATH="$BUN_INSTALL/bin:$PATH"
+          fi
+          bun --version || true
+
+      - name: Install dependencies and build (bun)
+        shell: bash
+        run: |
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          bun install
+          bun build
+
+      - name: Prepare installer files (bash)
+        shell: bash
+        run: |
+          OUTPUT_DIR="dist"
+          if [ ! -d "$OUTPUT_DIR" ]; then
+            echo "Warning: $OUTPUT_DIR does not exist. Listing repo:" && ls -la
+          fi
+          rm -rf installer_files || true
+          mkdir -p installer_files
+          if [ -d "$OUTPUT_DIR" ]; then
+            cp -r $OUTPUT_DIR/* installer_files/ || true
+          fi
+          if command -v bun >/dev/null 2>&1; then
+            BUN_BIN=$(command -v bun)
+            mkdir -p installer_files/bin
+            cp "$BUN_BIN" installer_files/bin/ || true
+          fi
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y
+
+      - name: Create NSIS script
+        shell: pwsh
+        run: |
+          $version = "${{ steps.get_version.outputs.version }}"
+          $app = "oc-custom"
+          $installerName = "${{ steps.get_version.outputs.installer_name }}"
+          $nsi = @"
+Name "$app Installer"
+OutFile "$installerName"
+InstallDir "$PROGRAMFILES64\\$app"
+Page directory
+Page instfiles
+Section "Install"
+  SetOutPath "$INSTDIR"
+  File /r "installer_files\\*"
+  CreateShortCut "$SMPROGRAMS\\$app.lnk" "$INSTDIR\\$app.exe"
+SectionEnd
+"@
+          $nsi | Out-File -FilePath installer.nsi -Encoding utf8
+
+      - name: Build installer with makensis
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
+          $installer = "${{ steps.get_version.outputs.installer_name }}"
+          if (-not (Test-Path $installer)) { Write-Error "Installer not created: $installer" }
+
+      - name: Create GitHub Release and upload installer
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ steps.get_version.outputs.version }}
+          files: ${{ steps.get_version.outputs.installer_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_SYNC }}
+YML
+
+      - name: Commit and push branch
+        env:
+          DELEGATE_PAT: ${{ secrets.DELEGATE_PAT }}
+        run: |
+          git add .github/workflows/windows-release.yml
+          git commit -m "ci: add windows release workflow (NSIS)" || echo "no changes to commit"
+          git push --set-upstream "https://${DELEGATE_PAT}@github.com/${GITHUB_REPOSITORY}.git" ci/windows-release-workflow --force
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.DELEGATE_PAT }}
+          branch: ci/windows-release-workflow
+          base: omo-custom
+          title: "Add Windows NSIS installer workflow"
+          body: |
+            This PR was created by the delegation workflow. It adds a manual workflow to build a Windows NSIS installer and publish it as a Release asset.
