@@ -111,6 +111,10 @@ const source = {
   "ui.messagePart.context.match.one": "({{count}} match)",
   "ui.messagePart.context.match.other": "({{count}} matches)",
   "ui.messagePart.tools.used": "Used {{tools}}",
+  "ui.messagePart.tools.skill.one": "{{count}} Skill",
+  "ui.messagePart.tools.skill.other": "{{count}} Skills",
+  "ui.messagePart.tools.agent.one": "{{count}} Agent",
+  "ui.messagePart.tools.agent.other": "{{count}} Agents",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",

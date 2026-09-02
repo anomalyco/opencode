@@ -497,20 +497,40 @@ export function CurrentContextToolGroup(props: {
   const pending = createMemo(
     () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
-  const names = createMemo(() =>
-    [
-      ...new Set(
-        tools().map((tool) => {
-          const input = currentToolInput(tool)
-          if (tool.name === "skill") return i18n.t("ui.tool.skill")
-          if (tool.name === "subagent") return i18n.t("ui.tool.agent.default")
-          return getToolInfo(tool.name, input, currentToolMetadata(tool)).title
-        }),
-      ),
-    ].join(", "),
-  )
+  const names = createMemo(() => {
+    const counts = new Map<
+      string,
+      { count: number; plural?: "ui.messagePart.tools.skill" | "ui.messagePart.tools.agent" }
+    >()
+    tools().forEach((tool) => {
+      const input = currentToolInput(tool)
+      const name =
+        tool.name === "skill"
+          ? i18n.t("ui.tool.skill")
+          : tool.name === "subagent"
+            ? i18n.t("ui.tool.agent.default")
+            : getToolInfo(tool.name, input, currentToolMetadata(tool)).title
+      const current = counts.get(name)
+      if (current) {
+        current.count++
+        return
+      }
+      counts.set(name, {
+        count: 1,
+        plural:
+          tool.name === "skill"
+            ? "ui.messagePart.tools.skill"
+            : tool.name === "subagent"
+              ? "ui.messagePart.tools.agent"
+              : undefined,
+      })
+    })
+    return [...counts.entries()]
+      .map(([name, item]) => (item.plural ? i18n.plural(item.plural, item.count) : `${item.count} ${name}`))
+      .join(", ")
+  })
   const label = createMemo(() => {
-    const title = `${tools().length} ${names()}`
+    const title = names()
     const text = i18n.t("ui.messagePart.tools.used", { tools: title })
     const index = text.indexOf(title)
     return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }

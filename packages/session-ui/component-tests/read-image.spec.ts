@@ -9,7 +9,7 @@ const png = Buffer.from(
 
 story.beforeEach(async ({ mount }) => {
   const root = await mount("current-tool-group--mixed-tools")
-  await expect(root.getByRole("button", { name: "Used 4 Shell, Read, Agent", exact: true })).toBeVisible()
+  await expect(root.getByRole("button", { name: "Used 1 Shell, 1 Read, 2 Agents", exact: true })).toBeVisible()
 })
 
 for (const grouped of [true, false]) {
