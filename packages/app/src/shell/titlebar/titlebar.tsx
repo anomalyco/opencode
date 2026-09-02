@@ -37,6 +37,7 @@ const windowsTitlebarHeight = 44 // Includes the content inset; matches the nati
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
 const macTrafficLightsBaseWidth = 84
+const macTrafficLightsTopClearance = 28
 
 export type TitlebarUpdate = {
   version: string | undefined
@@ -624,7 +625,7 @@ export function Titlebar(props: {
                             <Show when={macVerticalTabs()}>
                               <div
                                 class="relative w-full shrink-0"
-                                style={{ height: `${(titlebarHeight - 8) / zoom()}px` }}
+                                style={{ height: `${macTrafficLightsTopClearance / zoom()}px` }}
                                 data-tauri-drag-region={hideMacVerticalTitlebar() ? true : undefined}
                               >
                                 <div class="absolute right-0 top-0 flex h-full items-center [app-region:no-drag]">
