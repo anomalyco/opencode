@@ -21,6 +21,8 @@ import { ProviderFailureClassification } from "./errors"
  * - `cacheReadInputTokens` — input tokens served from cache.
  * - `cacheWriteInputTokens` — input tokens written to cache.
  * - `reasoningTokens` — subset of `outputTokens` spent on hidden reasoning.
+ * - `billedCost` — provider-reported authoritative USD cost, when a provider
+ *   reports billing directly instead of deriving it from token prices.
  *
  * **Invariant**: `nonCachedInputTokens + cacheReadInputTokens +
  * cacheWriteInputTokens = inputTokens`, and `reasoningTokens ≤ outputTokens`.
@@ -43,10 +45,10 @@ import { ProviderFailureClassification } from "./errors"
  *   `reasoningTokens` is `undefined` and `outputTokens` carries the
  *   combined total — a documented limitation of the Anthropic API.
  *
- * `providerMetadata` always carries the provider's raw usage payload —
- * keyed by provider name (`{ openai: ... }`, `{ anthropic: ... }`, etc.)
- * — for fields we don't normalize and for billing-level audit trails.
- * Matches the same escape-hatch field on `LLMEvent`.
+ * `billedCost` carries normalized authoritative cost when a provider reports
+ * billing directly. `providerMetadata` remains the escape hatch for raw
+ * provider payloads keyed by provider name (`{ openai: ... }`,
+ * `{ anthropic: ... }`, etc.).
  */
 export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   inputTokens: Schema.optional(Schema.Number),
@@ -56,6 +58,7 @@ export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   cacheWriteInputTokens: Schema.optional(Schema.Number),
   reasoningTokens: Schema.optional(Schema.Number),
   totalTokens: Schema.optional(Schema.Number),
+  billedCost: Schema.optional(Schema.Finite),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   /**

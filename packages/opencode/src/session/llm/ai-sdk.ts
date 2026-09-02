@@ -15,7 +15,7 @@ export function adapterState() {
     currentTextID: undefined as string | undefined,
     currentReasoningID: undefined as string | undefined,
     toolNames: {} as Record<string, string>,
-    copilotTotalNanoAiu: undefined as number | undefined,
+    copilotBilledCost: undefined as number | undefined,
   }
 }
 
@@ -28,23 +28,21 @@ function providerMetadata(value: unknown): ProviderMetadata | undefined {
   return Schema.is(ProviderMetadata)(value) ? value : undefined
 }
 
-// Temporary AI SDK bridge: Copilot billing survives only in raw provider chunks here.
-// Move this extraction into @opencode-ai/llm when Copilot is handled by the native runtime.
-function copilotTotalNanoAiu(value: unknown) {
-  if (!value || typeof value !== "object") return
-  const raw = value as Record<string, unknown>
-  const response =
-    raw.response && typeof raw.response === "object" ? (raw.response as Record<string, unknown>) : undefined
-  const usage = raw.copilot_usage ?? response?.copilot_usage
-  if (!usage || typeof usage !== "object") return
-  const total = (usage as Record<string, unknown>).total_nano_aiu
-  if (typeof total !== "number" || !Number.isFinite(total) || total < 0) return
-  return total
+function copilotBilledCost(value: unknown): number | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const response = Reflect.get(value, "response")
+  const usage =
+    Reflect.get(value, "copilot_usage") ??
+    (response && typeof response === "object" ? Reflect.get(response, "copilot_usage") : undefined)
+  if (!usage || typeof usage !== "object") return undefined
+  const total = Reflect.get(usage, "total_nano_aiu")
+  if (typeof total !== "number" || !Number.isFinite(total) || total < 0) return undefined
+  return total / 100_000_000_000
 }
 
-function usage(value: unknown) {
-  if (!value || typeof value !== "object") return undefined
-  const item = value as {
+function usage(value: unknown, billedCost?: number) {
+  if ((!value || typeof value !== "object") && billedCost === undefined) return undefined
+  const item = (value && typeof value === "object" ? value : {}) as {
     inputTokens?: number
     outputTokens?: number
     totalTokens?: number
@@ -60,6 +58,7 @@ function usage(value: unknown) {
     reasoningTokens: item.outputTokenDetails?.reasoningTokens ?? item.reasoningTokens,
     cacheReadInputTokens: item.inputTokenDetails?.cacheReadTokens ?? item.cachedInputTokens,
     cacheWriteInputTokens: item.inputTokenDetails?.cacheWriteTokens,
+    billedCost,
   }).filter((entry) => entry[1] !== undefined)
   return entries.length === 0 ? undefined : Object.fromEntries(entries)
 }
@@ -89,24 +88,14 @@ export function toLLMEvents(
       if (event.rawFinishReason === "network_error")
         return Effect.fail(new ProviderError.ResponseStreamError("Provider finish_reason: network_error"))
       return Effect.sync(() => {
-        const original = providerMetadata(event.providerMetadata)
-        const metadata =
-          state.copilotTotalNanoAiu === undefined
-            ? original
-            : {
-                ...original,
-                copilot: {
-                  ...original?.copilot,
-                  totalNanoAiu: state.copilotTotalNanoAiu,
-                },
-              }
-        state.copilotTotalNanoAiu = undefined
+        const billedCost = state.copilotBilledCost
+        state.copilotBilledCost = undefined
         return [
           LLMEvent.stepFinish({
             index: state.step++,
             reason: finishReason(event.finishReason),
-            usage: usage(event.usage),
-            providerMetadata: metadata,
+            usage: usage(event.usage, billedCost),
+            providerMetadata: providerMetadata(event.providerMetadata),
           }),
         ]
       })
@@ -276,7 +265,7 @@ export function toLLMEvents(
 
     case "raw":
       return Effect.sync(() => {
-        state.copilotTotalNanoAiu = copilotTotalNanoAiu(event.rawValue) ?? state.copilotTotalNanoAiu
+        state.copilotBilledCost = copilotBilledCost(event.rawValue) ?? state.copilotBilledCost
         return []
       })
 
