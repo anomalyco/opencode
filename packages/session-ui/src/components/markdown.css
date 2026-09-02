@@ -257,6 +257,7 @@
       var(--markdown-inline-code-path-color) var(--markdown-inline-code-bg-mix),
       transparent
     );
+    cursor: pointer;
   }
 
   a.external-link > code[data-inline-code-kind="url"] {
