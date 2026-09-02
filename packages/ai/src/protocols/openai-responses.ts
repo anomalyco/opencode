@@ -75,7 +75,9 @@ const OpenAIResponsesToolChoice = Schema.Union([
 
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, OpenAIResponsesHostedToolItem])),
+  input: Schema.Array(
+    Schema.Union([OpenResponses.CompletedReasoningItem, OpenResponses.InputItem, OpenAIResponsesHostedToolItem]),
+  ),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
 }
@@ -86,10 +88,16 @@ const OpenAIResponsesBody = Schema.Struct({
 })
 export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
+const restoreReasoningItem = (item: unknown) => {
+  if (!Schema.is(OpenResponses.CompletedReasoningItem)(item)) return undefined
+  return item.content?.length === 0 ? { ...item, content: undefined } : item
+}
+
 const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
+  restoreReasoningItem,
 } satisfies OpenResponses.ProviderAdapter
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
@@ -185,12 +193,6 @@ const HOSTED_TOOLS = {
 } as const satisfies ResponsesHostedTools.Definitions
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
-  if (event.type === "response.reasoning_text.delta")
-    return event.item_id !== undefined
-      ? Effect.succeed(
-          OpenResponses.onReasoningDelta(state, event, OpenResponses.outputItemID(state, event) ?? event.item_id),
-        )
-      : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
   return OpenResponses.step(state, event)

@@ -303,6 +303,49 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("projects completed reasoning items through the shared protocol", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant({
+              type: "reasoning",
+              text: "Portable summary",
+              providerMetadata: {
+                example: {
+                  reasoningItem: {
+                    type: "reasoning",
+                    id: "rs_1",
+                    summary: [{ type: "summary_text", text: "Summary" }],
+                    content: [{ type: "reasoning_text", text: "Raw" }],
+                    encrypted_content: "state",
+                    status: "completed",
+                    future_field: { retained: true },
+                  },
+                },
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "reasoning",
+          id: "rs_1",
+          summary: [{ type: "summary_text", text: "Summary" }],
+          encrypted_content: "state",
+        },
+      ])
+    }),
+  )
+
   it.effect("routes response deltas by output index", () =>
     Effect.gen(function* () {
       const model = configure({
@@ -427,7 +470,7 @@ describe("Open Responses-compatible route", () => {
     })
 
     routings.forEach((routing) => {
-      it.effect(`preserves reasoning summary boundaries without terminal reconciliation with ${routing.name}`, () =>
+      it.effect(`keeps one reasoning lifecycle without item completion with ${routing.name}`, () =>
         Effect.gen(function* () {
           const address = { item_id: routing.item_id, output_index: routing.output_index }
           const response = yield* LLMClient.generate(request).pipe(
@@ -458,26 +501,10 @@ describe("Open Responses-compatible route", () => {
           expect(response.message.content).toEqual([
             {
               type: "reasoning",
-              text: "First.",
-              providerMetadata: { "openai-compatible": { itemId: routing.id } },
-            },
-            {
-              type: "reasoning",
-              text: "Second.",
-              providerMetadata: {
-                "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: null },
-              },
+              text: "First.Second.",
             },
           ])
-          expect(response.events.filter(LLMEvent.is.reasoningEnd)).toEqual([
-            {
-              type: "reasoning-end",
-              id: `${routing.id}:0`,
-              text: undefined,
-              providerMetadata: { "openai-compatible": { itemId: routing.id } },
-            },
-            { type: "reasoning-end", id: `${routing.id}:1` },
-          ])
+          expect(response.events.filter(LLMEvent.is.reasoningEnd)).toEqual([{ type: "reasoning-end", id: routing.id }])
         }),
       )
     })
@@ -717,7 +744,7 @@ describe("Open Responses-compatible route", () => {
 
       expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
         type: "reasoning-end",
-        id: "rs_raw:0",
+        id: "rs_raw",
       })
     }),
   )

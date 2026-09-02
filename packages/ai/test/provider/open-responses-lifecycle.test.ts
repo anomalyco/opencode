@@ -71,59 +71,61 @@ function expectLifecycle(events: ReadonlyArray<LLMEvent>, completed: boolean) {
 }
 
 describe("Open Responses basic-item lifecycles", () => {
-  it.effect("closes implicit summary boundaries and ignores late events for completed reasoning", () =>
+  it.effect("streams mixed reasoning in one lifecycle and ignores late events", () =>
     Effect.gen(function* () {
-      const item = { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" }
+      const item = {
+        type: "reasoning",
+        id: "rs_1",
+        summary: [{ type: "summary_text", text: "Completed" }],
+        encrypted_content: "encrypted-state",
+      }
       const events = yield* collect(
         { type: "response.output_item.added", output_index: 0, item: { ...item, encrypted_content: null } },
         { type: "response.output_item.added", item: { ...item, encrypted_content: null } },
-        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
-        { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
-        { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
-        { type: "response.reasoning_summary_text.done", item_id: "rs_1", summary_index: 1, text: "Second" },
-        // The third part omits both explicit summary boundaries.
+        { type: "response.reasoning.delta", item_id: "rs_1", content_index: 0, delta: "Raw " },
+        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "summary " },
+        { type: "response.reasoning.done", item_id: "rs_1", content_index: 0, text: "ignored raw final" },
         {
-          type: "response.reasoning_summary_text.delta",
+          type: "response.reasoning_summary_text.done",
+          item_id: "rs_1",
+          summary_index: 0,
+          text: "ignored summary final",
+        },
+        {
+          type: "response.reasoning_text.done",
           output_index: 0,
           item_id: "wrong",
-          summary_index: 2,
-          delta: "Third",
+          content_index: 1,
+          text: "raw final ",
         },
+        { type: "response.reasoning_summary_text.done", item_id: "rs_1", summary_index: 1, text: "summary final" },
         { type: "response.output_item.done", item },
         { type: "response.output_item.done", item },
         { type: "response.output_item.added", item },
-        { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 3 },
-        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 3, delta: "late" },
-        { type: "response.reasoning_summary_text.done", item_id: "rs_1", summary_index: 2, text: "late final" },
-        { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 3 },
+        { type: "response.reasoning.delta", item_id: "rs_1", content_index: 2, delta: "late raw" },
+        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 2, delta: "late summary" },
+        { type: "response.reasoning.done", item_id: "rs_1", content_index: 3, text: "late raw final" },
+        { type: "response.reasoning_summary_text.done", item_id: "rs_1", summary_index: 3, text: "late final" },
         completed,
       )
 
       expect(events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
-        {
-          type: "reasoning-start",
-          id: "rs_1:0",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: null } },
-        },
-        { type: "reasoning-delta", id: "rs_1:0", text: "First" },
-        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { "openai-compatible": { itemId: "rs_1" } } },
-        {
-          type: "reasoning-start",
-          id: "rs_1:1",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: null } },
-        },
-        { type: "reasoning-delta", id: "rs_1:1", text: "Second" },
-        { type: "reasoning-end", id: "rs_1:1", providerMetadata: { "openai-compatible": { itemId: "rs_1" } } },
-        {
-          type: "reasoning-start",
-          id: "rs_1:2",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: null } },
-        },
-        { type: "reasoning-delta", id: "rs_1:2", text: "Third" },
+        { type: "reasoning-start", id: "rs_1" },
+        { type: "reasoning-delta", id: "rs_1", text: "Raw " },
+        { type: "reasoning-delta", id: "rs_1", text: "summary " },
+        { type: "reasoning-delta", id: "rs_1", text: "raw final " },
+        { type: "reasoning-delta", id: "rs_1", text: "summary final" },
         {
           type: "reasoning-end",
-          id: "rs_1:2",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          id: "rs_1",
+          text: "Completed",
+          providerMetadata: {
+            "openai-compatible": {
+              itemId: "rs_1",
+              reasoningEncryptedContent: "encrypted-state",
+              reasoningItem: item,
+            },
+          },
         },
       ])
     }),
@@ -152,13 +154,18 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "reasoning-start",
           id: "rs_1",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
         {
           type: "reasoning-end",
           id: "rs_1",
           text: "Not streamed",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: {
+            "openai-compatible": {
+              itemId: "rs_1",
+              reasoningEncryptedContent: "encrypted-state",
+              reasoningItem: item,
+            },
+          },
         },
       ])
     }),
@@ -431,7 +438,7 @@ describe("Open Responses basic-item lifecycles", () => {
           providerExecuted: undefined,
           providerMetadata: { "openai-compatible": { itemId: "fc_1" } },
         },
-        { type: "reasoning-end", id: "rs_1:0" },
+        { type: "reasoning-end", id: "rs_1" },
       ])
     }),
   )
@@ -468,7 +475,8 @@ describe("Open Responses basic-item lifecycles", () => {
       expect(events.filter(LLMEvent.is.reasoningEnd)).toEqual([
         {
           type: "reasoning-end",
-          id: ":0",
+          id: "",
+          text: "Thinking",
           providerMetadata: { "openai-compatible": { itemId: "", reasoningEncryptedContent: "state" } },
         },
       ])
@@ -543,7 +551,7 @@ describe("Open Responses basic-item lifecycles", () => {
       )
       expect(events.filter(LLMEvent.is.toolInputEnd)).toEqual([])
       expect(events.filter(LLMEvent.is.toolCall)).toEqual([])
-      expect(events.filter(LLMEvent.is.reasoningEnd)).toEqual([{ type: "reasoning-end", id: "rs_1:0" }])
+      expect(events.filter(LLMEvent.is.reasoningEnd)).toEqual([{ type: "reasoning-end", id: "rs_1" }])
       expect(events.filter(LLMEvent.is.finish)).toEqual([
         {
           type: "finish",

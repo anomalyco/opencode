@@ -164,13 +164,23 @@ describe("Open Responses completed item reasoning", () => {
         expect(response.reasoning).toBe(fixture.text)
         expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
         expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-          "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted" },
+          "openai-compatible": {
+            itemId: "rs_1",
+            reasoningEncryptedContent: "encrypted",
+            reasoningItem: {
+              type: "reasoning",
+              id: "rs_1",
+              summary: fixture.summary,
+              content: fixture.content,
+              encrypted_content: "encrypted",
+            },
+          },
         })
       }),
     )
   })
 
-  it.effect("replaces only the still-open summary without repeating earlier text", () =>
+  it.effect("replaces streamed reasoning with the completed summary", () =>
     Effect.gen(function* () {
       const response = yield* generate(
         { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
@@ -190,8 +200,32 @@ describe("Open Responses completed item reasoning", () => {
         },
         completed,
       )
-      expect(response.reasoning).toBe("First final")
-      expect(response.events.filter(LLMEvent.is.reasoningEnd).map((event) => event.text)).toEqual([undefined, "final"])
+      expect(response.reasoning).toBe("First \n\nfinal")
+      expect(response.events.filter(LLMEvent.is.reasoningEnd).map((event) => event.text)).toEqual(["First \n\nfinal"])
+    }),
+  )
+
+  it.effect("does not store malformed completed reasoning items", () =>
+    Effect.gen(function* () {
+      const response = yield* generate(
+        { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
+        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", delta: "Draft" },
+        {
+          type: "response.output_item.done",
+          item: {
+            type: "reasoning",
+            id: "rs_1",
+            content: [{ type: "reasoning_text", text: "Raw" }],
+            encrypted_content: "encrypted",
+          },
+        },
+        completed,
+      )
+
+      expect(response.reasoning).toBe("Raw")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted" },
+      })
     }),
   )
 })
@@ -230,6 +264,7 @@ describe("Open Responses completed item reasoning", () => {
       expect(response.reasoning).toBe("Draft")
       expect(response.events.filter(LLMEvent.is.textEnd).map((event) => event.text)).toEqual([undefined])
       expect(response.events.filter(LLMEvent.is.reasoningEnd).map((event) => event.text)).toEqual([undefined])
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toBeUndefined()
     }),
   )
 })
