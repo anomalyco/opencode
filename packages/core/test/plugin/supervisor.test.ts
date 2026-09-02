@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Layer, LayerMap } from "effect"
+import { Deferred, Duration, Effect, Layer, LayerMap, Stream } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { Command } from "@opencode-ai/core/command"
+import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
 import { Instance } from "@opencode-ai/core/instance"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
@@ -16,17 +17,32 @@ import { Bus } from "../../src/bus"
 import { tempGlobalLayer } from "../fixture/global"
 import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
+import { advance } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 
 const id = Plugin.ID.make("account-prompts")
 
 // Host and instance plugins share one ID; each registers a distinct command so the winner is observable.
-const greeter = (command: string) =>
+const greeter = (command: string, plugin: string = id) =>
   define({
-    id,
+    id: plugin,
     effect: (ctx) =>
       ctx.command.transform((editor) => editor.add({ name: command, execute: () => Effect.void })).pipe(Effect.asVoid),
   })
+
+// Every supervisor activation scans the config plugin operations once, so counting scans counts activations.
+const source = { activations: 0 }
+const sourceLayer = Layer.succeed(
+  ConfigPluginSource.Service,
+  ConfigPluginSource.Service.of({
+    operations: () =>
+      Effect.sync(() => {
+        source.activations++
+        return []
+      }),
+    changes: () => Stream.never,
+  }),
+)
 
 const instances = Layer.effect(
   LocationServiceMap.Service,
@@ -39,6 +55,7 @@ const instances = Layer.effect(
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
       offlineModels,
+      ConfigPluginSource.node.replace(sourceLayer),
       LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
       Instance.node.replace(
         Layer.succeed(Instance.Service, {
@@ -95,6 +112,93 @@ describe("PluginSupervisor", () => {
       expect(
         state.inventory.some((plugin) => plugin.id?.startsWith("opencode.") && plugin.state.status === "active"),
       ).toBe(true)
+    }),
+  )
+
+  it.effect("activates the initial generation without waiting for the reload debounce", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const commands = yield* Command.Service
+        // The TestClock never advances here, so any timer between boot and the first activation would hang this.
+        yield* plugins.awaitActivation
+        expect(yield* commands.get("instance-greet")).toBeDefined()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      expect(source.activations).toBe(1)
+    }),
+  )
+
+  it.effect("reloads for a trigger published while the initial generation is activating", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      const sdk = yield* SdkPlugins.Service
+      const entered = yield* Deferred.make<void>()
+      const gate = yield* Deferred.make<void>()
+      yield* sdk.register(
+        define({
+          id: "gated",
+          effect: () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(gate))),
+        }),
+      )
+      let late = false
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const commands = yield* Command.Service
+        yield* Deferred.await(entered)
+        // Generation 0 is mid-setup: the reload feed must already be subscribed for this update to count.
+        yield* sdk.register(
+          define({
+            id: "late",
+            effect: (ctx) =>
+              ctx.command
+                .transform((editor) => editor.add({ name: "late-greet", execute: () => Effect.void }))
+                .pipe(Effect.tap(() => Effect.sync(() => (late = true)))),
+          }),
+        )
+        yield* Deferred.succeed(gate, undefined)
+        yield* advance(() => late)
+        yield* plugins.awaitActivation
+        expect(yield* commands.get("late-greet")).toBeDefined()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      expect(source.activations).toBe(2)
+    }),
+  )
+
+  it.effect("coalesces a burst of reload triggers after the initial generation into one activation", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      const sdk = yield* SdkPlugins.Service
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+        expect(source.activations).toBe(1)
+
+        yield* sdk.register(greeter("greet-a", "a"))
+        yield* sdk.register(greeter("greet-b", "b"))
+        yield* sdk.register(greeter("greet-c", "c"))
+        yield* advance(() => source.activations > 1)
+        yield* plugins.awaitActivation
+        expect(yield* commands.get("greet-a")).toBeDefined()
+        expect(yield* commands.get("greet-c")).toBeDefined()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      expect(source.activations).toBe(2)
     }),
   )
 })

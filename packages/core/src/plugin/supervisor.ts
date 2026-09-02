@@ -189,11 +189,26 @@ export const layer = Layer.effectDiscard(
         Effect.forkScoped({ startImmediately: true }),
       )
     })
-    const reloads = Stream.merge(
-      Stream.merge(
-        Stream.merge(sources.changes(), Stream.fromPubSub(refresh)),
-        bus.subscribe([Event.Updated, SdkPlugins.Updated]),
-      ),
+    // Reload triggers are subscribed eagerly, each on its own fiber, before generation 0 starts
+    // activating: Stream.merge and Stream.debounce open upstream a fiber hop later and PubSub does not
+    // replay for late subscribers, so a change landing during the first activation would otherwise be
+    // lost. The sliding slot keeps observing while activation runs, retaining only the latest request.
+    const triggers = yield* PubSub.sliding<number>(1)
+    // Make accepted work visible to awaitActivation before coalescing the burst.
+    const notify = Effect.gen(function* () {
+      observed++
+      if (!release) release = yield* registry.hold()
+      yield* PubSub.publish(triggers, observed)
+    })
+    const watch = <A>(stream: Stream.Stream<A>) =>
+      stream.pipe(
+        Stream.runForEach(() => notify),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+    yield* watch(sources.changes())
+    yield* watch(Stream.fromPubSub(refresh))
+    yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated]))
+    yield* watch(
       updates.changes().pipe(
         Stream.filter((update) => packages.has(update.target)),
         Stream.tap((update) =>
@@ -202,22 +217,12 @@ export const layer = Layer.effectDiscard(
             update.updating ? updating.add(update.target) : updating.delete(update.target)
           }),
         ),
-        Stream.map(() => undefined),
-      ),
-    ).pipe(
-      // Make accepted work visible to awaitActivation before coalescing the burst.
-      Stream.mapEffect(() =>
-        Effect.gen(function* () {
-          observed++
-          if (!release) release = yield* registry.hold()
-          return observed
-        }),
       ),
     )
-    yield* Stream.concat(Stream.succeed(0), reloads).pipe(
-      // Keep observing updates while activation runs, retaining only the latest generation request.
-      Stream.buffer({ capacity: 1, strategy: "sliding" }),
-      Stream.debounce("100 millis"),
+    const reloads = yield* PubSub.subscribe(triggers)
+    // One lane serializes every activation. Generation 0 has nothing to coalesce with, so it runs at
+    // once; only the reload feed waits out the debounce that absorbs file-save bursts.
+    yield* Stream.concat(Stream.succeed(0), Stream.fromSubscription(reloads).pipe(Stream.debounce("100 millis"))).pipe(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
           yield* activate().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause })))
