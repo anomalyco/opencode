@@ -939,14 +939,64 @@ describe("ProviderTransform.providerOptions", () => {
         })
 
         test.each([
-          ["claude-opus-5", "default"],
-          ["claude-opus-5", "high"],
-          ["claude-sonnet-5", "default"],
-          ["claude-sonnet-5", "high"],
-          ["claude-mythos-5-1", "default"],
-          ["claude-mythos-5-1", "high"],
-          ["claude-haiku-4-5", "title"],
-        ])("omits binding from the %s %s request body and betas", async (id, mode) => {
+          "claude-fable-5-1",
+          "claude-opus-6",
+          "claude-opus-5",
+          "claude-mythos-5-1",
+          "claude-haiku-4-5",
+          "kimi-k2-thinking",
+        ])("normalizes binding opt-out for %s without mutating options", (id) => {
+          const model = claude(sdk.npm, id)
+          const options = Object.freeze({
+            [sdk.option]: Object.freeze({ type: "adaptive", display: "summarized", blockBinding: false }),
+            metadata: { userId: "test-user" },
+          })
+          expect(ProviderTransform.providerOptions(model, options)).toEqual({
+            [sdk.key]: {
+              [sdk.option]: { type: "adaptive", display: "summarized" },
+              metadata: options.metadata,
+            },
+          })
+          expect(options[sdk.option]).toEqual({ type: "adaptive", display: "summarized", blockBinding: false })
+          expect(
+            ProviderTransform.providerOptions(model, {
+              [sdk.option]: { type: "enabled", budgetTokens: 4000, blockBinding: false },
+            }),
+          ).toEqual({ [sdk.key]: { [sdk.option]: { type: "enabled", budgetTokens: 4000 } } })
+          expect(
+            ProviderTransform.providerOptions(model, { [sdk.option]: { type: "disabled", blockBinding: false } }),
+          ).toEqual({ [sdk.key]: { [sdk.option]: { type: "disabled" } } })
+          expect(
+            ProviderTransform.providerOptions(model, {
+              [sdk.option]: { blockBinding: false },
+              metadata: options.metadata,
+            }),
+          ).toEqual({ [sdk.key]: { metadata: options.metadata } })
+        })
+
+        test.each(["error", "drop_block"])("preserves explicit %s binding behavior on eligible models", (behavior) => {
+          const options = { [sdk.option]: { type: "adaptive", blockBinding: { prefixMismatchBehavior: behavior } } }
+          expect(ProviderTransform.providerOptions(claude(sdk.npm, "claude-fable-5-1"), options)).toEqual({
+            [sdk.key]: options,
+          })
+        })
+
+        test.each([
+          ["claude-opus-5", "default", "auto"],
+          ["claude-opus-5", "high", "auto"],
+          ["claude-sonnet-5", "default", "auto"],
+          ["claude-sonnet-5", "high", "auto"],
+          ["claude-mythos-5-1", "default", "auto"],
+          ["claude-mythos-5-1", "high", "auto"],
+          ["claude-haiku-4-5", "title", "auto"],
+          ["claude-fable-5-1", "default", "off"],
+          ["claude-fable-5-1", "high", "off"],
+          ["claude-opus-5", "default", "off"],
+          ["claude-opus-5", "high", "off"],
+          ["claude-mythos-5-1", "default", "off"],
+          ["claude-mythos-5-1", "high", "off"],
+          ["claude-haiku-4-5", "title", "off"],
+        ])("omits binding from the %s %s request body and betas (%s)", async (id, mode, setting) => {
           const requests: Request[] = []
           const capture = Object.assign(
             async (...args: Parameters<typeof fetch>) => {
@@ -991,12 +1041,14 @@ describe("ProviderTransform.providerOptions", () => {
                 : id,
           )
           const variants = ProviderTransform.variants(model)
-          const options =
+          const base =
             mode === "title"
               ? ProviderTransform.smallOptions({ ...model, variants })
               : mode === "high"
                 ? variants.high
                 : {}
+          const options =
+            setting === "off" ? { ...base, [sdk.option]: { ...base[sdk.option], blockBinding: false } } : base
           await generateText({
             model: provider(model.api.id),
             prompt: "hi",
@@ -1050,24 +1102,26 @@ describe("ProviderTransform.providerOptions", () => {
 
     test("omits blockBinding when config opts out with false", () => {
       const model = claude("@ai-sdk/anthropic", "claude-opus-5")
-      expect(
-        ProviderTransform.providerOptions(model, { thinking: { type: "adaptive", blockBinding: false } }),
-      ).toEqual({
-        anthropic: { thinking: { type: "adaptive" } },
-      })
+      expect(ProviderTransform.providerOptions(model, { thinking: { type: "adaptive", blockBinding: false } })).toEqual(
+        {
+          anthropic: { thinking: { type: "adaptive" } },
+        },
+      )
     })
 
     test("opt-out also works for models that think by default", () => {
       const model = claude("@ai-sdk/anthropic", "claude-sonnet-5")
       expect(
-        ProviderTransform.providerOptions(model, { thinking: { type: "enabled", budgetTokens: 4000, blockBinding: false } }),
+        ProviderTransform.providerOptions(model, {
+          thinking: { type: "enabled", budgetTokens: 4000, blockBinding: false },
+        }),
       ).toEqual({
         anthropic: { thinking: { type: "enabled", budgetTokens: 4000 } },
       })
     })
 
     test("preserves an explicit blockBinding instead of overwriting it", () => {
-      const model = claude("@ai-sdk/anthropic", "claude-opus-5")
+      const model = claude("@ai-sdk/anthropic", "claude-fable-5-1")
       const custom = { prefixMismatchBehavior: "error" }
       expect(
         ProviderTransform.providerOptions(model, { thinking: { type: "adaptive", blockBinding: custom } }),

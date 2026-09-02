@@ -705,35 +705,29 @@ function anthropicBindsThinking(apiId: string) {
 // The patched AI SDK adds the thinking-binding-controls beta whenever it is set.
 const ANTHROPIC_BLOCK_BINDING = { prefixMismatchBehavior: "drop_block" }
 
-// Not every Claude deployment accepts the field after all. Bedrock, Vertex and
-// Anthropic-compatible proxy endpoints have each been observed rejecting it with
-//   thinking.adaptive.block_binding: Extra inputs are not permitted
-// (#46729), and sending the thinking-binding-controls beta does not change that.
-// Honour an explicit `blockBinding` in config so those deployments can opt out with
-// `blockBinding: false` (or pin their own value) instead of being stuck on 1.18.25.
-function applyBlockBinding(config: { [x: string]: any }) {
-  if (!("blockBinding" in config)) return { ...config, blockBinding: ANTHROPIC_BLOCK_BINDING }
-  if (config.blockBinding) return config
-  const { blockBinding: _disabled, ...rest } = config
-  return rest
-}
-
 function anthropicBlockBinding(model: Provider.Model, options: { [x: string]: any }) {
-  if (!anthropicBindsThinking(model.api.id)) return options
-  switch (model.api.npm) {
-    case "@ai-sdk/anthropic":
-    case "@ai-sdk/google-vertex/anthropic": {
-      const thinking = options.thinking ?? { type: "adaptive" }
-      if (thinking.type !== "adaptive" && thinking.type !== "enabled") return options
-      return { ...options, thinking: applyBlockBinding(thinking) }
-    }
-    case "@ai-sdk/amazon-bedrock": {
-      const reasoningConfig = options.reasoningConfig ?? { type: "adaptive" }
-      if (reasoningConfig.type !== "adaptive" && reasoningConfig.type !== "enabled") return options
-      return { ...options, reasoningConfig: applyBlockBinding(reasoningConfig) }
-    }
+  const key =
+    model.api.npm === "@ai-sdk/amazon-bedrock"
+      ? "reasoningConfig"
+      : ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)
+        ? "thinking"
+        : undefined
+  if (!key) return options
+
+  // `false` is an OpenCode-only opt-out, not a valid SDK value. Remove it even
+  // on models outside the default scope, and omit opt-out-only thinking objects.
+  if (options[key]?.blockBinding === false) {
+    const result = { ...options, [key]: { ...options[key] } }
+    delete result[key].blockBinding
+    if (Object.keys(result[key]).length === 0) delete result[key]
+    return result
   }
-  return options
+
+  if (!anthropicBindsThinking(model.api.id)) return options
+  const thinking = options[key] ?? { type: "adaptive" }
+  if (thinking.type !== "adaptive" && thinking.type !== "enabled") return options
+  if (thinking.blockBinding !== undefined) return options
+  return { ...options, [key]: { ...thinking, blockBinding: ANTHROPIC_BLOCK_BINDING } }
 }
 
 function googleThinkingLevelEfforts(apiId: string) {

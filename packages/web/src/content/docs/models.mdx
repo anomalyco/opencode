@@ -135,6 +135,33 @@ You can also define custom variants that extend built-in ones. Variants let you 
 
 ---
 
+### Thinking block binding
+
+OpenCode enables Anthropic's [thinking block binding controls](https://platform.claude.com/docs/en/build-with-claude/thinking#preserved-thinking-controls) by default for Claude 5.1 and later, except Mythos 5.1. If an endpoint rejects `thinking.block_binding`, disable the control in the model's options:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "models": {
+        "claude-fable-5-1": {
+          "options": {
+            "thinking": { "blockBinding": false },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Anthropic and Google Vertex Anthropic use `options.thinking.blockBinding`. Amazon Bedrock uses `options.reasoningConfig.blockBinding` instead. These settings also apply to custom providers using the corresponding SDK packages.
+
+This disables only the binding control, not thinking or the selected reasoning effort. OpenCode removes the `false` value before sending the request. On models that enforce binding, disabling the control can cause signature errors when earlier conversation content changes.
+
+---
+
 ## Variants
 
 Many models support multiple variants with different configurations. OpenCode ships with built-in default variants for popular providers.
