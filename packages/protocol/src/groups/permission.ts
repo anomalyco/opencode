@@ -1,5 +1,4 @@
 import { Agent } from "@opencode-ai/schema/agent"
-import { Location } from "@opencode-ai/schema/location"
 import { Permission } from "@opencode-ai/schema/permission"
 import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 import { Project } from "@opencode-ai/schema/project"
@@ -19,20 +18,6 @@ export const makePermissionGroup = <
   sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>,
 ) =>
   HttpApiGroup.make("server.permission")
-    .add(
-      HttpApiEndpoint.get("permission.request.list", "/api/permission/request", {
-        query: LocationQuery,
-        success: Location.response(Schema.Array(Permission.Request)),
-      })
-        .annotateMerge(locationQueryOpenApi)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.permission.request.list",
-            summary: "List pending permission requests",
-            description: "Retrieve pending permission requests for a location.",
-          }),
-        ),
-    )
     .add(
       HttpApiEndpoint.get("permission.saved.list", "/api/permission/saved", {
         query: Schema.Struct({ projectID: Project.ID.pipe(Schema.optional) }),
@@ -57,8 +42,24 @@ export const makePermissionGroup = <
         }),
       ),
     )
-    // Effect applies group middleware only to endpoints already added; session endpoints use session placement below.
+    // Effect applies group middleware only to endpoints already added. Pending requests live in a
+    // host-wide ledger, so the routes below resolve a Location only when evaluating policy.
     .middleware(locationMiddleware)
+    .add(
+      HttpApiEndpoint.get("permission.request.list", "/api/permission/request", {
+        query: LocationQuery,
+        success: Schema.Struct({ data: Schema.Array(Permission.Request) }),
+      })
+        .annotateMerge(locationQueryOpenApi)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.permission.request.list",
+            summary: "List pending permission requests",
+            description:
+              "Retrieve pending permission requests across the host, or only those asked from the given location.",
+          }),
+        ),
+    )
     .add(
       HttpApiEndpoint.post("session.permission.create", "/api/session/:sessionID/permission", {
         params: { sessionID: Session.ID },
@@ -103,15 +104,13 @@ export const makePermissionGroup = <
         params: { sessionID: Session.ID, requestID: Permission.ID },
         success: Schema.Struct({ data: Permission.Request }),
         error: [SessionNotFoundError, PermissionNotFoundError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.permission.get",
-            summary: "Get permission request",
-            description: "Retrieve a pending permission request owned by a session.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.permission.get",
+          summary: "Get permission request",
+          description: "Retrieve a pending permission request owned by a session.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.permission.reply", "/api/session/:sessionID/permission/:requestID/reply", {
@@ -122,14 +121,12 @@ export const makePermissionGroup = <
         }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, PermissionNotFoundError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.permission.reply",
-            summary: "Reply to pending permission request",
-            description: "Respond to a pending permission request owned by a session.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.permission.reply",
+          summary: "Reply to pending permission request",
+          description: "Respond to a pending permission request owned by a session.",
+        }),
+      ),
     )
     .annotateMerge(OpenApi.annotations({ title: "permission", description: "Experimental permission routes." }))

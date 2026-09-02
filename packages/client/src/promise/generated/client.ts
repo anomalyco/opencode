@@ -161,12 +161,12 @@ import type {
   FormReplyOutput,
   FormCancelInput,
   FormCancelOutput,
-  PermissionRequestListInput,
-  PermissionRequestListOutput,
   PermissionSavedListInput,
   PermissionSavedListOutput,
   PermissionSavedRemoveInput,
   PermissionSavedRemoveOutput,
+  PermissionRequestListInput,
+  PermissionRequestListOutput,
   PermissionCreateInput,
   PermissionCreateOutput,
   PermissionListInput,
@@ -1465,20 +1465,6 @@ export function make(options: ClientOptions) {
         ),
     },
     permission: {
-      request: {
-        list: (input?: PermissionRequestListInput, requestOptions?: RequestOptions) =>
-          request<PermissionRequestListOutput>(
-            {
-              method: "GET",
-              path: `/api/permission/request`,
-              query: { location: input?.["location"] },
-              successStatus: 200,
-              declaredStatuses: [401, 400],
-              empty: false,
-            },
-            requestOptions,
-          ),
-      },
       saved: {
         list: (input?: PermissionSavedListInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: PermissionSavedListOutput }>(
@@ -1503,6 +1489,20 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+      },
+      request: {
+        list: (input?: PermissionRequestListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: PermissionRequestListOutput }>(
+            {
+              method: "GET",
+              path: `/api/permission/request`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [401, 400],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
       },
       create: (input: PermissionCreateInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: PermissionCreateOutput }>(
@@ -1541,7 +1541,7 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}`,
             successStatus: 200,
-            declaredStatuses: [404, 400, 401],
+            declaredStatuses: [404, 401, 400],
             empty: false,
           },
           requestOptions,
@@ -1553,7 +1553,7 @@ export function make(options: ClientOptions) {
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}/reply`,
             body: { reply: input["reply"], message: input["message"] },
             successStatus: 204,
-            declaredStatuses: [404, 400, 401],
+            declaredStatuses: [404, 401, 400],
             empty: true,
           },
           requestOptions,

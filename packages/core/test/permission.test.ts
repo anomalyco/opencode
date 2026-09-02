@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Context, Deferred, Effect, Fiber, Layer } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -7,8 +7,10 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { Permission } from "@opencode-ai/core/permission"
+import { PermissionLedger } from "@opencode-ai/core/permission/ledger"
 import { PermissionTable } from "@opencode-ai/core/permission/sql"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -26,7 +28,16 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      Agent.node,
+      PluginHooks.node,
+      PermissionLedger.node,
+      Permission.node,
+    ]),
     [Location.node.replace(current)],
   ),
 )
@@ -245,6 +256,27 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("lets plugin hooks override the evaluated effect", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          if (event.action !== "read") return
+          event.effect = "ask"
+          event.message = "review reads"
+        }),
+      )
+      const service = yield* Permission.Service
+      expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "ask" })
+      expect(yield* service.get(Permission.ID.create("per_test"))).toMatchObject({ message: "review reads" })
+      expect(yield* service.ask(assertion({ id: Permission.ID.create("per_write"), action: "write" }))).toMatchObject({
+        effect: "ask",
+      })
+      expect(yield* service.get(Permission.ID.create("per_write"))).not.toHaveProperty("message", "review reads")
+    }),
+  )
+
   it.effect("resolves an asked permission once", () =>
     Effect.gen(function* () {
       yield* setup()
@@ -275,6 +307,84 @@ describe("Permission", () => {
           ),
         ).toBe(true)
       expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("shares pending requests through the host-wide ledger", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { fiber, request } = yield* waitForRequest()
+      const ledger = yield* PermissionLedger.Service
+      expect(yield* ledger.forSession(request.sessionID)).toEqual([request])
+      expect(yield* ledger.get(request.id)).toEqual(request)
+      expect(yield* ledger.list()).toEqual([request])
+      expect(yield* ledger.list(Location.Ref.make({ directory: AbsolutePath.make("/project") }))).toEqual([request])
+      expect(yield* ledger.list(Location.Ref.make({ directory: AbsolutePath.make("/elsewhere") }))).toEqual([])
+      yield* ledger.reply({ requestID: request.id, reply: "once" })
+      yield* Fiber.join(fiber)
+      expect(yield* ledger.list()).toEqual([])
+    }),
+  )
+
+  it.effect("cancels an interrupted asker and tells clients", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const bus = yield* Bus.Service
+      const replied: Array<{ location?: Location.Ref; data: unknown }> = []
+      const unsubscribe = yield* bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Permission.Event.Replied.type) replied.push({ location: event.location, data: event.data })
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const { service, fiber, request } = yield* waitForRequest()
+      yield* Fiber.interrupt(fiber)
+      expect(yield* service.list()).toEqual([])
+      expect(replied).toEqual([
+        {
+          location: { directory: AbsolutePath.make("/project"), workspaceID: undefined },
+          data: { sessionID: request.sessionID, requestID: request.id, reply: "reject" },
+        },
+      ])
+    }),
+  )
+
+  it.effect("cancels detached requests when their instance closes", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const bus = yield* Bus.Service
+      const ledger = yield* PermissionLedger.Service
+      const replied: unknown[] = []
+      const unsubscribe = yield* bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Permission.Event.Replied.type) replied.push(event.data)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      // A second facade standing on the same global services stands in for another instance.
+      const instance = LayerNode.compile(LayerNode.group([Permission.node]), {
+        replacements: [
+          Location.node.replace(current),
+          Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+          PermissionLedger.node.replace(Layer.succeed(PermissionLedger.Service, ledger)),
+          SessionStore.node.replace(Layer.succeed(SessionStore.Service, yield* SessionStore.Service)),
+          PermissionSaved.node.replace(Layer.succeed(PermissionSaved.Service, yield* PermissionSaved.Service)),
+          Agent.node.replace(Layer.succeed(Agent.Service, yield* Agent.Service)),
+        ],
+      })
+      const asked = yield* Effect.scoped(
+        Effect.gen(function* () {
+          // A fresh memo map keeps this build from adopting the harness's own facade.
+          const context = yield* Layer.buildWithMemoMap(instance, Layer.makeMemoMapUnsafe(), yield* Effect.scope)
+          const service = Context.get(context, Permission.Service)
+          const asked = yield* service.ask(assertion())
+          expect(asked.effect).toBe("ask")
+          expect(yield* ledger.get(asked.id)).toBeDefined()
+          return asked
+        }),
+      )
+      expect(yield* ledger.get(asked.id)).toBeUndefined()
+      expect(replied).toEqual([{ sessionID: Session.ID.make("ses_test"), requestID: asked.id, reply: "reject" }])
     }),
   )
 

@@ -26,8 +26,8 @@ import type { Integration } from "@opencode-ai/schema/integration"
 import type { Form } from "@opencode-ai/schema/form"
 import type { Mcp } from "@opencode-ai/schema/mcp"
 import type { Credential } from "@opencode-ai/schema/credential"
-import type { Permission } from "@opencode-ai/schema/permission"
 import type { PermissionSaved } from "@opencode-ai/schema/permission-saved"
+import type { Permission } from "@opencode-ai/schema/permission"
 import type { FileSystem } from "@opencode-ai/schema/filesystem"
 import type { Command } from "@opencode-ai/schema/command"
 import type { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
@@ -1482,17 +1482,6 @@ export interface FormApi<E = never> {
   readonly cancel: FormCancelOperation<E>
 }
 
-export type PermissionRequestListInput = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
-export type PermissionRequestListOutput = {
-  readonly location: Location.Info
-  readonly data: ReadonlyArray<Permission.Request>
-}
-export type PermissionRequestListOperation<E = never> = (
-  input?: PermissionRequestListInput,
-) => Effect.Effect<PermissionRequestListOutput, E>
-
 export type PermissionSavedListInput = { readonly projectID?: Project.ID | undefined }
 export type PermissionSavedListOutput = ReadonlyArray<PermissionSaved.Info>
 export type PermissionSavedListOperation<E = never> = (
@@ -1504,6 +1493,14 @@ export type PermissionSavedRemoveOutput = void
 export type PermissionSavedRemoveOperation<E = never> = (
   input: PermissionSavedRemoveInput,
 ) => Effect.Effect<PermissionSavedRemoveOutput, E>
+
+export type PermissionRequestListInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type PermissionRequestListOutput = ReadonlyArray<Permission.Request>
+export type PermissionRequestListOperation<E = never> = (
+  input?: PermissionRequestListInput,
+) => Effect.Effect<PermissionRequestListOutput, E>
 
 export type PermissionCreateInput = {
   readonly sessionID: Session.ID
@@ -1540,8 +1537,8 @@ export type PermissionReplyOperation<E = never> = (
 ) => Effect.Effect<PermissionReplyOutput, E>
 
 export interface PermissionApi<E = never> {
-  readonly request: { readonly list: PermissionRequestListOperation<E> }
   readonly saved: { readonly list: PermissionSavedListOperation<E>; readonly remove: PermissionSavedRemoveOperation<E> }
+  readonly request: { readonly list: PermissionRequestListOperation<E> }
   readonly create: PermissionCreateOperation<E>
   readonly list: PermissionListOperation<E>
   readonly get: PermissionGetOperation<E>

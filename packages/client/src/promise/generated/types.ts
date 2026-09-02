@@ -320,9 +320,9 @@ export type FormMetadata = { [x: string]: JsonValue }
 
 export type FormValue = string | number | boolean | Array<string>
 
-export type PermissionSource = { type: "tool"; messageID: string; id: string }
-
 export type PermissionSavedInfo = { id: string; projectID: string; action: string; resource: string }
+
+export type PermissionSource = { type: "tool"; messageID: string; id: string }
 
 export type FileSystemEntry = { path: string; type: "file" | "directory" }
 
@@ -5538,17 +5538,6 @@ export type FormCancelInput = {
 
 export type FormCancelOutput = void
 
-export type PermissionRequestListInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type PermissionRequestListOutput = {
-  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: Array<PermissionRequest>
-}
-
 export type PermissionSavedListInput = { readonly projectID?: { readonly projectID?: string | undefined }["projectID"] }
 
 export type PermissionSavedListOutput = { data: Array<PermissionSavedInfo> }["data"]
@@ -5556,6 +5545,14 @@ export type PermissionSavedListOutput = { data: Array<PermissionSavedInfo> }["da
 export type PermissionSavedRemoveInput = { readonly id: { readonly id: string }["id"] }
 
 export type PermissionSavedRemoveOutput = void
+
+export type PermissionRequestListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type PermissionRequestListOutput = { data: Array<PermissionRequest> }["data"]
 
 export type PermissionCreateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]

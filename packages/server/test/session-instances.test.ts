@@ -38,6 +38,8 @@ it.live(
       const first = { id: Session.ID.make("ses_instance_first"), tool: "instance_first", temperature: 0.1 }
       const second = { id: Session.ID.make("ses_instance_second"), tool: "instance_second", temperature: 0.2 }
       const configs = [first, second]
+      // Never configured, so any attempt to boot its instance throws.
+      const third = Session.ID.make("ses_instance_third")
       const boots: Session.ID[] = []
       const executed: Session.ID[] = []
       const commands: Session.ID[] = []
@@ -176,7 +178,7 @@ it.live(
           ),
         )
 
-      yield* Effect.forEach(configs, (config) =>
+      yield* Effect.forEach([...configs, { id: third, tool: "instance_third" }], (config) =>
         sessions.create({
           id: config.id,
           title: config.tool,
@@ -185,7 +187,7 @@ it.live(
           location,
         }),
       )
-      expect((yield* sessions.list()).data.map((session) => session.location)).toEqual([location, location])
+      expect((yield* sessions.list()).data.map((session) => session.location)).toEqual([location, location, location])
       expect(yield* sessions.messages({ sessionID: first.id })).toEqual([])
       yield* sessions.get(second.id)
       for (const config of configs) {
@@ -257,11 +259,14 @@ it.live(
               title: "Foreign form",
               fields: [{ key: "answer", type: "string" }],
             })
-            const foreignPermission = yield* permissions.ask({
+            // Asked from this instance on behalf of the never-booted third Session.
+            const foreignPermission = {
               ...permission,
               id: Permission.ID.create(),
-              sessionID: foreignID,
-            })
+              sessionID: third,
+              message: config.tool,
+            }
+            expect(yield* permissions.ask(foreignPermission)).toEqual({ id: foreignPermission.id, effect: "ask" })
             return {
               session,
               form,
@@ -299,11 +304,29 @@ it.live(
           const forms = yield* Form.Service
           const permissions = yield* Permission.Service
           expect(yield* forms.state(entry.foreignForm.id)).toEqual({ status: "pending" })
-          expect(yield* permissions.get(entry.foreignPermission.id)).toMatchObject({
-            sessionID: entry.foreignForm.sessionID,
-          })
+          expect(yield* permissions.get(entry.foreignPermission.id)).toMatchObject({ sessionID: third })
         }).pipe(instances.provide(entry.session))
       }
+      // The ledger is host-wide: the third Session's requests are visible and answerable without booting it.
+      const foreign = yield* request(`/api/session/${third}/permission`)
+      expect(foreign.status).toBe(200)
+      expect(yield* Effect.promise<unknown>(() => foreign.json())).toEqual({
+        data: pending.map((entry) => entry.foreignPermission),
+      })
+      const everywhere = yield* request(`/api/permission/request`)
+      expect(everywhere.status).toBe(200)
+      expect(yield* Effect.promise<unknown>(() => everywhere.json())).toEqual({
+        data: pending.flatMap((entry) => [entry.permission, entry.foreignPermission]),
+      })
+      for (const entry of pending) {
+        expect(
+          (yield* request(`/api/session/${third}/permission/${entry.foreignPermission.id}/reply`, { reply: "once" }))
+            .status,
+        ).toBe(204)
+      }
+      const answered = yield* request(`/api/session/${third}/permission`)
+      expect(yield* Effect.promise<unknown>(() => answered.json())).toEqual({ data: [] })
+      expect(boots).toEqual([first.id, second.id])
       for (const entry of pending) {
         expect(
           (yield* request(`/api/session/${entry.session.id}/form/${entry.form.id}/reply`, {

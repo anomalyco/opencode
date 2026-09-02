@@ -9,6 +9,7 @@ import { EventLogger } from "@opencode-ai/core/event-logger"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
 import { Credential } from "@opencode-ai/core/credential"
 import { Config } from "@opencode-ai/core/config"
+import { PermissionLedger } from "@opencode-ai/core/permission/ledger"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { PersistentPty } from "@opencode-ai/core/persistent-pty"
@@ -61,6 +62,7 @@ const applicationServiceNodes = [
   SessionTransfer.node,
   SdkPlugins.node,
   PluginUpdate.node,
+  PermissionLedger.node,
   PermissionSaved.node,
   PtyTicket.node,
   PersistentPty.node,

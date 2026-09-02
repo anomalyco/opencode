@@ -62,7 +62,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
         input.sdk.api.permission.request
           .list({ location: { directory: location.directory, workspace: location.workspaceID } })
           .then((pending) => {
-            if (!state.disposed) pending.data.forEach((request) => approve(request))
+            if (!state.disposed) pending.forEach((request) => approve(request))
             return true
           })
           .catch(() => false),

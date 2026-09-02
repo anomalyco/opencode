@@ -167,12 +167,12 @@ import type {
   FormReplyOutput,
   FormCancelInput,
   FormCancelOutput,
-  PermissionRequestListInput,
-  PermissionRequestListOutput,
   PermissionSavedListInput,
   PermissionSavedListOutput,
   PermissionSavedRemoveInput,
   PermissionSavedRemoveOutput,
+  PermissionRequestListInput,
+  PermissionRequestListOutput,
   PermissionCreateInput,
   PermissionCreateOutput,
   PermissionListInput,
@@ -1090,11 +1090,6 @@ const adaptGroupForm = (raw: RawClient["server.form"]) => ({
   cancel: EndpointFormCancel(raw),
 })
 
-const EndpointPermissionRequestList = (raw: RawClient["server.permission"]) => (input?: PermissionRequestListInput) =>
-  preserveEffect<PermissionRequestListOutput>()(
-    raw["permission.request.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
-  )
-
 const EndpointPermissionSavedList = (raw: RawClient["server.permission"]) => (input?: PermissionSavedListInput) =>
   preserveEffect<PermissionSavedListOutput>()(
     raw["permission.saved.list"]({ query: { projectID: input?.["projectID"] } }).pipe(
@@ -1106,6 +1101,14 @@ const EndpointPermissionSavedList = (raw: RawClient["server.permission"]) => (in
 const EndpointPermissionSavedRemove = (raw: RawClient["server.permission"]) => (input: PermissionSavedRemoveInput) =>
   preserveEffect<PermissionSavedRemoveOutput>()(
     raw["permission.saved.remove"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointPermissionRequestList = (raw: RawClient["server.permission"]) => (input?: PermissionRequestListInput) =>
+  preserveEffect<PermissionRequestListOutput>()(
+    raw["permission.request.list"]({ query: { location: input?.["location"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
   )
 
 const EndpointPermissionCreate = (raw: RawClient["server.permission"]) => (input: PermissionCreateInput) =>
@@ -1152,8 +1155,8 @@ const EndpointPermissionReply = (raw: RawClient["server.permission"]) => (input:
   )
 
 const adaptGroupPermission = (raw: RawClient["server.permission"]) => ({
-  request: { list: EndpointPermissionRequestList(raw) },
   saved: { list: EndpointPermissionSavedList(raw), remove: EndpointPermissionSavedRemove(raw) },
+  request: { list: EndpointPermissionRequestList(raw) },
   create: EndpointPermissionCreate(raw),
   list: EndpointPermissionList(raw),
   get: EndpointPermissionGet(raw),
