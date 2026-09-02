@@ -19,6 +19,18 @@ test("normal browser windows are not standalone", () => {
   expect(isStandalone()).toBe(false)
 })
 
+test("detects iOS home-screen apps when the standalone media query does not match", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(navigator, "standalone")
+  Object.defineProperty(navigator, "standalone", { configurable: true, value: true })
+  try {
+    expect(window.matchMedia("(display-mode: standalone)").matches).toBe(false)
+    expect(isStandalone()).toBe(true)
+  } finally {
+    if (descriptor) Object.defineProperty(navigator, "standalone", descriptor)
+    if (!descriptor) Reflect.deleteProperty(navigator, "standalone")
+  }
+})
+
 test("restores the last PWA route including query and hash without adding history", () => {
   window.history.replaceState({ retained: true }, "", "http://localhost/")
   const length = window.history.length
