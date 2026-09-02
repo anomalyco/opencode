@@ -1,20 +1,8 @@
 import { Script, constants } from "node:vm"
-import { createRequire, registerHooks } from "node:module"
+import { registerHooks } from "node:module"
+import { statSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { resolve, type Package } from "resolve.exports"
-
-let conditions: readonly string[] = []
-const conditionHooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    conditions = context.conditions
-    return nextResolve(specifier, context)
-  },
-})
-await new Script('import("node:module")', {
-  importModuleDynamically: constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
-}).runInThisContext()
-conditionHooks.deregister()
 
 export async function importModule(specifier: string) {
   const imported = (await new Script(`import(${JSON.stringify(specifier)})`, {
@@ -30,10 +18,44 @@ export async function importModule(specifier: string) {
 }
 
 export function resolveModule(specifier: string, directory: string) {
-  const pkg = createRequire(import.meta.url)(path.join(directory, "package.json")) as Package
-  const target = resolve(pkg, specifier, { conditions, unsafe: true })?.[0]
-  if (target) return pathToFileURL(path.resolve(directory, target)).href
-  const legacyTarget =
-    specifier === pkg.name ? directory : path.resolve(directory, specifier.slice(pkg.name.length + 1))
-  return pathToFileURL(createRequire(path.join(directory, "package.json")).resolve(legacyTarget)).href
+  // Node only accepts import.meta.resolve's parent URL behind an experimental
+  // flag. Scope this synchronous resolution to the caller's package directory
+  // through the supported resolver hook instead.
+  const hook = registerHooks({
+    resolve(specifier, context, nextResolve) {
+      return nextResolve(specifier, { ...context, parentURL: pathToFileURL(path.join(directory, "package.json")).href })
+    },
+  })
+  try {
+    const resolve = (target: string) => {
+      const resolved = import.meta.resolve(path.isAbsolute(target) ? pathToFileURL(target).href : target)
+      if (resolved.startsWith("file:")) statSync(new URL(resolved))
+      return resolved
+    }
+    try {
+      return resolve(specifier)
+    } catch (error) {
+      if (path.extname(specifier) || !missing(error)) throw error
+      // Node does not infer extensions for local files or legacy package
+      // subpaths. Resolve each candidate natively so package exports still apply.
+      for (const extension of [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"]) {
+        try {
+          return resolve(specifier + extension)
+        } catch (cause) {
+          if (!missing(cause)) throw cause
+        }
+      }
+      throw error
+    }
+  } finally {
+    hook.deregister()
+  }
+}
+
+function missing(error: unknown) {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    ["ENOENT", "ENOTDIR", "ERR_MODULE_NOT_FOUND"].includes(String(error.code))
+  )
 }

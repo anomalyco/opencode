@@ -89,12 +89,7 @@ export default Runtime.handler(Commands, (input) =>
           }
         : undefined,
       packages: {
-        resolve: (spec, install = true) =>
-          runPromise(
-            (install ? npm.add(spec, { subpaths: ["tui"] }) : npm.resolve(spec, { subpaths: ["tui"] })).pipe(
-              Effect.map((result) => result.entrypoint),
-            ),
-          ),
+        prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },
       environment: requestedServer === undefined ? Env.session() : undefined,
       terminalHandoff: () => preflight.finish(),

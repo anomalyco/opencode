@@ -3,10 +3,11 @@ export * as ConfigPluginSource from "./source.js"
 import { Directory, Document, type Entry } from "@opencode-ai/schema/config"
 import { ConfigPlugin } from "@opencode-ai/schema/config/plugin"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Host } from "@opencode-ai/plugin/host"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Option, PubSub, Scope, Stream } from "effect"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Location } from "../../location.js"
@@ -41,8 +42,8 @@ export const layer = Layer.effect(
     const configuredChanges = yield* PubSub.unbounded<void>()
     const watched = new Set<string>()
 
-    // Configured local plugin entrypoints can live outside config roots, where the
-    // config change feed cannot see them; watch those entrypoints directly.
+    // Configured local plugins can live outside config roots, where the
+    // config change feed cannot see them; watch those targets directly.
     // Watches start on first sighting and are never torn down individually:
     // a stale watch after a config edit costs one deduped fs handle and a
     // no-op activation, and every watch dies with this layer's scope.
@@ -56,7 +57,10 @@ export const layer = Layer.effect(
         // The config change feed already covers {plugin,plugins} directories.
         if (isPluginSource(entries, operation.target)) continue
         watched.add(operation.target)
-        const updates = yield* watcher.subscribe({ path: operation.target, type: "file" })
+        const updates = yield* watcher.subscribe({
+          path: operation.target,
+          type: (yield* fs.isDir(operation.target)) ? "directory" : "file",
+        })
         yield* updates.pipe(
           Stream.runForEach(() => PubSub.publish(configuredChanges, undefined)),
           Effect.catchCause((cause) =>
@@ -148,24 +152,40 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
         yield* Effect.logWarning("configured plugin path must be a directory", { target: operation.target })
         return Option.none<Operation>()
       }
-      if (!(yield* fs.isDir(operation.target))) return Option.some<Operation>(operation)
-      const entrypoint = yield* PluginSourceDirectory.entrypoint(fs, operation.target)
-      if (Option.isSome(entrypoint)) return Option.some<Operation>({ ...operation, target: entrypoint.value })
-      yield* Effect.logWarning("configured plugin directory has no index entrypoint", { target: operation.target })
-      return Option.none<Operation>()
+      return Option.some<Operation>(operation)
     }),
   ).pipe(Effect.map((operations) => operations.flatMap(Option.toArray)))
   // Explicit config is applied last so it can remove auto-discovered packages.
-  return yield* Effect.forEach([...discovered, ...resolved], (operation) => {
-    if (operation.type === "remove" || !path.isAbsolute(operation.target)) return Effect.succeed(operation)
-    return fs.stat(operation.target).pipe(
-      Effect.map((info) => ({
-        ...operation,
-        mtime: Option.getOrElse(info.mtime, () => new Date(0)).getTime(),
-      })),
-      Effect.orElseSucceed(() => operation),
-    )
-  })
+  return yield* Effect.forEach([...discovered, ...resolved], (operation) =>
+    Effect.gen(function* () {
+      if (operation.type === "remove" || !path.isAbsolute(operation.target)) return [operation]
+      if (!(yield* fs.existsSafe(operation.target))) return [operation]
+      const directory = yield* fs.isDir(operation.target)
+      const entrypoints: Host.Entrypoints = directory
+        ? yield* Effect.sync(() => Host.resolve({ directory: operation.target }))
+        : { server: pathToFileURL(operation.target).href }
+      if (!entrypoints.server) return []
+      if (directory) {
+        const root = yield* fs.resolve(operation.target)
+        const server = yield* fs.resolve(fileURLToPath(entrypoints.server))
+        if (!FSUtil.contains(root, server)) return []
+      }
+      const times = yield* Effect.forEach(
+        [
+          ...Object.values(entrypoints)
+            .filter((entry) => entry !== undefined)
+            .map((entry) => fileURLToPath(entry)),
+          path.join(directory ? operation.target : path.dirname(operation.target), "package.json"),
+        ],
+        (entry) =>
+          fs.stat(entry).pipe(
+            Effect.map((info) => Option.getOrElse(info.mtime, () => new Date(0)).getTime()),
+            Effect.orElseSucceed(() => 0),
+          ),
+      )
+      return [{ ...operation, mtime: Math.max(...times) }]
+    }),
+  ).pipe(Effect.map((operations) => operations.flat()))
 })
 
 function isPluginSource(entries: readonly Entry[], file: string) {

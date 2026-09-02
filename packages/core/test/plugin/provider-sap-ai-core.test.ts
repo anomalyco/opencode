@@ -14,10 +14,10 @@ import { PluginTestLayer } from "./fixture"
 const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.url).href
 const it = testEffect(PluginTestLayer)
 const npm = Npm.Service.of({
-  add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
-  resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+  add: (name) => Effect.succeed({ directory: "", name }),
+  resolve: (name) => Effect.succeed({ directory: "", name }),
   check: () => Effect.succeed(false),
-  update: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+  update: (name) => Effect.succeed({ directory: "", name }),
   which: () => Effect.undefined,
 })
 

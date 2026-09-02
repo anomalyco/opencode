@@ -11,7 +11,6 @@ import { filesystem } from "./effect/app-node-platform.js"
 import { LayerNode } from "./effect/layer-node.js"
 import { makeRuntime } from "./effect/runtime.js"
 import { NpmConfig } from "./npm-config.js"
-import { resolveModule } from "#runtime-import"
 
 export class InstallFailedError extends Schema.TaggedError<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),
@@ -19,24 +18,18 @@ export class InstallFailedError extends Schema.TaggedError<InstallFailedError>()
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-export interface EntryPoint {
+export interface Package {
   readonly directory: string
-  readonly entrypoint?: string
+  readonly name: string
   readonly version?: string
   readonly revision?: string
 }
 
 export interface Interface {
-  readonly add: (
-    pkg: string,
-    options?: { readonly subpaths?: readonly string[] },
-  ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
-  readonly resolve: (pkg: string, options?: { readonly subpaths?: readonly string[] }) => Effect.Effect<EntryPoint>
+  readonly add: (pkg: string) => Effect.Effect<Package, InstallFailedError | EffectFlock.LockError>
+  readonly resolve: (pkg: string) => Effect.Effect<Package>
   readonly check: (pkg: string) => Effect.Effect<boolean, InstallFailedError>
-  readonly update: (
-    pkg: string,
-    options?: { readonly subpaths?: readonly string[] },
-  ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+  readonly update: (pkg: string) => Effect.Effect<Package, InstallFailedError | EffectFlock.LockError>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
 }
 
@@ -112,22 +105,6 @@ function gitSlug(pkg: string) {
       ?.replace(/[^a-zA-Z0-9._-]+/g, "-")
       .replace(/^-+|-+$/g, "") || "repository"
   )
-}
-
-const resolveEntryPoint = (name: string, dir: string, subpaths: readonly string[] = [""]): EntryPoint => {
-  const entrypoint = subpaths
-    .map((subpath) => {
-      try {
-        return resolveModule([name, subpath].filter(Boolean).join("/"), dir)
-      } catch {
-        return undefined
-      }
-    })
-    .find((entrypoint) => entrypoint !== undefined)
-  return {
-    directory: dir,
-    entrypoint,
-  }
 }
 
 interface ArboristNode {
@@ -215,13 +192,7 @@ const layer = Layer.effect(
         if (revision) return revision
       }
     })
-    const entry = Effect.fnUntraced(function* (
-      root: string,
-      name: string,
-      dir: string,
-      target: Target | undefined,
-      subpaths?: readonly string[],
-    ) {
+    const metadata = Effect.fnUntraced(function* (root: string, name: string, dir: string, target: Target | undefined) {
       const manifest = yield* afs
         .readJson(path.join(dir, "package.json"))
         .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageJson)), Effect.option)
@@ -229,7 +200,8 @@ const layer = Layer.effect(
       const revision = target ? (yield* installedRevision(root, name, target)) ?? manifestVersion : undefined
       const version = target?.type === "git" ? revision : manifestVersion
       return {
-        ...resolveEntryPoint(name, dir, subpaths),
+        directory: dir,
+        name,
         ...(version ? { version } : {}),
         ...(revision ? { revision } : {}),
       }
@@ -274,14 +246,13 @@ const layer = Layer.effect(
       pkg: string,
       target: Target | undefined,
       dir: string,
-      subpaths: readonly string[] | undefined,
       update: boolean,
     ) {
       yield* flock.acquire(`npm-install:${dir}`)
       const active = yield* current(dir)
       const name = yield* installedName(pkg, active ?? dir, target)
       if (active && !update && (yield* afs.existsSafe(path.join(active, "node_modules", name)))) {
-        return yield* entry(active, name, path.join(active, "node_modules", name), target, subpaths)
+        return yield* metadata(active, name, path.join(active, "node_modules", name), target)
       }
 
       yield* mkdir(dir)
@@ -291,26 +262,25 @@ const layer = Layer.effect(
         const tree = yield* reify({ dir: staging, config: dir, add: [pkg], update })
         const installed = tree.edgesOut.values().next().value?.to
         const installedNameValue = installed?.name ?? (yield* installedName(pkg, staging, target))
-        const result = yield* entry(
+        const result = yield* metadata(
           staging,
           installedNameValue,
           installed?.path ?? path.join(staging, "node_modules", installedNameValue),
           target,
-          // Resolve installed entrypoints after rename so Bun cannot hold the staging directory open on Windows.
-          installed ? [] : subpaths,
         )
-        if (!installed && !result.entrypoint) return yield* new InstallFailedError({ add: [pkg], dir: staging })
+        if (!installed && !(yield* afs.isDir(result.directory)))
+          return yield* new InstallFailedError({ add: [pkg], dir: staging })
         const links =
           process.platform === "win32"
             ? Array.from(tree.inventory.values()).filter(
                 (node) => node.isLink && FSUtil.contains(staging, node.path) && FSUtil.contains(staging, node.realpath),
               )
             : []
-        return { name: installedNameValue, result, links }
+        return { result, links }
       }).pipe(Effect.onError(() => remove(staging, dir).pipe(Effect.ignore)))
 
       if (active) {
-        const activeEntry = yield* entry(active, name, path.join(active, "node_modules", name), target, subpaths)
+        const activeEntry = yield* metadata(active, name, path.join(active, "node_modules", name), target)
         if (activeEntry.revision && activeEntry.revision === staged.result.revision) {
           yield* remove(staging, dir)
           return activeEntry
@@ -337,13 +307,7 @@ const layer = Layer.effect(
         ).pipe(Effect.onError(() => remove(staging, dir).pipe(Effect.ignore)))
       }
       yield* rename(staging, generation, dir)
-      return yield* entry(
-        generation,
-        staged.name,
-        path.join(generation, "node_modules", staged.name),
-        target,
-        subpaths,
-      )
+      return { ...staged.result, directory: path.join(generation, "node_modules", staged.result.name) }
     })
 
     const collect = Effect.fnUntraced(function* (dir: string) {
@@ -367,26 +331,20 @@ const layer = Layer.effect(
       )
     })
 
-    const add = Effect.fn("Npm.add")(function* (
-      pkg: string,
-      options?: { readonly subpaths?: readonly string[] },
-    ) {
+    const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const target = yield* Effect.promise(() => parse(pkg))
       const dir = directory(pkg, target)
-      return yield* install(pkg, target, dir, options?.subpaths, false)
+      return yield* install(pkg, target, dir, false)
     }, Effect.scoped)
 
-    const resolve = Effect.fn("Npm.resolve")(function* (
-      pkg: string,
-      options?: { readonly subpaths?: readonly string[] },
-    ) {
+    const resolve = Effect.fn("Npm.resolve")(function* (pkg: string) {
       const target = yield* Effect.promise(() => parse(pkg))
       const root = directory(pkg, target)
       const generation = yield* current(root)
       const name = yield* installedName(pkg, generation ?? root, target)
       const dir = path.join(generation ?? root, "node_modules", name)
-      if (!(yield* afs.existsSafe(dir))) return { directory: dir }
-      return yield* entry(generation ?? root, name, dir, target, options?.subpaths)
+      if (!(yield* afs.existsSafe(dir))) return { directory: dir, name }
+      return yield* metadata(generation ?? root, name, dir, target)
     })
 
     const check = Effect.fn("Npm.check")(function* (pkg: string) {
@@ -415,22 +373,19 @@ const layer = Layer.effect(
       return installed !== available
     })
 
-    const update = Effect.fn("Npm.update")(
-      function* (pkg: string, options?: { readonly subpaths?: readonly string[] }) {
-        const target = yield* Effect.promise(() => parse(pkg))
-        const dir = directory(pkg, target)
-        if (!target)
-          return yield* new InstallFailedError({
-            dir,
-            cause: new Error("Package updates only support registry and Git package specs"),
-          })
-        if (!target.mutable) return yield* add(pkg, options)
-        const installed = yield* install(pkg, target, dir, options?.subpaths, true)
-        yield* collect(dir)
-        return installed
-      },
-      Effect.scoped,
-    )
+    const update = Effect.fn("Npm.update")(function* (pkg: string) {
+      const target = yield* Effect.promise(() => parse(pkg))
+      const dir = directory(pkg, target)
+      if (!target)
+        return yield* new InstallFailedError({
+          dir,
+          cause: new Error("Package updates only support registry and Git package specs"),
+        })
+      if (!target.mutable) return yield* add(pkg)
+      const installed = yield* install(pkg, target, dir, true)
+      yield* collect(dir)
+      return installed
+    }, Effect.scoped)
 
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
       const target = yield* Effect.promise(() => parse(pkg))

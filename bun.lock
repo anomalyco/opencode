@@ -575,6 +575,7 @@
         "@opencode-ai/client": "workspace:*",
         "@opencode-ai/protocol": "workspace:*",
         "@opencode-ai/schema": "workspace:*",
+        "@opencode-ai/util": "workspace:*",
         "@standard-schema/spec": "catalog:",
         "effect": "catalog:",
         "zod": "catalog:",
@@ -585,6 +586,7 @@
         "@opentui/solid": "catalog:",
         "@tsconfig/bun": "catalog:",
         "@tsconfig/node22": "catalog:",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
         "solid-js": "catalog:",
@@ -971,7 +973,6 @@
         "minimatch": "10.2.5",
         "npm-package-arg": "13.0.2",
         "pacote": "21.5.1",
-        "resolve.exports": "catalog:",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
@@ -1123,7 +1124,6 @@
     "opentui-spinner": "0.0.7",
     "remeda": "2.26.0",
     "remend": "1.3.1",
-    "resolve.exports": "2.0.3",
     "semver": "7.7.4",
     "shiki": "4.4.3",
     "solid-js": "1.9.15",
@@ -5170,8 +5170,6 @@
     "resolve-from": ["resolve-from@5.0.0", "", {}, "sha512-qYg9KP24dD5qka9J47d0aVky0N+b4fTU89LN9iDnjB5waksiC49rvMB0PrUJQGoTmH50XPiqOvAjDfaijGxYZw=="],
 
     "resolve-pkg-maps": ["resolve-pkg-maps@1.0.0", "", {}, "sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw=="],
-
-    "resolve.exports": ["resolve.exports@2.0.3", "", {}, "sha512-OcXjMsGdhL4XnbShKpAcSqPMzQoYkYyhbEaeSko47MjRP9NfEQMhZkXL1DoFlt9LWQn4YttrdnV6X2OiyzBi+A=="],
 
     "responselike": ["responselike@2.0.1", "", { "dependencies": { "lowercase-keys": "^2.0.0" } }, "sha512-4gl03wn3hj1HP3yzgdI7d3lCkF95F21Pz4BPGvKHinyQzALR5CapwC8yIi0Rh58DEMQ/SguC03wFj2k0M/mHhw=="],
 
