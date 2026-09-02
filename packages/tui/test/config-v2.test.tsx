@@ -119,8 +119,8 @@ test("enables persistent terminals unless explicitly disabled", () => {
 
   const disabled = resolve({ session: { terminal: false } }, { terminalSuspend: true })
   expect(disabled.session.terminal).toBe(false)
-  expect(disabled.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
-  expect(disabled.keybinds.get("terminal.toggle")).toEqual([])
+  expect(disabled.keybinds.get("theme.switch")).toEqual([])
+  expect(disabled.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>t" }])
 
   const customized = resolve(
     { session: { terminal: true }, keybinds: { "theme.switch": "<leader>t", "terminal.toggle": "<leader>p" } },
