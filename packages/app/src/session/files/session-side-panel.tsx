@@ -359,6 +359,7 @@ export function SessionSidePanel(props: {
                               >
                                 <Tabs.Trigger
                                   value={SESSION_OPEN_FILE_TAB}
+                                  class="group"
                                   onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
                                   closeButton={
                                     <Tooltip
@@ -373,16 +374,29 @@ export function SessionSidePanel(props: {
                                       placement="bottom"
                                       gutter={10}
                                     >
-                                      <Tabs.CloseButton
-                                        onClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
+                                      <IconButton
+                                        size="small"
+                                        variant="ghost-muted"
+                                        class="hover-reveal relative z-10 group-hover:opacity-100"
+                                        classList={{ "opacity-100": activeTab() === SESSION_OPEN_FILE_TAB }}
+                                        onPointerDown={(event) => {
+                                          event.preventDefault()
+                                          event.stopPropagation()
+                                        }}
+                                        onClick={(event) => {
+                                          event.preventDefault()
+                                          event.stopPropagation()
+                                          tabs().close(SESSION_OPEN_FILE_TAB)
+                                        }}
+                                        icon={<Icon name="xmark-small" />}
                                         aria-label={language.t("common.closeTab")}
                                       />
                                     </Tooltip>
                                   }
                                   hideCloseButton
                                 >
-                                  <div class="flex items-center gap-1.5 italic">
-                                    <Icon name="open-file" size="small" />
+                                  <div class="flex items-center gap-1.5">
+                                    <Icon name="file-tree" size="small" />
                                     <span>{language.t("command.file.open")}</span>
                                   </div>
                                 </Tabs.Trigger>
