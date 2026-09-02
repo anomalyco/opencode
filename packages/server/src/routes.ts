@@ -31,14 +31,14 @@ import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { Worktree } from "@opencode-ai/core/worktree"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
-import { HttpRouter } from "effect/unstable/http"
+import { HttpMethod, HttpRouter, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Context, Effect, Layer, Option } from "effect"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
-import { authorizationLayer } from "./middleware/authorization"
+import { authorizationLayer, routerAuthorizationLayer } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { PtyEnvironment } from "./pty-environment"
 import { layer } from "./location"
@@ -152,7 +152,16 @@ function makeRoutes<AuthError, AuthServices>(
         ),
         ServerInfo.layer(serviceURLs, options.app),
       )
-      const api = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
+      const api = Layer.merge(
+        HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }),
+        HttpRouter.addAll(
+          [...HttpMethod.all]
+            // Let HEAD resolve through GET instead of matching the fallback first.
+            .filter((method) => method !== "HEAD")
+            .map((method) => HttpRouter.route(method, "/api/*", HttpServerResponse.empty({ status: 404 }))),
+        ),
+      ).pipe(
+        Layer.provide(routerAuthorizationLayer),
         Layer.provide(handlers.pipe(Layer.provide(services), Layer.provide(Layer.succeed(CorsConfig, options)))),
         Layer.provide(formLocationLayer),
         Layer.provide(sessionLocationLayer),

@@ -5,7 +5,7 @@ export { Authorization } from "@opencode-ai/protocol/middleware/authorization"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode-ai/protocol/groups/persistent-pty"
 import { Effect, Encoding, Layer, Redacted } from "effect"
-import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpEffect, HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
@@ -39,6 +39,22 @@ function credentialFromRequest(request: HttpServerRequest.HttpServerRequest) {
 export function authorizedRequest(request: HttpServerRequest.HttpServerRequest, config: ServerAuth.Info) {
   return credentialFromRequest(request).pipe(Effect.map((credential) => ServerAuth.authorized(credential, config)))
 }
+
+export const routerAuthorizationLayer = HttpRouter.middleware(
+  Effect.gen(function* () {
+    const config = yield* ServerAuth.Config
+    if (!ServerAuth.required(config)) return HttpMiddleware.make((effect) => effect)
+    return HttpMiddleware.make((effect) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest
+        const url = new URL(request.url, "http://localhost")
+        if (hasPtyConnectTicketURL(url) || hasPersistentPtyConnectTicketURL(url)) return yield* effect
+        if (yield* authorizedRequest(request, config)) return yield* effect
+        return HttpServerResponse.empty({ status: 401, headers: { "www-authenticate": WWW_AUTHENTICATE } })
+      }),
+    )
+  }),
+).layer
 
 export const authorizationLayer = Layer.effect(
   Authorization,

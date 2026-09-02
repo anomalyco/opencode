@@ -1,7 +1,7 @@
 import { NodeFileSystem, NodeHttpServer } from "@effect/platform-node"
 import { afterAll, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { HttpServer, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -29,21 +29,11 @@ describe("web UI", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const transform = yield* WebUi.handler({ assets })
+          const router = yield* HttpRouter.make
+          yield* router.add("GET", "/api/health", HttpServerResponse.jsonUnsafe({ healthy: true }))
+          yield* router.add("GET", "/api/*", HttpServerResponse.empty({ status: 404 }))
           const http = yield* NodeHttpServer.make(createServer, { host: "127.0.0.1", port: 0 })
-          yield* http.serve(
-            transform(
-              Effect.gen(function* () {
-                const request = yield* HttpServerRequest.HttpServerRequest
-                const pathname = new URL(request.url, "http://localhost").pathname
-                if (pathname === "/api/health") return HttpServerResponse.jsonUnsafe({ healthy: true })
-                return yield* Effect.fail(
-                  new HttpServerError.HttpServerError({
-                    reason: new HttpServerError.RouteNotFound({ request }),
-                  }),
-                )
-              }),
-            ),
-          )
+          yield* http.serve(transform(router.asHttpEffect()))
           const origin = HttpServer.formatAddress(http.address)
 
           const health = yield* Effect.promise(() => fetch(`${origin}/api/health`))
