@@ -38,10 +38,10 @@ export const layer = Layer.effect(
       .withPermit(
         Effect.gen(function* () {
           discovered = yield* mcp.tools()
-          yield* tools.transform((draft) => {
+          yield* tools.transform((editor) => {
             for (const tool of discovered) {
               const schema = (tool.inputSchema ?? {}) as JsonSchema.JsonSchema
-              draft.add({
+              editor.add({
                 name: tool.name,
                 options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
                 description: tool.description ?? "",

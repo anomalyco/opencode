@@ -47,14 +47,14 @@ describe("State replay properties", () => {
             const states = sources.map((_, index) =>
               State.create({
                 initial: (): Value => ({ value: sources[index], order: [] }),
-                draft: (draft) => draft,
+                editor: (editor) => editor,
                 notify: () => Effect.sync(() => void notifications[index]++),
               }),
             )
-            const callbacks = operations.map((operation, index) => (draft: Value) => {
+            const callbacks = operations.map((operation, index) => (editor: Value) => {
               calls++
-              draft.value = apply(draft.value, operation)
-              draft.order.push(index)
+              editor.value = apply(editor.value, operation)
+              editor.order.push(index)
             })
             const registrations: { handle: State.Registration; callback: number; active: boolean }[][] = [[], []]
             const expected = (index: number): Value => {
@@ -138,7 +138,7 @@ describe("State replay properties", () => {
             let calls = 0
             const state = State.create({
               initial: () => ({ value: 1, order: new Array<number>() }),
-              draft: (draft) => draft,
+              editor: (editor) => editor,
             })
             const registrations: State.Registration[] = []
             const retained: { value: Value; snapshot: Value }[] = []
@@ -155,10 +155,10 @@ describe("State replay properties", () => {
                     Effect.gen(function* () {
                       const before = calls
                       const added = yield* Effect.forEach(chunk.append, (operation) =>
-                        state.transform((draft) => {
+                        state.transform((editor) => {
                           calls++
-                          draft.value = apply(draft.value, operation)
-                          draft.order.push(draft.order.length)
+                          editor.value = apply(editor.value, operation)
+                          editor.order.push(editor.order.length)
                         }),
                       )
                       registrations.push(...added)

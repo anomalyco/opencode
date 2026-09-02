@@ -34,7 +34,7 @@ type Data = {
   default?: ID
 }
 
-export type Draft = {
+export type Editor = {
   list: () => readonly Info[]
   get: (id: ID) => Info | undefined
   default: (id: ID | undefined) => void
@@ -42,7 +42,7 @@ export type Draft = {
   remove: (id: ID) => void
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   readonly resolve: (id?: ID | string) => Effect.Effect<Info | undefined>
   readonly select: (id?: ID | string) => Effect.Effect<Selection>
@@ -62,29 +62,29 @@ const layer = Layer.effect(
       { action: "external_directory", resource: path.join(global.tmp, "*"), effect: "allow" },
       { action: "external_directory", resource: path.join(global.config, "*"), effect: "allow" },
     ]
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "agent",
       initial: () => ({ agents: new Map() }),
-      draft: (draft) => ({
-        list: () => Array.fromIterable(draft.agents.values()) as Info[],
-        get: (id) => draft.agents.get(id),
+      editor: (editor) => ({
+        list: () => Array.fromIterable(editor.agents.values()) as Info[],
+        get: (id) => editor.agents.get(id),
         default: (id) => {
-          draft.default = id
+          editor.default = id
         },
         update: (id, fn) => {
           const defaults = Info.default(id)
           const current =
-            draft.agents.get(id) ??
+            editor.agents.get(id) ??
             ({
               ...defaults,
               permissions: [...defaults.permissions, ...permissions],
             } as Types.DeepMutable<Info>)
-          if (!draft.agents.has(id)) draft.agents.set(id, current)
+          if (!editor.agents.has(id)) editor.agents.set(id, current)
           fn(current)
           current.id = id
         },
         remove: (id) => {
-          draft.agents.delete(id)
+          editor.agents.delete(id)
         },
       }),
       notify: () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid),

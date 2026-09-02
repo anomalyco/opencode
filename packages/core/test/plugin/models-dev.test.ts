@@ -76,8 +76,8 @@ describe("ModelsDevPlugin", () => {
 
       const scope = yield* Scope.make()
       yield* catalog
-        .transform((draft) =>
-          draft.model.update(providerID, modelID, (model) => {
+        .transform((editor) =>
+          editor.model.update(providerID, modelID, (model) => {
             model.variants ??= []
             model.variants.push({ id: Model.VariantID.make("configured") })
           }),

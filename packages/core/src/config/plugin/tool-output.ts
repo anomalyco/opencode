@@ -12,10 +12,10 @@ export const Plugin = define({
     const config = yield* Config.Service
     const output = yield* ToolOutput.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, output.reload())
-    yield* output.transform((draft) => {
+    yield* output.transform((editor) => {
       const configured = Config.latest(loaded.entries, "tool_output")
       if (!configured) return
-      draft.configure({
+      editor.configure({
         ...(configured.max_lines === undefined ? {} : { maxLines: configured.max_lines }),
         ...(configured.max_bytes === undefined ? {} : { maxBytes: configured.max_bytes }),
       })

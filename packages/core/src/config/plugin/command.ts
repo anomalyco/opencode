@@ -57,10 +57,10 @@ export const Plugin = define({
       Effect.forkScoped({ startImmediately: true }),
     )
     loaded.documents = yield* load()
-    yield* ctx.command.transform((draft) => {
+    yield* ctx.command.transform((editor) => {
       for (const document of loaded.documents) {
         for (const [name, command] of Object.entries(document.commands ?? {})) {
-          draft.add({
+          editor.add({
             name,
             description: command.description,
             execute: (input) =>

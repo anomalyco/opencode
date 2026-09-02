@@ -153,20 +153,20 @@ const withSubagent = (location: Location.Ref) =>
     const locations = yield* LocationServiceMap.Service
     yield* Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(Effect.provide(locations.get(location)))
     yield* Agent.Service.use((agents) =>
-      agents.transform((draft) => {
+      agents.transform((editor) => {
         // The caller identity used by executeTool; subagent permission asserts against it.
-        draft.update(toolIdentity.agent, (agent) => {
+        editor.update(toolIdentity.agent, (agent) => {
           agent.mode = "primary"
           agent.permissions.push({ action: "*", resource: "*", effect: "allow" })
         })
-        draft.update(Agent.ID.make("reviewer"), (agent) => {
+        editor.update(Agent.ID.make("reviewer"), (agent) => {
           agent.mode = "subagent"
           agent.model = childModel
         })
-        draft.update(Agent.ID.make("fallback"), (agent) => {
+        editor.update(Agent.ID.make("fallback"), (agent) => {
           agent.mode = "subagent"
         })
-        draft.update(Agent.ID.make("primary"), (agent) => {
+        editor.update(Agent.ID.make("primary"), (agent) => {
           agent.mode = "primary"
         })
       }),

@@ -306,7 +306,7 @@ describe("LocationWatcher subscriptions", () => {
       layer: Layer.effectDiscard(
         Effect.gen(function* () {
           const policy = yield* LocationWatcherPolicy.Service
-          yield* policy.transform((draft) => draft.add([".git"]))
+          yield* policy.transform((editor) => editor.add([".git"]))
         }),
       ),
       deps: [LocationWatcherPolicy.node],

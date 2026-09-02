@@ -257,8 +257,8 @@ const permissionFail = {
 }
 const permission = permissionLayer()
 const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, ToolInfo>>, options?: Tool.Options) =>
-  registry.transform((draft) =>
-    Object.entries(tools).forEach(([name, tool]) => draft.add({ ...tool, name, options: options ?? tool.options })),
+  registry.transform((editor) =>
+    Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
   )
 const layer = Layer.unwrap(
   Effect.map(RunnerState, (state) => {
@@ -521,8 +521,8 @@ const setup = Effect.gen(function* () {
   yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
     discard: true,
   })
-  yield* agents.transform((draft) =>
-    draft.update(Agent.ID.make("build"), (agent) => {
+  yield* agents.transform((editor) =>
+    editor.update(Agent.ID.make("build"), (agent) => {
       agent.mode = "primary"
     }),
   )
@@ -906,8 +906,8 @@ const prepareTitleGeneration = Effect.gen(function* () {
   const agents = yield* Agent.Service
   const { db } = yield* Database.Service
   yield* db.update(SessionTable).set({ title: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
-  yield* agents.transform((draft) =>
-    draft.update(Agent.ID.make("title"), (agent) => {
+  yield* agents.transform((editor) =>
+    editor.update(Agent.ID.make("title"), (agent) => {
       agent.mode = "primary"
       agent.hidden = true
       agent.system = "Generate a title."
@@ -1700,8 +1700,8 @@ describe("SessionRunnerLLM", () => {
 
   scenario("updates selected-agent skill instructions after an agent switch", function* (s) {
     const agents = yield* Agent.Service
-    yield* agents.transform((draft) =>
-      draft.update(Agent.ID.make("reviewer"), (agent) => {
+    yield* agents.transform((editor) =>
+      editor.update(Agent.ID.make("reviewer"), (agent) => {
         agent.mode = "primary"
       }),
     )
@@ -2113,8 +2113,8 @@ describe("SessionRunnerLLM", () => {
           provider: route === AnthropicMessages.route ? "anthropic" : "openai",
           route,
         })
-        yield* agents.transform((draft) =>
-          draft.update(agentID, (agent) => {
+        yield* agents.transform((editor) =>
+          editor.update(agentID, (agent) => {
             agent.system = "Review the project carefully."
           }),
         )
@@ -2484,7 +2484,7 @@ describe("SessionRunnerLLM", () => {
   scenario("does not recover provider context overflow when automatic compaction is disabled", function* (s) {
     yield* setupOverflowRecovery(s)
     const compaction = yield* SessionCompaction.Service
-    yield* compaction.transform((draft) => draft.configure({ auto: false }))
+    yield* compaction.transform((editor) => editor.configure({ auto: false }))
     yield* s.llm.push(
       [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
       TestLLM.text("Must not compact", "text-unexpected-summary"),

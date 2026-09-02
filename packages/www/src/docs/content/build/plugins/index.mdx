@@ -215,15 +215,15 @@ const build = await ctx.agent.get({ agentID: "build" })
 Register a transform to inspect, update, remove, or select the default agent.
 
 ```ts
-await ctx.agent.transform((draft) => {
-  const agents = draft.list()
-  const build = draft.get("build")
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
 
-  draft.default("build")
-  draft.update("build", (agent) => {
+  editor.default("build")
+  editor.update("build", (agent) => {
     agent.description = "Builds features and fixes bugs"
   })
-  draft.remove("legacy")
+  editor.remove("legacy")
 })
 ```
 
@@ -241,11 +241,11 @@ Schema: [`Agent.Info`](/api#schema-Agent.Info)
 interface AgentContext {
   list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
   get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
-  transform(callback: (draft: AgentDraft) => void): Promise<Registration>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface AgentDraft {
+interface AgentEditor {
   list(): readonly AgentInfo[]
   get(id: string): AgentInfo | undefined
   default(id: string | undefined): void
@@ -309,11 +309,11 @@ interface CatalogContext {
     list(input?: ModelListInput, requestOptions?: RequestOptions): Promise<ModelListOutput>
     default(input?: ModelDefaultInput, requestOptions?: RequestOptions): Promise<ModelDefaultOutput>
   }
-  transform(callback: (draft: CatalogDraft) => void): Promise<Registration>
+  transform(callback: (editor: CatalogEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface CatalogDraft {
+interface CatalogEditor {
   provider: {
     list(): readonly CatalogProviderRecord[]
     get(providerID: string): CatalogProviderRecord | undefined
@@ -348,8 +348,8 @@ const commands = await ctx.command.list()
 Register commands with a transform. The executor receives the session, prompt attachments, and requested delivery mode.
 
 ```ts
-await ctx.command.transform((draft) => {
-  draft.add({
+await ctx.command.transform((editor) => {
+  editor.add({
     name: "security-review",
     description: "Review changes for security issues",
     execute: async ({ sessionID, prompt, delivery }) => {
@@ -378,11 +378,11 @@ Schemas: [`Command.Info`](/api#schema-Command.Info),
 ```ts
 interface CommandContext {
   list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
-  transform(callback: (draft: CommandDraft) => void): Promise<Registration>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface CommandDraft {
+interface CommandEditor {
   add(definition: CommandDefinition): void
 }
 
@@ -439,22 +439,22 @@ await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt
 Register a transform to inspect integrations and manage their authentication methods.
 
 ```ts
-await ctx.integration.transform((draft) => {
-  const integrations = draft.list()
-  const acme = draft.get("acme")
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
 
-  draft.update("acme", (integration) => {
+  editor.update("acme", (integration) => {
     integration.name = "Acme"
   })
-  draft.method.update({
+  editor.method.update({
     integrationID: "acme",
     method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
   })
 
-  const methods = draft.method.list("acme")
+  const methods = editor.method.list("acme")
   const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
-  if (legacy) draft.method.remove("acme", legacy)
-  draft.remove("legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
 })
 ```
 
@@ -496,7 +496,7 @@ interface IntegrationContext {
     ): Promise<IntegrationCommandStatusOutput>
     cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
   }
-  transform(callback: (draft: IntegrationDraft) => void): Promise<Registration>
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
   reload(): Promise<void>
   connection: {
     active(integrationID: string): Promise<ConnectionInfo | undefined>
@@ -504,7 +504,7 @@ interface IntegrationContext {
   }
 }
 
-interface IntegrationDraft {
+interface IntegrationEditor {
   list(): readonly IntegrationRef[]
   get(id: string): IntegrationRef | undefined
   update(id: string, update: (integration: IntegrationRef) => void): void
@@ -525,18 +525,18 @@ List MCP servers and their current connection state.
 const servers = await ctx.mcp.list()
 ```
 
-Plugins manage MCP servers only through transforms. Use `draft.set` to add or replace a server, `draft.update` to
-change its configuration, and `draft.remove` to remove it. Inspect configuration with `draft.list` and `draft.get`.
+Plugins manage MCP servers only through transforms. Use `editor.set` to add or replace a server, `editor.update` to
+change its configuration, and `editor.remove` to remove it. Inspect configuration with `editor.list` and `editor.get`.
 
 ```ts
-await ctx.mcp.transform((draft) => {
-  const servers = draft.list()
-  const docs = draft.get("docs")
-  draft.set("docs", { type: "remote", url: "https://mcp.example.com" })
-  draft.update("docs", (server) => {
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
     server.disabled = false
   })
-  draft.remove("legacy")
+  editor.remove("legacy")
 })
 ```
 
@@ -557,11 +557,11 @@ Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api
 ```ts
 interface MCPContext {
   list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
-  transform(callback: (draft: MCPDraft) => void): Promise<Registration>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface MCPDraft {
+interface MCPEditor {
   list(): readonly (readonly [string, McpServerConfig])[]
   get(name: string): McpServerConfig | undefined
   set(name: string, config: McpServerConfig): void
@@ -599,11 +599,11 @@ const references = await ctx.reference.list()
 Register a transform to inspect, add, or remove local and Git references.
 
 ```ts
-await ctx.reference.transform((draft) => {
-  const references = draft.list()
-  draft.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
-  draft.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
-  draft.remove("legacy")
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  editor.remove("legacy")
 })
 ```
 
@@ -621,11 +621,11 @@ Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource
 ```ts
 interface ReferenceContext {
   list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
-  transform(callback: (draft: ReferenceDraft) => void): Promise<Registration>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface ReferenceDraft {
+interface ReferenceEditor {
   list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
   add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
   remove(name: string): void
@@ -720,19 +720,19 @@ const skills = await ctx.skill.list()
 Register a transform to inspect, add, update, or remove skills.
 
 ```ts
-await ctx.skill.transform((draft) => {
-  const skills = draft.list()
-  draft.add({
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
     id: "review",
     name: "Review",
     description: "Review the current changes",
     location: "/workspace/.opencode/skills/review.md",
     content: "Review the current changes for correctness and missing tests.",
   })
-  draft.update("review", (skill) => {
+  editor.update("review", (skill) => {
     skill.autoinvoke = true
   })
-  draft.remove("legacy")
+  editor.remove("legacy")
 })
 ```
 
@@ -749,11 +749,11 @@ Schema: [`Skill.Info`](/api#schema-Skill.Info)
 ```ts
 interface SkillContext {
   list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
-  transform(callback: (draft: SkillDraft) => void): Promise<Registration>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface SkillDraft {
+interface SkillEditor {
   list(): readonly SkillInfo[]
   add(skill: SkillInfo): void
   update(id: string, update: (skill: SkillInfo) => void): void
@@ -806,12 +806,12 @@ Register, update, and remove tools with a synchronous transform, including in Pr
 before registering or reloading. A later valid registration overrides the same effective tool name.
 
 ```ts
-const registration = await ctx.tool.transform((draft) => {
-  draft.namespace({
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
     name: "acme",
     description: "Customer account tools",
   })
-  draft.add({
+  editor.add({
     name: "greeting",
     description: "Create a greeting",
     input: {
@@ -836,7 +836,7 @@ changing their order; it does not rerun plugin setup.
 await ctx.tool.reload()
 ```
 
-Use `list()` and `get()` to inspect tools currently in the draft. Tools have an `id` containing their effective name,
+Use `list()` and `get()` to inspect tools currently in the editor. Tools have an `id` containing their effective name,
 and `get()` returns `undefined` when that ID is not present. Use `update` and `remove` with the effective tool name,
 including its namespace (`acme_greeting` above). Dots in
 namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
@@ -844,11 +844,11 @@ namespaces and unsupported characters in tool names become `_`. Missing names ar
 them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
 
 ```ts
-await ctx.tool.transform((draft) => {
-  draft.update("acme_greeting", (tool) => {
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
     tool.description = "Greet the user by name"
   })
-  draft.remove("acme_obsolete")
+  editor.remove("acme_obsolete")
 })
 ```
 
@@ -874,11 +874,11 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 
 ```ts
 interface ToolContext {
-  transform(callback: (draft: ToolDraft) => void): Promise<Registration>
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface ToolDraft {
+interface ToolEditor {
   list(): readonly (ToolInfo & { readonly id: string })[]
   get(id: string): (ToolInfo & { readonly id: string }) | undefined
   namespace(namespace: { name: string; description: string }): void
@@ -900,11 +900,11 @@ const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
 ```
 
 Register a location-scoped VCS provider with a transform. A provider matching the detected repository type is selected
-automatically; use `draft.default.set` to select a different provider.
+automatically; use `editor.default.set` to select a different provider.
 
 ```ts
-await ctx.vcs.transform((draft) => {
-  draft.add({
+await ctx.vcs.transform((editor) => {
+  editor.add({
     id: "custom",
     name: "Custom VCS",
     info: async () => ({ branch: { current: "feature", default: "main" } }),
@@ -912,7 +912,7 @@ await ctx.vcs.transform((draft) => {
     status: async (scope, { signal }) => readStatus(scope.worktree, signal),
     diff: async (input, { signal }) => readDiff(input, signal),
   })
-  draft.default.set("custom")
+  editor.default.set("custom")
 })
 ```
 
@@ -931,11 +931,11 @@ interface VcsContext {
   branches(input?: VcsBranchesInput, requestOptions?: RequestOptions): Promise<VcsBranchesOutput>
   status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
   diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
-  transform(callback: (draft: VcsDraft) => void): Promise<Registration>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface VcsDraft {
+interface VcsEditor {
   add(definition: VcsDefinition): void
   default: {
     get(): string | undefined
@@ -956,8 +956,8 @@ const results = await ctx.websearch.query({ query: "OpenCode plugins", providerI
 Register a provider and select the default provider with a transform.
 
 ```ts
-await ctx.websearch.transform((draft) => {
-  draft.add({
+await ctx.websearch.transform((editor) => {
+  editor.add({
     id: "internal",
     name: "Internal search",
     execute: async ({ query }, { signal }) => {
@@ -966,14 +966,14 @@ await ctx.websearch.transform((draft) => {
       return [{ url: result.url, title: result.title, content: result.content, time: {} }]
     },
   })
-  draft.default.set("internal")
+  editor.default.set("internal")
 })
 ```
 
 Disable websearch by selecting `false`, or reload providers after external state changes.
 
 ```ts
-await ctx.websearch.transform((draft) => draft.default.set(false))
+await ctx.websearch.transform((editor) => editor.default.set(false))
 await ctx.websearch.reload()
 ```
 
@@ -985,11 +985,11 @@ Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Res
 interface WebSearchContext {
   providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
   query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
-  transform(callback: (draft: WebSearchDraft) => void): Promise<Registration>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface WebSearchDraft {
+interface WebSearchEditor {
   add(provider: WebSearchDefinition): void
   default: {
     get(): string | false | undefined

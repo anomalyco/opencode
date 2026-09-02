@@ -56,12 +56,12 @@ describe("GithubCopilotPlugin", () => {
   it.effect("removes the generic key method", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
-      yield* integrations.transform((draft) => {
-        draft.method.update({
+      yield* integrations.transform((editor) => {
+        editor.method.update({
           integrationID: Integration.ID.make("github-copilot"),
           method: { type: "key" },
         })
-        draft.method.update({
+        editor.method.update({
           integrationID: Integration.ID.make("github-copilot"),
           method: { type: "env", names: ["GITHUB_TOKEN"] },
         })

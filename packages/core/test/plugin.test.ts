@@ -116,7 +116,7 @@ it.effect("unloading a plugin removes its commands and runs cleanup", () =>
                 cleaned = true
               }),
             )
-            yield* ctx.command.transform((draft) => draft.add({ name: "greet", execute: () => Effect.void }))
+            yield* ctx.command.transform((editor) => editor.add({ name: "greet", execute: () => Effect.void }))
           }),
       },
     ])
@@ -141,7 +141,7 @@ it.effect("reports a failed plugin without blocking a healthy plugin", () =>
         revision: "1",
         effect: (ctx) =>
           ctx.command
-            .transform((draft) => draft.add({ name: "greet", execute: () => Effect.void }))
+            .transform((editor) => editor.add({ name: "greet", execute: () => Effect.void }))
             .pipe(Effect.asVoid),
       },
     ])
@@ -166,8 +166,8 @@ it.effect("reloading a plugin replaces its command implementation", () =>
           revision,
           effect: (ctx) =>
             ctx.command
-              .transform((draft) =>
-                draft.add({
+              .transform((editor) =>
+                editor.add({
                   name: "greet",
                   execute: () =>
                     Effect.sync(() => {
@@ -225,8 +225,8 @@ it.effect("refreshes expired OAuth credentials through the context during activa
         revision: "1",
         effect: (ctx) =>
           Effect.gen(function* () {
-            yield* ctx.integration.transform((draft) =>
-              draft.method.update({
+            yield* ctx.integration.transform((editor) =>
+              editor.method.update({
                 integrationID,
                 method: { id: methodID, type: "oauth", label: "Fixture" },
                 authorize: () => Effect.die("unexpected authorization"),

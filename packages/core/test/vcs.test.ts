@@ -121,9 +121,9 @@ describe("Vcs", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         const vcs = yield* Vcs.Service
-        const registration = yield* vcs.transform((draft) => {
-          draft.add(provider())
-          draft.default.set("custom")
+        const registration = yield* vcs.transform((editor) => {
+          editor.add(provider())
+          editor.default.set("custom")
         })
 
         expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "main" } })
@@ -145,7 +145,7 @@ describe("Vcs", () => {
     withGit(() =>
       Effect.gen(function* () {
         const vcs = yield* Vcs.Service
-        const registration = yield* vcs.transform((draft) => draft.add(provider({ id: "git" })))
+        const registration = yield* vcs.transform((editor) => editor.add(provider({ id: "git" })))
         expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "main" } })
 
         yield* registration.dispose
@@ -160,8 +160,8 @@ describe("Vcs", () => {
       const reads: string[] = []
       yield* State.batch(
         Effect.gen(function* () {
-          yield* vcs.transform((draft) => {
-            draft.add(
+          yield* vcs.transform((editor) => {
+            editor.add(
               provider({
                 info: () =>
                   Effect.sync(() => {
@@ -170,12 +170,12 @@ describe("Vcs", () => {
                   }),
               }),
             )
-            draft.default.set("custom")
+            editor.default.set("custom")
           })
           expect((yield* vcs.status())[0]?.file).toBe("file.txt")
           expect(yield* vcs.info()).toEqual({ branch: {} })
-          yield* vcs.transform((draft) =>
-            draft.add(
+          yield* vcs.transform((editor) =>
+            editor.add(
               provider({
                 info: () =>
                   Effect.sync(() => {
@@ -197,8 +197,8 @@ describe("Vcs", () => {
       Effect.gen(function* () {
         const observed: VcsDiffInput[] = []
         const vcs = yield* Vcs.Service
-        yield* vcs.transform((draft) => {
-          draft.add(
+        yield* vcs.transform((editor) => {
+          editor.add(
             provider({
               diff: (input) =>
                 Effect.sync(() => {
@@ -207,7 +207,7 @@ describe("Vcs", () => {
                 }),
             }),
           )
-          draft.default.set("custom")
+          editor.default.set("custom")
         })
 
         yield* vcs.diff("committed", { context: 3, base: "release" })
@@ -230,8 +230,8 @@ describe("Vcs", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         const vcs = yield* Vcs.Service
-        yield* vcs.transform((draft) => {
-          draft.add(
+        yield* vcs.transform((editor) => {
+          editor.add(
             provider({
               status: () => Effect.succeed([{ file: "file.txt", additions: -1, deletions: 0, status: "added" }]),
               diff: () =>
@@ -240,7 +240,7 @@ describe("Vcs", () => {
                 ]),
             }),
           )
-          draft.default.set("custom")
+          editor.default.set("custom")
         })
 
         expect(yield* vcs.status()).toEqual([])
@@ -257,8 +257,8 @@ describe("Vcs", () => {
       Effect.gen(function* () {
         const vcs = yield* Vcs.Service
         let interrupt = false
-        yield* vcs.transform((draft) => {
-          draft.add(
+        yield* vcs.transform((editor) => {
+          editor.add(
             provider({
               info: () => (interrupt ? Effect.interrupt : Effect.succeed({ branch: { current: "feature" } })),
               status: () => Effect.never,
@@ -266,7 +266,7 @@ describe("Vcs", () => {
               base: () => Effect.never,
             }),
           )
-          draft.default.set("custom")
+          editor.default.set("custom")
         })
 
         const fiber = yield* Effect.forkChild(vcs.status())
@@ -317,8 +317,8 @@ describe("Vcs", () => {
       let branch = "initial"
       let block = false
       yield* vcs
-        .transform((draft) => {
-          draft.add(
+        .transform((editor) => {
+          editor.add(
             provider({
               info: () =>
                 Effect.gen(function* () {
@@ -333,7 +333,7 @@ describe("Vcs", () => {
                 }),
             }),
           )
-          draft.default.set("custom")
+          editor.default.set("custom")
         })
         .pipe(Scope.provide(root))
       observed.length = 0
@@ -375,8 +375,8 @@ describe("Vcs", () => {
         const faulty = yield* Scope.make()
         yield* Effect.addFinalizer(() => Scope.close(faulty, Exit.void))
         let branch = "initial"
-        yield* vcs.transform((draft) =>
-          draft.add(provider({ id: "git", info: () => Effect.sync(() => ({ branch: { current: branch } })) })),
+        yield* vcs.transform((editor) =>
+          editor.add(provider({ id: "git", info: () => Effect.sync(() => ({ branch: { current: branch } })) })),
         )
         const failure = new Error("fixture replay failed")
         let replays = 0
@@ -418,8 +418,8 @@ describe("Vcs", () => {
         const release = yield* Deferred.make<void>()
         const accepted = yield* Deferred.make<void>()
         const reads: string[] = []
-        yield* vcs.transform((draft) =>
-          draft.add(
+        yield* vcs.transform((editor) =>
+          editor.add(
             provider({
               id: "git",
               info: () =>
@@ -442,8 +442,8 @@ describe("Vcs", () => {
           yield* Deferred.await(started)
           const configured = yield* State.batch(
             Effect.gen(function* () {
-              yield* vcs.transform((draft) =>
-                draft.add(
+              yield* vcs.transform((editor) =>
+                editor.add(
                   provider({
                     id: "git",
                     info: () =>
@@ -490,15 +490,15 @@ describe("Vcs", () => {
         )
           return Effect.void
         return vcs
-          .transform((draft) =>
-            draft.add(provider({ info: () => Effect.succeed({ branch: { current: "listener" } }) })),
+          .transform((editor) =>
+            editor.add(provider({ info: () => Effect.succeed({ branch: { current: "listener" } }) })),
           )
           .pipe(Scope.provide(scope), Effect.asVoid)
       })
       yield* Effect.gen(function* () {
-        yield* vcs.transform((draft) => {
-          draft.add(provider())
-          draft.default.set("custom")
+        yield* vcs.transform((editor) => {
+          editor.add(provider())
+          editor.default.set("custom")
         })
         yield* bus.publish(Done, {})
         const events = (yield* Fiber.join(updates)).filter((event) => event.type === VcsEvent.BranchUpdated.type)
@@ -906,10 +906,10 @@ describe("Vcs", () => {
       withTmp((directory) =>
         Effect.gen(function* () {
           const vcs = yield* Vcs.Service
-          yield* vcs.transform((draft) => {
+          yield* vcs.transform((editor) => {
             // @ts-expect-error Invalid third-party wire metadata must be checked at runtime.
-            draft.add(provider({ base: scenario.base }))
-            draft.default.set("custom")
+            editor.add(provider({ base: scenario.base }))
+            editor.default.set("custom")
           })
           expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
         }).pipe(provide(directory)),
@@ -921,14 +921,14 @@ describe("Vcs", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         const vcs = yield* Vcs.Service
-        yield* vcs.transform((draft) => {
-          draft.add(
+        yield* vcs.transform((editor) => {
+          editor.add(
             provider({
               base: () => Effect.succeed({ name: "release", ref: "refs/heads/release", source: "reflog" }),
               diff: () => Effect.fail(new Error("failed")),
             }),
           )
-          draft.default.set("custom")
+          editor.default.set("custom")
         })
         expect((yield* vcs.base())?.source).toBe("reflog")
         expect(yield* vcs.diff("committed").pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })

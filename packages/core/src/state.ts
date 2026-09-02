@@ -5,11 +5,11 @@ import { Cause, Context, Effect, Exit, Fiber, Scope } from "effect"
 /**
  * A synchronous, replayable edit to the current domain state.
  *
- * Domain drafts expose readable and writable state while preserving concise
+ * Domain editors expose readable and writable state while preserving concise
  * plugin/config code. Transforms synchronously rebuild derived state.
  */
-type TransformCallback<DraftApi> = (draft: DraftApi) => void
-export type MakeDraft<State, DraftApi> = (state: State) => DraftApi
+type TransformCallback<Editor> = (editor: Editor) => void
+export type MakeEditor<State, Editor> = (state: State) => Editor
 
 export interface Registration {
   readonly dispose: Effect.Effect<void>
@@ -19,15 +19,15 @@ export interface Registration {
  * Registers a scoped transform. Reads rebuild by applying every registered transform in order.
  * Closing the owning Scope removes the transform and invalidates the current value.
  */
-export type Transform<DraftApi> = (
-  transform: TransformCallback<DraftApi>,
+export type Transform<Editor> = (
+  transform: TransformCallback<Editor>,
 ) => Effect.Effect<Registration, never, Scope.Scope>
 
 /** Invalidates the current value after captured inputs change and notifies like a registration would. */
 export type Reload = () => Effect.Effect<void>
 
-export interface Transformable<DraftApi> {
-  readonly transform: Transform<DraftApi>
+export interface Transformable<Editor> {
+  readonly transform: Transform<Editor>
   readonly reload: Reload
 }
 
@@ -88,12 +88,12 @@ export const inherit = Effect.fnUntraced(function* () {
   return <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provideService(effect, CurrentBatch, batch)
 })
 
-export interface Options<State, DraftApi> {
+export interface Options<State, Editor> {
   readonly name?: string
   /** Creates the empty base value for every rebuild. */
   readonly initial: () => State
-  /** Wraps mutable state in a domain-specific draft API. */
-  readonly draft: MakeDraft<State, DraftApi>
+  /** Wraps mutable state in a domain-specific editor API. */
+  readonly editor: MakeEditor<State, Editor>
   /**
    * Observes the freshly rebuilt value outside the read path. Every registration, disposal, or
    * reload notifies once it is applied; a batch coalesces them into one notification at its end.
@@ -102,7 +102,7 @@ export interface Options<State, DraftApi> {
   readonly notify?: (state: State) => Effect.Effect<void>
 }
 
-export interface Interface<State, DraftApi> extends Transformable<DraftApi> {
+export interface Interface<State, Editor> extends Transformable<Editor> {
   /**
    * Rebuilds synchronously when transforms changed since the last read. Each rebuild produces a new
    * value and never touches earlier ones, so callers may retain what they read.
@@ -110,17 +110,17 @@ export interface Interface<State, DraftApi> extends Transformable<DraftApi> {
   readonly get: () => State
 }
 
-export function create<State, DraftApi>(options: Options<State, DraftApi>): Interface<State, DraftApi> {
+export function create<State, Editor>(options: Options<State, Editor>): Interface<State, Editor> {
   let state = options.initial()
-  const transforms: { run: TransformCallback<DraftApi> }[] = []
+  const transforms: { run: TransformCallback<Editor> }[] = []
   let dirty = false
   let closed = false
 
   const get = () => {
     if (closed || !dirty) return state
     const next = options.initial()
-    const draft = options.draft(next)
-    for (const transform of transforms) transform.run(draft)
+    const editor = options.editor(next)
+    for (const transform of transforms) transform.run(editor)
     // Only a complete fold becomes visible; a throwing callback leaves the previous value and stays dirty.
     state = next
     dirty = false

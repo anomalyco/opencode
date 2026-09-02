@@ -21,7 +21,7 @@ const fallback = SessionSystemPrompt.make([])
 const makeHost = Effect.gen(function* () {
   const agents = yield* Agent.Service
   const plugins = yield* Plugin.Service
-  yield* agents.transform((draft) => draft.update(Agent.ID.make("build"), () => {}))
+  yield* agents.transform((editor) => editor.update(Agent.ID.make("build"), () => {}))
   return yield* PluginHost.make(plugins)
 })
 
@@ -66,9 +66,9 @@ describe("SystemPromptPlugin", () => {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* catalog.transform((draft) => {
+      yield* catalog.transform((editor) => {
         for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex"])
-          draft.model.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
+          editor.model.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
       })
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
         discard: true,
@@ -108,8 +108,8 @@ describe("SystemPromptPlugin", () => {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* catalog.transform((draft) =>
-        draft.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5"), () => {}),
+      yield* catalog.transform((editor) =>
+        editor.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5"), () => {}),
       )
       yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
       const event = context("gpt-5")
@@ -154,8 +154,8 @@ describe("SystemPromptPlugin", () => {
     Effect.gen(function* () {
       const agents = yield* Agent.Service
       const hooks = yield* PluginHooks.Service
-      yield* agents.transform((draft) =>
-        draft.update(Agent.ID.make("build"), (agent) => {
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("build"), (agent) => {
           agent.system = "Custom agent prompt"
         }),
       )
@@ -177,7 +177,7 @@ describe("SystemPromptPlugin", () => {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
-      yield* agents.transform((draft) => draft.remove(Agent.ID.make("build")))
+      yield* agents.transform((editor) => editor.remove(Agent.ID.make("build")))
       const event = context("gpt-5")
 
       yield* hooks.trigger("session", "context", event)
@@ -207,14 +207,14 @@ describe("SystemPromptPlugin", () => {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* catalog.transform((draft) => {
-        draft.model.update(Provider.ID.make("test"), Model.ID.make("openai-alias"), (model) => {
+      yield* catalog.transform((editor) => {
+        editor.model.update(Provider.ID.make("test"), Model.ID.make("openai-alias"), (model) => {
           model.modelID = Model.ID.make("gpt-5")
         })
-        draft.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5-alias"), (model) => {
+        editor.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5-alias"), (model) => {
           model.modelID = Model.ID.make("custom-model")
         })
-        draft.model.update(Provider.ID.make("test"), Model.ID.make("codex-family-alias"), (model) => {
+        editor.model.update(Provider.ID.make("test"), Model.ID.make("codex-family-alias"), (model) => {
           model.modelID = Model.ID.make("custom-deployment")
           model.family = Model.Family.make("gpt-codex")
         })

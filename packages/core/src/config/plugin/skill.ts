@@ -180,8 +180,8 @@ export const Plugin = define({
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* refresh()
-    yield* ctx.skill.transform((draft) => {
-      for (const skill of loaded.skills) draft.add(skill)
+    yield* ctx.skill.transform((editor) => {
+      for (const skill of loaded.skills) editor.add(skill)
     })
     yield* ctx.event.subscribe().pipe(
       Stream.filter((event) => event.type === "config.updated"),

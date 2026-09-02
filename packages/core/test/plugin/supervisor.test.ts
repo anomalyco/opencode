@@ -24,7 +24,7 @@ const greeter = (command: string) =>
   define({
     id,
     effect: (ctx) =>
-      ctx.command.transform((draft) => draft.add({ name: command, execute: () => Effect.void })).pipe(Effect.asVoid),
+      ctx.command.transform((editor) => editor.add({ name: command, execute: () => Effect.void })).pipe(Effect.asVoid),
   })
 
 const instances = Layer.effect(

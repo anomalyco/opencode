@@ -112,17 +112,17 @@ export const Plugin = define({
         Effect.forkScoped({ startImmediately: true }),
       )
       yield* refresh()
-      yield* discovery.transform((draft) => {
+      yield* discovery.transform((editor) => {
         if (loaded.current.type === "unavailable") {
-          draft.unavailable()
+          editor.unavailable()
           return
         }
-        for (const file of loaded.current.files) draft.add(file)
+        for (const file of loaded.current.files) editor.add(file)
       })
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("failed to activate instruction source", { cause }).pipe(
-          Effect.andThen(discovery.transform((draft) => draft.unavailable())),
+          Effect.andThen(discovery.transform((editor) => editor.unavailable())),
           Effect.asVoid,
         ),
       ),

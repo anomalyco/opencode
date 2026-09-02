@@ -62,8 +62,8 @@ it.live(
                     effect: (ctx) =>
                       Effect.gen(function* () {
                         expect(ctx.app).toMatchObject({ name: "instance-test", version: "1.2.3" })
-                        yield* ctx.agent.transform((draft) =>
-                          draft.update(Agent.ID.make("build"), (agent) => {
+                        yield* ctx.agent.transform((editor) =>
+                          editor.update(Agent.ID.make("build"), (agent) => {
                             agent.permissions = [{ action: "*", resource: "*", effect: "allow" }]
                           }),
                         )
@@ -72,8 +72,8 @@ it.live(
                             event.generation.temperature = 0.25
                           }),
                         )
-                        yield* ctx.tool.transform((draft) =>
-                          draft.add({
+                        yield* ctx.tool.transform((editor) =>
+                          editor.add({
                             name: "thread_echo",
                             description: "Report the configured thread",
                             input: Schema.Struct({}),

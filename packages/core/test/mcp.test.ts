@@ -1297,8 +1297,8 @@ testEffect(Layer.empty).live(
       const original = JSON.stringify(entries)
       yield* Effect.gen(function* () {
         const service = yield* Mcp.Service
-        const check = yield* service.transform((draft) => {
-          expect(draft.get("resources")).toEqual({
+        const check = yield* service.transform((editor) => {
+          expect(editor.get("resources")).toEqual({
             type: "local",
             command: ["later"],
             disabled: true,
@@ -1314,8 +1314,8 @@ testEffect(Layer.empty).live(
         } satisfies ConfigMCP.Local
         yield* service.add("resources", runtime)
         yield* service.reload()
-        yield* service.transform((draft) => {
-          expect(draft.get("resources")).toEqual(runtime)
+        yield* service.transform((editor) => {
+          expect(editor.get("resources")).toEqual(runtime)
         })
       }).pipe(
         Effect.provide(
@@ -1336,8 +1336,8 @@ testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unus
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* service.transform((draft) => {
-            draft.set("dynamic", {
+          yield* service.transform((editor) => {
+            editor.set("dynamic", {
               type: "local",
               command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
             })
@@ -1347,12 +1347,12 @@ testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unus
           )
           expect(yield* service.tools()).toHaveLength(2)
 
-          yield* service.transform((draft) => draft.update("dynamic", (server) => (server.codemode = false)))
+          yield* service.transform((editor) => editor.update("dynamic", (server) => (server.codemode = false)))
           expect((yield* service.tools()).map((tool) => tool.codemode)).toEqual([false, false])
 
           const settings = { disabled: true }
-          yield* service.transform((draft) => {
-            draft.update("dynamic", (server) => {
+          yield* service.transform((editor) => {
+            editor.update("dynamic", (server) => {
               server.disabled = settings.disabled
             })
           })
@@ -1366,7 +1366,7 @@ testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unus
           )
           expect(yield* service.tools()).toHaveLength(2)
 
-          const removed = yield* service.transform((draft) => draft.remove("dynamic"))
+          const removed = yield* service.transform((editor) => editor.remove("dynamic"))
           expect((yield* service.servers()).some((server) => server.name === "dynamic")).toBe(false)
           expect(yield* service.tools()).toEqual([])
 
@@ -1396,14 +1396,14 @@ test("restores runtime MCP config when a transform is disposed", async () => {
           disabled: true,
         })
         yield* service.add("dynamic", config)
-        const transformed = yield* service.transform((draft) =>
-          draft.update("dynamic", (server) => {
+        const transformed = yield* service.transform((editor) =>
+          editor.update("dynamic", (server) => {
             if (server.type === "remote") server.headers = { Authorization: "transformed" }
           }),
         )
         let observed: string | undefined
-        yield* service.transform((draft) => {
-          const server = draft.get("dynamic")
+        yield* service.transform((editor) => {
+          const server = editor.get("dynamic")
           observed = server?.type === "remote" ? server.headers?.Authorization : undefined
         })
 
@@ -1432,8 +1432,8 @@ test("isolates nested configured MCP mutations and reconciles them", async () =>
       Effect.gen(function* () {
         const service = yield* Mcp.Service
         expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(1)
-        yield* service.transform((draft) =>
-          draft.update("resources", (server) => {
+        yield* service.transform((editor) =>
+          editor.update("resources", (server) => {
             if (server.type === "remote" && server.headers) server.headers.Authorization = "transformed"
           }),
         )
@@ -1452,16 +1452,16 @@ testEffect(Layer.empty).live("batches MCP transforms without connecting intermed
       const service = yield* Mcp.Service
       const registrations = yield* State.batch(
         Effect.gen(function* () {
-          const added = yield* service.transform((draft) =>
-            draft.set("dynamic", {
+          const added = yield* service.transform((editor) =>
+            editor.set("dynamic", {
               type: "remote",
               url: server.url,
               oauth: false,
             }),
           )
           expect((yield* service.servers()).some((server) => server.name === "dynamic")).toBe(false)
-          const disabled = yield* service.transform((draft) =>
-            draft.update("dynamic", (config) => (config.disabled = true)),
+          const disabled = yield* service.transform((editor) =>
+            editor.update("dynamic", (config) => (config.disabled = true)),
           )
           return [added, disabled]
         }),
@@ -1587,13 +1587,13 @@ testEffect(Layer.empty).live("keeps MCP config snapshots stable during an in-fli
     yield* Effect.gen(function* () {
       const service = yield* Mcp.Service
       const replacing = yield* service
-        .transform((draft) => draft.update("resources", (config) => (config.disabled = false)))
+        .transform((editor) => editor.update("resources", (config) => (config.disabled = false)))
         .pipe(Effect.forkScoped({ startImmediately: true }))
       yield* Deferred.await(started)
 
       const restoring = yield* State.batch(
         Effect.gen(function* () {
-          yield* service.transform((draft) => draft.update("resources", (config) => (config.disabled = true)))
+          yield* service.transform((editor) => editor.update("resources", (config) => (config.disabled = true)))
           yield* Deferred.succeed(accepted, undefined)
         }),
       ).pipe(Effect.forkScoped({ startImmediately: true }))
@@ -1657,9 +1657,9 @@ shutdownIt.effect("discards in-flight and queued MCP notifications after its lay
     )
     const source = { url: "https://example.com/initial", added: false }
     yield* service
-      .transform((draft) => {
-        draft.set("fixture", { type: "remote", url: source.url, oauth: false, disabled: true })
-        if (source.added) draft.set("queued", { type: "local", command: ["unused"], disabled: true })
+      .transform((editor) => {
+        editor.set("fixture", { type: "remote", url: source.url, oauth: false, disabled: true })
+        if (source.added) editor.set("queued", { type: "local", command: ["unused"], disabled: true })
       })
       .pipe(Scope.provide(root))
 
@@ -1758,8 +1758,8 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
         "other_lookup",
         "execute",
       ])
-      const override = yield* registry.transform((draft) => {
-        draft.add({
+      const override = yield* registry.transform((editor) => {
+        editor.add({
           name: "search",
           options: { namespace: "demo", codemode: false },
           description: "Override search",
@@ -1768,11 +1768,11 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
           execute: () => Effect.succeed({ output: "override" }),
         })
       })
-      const mutation = yield* registry.transform((draft) => {
-        draft.update("other_lookup", (tool) => {
+      const mutation = yield* registry.transform((editor) => {
+        editor.update("other_lookup", (tool) => {
           tool.description += " updated"
         })
-        draft.remove("repaired_lookup")
+        editor.remove("repaired_lookup")
       })
 
       yield* Ref.set(catalog, [tool("demo", "y".repeat(65)), ...healthy, tool("demo", "added"), namespace])

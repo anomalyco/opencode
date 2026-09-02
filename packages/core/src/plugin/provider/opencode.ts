@@ -103,12 +103,12 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
         : undefined
     })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.update("opencode", (integration) => {
+    yield* ctx.integration.transform((editor) => {
+      editor.update("opencode", (integration) => {
         integration.name = "OpenCode"
       })
-      draft.method.update(oauth(http))
-      draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
+      editor.method.update(oauth(http))
+      editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
     yield* load()

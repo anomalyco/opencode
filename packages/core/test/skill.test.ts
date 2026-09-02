@@ -23,11 +23,11 @@ describe("Skill", () => {
   it.effect("registers values with last-write-wins precedence", () =>
     Effect.gen(function* () {
       const skill = yield* Skill.Service
-      yield* skill.transform((draft) => {
-        draft.add(info("review", "First"))
-        draft.add(info("deploy", "Deploy"))
-        draft.add(info("review", "Second"))
-        expect(draft.list().map((item) => item.id)).toEqual([Skill.ID.make("review"), Skill.ID.make("deploy")])
+      yield* skill.transform((editor) => {
+        editor.add(info("review", "First"))
+        editor.add(info("deploy", "Deploy"))
+        editor.add(info("review", "Second"))
+        expect(editor.list().map((item) => item.id)).toEqual([Skill.ID.make("review"), Skill.ID.make("deploy")])
       })
 
       expect(yield* skill.list()).toEqual([info("review", "Second"), info("deploy", "Deploy")])
@@ -39,17 +39,17 @@ describe("Skill", () => {
   it.effect("updates and removes registered values", () =>
     Effect.gen(function* () {
       const skill = yield* Skill.Service
-      yield* skill.transform((draft) => {
-        draft.add(info("review", "Initial"))
-        draft.update("review", (value) => {
+      yield* skill.transform((editor) => {
+        editor.add(info("review", "Initial"))
+        editor.update("review", (value) => {
           value.description = "Updated"
           value.id = Skill.ID.make("ignored")
         })
-        draft.update("missing", () => {
+        editor.update("missing", () => {
           throw new Error("unreachable")
         })
-        draft.add(info("deploy", "Deploy"))
-        draft.remove("deploy")
+        editor.add(info("deploy", "Deploy"))
+        editor.remove("deploy")
       })
 
       expect(yield* skill.list()).toEqual([info("review", "Updated")])
@@ -60,9 +60,9 @@ describe("Skill", () => {
     Effect.gen(function* () {
       const skill = yield* Skill.Service
       const original = info("review", "Initial")
-      yield* skill.transform((draft) => draft.add(original))
-      const updated = yield* skill.transform((draft) =>
-        draft.update("review", (value) => {
+      yield* skill.transform((editor) => editor.add(original))
+      const updated = yield* skill.transform((editor) =>
+        editor.update("review", (value) => {
           value.description = "Updated"
         }),
       )
@@ -85,7 +85,7 @@ describe("Skill", () => {
       )
       yield* Effect.yieldNow
 
-      yield* skill.transform((draft) => draft.add(info("review", "Visible")))
+      yield* skill.transform((editor) => editor.add(info("review", "Visible")))
       expect(yield* Deferred.await(updated).pipe(Effect.timeout("1 second"))).toEqual([info("review", "Visible")])
       yield* Fiber.interrupt(fiber)
     }),
@@ -94,8 +94,8 @@ describe("Skill", () => {
   it.effect("filters values by agent permissions", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
-      yield* agents.transform((draft) =>
-        draft.update(Agent.ID.make("reviewer"), (agent) => {
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("reviewer"), (agent) => {
           agent.permissions.push({ action: "skill", resource: "deploy", effect: "deny" })
         }),
       )

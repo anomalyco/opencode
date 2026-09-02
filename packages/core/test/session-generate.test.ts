@@ -200,8 +200,8 @@ const setup = Effect.gen(function* () {
   const instructionBuiltIns = yield* InstructionBuiltIns.Service
   const context = yield* SessionContext.Service
   const store = yield* SessionStore.Service
-  yield* agents.transform((draft) =>
-    draft.update(Agent.ID.make("build"), (agent) => {
+  yield* agents.transform((editor) =>
+    editor.update(Agent.ID.make("build"), (agent) => {
       agent.mode = "primary"
     }),
   )

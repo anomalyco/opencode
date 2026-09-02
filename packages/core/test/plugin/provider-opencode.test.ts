@@ -267,12 +267,12 @@ describe("OpencodePlugin", () => {
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
           const integrations = yield* Integration.Service
-          yield* catalog.transform((draft) => {
-            draft.provider.update(Provider.ID.openai, (provider) => {
+          yield* catalog.transform((editor) => {
+            editor.provider.update(Provider.ID.openai, (provider) => {
               provider.package = Provider.aisdk("@ai-sdk/openai")
               provider.integrationID = Integration.ID.make("openai")
             })
-            draft.model.update(Provider.ID.openai, Model.ID.make("api-model"), (model) => {
+            editor.model.update(Provider.ID.openai, Model.ID.make("api-model"), (model) => {
               model.package = Provider.aisdk("@ai-sdk/openai")
               model.settings = { baseURL: "https://upstream.example/v1" }
               model.variants = [
@@ -284,7 +284,7 @@ describe("OpencodePlugin", () => {
                 },
               ]
             })
-            draft.model.update(Provider.ID.make("remote"), Model.ID.make("stale"), () => {})
+            editor.model.update(Provider.ID.make("remote"), Model.ID.make("stale"), () => {})
           })
           const initial = yield* credentials.create({
             integrationID: Integration.ID.make("opencode"),

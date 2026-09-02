@@ -136,13 +136,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
       },
       reload: agents.reload,
       transform: (callback) =>
-        agents.transform((draft) => {
+        agents.transform((editor) => {
           callback({
-            list: () => mutable(draft.list()),
-            get: (id) => mutable(draft.get(Agent.ID.make(id))),
-            default: (id) => draft.default(id === undefined ? undefined : Agent.ID.make(id)),
-            update: (id, update) => draft.update(Agent.ID.make(id), update),
-            remove: (id) => draft.remove(Agent.ID.make(id)),
+            list: () => mutable(editor.list()),
+            get: (id) => mutable(editor.get(Agent.ID.make(id))),
+            default: (id) => editor.default(id === undefined ? undefined : Agent.ID.make(id)),
+            update: (id, update) => editor.update(Agent.ID.make(id), update),
+            remove: (id) => editor.remove(Agent.ID.make(id)),
           })
         }),
     },
@@ -196,24 +196,25 @@ export const make = Effect.fn("PluginHost.make")(function* (
       },
       reload: catalog.reload,
       transform: (callback) =>
-        catalog.transform((draft) => {
+        catalog.transform((editor) => {
           callback({
             provider: {
-              list: () => mutable(draft.provider.list()),
-              get: (id) => mutable(draft.provider.get(Provider.ID.make(id))),
-              update: (id, update) => draft.provider.update(Provider.ID.make(id), update),
-              remove: (id) => draft.provider.remove(Provider.ID.make(id)),
+              list: () => mutable(editor.provider.list()),
+              get: (id) => mutable(editor.provider.get(Provider.ID.make(id))),
+              update: (id, update) => editor.provider.update(Provider.ID.make(id), update),
+              remove: (id) => editor.provider.remove(Provider.ID.make(id)),
             },
             model: {
               get: (providerID, modelID) =>
-                mutable(draft.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))),
+                mutable(editor.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))),
               update: (providerID, modelID, update) =>
-                draft.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
-              remove: (providerID, modelID) => draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+                editor.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
+              remove: (providerID, modelID) =>
+                editor.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
               default: {
-                get: draft.model.default.get,
+                get: editor.model.default.get,
                 set: (providerID, modelID) =>
-                  draft.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
+                  editor.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
               },
             },
           })
@@ -315,17 +316,17 @@ export const make = Effect.fn("PluginHost.make")(function* (
           ),
       },
       transform: (callback) =>
-        integration.transform((draft) => {
+        integration.transform((editor) => {
           callback({
-            list: () => mutable(draft.list()),
-            get: (id) => mutable(draft.get(Integration.ID.make(id))),
-            update: (id, update) => draft.update(Integration.ID.make(id), update),
-            remove: (id) => draft.remove(Integration.ID.make(id)),
+            list: () => mutable(editor.list()),
+            get: (id) => mutable(editor.get(Integration.ID.make(id))),
+            update: (id, update) => editor.update(Integration.ID.make(id), update),
+            remove: (id) => editor.remove(Integration.ID.make(id)),
             method: {
-              list: (id) => draft.method.list(Integration.ID.make(id)),
-              update: (input) => draft.method.update(methodImplementation(input)),
+              list: (id) => editor.method.list(Integration.ID.make(id)),
+              update: (input) => editor.method.update(methodImplementation(input)),
               remove: (id, method) =>
-                draft.method.remove(Integration.ID.make(id), Schema.decodeUnknownSync(Integration.Method)(method)),
+                editor.method.remove(Integration.ID.make(id), Schema.decodeUnknownSync(Integration.Method)(method)),
             },
           })
         }),
@@ -350,13 +351,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
       },
       reload: mcp.reload,
       transform: (callback) =>
-        mcp.transform((draft) => {
+        mcp.transform((editor) => {
           callback({
-            list: () => draft.list().map(([name, config]) => [name, mutable(config)]),
-            get: (name) => mutable(draft.get(name)),
-            set: (name, config) => draft.set(name, Schema.decodeUnknownSync(ServerConfig)(config)),
-            update: draft.update,
-            remove: draft.remove,
+            list: () => editor.list().map(([name, config]) => [name, mutable(config)]),
+            get: (name) => mutable(editor.get(name)),
+            set: (name, config) => editor.set(name, Schema.decodeUnknownSync(ServerConfig)(config)),
+            update: editor.update,
+            remove: editor.remove,
           })
         }),
     },
@@ -391,11 +392,11 @@ export const make = Effect.fn("PluginHost.make")(function* (
       list: () => response(reference.list()),
       reload: reference.reload,
       transform: (callback) =>
-        reference.transform((draft) => {
+        reference.transform((editor) => {
           callback({
-            add: (name, source) => draft.add(name, Schema.decodeUnknownSync(Reference.Source)(source)),
-            remove: draft.remove,
-            list: draft.list,
+            add: (name, source) => editor.add(name, Schema.decodeUnknownSync(Reference.Source)(source)),
+            remove: editor.remove,
+            list: editor.list,
           })
         }),
     },
@@ -403,12 +404,12 @@ export const make = Effect.fn("PluginHost.make")(function* (
       list: () => response(skill.list()),
       reload: skill.reload,
       transform: (callback) =>
-        skill.transform((draft) => {
+        skill.transform((editor) => {
           callback({
-            list: () => mutable(draft.list()),
-            add: (value) => draft.add(Schema.decodeUnknownSync(Skill.Info)(value)),
-            update: draft.update,
-            remove: draft.remove,
+            list: () => mutable(editor.list()),
+            add: (value) => editor.add(Schema.decodeUnknownSync(Skill.Info)(value)),
+            update: editor.update,
+            remove: editor.remove,
           })
         }),
     },
@@ -441,18 +442,18 @@ export const make = Effect.fn("PluginHost.make")(function* (
         ),
       reload: websearch.reload,
       transform: (callback) =>
-        websearch.transform((draft) => {
+        websearch.transform((editor) => {
           callback({
             add: (definition) =>
-              draft.add({
+              editor.add({
                 id: WebSearch.ID.make(definition.id),
                 name: definition.name,
                 execute: definition.execute,
               }),
             default: {
-              get: draft.default.get,
+              get: editor.default.get,
               set: (selection) =>
-                draft.default.set(
+                editor.default.set(
                   selection === false || selection === "random" ? selection : WebSearch.ID.make(selection),
                 ),
             },

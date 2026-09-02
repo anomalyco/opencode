@@ -38,8 +38,8 @@ describe("Catalog", () => {
         const catalog = yield* Catalog.Service
         const providerID = Provider.ID.make("resolve-fixture")
         const modelID = Model.ID.make("fixture-model")
-        yield* catalog.transform((draft) =>
-          draft.model.update(providerID, modelID, (model) => {
+        yield* catalog.transform((editor) =>
+          editor.model.update(providerID, modelID, (model) => {
             model.package = path === "aisdk" ? Provider.aisdk("@ai-sdk/fixture") : "@opencode-ai/ai/providers/openai"
             model.settings = {
               apiKey: path === "empty-key" ? "" : "fixture-key",
@@ -62,8 +62,8 @@ describe("Catalog", () => {
             },
           )
 
-        yield* catalog.transform((draft) =>
-          draft.model.update(providerID, modelID, (model) => {
+        yield* catalog.transform((editor) =>
+          editor.model.update(providerID, modelID, (model) => {
             model.limit.context = 100_000
             model.capabilities.tools = false
             model.variants.push({ id: Model.VariantID.make("other") })
@@ -323,7 +323,7 @@ describe("Catalog", () => {
       const providerID = Provider.ID.make("test")
       const old = Model.ID.make("old")
       const newest = Model.ID.make("new")
-      const models = (catalog: Catalog.Draft) => {
+      const models = (catalog: Catalog.Editor) => {
         catalog.provider.update(providerID, () => {})
         catalog.model.update(providerID, old, (model) => {
           model.time.released = 1000

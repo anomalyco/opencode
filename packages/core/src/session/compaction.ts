@@ -75,7 +75,7 @@ export type Settings = {
   tokens: number
 }
 
-export type Draft = {
+export type Editor = {
   configure: (settings: Partial<Settings>) => void
 }
 
@@ -116,7 +116,7 @@ export type Outcome =
   | Pick<SessionMessage.CompactionCompleted, "status">
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly enabled: () => boolean
   readonly required: (input: RequiredInput) => boolean
   readonly compact: (input: AutoInput) => Effect.Effect<Outcome>
@@ -326,14 +326,14 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
 
-    const state = State.create<Settings, Draft>({
+    const state = State.create<Settings, Editor>({
       name: "session-compaction",
       initial: () => ({ auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS }),
-      draft: (draft) => ({
+      editor: (editor) => ({
         configure: (settings) => {
-          if (settings.auto !== undefined) draft.auto = settings.auto
-          if (settings.buffer !== undefined) draft.buffer = settings.buffer
-          if (settings.tokens !== undefined) draft.tokens = settings.tokens
+          if (settings.auto !== undefined) editor.auto = settings.auto
+          if (settings.buffer !== undefined) editor.buffer = settings.buffer
+          if (settings.tokens !== undefined) editor.tokens = settings.tokens
         },
       }),
     })

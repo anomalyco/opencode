@@ -182,8 +182,8 @@ describe("SessionRunnerLLM recorded", () => {
       const agents = yield* Agent.Service
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
-      yield* agents.transform((draft) =>
-        draft.update(Agent.ID.make("build"), (agent) => {
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("build"), (agent) => {
           agent.mode = "primary"
           agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
         }),

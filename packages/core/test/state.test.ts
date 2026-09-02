@@ -11,7 +11,7 @@ describe("State", () => {
       let block = true
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
-        draft: (draft) => ({ add: (value: string) => draft.values.push(value) }),
+        editor: (editor) => ({ add: (value: string) => editor.values.push(value) }),
         notify: () =>
           block ? Deferred.succeed(rebuilding, undefined).pipe(Effect.andThen(Deferred.await(release))) : Effect.void,
       })
@@ -38,12 +38,12 @@ describe("State", () => {
       const observed: string[][] = []
       const state: State.Interface<{ values: string[] }, { add: (item: string) => void }> = State.create({
         initial: () => ({ values: [] as string[] }),
-        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        editor: (editor) => ({ add: (item: string) => editor.values.push(item) }),
         notify: () => Effect.sync(() => observed.push([...state.get().values])),
       })
 
-      yield* state.transform((draft) => {
-        draft.add("value")
+      yield* state.transform((editor) => {
+        editor.add("value")
       })
 
       // Update events publish from notify, so consumers reading on the event
@@ -57,7 +57,7 @@ describe("State", () => {
       let value = "first"
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
-        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        editor: (editor) => ({ add: (item: string) => editor.values.push(item) }),
       })
 
       yield* state.transform((editor) => {
@@ -75,7 +75,7 @@ describe("State", () => {
     Effect.gen(function* () {
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
-        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        editor: (editor) => ({ add: (item: string) => editor.values.push(item) }),
       })
       yield* state.transform((editor) => {
         editor.add("first")
@@ -98,25 +98,25 @@ describe("State", () => {
       let finalized = 0
       const first = State.create({
         initial: () => ({ values: [] as string[] }),
-        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        editor: (editor) => ({ add: (item: string) => editor.values.push(item) }),
         notify: () => Effect.sync(() => finalized++),
       })
       const second = State.create({
         initial: () => ({ values: [] as string[] }),
-        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        editor: (editor) => ({ add: (item: string) => editor.values.push(item) }),
         notify: () => Effect.sync(() => finalized++),
       })
 
       yield* State.batch(
         Effect.gen(function* () {
-          yield* first.transform((draft) => {
-            draft.add("first")
+          yield* first.transform((editor) => {
+            editor.add("first")
           })
-          yield* first.transform((draft) => {
-            draft.add("second")
+          yield* first.transform((editor) => {
+            editor.add("second")
           })
-          yield* second.transform((draft) => {
-            draft.add("third")
+          yield* second.transform((editor) => {
+            editor.add("third")
           })
           expect(finalized).toBe(0)
         }),
@@ -134,7 +134,7 @@ describe("State", () => {
       let disposed = 0
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
-        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        editor: (editor) => ({ add: (item: string) => editor.values.push(item) }),
         notify: () => Effect.sync(() => finalized++),
       })
       const scope = yield* Scope.make()
@@ -142,7 +142,7 @@ describe("State", () => {
         scope,
         Effect.sync(() => disposed++),
       )
-      const registration = yield* state.transform((draft) => draft.add("value")).pipe(Scope.provide(scope))
+      const registration = yield* state.transform((editor) => editor.add("value")).pipe(Scope.provide(scope))
       expect(finalized).toBe(1)
 
       yield* State.shutdown(Scope.close(scope, Exit.void))
@@ -160,12 +160,12 @@ describe("State", () => {
       const finalized: string[] = []
       const closing = State.create({
         initial: () => ({}),
-        draft: (draft) => draft,
+        editor: (editor) => editor,
         notify: () => Effect.sync(() => finalized.push("closing")),
       })
       const live = State.create({
         initial: () => ({}),
-        draft: (draft) => draft,
+        editor: (editor) => editor,
         notify: () => Effect.sync(() => finalized.push("live")),
       })
       const scope = yield* Scope.make()
@@ -187,11 +187,11 @@ describe("State", () => {
       let finalized = 0
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
-        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        editor: (editor) => ({ add: (item: string) => editor.values.push(item) }),
         notify: () => Effect.sync(() => finalized++),
       })
-      yield* state.transform((draft) => {
-        draft.add("value")
+      yield* state.transform((editor) => {
+        editor.add("value")
       })
       finalized = 0
 
@@ -209,19 +209,19 @@ describe("State rebuild", () => {
     Effect.gen(function* () {
       const state = State.create({
         initial: () => ({ values: new Array<string>(), tags: new Map<string, number>() }),
-        draft: (data) => data,
+        editor: (data) => data,
       })
       yield* State.batch(
         Effect.gen(function* () {
-          yield* state.transform((draft) => {
-            draft.values.push("first")
-            draft.tags.set("first", 1)
+          yield* state.transform((editor) => {
+            editor.values.push("first")
+            editor.tags.set("first", 1)
           })
           const retained = state.get()
           expect(state.get()).toBe(retained)
-          yield* state.transform((draft) => {
-            draft.values.push("second")
-            draft.tags.set("second", 2)
+          yield* state.transform((editor) => {
+            editor.values.push("second")
+            editor.tags.set("second", 2)
           })
           const current = state.get()
           expect(current).not.toBe(retained)
@@ -234,12 +234,12 @@ describe("State rebuild", () => {
     }),
   )
 
-  it.effect("recreates the draft with every rebuild", () =>
+  it.effect("recreates the editor with every rebuild", () =>
     Effect.gen(function* () {
       let drafts = 0
       const state = State.create({
         initial: () => ({ values: new Array<number>() }),
-        draft: (data) => {
+        editor: (data) => {
           drafts++
           let sequence = 0
           return { add: () => data.values.push(++sequence) }
@@ -247,10 +247,10 @@ describe("State rebuild", () => {
       })
       yield* State.batch(
         Effect.gen(function* () {
-          yield* state.transform((draft) => draft.add())
+          yield* state.transform((editor) => editor.add())
           expect(state.get().values).toEqual([1])
           expect(drafts).toBe(1)
-          yield* state.transform((draft) => draft.add())
+          yield* state.transform((editor) => editor.add())
           expect(state.get().values).toEqual([1, 2])
           expect(drafts).toBe(2)
           yield* state.reload()
@@ -267,7 +267,7 @@ describe("State rebuild", () => {
       const notifications: string[][] = []
       const state = State.create({
         initial: () => ({ values: new Array<string>() }),
-        draft: (data) => data,
+        editor: (data) => data,
         notify: (value) => Effect.sync(() => notifications.push([...value.values])),
       })
       expect(state.get().values).toEqual([])
@@ -276,31 +276,31 @@ describe("State rebuild", () => {
 
       yield* State.batch(
         Effect.gen(function* () {
-          yield* state.transform((draft) => {
+          yield* state.transform((editor) => {
             calls.push("first")
-            draft.values.push("first")
+            editor.values.push("first")
           })
-          yield* state.transform((draft) => {
+          yield* state.transform((editor) => {
             calls.push("second")
-            draft.values.push("second")
+            editor.values.push("second")
           })
           expect(calls).toEqual([])
           const view = state.get()
           expect(view.values).toEqual(["first", "second"])
           expect(state.get()).toBe(view)
           expect(calls).toEqual(["first", "second"])
-          yield* state.transform((draft) => {
+          yield* state.transform((editor) => {
             calls.push("third")
-            draft.values.push("third")
+            editor.values.push("third")
           })
           expect(calls).toEqual(["first", "second"])
           expect(state.get()).not.toBe(view)
           expect(state.get().values).toEqual(["first", "second", "third"])
           expect(view.values).toEqual(["first", "second"])
           expect(calls).toEqual(["first", "second", "first", "second", "third"])
-          yield* state.transform((draft) => {
+          yield* state.transform((editor) => {
             calls.push("fourth")
-            draft.values.push("fourth")
+            editor.values.push("fourth")
           })
           expect(notifications).toEqual([])
         }),
@@ -313,22 +313,22 @@ describe("State rebuild", () => {
   it.effect("replays every callback after each change outside a batch", () =>
     Effect.gen(function* () {
       const calls: number[] = []
-      const state = State.create({ initial: () => ({ value: 2 }), draft: (data) => data })
-      yield* state.transform((draft) => {
+      const state = State.create({ initial: () => ({ value: 2 }), editor: (data) => data })
+      yield* state.transform((editor) => {
         calls.push(1)
-        draft.value += 3
+        editor.value += 3
       })
-      yield* state.transform((draft) => {
+      yield* state.transform((editor) => {
         calls.push(2)
-        draft.value *= 4
+        editor.value *= 4
       })
       // Each registration outside a batch notifies immediately, and notification materializes.
       expect(calls).toEqual([1, 1, 2])
       expect(state.get().value).toBe(20)
       expect(calls).toEqual([1, 1, 2])
-      yield* state.transform((draft) => {
+      yield* state.transform((editor) => {
         calls.push(3)
-        draft.value -= 1
+        editor.value -= 1
       })
       expect(state.get().value).toBe(19)
       expect(calls).toEqual([1, 1, 2, 1, 2, 3])
@@ -338,20 +338,20 @@ describe("State rebuild", () => {
     it.effect(`rebuilds noncommutative edits after removing position ${removed}`, () =>
       Effect.gen(function* () {
         const calls: number[] = []
-        const state = State.create({ initial: () => ({ value: 5 }), draft: (data) => data })
+        const state = State.create({ initial: () => ({ value: 5 }), editor: (data) => data })
         const registrations = yield* State.batch(
           Effect.all([
-            state.transform((draft) => {
+            state.transform((editor) => {
               calls.push(0)
-              draft.value += 1
+              editor.value += 1
             }),
-            state.transform((draft) => {
+            state.transform((editor) => {
               calls.push(1)
-              draft.value *= 3
+              editor.value *= 3
             }),
-            state.transform((draft) => {
+            state.transform((editor) => {
               calls.push(2)
-              draft.value -= 4
+              editor.value -= 4
             }),
           ]),
         )
@@ -371,8 +371,8 @@ describe("State rebuild", () => {
 
   it.effect("keeps equal callback registrations independently disposable", () =>
     Effect.gen(function* () {
-      const state = State.create({ initial: () => ({ value: 0 }), draft: (data) => data })
-      const callback = (draft: { value: number }) => draft.value++
+      const state = State.create({ initial: () => ({ value: 0 }), editor: (data) => data })
+      const callback = (editor: { value: number }) => editor.value++
       const first = yield* state.transform(callback)
       const second = yield* state.transform(callback)
       expect(state.get().value).toBe(2)
@@ -388,7 +388,7 @@ describe("State rebuild", () => {
   it.effect("does not evaluate a pending callback removed before the first read", () =>
     Effect.gen(function* () {
       let calls = 0
-      const state = State.create({ initial: () => ({ value: 0 }), draft: (data) => data })
+      const state = State.create({ initial: () => ({ value: 0 }), editor: (data) => data })
       yield* State.batch(
         Effect.gen(function* () {
           const registration = yield* state.transform(() => calls++)
@@ -407,12 +407,12 @@ describe("State rebuild", () => {
       let notifications = 0
       const state = State.create({
         initial: () => ({ value: 0 }),
-        draft: (data) => data,
+        editor: (data) => data,
         notify: () => Effect.sync(() => notifications++),
       })
-      yield* state.transform((draft) => {
+      yield* state.transform((editor) => {
         calls++
-        draft.value += source
+        editor.value += source
       })
       notifications = 0
       source = 2
@@ -426,7 +426,7 @@ describe("State rebuild", () => {
           source = 3
           yield* state.reload()
           expect(state.get().value).toBe(3)
-          yield* state.transform((draft) => (draft.value *= 10))
+          yield* state.transform((editor) => (editor.value *= 10))
           expect(state.get().value).toBe(30)
           expect(calls).toBe(4)
           expect(notifications).toBe(1)
@@ -439,7 +439,7 @@ describe("State rebuild", () => {
   it.effect("resamples a changing initial value even when there are no transforms", () =>
     Effect.gen(function* () {
       let source = 1
-      const state = State.create({ initial: () => ({ value: source }), draft: (data) => data })
+      const state = State.create({ initial: () => ({ value: source }), editor: (data) => data })
       expect(state.get().value).toBe(1)
       // A captured input changed but nothing invalidated the value, so reads stay cached.
       source = 2
@@ -462,15 +462,15 @@ describe("State rebuild", () => {
           initializations++
           return { values: new Array<string>() }
         },
-        draft: (data) => data,
+        editor: (data) => data,
       })
-      yield* state.transform((draft) => draft.values.push("first"))
+      yield* state.transform((editor) => editor.values.push("first"))
       const before = state.get()
       expect(initializations).toBe(2)
       yield* State.batch(
         Effect.gen(function* () {
-          yield* state.transform((draft) => {
-            draft.values.push("second")
+          yield* state.transform((editor) => {
+            editor.values.push("second")
             if (fail) throw new Error("failed edit")
           })
           expect(() => state.get()).toThrow("failed edit")
@@ -482,7 +482,7 @@ describe("State rebuild", () => {
           fail = false
           expect(state.get().values).toEqual(["first", "second"])
           expect(initializations).toBe(5)
-          yield* state.transform((draft) => draft.values.push("third"))
+          yield* state.transform((editor) => editor.values.push("third"))
           expect(state.get().values).toEqual(["first", "second", "third"])
           expect(initializations).toBe(6)
         }),
@@ -492,18 +492,18 @@ describe("State rebuild", () => {
 
   it.effect("recovers by disposing a failing callback without keeping its partial edits", () =>
     Effect.gen(function* () {
-      const state = State.create({ initial: () => ({ value: 2 }), draft: (data) => data })
-      yield* state.transform((draft) => (draft.value *= 3))
+      const state = State.create({ initial: () => ({ value: 2 }), editor: (data) => data })
+      yield* state.transform((editor) => (editor.value *= 3))
       yield* State.batch(
         Effect.gen(function* () {
-          const failing = yield* state.transform((draft) => {
-            draft.value += 100
+          const failing = yield* state.transform((editor) => {
+            editor.value += 100
             throw new Error("bad callback")
           })
           expect(() => state.get()).toThrow("bad callback")
           yield* failing.dispose
           expect(state.get().value).toBe(6)
-          yield* state.transform((draft) => (draft.value += 1))
+          yield* state.transform((editor) => (editor.value += 1))
           expect(state.get().value).toBe(7)
         }),
       )
@@ -522,7 +522,7 @@ describe("State notification boundaries", () => {
           let block = true
           const first = State.create({
             initial: () => ({ value: 0 }),
-            draft: (data) => data,
+            editor: (data) => data,
             notify: () =>
               Effect.gen(function* () {
                 observed.push("first")
@@ -533,13 +533,13 @@ describe("State notification boundaries", () => {
           })
           const second = State.create({
             initial: () => ({ value: 0 }),
-            draft: (data) => data,
+            editor: (data) => data,
             notify: () => Effect.sync(() => observed.push("second")),
           })
           const writer = yield* State.batch(
             Effect.gen(function* () {
-              yield* first.transform((draft) => draft.value++)
-              yield* second.transform((draft) => draft.value++)
+              yield* first.transform((editor) => editor.value++)
+              yield* second.transform((editor) => editor.value++)
               if (phase !== "body") return
               yield* Deferred.succeed(entered, undefined)
               yield* Effect.never
@@ -560,20 +560,20 @@ describe("State notification boundaries", () => {
       let notifications = 0
       const state = State.create({
         initial: () => ({ value: 0 }),
-        draft: (data) => data,
+        editor: (data) => data,
         notify: () => Effect.sync(() => notifications++),
       })
       const inherit = yield* State.batch(
         Effect.gen(function* () {
-          yield* state.transform((draft) => draft.value++)
-          yield* State.batch(state.transform((draft) => draft.value++))
+          yield* state.transform((editor) => editor.value++)
+          yield* State.batch(state.transform((editor) => editor.value++))
           expect(state.get().value).toBe(2)
           expect(notifications).toBe(0)
           return yield* State.inherit()
         }),
       )
       expect(notifications).toBe(1)
-      yield* inherit(state.transform((draft) => draft.value++))
+      yield* inherit(state.transform((editor) => editor.value++))
       expect(state.get().value).toBe(3)
       expect(notifications).toBe(2)
     }),
@@ -584,10 +584,10 @@ describe("State notification boundaries", () => {
       const scope = yield* Scope.Scope
       const observed: number[] = []
       let added = false
-      const other = State.create({ initial: () => ({ value: 0 }), draft: (data) => data })
+      const other = State.create({ initial: () => ({ value: 0 }), editor: (data) => data })
       const state: State.Interface<object, object> = State.create({
         initial: () => ({}),
-        draft: (data) => data,
+        editor: (data) => data,
         notify: () =>
           Effect.gen(function* () {
             observed.push(other.get().value)
@@ -599,7 +599,7 @@ describe("State notification boundaries", () => {
       yield* State.batch(
         Effect.gen(function* () {
           yield* state.transform(() => {})
-          yield* other.transform((draft) => (draft.value = 42))
+          yield* other.transform((editor) => (editor.value = 42))
         }),
       )
       expect(observed).toEqual([42, 42])
@@ -613,7 +613,7 @@ describe("State notification boundaries", () => {
       const observed: number[] = []
       const state: State.Interface<{ value: number }, { value: number }> = State.create({
         initial: () => ({ value: 0 }),
-        draft: (data) => data,
+        editor: (data) => data,
         notify: () =>
           Effect.gen(function* () {
             observed.push(state.get().value)
@@ -623,7 +623,7 @@ describe("State notification boundaries", () => {
             yield* state.reload()
           }),
       })
-      yield* state.transform((draft) => (draft.value = source))
+      yield* state.transform((editor) => (editor.value = source))
       source = 2
       reloadAgain = true
       yield* state.reload()
@@ -637,12 +637,12 @@ describe("State notification boundaries", () => {
       let fail = true
       const first = State.create({
         initial: () => ({}),
-        draft: (data) => data,
+        editor: (data) => data,
         notify: () => (fail ? Effect.die("observer failed") : Effect.void),
       })
       const second = State.create({
         initial: () => ({}),
-        draft: (data) => data,
+        editor: (data) => data,
         notify: () => Effect.sync(() => observed.push("second")),
       })
       const exit = yield* State.batch(
@@ -668,7 +668,7 @@ describe("State notification boundaries", () => {
       let notifications = 0
       const state = State.create({
         initial: () => ({}),
-        draft: (data) => data,
+        editor: (data) => data,
         notify: () =>
           Effect.sync(() => {
             notifications++

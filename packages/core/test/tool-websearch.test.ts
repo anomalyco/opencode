@@ -55,9 +55,9 @@ const setup = Effect.gen(function* () {
   const fixture = new Fixture()
   const websearch = yield* TestWebSearch.Service
   const kv = yield* KV.Service
-  yield* websearch.transform((draft) =>
+  yield* websearch.transform((editor) =>
     providers.forEach((provider) =>
-      draft.add({
+      editor.add({
         ...provider,
         execute: () =>
           Effect.gen(function* () {

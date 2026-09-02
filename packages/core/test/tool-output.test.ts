@@ -23,7 +23,7 @@ const withStore = <A, E, R>(
       return Effect.gen(function* () {
         const output = yield* ToolOutput.Service
         const fs = yield* FSUtil.Service
-        if (limits) yield* output.transform((draft) => draft.configure(limits))
+        if (limits) yield* output.transform((editor) => editor.configure(limits))
         return yield* body(output, fs, tmp.path)
       }).pipe(Effect.provide(layer))
     },

@@ -80,13 +80,13 @@ export const AzurePlugin = define({
         ])
       })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update({
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update({
         integrationID: Provider.ID.azure,
         method: { type: "key", label: "API key", form: form() },
       })
       if (!available) return
-      draft.method.update({
+      editor.method.update({
         integrationID: Provider.ID.azure,
         method: {
           id: methodID,

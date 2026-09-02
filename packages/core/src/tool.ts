@@ -23,7 +23,7 @@ export class RegistrationError extends Schema.TaggedError<RegistrationError>()("
   message: Schema.String,
 }) {}
 
-export interface Draft {
+export interface Editor {
   readonly list: () => readonly (Tool.Info & { readonly id: string })[]
   readonly get: (id: string) => (Tool.Info & { readonly id: string }) | undefined
   readonly namespace: (namespace: Tool.Namespace) => void
@@ -38,7 +38,7 @@ type Data = {
   errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
 }
 
@@ -149,35 +149,35 @@ const layer = Layer.effect(
       }
     })
 
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "tool",
       initial: () => ({
         tools: new Map(),
         namespaces: new Map(),
         errors: [],
       }),
-      draft: (draft) => ({
-        list: () => Array.from(draft.tools.values()),
-        get: (id) => draft.tools.get(id),
+      editor: (editor) => ({
+        list: () => Array.from(editor.tools.values()),
+        get: (id) => editor.tools.get(id),
         namespace: (namespace) => {
           const error = namespaceError(namespace.name)
           if (error) {
-            draft.errors.push({ kind: "namespace", name: namespace.name, namespace: namespace.name, error })
+            editor.errors.push({ kind: "namespace", name: namespace.name, namespace: namespace.name, error })
             return
           }
-          draft.namespaces.set(namespace.name, { ...namespace })
+          editor.namespaces.set(namespace.name, { ...namespace })
         },
         add: (tool) => {
           const error = registrationError(tool)
           if (error) {
-            draft.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
+            editor.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
             return
           }
           const id = effectiveName(tool)
-          draft.tools.set(id, { ...tool, id, options: tool.options && { ...tool.options } })
+          editor.tools.set(id, { ...tool, id, options: tool.options && { ...tool.options } })
         },
         update: (id, update) => {
-          const current = draft.tools.get(id)
+          const current = editor.tools.get(id)
           if (!current) return
           const tool = { ...current, options: current.options && { ...current.options } }
           update(tool)
@@ -187,13 +187,13 @@ const layer = Layer.effect(
             tool.options = { ...tool.options, namespace: current.options?.namespace }
           const error = registrationError(tool)
           if (error) {
-            draft.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
+            editor.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
             return
           }
-          draft.tools.set(id, tool)
+          editor.tools.set(id, tool)
         },
         remove: (id) => {
-          draft.tools.delete(id)
+          editor.tools.delete(id)
         },
       }),
       notify: (value) =>

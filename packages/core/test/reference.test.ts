@@ -61,13 +61,13 @@ describe("Reference", () => {
 
       yield* State.batch(
         Effect.gen(function* () {
-          yield* references.transform((draft) =>
-            draft.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/docs") })),
+          yield* references.transform((editor) =>
+            editor.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/docs") })),
           )
           expect((yield* references.list()).map((info) => info.name)).toEqual(["docs"])
 
-          yield* references.transform((draft) => {
-            draft.add(
+          yield* references.transform((editor) => {
+            editor.add(
               "sdk",
               Reference.GitSource.make({
                 type: "git",
@@ -77,12 +77,12 @@ describe("Reference", () => {
                 hidden: true,
               }),
             )
-            draft.add("invalid", Reference.GitSource.make({ type: "git", repository: "invalid" }))
-            draft.add(
+            editor.add("invalid", Reference.GitSource.make({ type: "git", repository: "invalid" }))
+            editor.add(
               "invalid-branch",
               Reference.GitSource.make({ type: "git", repository: "owner/repo", branch: "../escape" }),
             )
-            draft.add("file", Reference.GitSource.make({ type: "git", repository: "file:///docs" }))
+            editor.add("file", Reference.GitSource.make({ type: "git", repository: "file:///docs" }))
           })
           const infos = yield* references.list()
           expect(infos.map((info) => info.name)).toEqual(["docs", "sdk"])
@@ -122,8 +122,8 @@ describe("Reference", () => {
           if (event.type !== Reference.Event.Updated.type || reentered) return
           reentered = true
           yield* references
-            .transform((draft) =>
-              draft.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/new") })),
+            .transform((editor) =>
+              editor.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/new") })),
             )
             .pipe(Scope.provide(scope))
         }),
@@ -139,8 +139,8 @@ describe("Reference", () => {
       )
       yield* Effect.addFinalizer(() => first.pipe(Effect.andThen(second)))
 
-      yield* references.transform((draft) =>
-        draft.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/old") })),
+      yield* references.transform((editor) =>
+        editor.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/old") })),
       )
 
       expect((yield* references.list()).map((info) => info.path)).toEqual([AbsolutePath.make("/new")])

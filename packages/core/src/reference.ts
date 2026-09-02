@@ -28,13 +28,13 @@ type Data = {
   sources: Map<string, Source>
 }
 
-type Draft = {
+type Editor = {
   add(name: string, source: Source): void
   remove(name: string): void
   list(): readonly [string, Source][]
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -91,13 +91,13 @@ const layer = Layer.effect(
         { concurrency: 4, discard: true },
       )
     })
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "reference",
       initial: () => ({ sources: new Map() }),
-      draft: (draft) => ({
-        add: (name, source) => draft.sources.set(name, source),
-        remove: (name) => draft.sources.delete(name),
-        list: () => Array.from(draft.sources),
+      editor: (editor) => ({
+        add: (name, source) => editor.sources.set(name, source),
+        remove: (name) => editor.sources.delete(name),
+        list: () => Array.from(editor.sources),
       }),
       notify: () =>
         Effect.gen(function* () {

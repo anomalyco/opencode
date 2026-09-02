@@ -239,10 +239,10 @@ const withScanner = <A, E, R>(
         return yield* withSession(fixture.active, (registry) =>
           Effect.gen(function* () {
             const selection = yield* ShellSelect.Service
-            yield* selection.transform((draft) => draft.configure(shell))
+            yield* selection.transform((editor) => editor.configure(shell))
             const agents = yield* Agent.Service
-            yield* agents.transform((draft) =>
-              draft.update(toolIdentity.agent, (agent) => {
+            yield* agents.transform((editor) =>
+              editor.update(toolIdentity.agent, (agent) => {
                 agent.permissions = []
               }),
             )
@@ -348,8 +348,8 @@ describe("ShellTool scanner permissions", () => {
           expect((yield* saved.list()).map((item) => item.resource)).toEqual(["printf *"])
 
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [{ action: "shell", resource: "printf hello", effect: "deny" }]
             }),
           )
@@ -384,8 +384,8 @@ describe("ShellTool scanner permissions", () => {
           expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
 
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [{ action: "shell", resource: "cat", effect: "deny" }]
             }),
           )
@@ -404,8 +404,8 @@ describe("ShellTool scanner permissions", () => {
       withScanner(portable, (registry, fixture) =>
         Effect.gen(function* () {
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [{ action: "shell", resource: "*", effect: "allow" }]
             }),
           )
@@ -445,8 +445,8 @@ describe("ShellTool scanner permissions", () => {
         Effect.gen(function* () {
           yield* Effect.promise(() => fs.symlink(fixture.outside, path.join(fixture.active, "123")))
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [
                 { action: "shell", resource: "*", effect: "allow" },
                 { action: "external_directory", resource: "*", effect: "deny" },
@@ -477,8 +477,8 @@ describe("ShellTool scanner permissions", () => {
       withScanner(portable, (registry, fixture) =>
         Effect.gen(function* () {
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [
                 { action: "shell", resource: "*", effect: "allow" },
                 { action: "external_directory", resource: path.join(fixture.outside, "*"), effect: "deny" },
@@ -595,8 +595,8 @@ describe("ShellTool ordinary shell syntax", () => {
           (registry, directory) =>
             Effect.gen(function* () {
               const agents = yield* Agent.Service
-              yield* agents.transform((draft) =>
-                draft.update(toolIdentity.agent, (agent) => {
+              yield* agents.transform((editor) =>
+                editor.update(toolIdentity.agent, (agent) => {
                   agent.permissions = [
                     { action: "shell", resource: "*", effect: "allow" },
                     { action: "shell", resource: "printf *", effect: "deny" },
@@ -682,8 +682,8 @@ describe("ShellTool ordinary shell syntax", () => {
             })
 
             const agents = yield* Agent.Service
-            yield* agents.transform((draft) =>
-              draft.update(toolIdentity.agent, (agent) => {
+            yield* agents.transform((editor) =>
+              editor.update(toolIdentity.agent, (agent) => {
                 agent.permissions = [{ action: "shell", resource: command, effect: "deny" }]
               }),
             )
@@ -706,8 +706,8 @@ describe("ShellTool", () => {
         reset()
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
-            yield* registry.transform((draft) =>
-              draft.update("shell", (tool) => {
+            yield* registry.transform((editor) =>
+              editor.update("shell", (tool) => {
                 tool.options = { ...tool.options, codemode: true }
               }),
             )
@@ -1068,7 +1068,7 @@ describe("ShellTool", () => {
               const settled = yield* withSession(tmp.path, (registry) =>
                 Effect.gen(function* () {
                   const selection = yield* ShellSelect.Service
-                  yield* selection.transform((draft) => draft.configure("sh"))
+                  yield* selection.transform((editor) => editor.configure("sh"))
                   return yield* executeTool(
                     registry,
                     call({ command: 'printf hello > marker\necho "' }, "call-portable-malformed"),
@@ -1117,7 +1117,7 @@ describe("ShellTool", () => {
                   yield* withSession(tmp.path, (registry) =>
                     Effect.gen(function* () {
                       const selection = yield* ShellSelect.Service
-                      yield* selection.transform((draft) => draft.configure(shell))
+                      yield* selection.transform((editor) => editor.configure(shell))
                       for (const [command, output] of [
                         ["echo $((1 + 1))", "2\n"],
                         ["cd ~ && pwd", `${realpathSync(os.homedir())}\n`],

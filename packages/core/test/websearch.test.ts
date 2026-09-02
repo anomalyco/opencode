@@ -12,8 +12,8 @@ const register = (id: string) =>
     const websearch = yield* WebSearch.Service
     const providerID = WebSearch.ID.make(id)
     const calls: WebSearch.ProviderInput[] = []
-    yield* websearch.transform((draft) => {
-      draft.add({
+    yield* websearch.transform((editor) => {
+      editor.add({
         id: providerID,
         name: id.toUpperCase(),
         execute: (input) =>
@@ -91,7 +91,7 @@ describe("WebSearch", () => {
       yield* register("exa")
       const parallel = yield* register("parallel")
       const websearch = yield* WebSearch.Service
-      yield* websearch.transform((draft) => draft.default.set(parallel.providerID))
+      yield* websearch.transform((editor) => editor.default.set(parallel.providerID))
 
       expect((yield* websearch.query({ query: "configured" })).providerID).toBe(parallel.providerID)
     }),
@@ -103,7 +103,7 @@ describe("WebSearch", () => {
       const parallel = yield* register("parallel")
       const websearch = yield* WebSearch.Service
       const source = { providerID: exa.providerID }
-      yield* websearch.transform((draft) => draft.default.set(source.providerID))
+      yield* websearch.transform((editor) => editor.default.set(source.providerID))
 
       expect((yield* websearch.default())?.id).toBe(exa.providerID)
       source.providerID = parallel.providerID
@@ -131,7 +131,7 @@ describe("WebSearch", () => {
       const parallel = yield* register("parallel")
       const websearch = yield* WebSearch.Service
       yield* websearch.select(parallel.providerID)
-      yield* websearch.transform((draft) => draft.default.set(exa.providerID))
+      yield* websearch.transform((editor) => editor.default.set(exa.providerID))
 
       expect((yield* websearch.query({ query: "configured" })).providerID).toBe(exa.providerID)
     }),
@@ -142,7 +142,7 @@ describe("WebSearch", () => {
       yield* register("exa")
       yield* register("parallel")
       const websearch = yield* WebSearch.Service
-      yield* websearch.transform((draft) => draft.default.set("random"))
+      yield* websearch.transform((editor) => editor.default.set("random"))
 
       expect(["exa", "parallel"]).toContain((yield* websearch.query({ query: "random" })).providerID)
     }),
@@ -152,7 +152,7 @@ describe("WebSearch", () => {
     Effect.gen(function* () {
       yield* register("exa")
       const websearch = yield* WebSearch.Service
-      yield* websearch.transform((draft) => draft.default.set(false))
+      yield* websearch.transform((editor) => editor.default.set(false))
 
       expect((yield* websearch.query({ query: "disabled" }).pipe(Effect.flip))._tag).toBe("WebSearch.Disabled")
     }),
@@ -162,7 +162,7 @@ describe("WebSearch", () => {
     Effect.gen(function* () {
       yield* register("exa")
       const websearch = yield* WebSearch.Service
-      yield* websearch.transform((draft) => draft.default.set(WebSearch.ID.make("missing")))
+      yield* websearch.transform((editor) => editor.default.set(WebSearch.ID.make("missing")))
 
       expect((yield* websearch.query({ query: "fallback" }).pipe(Effect.flip))._tag).toBe("WebSearch.ProviderRequired")
     }),

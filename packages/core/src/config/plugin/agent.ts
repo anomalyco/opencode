@@ -74,27 +74,27 @@ export const Plugin = define({
       Effect.forkScoped({ startImmediately: true }),
     )
     loaded.documents = yield* load()
-    yield* ctx.agent.transform((draft) => {
+    yield* ctx.agent.transform((editor) => {
       const permissions = expandPermissions(
         loaded.documents.flatMap((document) => document.info.permissions ?? []),
         global.home,
       )
       const configuredDefault = Config.latest(loaded.documents, "default_agent")
-      if (configuredDefault !== undefined) draft.default(Agent.ID.make(configuredDefault))
-      for (const current of draft.list()) {
-        draft.update(current.id, (agent) => agent.permissions.push(...permissions))
+      if (configuredDefault !== undefined) editor.default(Agent.ID.make(configuredDefault))
+      for (const current of editor.list()) {
+        editor.update(current.id, (agent) => agent.permissions.push(...permissions))
       }
 
       for (const document of loaded.documents) {
         for (const [id, item] of Object.entries(document.info.agents ?? {})) {
           const agentID = Agent.ID.make(id)
           if (item.disabled) {
-            draft.remove(agentID)
+            editor.remove(agentID)
             continue
           }
 
-          const exists = draft.get(agentID) !== undefined
-          draft.update(agentID, (agent) => {
+          const exists = editor.get(agentID) !== undefined
+          editor.update(agentID, (agent) => {
             if (!exists) agent.permissions.push(...permissions)
             if (item.model !== undefined)
               agent.model = {
