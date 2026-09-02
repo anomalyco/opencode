@@ -1489,6 +1489,28 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
 
+  const [tick, setTick] = createSignal(0)
+  createEffect(() => {
+    if (final()) return
+    const id = setInterval(() => setTick((t) => t + 1), 500)
+    onCleanup(() => clearInterval(id))
+  })
+  // ponytail: output tokens aren't known until step-finish, so streaming tok/s
+  // is estimated from accumulated output chars (~4 chars/token). Upstream
+  // upgrade path: core emitting periodic usage during the stream.
+  const liveTps = createMemo(() => {
+    if (final()) return undefined
+    tick()
+    let chars = 0
+    for (const part of props.parts) {
+      if (part.type === "text" || part.type === "reasoning") chars += part.text?.length ?? 0
+    }
+    if (chars <= 0) return undefined
+    const elapsedMs = Date.now() - props.message.time.created
+    if (elapsedMs < 1000) return undefined
+    return Math.round(chars / 4 / (elapsedMs / 1000))
+  })
+
   return (
     <>
       <For each={props.parts}>
@@ -1561,6 +1583,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
               <span style={{ fg: theme.textMuted }}> · {model()}</span>
+              <Show when={liveTps()}>
+                <span style={{ fg: theme.textMuted }}> · ~{liveTps()} tok/s</span>
+              </Show>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
