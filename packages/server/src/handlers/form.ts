@@ -1,6 +1,5 @@
 import { Form } from "@opencode-ai/core/form"
-import { Instance } from "@opencode-ai/core/instance/service"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { Location } from "@opencode-ai/core/location"
 import { Session } from "@opencode-ai/core/session"
 import {
   ConflictError,
@@ -20,40 +19,38 @@ function missingForm(id: Form.ID) {
 
 export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =>
   Effect.gen(function* () {
-    const locations = yield* LocationServiceMap.Service
-    const instances = yield* Instance.Service
+    const form = yield* Form.Service
     const sessions = yield* Session.Service
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
-      const form = yield* Form.Service
       const info = yield* form.get(formID).pipe(Effect.catchTag("Form.NotFoundError", () => missingForm(formID)))
       if (info.sessionID !== sessionID) return yield* missingForm(formID)
-      return { form, info }
+      return info
     })
 
     return handlers
       .handle(
         "form.request.list",
         Effect.fn(function* () {
-          const form = yield* Form.Service
-          return yield* response(form.list())
+          const location = yield* Location.Service
+          return yield* response(
+            form.list({ location: { directory: location.directory, workspaceID: location.workspaceID } }),
+          )
         }),
       )
       .handle(
         "session.form.list",
         Effect.fn(function* (ctx) {
-          const session =
-            ctx.params.sessionID === "global" ? undefined : yield* sessionInfo(sessions, ctx.params.sessionID)
-          const read = Form.Service.use((form) => form.list({ sessionID: ctx.params.sessionID }))
-          const forms = yield* session
-            ? read.pipe(instances.provide(session))
-            : read.pipe(Effect.provide(locations.get(requestRef(ctx.request))))
-          return { data: forms }
+          // The `global` MCP elicitation owner is Location-scoped rather than session-owned.
+          if (ctx.params.sessionID === "global") {
+            return { data: yield* form.list({ sessionID: "global", location: requestRef(ctx.request) }) }
+          }
+          yield* sessionInfo(sessions, ctx.params.sessionID)
+          return { data: yield* form.list({ sessionID: ctx.params.sessionID }) }
         }),
       )
       .handle(
         "session.form.create",
         Effect.fn(function* (ctx) {
-          const form = yield* Form.Service
           const created = yield* form
             .create({
               id: ctx.payload.id,
@@ -75,15 +72,14 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
       .handle(
         "session.form.get",
         Effect.fn(function* (ctx) {
-          const owned = yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
-          return { data: owned.info }
+          return { data: yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID) }
         }),
       )
       .handle(
         "session.form.state",
         Effect.fn(function* (ctx) {
-          const owned = yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
-          const data = yield* owned.form
+          yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
+          const data = yield* form
             .state(ctx.params.formID)
             .pipe(Effect.catchTag("Form.NotFoundError", () => missingForm(ctx.params.formID)))
           return { data }
@@ -92,8 +88,8 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
       .handle(
         "session.form.reply",
         Effect.fn(function* (ctx) {
-          const owned = yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
-          yield* owned.form.reply({ id: ctx.params.formID, answer: ctx.payload.answer }).pipe(
+          yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
+          yield* form.reply({ id: ctx.params.formID, answer: ctx.payload.answer }).pipe(
             Effect.catchTags({
               "Form.AlreadySettledError": (error) =>
                 new FormAlreadySettledError({ id: error.id, message: error.message }),
@@ -108,8 +104,8 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
       .handle(
         "session.form.cancel",
         Effect.fn(function* (ctx) {
-          const owned = yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
-          yield* owned.form.cancel(ctx.params.formID).pipe(
+          yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
+          yield* form.cancel(ctx.params.formID).pipe(
             Effect.catchTags({
               "Form.AlreadySettledError": (error) =>
                 new FormAlreadySettledError({ id: error.id, message: error.message }),

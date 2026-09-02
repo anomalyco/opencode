@@ -7767,21 +7767,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | FormNotFoundError",
+            "description": "FormNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
                 }
               }
             }
@@ -7854,21 +7844,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | FormNotFoundError",
+            "description": "FormNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
                 }
               }
             }
@@ -7934,21 +7914,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | FormNotFoundError",
+            "description": "FormNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
                 }
               }
             }
@@ -8027,21 +7997,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | FormNotFoundError",
+            "description": "FormNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
                 }
               }
             }

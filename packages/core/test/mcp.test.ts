@@ -34,6 +34,7 @@ import { McpStdio } from "@opencode-ai/core/mcp/stdio"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { Tool } from "@opencode-ai/core/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, PubSub, Ref, Schedule, Schema, Sink, Stream } from "effect"
@@ -279,6 +280,8 @@ function resourceMcpLayer(
           },
         }),
         Layer.mock(Credential.Service, {}),
+        // MCP elicitation forms use the `global` owner, so the ledger never consults the Session row.
+        Layer.mock(SessionStore.Service, {}),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),

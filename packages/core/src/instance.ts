@@ -12,7 +12,6 @@ import { Formatter } from "./formatter.js"
 import { FileSystem } from "./filesystem.js"
 import { FileSystemSearch } from "./filesystem/search.js"
 import { Generate } from "./generate.js"
-import { Form } from "./form.js"
 import { Image } from "./image.js"
 import { LocationWatcher } from "./filesystem/location-watcher.js"
 import { Integration } from "./integration.js"
@@ -91,7 +90,6 @@ const nodes = [
   SkillInstructions.node,
   ReferenceInstructions.node,
   InstructionEntry.node,
-  Form.node,
   Generate.node,
   ReadToolFileSystem.node,
   McpTool.node,

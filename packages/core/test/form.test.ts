@@ -1,13 +1,23 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Deferred, Effect, Exit, Fiber, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
+import { Database } from "@opencode-ai/core/database/database"
 import { Form } from "@opencode-ai/core/form"
+import { Location } from "@opencode-ai/core/location"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionStore } from "@opencode-ai/core/session/store"
+import { Project } from "@opencode-ai/schema/project"
+import { AbsolutePath } from "@opencode-ai/schema/schema"
+import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
-const forms = AppNodeBuilder.build(LayerNode.group([Bus.node, Form.node]))
+// No LocationServiceMap or Instance in this graph: the ledger must serve Session-keyed reads
+// and route events without booting the Session's Location.
+const forms = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionStore.node, Form.node]))
 const it = testEffect(forms)
 
 const formID = Form.ID.create("frm_test")
@@ -18,7 +28,110 @@ const input = {
   fields: [{ key: "name", type: "string", required: true }],
 } satisfies Form.CreateInput
 
+const a = Location.Ref.make({ directory: AbsolutePath.make("/a") })
+const b = Location.Ref.make({ directory: AbsolutePath.make("/b") })
+const Done = Bus.ephemeral({ type: "test.form.done", schema: {} })
+
+const seed = Effect.fn(function* (sessions: ReadonlyArray<{ id: SessionSchema.ID; ref: Location.Ref }>) {
+  const database = yield* Database.Service
+  yield* database.db.insert(ProjectTable).values({ id: Project.ID.global, worktree: a.directory, sandboxes: [] }).run()
+  yield* database.db
+    .insert(SessionTable)
+    .values(
+      sessions.map((session) => ({
+        id: session.id,
+        project_id: Project.ID.global,
+        directory: session.ref.directory,
+        workspace_id: session.ref.workspaceID,
+        slug: session.id,
+        version: "test",
+      })),
+    )
+    .run()
+})
+
+// Collects what a client subscribed at `ref` sees until the global Done marker.
+const watch = (bus: Bus.Interface, ref: Location.Ref) =>
+  bus
+    .subscribe()
+    .pipe(
+      Stream.takeUntil((event) => event.type === Done.type),
+      Stream.filter((event) => event.type !== Done.type),
+      Stream.runCollect,
+      Effect.provideService(Location.Service, location(ref)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+
 describe("Form", () => {
+  it.effect("serves Session-keyed reads from the global ledger without the Session's Location", () =>
+    Effect.gen(function* () {
+      const other = SessionSchema.ID.make("ses_other")
+      yield* seed([
+        { id: input.sessionID, ref: a },
+        { id: other, ref: b },
+      ])
+      const service = yield* Form.Service
+
+      const created = yield* service.create(input)
+
+      expect(yield* service.list({ sessionID: input.sessionID })).toEqual([created])
+      expect(yield* service.list({ sessionID: other })).toEqual([])
+      expect(yield* service.list({ location: a })).toEqual([created])
+      expect(yield* service.list({ location: b })).toEqual([])
+    }),
+  )
+
+  it.effect("routes events to the owning Session's Location without an ambient Location", () =>
+    Effect.gen(function* () {
+      yield* seed([{ id: input.sessionID, ref: a }])
+      const service = yield* Form.Service
+      const bus = yield* Bus.Service
+      const atA = yield* watch(bus, a)
+      const atB = yield* watch(bus, b)
+
+      const created = yield* service.create(input)
+      yield* service.reply({ id: created.id, answer: { name: "Ava" } })
+      yield* bus.publish(Done, {}, { global: true })
+
+      const seen = Array.from(yield* Fiber.join(atA))
+      expect(seen.map((event) => [event.type, event.location])).toEqual([
+        ["form.created", a],
+        ["form.replied", a],
+      ])
+      expect(Array.from(yield* Fiber.join(atB))).toEqual([])
+    }),
+  )
+
+  it.effect("scopes the global mcp elicitation owner to its ambient Location", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const bus = yield* Bus.Service
+      const atA = yield* watch(bus, a)
+      const atB = yield* watch(bus, b)
+
+      const created = yield* service
+        .create({
+          sessionID: "global",
+          title: "MCP input",
+          fields: [{ key: "name", type: "string", required: true }],
+        })
+        .pipe(Effect.provideService(Location.Service, location(a)))
+      expect(yield* service.list({ sessionID: "global", location: a })).toEqual([created])
+      expect(yield* service.list({ sessionID: "global", location: b })).toEqual([])
+
+      // Settling from outside the Location, as the HTTP cancel route does, keeps the creation route.
+      yield* service.cancel(created.id)
+      yield* bus.publish(Done, {}, { global: true })
+
+      const seen = Array.from(yield* Fiber.join(atA))
+      expect(seen.map((event) => [event.type, event.location])).toEqual([
+        ["form.created", a],
+        ["form.cancelled", a],
+      ])
+      expect(Array.from(yield* Fiber.join(atB))).toEqual([])
+    }),
+  )
+
   it.effect("validates absolute URI formats without restricting schemes", () =>
     Effect.sync(() => {
       const fields = [{ key: "uri", type: "string", format: "uri" }] satisfies ReadonlyArray<Form.Field>

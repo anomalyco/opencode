@@ -159,6 +159,7 @@ it.live(
         createEmbeddedRoutes({}, replacements).pipe(Layer.provide(HttpServer.layerServices)),
       )
       const sessions = Context.get(context, Session.Service)
+      const forms = Context.get(context, Form.Service)
       const instances = Context.get(context, Instance.Service)
       const locations = Context.get(context, LocationServiceMap.Service)
       const handler = Context.get(context, HttpRouter.HttpRouter)
@@ -232,12 +233,12 @@ it.live(
         })),
       )
 
-      // Seed through Core, then use HTTP to reach those exact private instances.
+      // Seed through Core, then use HTTP to reach those exact private instances. Forms live in the
+      // global ledger keyed by Session; permissions stay in the selected instance.
       const pending = yield* Effect.forEach(configs, (config) =>
         Effect.gen(function* () {
           const session = yield* sessions.get(config.id)
           return yield* Effect.gen(function* () {
-            const forms = yield* Form.Service
             const permissions = yield* Permission.Service
             const form = yield* forms.create({
               sessionID: config.id,
@@ -273,14 +274,20 @@ it.live(
         }),
       )
       for (const entry of pending) {
-        const forms = yield* request(`/api/session/${entry.session.id}/form`)
-        expect(forms.status).toBe(200)
-        expect(yield* Effect.promise<unknown>(() => forms.json())).toEqual({ data: [entry.form] })
+        const owned = pending
+          .flatMap((other) => [other.form, other.foreignForm])
+          .filter((form) => form.sessionID === entry.session.id)
+        const response = yield* request(`/api/session/${entry.session.id}/form`)
+        expect(response.status).toBe(200)
+        const listed = yield* Effect.promise(() => response.json() as Promise<{ data: Form.Info[] }>)
+        expect(listed.data.toSorted((x, y) => x.id.localeCompare(y.id))).toEqual(
+          owned.toSorted((x, y) => x.id.localeCompare(y.id)),
+        )
         const permissions = yield* request(`/api/session/${entry.session.id}/permission`)
         expect(permissions.status).toBe(200)
         expect(yield* Effect.promise<unknown>(() => permissions.json())).toEqual({ data: [entry.permission] })
 
-        // These IDs exist in the selected instance, but belong to the other Session.
+        // These IDs exist, but belong to the other Session.
         expect((yield* request(`/api/session/${entry.session.id}/form/${entry.foreignForm.id}`)).status).toBe(404)
         expect(
           (yield* request(`/api/session/${entry.session.id}/permission/${entry.foreignPermission.id}`)).status,
@@ -295,10 +302,9 @@ it.live(
             reply: "once",
           })).status,
         ).toBe(404)
+        expect(yield* forms.state(entry.foreignForm.id)).toEqual({ status: "pending" })
         yield* Effect.gen(function* () {
-          const forms = yield* Form.Service
           const permissions = yield* Permission.Service
-          expect(yield* forms.state(entry.foreignForm.id)).toEqual({ status: "pending" })
           expect(yield* permissions.get(entry.foreignPermission.id)).toMatchObject({
             sessionID: entry.foreignForm.sessionID,
           })
@@ -315,13 +321,12 @@ it.live(
             reply: "once",
           })).status,
         ).toBe(204)
+        expect(yield* forms.state(entry.form.id)).toEqual({
+          status: "answered",
+          answer: { answer: entry.session.id },
+        })
         yield* Effect.gen(function* () {
-          const forms = yield* Form.Service
           const permissions = yield* Permission.Service
-          expect(yield* forms.state(entry.form.id)).toEqual({
-            status: "answered",
-            answer: { answer: entry.session.id },
-          })
           expect(yield* permissions.get(entry.permission.id)).toBeUndefined()
         }).pipe(instances.provide(entry.session))
       }

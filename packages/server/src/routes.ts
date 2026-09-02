@@ -7,6 +7,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventLogger } from "@opencode-ai/core/event-logger"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
+import { Form } from "@opencode-ai/core/form"
 import { Credential } from "@opencode-ai/core/credential"
 import { Config } from "@opencode-ai/core/config"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
@@ -57,6 +58,7 @@ const applicationServiceNodes = [
   Project.node,
   Worktree.node,
   Session.node,
+  Form.node,
   Instance.node,
   SessionTransfer.node,
   SdkPlugins.node,

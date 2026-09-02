@@ -2,8 +2,11 @@ export * as Form from "./form.js"
 
 import { Form } from "@opencode-ai/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "./bus.js"
+import { Location } from "./location.js"
+import { SessionSchema } from "./session/schema.js"
+import { SessionStore } from "./session/store.js"
 
 const RETENTION = Duration.minutes(10)
 
@@ -76,6 +79,8 @@ export interface ReplyInput {
 
 export interface ListInput {
   readonly sessionID?: Form.Info["sessionID"]
+  /** Restrict to forms routed to this Location; `form.request.list` keeps its per-Location shape. */
+  readonly location?: Location.Ref
 }
 
 export interface Interface {
@@ -94,12 +99,18 @@ interface Entry {
   readonly form: Info
   readonly state: State
   readonly deferred: Deferred.Deferred<TerminalState>
+  // Event route, fixed at creation. Undefined leaves Bus to its ambient fallback.
+  readonly location: Location.Ref | undefined
 }
 
+// The ledger is process-global: pending forms are transient state keyed by Session, so reading
+// them must not boot the Session's Location. Events still route per Location, resolved once at
+// creation from the owning Session row, or from the ambient Location for the MCP `global` owner.
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const store = yield* SessionStore.Service
     const forms = yield* Cache.makeWith<ID, Entry>(
       () => Effect.die(new Error("Form cache must be used via set/getSuccess, never get")),
       {
@@ -114,6 +125,13 @@ export const layer = Layer.effect(
         Effect.flatMap((entry) => Effect.fromOption(entry, () => new NotFoundError({ id }))),
       ),
     )
+
+    const resolveLocation = Effect.fnUntraced(function* (sessionID: Info["sessionID"]) {
+      const session = Schema.is(SessionSchema.ID)(sessionID) ? yield* store.get(sessionID) : undefined
+      if (session) return session.location
+      const ambient = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+      return ambient ? { directory: ambient.directory, workspaceID: ambient.workspaceID } : undefined
+    })
 
     const create = Effect.fn("Form.create")((input: CreateInput) =>
       Effect.uninterruptible(
@@ -134,9 +152,12 @@ export const layer = Layer.effect(
             form,
             state: { status: "pending" },
             deferred: yield* Deferred.make<TerminalState>(),
+            location: yield* resolveLocation(input.sessionID),
           }
           yield* Cache.set(forms, id, entry)
-          yield* bus.publish(Form.Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
+          yield* bus
+            .publish(Form.Event.Created, { form }, { location: entry.location })
+            .pipe(Effect.onError(() => Cache.invalidate(forms, id)))
           return form
         }),
       ),
@@ -163,6 +184,12 @@ export const layer = Layer.effect(
       return Array.from(entries)
         .filter((entry) => entry.state.status === "pending")
         .filter((entry) => input?.sessionID === undefined || entry.form.sessionID === input.sessionID)
+        .filter(
+          (entry) =>
+            input?.location === undefined ||
+            (entry.location?.directory === input.location.directory &&
+              entry.location.workspaceID === input.location.workspaceID),
+        )
         .map((entry) => entry.form)
     })
 
@@ -178,11 +205,11 @@ export const layer = Layer.effect(
           const invalid = validateAnswer(entry.form.fields, input.answer)
           if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
           const next: TerminalState = { status: "answered", answer: input.answer }
-          yield* bus.publish(Form.Event.Replied, {
-            id: input.id,
-            sessionID: entry.form.sessionID,
-            answer: input.answer,
-          })
+          yield* bus.publish(
+            Form.Event.Replied,
+            { id: input.id, sessionID: entry.form.sessionID, answer: input.answer },
+            { location: entry.location },
+          )
           yield* Cache.set(forms, input.id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
         }),
@@ -195,7 +222,11 @@ export const layer = Layer.effect(
           const entry = yield* requireEntry(id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id })
           const next: TerminalState = { status: "cancelled" }
-          yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
+          yield* bus.publish(
+            Form.Event.Cancelled,
+            { id, sessionID: entry.form.sessionID },
+            { location: entry.location },
+          )
           yield* Cache.set(forms, id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
         }),
@@ -218,7 +249,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Bus.node, SessionStore.node] })
 
 export function validateAnswer(form: ReadonlyArray<Form.Field>, answer: Answer) {
   const fields = new Map(form.map((field) => [field.key, field] as const))
