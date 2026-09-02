@@ -1,8 +1,8 @@
 export * as Provider from "./provider.js"
 
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Provider } from "@opencode-ai/schema/provider"
-import type { ProviderPackageDefinition } from "@opencode-ai/ai"
+import { HttpTimeout, type ProviderPackageDefinition } from "@opencode-ai/ai"
 import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Npm } from "@opencode-ai/util/npm"
 import type { DeepMutable } from "./schema.js"
@@ -134,6 +134,16 @@ export function mergeHeaders(
       }, new Map<string, [string, string]>())
       .values(),
   )
+}
+
+const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)
+
+/** Read request timeouts from provider settings; invalid values are ignored so the default applies. */
+export function timeouts(settings: Readonly<Record<string, unknown>>) {
+  return {
+    headerTimeout: Option.getOrUndefined(decodeTimeout(settings.headerTimeout)),
+    chunkTimeout: Option.getOrUndefined(decodeTimeout(settings.chunkTimeout)),
+  }
 }
 
 export const Request = Provider.Request

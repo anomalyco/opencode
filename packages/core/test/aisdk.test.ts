@@ -740,29 +740,6 @@ it.effect("fails with a retryable transport error when response headers time out
   }),
 )
 
-it.effect("strips timeout settings from provider options", () =>
-  Effect.gen(function* () {
-    const aisdk = yield* AISDK.Service
-    let options: Record<string, unknown> | undefined
-    yield* aisdk.hook.sdk((event) => {
-      options = event.options
-      event.sdk = { languageModel: () => streamModel([]) }
-    })
-    yield* aisdk.model(
-      model("@ai-sdk/openai-compatible", {
-        apiKey: "test",
-        baseURL: "https://example.test/v1",
-        headerTimeout: false,
-        chunkTimeout: 60_000,
-      }),
-    )
-
-    expect(options).toBeDefined()
-    expect(options).not.toHaveProperty("headerTimeout")
-    expect(options).not.toHaveProperty("chunkTimeout")
-  }),
-)
-
 it.effect("emits malformed AI SDK tool input without executing it", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service

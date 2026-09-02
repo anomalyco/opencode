@@ -12,7 +12,6 @@ import { Integration } from "./integration.js"
 import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode-ai/util/npm"
 import { Provider } from "./provider.js"
-import { RequestTimeouts } from "./request-timeouts.js"
 
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
@@ -129,10 +128,10 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   const resolved = prepareRuntimeModel(model, credential)
   const packageName = Provider.packageName(resolved.package)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
-  const settingsWithTimeouts = { ...resolved.settings, ...credential?.metadata, ...configuration }
-  // Timeouts are transport policy, so they become route HTTP defaults instead of provider package settings.
-  const timeouts = RequestTimeouts.from(settingsWithTimeouts)
-  const configured = RequestTimeouts.strip(settingsWithTimeouts)
+  const merged = { ...resolved.settings, ...credential?.metadata, ...configuration }
+  // Timeouts are transport policy: they become route HTTP defaults rather than provider package settings.
+  const timeouts = Provider.timeouts(merged)
+  const configured = Struct.omit(merged, ["headerTimeout", "chunkTimeout"])
   const mapping = Provider.isAISDK(resolved.package)
     ? AISDKNative.map({
         packageName,
@@ -177,14 +176,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,
-        ...(timeouts.headerTimeout === undefined && timeouts.chunkTimeout === undefined
-          ? {}
-          : {
-              defaults: {
-                ...runtime.defaults,
-                http: mergeHttpOptions(runtime.defaults?.http, new HttpOptions(timeouts)),
-              },
-            }),
+        defaults: { ...runtime.defaults, http: mergeHttpOptions(runtime.defaults?.http, new HttpOptions(timeouts)) },
       })
     },
     catch: () => unsupported(resolved),

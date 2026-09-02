@@ -37,7 +37,6 @@ import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "ef
 import { makeParser } from "effect/unstable/encoding/Sse"
 import type { ID, Info } from "./model.js"
 import { Provider } from "./provider.js"
-import { RequestTimeouts } from "./request-timeouts.js"
 import { State } from "./state.js"
 
 type SDK = any
@@ -128,30 +127,28 @@ function prepareOptions(model: Info, pkg: string) {
   }
 
   const customFetch = options.fetch
-  const timeouts = RequestTimeouts.from(options)
+  const timeouts = Provider.timeouts(options)
   const chunkTimeout = timeouts.chunkTimeout ?? DEFAULT_HTTP_TIMEOUT_MS
   const headerTimeout = timeouts.headerTimeout ?? DEFAULT_HTTP_TIMEOUT_MS
   delete options.chunkTimeout
   delete options.headerTimeout
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
-    const chunkAbortCtl = chunkTimeout === false ? undefined : new AbortController()
-    const headerAbortCtl = headerTimeout === false ? undefined : new AbortController()
-    // Only covers the wait for response headers; the chunk timer takes over once the body streams.
+    const ctl = new AbortController()
+    // Only covers the wait for response headers; wrapSSE takes over once the body streams.
     const headerTimer =
       headerTimeout === false
         ? undefined
-        : setTimeout(() => headerAbortCtl?.abort(new Error(HEADER_TIMEOUT_MESSAGE)), headerTimeout)
-    const abortSignals = [
-      opts.signal,
-      chunkAbortCtl?.signal,
-      headerAbortCtl?.signal,
-      options.timeout !== undefined && options.timeout !== null && options.timeout !== false
-        ? AbortSignal.timeout(options.timeout)
-        : undefined,
-    ].filter((item): item is AbortSignal => item !== undefined && item !== null)
-    if (abortSignals.length === 1) opts.signal = abortSignals[0]
-    if (abortSignals.length > 1) opts.signal = AbortSignal.any(abortSignals)
+        : setTimeout(() => ctl.abort(new Error(HEADER_TIMEOUT_MESSAGE)), headerTimeout)
+    opts.signal = AbortSignal.any(
+      [
+        opts.signal,
+        ctl.signal,
+        options.timeout !== undefined && options.timeout !== null && options.timeout !== false
+          ? AbortSignal.timeout(options.timeout)
+          : undefined,
+      ].filter((item): item is AbortSignal => item !== undefined && item !== null),
+    )
 
     if (typeof opts.body === "string" && model.body !== undefined) {
       const decoded = Option.getOrUndefined(decodeJson(opts.body))
@@ -164,8 +161,8 @@ function prepareOptions(model: Info, pkg: string) {
       ...opts,
       timeout: false,
     }).finally(() => clearTimeout(headerTimer))
-    if (!chunkAbortCtl || chunkTimeout === false) return res
-    return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+    if (chunkTimeout === false) return res
+    return wrapSSE(res, chunkTimeout, ctl)
   }
 
   return options

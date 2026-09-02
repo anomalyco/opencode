@@ -98,44 +98,32 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
     }),
   execute: (prepared, request, runtime) =>
     Effect.gen(function* () {
-      const headerTimeout = timeoutDuration(request.http?.headerTimeout)
-      const chunkTimeout = timeoutDuration(request.http?.chunkTimeout)
-      const execute = runtime.http.execute(prepared.request, prepared.middleware)
-      const response = yield* headerTimeout
-        ? execute.pipe(
-            Effect.timeoutOrElse({
-              duration: headerTimeout,
-              orElse: () =>
-                Effect.fail(
-                  timeoutError(
-                    prepared.request.url,
-                    "request",
-                    `Timed out waiting for response headers after ${Duration.format(headerTimeout)}`,
-                  ),
-                ),
-            }),
-          )
-        : execute
+      const timeout = (operation: TransportOperation, message: string, http?: HttpContext) =>
+        new AIError({
+          reason: new TransportError({
+            message,
+            transport: "http",
+            operation,
+            code: "Timeout",
+            url: prepared.request.url,
+            http,
+          }),
+        })
+      const response = yield* runtime.http.execute(prepared.request, prepared.middleware).pipe(
+        Effect.timeoutOrElse({
+          duration: timeoutDuration(request.http?.headerTimeout),
+          orElse: () => Effect.fail(timeout("request", "Timed out waiting for response headers")),
+        }),
+      )
       const http = RequestExecutor.responseHttp(response)
-      const bytes = RequestExecutor.responseStream(response)
       return {
         frames: prepared.framing.frame(
-          chunkTimeout
-            ? bytes.pipe(
-                Stream.timeoutOrElse({
-                  duration: chunkTimeout,
-                  orElse: () =>
-                    Stream.fail(
-                      timeoutError(
-                        prepared.request.url,
-                        "read",
-                        `Timed out waiting for response data after ${Duration.format(chunkTimeout)}`,
-                        http,
-                      ),
-                    ),
-                }),
-              )
-            : bytes,
+          RequestExecutor.responseStream(response).pipe(
+            Stream.timeoutOrElse({
+              duration: timeoutDuration(request.http?.chunkTimeout),
+              orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
+            }),
+          ),
         ),
         http,
         body: prepared.framing.body,
@@ -145,12 +133,7 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
 
 // `false` disables a timer; an unset value uses the shared default.
 const timeoutDuration = (value: HttpTimeout | undefined) =>
-  value === false ? undefined : Duration.millis(value ?? DEFAULT_HTTP_TIMEOUT_MS)
-
-const timeoutError = (url: string, operation: TransportOperation, message: string, http?: HttpContext) =>
-  new AIError({
-    reason: new TransportError({ message, transport: "http", operation, code: "Timeout", url, http }),
-  })
+  value === false ? Duration.infinity : Duration.millis(value ?? DEFAULT_HTTP_TIMEOUT_MS)
 
 export const sseJson = {
   id: "http-json/sse",
