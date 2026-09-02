@@ -242,6 +242,7 @@ describe("Tool", () => {
           draft.add({ ...constant("overlay"), name: "echo", options: { codemode: false } })
         })
         .pipe(Scope.provide(scope))
+      // Each registration outside a batch notifies immediately, and every rebuild replays all transforms.
       expect(runs).toEqual(["base", "base", "overlay"])
       expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "overlay" })
 
@@ -254,7 +255,7 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("batches tool publication and suppresses terminal teardown replay", () =>
+  it.effect("reads pending tools inside a batch and suppresses terminal teardown replay", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       const runs: string[] = []
@@ -270,13 +271,14 @@ describe("Tool", () => {
             draft.add({ ...constant("overlay"), name: "echo", options: { codemode: false } })
           })
           expect(runs).toEqual([])
-          expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+          expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["echo", "execute"])
+          expect(runs).toEqual(["base", "overlay"])
         }).pipe(Scope.provide(scope)),
       )
 
       expect(runs).toEqual(["base", "overlay"])
       expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "overlay" })
-      yield* State.batch(Scope.close(scope, Exit.void), { flush: false })
+      yield* State.shutdown(Scope.close(scope, Exit.void))
       expect(runs).toEqual(["base", "overlay"])
     }),
   )
@@ -503,6 +505,41 @@ describe("Tool", () => {
           { tool: "registry.search.sales", status: "completed" },
         ],
       })
+    }),
+  )
+
+  it.effect("retains namespace descriptions in executable snapshots after appended transforms", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((draft) => {
+        draft.namespace({ name: "acme", description: "Archival operations" })
+        draft.add({ ...make(), options: { namespace: "acme" } })
+      })
+      const advertised = yield* service.snapshot()
+
+      yield* service.transform((draft) => {
+        draft.namespace({ name: "acme", description: "Billing operations" })
+      })
+      const current = yield* service.snapshot()
+      expect(advertised.codeModeCatalog?.tools).toMatchObject([{ name: "acme", description: "Archival operations" }])
+      expect(current.codeModeCatalog?.tools).toMatchObject([{ name: "acme", description: "Billing operations" }])
+
+      const search = (snapshot: Tool.Snapshot, query: string) =>
+        snapshot.execute({
+          ...call("execute"),
+          call: {
+            type: "tool-call",
+            id: `namespace-${query}`,
+            name: "execute",
+            input: {
+              code: `return search({ query: ${JSON.stringify(query)} }).items.map(item => item.path).join(",")`,
+            },
+          },
+        })
+      expect((yield* search(advertised, "archival")).output).toMatchObject({ output: "tools.acme.echo" })
+      expect((yield* search(advertised, "billing")).output).toMatchObject({ output: "" })
+      expect((yield* search(current, "archival")).output).toMatchObject({ output: "" })
+      expect((yield* search(current, "billing")).output).toMatchObject({ output: "tools.acme.echo" })
     }),
   )
 

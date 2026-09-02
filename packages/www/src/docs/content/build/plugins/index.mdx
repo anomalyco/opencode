@@ -117,8 +117,10 @@ export default Plugin.define({
 
 ## Transforms
 
-Transforms are a central pattern in the plugin API and modify how OpenCode works. Plugins register
-transforms and each builds on the changes made before it.
+Transforms are synchronous edits to OpenCode's domain state, and each builds on earlier registrations.
+Registry reads such as `ctx.catalog.model.list()` apply pending edits before returning, including during plugin setup;
+startup batches update notifications, not read visibility. Resource status APIs still report the state of running
+resources: a registered definition does not mean its connection or other resource work has completed.
 
 Say we have a plugin that adds one model to the catalog.
 
@@ -134,9 +136,15 @@ export default Plugin.define({
         model.cost = [{ input: 2, output: 12, cache: { read: 0.2, write: 2 } }]
       })
     })
+
+    const models = await ctx.catalog.model.list() // Includes the model registered above.
   },
 })
 ```
+
+Any registration, removal, or `reload()` marks the registry changed; the next read rebuilds it by replaying every
+active transform in registration order onto a fresh value. Keep transforms cheap and repeatable. A value you have
+already read is never modified by later rebuilds.
 
 A later plugin can enforce a maximum output price across every model, including models added by earlier plugins.
 
@@ -159,8 +167,8 @@ export default Plugin.define({
 })
 ```
 
-Now say the first plugin dynamically fetches can fetch its model list from a
-dynamic source. It can call `reload` when that list changes.
+Captured inputs are not watched automatically. Load external data before the synchronous callback, then call
+`reload()` after those inputs change.
 
 ```ts title="plugins/models/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
@@ -793,9 +801,9 @@ interface StorageScanResult {
 
 ### Tools
 
-Register, update, and remove tools with a transform. The callback is synchronous, including in Promise plugins; load external
-data before registering or reloading. OpenCode replays active transforms in registration order on a fresh draft.
-For the same effective tool name, a later valid registration overrides an earlier one.
+Register, update, and remove tools with a synchronous transform, including in Promise plugins. Load external data
+before registering or reloading. Transforms build on earlier registrations; a later valid registration overrides
+the same effective tool name.
 
 ```ts
 const registration = await ctx.tool.transform((draft) => {
@@ -854,9 +862,10 @@ definition it overrode. Disposal is idempotent, and unloading the plugin also di
 await registration.dispose()
 ```
 
-Each model request captures a tool snapshot. Reload and disposal affect future snapshots, not the definitions or
-executors already captured by an existing request. Executors that close over mutable plugin data still observe
-that data; capture a value inside the transform when it must remain tied to that definition.
+Each model request captures a stable, executable tool snapshot. Later transforms, reloads, and disposal affect future
+snapshots, not the definitions, Code Mode namespace descriptions, or executors already captured. Executors that close
+over mutable plugin data still observe that data; capture a value inside the transform when it must remain tied to
+that definition.
 
 #### Reference
 

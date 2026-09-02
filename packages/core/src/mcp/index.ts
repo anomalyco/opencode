@@ -6,7 +6,21 @@ import { ephemeral } from "@opencode-ai/schema/event"
 import type { Session } from "@opencode-ai/schema/session"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Stream, Types } from "effect"
+import {
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  FiberSet,
+  Latch,
+  Layer,
+  Schema,
+  Scope,
+  Semaphore,
+  Stream,
+  Types,
+} from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -615,8 +629,9 @@ export const layer = (options?: Options) =>
 
       let applied: Map<ServerName, Mcp.ServerConfig> | undefined
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
-      const reconcile = Effect.fnUntraced(function* (next: Draft) {
-        const servers = new Map(next.list())
+      const reconcileLock = Semaphore.makeUnsafe(1)
+      const reconcile = Effect.fnUntraced(function* () {
+        const servers = state.get().servers
         if (!applied && entries.size === 0) {
           for (const [name, server] of servers) {
             entries.set(name, {
@@ -677,7 +692,7 @@ export const layer = (options?: Options) =>
           Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
         ),
       )
-      const state = State.create<Data, Draft>({
+      const state: State.Interface<Data, Draft> = State.create<Data, Draft>({
         name: "mcp",
         initial: () => ({
           servers: new Map(
@@ -702,7 +717,12 @@ export const layer = (options?: Options) =>
           },
           remove: (server) => draft.servers.delete(ServerName.make(server)),
         }),
-        finalize: reconcile,
+        // The layer owns both active reconciliation and work queued behind the lock.
+        notify: Effect.gen(function* () {
+          const exit = yield* Fiber.await(fork(reconcileLock.withPermit(reconcile())))
+          if (Exit.isFailure(exit) && root.state._tag === "Closed" && Cause.hasInterruptsOnly(exit.cause)) return
+          yield* exit
+        }),
       })
 
       // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.

@@ -196,7 +196,8 @@ const layer = Layer.effect(
           draft.tools.delete(id)
         },
       }),
-      finalize: () =>
+      // Read errors when the notification runs, not when the State is created.
+      notify: Effect.suspend(() =>
         Effect.forEach(
           state.get().errors,
           ({ kind, name, namespace, error }) =>
@@ -207,6 +208,7 @@ const layer = Layer.effect(
             }),
           { discard: true },
         ),
+      ),
     })
 
     return Service.of({
