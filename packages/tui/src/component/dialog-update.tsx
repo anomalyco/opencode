@@ -1,13 +1,154 @@
 /** @jsxImportSource @opentui/solid */
-import { DialogConfirm } from "../ui/dialog-confirm"
+import { TextAttributes } from "@opentui/core"
+import { For, Match, Show, Switch } from "solid-js"
+import { createStore } from "solid-js/store"
+import { Keymap } from "../context/keymap"
+import { useTheme } from "../context/theme"
+import { errorMessage } from "../util/error"
+import { useDialog } from "../ui/dialog"
+import { Spinner } from "./spinner"
 
-export function DialogUpdate(props: { onInstall: () => void }) {
+type State =
+  | { type: "ready"; active: "install" | "ignore" }
+  | { type: "installing" }
+  | { type: "restarting" }
+  | { type: "complete" }
+  | { type: "failed"; message: string }
+
+export function DialogUpdate(props: { version: string; install: () => Promise<void>; restart: () => Promise<void> }) {
+  const dialog = useDialog()
+  const theme = useTheme("elevated")
+  const [state, setState] = createStore<State>({ type: "ready", active: "install" })
+
+  const install = async () => {
+    setState({ type: "installing" })
+    await props.install()
+    setState({ type: "restarting" })
+    await props.restart()
+    setState({ type: "complete" })
+  }
+
+  const beginInstall = () => {
+    if (state.type !== "ready") return
+    void install().catch((error) => setState({ type: "failed", message: errorMessage(error) }))
+  }
+
+  const run = () => {
+    if (state.type !== "ready") return
+    if (state.active === "ignore") return dialog.clear()
+    beginInstall()
+  }
+
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    commands: [
+      {
+        bind: "return",
+        title: "Confirm update action",
+        group: "Dialog",
+        run: () => (state.type === "complete" || state.type === "failed" ? dialog.clear() : run()),
+      },
+      {
+        bind: "left",
+        title: "Previous update action",
+        group: "Dialog",
+        run: () => {
+          if (state.type === "ready") setState("active", state.active === "install" ? "ignore" : "install")
+        },
+      },
+      {
+        bind: "right",
+        title: "Next update action",
+        group: "Dialog",
+        run: () => {
+          if (state.type === "ready") setState("active", state.active === "install" ? "ignore" : "install")
+        },
+      },
+    ],
+  }))
+
   return (
-    <DialogConfirm
-      title="Update ready"
-      message="An update is ready. Active sessions will be restarted."
-      label={{ confirm: "Install", cancel: "Ignore" }}
-      onConfirm={props.onInstall}
-    />
+    <box paddingLeft={2} paddingRight={2} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+          <Switch>
+            <Match when={state.type === "ready"}>Update ready</Match>
+            <Match when={state.type === "installing"}>Installing update</Match>
+            <Match when={state.type === "restarting"}>Restarting service</Match>
+            <Match when={state.type === "complete"}>Update complete</Match>
+            <Match when={state.type === "failed"}>Update failed</Match>
+          </Switch>
+        </text>
+        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
+      </box>
+      <box paddingBottom={1}>
+        <Switch>
+          <Match when={state.type === "ready"}>
+            <text fg={theme.text.subdued}>An update is ready. Active sessions will be restarted.</text>
+          </Match>
+          <Match when={state.type === "installing"}>
+            <Spinner>Installing OpenCode {props.version}...</Spinner>
+          </Match>
+          <Match when={state.type === "restarting"}>
+            <Spinner>Restarting the background service...</Spinner>
+          </Match>
+          <Match when={state.type === "complete"}>
+            <text fg={theme.text.feedback.success.default}>OpenCode is up to date.</text>
+          </Match>
+          <Match when={state.type === "failed"}>
+            <text fg={theme.text.feedback.error.default}>{state.type === "failed" ? state.message : ""}</text>
+          </Match>
+        </Switch>
+      </box>
+      <Show
+        when={state.type === "ready"}
+        fallback={
+          <Show when={state.type === "complete" || state.type === "failed"}>
+            <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
+              <box
+                paddingLeft={3}
+                paddingRight={3}
+                backgroundColor={theme.background.action.primary.focused}
+                onMouseUp={() => dialog.clear()}
+              >
+                <text fg={theme.text.action.primary.focused}>close</text>
+              </box>
+            </box>
+          </Show>
+        }
+      >
+        <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
+          <For each={["ignore", "install"] as const}>
+            {(action) => (
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={
+                  state.type === "ready" && action === state.active
+                    ? theme.background.action.primary.focused
+                    : undefined
+                }
+                onMouseUp={() => {
+                  if (action === "ignore") return dialog.clear()
+                  beginInstall()
+                }}
+              >
+                <text
+                  fg={
+                    state.type === "ready" && action === state.active
+                      ? theme.text.action.primary.focused
+                      : theme.text.subdued
+                  }
+                >
+                  {action === "install" ? "Install" : "Ignore"}
+                </text>
+              </box>
+            )}
+          </For>
+        </box>
+      </Show>
+    </box>
   )
 }

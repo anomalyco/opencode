@@ -1223,19 +1223,9 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
     if (updateNotifications.versions.includes(version)) return
     void markUpdateNotification((draft) => {
       draft.versions = [...draft.versions, version].slice(-100)
-    }).catch(toast.error)
-    dialog.replace(() => (
-      <DialogUpdate
-        onInstall={() => {
-          toast.show({ variant: "info", message: `Updating to ${version}...`, duration: 30_000 })
-          void updater
-            .apply(version)
-            .then(restart)
-            .then(() => toast.show({ variant: "success", message: "Update complete" }))
-            .catch(toast.error)
-        }}
-      />
-    ))
+    }).catch((error) => log.error("failed to persist update notification", { error }))
+    dialog.replace(() => <DialogUpdate version={version} install={() => updater.apply(version)} restart={restart} />)
+    dialog.setCentered(true)
   })
 
   event.on("tui.session.select", (evt, { workspace }) => {
