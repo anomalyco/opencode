@@ -150,13 +150,16 @@ function auto(key: string, cwd: string, shell: string) {
   if (name === "PSHOME") return path.dirname(shell)
 }
 
+function variableValue(key: string, cwd: string, shell: string) {
+  return auto(key, cwd, shell) ?? envValue(key) ?? ""
+}
+
 function expand(text: string, cwd: string, shell: string) {
   const out = unquote(text)
     .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => envValue(key) || "")
     .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => envValue(key) || "")
-    .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, key: string) => envValue(key) || "")
-    .replace(/\$([A-Za-z_][A-Za-z0-9_]*)(?=$|[\\/])/g, (_, key: string) => envValue(key) || "")
-    .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => auto(key, cwd, shell) || "")
+    .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, key: string) => variableValue(key, cwd, shell))
+    .replace(/\$([A-Za-z_][A-Za-z0-9_]*)(?=$|[\\/])/g, (_, key: string) => variableValue(key, cwd, shell))
   return home(out)
 }
 
@@ -468,7 +471,11 @@ export const ShellTool = Tool.define(
             yield* Effect.logInfo("resolved path", { arg, resolved })
             const boundary = resolved && resolveThroughSymlinks(resolved)
             if (!resolved || !boundary || containsPath(boundary, instance)) continue
-            const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
+            // Keep the user-facing path for ordinary external inputs, but do
+            // not scope a permission pattern to an in-project symlink that
+            // points outside the workspace.
+            const reportPath = containsPath(resolved, instance) ? boundary : resolved
+            const dir = (yield* fs.isDir(reportPath)) ? reportPath : path.dirname(reportPath)
             scan.dirs.add(dir)
           }
         }

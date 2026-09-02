@@ -391,7 +391,7 @@ describe("tool.shell permissions", () => {
       const project = yield* tmpdirScoped()
       const outside = yield* tmpdirScoped()
       const linked = path.join(project, "linked")
-      yield* Effect.promise(() => symlink(outside, linked))
+      yield* Effect.promise(() => symlink(outside, linked, process.platform === "win32" ? "junction" : "dir"))
 
       const err = new Error("stop after permission")
       const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
@@ -403,7 +403,15 @@ describe("tool.shell permissions", () => {
           ).toMatchObject({ message: err.message })
         }),
       )
-      expect(requests.find((request) => request.permission === "external_directory")).toBeDefined()
+      const extDirReq = requests.find((request) => request.permission === "external_directory")
+      expect(extDirReq).toBeDefined()
+      if (extDirReq?.permission !== "external_directory") return
+      const expected = glob(path.join(outside, "*"))
+      expect(extDirReq.patterns).toContain(expected)
+      expect(extDirReq.metadata).toMatchObject({
+        directories: [outside],
+        patterns: [expected],
+      })
     }),
   )
 
@@ -542,6 +550,38 @@ describe("tool.shell permissions", () => {
               if (requests[0]?.permission !== "external_directory") return
               expect(requests[0].patterns).toContain(glob(path.join(os.homedir(), ".ssh", "*")))
             }),
+          ),
+        ),
+      )
+    }
+
+    for (const item of ps) {
+      it.live(`uses the shell-independent HOME path for PowerShell expansion [${item.label}]`, () =>
+        withShell(
+          item,
+          Effect.acquireUseRelease(
+            Effect.sync(() => {
+              const previous = process.env.HOME
+              process.env.HOME = path.join(projectRoot, "fake-home")
+              return previous
+            }),
+            (previous) =>
+              runIn(
+                projectRoot,
+                Effect.gen(function* () {
+                  const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+                  yield* run({ command: 'Get-Content "$HOME/.ssh/config"' }, capture(requests))
+                  const extDirReq = requests.find((request) => request.permission === "external_directory")
+                  expect(extDirReq).toBeDefined()
+                  if (extDirReq?.permission !== "external_directory") return
+                  expect(extDirReq.patterns).toContain(glob(path.join(os.homedir(), ".ssh", "*")))
+                }),
+              ),
+            (previous) =>
+              Effect.sync(() => {
+                if (previous === undefined) delete process.env.HOME
+                else process.env.HOME = previous
+              }),
           ),
         ),
       )
