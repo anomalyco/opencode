@@ -1,0 +1,69 @@
+diff --git a/dist/RcMap.js b/dist/RcMap.js
+index 6e9a9ad04ec2c0fef0852cc0e6b3b1dba530a6f4..ba5a15d9585438528ff3d6f549d22ac6e831a049 100644
+--- a/dist/RcMap.js
++++ b/dist/RcMap.js
+@@ -254,10 +254,14 @@ const release = (self, key, entry) => Effect.withFiber(fiber => {
+   entry.refCount--;
+   if (entry.refCount > 0) {
+     return Effect.void;
+-  } else if (self.state._tag === "Closed" || !MutableHashMap.has(self.state.map, key) || Duration.isZero(entry.idleTimeToLive)) {
+-    if (self.state._tag === "Open") {
+-      MutableHashMap.remove(self.state.map, key);
+-    }
++  } else if (self.state._tag === "Closed") {
++    return Scope.close(entry.scope, Exit.void);
++  }
++  const o = MutableHashMap.get(self.state.map, key);
++  if (o._tag === "None" || o.value !== entry) {
++    return Scope.close(entry.scope, Exit.void);
++  } else if (Duration.isZero(entry.idleTimeToLive)) {
++    MutableHashMap.remove(self.state.map, key);
+     return Scope.close(entry.scope, Exit.void);
+   } else if (!Duration.isFinite(entry.idleTimeToLive)) {
+     return Effect.void;
+@@ -270,6 +274,8 @@ const release = (self, key, entry) => Effect.withFiber(fiber => {
+     const remaining = entry.expiresAt - now;
+     if (remaining <= 0) {
+       if (self.state._tag === "Closed" || entry.refCount > 0) return Effect.void;
++      const o = MutableHashMap.get(self.state.map, key);
++      if (o._tag === "None" || o.value !== entry) return Effect.void;
+       MutableHashMap.remove(self.state.map, key);
+       return restore(Scope.close(entry.scope, Exit.void));
+     }
+diff --git a/src/RcMap.ts b/src/RcMap.ts
+index 67dcc147389a8fd0e8aae21b69ef58f44c295958..a98893a085e2f29d2c40125e2691a1e172c65f7d 100644
+--- a/src/RcMap.ts
++++ b/src/RcMap.ts
+@@ -738,14 +738,15 @@ const release = <K, A, E>(self: RcMap<K, A, E>, key: K, entry: State.Entry<A, E>
+     entry.refCount--
+     if (entry.refCount > 0) {
+       return Effect.void
+-    } else if (
+-      self.state._tag === "Closed"
+-      || !MutableHashMap.has(self.state.map, key)
+-      || Duration.isZero(entry.idleTimeToLive)
+-    ) {
+-      if (self.state._tag === "Open") {
+-        MutableHashMap.remove(self.state.map, key)
+-      }
++    } else if (self.state._tag === "Closed") {
++      return Scope.close(entry.scope, Exit.void)
++    }
++
++    const o = MutableHashMap.get(self.state.map, key)
++    if (o._tag === "None" || o.value !== entry) {
++      return Scope.close(entry.scope, Exit.void)
++    } else if (Duration.isZero(entry.idleTimeToLive)) {
++      MutableHashMap.remove(self.state.map, key)
+       return Scope.close(entry.scope, Exit.void)
+     } else if (!Duration.isFinite(entry.idleTimeToLive)) {
+       return Effect.void
+@@ -760,6 +761,8 @@ const release = <K, A, E>(self: RcMap<K, A, E>, key: K, entry: State.Entry<A, E>
+       const remaining = entry.expiresAt - now
+       if (remaining <= 0) {
+         if (self.state._tag === "Closed" || entry.refCount > 0) return Effect.void
++        const o = MutableHashMap.get(self.state.map, key)
++        if (o._tag === "None" || o.value !== entry) return Effect.void
+         MutableHashMap.remove(self.state.map, key)
+         return restore(Scope.close(entry.scope, Exit.void))
+       }
