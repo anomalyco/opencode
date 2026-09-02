@@ -322,6 +322,11 @@ export function getToolInfo(
         title: i18n.t("ui.tool.grep"),
         subtitle: typeof input.pattern === "string" ? input.pattern : undefined,
       }
+    case "browser":
+      return {
+        icon: "window-cursor",
+        title: i18n.t("ui.tool.browser"),
+      }
     case "webfetch":
       return {
         icon: "window-cursor",
