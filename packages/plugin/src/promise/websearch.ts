@@ -12,11 +12,11 @@ export interface WebSearchDefinition {
 }
 
 export interface WebSearchDomain extends WebSearchApi {
-  readonly transform: Transform<WebSearchDraft>
+  readonly transform: Transform<WebSearchEditor>
   readonly reload: () => Promise<void>
 }
 
-export interface WebSearchDraft {
+export interface WebSearchEditor {
   add(definition: WebSearchDefinition): void
   readonly default: {
     get(): string | false | undefined

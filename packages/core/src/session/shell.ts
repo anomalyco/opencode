@@ -3,12 +3,13 @@ export * as SessionShell from "./shell.js"
 import type { Session } from "@opencode-ai/schema/session"
 import { Effect } from "effect"
 import { Instance } from "../instance/service.js"
+import { Plugin } from "../plugin/service.js"
 import { Shell } from "../shell.js"
 import { ShellResult } from "../shell/result.js"
 
 export const start = Effect.fn("SessionShell.start")(function* (input: { session: Session.Info; command: string }) {
   const instances = yield* Instance.Service
-  const shell = yield* Shell.Service.pipe(instances.provide(input.session))
+  const shell = yield* Plugin.awaitActivation.pipe(Effect.andThen(Shell.Service), instances.provide(input.session))
   const info = yield* shell.create({
     command: input.command,
     cwd: input.session.location.directory,

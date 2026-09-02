@@ -7,7 +7,7 @@ import type {
   SessionStatus,
 } from "@opencode-ai/client/promise"
 import { Option, Schema } from "effect"
-import { createMemo, type Accessor } from "solid-js"
+import { createMemo, mapArray, type Accessor } from "solid-js"
 import { currentContentDefaultOpen } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 
@@ -82,6 +82,18 @@ export function createReactiveTimelineProjection(input: {
   )
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
   const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
+  // Row structure depends on the empty/non-empty boundary, not each text delta.
+  // Keep the original content objects so row renderers still read live text.
+  const textParts = mapArray(
+    () =>
+      input
+        .sessionMessages()
+        .flatMap((message) =>
+          message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
+        ),
+    (content) => [content, createMemo(() => !!content.text.trim())] as const,
+  )
+  const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
       input.sessionMessages(),
@@ -90,6 +102,10 @@ export function createReactiveTimelineProjection(input: {
       input.pendingUserMessageIDs?.(),
       input.shellToolDefaultOpen?.() ?? false,
       input.editToolDefaultOpen?.() ?? false,
+      (content, showReasoning) =>
+        content.type === "tool"
+          ? renderable(content, showReasoning)
+          : (content.type === "text" || showReasoning) && textVisible().get(content)!(),
     ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
@@ -140,6 +156,7 @@ export namespace Timeline {
     pendingUserMessageIDs?: ReadonlySet<string>,
     shellToolDefaultOpen = false,
     editToolDefaultOpen = false,
+    isRenderable = renderable,
   ) {
     type Turn = {
       id: string
@@ -218,6 +235,7 @@ export namespace Timeline {
             turn.id === activeMessageID,
             shellToolDefaultOpen,
             editToolDefaultOpen,
+            isRenderable,
           )
         }),
       ],
@@ -234,6 +252,7 @@ export namespace Timeline {
     isActive: boolean,
     shellToolDefaultOpen = false,
     editToolDefaultOpen = false,
+    isRenderable = renderable,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -261,7 +280,7 @@ export namespace Timeline {
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
       const refs = messages.flatMap((message, messageIndex) =>
         contentEntries(message)
-          .filter((entry) => renderable(entry.content, showReasoning) && !(thinking && entry.content === lastContent))
+          .filter((entry) => isRenderable(entry.content, showReasoning) && !(thinking && entry.content === lastContent))
           .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
       )
       const interruptedAt = messages.findIndex((message) => isInterrupted(message.error))

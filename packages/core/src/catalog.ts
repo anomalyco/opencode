@@ -23,7 +23,7 @@ type Data = {
   defaultModel?: DefaultModel
 }
 
-export type Draft = {
+export type Editor = {
   provider: {
     list: () => readonly ProviderRecord[]
     get: (providerID: Provider.ID) => ProviderRecord | undefined
@@ -41,7 +41,7 @@ export type Draft = {
   }
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly provider: {
     readonly get: (providerID: Provider.ID) => Effect.Effect<Provider.Info | undefined>
     readonly all: () => Effect.Effect<Provider.Info[]>
@@ -82,39 +82,39 @@ const layer = Layer.effect(
       } satisfies Model.Info
     }
 
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "catalog",
       initial: () => ({ providers: new Map() }),
-      draft: (draft) => {
-        const result: Draft = {
+      editor: (editor) => {
+        const result: Editor = {
           provider: {
-            list: () => Array.fromIterable(draft.providers.values()) as ProviderRecord[],
-            get: (providerID) => draft.providers.get(providerID),
+            list: () => Array.fromIterable(editor.providers.values()) as ProviderRecord[],
+            get: (providerID) => editor.providers.get(providerID),
             update: (providerID, fn) => {
-              let current = draft.providers.get(providerID)
+              let current = editor.providers.get(providerID)
               if (!current) {
                 current = {
                   provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
                   models: new Map<Model.ID, Model.MutableInfo>(),
                 }
-                draft.providers.set(providerID, current)
+                editor.providers.set(providerID, current)
               }
               fn(current.provider)
             },
             remove: (providerID) => {
-              draft.providers.delete(providerID)
+              editor.providers.delete(providerID)
             },
           },
           model: {
-            get: (providerID, modelID) => draft.providers.get(providerID)?.models.get(modelID),
+            get: (providerID, modelID) => editor.providers.get(providerID)?.models.get(modelID),
             update: (providerID, modelID, fn) => {
-              let record = draft.providers.get(providerID)
+              let record = editor.providers.get(providerID)
               if (!record) {
                 record = {
                   provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
                   models: new Map<Model.ID, Model.MutableInfo>(),
                 }
-                draft.providers.set(providerID, record)
+                editor.providers.set(providerID, record)
               }
               const model = record.models.get(modelID) ?? (Model.Info.default(providerID, modelID) as Model.MutableInfo)
               if (!record.models.has(modelID)) record.models.set(modelID, model)
@@ -123,21 +123,19 @@ const layer = Layer.effect(
               model.providerID = providerID
             },
             remove: (providerID, modelID) => {
-              draft.providers.get(providerID)?.models.delete(modelID)
+              editor.providers.get(providerID)?.models.delete(modelID)
             },
             default: {
-              get: () => draft.defaultModel,
+              get: () => editor.defaultModel,
               set: (providerID, modelID) => {
-                draft.defaultModel = { providerID, modelID }
+                editor.defaultModel = { providerID, modelID }
               },
             },
           },
         }
         return result
       },
-      finalize: Effect.fn("Catalog.finalize")(function* () {
-        yield* bus.publish(Catalog.Event.Updated, {})
-      }),
+      notify: () => bus.publish(Catalog.Event.Updated, {}).pipe(Effect.asVoid, Effect.withSpan("Catalog.notify")),
     })
     const result: Interface = {
       transform: state.transform,

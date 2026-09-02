@@ -91,7 +91,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
     },
-    plugins: [{ ...picker, transformIndexHtml: undefined }, appPlugin, sentry],
+    plugins: [picker, appPlugin, sentry],
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {

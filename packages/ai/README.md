@@ -241,13 +241,114 @@ Constructing `stream()` or `generate()` does not record a request, invoke a resp
 Each execution does. An exhausted queue without a fallback defects immediately rather than waiting for a
 future reply.
 
-Responses remain canonical event arrays or arbitrary `Stream<LLMEvent, AIError>` values. The client consumes
+Generation responses remain canonical event arrays or arbitrary `Stream<LLMEvent, AIError>` values. The client consumes
 supplied streams directly, preserving failure identity, finalizers, incomplete output, and post-finish tails;
 it does not repair or truncate them.
+
+For explicit compaction, script a `CompactionResponse` through `push`, `always`, or `serve`. Its `replacement` contains the next context window, including retained user messages. The client returns that result and usage directly, with the same lazy request recording and gates. Generation and compaction reject fixtures for the wrong operation instead of converting between response shapes.
 
 The published legacy `Service`, `layer`, `clientLayer`, and module-level controls remain available as adapters
 over the same implementation, including the legacy live `requests` array. New tests should use `Test` and
 `testLayer`.
+
+## Provider compaction
+
+Compaction is opt-in. The package supports automatic compaction in OpenAI/Azure Responses and Anthropic Messages (including Claude on Vertex), and explicit compaction calls in OpenAI/Azure/xAI Responses. Model and deployment support still depends on the provider. Bedrock compaction is deferred to a separate follow-up.
+
+This is different from prompt caching, server-side history storage, or truncation. Compaction returns provider-owned context that must be replayed to continue the conversation.
+
+### Explicit compaction
+
+`LLMClient.compact(request)` is the caller-controlled operation for OpenAI, Azure, and xAI Responses. It performs exactly one HTTP call to `/responses/compact`, using the selected route's endpoint, credentials, query, and HTTP middleware. It returns a `CompactionResponse` with `replacement: Message[]` and optional `usage`, not a normal generation response.
+
+Prefer this operation, where supported, when the application owns compaction policy and durable context updates.
+
+```ts
+const result = yield * LLMClient.compact(request)
+const next = LLMRequest.update(request, {
+  messages: result.replacement,
+})
+const response = yield * LLMClient.generate(next)
+```
+
+`replacement` replaces the complete input window. Do not append it to the original transcript or extract only the encrypted item: the provider may retain additional messages in its output. Retained user and assistant messages remain ordinary messages with typed text, media, or reasoning parts, in their original order. Provider-specific message IDs, status, and phase use `providerMetadata`, not a raw output array hidden in an assistant message. Unsupported returned item types fail explicitly.
+
+The selected model carries explicit-compaction capability through request construction and updates. Calls using unsupported routes fail type checking. When the model is selected dynamically, narrow the request with `LLMClient.canCompact(request)` before calling `LLMClient.compact`; a model or route switch does not inherit the old capability. Runtime validation still rejects unsupported calls from untyped consumers. Capability describes the route's API, not whether every model or custom deployment supports the operation.
+
+Generation-only body overlays such as `stream` and `store` are not sent to the compact endpoint. Supported compact controls such as service tier and prompt-cache settings preserve request defaults and HTTP-overlay precedence. Retained image and file detail settings survive serialization and replay.
+
+The input must still fit the model's context window. Explicit compaction is not an overflow-recovery operation. Anthropic does not expose this operation in this package; its in-band compaction remains available below. Compatible routes do not inherit an explicit compact endpoint simply because they use a Responses protocol.
+
+### Advanced: in-band compaction
+
+`providerOptions.contextManagement` lets the provider decide when to compact during an ordinary `generate` or `stream` call. This is an advanced option for callers that own persistence and recovery: persist the complete assistant message, including its checkpoint, before continuing. Enabling the option does not provide durable checkpoint storage, interruption recovery, or model-switch policy. Keep the prior context until a successful checkpoint has been persisted.
+
+Inside an `Effect.gen`, enable OpenAI compaction with typed provider options:
+
+```ts
+import { LLM, LLMClient, LLMRequest, Message } from "@opencode-ai/ai"
+import { OpenAI } from "@opencode-ai/ai/providers"
+
+const request = LLM.request({
+  model: OpenAI.configure({ apiKey }).responses("gpt-5.3-codex"),
+  messages,
+  providerOptions: {
+    contextManagement: [{ type: "compaction", compactThreshold: 200_000 }],
+  },
+})
+const response = yield * LLMClient.generate(request)
+const next = LLMRequest.update(request, {
+  messages: [...request.messages, response.message, Message.user("Continue")],
+})
+```
+
+`store: false` remains the default. Keep the entire `response.message`, not just `response.text`. Compaction events become ordered `CompactionPart`s alongside text and reasoning. The conversation contains everything needed to continue; there is no separate replay object or hidden provider transcript.
+
+A compaction part has `provider` and exactly one representation: `encrypted` for Responses, or `text` for Anthropic. Responses also preserves the optional checkpoint `id`. These fields survive message serialization without becoming visible assistant text. Sending a checkpoint to another provider or an incompatible API fails rather than silently losing context.
+
+```ts
+import { CompactionPart, ProviderID } from "@opencode-ai/ai"
+
+CompactionPart.make({ provider: ProviderID.make("openai"), id: "cmp_123", encrypted: "..." })
+CompactionPart.make({ provider: ProviderID.make("anthropic"), text: "Summary of the conversation..." })
+```
+
+For Anthropic, use:
+
+```ts
+providerOptions: {
+  contextManagement: {
+    edits: [{
+      type: "compact_20260112",
+      trigger: { type: "input_tokens", value: 150_000 },
+      pauseAfterCompaction: true,
+      instructions: "Summarize the task and decisions. Do not call tools while summarizing.",
+    }],
+  },
+}
+```
+
+- The trigger is optional (provider default: 150,000 tokens), with a minimum of 50,000.
+- Custom instructions replace Anthropic's default summarization instructions.
+- The route adds `compact-2026-01-12` to existing beta headers, including when replaying a checkpoint without enabling new compactions.
+- A pause is exposed as `response.finishReason.raw === "compaction"`. It occurs only if the threshold triggers compaction: `pauseAfterCompaction` does not mean "compact now". The caller explicitly issues the next request; the package never automatically resumes.
+- Anthropic can return a compaction block with `content: null` when summarization fails. This becomes a compaction part with `text: null`, which is **not** a successful replacement for prior history. The package never prunes history automatically.
+- `Usage` totals include all reported Anthropic `usage.iterations`, including compaction. `contextTokens` separately reports the final message iteration's inclusive input size, when available. A compaction-only pause does not report a post-compaction context size. Raw iteration usage remains in `providerMetadata`.
+
+### Ownership and verification
+
+The AI package transports options and typed conversation parts. It does not schedule compaction, persist Session checkpoints, select history, switch providers, or replace Core's existing local compaction policy. Native compaction is not enabled for OpenCode Sessions by this feature; Session integration must persist these parts before enabling it. The AI SDK bridge rejects native compaction parts rather than dropping them. Provider-executed tool APIs and persistence changes are a separate follow-up.
+
+Tests cover serialized round trips, real local HTTP plus a tool loop, WebSocket recovery, provider errors, malformed blocks, and usage accounting. Live provider tests are gated by `RECORD=true` and the relevant API keys:
+
+```sh
+# Run from packages/ai. Only records the selected new cassette group.
+RECORD=true RECORDED_PREFIX=openai-compaction bun test test/provider/compaction.recorded.test.ts
+RECORD=true RECORDED_PREFIX=xai-compaction bun test test/provider/compaction.recorded.test.ts
+RECORD=true RECORDED_PREFIX=anthropic-compaction bun test test/provider/compaction.recorded.test.ts
+```
+
+Provider references: [OpenAI](https://developers.openai.com/api/docs/guides/compaction), [Azure](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses#server-side-compaction), [Anthropic](https://platform.claude.com/docs/en/build-with-claude/compaction), [xAI](https://docs.x.ai/developers/advanced-api-usage/context-compaction).
 
 ## Caching
 

@@ -244,6 +244,31 @@ Review files`,
     ),
   )
 
+  it.effect("rebuilds on a config update published immediately after startup", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      const bus = yield* Bus.Service
+      let reloads = 0
+      // No directory entries, so startup has no filesystem hop that could hide a late subscription.
+      yield* ConfigCommandPlugin.Plugin.effect(
+        host({
+          command: {
+            list: () => Effect.die("unused command.list"),
+            transform: command.transform,
+            reload: () => command.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+          },
+          event: { subscribe: () => bus.subscribe(Event.Updated) },
+        }),
+      )
+
+      // Published in the same fiber step as startup: the subscription must
+      // already be open when the plugin effect returns.
+      yield* bus.publish(Event.Updated, {})
+      yield* advance(() => reloads >= 1)
+      expect(reloads).toBe(1)
+    }).pipe(Effect.provide(Config.testLayer([]))),
+  )
+
   it.effect("ignores updates outside command source directories", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>

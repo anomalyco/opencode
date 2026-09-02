@@ -9,6 +9,8 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginAwaitActivationInput,
+  PluginAwaitActivationOutput,
   PluginCheckInput,
   PluginCheckOutput,
   PluginUpdateInput,
@@ -467,6 +469,18 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,
+          },
+          requestOptions,
+        ),
+      awaitActivation: (input?: PluginAwaitActivationInput, requestOptions?: RequestOptions) =>
+        request<PluginAwaitActivationOutput>(
+          {
+            method: "POST",
+            path: `/api/plugin/await-activation`,
+            query: { location: input?.["location"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
           },
           requestOptions,
         ),

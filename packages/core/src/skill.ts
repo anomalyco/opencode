@@ -72,14 +72,14 @@ export type Data = {
   skills: Map<ID, Types.DeepMutable<Info>>
 }
 
-export type Draft = {
+export type Editor = {
   list: () => readonly Types.DeepMutable<Info>[]
   add: (skill: Info) => void
   update: (id: string, update: (skill: Types.DeepMutable<Info>) => void) => void
   remove: (id: string) => void
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
 }
@@ -91,25 +91,25 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
 
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "skill",
       initial: () => ({ skills: new Map() }),
-      draft: (draft) => ({
-        list: () => Array.from(draft.skills.values()),
+      editor: (editor) => ({
+        list: () => Array.from(editor.skills.values()),
         add: (skill) => {
-          draft.skills.set(skill.id, { ...skill } as Types.DeepMutable<Info>)
+          editor.skills.set(skill.id, { ...skill } as Types.DeepMutable<Info>)
         },
         update: (id, update) => {
-          const current = draft.skills.get(ID.make(id))
+          const current = editor.skills.get(ID.make(id))
           if (!current) return
           update(current)
           current.id = ID.make(id)
         },
         remove: (id) => {
-          draft.skills.delete(ID.make(id))
+          editor.skills.delete(ID.make(id))
         },
       }),
-      finalize: () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     return Service.of({

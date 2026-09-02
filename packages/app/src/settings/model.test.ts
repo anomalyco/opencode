@@ -101,7 +101,14 @@ describe("settings schema", () => {
         terminalPlacement: "side",
         followUpBehavior: "steer",
       },
-      appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
+      appearance: {
+        fontSize: 14,
+        mono: "",
+        sans: "",
+        terminal: "",
+        tabLayout: "horizontal",
+        showProjectName: false,
+      },
       keybinds: {},
       permissions: { autoApprove: false },
       workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -126,7 +133,7 @@ describe("settings schema", () => {
         reasoningMode: 3,
         followUpBehavior: "invalid",
       },
-      appearance: { fontSize: "large", mono: "Custom Mono", tabLayout: "vertical" },
+      appearance: { fontSize: "large", mono: "Custom Mono", tabLayout: "vertical", showProjectName: true },
       permissions: { autoApprove: true },
       workspaces: { defaultDestination: "new", lastUsed: { good: "workspace", bad: true } },
       keybinds: { good: "ctrl+k", bad: 3 },
@@ -146,6 +153,7 @@ describe("settings schema", () => {
       sans: "",
       terminal: "",
       tabLayout: "vertical",
+      showProjectName: true,
     })
     expect(settings.permissions.autoApprove).toBe(true)
     expect(settings.workspaces).toEqual({ defaultDestination: "new", lastUsed: { good: "workspace" } })

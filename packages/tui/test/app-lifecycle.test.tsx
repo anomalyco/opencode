@@ -239,7 +239,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: {},
         log: () => {},
@@ -315,7 +315,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
@@ -389,7 +389,7 @@ test("session title generated while an untitled session is loading remains visib
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
@@ -688,7 +688,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
       frame.includes("Prepended instructions") &&
       frame.includes("Original answer") &&
       frame.includes("20.0 tok/s") &&
-      !frame.includes("Loading session history..."),
+      !frame.includes("Loading session history…"),
   )
   expect(prepended).toContain("Current input")
   expect(prepended).toContain("Original answer")
@@ -775,7 +775,7 @@ test("session startup prompt is submitted exactly once", async () => {
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy", prompt: "RESUME_READY" },
         log: () => {},
@@ -1309,7 +1309,7 @@ test.each(["manual", "select"] as const)(
             }),
             update: async () => ({}),
           },
-          packages: { resolve: async () => undefined },
+          packages: { prepare: async () => ({ directory: "" }) },
           args: { sessionID: session.id },
           terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
           log: () => {},
@@ -1395,7 +1395,7 @@ async function createAppFixture(
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: { get: async () => input.config ?? { animations: false }, update: async () => ({}) },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
       args: input.args ?? {},
       log: () => {},

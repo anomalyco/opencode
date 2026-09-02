@@ -190,9 +190,9 @@ export const GithubCopilotPlugin = define({
       )
     })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.method.remove("github-copilot", { type: "key" })
-      draft.method.update(oauth(ctx.app))
+    yield* ctx.integration.transform((editor) => {
+      editor.method.remove("github-copilot", { type: "key" })
+      editor.method.update(oauth(ctx.app))
     })
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(Provider.ID.githubCopilot)

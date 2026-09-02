@@ -10,7 +10,6 @@ import { Tool } from "@opencode-ai/core/tool"
 import type { Info } from "@opencode-ai/schema/tool"
 import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
-import { TestClock } from "effect/testing"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
 
@@ -66,20 +65,20 @@ const constant = (text: string): Info => ({
 })
 
 const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>>, options?: Tool.Options) =>
-  service.transform((draft) =>
-    Object.entries(tools).forEach(([name, tool]) => draft.add({ ...tool, name, options: options ?? tool.options })),
+  service.transform((editor) =>
+    Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
   )
 
 describe("Tool", () => {
-  it.effect("reads the current draft tools by effective name", () =>
+  it.effect("reads the current editor tools by effective name", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { echo: make() }, { namespace: "acme", codemode: false })
-      yield* service.transform((draft) => {
-        expect(draft.list().map((tool) => tool.id)).toEqual(["acme_echo"])
-        expect(draft.get("acme_echo")?.id).toBe("acme_echo")
-        expect(draft.get("acme_echo")?.name).toBe("echo")
-        expect(draft.get("missing")).toBeUndefined()
+      yield* service.transform((editor) => {
+        expect(editor.list().map((tool) => tool.id)).toEqual(["acme_echo"])
+        expect(editor.get("acme_echo")?.id).toBe("acme_echo")
+        expect(editor.get("acme_echo")?.name).toBe("echo")
+        expect(editor.get("missing")).toBeUndefined()
       })
     }),
   )
@@ -90,18 +89,18 @@ describe("Tool", () => {
       let text = "original"
       const source = yield* Scope.make()
       yield* service
-        .transform((draft) => {
-          draft.add({ ...constant(text), name: "echo", options: { namespace: "acme", codemode: false } })
-          draft.add({ ...make(), name: "hidden" })
+        .transform((editor) => {
+          editor.add({ ...constant(text), name: "echo", options: { namespace: "acme", codemode: false } })
+          editor.add({ ...make(), name: "hidden" })
         })
         .pipe(Scope.provide(source))
       const original = yield* service.snapshot()
-      const update = yield* service.transform((draft) => {
-        draft.update("missing", () => {
+      const update = yield* service.transform((editor) => {
+        editor.update("missing", () => {
           throw new Error("must not create a tool")
         })
-        draft.remove("missing")
-        draft.update("acme_echo", (tool) => {
+        editor.remove("missing")
+        editor.update("acme_echo", (tool) => {
           const execute = tool.execute
           tool.description = "Updated"
           tool.execute = (input, context) =>
@@ -111,14 +110,12 @@ describe("Tool", () => {
         })
       })
       const scope = yield* Scope.make()
-      yield* service.transform((draft) => draft.remove("hidden")).pipe(Scope.provide(scope))
+      yield* service.transform((editor) => editor.remove("hidden")).pipe(Scope.provide(scope))
       expect((yield* service.snapshot()).codeModeCatalog?.tools).toEqual([])
       expect((yield* executeTool(service, call("acme_echo"))).output).toEqual({ text: "original updated" })
 
       text = "refreshed"
-      const reload = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(reload)
+      yield* service.reload()
       const refreshed = yield* service.snapshot()
       expect(refreshed.definitions[0]?.description).toBe("Updated")
       expect(refreshed.codeModeCatalog?.tools).toEqual([])
@@ -133,8 +130,8 @@ describe("Tool", () => {
         "hidden",
       ])
 
-      yield* service.transform((draft) =>
-        draft.update("acme_echo", (tool) => {
+      yield* service.transform((editor) =>
+        editor.update("acme_echo", (tool) => {
           tool.description = "Updated again"
         }),
       )
@@ -146,16 +143,16 @@ describe("Tool", () => {
   it.effect("updates schemas and executors without renaming tools and applies removal in order", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* service.transform((draft) => {
-        draft.add({ ...make(), options: { namespace: "acme.tools", codemode: false } })
-        draft.add({ ...make(), name: "removed", options: { codemode: false } })
-        draft.remove("removed")
-        draft.update("removed", () => {
+      yield* service.transform((editor) => {
+        editor.add({ ...make(), options: { namespace: "acme.tools", codemode: false } })
+        editor.add({ ...make(), name: "removed", options: { codemode: false } })
+        editor.remove("removed")
+        editor.update("removed", () => {
           throw new Error("must not resurrect a tool")
         })
-        draft.remove("acme_tools_echo")
-        draft.add({ ...make(), options: { namespace: "acme.tools", codemode: false } })
-        draft.update("acme_tools_echo", (tool) => {
+        editor.remove("acme_tools_echo")
+        editor.add({ ...make(), options: { namespace: "acme.tools", codemode: false } })
+        editor.update("acme_tools_echo", (tool) => {
           tool.name = "renamed"
           tool.options = { namespace: "other", codemode: false }
           tool.input = Schema.Struct({ value: Schema.Finite })
@@ -185,8 +182,8 @@ describe("Tool", () => {
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { echo: make() }, { codemode: false })
-      yield* service.transform((draft) =>
-        draft.update("echo", (tool) => {
+      yield* service.transform((editor) =>
+        editor.update("echo", (tool) => {
           Object.assign(tool, { description: undefined })
         }),
       )
@@ -199,29 +196,23 @@ describe("Tool", () => {
     Effect.gen(function* () {
       const service = yield* Tool.Service
       let source: Info[] = []
-      yield* service.transform((draft) => source.forEach((tool) => draft.add(tool)))
+      yield* service.transform((editor) => source.forEach((tool) => editor.add(tool)))
       expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
 
       const tool = { ...constant("first"), name: "echo", options: { codemode: false } }
       source = [tool]
-      const first = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(first)
+      yield* service.reload()
       const advertised = yield* service.snapshot()
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
 
       tool.execute = constant("second").execute
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
-      const second = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(second)
+      yield* service.reload()
       expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "second" })
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
 
       source = []
-      const removed = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(removed)
+      yield* service.reload()
       expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
     }),
@@ -231,17 +222,18 @@ describe("Tool", () => {
     Effect.gen(function* () {
       const service = yield* Tool.Service
       const runs: string[] = []
-      yield* service.transform((draft) => {
+      yield* service.transform((editor) => {
         runs.push("base")
-        draft.add({ ...constant("base"), name: "echo", options: { codemode: false } })
+        editor.add({ ...constant("base"), name: "echo", options: { codemode: false } })
       })
       const scope = yield* Scope.make()
       const overlay = yield* service
-        .transform((draft) => {
+        .transform((editor) => {
           runs.push("overlay")
-          draft.add({ ...constant("overlay"), name: "echo", options: { codemode: false } })
+          editor.add({ ...constant("overlay"), name: "echo", options: { codemode: false } })
         })
         .pipe(Scope.provide(scope))
+      // Each registration outside a batch notifies immediately, and every rebuild replays all transforms.
       expect(runs).toEqual(["base", "base", "overlay"])
       expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "overlay" })
 
@@ -254,29 +246,30 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("batches tool publication and suppresses terminal teardown replay", () =>
+  it.effect("reads pending tools inside a batch and suppresses terminal teardown replay", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       const runs: string[] = []
       const scope = yield* Scope.make()
       yield* State.batch(
         Effect.gen(function* () {
-          yield* service.transform((draft) => {
+          yield* service.transform((editor) => {
             runs.push("base")
-            draft.add({ ...constant("base"), name: "echo", options: { codemode: false } })
+            editor.add({ ...constant("base"), name: "echo", options: { codemode: false } })
           })
-          yield* service.transform((draft) => {
+          yield* service.transform((editor) => {
             runs.push("overlay")
-            draft.add({ ...constant("overlay"), name: "echo", options: { codemode: false } })
+            editor.add({ ...constant("overlay"), name: "echo", options: { codemode: false } })
           })
           expect(runs).toEqual([])
-          expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+          expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["echo", "execute"])
+          expect(runs).toEqual(["base", "overlay"])
         }).pipe(Scope.provide(scope)),
       )
 
       expect(runs).toEqual(["base", "overlay"])
       expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "overlay" })
-      yield* State.batch(Scope.close(scope, Exit.void), { flush: false })
+      yield* State.shutdown(Scope.close(scope, Exit.void))
       expect(runs).toEqual(["base", "overlay"])
     }),
   )
@@ -286,23 +279,19 @@ describe("Tool", () => {
       const service = yield* Tool.Service
       yield* transform(service, { echo_tool: constant("base") }, { codemode: false })
       let source = [{ ...constant("overlay"), name: "echo.tool", options: { codemode: false } }]
-      const registration = yield* service.transform((draft) => source.forEach((tool) => draft.add(tool)))
+      const registration = yield* service.transform((editor) => source.forEach((tool) => editor.add(tool)))
       expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "overlay" })
 
       source = [...source, { ...constant("collision"), name: "echo_tool", options: { codemode: false } }]
-      const collision = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(collision)
+      yield* service.reload()
       expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "collision" })
 
       yield* registration.dispose
       expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "base" })
-      yield* service.transform((draft) => source.forEach((tool) => draft.add(tool)))
+      yield* service.transform((editor) => source.forEach((tool) => editor.add(tool)))
 
       source = [{ ...constant("invalid"), name: "", options: { codemode: false } }]
-      const invalid = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(invalid)
+      yield* service.reload()
       expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "base" })
     }),
   )
@@ -417,11 +406,11 @@ describe("Tool", () => {
   it.effect("keeps healthy tools when another namespace is invalid", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* service.transform((draft) => {
-        draft.namespace({ name: "invalid..namespace", description: "Invalid" })
-        draft.add({ ...make(), name: "first", options: { codemode: false } })
-        draft.add({ ...make(), name: "second", options: { namespace: "invalid..namespace", codemode: false } })
-        draft.add({ ...make(), name: "second", options: { namespace: "invalid__namespace" } })
+      yield* service.transform((editor) => {
+        editor.namespace({ name: "invalid..namespace", description: "Invalid" })
+        editor.add({ ...make(), name: "first", options: { codemode: false } })
+        editor.add({ ...make(), name: "second", options: { namespace: "invalid..namespace", codemode: false } })
+        editor.add({ ...make(), name: "second", options: { namespace: "invalid__namespace" } })
       })
 
       const snapshot = yield* service.snapshot()
@@ -435,13 +424,13 @@ describe("Tool", () => {
   it.effect("keeps namespace descriptions beside catalog tools", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* service.transform((draft) => {
-        draft.namespace({ name: "registry", description: "Package publishing and discovery" })
-        draft.namespace({ name: "registry.search", description: "Pricing operations" })
-        draft.add({ ...make(), name: "plain", options: { namespace: "legacy" } })
-        draft.add({ ...make(), name: "direct", options: { namespace: "registry", codemode: false } })
-        draft.add({ ...make(), name: "search", description: "Search packages", options: { namespace: "registry" } })
-        draft.add({ ...make(), name: "sales", description: "Read sales", options: { namespace: "registry.search" } })
+      yield* service.transform((editor) => {
+        editor.namespace({ name: "registry", description: "Package publishing and discovery" })
+        editor.namespace({ name: "registry.search", description: "Pricing operations" })
+        editor.add({ ...make(), name: "plain", options: { namespace: "legacy" } })
+        editor.add({ ...make(), name: "direct", options: { namespace: "registry", codemode: false } })
+        editor.add({ ...make(), name: "search", description: "Search packages", options: { namespace: "registry" } })
+        editor.add({ ...make(), name: "sales", description: "Read sales", options: { namespace: "registry.search" } })
       })
 
       const snapshot = yield* service.snapshot()
@@ -506,13 +495,48 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("retains namespace descriptions in executable snapshots after appended transforms", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((editor) => {
+        editor.namespace({ name: "acme", description: "Archival operations" })
+        editor.add({ ...make(), options: { namespace: "acme" } })
+      })
+      const advertised = yield* service.snapshot()
+
+      yield* service.transform((editor) => {
+        editor.namespace({ name: "acme", description: "Billing operations" })
+      })
+      const current = yield* service.snapshot()
+      expect(advertised.codeModeCatalog?.tools).toMatchObject([{ name: "acme", description: "Archival operations" }])
+      expect(current.codeModeCatalog?.tools).toMatchObject([{ name: "acme", description: "Billing operations" }])
+
+      const search = (snapshot: Tool.Snapshot, query: string) =>
+        snapshot.execute({
+          ...call("execute"),
+          call: {
+            type: "tool-call",
+            id: `namespace-${query}`,
+            name: "execute",
+            input: {
+              code: `return search({ query: ${JSON.stringify(query)} }).items.map(item => item.path).join(",")`,
+            },
+          },
+        })
+      expect((yield* search(advertised, "archival")).output).toMatchObject({ output: "tools.acme.echo" })
+      expect((yield* search(advertised, "billing")).output).toMatchObject({ output: "" })
+      expect((yield* search(current, "archival")).output).toMatchObject({ output: "" })
+      expect((yield* search(current, "billing")).output).toMatchObject({ output: "tools.acme.echo" })
+    }),
+  )
+
   it.effect("preserves a top-level tool that also has child tools", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* service.transform((draft) => {
-        draft.namespace({ name: "pricing", description: "Pricing operations" })
-        draft.add({ ...make(), name: "pricing" })
-        draft.add({ ...make(), name: "sales", options: { namespace: "pricing" } })
+      yield* service.transform((editor) => {
+        editor.namespace({ name: "pricing", description: "Pricing operations" })
+        editor.add({ ...make(), name: "pricing" })
+        editor.add({ ...make(), name: "sales", options: { namespace: "pricing" } })
       })
 
       const snapshot = yield* service.snapshot()
@@ -542,15 +566,15 @@ describe("Tool", () => {
     })
     return Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* service.transform((draft) => {
-        draft.add({ ...make(), name: "healthy", options: { codemode: false } })
-        draft.add({
+      yield* service.transform((editor) => {
+        editor.add({ ...make(), name: "healthy", options: { codemode: false } })
+        editor.add({
           name: "phone_type",
           input: Schema.Struct({}),
           execute: () => Effect.succeed({ content: "ok" }),
           options: { codemode: false },
         } as unknown as Info)
-        draft.add({ ...make(), name: "codemode" })
+        editor.add({ ...make(), name: "codemode" })
       })
 
       expect(output).toEqual([
@@ -576,9 +600,9 @@ describe("Tool", () => {
       yield* transform(service, { echo: constant("original") }, { codemode: false })
       yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* service.transform((draft) => {
-            draft.add({ ...constant("invalid"), name: "echo", description: undefined } as unknown as Info)
-            draft.add({ ...make(), name: "temporary", options: { codemode: false } })
+          yield* service.transform((editor) => {
+            editor.add({ ...constant("invalid"), name: "echo", description: undefined } as unknown as Info)
+            editor.add({ ...make(), name: "temporary", options: { codemode: false } })
           })
           const snapshot = yield* service.snapshot()
           expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["echo", "temporary", "execute"])
@@ -596,7 +620,7 @@ describe("Tool", () => {
       const capture = (tools: ReadonlyArray<Info>) =>
         Effect.scoped(
           Effect.gen(function* () {
-            yield* service.transform((draft) => tools.forEach(draft.add))
+            yield* service.transform((editor) => tools.forEach(editor.add))
             return (yield* service.snapshot()).definitions
           }),
         )
@@ -621,8 +645,8 @@ describe("Tool", () => {
   it.effect("snapshots external tools with missing input schemas", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* service.transform((draft) =>
-        draft.add({
+      yield* service.transform((editor) =>
+        editor.add({
           ...make(),
           input: undefined,
         } as unknown as Info),

@@ -24,7 +24,6 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
-    const plugins = yield* Plugin.Service
     const policy = yield* LocationWatcherPolicy.Service
     const publish = (update: { type: "create" | "update" | "delete"; path: string }) =>
       bus.publish(FileSystem.Event.Changed, {
@@ -93,7 +92,7 @@ const layer = Layer.effect(
     )
     yield* policy.observe(reconcile)
     yield* Effect.gen(function* () {
-      yield* plugins.awaitActivation
+      yield* Plugin.awaitActivation
       yield* reconcile(policy.current())
     }).pipe(
       Effect.catchCauseIf(

@@ -985,15 +985,6 @@ export type ReferenceUpdated = {
   data: {}
 }
 
-export type PluginAdded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "plugin.added"
-  location?: LocationRef
-  data: { id: string }
-}
-
 export type PluginUpdated = {
   id: string
   created: number
@@ -1892,7 +1883,7 @@ export type ConfigEntry =
         shell?: string
         model?: string | { providerID: string; model: string; variant?: string }
         default_agent?: string
-        autoupdate?: boolean | "notify"
+        update?: "disable" | "notify" | "auto"
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
@@ -2299,7 +2290,6 @@ export type V2Event =
   | ReferenceUpdated
   | PermissionAsked
   | PermissionReplied
-  | PluginAdded
   | PluginUpdated
   | ProjectUpdated
   | WorktreeUpdated
@@ -2584,6 +2574,14 @@ export type PluginListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<PluginInfo>
 }
+
+export type PluginAwaitActivationInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type PluginAwaitActivationOutput = void
 
 export type PluginCheckInput = {
   readonly location?: {

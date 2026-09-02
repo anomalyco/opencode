@@ -5,13 +5,14 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { LLMRequest, type JsonSchema, type ToolDefinition } from "../schema/index.js"
+import type { LLMRequest, JsonSchema, ToolDefinition } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
+import { ResponsesCompaction } from "./utils/responses-compaction.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -19,6 +20,14 @@ const WEBSOCKET_PROTOCOL_HEADER = "responses_websockets=2026-02-06"
 const WEBSOCKET_ROTATE_AFTER_MS = 55 * 60 * 1000
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = OpenResponses.PATH
+
+export const ContextManagement = Schema.Array(
+  Schema.Struct({
+    type: Schema.Literal("compaction"),
+    compactThreshold: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+  }),
+)
+export type ContextManagement = typeof ContextManagement.Type
 
 const OpenAIResponsesImageGenerationTool = Schema.Struct({
   type: Schema.tag("image_generation"),
@@ -78,6 +87,14 @@ const OpenAIResponsesCoreFields = {
   input: Schema.Array(Schema.Union([OpenResponses.InputItem, OpenAIResponsesHostedToolItem])),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
+  context_management: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        type: Schema.Literal("compaction"),
+        compact_threshold: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+      }),
+    ),
+  ),
 }
 
 const OpenAIResponsesBody = Schema.Struct({
@@ -125,15 +142,14 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesBody))
 
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
-  const body = yield* OpenResponses.fromRequestWithAdapter(
-    LLMRequest.update(request, { tools: [], toolChoice: undefined }),
-    adapter,
-  )
+  const management = yield* ProviderShared.validateWith(
+    Schema.decodeUnknownEffect(Schema.UndefinedOr(ContextManagement)),
+  )(request.providerOptions?.contextManagement)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
-  const parallelToolCalls = OpenResponses.resolveParallelToolCalls(request)
   return yield* decodeBody({
-    ...body,
-    ...(parallelToolCalls === undefined ? {} : { parallel_tool_calls: parallelToolCalls }),
+    ...(yield* OpenResponses.lowerConversation(request, adapter)),
+    ...OpenResponses.lowerGeneration(request),
+    context_management: management?.map((edit) => ({ type: edit.type, compact_threshold: edit.compactThreshold })),
     tools:
       request.tools.length === 0
         ? undefined
@@ -141,7 +157,8 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
             lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
           ),
     tool_choice:
-      body.tool_choice ?? (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
+      OpenResponses.allowedToolChoice(request) ??
+      (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
   })
 })
 
@@ -223,6 +240,7 @@ export const transport = channelTransport({
 })
 
 export const route = Route.make({
+  compact: ResponsesCompaction.make(adapter),
   id: ADAPTER,
   provider: "openai",
   providerMetadataKey: "openai",

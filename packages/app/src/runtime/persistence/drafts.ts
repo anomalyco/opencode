@@ -39,6 +39,19 @@ export async function createBlobReference(blob: Blob): Promise<BlobReference> {
 
 export function createDraftStore(driver: Driver): DraftStore {
   const versions = new Map<string, number>()
+  const loading = new Map<string, Promise<string | undefined>>()
+  const loadBlobUrl = (id: string) => {
+    const existing = urls.get(id)
+    if (existing) return existing
+    const pending = loading.get(id)
+    if (pending) return pending
+    const next = driver
+      .getBlob(id)
+      .then((blob) => (blob ? blobUrl(id, blob) : undefined))
+      .finally(() => loading.delete(id))
+    loading.set(id, next)
+    return next
+  }
   const putBlob = async (blob: Blob) => {
     const id = await driver.putBlob(blob)
     return { id, url: blobUrl(id, blob) }
@@ -71,8 +84,8 @@ export function createDraftStore(driver: Driver): DraftStore {
     if (item.blob && typeof item.blob === "object") {
       const ref = item.blob as Record<string, unknown>
       if (typeof ref.id === "string") {
-        const blob = await driver.getBlob(ref.id)
-        if (blob) return { ...item, blob: { id: ref.id, url: blobUrl(ref.id, blob) } }
+        const url = await loadBlobUrl(ref.id)
+        if (url) return { ...item, blob: { id: ref.id, url } }
       }
     }
     return Object.fromEntries(

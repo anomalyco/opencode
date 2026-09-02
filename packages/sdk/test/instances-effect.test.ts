@@ -8,7 +8,7 @@ import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Plugin } from "@opencode-ai/plugin/effect"
-import { Deferred, Effect, Exit, Layer, Schema, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, Schema, Scope } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { testEffect } from "../../core/test/lib/effect"
 import { AbsolutePath, Agent, Location, OpenCode } from "../src/effect"
@@ -62,8 +62,8 @@ it.live(
                     effect: (ctx) =>
                       Effect.gen(function* () {
                         expect(ctx.app).toMatchObject({ name: "instance-test", version: "1.2.3" })
-                        yield* ctx.agent.transform((draft) =>
-                          draft.update(Agent.ID.make("build"), (agent) => {
+                        yield* ctx.agent.transform((editor) =>
+                          editor.update(Agent.ID.make("build"), (agent) => {
                             agent.permissions = [{ action: "*", resource: "*", effect: "allow" }]
                           }),
                         )
@@ -72,8 +72,8 @@ it.live(
                             event.generation.temperature = 0.25
                           }),
                         )
-                        yield* ctx.tool.transform((draft) =>
-                          draft.add({
+                        yield* ctx.tool.transform((editor) =>
+                          editor.add({
                             name: "thread_echo",
                             description: "Report the configured thread",
                             input: Schema.Struct({}),
@@ -231,6 +231,72 @@ it.live(
       const admitted = yield* opencode.sessions.prompt({ sessionID: first.id, text: "Moved", resume: false })
       expect(admitted.payload.text).toBe(`Moved:${secondWorkspace}`)
       expect(configured).toEqual(["same-thread", "same-thread"])
+    }),
+  15_000,
+)
+
+class Personas extends Context.Service<Personas, { readonly of: (threadID: string) => Effect.Effect<string> }>()(
+  "Personas",
+) {}
+
+it.live(
+  "configures instances from services provided to the SDK layer",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const hostScope = yield* Scope.fork(yield* Effect.scope)
+      const attempts: string[] = []
+      const released: string[] = []
+      const layer = OpenCode.layer({
+        config: { directory: directory.path, project: false, content: "{}" },
+        models: { fetch: false },
+        fs: { filewatcher: false },
+        instances: {
+          key: (session) => metadata(session.metadata).threadID,
+          configure: (key) =>
+            Effect.gen(function* () {
+              const personas = yield* Personas
+              const persona = yield* personas.of(key)
+              const attempt = attempts.push(key)
+              yield* Effect.addFinalizer(() => Effect.sync(() => released.push(`${key}:${attempt}`)))
+              if (attempt === 1) return yield* Effect.fail(new Error("Persona store cold"))
+              return {
+                plugins: [
+                  Plugin.define({
+                    id: "persona",
+                    effect: (ctx) =>
+                      ctx.session.hook("prompt", (event) =>
+                        Effect.sync(() => {
+                          event.prompt.text += `:${persona}`
+                        }),
+                      ),
+                  }),
+                ],
+              }
+            }),
+        },
+      }).pipe(Layer.provide(Layer.succeed(Personas, { of: (threadID) => Effect.succeed(`persona-for-${threadID}`) })))
+      const opencode = Context.get(yield* Layer.build(layer).pipe(Scope.provide(hostScope)), OpenCode.Service)
+      const session = yield* opencode.sessions.create({
+        title: "Service-configured fixture",
+        location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
+        metadata: { threadID: "thread-7" },
+      })
+
+      // A failed construction is discarded with what `configure` acquired, while the host lives on. Resources
+      // bound to the Scope captured alongside the services would instead linger until the host closes.
+      const failed = yield* opencode.sessions
+        .prompt({ sessionID: session.id, text: "Hello", resume: false })
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(failed)).toBe(true)
+      expect(released).toEqual(["thread-7:1"])
+
+      const admitted = yield* opencode.sessions.prompt({ sessionID: session.id, text: "Hello", resume: false })
+      expect(admitted.payload.text).toBe("Hello:persona-for-thread-7")
+      expect(attempts).toEqual(["thread-7", "thread-7"])
+      expect(released).toEqual(["thread-7:1"])
+      yield* Scope.close(hostScope, Exit.void)
+      expect(released).toEqual(["thread-7:1", "thread-7:2"])
     }),
   15_000,
 )

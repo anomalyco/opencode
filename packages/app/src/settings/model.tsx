@@ -95,6 +95,7 @@ const appearanceSchema = Persistence.struct({
   sans: Schema.String,
   terminal: Schema.String,
   tabLayout: Schema.Literals(["horizontal", "vertical"]),
+  showProjectName: Schema.Boolean,
 })
 
 const permissionsSchema = Persistence.struct({
@@ -179,7 +180,7 @@ export const defaultSettings: Settings = {
     terminalPlacement: "side",
     followUpBehavior: "steer",
   },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", showProjectName: false },
   keybinds: {},
   permissions: { autoApprove: false },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -326,6 +327,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
+        },
+        showProjectName: withFallback(
+          () => store.appearance?.showProjectName,
+          defaultSettings.appearance.showProjectName,
+        ),
+        setShowProjectName(value: boolean) {
+          setStore("appearance", "showProjectName", value)
         },
       },
       keybinds: {

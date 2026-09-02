@@ -82,8 +82,8 @@ it.live(
                           id: "session-instance",
                           effect: Effect.fnUntraced(function* (ctx) {
                             boots.push(config.id)
-                            yield* ctx.agent.transform((draft) =>
-                              draft.update("build", (agent) => {
+                            yield* ctx.agent.transform((editor) =>
+                              editor.update("build", (agent) => {
                                 agent.permissions = [{ action: "*", resource: "*", effect: "allow" }]
                               }),
                             )
@@ -103,8 +103,8 @@ it.live(
                                 if (event.action === "instance-test") event.message = config.tool
                               }),
                             )
-                            yield* ctx.tool.transform((draft) =>
-                              draft.add({
+                            yield* ctx.tool.transform((editor) =>
+                              editor.add({
                                 name: config.tool,
                                 description: `Tool for ${config.id}`,
                                 input: Schema.Struct({}),
@@ -117,8 +117,8 @@ it.live(
                                   }),
                               }),
                             )
-                            yield* ctx.command.transform((draft) =>
-                              draft.add({
+                            yield* ctx.command.transform((editor) =>
+                              editor.add({
                                 name: "instance-check",
                                 execute: (input) =>
                                   ctx.session

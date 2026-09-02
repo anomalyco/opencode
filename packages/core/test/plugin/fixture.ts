@@ -39,10 +39,10 @@ import { emptyMcpLayer } from "../fixture/mcp"
 const npmLayer = Layer.succeed(
   Npm.Service,
   Npm.Service.of({
-    add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
-    resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    add: (name) => Effect.succeed({ directory: "", name }),
+    resolve: (name) => Effect.succeed({ directory: "", name }),
     check: () => Effect.succeed(false),
-    update: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    update: (name) => Effect.succeed({ directory: "", name }),
     which: () => Effect.undefined,
   }),
 )

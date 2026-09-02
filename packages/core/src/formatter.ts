@@ -13,12 +13,12 @@ type Data = {
   formatters: Info[]
 }
 
-export type Draft = {
+export type Editor = {
   set: (formatter: Info) => void
   remove: (name: string) => void
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly file: (filepath: string) => Effect.Effect<boolean>
 }
 
@@ -30,17 +30,17 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const processes = yield* AppProcess.Service
     const commands = new WeakMap<Info, string[] | false>()
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "formatter",
       initial: () => ({ formatters: [] }),
-      draft: (draft) => ({
+      editor: (editor) => ({
         set: (formatter) => {
-          const index = draft.formatters.findIndex((item) => item.name === formatter.name)
-          if (index === -1) draft.formatters.push(formatter)
-          else draft.formatters[index] = formatter
+          const index = editor.formatters.findIndex((item) => item.name === formatter.name)
+          if (index === -1) editor.formatters.push(formatter)
+          else editor.formatters[index] = formatter
         },
         remove: (name) => {
-          draft.formatters = draft.formatters.filter((formatter) => formatter.name !== name)
+          editor.formatters = editor.formatters.filter((formatter) => formatter.name !== name)
         },
       }),
     })

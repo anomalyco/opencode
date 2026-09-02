@@ -21,6 +21,21 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
       ),
   )
   .add(
+    HttpApiEndpoint.post("plugin.awaitActivation", "/api/plugin/await-activation", {
+      query: LocationQuery,
+      success: HttpApiSchema.NoContent,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.plugin.awaitActivation",
+          summary: "Wait for plugin activation",
+          description:
+            "Wait for configured plugin activation at a Location to settle, including missing-package installs. Completion does not imply every plugin succeeded or background resource discovery finished. Cancelling this wait does not cancel activation.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("plugin.check", "/api/plugin/check", {
       query: LocationQuery,
       payload: Schema.Struct({ target: Schema.String.pipe(Schema.optional) }),

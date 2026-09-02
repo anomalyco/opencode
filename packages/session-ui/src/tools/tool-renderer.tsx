@@ -497,38 +497,32 @@ export function CurrentContextToolGroup(props: {
   const pending = createMemo(
     () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
-  const names = createMemo(() => {
-    const counts = new Map<
-      string,
-      { count: number; plural?: "ui.messagePart.tools.skill" | "ui.messagePart.tools.agent" }
-    >()
-    tools().forEach((tool) => {
-      const input = currentToolInput(tool)
-      const name =
-        tool.name === "skill"
-          ? i18n.t("ui.tool.skill")
-          : tool.name === "subagent"
-            ? i18n.t("ui.tool.agent.default")
-            : getToolInfo(tool.name, input, currentToolMetadata(tool)).title
-      const current = counts.get(name)
-      if (current) {
-        current.count++
-        return
-      }
-      counts.set(name, {
-        count: 1,
-        plural:
+  const names = createMemo(() =>
+    [
+      ...tools().reduce((counts, tool) => {
+        const input = currentToolInput(tool)
+        const name =
           tool.name === "skill"
-            ? "ui.messagePart.tools.skill"
+            ? i18n.t("ui.tool.skill")
             : tool.name === "subagent"
-              ? "ui.messagePart.tools.agent"
-              : undefined,
-      })
-    })
-    return [...counts.entries()]
+              ? i18n.t("ui.tool.agent.default")
+              : getToolInfo(tool.name, input, currentToolMetadata(tool)).title
+        const current = counts.get(name)
+        counts.set(name, {
+          count: (current?.count ?? 0) + 1,
+          plural:
+            tool.name === "skill"
+              ? "ui.messagePart.tools.skill"
+              : tool.name === "subagent"
+                ? "ui.messagePart.tools.agent"
+                : undefined,
+        })
+        return counts
+      }, new Map<string, { count: number; plural?: "ui.messagePart.tools.skill" | "ui.messagePart.tools.agent" }>()),
+    ]
       .map(([name, item]) => (item.plural ? i18n.plural(item.plural, item.count) : `${item.count} ${name}`))
-      .join(", ")
-  })
+      .join(", "),
+  )
   const label = createMemo(() => {
     const title = names()
     const text = i18n.t("ui.messagePart.tools.used", { tools: title })
@@ -1042,7 +1036,9 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   if (props.tool === "websearch") return text(props.input.query)
   if (props.tool === "skill") return skillToolName(props.input, props.metadata)
   if (props.tool === "patch") {
-    const count = patchFileGroups(props.metadata.files).length
+    const count = new Set(
+      Array.isArray(props.metadata.files) ? props.metadata.files.filter(changedFileDiff).map((file) => file.file) : [],
+    ).size
     if (count === 0) return undefined
     return `${count} ${i18n.plural("ui.common.file", count)}`
   }

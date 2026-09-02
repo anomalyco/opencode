@@ -486,6 +486,82 @@
         "summary": "List plugins"
       }
     },
+    "/api/plugin/await-activation": {
+      "post": {
+        "tags": ["plugin"],
+        "operationId": "v2.plugin.awaitActivation",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Wait for configured plugin activation at a Location to settle, including missing-package installs. Completion does not imply every plugin succeeded or background resource discovery finished. Cancelling this wait does not cancel activation.",
+        "summary": "Wait for plugin activation"
+      }
+    },
     "/api/plugin/check": {
       "post": {
         "tags": ["plugin"],
@@ -13821,16 +13897,9 @@
           "default_agent": {
             "type": "string"
           },
-          "autoupdate": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "string",
-                "enum": ["notify"]
-              }
-            ]
+          "update": {
+            "type": "string",
+            "enum": ["disable", "notify", "auto"]
           },
           "share": {
             "type": "string",

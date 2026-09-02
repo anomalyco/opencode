@@ -51,7 +51,7 @@ export class RequestError extends Schema.TaggedError<RequestError>()("WebSearch.
 
 export type Error = ProviderRequiredError | ProviderNotFoundError | DisabledError | RequestError
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly providers: () => Effect.Effect<readonly Provider[]>
   readonly default: () => Effect.Effect<Provider | undefined, DisabledError>
   readonly select: (selection: Selection) => Effect.Effect<void>
@@ -65,7 +65,7 @@ type Data = {
   selection?: Selection
 }
 
-export type Draft = {
+export type Editor = {
   add: (provider: ProviderImplementation) => void
   default: {
     get: () => Selection | undefined
@@ -79,16 +79,16 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const kv = yield* KV.Service
     const decodeResults = Schema.decodeUnknownEffect(Schema.Array(Result))
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       initial: () => ({ providers: new Map() }),
-      draft: (draft) => ({
-        add: (provider) => draft.providers.set(provider.id, provider),
+      editor: (editor) => ({
+        add: (provider) => editor.providers.set(provider.id, provider),
         default: {
-          get: () => draft.selection,
-          set: (selection) => (draft.selection = selection),
+          get: () => editor.selection,
+          set: (selection) => (editor.selection = selection),
         },
       }),
-      finalize: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const requireProvider = (providers: Map<ID, ProviderImplementation>, providerID: ID) => {

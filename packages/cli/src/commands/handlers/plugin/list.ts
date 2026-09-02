@@ -9,8 +9,9 @@ import { ServiceConfig } from "../../../services/service-config"
 import { Config } from "../../../config"
 import { Global } from "@opencode-ai/util/global"
 import { Npm } from "@opencode-ai/util/npm"
+import { Host } from "@opencode-ai/plugin/host"
 import { fileURLToPath } from "node:url"
-import { discoverTuiPlugins, localPluginDirectories, localSource } from "@opencode-ai/tui/plugin/discovery"
+import { discoverPluginTargets, localPluginDirectories, localSource } from "@opencode-ai/tui/plugin/discovery"
 
 export default Runtime.handler(
   Commands.commands.plugin.commands.list,
@@ -22,27 +23,27 @@ export default Runtime.handler(
     const global = yield* Global.Service
     const info = yield* config.get()
     const discovered = yield* Effect.promise(() =>
-      localPluginDirectories(process.cwd(), global.config).then(discoverTuiPlugins),
+      localPluginDirectories(process.cwd(), global.config).then(discoverPluginTargets),
     )
     const npm = yield* Npm.Service
-    const configured = yield* Effect.forEach(info.plugins ?? [], (entry) =>
+    const configured = yield* Effect.forEach([...(info.plugins ?? []), ...discovered], (entry) =>
       Effect.gen(function* () {
         const target = typeof entry === "string" ? entry : entry.package
         if (target.startsWith("-") || target === "*" || target.endsWith(".*") || target.startsWith("opencode."))
           return []
         const local = localSource(target, path.dirname(config.path))
-        if (local) return [{ target: fileURLToPath(local), version: "local" }]
+        if (local) {
+          const directory = fileURLToPath(local)
+          const entrypoints = Host.resolve({ directory })
+          return entrypoints.tui ? [{ target: directory, version: "local" }] : []
+        }
         if (!(yield* Effect.promise(() => Npm.isInstallablePackage(target)))) return []
-        const installed = yield* npm.resolve(target, { subpaths: ["tui"] })
-        if (!installed.entrypoint) return []
+        const installed = yield* npm.resolve(target)
+        if (!Host.resolve(installed).tui) return []
         return [{ target, version: installed.version }]
       }),
     )
-    const output = format(
-      response.data,
-      [...configured.flat(), ...discovered.map((target) => ({ target, version: "local" }))],
-      input.builtin,
-    )
+    const output = format(response.data, configured.flat(), input.builtin)
     if (!output) {
       process.stdout.write("No plugins found" + EOL)
       return
@@ -81,9 +82,7 @@ export function format(
             ? plugin.source.target === item.target
             : plugin.source.type === "local" &&
               (plugin.source.path === item.target ||
-                (plugin.features.tui &&
-                  path.dirname(plugin.source.path) ===
-                    (item.version === "local" && path.extname(item.target) ? path.dirname(item.target) : item.target))),
+                (plugin.features.tui && path.dirname(plugin.source.path) === item.target)),
         ),
     )
     .filter((plugin, index, all) => all.findIndex((candidate) => candidate.target === plugin.target) === index)

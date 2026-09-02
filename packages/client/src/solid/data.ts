@@ -83,10 +83,8 @@ type LocationData = {
   agent?: AgentInfo[]
   command?: CommandInfo[]
   integration?: IntegrationInfo[]
-  mcp?: {
-    server?: McpServer[]
-    resource?: McpResource[]
-  }
+  mcpServer?: McpServer[]
+  mcpResource?: McpResource[]
   model?: ModelInfo[]
   provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
@@ -125,8 +123,8 @@ export function locationKey(location: LocationRef) {
   return JSON.stringify([location.directory, location.workspaceID])
 }
 
-function locationQuery(ref?: LocationRef) {
-  return ref ? { directory: ref.directory, workspace: ref.workspaceID } : undefined
+function locationQuery(ref: LocationRef) {
+  return { directory: ref.directory, workspace: ref.workspaceID }
 }
 
 function formRequestOptions(sessionID: string, ref?: LocationRef) {
@@ -1273,6 +1271,41 @@ export function createData(config: CreateDataInput) {
     }
   }
 
+  // A cached per-location catalog. `sync` loads once per invalidation, keyed by the
+  // effective location, and publishes under the server's canonical location; `alias`
+  // also publishes under the requested key when the two differ.
+  function locationResource<Field extends keyof LocationData>(
+    field: Field,
+    load: (location: ReturnType<typeof locationQuery>) => Promise<{ location: LocationRef; data: LocationData[Field] }>,
+    options?: { alias?: boolean },
+  ) {
+    const publish = (key: string, value: LocationData[Field]) => setStore("location", key, { [field]: value })
+    return {
+      list: (ref?: LocationRef) => store.location[locationKey(ref ?? defaultLocation())]?.[field],
+      sync: (ref?: LocationRef) => {
+        const location = ref ?? defaultLocation()
+        const id = locationKey(location)
+        return sync.run(`location.${field}:${id}`, async () => {
+          const response = await load(locationQuery(location))
+          const key = locationKey(response.location)
+          publish(key, response.data)
+          if (options?.alias && key !== id) publish(id, response.data)
+        })
+      },
+      invalidate: (ref?: LocationRef) => sync.invalidate(`location.${field}:${locationKey(ref ?? defaultLocation())}`),
+    }
+  }
+
+  const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
+  const shells = locationResource("shell", async (location) => {
+    const response = await api().shell.list({ location })
+    const ref = { directory: response.location.directory, workspaceID: response.location.workspaceID }
+    return {
+      location: response.location,
+      data: Object.fromEntries(response.data.map((info) => [info.id, { ...info, location: ref }])),
+    }
+  })
+
   const result = {
     on: config.event.on,
     listen: config.event.listen,
@@ -1740,7 +1773,7 @@ export function createData(config: CreateDataInput) {
     },
     shell: {
       list(location?: LocationRef) {
-        return Object.values(store.location[locationKey(location ?? defaultLocation())]?.shell ?? {})
+        return Object.values(shells.list(location) ?? {})
       },
       listBySession(sessionID: string) {
         return Object.values(store.location)
@@ -1752,31 +1785,8 @@ export function createData(config: CreateDataInput) {
           .map((data) => data.shell?.[id])
           .find((shell) => shell !== undefined)
       },
-      sync(ref?: LocationRef) {
-        const id = locationKey(ref ?? defaultLocation())
-        return sync.run(`location.shell:${id}`, async () => {
-          const response = await api().shell.list({ location: locationQuery(ref ?? defaultLocation()) })
-          const key = locationKey(response.location)
-          setStore("location", key, {
-            ...store.location[key],
-            shell: Object.fromEntries(
-              response.data.map((info) => [
-                info.id,
-                {
-                  ...info,
-                  location: {
-                    directory: response.location.directory,
-                    workspaceID: response.location.workspaceID,
-                  },
-                },
-              ]),
-            ),
-          })
-        })
-      },
-      invalidate(ref?: LocationRef) {
-        sync.invalidate(`location.shell:${locationKey(ref ?? defaultLocation())}`)
-      },
+      sync: shells.sync,
+      invalidate: shells.invalidate,
     },
     location: {
       info(ref?: LocationRef) {
@@ -1831,162 +1841,20 @@ export function createData(config: CreateDataInput) {
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
       },
-      vcs: {
-        info(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.vcs
-        },
-        sync(ref?: LocationRef) {
-          const location = ref ?? defaultLocation()
-          return sync.run(`location.vcs:${locationKey(location)}`, async () => {
-            const response = await api().vcs.get({ location: locationQuery(location) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], vcs: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.vcs:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      agent: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.agent
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.agent:${id}`, async () => {
-            const response = await api().agent.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], agent: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.agent:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      command: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.command
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.command:${id}`, async () => {
-            const response = await api().command.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], command: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.command:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      integration: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.integration
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.integration:${id}`, async () => {
-            const response = await api().integration.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], integration: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.integration:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
+      vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
+      agent: locationResource("agent", (location) => api().agent.list({ location })),
+      command: locationResource("command", (location) => api().command.list({ location })),
+      integration: locationResource("integration", (location) => api().integration.list({ location })),
       mcp: {
-        server: {
-          list(location?: LocationRef) {
-            return store.location[locationKey(location ?? defaultLocation())]?.mcp?.server
-          },
-          sync(ref?: LocationRef) {
-            const id = locationKey(ref ?? defaultLocation())
-            return sync.run(`location.mcp.server:${id}`, async () => {
-              const response = await api().mcp.list({ location: locationQuery(ref ?? defaultLocation()) })
-              const key = locationKey(response.location)
-              setStore("location", key, {
-                ...store.location[key],
-                mcp: { ...store.location[key]?.mcp, server: response.data },
-              })
-            })
-          },
-          invalidate(ref?: LocationRef) {
-            sync.invalidate(`location.mcp.server:${locationKey(ref ?? defaultLocation())}`)
-          },
-        },
-        resource: {
-          list(location?: LocationRef) {
-            return store.location[locationKey(location ?? defaultLocation())]?.mcp?.resource
-          },
-          sync(ref?: LocationRef) {
-            const id = locationKey(ref ?? defaultLocation())
-            return sync.run(`location.mcp.resource:${id}`, async () => {
-              const response = await api().mcp.resource.catalog({
-                location: locationQuery(ref ?? defaultLocation()),
-              })
-              const key = locationKey(response.location)
-              setStore("location", key, {
-                ...store.location[key],
-                mcp: { ...store.location[key]?.mcp, resource: response.data.resources },
-              })
-            })
-          },
-          invalidate(ref?: LocationRef) {
-            sync.invalidate(`location.mcp.resource:${locationKey(ref ?? defaultLocation())}`)
-          },
-        },
+        server: locationResource("mcpServer", (location) => api().mcp.list({ location })),
+        resource: locationResource("mcpResource", async (location) => {
+          const response = await api().mcp.resource.catalog({ location })
+          return { location: response.location, data: response.data.resources }
+        }),
       },
-      model: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.model
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.model:${id}`, async () => {
-            const response = await api().model.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], model: response.data })
-            if (key !== id) setStore("location", id, { ...store.location[id], model: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.model:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      provider: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.provider
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.provider:${id}`, async () => {
-            const response = await api().provider.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], provider: response.data })
-            if (key !== id) setStore("location", id, { ...store.location[id], provider: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.provider:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      reference: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.reference
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.reference:${id}`, async () => {
-            const response = await api().reference.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], reference: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.reference:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
+      model: locationResource("model", (location) => api().model.list({ location }), { alias: true }),
+      provider: locationResource("provider", (location) => api().provider.list({ location }), { alias: true }),
+      reference: locationResource("reference", (location) => api().reference.list({ location })),
       websearch: {
         list(location?: LocationRef) {
           return store.location[locationKey(location ?? defaultLocation())]?.websearch
@@ -2001,22 +1869,7 @@ export function createData(config: CreateDataInput) {
           })
         },
       },
-      skill: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.skill
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.skill:${id}`, async () => {
-            const response = await api().skill.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], skill: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.skill:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
+      skill: locationResource("skill", (location) => api().skill.list({ location })),
     },
   }
 

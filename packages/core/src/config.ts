@@ -188,7 +188,15 @@ export const layer = (options?: Options) =>
         const globalDirectory = AbsolutePath.make(global.config)
         const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
         const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
-        const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
+        // Global roots and the walk are compared by canonical path: the same
+        // directory reached under two spellings (a symlinked checkout, macOS
+        // /var vs /private/var, OPENCODE_CONFIG_DIR inside the project) must
+        // classify identically or it enters discovery twice.
+        const globalRoots = yield* Effect.forEach(
+          [globalDirectory, globalClaudeDirectory, globalAgentsDirectory],
+          (item) => fs.resolve(item),
+        )
+        const locationIsGlobal = (yield* fs.resolve(location.directory)) === globalRoots[0]
         const discovered =
           locationIsGlobal || options?.project === false
             ? []
@@ -197,22 +205,30 @@ export const layer = (options?: Options) =>
                   targets: [".opencode", ".claude", ".agents", ...names.toReversed()],
                   start: location.directory,
                 })
-                .pipe(Effect.orDie)
+                .pipe(
+                  Effect.flatMap((items) =>
+                    Effect.forEach(items, (item) =>
+                      fs.resolve(item).pipe(Effect.map((resolved) => ({ item, resolved }))),
+                    ),
+                  ),
+                  Effect.orDie,
+                )
 
         const globalEnabled = options?.global !== false
         // A walked path that resolves into a global root is global config
         // however the walk reached it (home above the project, or a location
         // beneath the global config dir), so global: false excludes it
-        // uniformly — classified once here, not per consumer below.
-        const globalRoots = [globalDirectory, globalClaudeDirectory, globalAgentsDirectory].map((item) =>
-          path.resolve(item),
-        )
-        const visible = globalEnabled
-          ? discovered
-          : discovered.filter((item) => {
-              const resolved = path.resolve(item)
-              return !globalRoots.some((root) => resolved === root || resolved.startsWith(root + path.sep))
-            })
+        // uniformly — classified once here, not per consumer below. With
+        // global enabled, the roots themselves and the global config files are
+        // already loaded below, so the walk must not add them a second time.
+        const globalFiles = yield* Effect.forEach(names, (name) => fs.resolve(path.join(globalDirectory, name)))
+        const visible = discovered
+          .filter(({ resolved }) =>
+            globalEnabled
+              ? !globalRoots.includes(resolved) && !globalFiles.includes(resolved)
+              : !globalRoots.some((root) => resolved === root || resolved.startsWith(root + path.sep)),
+          )
+          .map(({ item }) => item)
         // We load certain files from a few other folders in the ecosystem
         const claude = [
           ...new Set([

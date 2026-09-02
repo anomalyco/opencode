@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 import { Effect } from "effect"
 import { HttpServer, HttpServerError, HttpServerResponse } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"
@@ -99,7 +100,12 @@ it.live("allows browser preflight requests without credentials", () =>
     )
     expect(event.status).toBe(200)
     expect(event.headers.get("content-encoding")).toBeNull()
-    yield* Effect.promise(() => event.body?.cancel() ?? Promise.resolve())
+    if (!event.body) return yield* Effect.die(new Error("Event response has no body"))
+    const reader = event.body.getReader()
+    yield* Effect.promise(() => readUntil(reader, "server.connected"))
+    yield* server.updateAvailable("2.0.0")
+    yield* Effect.promise(() => readUntil(reader, "installation.update-available"))
+    yield* Effect.promise(() => reader.cancel())
 
     const missing = yield* Effect.promise(() =>
       fetch(new URL("/missing", HttpServer.formatAddress(server.address)), {
@@ -124,3 +130,11 @@ it.live("allows browser preflight requests without credentials", () =>
     )
   }),
 )
+
+async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, expected: string) {
+  while (true) {
+    const next = await reader.read()
+    if (next.done) throw new Error(`Event stream ended before ${expected}`)
+    if (new TextDecoder().decode(next.value).includes(expected)) return
+  }
+}

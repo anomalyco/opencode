@@ -22,11 +22,11 @@ type Limits = {
   maxBytes: number
 }
 
-export type Draft = {
+export type Editor = {
   configure: (limits: Partial<Limits>) => void
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly truncate: (result: Result) => Effect.Effect<Result>
   readonly cleanup: () => Effect.Effect<void>
 }
@@ -51,13 +51,13 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const directory = path.join(global.data, DIRECTORY)
-    const state = State.create<Limits, Draft>({
+    const state = State.create<Limits, Editor>({
       name: "tool-output",
       initial: () => ({ maxLines: MAX_LINES, maxBytes: MAX_BYTES }),
-      draft: (draft) => ({
+      editor: (editor) => ({
         configure: (limits) => {
-          if (limits.maxLines !== undefined) draft.maxLines = limits.maxLines
-          if (limits.maxBytes !== undefined) draft.maxBytes = limits.maxBytes
+          if (limits.maxLines !== undefined) editor.maxLines = limits.maxLines
+          if (limits.maxBytes !== undefined) editor.maxBytes = limits.maxBytes
         },
       }),
     })

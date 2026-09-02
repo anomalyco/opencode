@@ -47,7 +47,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Deploy update service
-        if: github.ref_name == 'v2' || github.ref_name == 'beta'
+        if: github.ref_name == 'v2'
         working-directory: packages/updates
         run: bun run deploy
         env:

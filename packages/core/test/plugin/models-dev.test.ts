@@ -1,7 +1,8 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Money } from "@opencode-ai/schema/money"
-import { Effect, Exit, Layer, Scope } from "effect"
+import { Context, Effect, Exit, Layer, Scope } from "effect"
+import { TestClock } from "effect/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -31,10 +32,245 @@ const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.no
 ])
 const it = testEffect(layer)
 const real = testEffect(PluginTestLayer)
+const isolated = testEffect(Layer.empty)
 const models = (file: string) =>
   AppNodeBuilder.build(ModelsDev.node, [ModelsDev.node.replace(ModelsDev.configured({ file, fetch: false }))])
 
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected value")
+  return value
+}
+
+// One complete Location graph behind the production plugin host. Two of these stand in for
+// two Locations that share a single models.dev snapshot instance.
+const owner = Effect.gen(function* () {
+  const context = yield* Layer.build(PluginTestLayer)
+  const host = yield* PluginHost.make(Context.get(context, Plugin.Service)).pipe(Effect.provideContext(context))
+  return {
+    context,
+    host,
+    bus: Context.get(context, Bus.Service),
+    catalog: Context.get(context, Catalog.Service),
+    integration: Context.get(context, Integration.Service),
+  }
+})
+
+// Every nested overlay shape the normalized snapshot can carry, so in-place mutation of any
+// existing nested value is observable on the source object.
+const richSnapshot = (name = "Acme") => {
+  const providerID = Provider.ID.make("acme")
+  const modelID = Model.ID.make("gpt-5.4")
+  const snapshot = [
+    {
+      info: {
+        id: providerID,
+        name,
+        activation: "auto",
+        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+        settings: { baseURL: "https://api.acme.test/v1", thinking: { type: "adaptive", display: "summarized" } },
+        headers: { "x-acme": "provider" },
+        body: { service_tier: "default", tags: ["stable"] },
+      },
+      environment: ["ACME_API_KEY", "ACME_HOST"],
+      models: [
+        {
+          id: modelID,
+          modelID,
+          providerID,
+          name: "GPT-5.4",
+          family: Model.Family.make("gpt"),
+          settings: { baseURL: "https://models.acme.test/v1", reasoning: { effort: "low" } },
+          headers: { "x-mode": "fast" },
+          body: { service_tier: "priority", options: { top_k: 1 }, stop: ["<end>"] },
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          variants: [
+            {
+              id: Model.VariantID.make("low"),
+              settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+              body: { max_tokens: 1024 },
+            },
+          ],
+          time: { released: Date.parse("2026-01-01") },
+          cost: [
+            {
+              input: Money.USDPerMillionTokens.make(2.5),
+              output: Money.USDPerMillionTokens.make(15),
+              cache: { read: Money.USDPerMillionTokens.make(0.25), write: Money.USDPerMillionTokens.zero },
+            },
+            {
+              tier: { type: "context", size: 200_000 },
+              input: Money.USDPerMillionTokens.make(5),
+              output: Money.USDPerMillionTokens.make(22.5),
+              cache: { read: Money.USDPerMillionTokens.make(0.5), write: Money.USDPerMillionTokens.zero },
+            },
+          ],
+          status: "active",
+          enabled: true,
+          limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+        },
+      ],
+    },
+  ] satisfies readonly ModelsDev.Snapshot[]
+  return { providerID, modelID, snapshot }
+}
+
 describe("ModelsDevPlugin", () => {
+  isolated.effect("shares one snapshot between Locations while each catalog mutates only its own copies", () =>
+    Effect.gen(function* () {
+      const { providerID, modelID, snapshot } = richSnapshot()
+      const pristine = JSON.stringify(snapshot)
+      const source = ModelsDev.Service.of({ get: () => Effect.succeed(snapshot), refresh: () => Effect.void })
+      const first = yield* owner
+      const second = yield* owner
+      for (const each of [first, second])
+        yield* ModelsDevPlugin.effect(each.host).pipe(
+          Effect.provideService(ModelsDev.Service, source),
+          Effect.provideContext(each.context),
+        )
+
+      // The stored environment method must own its names array; the source array is shared.
+      let names: readonly string[] | undefined
+      yield* first.integration.transform((draft) => {
+        names = draft.method
+          .list(Integration.ID.make(providerID))
+          .flatMap((method) => (method.type === "env" ? [method.names] : []))[0]
+      })
+      expect(names).toEqual(snapshot[0].environment)
+      expect(names).not.toBe(snapshot[0].environment)
+
+      // Catalog-owned provider records are copies, not the source's nested objects.
+      const stored = required(yield* first.catalog.provider.get(providerID))
+      expect(stored.settings).toEqual(snapshot[0].info.settings)
+      expect(stored.settings).not.toBe(snapshot[0].info.settings)
+      expect(stored.headers).not.toBe(snapshot[0].info.headers)
+      expect(stored.body).not.toBe(snapshot[0].info.body)
+
+      // A later plugin in the first Location mutates existing nested values in place through the
+      // production host, the way the Bedrock, Azure, and config provider plugins do.
+      const scope = yield* Scope.make()
+      yield* first.host.catalog
+        .transform((catalog) => {
+          catalog.provider.update(providerID, (provider) => {
+            required(provider.settings).baseURL = "https://override.acme.test/v1"
+            required(provider.settings).thinking.type = "disabled"
+            required(provider.headers)["x-acme"] = "override"
+            required(provider.body).service_tier = "priority"
+            required(provider.body).tags.push("override")
+          })
+          catalog.model.update(providerID, modelID, (model) => {
+            required(model.settings).reasoning.effort = "high"
+            required(model.headers)["x-mode"] = "slow"
+            required(model.body).options.top_k = 7
+            required(model.body).stop.push("<stop>")
+            const variant = required(model.variants[0])
+            required(variant.settings).thinking.type = "disabled"
+            required(variant.body).max_tokens = 4096
+            model.capabilities.input.push("image")
+            required(model.cost[0]).cache.read = Money.USDPerMillionTokens.make(9)
+            required(required(model.cost[1]).tier).size = 1
+            required(model.cost[1]).input = Money.USDPerMillionTokens.make(42)
+            model.limit.context = 1
+            model.time.released = 5
+          })
+        })
+        .pipe(Scope.provide(scope))
+
+      const mutatedProvider = required(yield* first.catalog.provider.get(providerID))
+      const mutated = required(yield* first.catalog.model.get(providerID, modelID))
+      expect(mutatedProvider.settings).toEqual({
+        baseURL: "https://override.acme.test/v1",
+        thinking: { type: "disabled", display: "summarized" },
+      })
+      expect(mutatedProvider.headers).toEqual({ "x-acme": "override" })
+      expect(mutatedProvider.body).toEqual({ service_tier: "priority", tags: ["stable", "override"] })
+      expect(mutated.settings).toEqual({
+        baseURL: "https://models.acme.test/v1",
+        thinking: { type: "disabled", display: "summarized" },
+        reasoning: { effort: "high" },
+      })
+      expect(mutated.headers).toEqual({ "x-acme": "override", "x-mode": "slow" })
+      expect(mutated.body).toEqual({
+        service_tier: "priority",
+        tags: ["stable", "override"],
+        options: { top_k: 7 },
+        stop: ["<end>", "<stop>"],
+      })
+      expect(mutated.variants).toEqual([
+        {
+          id: Model.VariantID.make("low"),
+          settings: { thinking: { type: "disabled", display: "summarized" }, effort: "low" },
+          body: { max_tokens: 4096 },
+        },
+      ])
+      expect(mutated.capabilities.input).toEqual(["text", "image"])
+      expect(mutated.cost[0]?.cache.read).toBe(Money.USDPerMillionTokens.make(9))
+      expect(mutated.cost[1]).toMatchObject({ tier: { type: "context", size: 1 }, input: 42 })
+      expect(mutated.limit.context).toBe(1)
+      expect(mutated.time.released).toBe(5)
+
+      // The sibling Location and the shared source are untouched.
+      const sibling = required(yield* second.catalog.model.get(providerID, modelID))
+      expect(sibling.settings).toEqual({
+        baseURL: "https://models.acme.test/v1",
+        thinking: { type: "adaptive", display: "summarized" },
+        reasoning: { effort: "low" },
+      })
+      expect(sibling.headers).toEqual({ "x-acme": "provider", "x-mode": "fast" })
+      expect(sibling.body).toEqual({
+        service_tier: "priority",
+        tags: ["stable"],
+        options: { top_k: 1 },
+        stop: ["<end>"],
+      })
+      expect(sibling.variants).toEqual(snapshot[0].models[0].variants)
+      expect(sibling.capabilities.input).toEqual(["text"])
+      expect(sibling.cost).toEqual(snapshot[0].models[0].cost)
+      expect(sibling.limit).toEqual(snapshot[0].models[0].limit)
+      expect(sibling.time).toEqual(snapshot[0].models[0].time)
+      expect(required(yield* second.catalog.provider.get(providerID)).settings).toEqual(snapshot[0].info.settings)
+      expect(JSON.stringify(snapshot)).toBe(pristine)
+
+      // Removing the mutating transform rebuilds the first catalog from the shared source.
+      yield* Scope.close(scope, Exit.void)
+      expect(yield* first.catalog.model.get(providerID, modelID)).toEqual(sibling)
+      expect(required(yield* first.catalog.provider.get(providerID)).settings).toEqual(snapshot[0].info.settings)
+      expect(JSON.stringify(snapshot)).toBe(pristine)
+    }),
+  )
+
+  isolated.effect("replaces its snapshot reference on refresh without touching the sibling Location", () =>
+    Effect.gen(function* () {
+      const initial = richSnapshot("Acme")
+      const refreshed = richSnapshot("Acme Refreshed")
+      const pristine = JSON.stringify(initial.snapshot)
+      const current = { snapshot: initial.snapshot }
+      const source = ModelsDev.Service.of({
+        get: () => Effect.sync(() => current.snapshot),
+        refresh: () => Effect.void,
+      })
+      const first = yield* owner
+      const second = yield* owner
+      for (const each of [first, second])
+        yield* ModelsDevPlugin.effect(each.host).pipe(
+          Effect.provideService(ModelsDev.Service, source),
+          Effect.provideContext(each.context),
+        )
+      expect(required(yield* first.catalog.provider.get(initial.providerID)).name).toBe("Acme")
+
+      current.snapshot = refreshed.snapshot
+      yield* first.bus.publish(ModelsDev.Event.Refreshed, {})
+      // Integration and catalog reloads are debounced sequentially.
+      yield* TestClock.adjust("500 millis")
+      yield* TestClock.adjust("500 millis")
+      yield* TestClock.adjust("500 millis")
+
+      expect(required(yield* first.catalog.provider.get(initial.providerID)).name).toBe("Acme Refreshed")
+      expect(required(yield* second.catalog.provider.get(initial.providerID)).name).toBe("Acme")
+      expect(JSON.stringify(initial.snapshot)).toBe(pristine)
+      expect(JSON.stringify(refreshed.snapshot)).toBe(JSON.stringify(richSnapshot("Acme Refreshed").snapshot))
+    }),
+  )
+
   real.effect("keeps the retained model seed unchanged across catalog replay", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
@@ -76,8 +312,8 @@ describe("ModelsDevPlugin", () => {
 
       const scope = yield* Scope.make()
       yield* catalog
-        .transform((draft) =>
-          draft.model.update(providerID, modelID, (model) => {
+        .transform((editor) =>
+          editor.model.update(providerID, modelID, (model) => {
             model.variants ??= []
             model.variants.push({ id: Model.VariantID.make("configured") })
           }),
@@ -89,6 +325,79 @@ describe("ModelsDevPlugin", () => {
 
       yield* Scope.close(scope, Exit.void)
       expect((yield* catalog.model.get(providerID, modelID))?.variants).toEqual([])
+    }),
+  )
+
+  it.effect("keeps the shared models.dev snapshot pristine while catalog transforms mutate records in place", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("acme")
+      const modelID = Model.ID.make("gpt-5.4")
+      const snapshot = [
+        {
+          info: {
+            id: providerID,
+            name: "Acme",
+            activation: "auto",
+            package: Provider.aisdk("@ai-sdk/openai-compatible"),
+            settings: { baseURL: "https://api.acme.test/v1" },
+            headers: { "x-acme": "provider" },
+          },
+          environment: ["ACME_API_KEY"],
+          models: [
+            {
+              id: modelID,
+              modelID,
+              providerID,
+              name: "GPT-5.4",
+              settings: { baseURL: "https://models.acme.test/v1" },
+              capabilities: { tools: true, input: ["text"], output: ["text"] },
+              variants: [],
+              time: { released: Date.parse("2026-01-01") },
+              cost: [],
+              status: "active",
+              enabled: true,
+              limit: { context: 1_050_000, output: 128_000 },
+            },
+          ],
+        },
+      ] satisfies readonly ModelsDev.Snapshot[]
+      const pristine = JSON.stringify(snapshot)
+      // The plugin receives the same snapshot instance every Location shares.
+      yield* ModelsDevPlugin.effect(
+        host({
+          catalog: catalogHost(catalog),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({ get: () => Effect.succeed(snapshot), refresh: () => Effect.void }),
+        ),
+      )
+
+      // Later plugins mutate nested provider and model records in place, as the Bedrock provider does.
+      yield* catalog.transform((draft) => {
+        draft.provider.update(providerID, (provider) => {
+          if (provider.settings) provider.settings.baseURL = "https://override.acme.test/v1"
+          if (provider.headers) provider.headers["x-acme"] = "override"
+        })
+        draft.model.update(providerID, modelID, (model) => {
+          if (model.settings) model.settings.baseURL = "https://override.models.acme.test/v1"
+          model.variants.push({ id: Model.VariantID.make("configured") })
+          model.capabilities.input.push("image")
+        })
+      })
+
+      const provider = yield* catalog.provider.get(providerID)
+      const model = yield* catalog.model.get(providerID, modelID)
+      expect(provider?.settings?.baseURL).toBe("https://override.acme.test/v1")
+      expect(provider?.headers).toEqual({ "x-acme": "override" })
+      expect(model?.settings?.baseURL).toBe("https://override.models.acme.test/v1")
+      expect(model?.variants).toEqual([{ id: Model.VariantID.make("configured") }])
+      expect(model?.capabilities.input).toEqual(["text", "image"])
+      expect(JSON.stringify(snapshot)).toBe(pristine)
     }),
   )
 

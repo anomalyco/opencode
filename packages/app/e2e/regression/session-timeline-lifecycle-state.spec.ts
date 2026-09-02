@@ -55,7 +55,7 @@ test("transitions a streaming shell from writing through command execution", asy
   const subtitle = tool.locator('[data-slot="basic-tool-tool-subtitle"]')
   await expect(titleShimmer).toHaveAttribute("aria-label", "Shell")
   await expect(titleShimmer).toHaveAttribute("data-active", "true")
-  await expect(subtitle).toHaveText("Writing command...")
+  await expect(subtitle).toHaveText("Writing command…")
   await expect(subtitle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
   await expect(tool.locator('[data-component="shell-submessage"]')).toHaveCount(0)
   await expect(tool.locator('[data-slot="collapsible-trigger"]')).toHaveCSS("height", "28px")
@@ -75,7 +75,7 @@ test("transitions a streaming shell from writing through command execution", asy
   await timeline.send(toolInputEnded({ sessionID, assistantMessageID: assistantID, id, text: input }))
   await expect(titleShimmer).toHaveAttribute("data-active", "true")
   await expect(subtitle).toHaveText(command)
-  await expect(tool).not.toContainText("Writing command...")
+  await expect(tool).not.toContainText("Writing command…")
 
   await timeline.send(
     toolCalled({
@@ -100,7 +100,7 @@ test("shimmers and expands a running shell command", async ({ page }) => {
 
   const tool = page.locator(`[data-timeline-part-id="${id}"]`)
   await expect(tool.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
-  await expect(tool).not.toContainText("Writing command...")
+  await expect(tool).not.toContainText("Writing command…")
   await expect(tool.locator('[data-component="shell-submessage"]')).toHaveText(command)
   await expect(tool.locator('[data-component="shell-submessage"] [data-component="text-shimmer"]')).toHaveCount(0)
   await expect(tool.locator('[data-slot="collapsible-trigger"]')).toHaveCSS("height", "28px")

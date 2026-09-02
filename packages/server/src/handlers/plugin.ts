@@ -13,6 +13,7 @@ export const PluginHandler = HttpApiBuilder.group(Api, "server.plugin", (handler
         return yield* response(Plugin.Service.use((plugin) => plugin.list()))
       }),
     )
+    .handle("plugin.awaitActivation", () => Plugin.awaitActivation)
     .handle("plugin.check", (ctx) =>
       Effect.gen(function* () {
         const plugins = yield* Plugin.Service

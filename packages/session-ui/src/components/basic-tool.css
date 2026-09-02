@@ -173,6 +173,10 @@
 [data-component="collapsible"].tool-collapsible[data-compact="true"] > [data-slot="collapsible-trigger"] {
   height: 28px;
 
+  [data-slot="collapsible-arrow"] {
+    width: 16px;
+  }
+
   [data-component="tool-trigger"],
   [data-slot="basic-tool-tool-info-main"] {
     gap: 6px;

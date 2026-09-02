@@ -51,7 +51,7 @@ const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
     return Stream.make(
-      LLMEvent.textDelta({ id: "summary", text: "manual summary" }),
+      LLMEvent.textDelta({ id: "summary", text: "## Objective\n- manual summary" }),
       LLMEvent.stepFinish({
         index: 0,
         reason: { normalized: "stop" },
@@ -91,7 +91,7 @@ const it = testEffect(
 )
 
 test("compaction prompt preserves detailed work state and relevant files", () => {
-  const prompt = SessionCompaction.buildPrompt({ context: ["conversation history"] })
+  const prompt = SessionCompaction.buildPrompt(false)
 
   expect(prompt).toContain("## Work State\n### Completed")
   expect(prompt).toContain("### Active")
@@ -123,29 +123,24 @@ test("compaction truncation does not split surrogate pairs", () => {
 })
 
 test("compaction prompt requires the checkpoint headings in order", () => {
-  const prompt = SessionCompaction.buildPrompt({ context: ["Conversation history"] })
+  const prompt = SessionCompaction.buildPrompt(false)
   expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
     "## Objective",
-    "## Important Details",
+    "## Requirements",
+    "## Decisions",
     "## Work State",
     "### Completed",
     "### Active",
     "### Blocked",
     "## Next Move",
     "## Relevant Files",
+    "## Additional Context",
   ])
-  expect(prompt).toContain("one or two brief sentences")
-  expect(prompt).toContain("constraints/preferences, decisions and why")
-  expect(prompt).toContain("immediate concrete action")
-  expect(prompt).toContain("next action if known")
-  expect(prompt).toContain("Keep every section, even when empty.")
 })
 
-test("compaction points an existing summary to the following history", () => {
-  const prompt = SessionCompaction.buildPrompt({ previousSummary: "Previous summary", context: ["Recent history"] })
-
-  expect(prompt.split("\n", 1)[0]).toBe("Update the anchored summary below using the conversation history below.")
-  expect(prompt).not.toContain("conversation history above")
+test("compaction prompts prohibit task execution", () => {
+  for (const update of [false, true])
+    expect(SessionCompaction.buildPrompt(update)).toContain("Do not continue the task or call tools")
 })
 
 it.effect("auto compaction estimates current content against the buffered prompt ceiling", () =>
@@ -305,6 +300,16 @@ const insertSession = (id: Session.ID, overrides?: Partial<typeof SessionTable.$
       .pipe(Effect.flatMap((session) => (session ? Effect.succeed(session) : Effect.die(`session missing: ${id}`))))
   })
 
+const loaded = (session: Session.Info, messages: readonly SessionMessage.Info[]) => ({
+  session,
+  messages,
+  model: resolved,
+  agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
+  initial: "Session instructions",
+  instructionUpdate: "",
+  tools: { definitions: [], execute: () => Effect.die("Compaction must not execute tools") },
+})
+
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
     requests = []
@@ -329,6 +334,25 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     }
     const session = yield* insertSession(sessionID, { parent_id: parentID })
     const modelRequests = yield* SessionModelRequest.Service
+    const messages = [
+      userMessage,
+      SessionMessage.Shell.make({
+        id: SessionMessage.ID.create(),
+        type: "shell",
+        shellID: Shell.ID.make("sh_background"),
+        status: "exited",
+        command: "pwd",
+        metadata: { background: true },
+        output: { output: "display-only-output", cursor: 19, size: 19, truncated: false },
+        time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
+      }),
+      SessionMessage.Synthetic.make({
+        id: SessionMessage.ID.create(),
+        type: "synthetic",
+        text: "User shell pwd completed: /project",
+        time: { created: DateTime.makeUnsafe(2) },
+      }),
+    ]
 
     const delta = yield* bus
       .subscribe(SessionEvent.Compaction.Delta)
@@ -337,31 +361,15 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(
       yield* compaction.compactManual({
         session,
-        resolveModel: () => Effect.succeed(resolved),
+        resolveContext: () => Effect.succeed(loaded(session, messages)),
         prepare: modelRequests.prepare,
-        messages: [
-          userMessage,
-          SessionMessage.Shell.make({
-            id: SessionMessage.ID.create(),
-            type: "shell",
-            shellID: Shell.ID.make("sh_background"),
-            status: "exited",
-            command: "pwd",
-            metadata: { background: true },
-            output: { output: "display-only-output", cursor: 19, size: 19, truncated: false },
-            time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
-          }),
-          SessionMessage.Synthetic.make({
-            id: SessionMessage.ID.create(),
-            type: "synthetic",
-            text: "User shell pwd completed: /project",
-            time: { created: DateTime.makeUnsafe(2) },
-          }),
-        ],
+        messages,
         inputID: SessionMessage.ID.make("msg_manual_compaction"),
       }),
     ).toEqual({ status: "completed" })
-    expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual(["manual summary"])
+    expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual([
+      "## Objective\n- manual summary",
+    ])
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.promptCacheKey).toBe(sessionID)
@@ -380,7 +388,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
     expect(JSON.stringify(requests[0]?.messages)).not.toContain("display-only-output")
     expect(yield* store.context(sessionID)).toMatchObject([
-      { type: "compaction", reason: "manual", summary: "manual summary", recent: "" },
+      { type: "compaction", reason: "manual", summary: "## Objective\n- manual summary", recent: "" },
     ])
     expect(yield* store.get(sessionID)).toMatchObject({
       cost: 0.0000233,
@@ -415,7 +423,7 @@ it.effect("manual compaction records model resolution failures without calling t
     expect(
       yield* compaction.compactManual({
         session,
-        resolveModel: () =>
+        resolveContext: () =>
           Effect.fail(
             new SessionRunnerModel.ModelUnavailableError({
               providerID: Provider.ID.make("test"),
@@ -461,19 +469,20 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
       fork_boundary: { type: "before", messageID: SessionMessage.ID.create() },
     })
     const modelRequests = yield* SessionModelRequest.Service
+    const messages = [
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "Summarize the forked conversation.",
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ]
     expect(
       yield* compaction.compactManual({
         session,
-        resolveModel: () => Effect.succeed(resolved),
+        resolveContext: () => Effect.succeed(loaded(session, messages)),
         prepare: modelRequests.prepare,
-        messages: [
-          {
-            id: SessionMessage.ID.create(),
-            type: "user",
-            text: "Summarize the forked conversation.",
-            time: { created: DateTime.makeUnsafe(0) },
-          },
-        ],
+        messages,
         inputID: SessionMessage.ID.make("msg_fork_compaction"),
       }),
     ).toEqual({ status: "completed" })

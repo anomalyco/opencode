@@ -196,8 +196,8 @@ export const Plugin = {
     )
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description: description(),

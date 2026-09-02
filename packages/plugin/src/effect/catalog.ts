@@ -9,7 +9,7 @@ export interface CatalogProviderRecord {
   readonly models: ReadonlyMap<string, Types.DeepMutable<Model.Info>>
 }
 
-export interface CatalogDraft {
+export interface CatalogEditor {
   readonly provider: {
     list(): readonly CatalogProviderRecord[]
     get(providerID: string): CatalogProviderRecord | undefined
@@ -28,6 +28,6 @@ export interface CatalogDraft {
 }
 
 export interface CatalogDomain extends CatalogApi<unknown> {
-  readonly transform: Transform<CatalogDraft>
+  readonly transform: Transform<CatalogEditor>
   readonly reload: () => Effect.Effect<void>
 }

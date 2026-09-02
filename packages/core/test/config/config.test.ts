@@ -149,6 +149,37 @@ describe("Config", () => {
     ),
   )
 
+  it.live("discovers the global config directory once when the project walk reaches it", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        // The global config dir is the project's own .opencode (as isolated
+        // hosts pin OPENCODE_CONFIG_DIR), and the location is the project under
+        // a symlinked spelling, so the walk reaches the same directory under a
+        // different string than the global root.
+        const real = path.join(tmp.path, "real")
+        const link = path.join(tmp.path, "link")
+        const global = AbsolutePath.make(path.join(real, ".opencode"))
+        const once = Effect.gen(function* () {
+          const config = yield* Config.Service
+          const watcher = yield* Watcher.Test
+          const entries = yield* config.entries()
+          expect(entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))).toEqual([global])
+          expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual(["global"])
+          expect((yield* watcher.subscriptions()).map((subscription) => subscription.path)).toEqual([global])
+        })
+        return Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
+          await fs.symlink(real, link, process.platform === "win32" ? "junction" : undefined)
+        }).pipe(
+          Effect.andThen(once.pipe(Effect.provide(testLayer(link, global, real)))),
+          // Same spelling on both sides: still exactly once.
+          Effect.andThen(once.pipe(Effect.provide(testLayer(real, global, real)))),
+        )
+      }),
+    ),
+  )
+
   it.live("loads explicit file and content overrides in priority order", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
@@ -584,6 +615,13 @@ describe("Config", () => {
       model: { providerID: "anthropic", model: "claude-haiku-4-5" },
       system: "Custom title prompt",
     })
+  })
+
+  test("migrates the v1 update policy", () => {
+    expect(ConfigMigrateV1.migrate({ autoupdate: false }).update).toBe("disable")
+    expect(ConfigMigrateV1.migrate({ autoupdate: "notify" }).update).toBe("notify")
+    expect(ConfigMigrateV1.migrate({ autoupdate: true }).update).toBe("auto")
+    expect(ConfigMigrateV1.migrate({}).update).toBeUndefined()
   })
 
   test("migrates v1 provider lists to policies", () => {
@@ -1026,7 +1064,7 @@ describe("Config", () => {
                 shell: "/bin/bash",
                 model: "anthropic/claude",
                 default_agent: "reviewer",
-                autoupdate: "notify",
+                update: "notify",
                 share: "disabled",
                 enterprise: { url: "https://share.example.com" },
                 username: "test-user",
@@ -1109,7 +1147,7 @@ describe("Config", () => {
             expect(documents[0]?.info.shell).toBe("/bin/bash")
             expect(documents[0]?.info.model).toEqual(selection("anthropic/claude"))
             expect(documents[0]?.info.default_agent).toBe("reviewer")
-            expect(documents[0]?.info.autoupdate).toBe("notify")
+            expect(documents[0]?.info.update).toBe("notify")
             expect(documents[0]?.info.share).toBe("disabled")
             expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
             expect(documents[0]?.info.username).toBe("test-user")
@@ -1236,6 +1274,7 @@ describe("Config", () => {
               JSON.stringify({
                 shell: "/bin/zsh",
                 default_agent: "reviewer",
+                autoupdate: false,
                 snapshot: false,
                 autoshare: true,
                 permission: {
@@ -1312,6 +1351,7 @@ describe("Config", () => {
             expect(documents[0]?.info).toBeInstanceOf(Info)
             expect(documents[0]?.info.shell).toBe("/bin/zsh")
             expect(documents[0]?.info.default_agent).toBe("reviewer")
+            expect(documents[0]?.info.update).toBe("disable")
             expect(documents[0]?.info.snapshots).toBe(false)
             expect(documents[0]?.info.share).toBe("auto")
             expect(documents[0]?.info.permissions).toEqual([

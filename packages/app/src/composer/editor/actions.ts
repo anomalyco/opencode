@@ -1,4 +1,4 @@
-import { batch, type Accessor } from "solid-js"
+import { batch, untrack, type Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import type {
   ComposerAgentPart,
@@ -23,43 +23,47 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
     return typeof value === "function" ? value() : value
   }
   const setStore = () => tuple()[1]
-  const clearRetry = () => setStore()("retry", undefined)
+  const clearRetry = () => {
+    if (untrack(() => store().retry) !== undefined) setStore()("retry", undefined)
+  }
 
   return {
     get state() {
       return store()
     },
     setPrompt(prompt: ComposerPrompt, cursor?: number) {
-      batch(() => {
-        setStore()("prompt", prompt)
-        if (cursor !== undefined) setStore()("cursor", cursor)
-        clearRetry()
-      })
+      // Persisted setters encode on every call, even inside a reactive batch.
+      batch(() => setStore()({ prompt, ...(cursor !== undefined ? { cursor } : {}), retry: undefined }))
     },
     setCursor(cursor: number) {
+      if (untrack(() => store().cursor) === cursor) return
       setStore()("cursor", cursor)
     },
     setMode(mode: "normal" | "shell") {
-      setStore()("mode", mode)
-      clearRetry()
+      if (untrack(() => store().mode === mode && store().retry === undefined)) return
+      setStore()({ mode, retry: undefined })
     },
     setText(content: string) {
-      batch(() => {
-        setStore()("prompt", (prompt) => [
-          { type: "text", content, start: 0, end: content.length },
-          ...prompt.filter((part) => part.type === "image"),
-        ])
-        setStore()("cursor", content.length)
-        clearRetry()
-      })
+      batch(() =>
+        setStore()((state) => ({
+          prompt: [
+            { type: "text", content, start: 0, end: content.length },
+            ...state.prompt.filter((part) => part.type === "image"),
+          ],
+          cursor: content.length,
+          retry: undefined,
+        })),
+      )
     },
     addText(content: string) {
       const cursor = store().cursor ?? promptLength(store().prompt)
-      batch(() => {
-        setStore()("prompt", (prompt) => insertText(prompt, cursor, content))
-        setStore()("cursor", cursor + content.length)
-        clearRetry()
-      })
+      batch(() =>
+        setStore()((state) => ({
+          prompt: insertText(state.prompt, cursor, content),
+          cursor: cursor + content.length,
+          retry: undefined,
+        })),
+      )
     },
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionUserActions } from "@opencode-ai/session-ui/actions"
@@ -342,8 +342,11 @@ export function MessageTimeline(props: MessageTimelineProps) {
     if (message?.type === "assistant" && message.time.completed !== undefined) {
       const content = Timeline.resolveContent(message, tail.group.ref.partID)
       // Start the required worker job while the rest of the selected view is constructed.
-      if (content?.type === "text" && content.text.trim())
-        void preloadMarkdown(content.text, tail.group.ref.partID).catch(() => undefined)
+      if (content?.type === "text" && content.text.trim()) {
+        const preload = new AbortController()
+        onCleanup(() => preload.abort())
+        void preloadMarkdown(content.text, tail.group.ref.partID, preload.signal).catch(() => undefined)
+      }
     }
   }
   return (
@@ -770,14 +773,14 @@ function MessageTimelineView(
                                 {language.t("common.rename")}
                               </Menu.Item>
                               <Menu.Item onSelect={() => void props.action.export(id)}>
-                                {language.t("common.export")}...
+                                {language.t("common.export")}…
                               </Menu.Item>
                             </Show>
                             <Show when={!parentID()}>
                               {/* TODO: Need a session archive API. */}
                               <Menu.Separator />
                               <Menu.Item onSelect={() => props.action.showDelete(id)}>
-                                {language.t("common.delete")}...
+                                {language.t("common.delete")}…
                               </Menu.Item>
                             </Show>
                           </Menu.Content>

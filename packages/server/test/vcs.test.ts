@@ -95,8 +95,8 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
                     revision: "test",
                     effect: (ctx) =>
                       ctx.vcs
-                        .transform((draft) => {
-                          draft.add({
+                        .transform((editor) => {
+                          editor.add({
                             id: "failing",
                             name: "Failing VCS",
                             info: () => Effect.succeed({ branch: {} }),
@@ -105,7 +105,7 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
                             diff: () => Effect.succeed([]),
                             base: () => Effect.fail(new Error("provider failure")),
                           })
-                          draft.default.set("failing")
+                          editor.default.set("failing")
                         })
                         .pipe(Effect.asVoid),
                   },

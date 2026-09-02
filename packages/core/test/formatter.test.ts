@@ -198,9 +198,9 @@ describe("Formatter", () => {
     withFormatter(false, (formatter, directory) =>
       Effect.gen(function* () {
         const command = { suffix: "A" }
-        yield* formatter.transform((draft) => {
+        yield* formatter.transform((editor) => {
           const suffix = command.suffix
-          draft.set({
+          editor.set({
             name: "reload",
             extensions: [".reload"],
             enabled: Effect.succeed([
@@ -230,7 +230,7 @@ describe("Formatter", () => {
         const resolving = yield* Deferred.make<void>()
         const release = yield* Deferred.make<void>()
         const command = { suffix: "A" }
-        yield* formatter.transform((draft) => {
+        yield* formatter.transform((editor) => {
           const suffix = command.suffix
           const resolved = [
             process.execPath,
@@ -238,7 +238,7 @@ describe("Formatter", () => {
             `const fs = require('fs'); const file = process.argv.at(-1); fs.appendFileSync(file, '${suffix}')`,
             "$FILE",
           ]
-          draft.set({
+          editor.set({
             name: "reload-race",
             extensions: [".race"],
             enabled:

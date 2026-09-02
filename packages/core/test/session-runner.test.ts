@@ -4,6 +4,7 @@ import {
   LLMEvent,
   LLMRequest,
   Message,
+  SystemPart,
   LanguageModel,
   ToolFailure,
   TransportError,
@@ -13,6 +14,8 @@ import {
   UnknownProviderError,
 } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
+import { AnthropicMessages, OpenAIResponses } from "@opencode-ai/ai/protocols"
+import { compileRequest } from "@opencode-ai/ai/route/client"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
@@ -70,7 +73,7 @@ import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
-import { ID } from "@opencode-ai/core/model"
+import { ID, Model } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
@@ -254,8 +257,8 @@ const permissionFail = {
 }
 const permission = permissionLayer()
 const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, ToolInfo>>, options?: Tool.Options) =>
-  registry.transform((draft) =>
-    Object.entries(tools).forEach(([name, tool]) => draft.add({ ...tool, name, options: options ?? tool.options })),
+  registry.transform((editor) =>
+    Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
   )
 const layer = Layer.unwrap(
   Effect.map(RunnerState, (state) => {
@@ -518,8 +521,8 @@ const setup = Effect.gen(function* () {
   yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
     discard: true,
   })
-  yield* agents.transform((draft) =>
-    draft.update(Agent.ID.make("build"), (agent) => {
+  yield* agents.transform((editor) =>
+    editor.update(Agent.ID.make("build"), (agent) => {
       agent.mode = "primary"
     }),
   )
@@ -903,8 +906,8 @@ const prepareTitleGeneration = Effect.gen(function* () {
   const agents = yield* Agent.Service
   const { db } = yield* Database.Service
   yield* db.update(SessionTable).set({ title: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
-  yield* agents.transform((draft) =>
-    draft.update(Agent.ID.make("title"), (agent) => {
+  yield* agents.transform((editor) =>
+    editor.update(Agent.ID.make("title"), (agent) => {
       agent.mode = "primary"
       agent.hidden = true
       agent.system = "Generate a title."
@@ -1392,7 +1395,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Echo before moving")
     yield* s.llm.push(
       TestLLM.tool("call-entry", "echo", { text: "moving" }),
-      TestLLM.text("Entry summary", "entry-summary"),
+      TestLLM.text("## Objective\n- Entry summary", "entry-summary"),
       TestLLM.text("Continued", "entry-continuation"),
     )
     const stream = yield* s.llm.gate
@@ -1427,8 +1430,7 @@ describe("SessionRunnerLLM", () => {
     yield* runner.drain({ sessionID, force: false, continuation: moved.continuation })
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1])[0]).toContain("Create a new anchored summary")
-    expect(userTexts(s.requests[2])[0]).toContain("<summary>\nEntry summary\n</summary>")
+    expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Entry summary\n</summary>")
     expect(yield* s.inbox).toEqual([])
   })
 
@@ -1587,7 +1589,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
-      expect.stringContaining("You are OpenCode, You and the user share the same workspace"),
+      defaultSystem,
+      expect.stringContaining("# Delegation"),
       "Initial context",
     ])
   })
@@ -1607,7 +1610,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
-      expect.stringContaining("You are OpenCode, You and the user share the same workspace"),
+      defaultSystem,
+      expect.stringContaining("# Delegation"),
       "Initial context",
     ])
   })
@@ -1696,8 +1700,8 @@ describe("SessionRunnerLLM", () => {
 
   scenario("updates selected-agent skill instructions after an agent switch", function* (s) {
     const agents = yield* Agent.Service
-    yield* agents.transform((draft) =>
-      draft.update(Agent.ID.make("reviewer"), (agent) => {
+    yield* agents.transform((editor) =>
+      editor.update(Agent.ID.make("reviewer"), (agent) => {
         agent.mode = "primary"
       }),
     )
@@ -1895,28 +1899,29 @@ describe("SessionRunnerLLM", () => {
 
   scenario("moves the epoch at compaction and narrates later changes", function* (s) {
     yield* s.runPrompt("First")
-    yield* s.bus.publish(SessionEvent.Compaction.Started, {
-      sessionID,
-      reason: "manual",
-      recent: "",
-    })
-    yield* s.bus.publish(SessionEvent.Compaction.Ended, {
-      sessionID,
-      reason: "manual",
-      text: "summary",
-      recent: "",
-    })
+    s.systemBaseline = "Changed before compaction"
+    yield* s.llm.push(TestLLM.text("## Objective\n- summary", "epoch-summary"))
+    yield* s.session.compact({ sessionID })
+    yield* s.resume
+    expect(systemTexts(s.requests[1])).toEqual(["Changed before compaction"])
+    expect((yield* s.context).some((message) => message.type === "system")).toBe(false)
     s.systemBaseline = "Replacement context"
     yield* s.runPrompt("Second")
 
     expect(s.requests.map((request) => request.system.map((part) => part.text))).toEqual([
       [defaultSystem, "Initial context"],
       [defaultSystem, "Initial context"],
+      [defaultSystem, "Initial context"],
     ])
-    expect(messageRoles(s.requests[1])).toEqual(["user", "system", "user"])
-    expect(s.requests[1]?.messages.at(1)?.content).toEqual([Expected.text("Replacement context")])
+    expect(messageRoles(s.requests[2])).toEqual(["user", "system", "user"])
+    expect(s.requests[2]?.messages.at(1)?.content).toEqual([Expected.text("Replacement context")])
     yield* replaySessionProjection(sessionID)
-    yield* s.runPrompt("Third")
+    const latest = yield* s.runPrompt("Third")
+    expect(systemTexts(s.requests[3])).toEqual(["Replacement context"])
+    const fork = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: latest.id } })
+    expect(
+      (yield* s.session.context(fork.id)).flatMap((message) => (message.type === "system" ? [message.text] : [])),
+    ).toEqual(["Replacement context"])
   })
 
   scenario("runs steers before queued compaction and later queued input", function* (s) {
@@ -1924,7 +1929,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(
       TestLLM.tool("call-active", "echo", { text: "active" }),
       TestLLM.text("Steer complete", "text-steer"),
-      [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
+      [LLMEvent.textDelta({ id: "summary", text: "## Objective\n- durable summary" })],
       TestLLM.text("Queue complete", "text-queue"),
     )
     yield* s.admit("Active work")
@@ -1951,13 +1956,12 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(4)
     expect(userTexts(s.requests[1])).toContain("Steer after compaction")
     expect(userTexts(s.requests[1])).toContain("Completion after compaction")
-    expect(userTexts(s.requests[2])[0]).toContain("Create a new anchored summary")
     expect(userTexts(s.requests[3])).toContain("Queue after compaction")
     expect(yield* SessionInbox.find(s.db, first.id)).toBeUndefined()
     expect((yield* s.messages).find((message) => message.id === first.id)).toMatchObject({
       type: "compaction",
       status: "completed",
-      summary: "durable summary",
+      summary: "## Objective\n- durable summary",
     })
   })
 
@@ -1965,6 +1969,7 @@ describe("SessionRunnerLLM", () => {
     s.currentModel = recoveryModel
     yield* s.llm.push(
       TestLLM.text("Active complete", "text-active-failure"),
+      [],
       [],
       TestLLM.text("Continued", "text-after-failure"),
     )
@@ -1980,8 +1985,8 @@ describe("SessionRunnerLLM", () => {
     })
     yield* active.finish
 
-    expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[2])).toContain("Continue after failure")
+    expect(s.requests).toHaveLength(4)
+    expect(userTexts(s.requests[3])).toContain("Continue after failure")
     expect(yield* SessionInbox.find(s.db, compaction.id)).toBeUndefined()
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
@@ -2020,7 +2025,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Earlier question")
 
     s.requests.length = 0
-    yield* s.llm.push(TestLLM.text("Manual summary", "text-manual-unknown-summary"))
+    yield* s.llm.push(TestLLM.text("## Objective\n- Manual summary", "text-manual-unknown-summary"))
     const compaction = yield* s.session.compact({ sessionID, delivery: "steer" })
     yield* s.resume
 
@@ -2029,7 +2034,7 @@ describe("SessionRunnerLLM", () => {
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
       status: "completed",
-      summary: "Manual summary",
+      summary: "## Objective\n- Manual summary",
     })
   })
 
@@ -2037,7 +2042,7 @@ describe("SessionRunnerLLM", () => {
     s.currentModel = recoveryModel
     yield* s.llm.push(
       TestLLM.text("Active complete", "text-active-steer-compact"),
-      [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
+      [LLMEvent.textDelta({ id: "summary", text: "## Objective\n- durable summary" })],
       TestLLM.text("Queue complete", "text-queue-after-compact"),
     )
     yield* s.admit("Active work")
@@ -2050,13 +2055,12 @@ describe("SessionRunnerLLM", () => {
     // Steer-delivered compaction runs at the boundary after the active step, ahead of
     // the queued prompt, and consuming it does not trigger an input-free model call.
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1])[0]).toContain("Create a new anchored summary")
     expect(userTexts(s.requests[2])).toContain("Queued prompt")
     expect(yield* SessionInbox.find(s.db, compaction.id)).toBeUndefined()
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
       status: "completed",
-      summary: "durable summary",
+      summary: "## Objective\n- durable summary",
     })
   })
 
@@ -2064,7 +2068,7 @@ describe("SessionRunnerLLM", () => {
     s.currentModel = recoveryModel
     yield* s.llm.push(
       TestLLM.tool("call-active", "echo", { text: "active" }),
-      [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
+      [LLMEvent.textDelta({ id: "summary", text: "## Objective\n- durable summary" })],
       TestLLM.text("Continued", "text-continued-after-compact"),
     )
     yield* s.admit("Active work")
@@ -2075,11 +2079,10 @@ describe("SessionRunnerLLM", () => {
 
     // The compaction summary is requested before the tool turn's continuation step.
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1])[0]).toContain("Create a new anchored summary")
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
       status: "completed",
-      summary: "durable summary",
+      summary: "## Objective\n- durable summary",
     })
   })
 
@@ -2097,6 +2100,148 @@ describe("SessionRunnerLLM", () => {
       error: { type: "provider.error", message: "summary unavailable" },
     })
   })
+
+  for (const route of [OpenAIChat.route, OpenAIResponses.route, AnthropicMessages.route]) {
+    for (const reason of ["manual", "auto"] as const) {
+      scenario(`preserves the session request prefix during ${reason} compaction (${route.id})`, function* (s) {
+        const agents = yield* Agent.Service
+        const hooks = yield* PluginHooks.Service
+        const agentID = Agent.ID.make("reviewer")
+        const variant = Model.VariantID.make("test-variant")
+        s.currentModel = LanguageModel.make({
+          id: route === AnthropicMessages.route ? "claude-sonnet-4-6" : "gpt-5",
+          provider: route === AnthropicMessages.route ? "anthropic" : "openai",
+          route,
+        })
+        yield* agents.transform((editor) =>
+          editor.update(agentID, (agent) => {
+            agent.system = "Review the project carefully."
+          }),
+        )
+        yield* s.bus.publish(SessionEvent.AgentSelected, { sessionID, agent: agentID })
+        yield* s.bus.publish(SessionEvent.ModelSelected, {
+          sessionID,
+          model: { id: ID.make(s.currentModel.id), providerID: Provider.ID.make(s.currentModel.provider), variant },
+        })
+        const requestAgents: Agent.ID[] = []
+        yield* hooks.register("session", "context", (event) =>
+          Effect.sync(() => {
+            expect(event.agent).toBe(agentID)
+            expect(event.model.variant).toBe(variant)
+            event.system.push(SystemPart.make("Hook-provided instructions"))
+            event.tools.echo.description = "Hook-provided tool description"
+            event.generation.maxTokens = 4_000
+          }),
+        )
+        yield* hooks.register("session", "model.request", (event) =>
+          Effect.sync(() => {
+            requestAgents.push(event.agent)
+          }),
+        )
+        yield* s.llm.push(
+          TestLLM.tool("call-prefix", "echo", { text: "x".repeat(4_000) }),
+          TestLLM.textWithUsage("Earlier answer", "prefix-answer", 185_000),
+          TestLLM.text("## Objective\n- Checkpoint summary", "prefix-summary"),
+        )
+        yield* s.runPrompt("Review these changes")
+        if (reason === "manual") {
+          yield* s.session.compact({ sessionID })
+          yield* s.resume
+        }
+        if (reason === "auto") {
+          yield* s.llm.push(TestLLM.text("Continued", "prefix-continued"))
+          yield* s.runPrompt("Retained recent request")
+        }
+
+        const normal = s.requests[1]
+        const compact = s.requests[2]
+        expect(compact.messages.slice(0, normal.messages.length)).toEqual([...normal.messages])
+        expect(compact.messages.at(-1)).toMatchObject({
+          role: "user",
+          content: [{ type: "text", text: SessionCompaction.buildPrompt(false) }],
+        })
+        expect(userTexts(compact)).not.toContain("Retained recent request")
+        for (const field of [
+          "model",
+          "system",
+          "tools",
+          "generation",
+          "providerOptions",
+          "toolChoice",
+          "cache",
+          "promptCacheKey",
+          "http",
+        ] as const)
+          expect(compact[field]).toEqual(normal[field])
+        expect(compact.toolChoice).toBeUndefined()
+        expect(compact.system.map((part) => part.text)).toContain("Review the project carefully.")
+        expect(requestAgents[2]).toBe(Agent.ID.make("compaction"))
+        expect(s.executions).toEqual(["x".repeat(4_000)])
+
+        // Compare wire content without the cache breakpoints that move to the new final message.
+        const before = yield* compileRequest(LLMRequest.update(normal, { cache: "none" }))
+        const after = yield* compileRequest(LLMRequest.update(compact, { cache: "none" }))
+        const key = route === OpenAIResponses.route ? "input" : "messages"
+        const input = Schema.decodeUnknownSync(Schema.Array(Schema.Unknown))
+        const prefix = input(before.body[key])
+        expect(input(after.body[key]).slice(0, prefix.length)).toEqual([...prefix])
+        expect(after.body).toMatchObject(
+          Object.fromEntries(Object.entries(before.body).filter(([name]) => name !== key)),
+        )
+      })
+    }
+  }
+
+  for (const response of ["tools", "reasoning", "invalid text"] as const) {
+    for (const summary of [true, false]) {
+      scenario(
+        `compaction ${summary ? "recovers" : "stops"} after one template reminder for ${response}`,
+        function* (s) {
+          yield* s.llm.push(TestLLM.text("Earlier answer", "summary-history"))
+          yield* s.runPrompt("Earlier question")
+          s.requests.length = 0
+          const invalid =
+            response === "tools"
+              ? TestLLM.tool("call-summary", "echo", { text: "must not execute" })
+              : response === "reasoning"
+                ? TestLLM.stop(
+                    LLMEvent.reasoningDelta({ id: "summary-reasoning", text: "## Objective\n- Not a summary" }),
+                  )
+                : TestLLM.text("Let me search the codebase. I will fill in ## Objective later.", "invalid-summary")
+          yield* s.llm.push(
+            invalid,
+            summary ? TestLLM.text("### Active\n- Recovered summary", "summary-recovered") : invalid,
+          )
+          const compact = yield* s.session.compact({ sessionID })
+          yield* s.resume
+
+          expect(s.requests).toHaveLength(2)
+          expect(s.requests[1].messages.slice(0, -1)).toEqual([...s.requests[0].messages])
+          expect(userTexts(s.requests[1]).at(-1)).toContain("did not fill in the required summary template")
+          expect(s.requests.every((request) => request.toolChoice === undefined)).toBe(true)
+          expect(s.executions).toEqual([])
+          expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject(
+            summary
+              ? { status: "completed", summary: "### Active\n- Recovered summary" }
+              : {
+                  status: "failed",
+                  error: {
+                    type: "compaction.failed",
+                    message:
+                      response === "invalid text"
+                        ? "Compaction summary did not match the required template"
+                        : "Compaction produced no summary",
+                  },
+                },
+          )
+          if (!summary)
+            expect(
+              (yield* s.context).some((message) => message.type === "user" && message.text === "Earlier question"),
+            ).toBe(true)
+        },
+      )
+    }
+  }
 
   scenario("preserves typed provider failures from manual compaction", function* (s) {
     yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-failure-history"))
@@ -2176,7 +2321,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Recent exact request ".repeat(180))
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0])[0]).toContain("## Objective")
+    expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
     expect(userTexts(s.requests[1])).toHaveLength(1)
     expect(userTexts(s.requests[1])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
     expect(userTexts(s.requests[1])[0]).toContain(`[User]: ${"Recent exact request ".repeat(180)}`)
@@ -2186,6 +2331,7 @@ describe("SessionRunnerLLM", () => {
     expect(context[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the task",
+      recent: `[User]: ${"Recent exact request ".repeat(180)}`,
     })
 
     s.requests.length = 0
@@ -2197,13 +2343,13 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Newest exact request ".repeat(180))
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0])[0]).toContain(
-      "<previous-summary>\n## Objective\n- Preserve the task\n</previous-summary>",
-    )
+    expect(userTexts(s.requests[0])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
     expect(userTexts(s.requests[0])[0]).toContain("Recent exact request")
+    expect(userTexts(s.requests[0]).at(-1)).toBe(SessionCompaction.buildPrompt(true))
     expect((yield* store.context(sessionID))[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the updated task",
+      recent: `[User]: ${"Newest exact request ".repeat(180)}`,
     })
   })
 
@@ -2259,7 +2405,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Continue")
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1])[0]).toContain("## Objective")
+    expect(userTexts(s.requests[1]).at(-1)).toContain("## Objective")
     expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Recover overflow\n</summary>")
     expect(yield* s.context).toMatchObject([
       { type: "compaction", summary: "## Objective\n- Recover overflow" },
@@ -2283,7 +2429,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Continue")
     yield* s.llm.push(
       [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
-      TestLLM.text("Overflow summary", "overflow-summary"),
+      TestLLM.text("## Objective\n- Overflow summary", "overflow-summary"),
       TestLLM.text("Recovered", "overflow-recovered"),
       TestLLM.stop(),
       TestLLM.stop(),
@@ -2320,7 +2466,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[2]?.model).toBe(replacementModel)
     expect(s.requests[2]?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context"])
     expect(systemTexts(s.requests[2])).toContain("Changed during compaction")
-    expect(userTexts(s.requests[2])[0]).toContain("<summary>\nOverflow summary\n</summary>")
+    expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Overflow summary\n</summary>")
     expect(userTexts(s.requests[2]).join("\n")).not.toContain("Queued during compaction")
     expect(userTexts(s.requests[2]).join("\n")).not.toContain("Steered during compaction")
     expect((yield* s.inbox).map((item) => item.id)).toEqual([queued.id, steered.id])
@@ -2338,7 +2484,7 @@ describe("SessionRunnerLLM", () => {
   scenario("does not recover provider context overflow when automatic compaction is disabled", function* (s) {
     yield* setupOverflowRecovery(s)
     const compaction = yield* SessionCompaction.Service
-    yield* compaction.transform((draft) => draft.configure({ auto: false }))
+    yield* compaction.transform((editor) => editor.configure({ auto: false }))
     yield* s.llm.push(
       [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
       TestLLM.text("Must not compact", "text-unexpected-summary"),

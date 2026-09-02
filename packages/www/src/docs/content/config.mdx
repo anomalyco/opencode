@@ -127,16 +127,17 @@ Choose the primary agent used when a session does not select one explicitly.
 See the [agents guide](/agents) for built-in and custom
 agents.
 
-### Autoupdate
+### Updates
 
-Control automatic updates from the global config. Set this to `false` to
-disable updates, or `"notify"` to report available updates without installing
-them. Set this to `true` to automatically install compatible non-major updates.
+Control updates from the global config. Set `update` to `"disable"` to skip
+updates, `"notify"` to report available updates without installing them, or
+`"auto"` to automatically install compatible non-major updates.
+Major updates are reported but never installed automatically.
 Project-level values are ignored.
 
 ```jsonc
 {
-  "autoupdate": false,
+  "update": "auto",
 }
 ```
 

@@ -400,7 +400,8 @@ function turnStart(messageID: string, slash: PreparedPrompt["slash"], skill: Ski
 
 async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog> {
   const location = { directory: cwd }
-  // Location plugins initialize asynchronously, so the first ACP request may observe an empty catalog.
+  await client.plugin.awaitActivation({ location })
+  // Some providers discover models in the background after activation has settled.
   const deadline = Date.now() + 5_000
   let missing = "No models are available"
   while (Date.now() < deadline) {

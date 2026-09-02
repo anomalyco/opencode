@@ -244,12 +244,12 @@ describe("AzurePlugin", () => {
       () =>
         Effect.gen(function* () {
           const catalog = yield* Catalog.Service
-          yield* catalog.transform((draft) => {
-            draft.provider.update(Provider.ID.azure, (provider) => {
+          yield* catalog.transform((editor) => {
+            editor.provider.update(Provider.ID.azure, (provider) => {
               provider.package = Provider.aisdk("@ai-sdk/azure")
             })
-            draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
-            draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
+            editor.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
+            editor.model.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
           })
           yield* azureCredential
           yield* addPlugin()
@@ -462,24 +462,24 @@ describe("AzurePlugin", () => {
           gateway: Model.ID.make("gateway"),
           nonAzure: Model.ID.make("non-azure"),
         }
-        yield* catalog.transform((draft) => {
-          draft.provider.update(Provider.ID.azure, (provider) => {
+        yield* catalog.transform((editor) => {
+          editor.provider.update(Provider.ID.azure, (provider) => {
             provider.package = Provider.aisdk("@ai-sdk/azure")
           })
-          draft.model.update(Provider.ID.azure, models.responses, () => {})
-          draft.model.update(Provider.ID.azure, models.chat, (model) => {
+          editor.model.update(Provider.ID.azure, models.responses, () => {})
+          editor.model.update(Provider.ID.azure, models.chat, (model) => {
             model.settings = { useCompletionUrls: true }
           })
-          draft.model.update(Provider.ID.azure, models.preview, (model) => {
+          editor.model.update(Provider.ID.azure, models.preview, (model) => {
             model.settings = { apiVersion: "2025-04-01-preview" }
           })
-          draft.model.update(Provider.ID.azure, models.deploymentURL, (model) => {
+          editor.model.update(Provider.ID.azure, models.deploymentURL, (model) => {
             model.settings = { useDeploymentBasedUrls: true }
           })
-          draft.model.update(Provider.ID.azure, models.gateway, (model) => {
+          editor.model.update(Provider.ID.azure, models.gateway, (model) => {
             model.settings = { baseURL: "https://gateway.example/azure" }
           })
-          draft.model.update(Provider.ID.azure, models.nonAzure, (model) => {
+          editor.model.update(Provider.ID.azure, models.nonAzure, (model) => {
             model.package = Provider.aisdk("@ai-sdk/anthropic")
           })
         })

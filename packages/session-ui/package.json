@@ -57,7 +57,8 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
     "@kobalte/core": "catalog:",

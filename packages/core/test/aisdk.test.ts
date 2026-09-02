@@ -10,6 +10,8 @@ import { Provider } from "@opencode-ai/core/provider"
 import {
   LLM,
   AIError,
+  CompactionPart,
+  ProviderID,
   HttpContext,
   LLMEvent,
   Message,
@@ -66,6 +68,31 @@ const client = LLMClient.layer.pipe(
       }),
     ),
   ),
+)
+
+it.effect("rejects native provider compaction rather than silently dropping replay state", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => streamModel([]) }
+    })
+    const resolved = yield* aisdk.model(model("@ai-sdk/openai"))
+    const error = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.assistant(
+            CompactionPart.make({
+              provider: ProviderID.make("test-provider"),
+              encrypted: "opaque",
+            }),
+          ),
+        ],
+      }),
+    ).pipe(Effect.flip)
+    expect(error.reason._tag).toBe("InvalidRequest")
+    expect(error.message).toContain("cannot replay")
+  }),
 )
 
 it.effect("keys language models by package and flattened overlays", () =>

@@ -8,8 +8,7 @@ import { Api } from "../api"
 export const RpcHandler = HttpApiBuilder.group(Api, "server.rpc", (handlers) =>
   handlers.handle("rpc.call", ({ params, payload }) =>
     Effect.gen(function* () {
-      const plugins = yield* Plugin.Service
-      yield* plugins.awaitActivation
+      yield* Plugin.awaitActivation
       const rpc = yield* Rpc.Service
       const output = yield* rpc.call(params.rpcID, params.method, payload.input)
       return output === undefined ? {} : { output }

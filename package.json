@@ -27,7 +27,6 @@
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
     "prepare": "husky",
-    "reserve-packages": "bun script/reserve-package-names.ts",
     "random": "echo 'Random script'",
     "sso": "aws sso login --sso-session=opencode --no-browser",
     "test": "echo 'do not run tests from root' && exit 1"
@@ -93,7 +92,6 @@
       "@typescript/native-preview": "7.0.0-dev.20251207.1",
       "zod": "4.1.8",
       "remeda": "2.26.0",
-      "resolve.exports": "2.0.3",
       "sst": "4.13.1",
       "shiki": "4.4.3",
       "solid-list": "0.3.0",
@@ -178,6 +176,7 @@
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
     "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",
     "@tanstack/virtual-core@3.17.8": "patches/@tanstack%2Fvirtual-core@3.17.8.patch",
-    "@ff-labs/fff-bun@0.10.5": "patches/@ff-labs%2Ffff-bun@0.10.5.patch"
+    "@ff-labs/fff-bun@0.10.5": "patches/@ff-labs%2Ffff-bun@0.10.5.patch",
+    "vite@8.2.2": "patches/vite@8.2.2.patch"
   }
 }

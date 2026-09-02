@@ -3,7 +3,7 @@ import type { Agent } from "@opencode-ai/schema/agent"
 import type { Transform } from "./registration.js"
 import type { DeepMutable } from "./types.js"
 
-export interface AgentDraft {
+export interface AgentEditor {
   list(): readonly DeepMutable<Agent.Info>[]
   get(id: string): DeepMutable<Agent.Info> | undefined
   default(id: string | undefined): void
@@ -12,6 +12,6 @@ export interface AgentDraft {
 }
 
 export interface AgentDomain extends AgentApi {
-  readonly transform: Transform<AgentDraft>
+  readonly transform: Transform<AgentEditor>
   readonly reload: () => Promise<void>
 }
