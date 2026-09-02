@@ -42,10 +42,24 @@ export function createSessionBrowser(session: SessionModel) {
     const owner = session.ownership.capture()
     const target = { sessionID, endpoint: server.conn.http }
     let registration: BrowserPaneRegistration | undefined
+    let retry: ReturnType<typeof setTimeout> | undefined
+    let attempts = 0
     const register = () => {
       if (registration) return
       registration = pane.register(target, (event) =>
-        owner.run(() => (event.type === "open" ? open() : setState({ browser: event.state, error: event.error }))),
+        owner.run(() => {
+          if (event.type === "open") return open()
+          // The desktop dropped the attachment (server restart, attach race).
+          // Re-register so the agent's browser tool comes back without a reload.
+          if (event.error === "browser.pane.registration.closed") {
+            registration?.close()
+            registration = undefined
+            setState({ registration: undefined, browser: null, error: undefined })
+            retry = setTimeout(register, Math.min(30_000, 1_000 * 2 ** attempts++))
+            return
+          }
+          setState({ browser: event.state, error: event.error })
+        }),
       )
       setState({ registration, browser: null, error: undefined })
     }
@@ -56,6 +70,7 @@ export function createSessionBrowser(session: SessionModel) {
     if (!session.shared.data.session.creating(sessionID)) register()
     onCleanup(() => {
       unsubscribe()
+      clearTimeout(retry)
       registration?.close()
     })
   })
