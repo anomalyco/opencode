@@ -6,6 +6,7 @@ import type { ContextManagement } from "../protocols/openai-responses.js"
 export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options.js"
 
 export type OpenAIOptionsInput = Omit<Options, "serviceTier"> & {
+  /** Advanced in-band compaction. The caller owns checkpoint persistence and recovery. */
   readonly contextManagement?: ContextManagement
   readonly serviceTier?: OpenAIServiceTier
   readonly [key: string]: unknown

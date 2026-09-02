@@ -245,7 +245,7 @@ Generation responses remain canonical event arrays or arbitrary `Stream<LLMEvent
 supplied streams directly, preserving failure identity, finalizers, incomplete output, and post-finish tails;
 it does not repair or truncate them.
 
-For explicit compaction, script a `CompactionResponse` through `push`, `always`, or `serve`. The client returns that replacement window directly, including retained user messages and usage, with the same lazy request recording and gates. Generation and compaction reject fixtures for the wrong operation instead of converting between response shapes.
+For explicit compaction, script a `CompactionResponse` through `push`, `always`, or `serve`. Its `replacement` contains the next context window, including retained user messages. The client returns that result and usage directly, with the same lazy request recording and gates. Generation and compaction reject fixtures for the wrong operation instead of converting between response shapes.
 
 The published legacy `Service`, `layer`, `clientLayer`, and module-level controls remain available as adapters
 over the same implementation, including the legacy live `requests` array. New tests should use `Test` and
@@ -257,7 +257,31 @@ Compaction is opt-in. The package supports automatic compaction in OpenAI/Azure 
 
 This is different from prompt caching, server-side history storage, or truncation. Compaction returns provider-owned context that must be replayed to continue the conversation.
 
-### Automatic compaction
+### Explicit compaction
+
+`LLMClient.compact(request)` is the caller-controlled operation for OpenAI, Azure, and xAI Responses. It performs exactly one HTTP call to `/responses/compact`, using the selected route's endpoint, credentials, query, and HTTP middleware. It returns a `CompactionResponse` with `replacement: Message[]` and optional `usage`, not a normal generation response.
+
+Prefer this operation, where supported, when the application owns compaction policy and durable context updates.
+
+```ts
+const result = yield * LLMClient.compact(request)
+const next = LLMRequest.update(request, {
+  messages: result.replacement,
+})
+const response = yield * LLMClient.generate(next)
+```
+
+`replacement` replaces the complete input window. Do not append it to the original transcript or extract only the encrypted item: the provider may retain additional messages in its output. Retained user and assistant messages remain ordinary messages with typed text, media, or reasoning parts, in their original order. Provider-specific message IDs, status, and phase use `providerMetadata`, not a raw output array hidden in an assistant message. Unsupported returned item types fail explicitly.
+
+The selected model carries explicit-compaction capability through request construction and updates. Calls using unsupported routes fail type checking. When the model is selected dynamically, narrow the request with `LLMClient.canCompact(request)` before calling `LLMClient.compact`; a model or route switch does not inherit the old capability. Runtime validation still rejects unsupported calls from untyped consumers. Capability describes the route's API, not whether every model or custom deployment supports the operation.
+
+Generation-only body overlays such as `stream` and `store` are not sent to the compact endpoint. Supported compact controls such as service tier and prompt-cache settings preserve request defaults and HTTP-overlay precedence. Retained image and file detail settings survive serialization and replay.
+
+The input must still fit the model's context window. Explicit compaction is not an overflow-recovery operation. Anthropic does not expose this operation in this package; its in-band compaction remains available below. Compatible routes do not inherit an explicit compact endpoint simply because they use a Responses protocol.
+
+### Advanced: in-band compaction
+
+`providerOptions.contextManagement` lets the provider decide when to compact during an ordinary `generate` or `stream` call. This is an advanced option for callers that own persistence and recovery: persist the complete assistant message, including its checkpoint, before continuing. Enabling the option does not provide durable checkpoint storage, interruption recovery, or model-switch policy. Keep the prior context until a successful checkpoint has been persisted.
 
 Inside an `Effect.gen`, enable OpenAI compaction with typed provider options:
 
@@ -307,29 +331,9 @@ providerOptions: {
 - The trigger is optional (provider default: 150,000 tokens), with a minimum of 50,000.
 - Custom instructions replace Anthropic's default summarization instructions.
 - The route adds `compact-2026-01-12` to existing beta headers, including when replaying a checkpoint without enabling new compactions.
-- A pause is exposed as `response.finishReason.raw === "compaction"`. The caller explicitly issues the next request; the package never automatically resumes.
+- A pause is exposed as `response.finishReason.raw === "compaction"`. It occurs only if the threshold triggers compaction: `pauseAfterCompaction` does not mean "compact now". The caller explicitly issues the next request; the package never automatically resumes.
 - Anthropic can return a compaction block with `content: null` when summarization fails. This becomes a compaction part with `text: null`, which is **not** a successful replacement for prior history. The package never prunes history automatically.
 - `Usage` totals include all reported Anthropic `usage.iterations`, including compaction. `contextTokens` separately reports the final message iteration's inclusive input size, when available. A compaction-only pause does not report a post-compaction context size. Raw iteration usage remains in `providerMetadata`.
-
-### Explicit compaction
-
-`LLMClient.compact(request)` performs exactly one HTTP call to `/responses/compact`, using the selected route's endpoint, credentials, query, and HTTP middleware. It returns a `CompactionResponse` containing replacement `messages` and usage, not a normal generation response.
-
-The selected model carries explicit-compaction capability through request construction and updates. Calls using unsupported routes fail type checking. When the model is selected dynamically, narrow the request with `LLMClient.canCompact(request)` before calling `LLMClient.compact`; a model or route switch does not inherit the old capability. Runtime validation still rejects unsupported calls from untyped consumers. Capability describes the route's API, not whether every model or custom deployment supports the operation.
-
-```ts
-const compacted = yield * LLMClient.compact(request)
-const next = LLMRequest.update(request, {
-  messages: [...compacted.messages, Message.user("Continue")],
-})
-const response = yield * LLMClient.generate(next)
-```
-
-Replace the prior window with `compacted.messages`. Do not append it to the original transcript or extract only the encrypted item: the provider may retain additional messages in its output. Retained user and assistant messages remain ordinary messages with typed text, media, or reasoning parts, in their original order. Provider-specific message IDs, status, and phase use `providerMetadata`, not a raw output array hidden in an assistant message. Unsupported returned item types fail explicitly. Generation-only body overlays such as `stream` and `store` are not sent to the compact endpoint.
-
-Supported compact controls such as service tier and prompt-cache settings preserve request defaults and HTTP-overlay precedence. Retained image and file detail settings survive serialization and replay.
-
-The input must still fit the model's context window. Explicit compaction is not an overflow-recovery operation. xAI supports this explicit path, not the automatic OpenAI option. Compatible routes do not inherit an explicit compact endpoint simply because they use a Responses protocol.
 
 ### Ownership and verification
 

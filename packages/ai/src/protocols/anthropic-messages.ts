@@ -64,6 +64,7 @@ export type ThinkingInput =
     ))
 
 export interface OptionsInput {
+  /** Advanced in-band compaction. The caller owns checkpoint persistence and recovery. */
   readonly contextManagement?: ContextManagement
   readonly [key: string]: unknown
   readonly thinking?: ThinkingInput
