@@ -16,12 +16,11 @@ export type Method = (typeof methods)[number]
 
 const binaryName =
   typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-node" ? "opencode2-node" : "opencode2"
-const packageName = binaryName === "opencode2-node" ? "opencode-node" : "@opencode-ai/cli"
 
 export type Target = { readonly package: string; readonly version: string }
 
 export interface Interface {
-  readonly package: string
+  readonly package: string | undefined
   readonly check: () => Effect.Effect<void>
   readonly monitor: (input: {
     readonly url: string
@@ -33,7 +32,7 @@ export interface Interface {
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<Target, Error>
-  readonly upgrade: (method: Method, target: string | Target) => Effect.Effect<void, Error>
+  readonly upgrade: (method: Method, target: Target) => Effect.Effect<void, Error>
 }
 
 export type Inspection =
@@ -198,8 +197,8 @@ const make = Effect.gen(function* () {
       .readFileString(path.join(directory, "package.json"))
       .pipe(Effect.flatMap((text) => Effect.try(() => JSON.parse(text))))
     const bin = manifest.bin?.[binaryName]
-    return bin && path.resolve(directory, bin) === executable ? manifest.name : packageName
-  }).pipe(Effect.orElseSucceed(() => packageName))
+    return bin && path.resolve(directory, bin) === executable ? manifest.name : undefined
+  }).pipe(Effect.orElseSucceed(() => undefined))
 
   const readPolicy = Effect.fnUntraced(function* () {
     const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -236,6 +235,7 @@ const make = Effect.gen(function* () {
       process.platform === "win32" ? "opencode2.exe" : "opencode2",
     )
     if (path.resolve(process.execPath) === path.resolve(binary)) return "curl"
+    if (!installedPackage) return
 
     const checks: ReadonlyArray<{ method: Method; command: string[] }> = [
       { method: "npm", command: ["npm", "list", "-g", "--depth=0", installedPackage] },
@@ -268,17 +268,15 @@ const make = Effect.gen(function* () {
       try: () => response.json(),
       catch: (cause) => new Error("Failed to read update information", { cause }),
     })
-    return { package: data.metadata?.package ?? installedPackage, version: data.version.trim().replace(/^v/, "") }
+    if (!data.metadata?.package) return yield* Effect.fail(new Error("Update information did not include a package"))
+    return { package: data.metadata.package, version: data.version.trim().replace(/^v/, "") }
   })
 
-  const upgrade = Effect.fnUntraced(function* (method: Method, input: string | Target) {
-    if (typeof input === "string" && !parseReleaseVersion(input)) {
-      return yield* Effect.fail(new Error(`Invalid version: ${input}`))
-    }
-    const release = typeof input === "string" ? { package: installedPackage, version: input } : input
-    const version = release.version.trim().replace(/^v/, "")
-    const target = `${release.package}@${version}`
-    if (release.package !== installedPackage && (method === "pnpm" || method === "yarn")) {
+  const upgrade = Effect.fnUntraced(function* (method: Method, input: Target) {
+    if (!parseReleaseVersion(input.version)) return yield* Effect.fail(new Error(`Invalid version: ${input.version}`))
+    const version = input.version.trim().replace(/^v/, "")
+    const target = `${input.package}@${version}`
+    if (installedPackage && input.package !== installedPackage && (method === "pnpm" || method === "yarn")) {
       return yield* Effect.fail(
         new Error(
           `Package migration with ${method} requires reinstalling ${target} after removing ${installedPackage}.`,
@@ -288,8 +286,14 @@ const make = Effect.gen(function* () {
     const commands: Record<Exclude<Method, "bun" | "curl">, string[]> = {
       // npm refuses to replace a command owned by a different global package.
       // Retain the old package: uninstalling it can also unlink the new command.
-      npm: ["npm", "install", "--global", ...(release.package !== installedPackage ? ["--force"] : []), target],
-      pnpm: ["pnpm", "add", "--global", `--allow-build=${release.package}`, target],
+      npm: [
+        "npm",
+        "install",
+        "--global",
+        ...(installedPackage && input.package !== installedPackage ? ["--force"] : []),
+        target,
+      ],
+      pnpm: ["pnpm", "add", "--global", `--allow-build=${input.package}`, target],
       yarn: ["yarn", "global", "add", target],
     }
     const result = yield* Effect.scoped(
@@ -338,7 +342,7 @@ const make = Effect.gen(function* () {
     })
     const next = action(OPENCODE_VERSION, target.version, policy)
     if (next === "none") {
-      if (target.package !== installedPackage && (yield* method()) !== "curl") {
+      if (installedPackage && target.package !== installedPackage && (yield* method()) !== "curl") {
         return { action: policy === "notify" ? "notify" : "upgrade", target }
       }
       yield* Effect.logInfo("update check done", { action: "up-to-date" })

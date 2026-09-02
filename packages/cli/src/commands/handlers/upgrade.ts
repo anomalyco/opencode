@@ -18,24 +18,21 @@ export default Runtime.handler(
       )
 
     log.info(`Using method: ${method}`)
-    const target = Option.getOrUndefined(input.target) ?? (yield* updater.latest())
-    const version = (typeof target === "string" ? target : target.version).trim().replace(/^v/, "")
-    if (
-      version === OPENCODE_VERSION &&
-      (typeof target === "string" || target.package === updater.package || method === "curl")
-    ) {
+    const target = yield* updater.latest()
+    const version = (Option.getOrUndefined(input.target) ?? target.version).trim().replace(/^v/, "")
+    if (version === OPENCODE_VERSION && (target.package === updater.package || method === "curl")) {
       log.warn(`OpenCode upgrade skipped: ${version} is already installed`)
       outro("Done")
       return
     }
 
     log.info(`From ${OPENCODE_VERSION} → ${version}`)
-    if (typeof target !== "string" && target.package !== updater.package && method !== "curl") {
+    if (updater.package && target.package !== updater.package && method !== "curl") {
       log.info(`Package: ${updater.package} → ${target.package}`)
     }
     const progress = spinner()
     progress.start("Upgrading...")
-    yield* updater.upgrade(method, target).pipe(
+    yield* updater.upgrade(method, { ...target, version }).pipe(
       Effect.tap(() => Effect.sync(() => progress.stop("Upgrade complete"))),
       Effect.tapCause(() => Effect.sync(() => progress.stop("Upgrade failed", 1))),
     )

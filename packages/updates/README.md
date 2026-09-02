@@ -38,12 +38,15 @@ The publisher advertises each artifact after its package has finished publishing
 The `cli-node` artifact currently points to `opencode-node`. Clients use their
 compile-time artifact to select the release and their locally detected package manager to install it.
 The curl installation method still uses the V2 installer.
-Explicit version upgrades stay on the currently installed package without an
-endpoint lookup. Older artifacts without `metadata.package` also retain the
-installed package.
+Explicit version upgrades also resolve the package from the endpoint, then use
+the requested version. A response without `metadata.package` fails the upgrade;
+there is no local fallback package name. Publish package metadata before rolling
+out clients that require it.
 
 Package-manager detection reads the installed wrapper's manifest, independently
-of the advertised target. npm package-name migrations allow replacement of the
+of the advertised target. If the installed package cannot be identified, automatic
+package-manager detection stops; manual upgrades can specify `--method`.
+npm package-name migrations allow replacement of the
 shared executable but retain the old global package: removing it can unlink the
 new executable. Cleanup is a separate migration step.
 pnpm and Yarn package-name changes currently require a manual reinstall: pnpm

@@ -30,7 +30,7 @@ await Effect.runPromise(
         }),
       upgrade: (method, target) =>
         Effect.suspend(() => {
-          record({ method, version: typeof target === "string" ? target : target.version })
+          record({ method, ...target })
           return process.env.UPGRADE_TEST_INSTALL_ERROR ? Effect.fail(new Error("Permission denied")) : Effect.void
         }),
     }),
