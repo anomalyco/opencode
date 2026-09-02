@@ -2,7 +2,7 @@ import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
 import { OpenCode } from "@opencode-ai/client"
 import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
-import { OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
 import { Context, Duration, Effect, FileSystem, Layer, Ref, Schedule, Semaphore, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
@@ -254,22 +254,21 @@ const make = Effect.gen(function* () {
   const latest = Effect.fnUntraced(function* () {
     const response = yield* Effect.tryPromise({
       try: () =>
-        fetch(`https://update.opencode.ai/api/${encodeURIComponent(channel)}/cli/npm`, {
-          headers: { "User-Agent": `opencode/${OPENCODE_VERSION}` },
-          signal: AbortSignal.timeout(10_000),
-        }),
+        fetch(
+          `https://update.opencode.ai/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/npm`,
+          {
+            headers: { "User-Agent": `opencode/${OPENCODE_VERSION}` },
+            signal: AbortSignal.timeout(10_000),
+          },
+        ),
       catch: (cause) => new Error("Failed to check for updates", { cause }),
     })
     if (!response.ok) return yield* Effect.fail(new Error(`Update check failed with status ${response.status}`))
-    const data: { version: string; metadata?: { packages?: Record<string, string> } } = yield* Effect.tryPromise({
+    const data: { version: string; metadata?: { package?: string } } = yield* Effect.tryPromise({
       try: () => response.json(),
       catch: (cause) => new Error("Failed to read update information", { cause }),
     })
-    const name = data.metadata?.packages?.[binaryName]
-    if (data.metadata?.packages && !name) {
-      return yield* Effect.fail(new Error(`Update information did not include a package for ${binaryName}`))
-    }
-    return { package: name ?? installedPackage, version: data.version.trim().replace(/^v/, "") }
+    return { package: data.metadata?.package ?? installedPackage, version: data.version.trim().replace(/^v/, "") }
   })
 
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string | Target) {

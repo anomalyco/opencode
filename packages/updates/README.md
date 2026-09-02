@@ -6,6 +6,7 @@ The updates Worker serves all selected artifacts for a channel.
 curl 'https://update.opencode.ai/api/latest'
 curl 'https://update.opencode.ai/api/latest/cli'
 curl 'https://update.opencode.ai/api/latest/cli/npm'
+curl 'https://update.opencode.ai/api/latest/cli-node/npm'
 ```
 
 The `/admin*` route must be protected by a Cloudflare Access self-hosted application. Configure the application with:
@@ -18,27 +19,28 @@ The Worker has `workers_dev` and preview URLs disabled so the custom hostname is
 
 ## CLI package targets
 
-The CLI npm artifact keeps the existing top-level `version` and includes package
-names by executable in release metadata:
+CLI builds set `OPENCODE_ARTIFACT` at compile time: `cli` for the native build and
+`cli-node` for the Node build. The updater looks up
+`/api/<channel>/<artifact>/npm`; the release channel remains independent of the build.
+Each artifact keeps the existing top-level `version` and includes a single package
+name in release metadata:
 
 ```json
 {
   "version": "2.4.0",
   "metadata": {
-    "packages": {
-      "opencode2": "@opencode/cli",
-      "opencode2-node": "opencode-node"
-    }
+    "package": "@opencode/cli"
   }
 }
 ```
 
-The publisher advertises only packages it has finished publishing. Clients select
-their own executable's entry and use their locally detected package manager.
+The publisher advertises each artifact after its package has finished publishing.
+The `cli-node` artifact currently points to `opencode-node`. Clients use their
+compile-time artifact to select the release and their locally detected package manager to install it.
 The curl installation method still uses the V2 installer.
 Explicit version upgrades stay on the currently installed package without an
-endpoint lookup. Older artifacts without `metadata.packages` also retain the
-installed package; when the map is present, a missing executable entry is an error.
+endpoint lookup. Older artifacts without `metadata.package` also retain the
+installed package.
 
 Package-manager detection reads the installed wrapper's manifest, independently
 of the advertised target. npm package-name migrations allow replacement of the
@@ -52,6 +54,8 @@ Changing this metadata does not redirect pre-capability clients, which only read
 `version`. Before retiring the old package, publish a bridge release and add
 compatibility routing that keeps pre-bridge clients on that version. Until that
 routing is deployed, every advertised version must still exist under the old name.
+Older Node clients also continue to query `cli/npm` until they receive a build
+with the `cli-node` artifact identity.
 
 ## Request logging
 
