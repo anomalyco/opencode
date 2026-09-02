@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   create_windows_workflow:
@@ -14,23 +15,42 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
 
-      - name: Configure git user
-        run: |
-          git config user.name "repo-delegate[bot]"
-          git config user.email "noreply@github.com"
+      - name: Create branch and write windows-release workflow via API
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = 'ci/windows-release-workflow';
 
-      - name: Create branch ci/windows-release-workflow
-        run: |
-          git fetch origin
-          git checkout -b ci/windows-release-workflow
+            // get default branch sha
+            const baseRef = await github.repos.get({ owner, repo });
+            const defaultBranch = baseRef.data.default_branch;
+            const ref = await github.git.getRef({ owner, repo, ref: `heads/${defaultBranch}` });
+            const sha = ref.data.object.sha;
 
-      - name: Write windows-release workflow file
-        run: |
-          mkdir -p .github/workflows
-          cat > .github/workflows/windows-release.yml <<'YML'
-name: Build Windows NSIS installer (manual)
+            // create branch ref (ignore if exists)
+            try {
+              await github.git.createRef({
+                owner,
+                repo,
+                ref: `refs/heads/${branch}`,
+                sha
+              });
+              core = 'created';
+            } catch (e) {
+              if (e.status === 422) {
+                // ref already exists
+                // console.log('Branch exists, continuing.');
+              } else {
+                throw e;
+              }
+            }
+
+            // windows-release workflow content (as a literal string)
+            const content = `name: Build Windows NSIS installer (manual)
 
 on:
   workflow_dispatch:
@@ -102,9 +122,9 @@ jobs:
       - name: Create NSIS script
         shell: pwsh
         run: |
-          $version = "${{ steps.get_version.outputs.version }}"
+          $version = "\\${{ steps.get_version.outputs.version }}"
           $app = "oc-custom"
-          $installerName = "${{ steps.get_version.outputs.installer_name }}"
+          $installerName = "\\${{ steps.get_version.outputs.installer_name }}"
           $nsi = @"
 Name "$app Installer"
 OutFile "$installerName"
@@ -122,33 +142,85 @@ SectionEnd
       - name: Build installer with makensis
         shell: pwsh
         run: |
-          & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
-          $installer = "${{ steps.get_version.outputs.installer_name }}"
-          if (-not (Test-Path $installer)) { Write-Error "Installer not created: $installer" }
+          $installerName = "\\${{ steps.get_version.outputs.installer_name }}"
+          & "C:\\Program Files (x86)\\NSIS\\makensis.exe" installer.nsi
+          if (-not (Test-Path $installerName)) { Write-Error "Installer not created: $installerName" }
+
+      - name: List generated files
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path . -Recurse -Force | Where-Object { $_.Length -gt 0 } | Select-Object FullName, Length | Format-Table -AutoSize
 
       - name: Create GitHub Release and upload installer
         uses: ncipollo/release-action@v1
         with:
-          tag: v${{ steps.get_version.outputs.version }}
-          files: ${{ steps.get_version.outputs.installer_name }}
+          tag: v\\${{ steps.get_version.outputs.version }}
+          files: \\${{ steps.get_version.outputs.installer_name }}
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_FOR_SYNC }}
-YML
+          GITHUB_TOKEN: \\${{ secrets.PAT_FOR_SYNC }}
+`;
 
-      - name: Commit and push branch
-        env:
-          DELEGATE_PAT: ${{ secrets.DELEGATE_PAT }}
-        run: |
-          git add .github/workflows/windows-release.yml
-          git commit -m "ci: add windows release workflow (NSIS)" || echo "no changes to commit"
-          git push --set-upstream "https://${DELEGATE_PAT}@github.com/${GITHUB_REPOSITORY}.git" ci/windows-release-workflow --force
+            // create or update file on the new branch
+            const path = '.github/workflows/windows-release.yml';
+            const encoded = Buffer.from(content, 'utf8').toString('base64');
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.DELEGATE_PAT }}
-          branch: ci/windows-release-workflow
-          base: omo-custom
-          title: "Add Windows NSIS installer workflow"
-          body: |
-            This PR was created by the delegation workflow. It adds a manual workflow to build a Windows NSIS installer and publish it as a Release asset.
+            try {
+              // try to get the file on the branch to see if exists
+              await github.repos.getContent({
+                owner,
+                repo,
+                path,
+                ref: branch
+              });
+
+              // if exists, update
+              const current = await github.repos.getContent({ owner, repo, path, ref: branch });
+              const sha = current.data.sha;
+              await github.repos.createOrUpdateFileContents({
+                owner,
+                repo,
+                path,
+                message: 'ci: add windows release workflow (NSIS)',
+                content: encoded,
+                branch,
+                sha
+              });
+            } catch (err) {
+              // if not found, create
+              if (err.status === 404) {
+                await github.repos.createOrUpdateFileContents({
+                  owner,
+                  repo,
+                  path,
+                  message: 'ci: add windows release workflow (NSIS)',
+                  content: encoded,
+                  branch
+                });
+              } else {
+                throw err;
+              }
+            }
+
+            // create PR from branch -> omo-custom (ignore if PR already exists)
+            const prs = await github.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${branch}`,
+              base: 'omo-custom',
+              state: 'open'
+            });
+
+            if (prs.data.length === 0) {
+              await github.pulls.create({
+                owner,
+                repo,
+                title: 'Add Windows NSIS installer workflow',
+                head: branch,
+                base: 'omo-custom',
+                body: 'This PR was created by the delegation workflow. It adds a manual workflow to build a Windows NSIS installer and publish it as a Release asset.'
+              });
+            } else {
+              // PR already exists
+            }
+      - name: Done
+        run: echo "Branch and PR created (or already existed)."
