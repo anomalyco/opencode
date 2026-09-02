@@ -219,6 +219,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const service = managed
     ? {
         reconnect: async (signal: AbortSignal) => {
+          // Give the server a chance to respawn itself before starting client-side recovery.
           await new Promise((resolve) => setTimeout(resolve, 50))
           if (signal.aborted) throw signal.reason ?? new Error("Server reconnect cancelled")
           const endpoint = await managed.reconnect(signal)
