@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { State } from "@opencode-ai/core/state"
-import { Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Scheduler, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
 
@@ -55,12 +55,18 @@ describe("State", () => {
     }),
   )
 
-  it.effect("runs transforms during every reload", () =>
+  it.effect("skips a reload's debounce when resolving but joins an in-progress reload", () =>
     Effect.gen(function* () {
+      const rebuilding = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
       let value = "first"
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
         draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () =>
+          value === "first"
+            ? Effect.void
+            : Deferred.succeed(rebuilding, undefined).pipe(Effect.andThen(Deferred.await(release))),
       })
 
       yield* state.transform((editor) => {
@@ -70,8 +76,15 @@ describe("State", () => {
 
       value = "second"
       const reload = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+      expect((yield* state.resolve()).values).toEqual(["first"])
       yield* TestClock.adjust("500 millis")
+      yield* Deferred.await(rebuilding)
+      const reader = yield* state.resolve().pipe(Effect.forkChild({ startImmediately: true }))
+      expect(reader.pollUnsafe()).toBeUndefined()
+      yield* Deferred.succeed(release, undefined)
       yield* Fiber.join(reload)
+      expect((yield* Fiber.join(reader)).values).toEqual(["second"])
       expect(state.get().values).toEqual(["second"])
     }),
   )
@@ -133,6 +146,168 @@ describe("State", () => {
     }),
   )
 
+  it.effect("resolves registrations deferred by a batch without rebuilding twice", () =>
+    Effect.gen(function* () {
+      let finalized = 0
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () => Effect.sync(() => finalized++),
+      })
+
+      expect(yield* state.resolve()).toBe(state.get())
+      expect(finalized).toBe(0)
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* state.transform((draft) => {
+            draft.add("first")
+          })
+          expect(state.get().values).toEqual([])
+
+          expect((yield* state.resolve()).values).toEqual(["first"])
+          expect(state.get().values).toEqual(["first"])
+          expect(finalized).toBe(1)
+
+          expect(yield* state.resolve()).toBe(state.get())
+          expect(finalized).toBe(1)
+
+          yield* state.transform((draft) => {
+            draft.add("second")
+          })
+        }),
+      )
+
+      // Resolution absorbed the queued batch rebuild; only the later registration
+      // rebuilds at batch completion.
+      expect(state.get().values).toEqual(["first", "second"])
+      expect(finalized).toBe(2)
+    }),
+  )
+
+  it.effect("resolves disposals deferred by a batch", () =>
+    Effect.gen(function* () {
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+      })
+      const scope = yield* Scope.make()
+      yield* state.transform((draft) => draft.add("value")).pipe(Scope.provide(scope))
+      expect(state.get().values).toEqual(["value"])
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* Scope.close(scope, Exit.void)
+          expect(state.get().values).toEqual(["value"])
+
+          expect((yield* state.resolve()).values).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  it.effect("joins a concurrent resolution instead of returning the previous publication", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const values = Array.from({ length: 128 }, (_, index) => index)
+      let finalized = 0
+      const state = State.create({
+        initial: () => ({ values: [] as number[] }),
+        draft: (draft) => draft,
+        finalize: () => Effect.sync(() => finalized++),
+      })
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* Effect.forEach(values, (value) =>
+            state.transform((draft) => {
+              draft.values.push(value)
+              if (value === 0) Deferred.doneUnsafe(started, Effect.void)
+            }),
+          )
+          const reader = yield* Deferred.await(started).pipe(
+            Effect.andThen(
+              Effect.gen(function* () {
+                expect(state.get().values).toEqual([])
+                return yield* state.resolve()
+              }),
+            ),
+            Effect.forkChild({ startImmediately: true }),
+          )
+          // Yield during synchronous transform replay, before the next value is published.
+          const writer = yield* state
+            .resolve()
+            .pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 64), Effect.forkChild({ startImmediately: true }))
+          const observed = yield* Fiber.join(reader)
+          const published = yield* Fiber.join(writer)
+          expect(observed.values).toEqual(values)
+          expect(observed).toBe(published)
+        }),
+      )
+      expect(finalized).toBe(1)
+    }),
+  )
+
+  it.effect("keeps queued resolution cancellable but finishes a rebuild once started", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let finalized = 0
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => draft,
+        finalize: () =>
+          Deferred.succeed(started, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+            Effect.andThen(Effect.sync(() => finalized++)),
+          ),
+      })
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* state.transform((draft) => draft.values.push("value"))
+          const writer = yield* state.resolve().pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+          yield* Deferred.await(started)
+          const reader = yield* state.resolve().pipe(Effect.forkChild({ startImmediately: true }))
+          expect(reader.pollUnsafe()).toBeUndefined()
+          yield* Fiber.interrupt(reader)
+          expect(writer.pollUnsafe()).toBeUndefined()
+
+          const interruption = yield* Fiber.interrupt(writer).pipe(Effect.forkChild({ startImmediately: true }))
+          expect(interruption.pollUnsafe()).toBeUndefined()
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(interruption)
+          expect((yield* state.resolve()).values).toEqual(["value"])
+        }),
+      )
+      expect(finalized).toBe(1)
+    }),
+  )
+
+  it.effect("can resolve again after transform replay fails", () =>
+    Effect.gen(function* () {
+      let fail = true
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => draft,
+      })
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* state.transform((draft) => {
+            if (fail) throw new Error("replay failed")
+            draft.values.push("value")
+          })
+          expect(Exit.isFailure(yield* Effect.exit(state.resolve()))).toBeTrue()
+          expect(state.get().values).toEqual([])
+          fail = false
+          expect((yield* state.resolve()).values).toEqual(["value"])
+        }),
+      )
+    }),
+  )
+
   it.effect("discards teardown rebuilds and pending reloads while still running cleanup", () =>
     Effect.gen(function* () {
       let finalized = 0
@@ -160,6 +335,7 @@ describe("State", () => {
       yield* Fiber.join(pending)
       yield* registration.dispose
       yield* state.reload()
+      expect(yield* state.resolve()).toBe(state.get())
       expect(finalized).toBe(1)
     }),
   )

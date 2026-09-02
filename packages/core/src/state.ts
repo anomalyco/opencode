@@ -74,7 +74,14 @@ export interface Options<State, DraftApi> {
 }
 
 export interface Interface<State, DraftApi> extends Transformable<DraftApi> {
+  /** Returns the last published value without rebuilding or waiting. */
   readonly get: () => State
+  /**
+   * Resolves completed registration changes, joining an in-progress rebuild or
+   * materializing batched changes before returning the published value. Does not
+   * wait for future registrations or a scheduled reload's debounce.
+   */
+  readonly resolve: () => Effect.Effect<State>
 }
 
 export function create<State, DraftApi>(options: Options<State, DraftApi>): Interface<State, DraftApi> {
@@ -84,11 +91,13 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
   let requestedAt = 0
   let running = false
   let closed = false
+  let dirty = false
   let waiters: { generation: number; done: Deferred.Deferred<void> }[] = []
   const semaphore = Semaphore.makeUnsafe(1)
 
   const commit = Effect.fn("State.commit")(function* (next: State) {
     state = next
+    dirty = false
     if (options.finalize) yield* options.finalize(options.draft(next))
   })
 
@@ -162,6 +171,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
                       closed = true
                       return
                     }
+                    dirty = true
                     batch.reloads.add(materializeReload)
                     return
                   }
@@ -177,12 +187,25 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
           )
           yield* Scope.addFinalizer(scope, dispose)
           const batch = yield* CurrentBatch
-          if (batch?.active) batch.reloads.add(materializeReload)
-          else yield* materializeReload()
+          if (batch?.active) {
+            dirty = true
+            batch.reloads.add(materializeReload)
+          } else yield* materializeReload()
           return { dispose }
         }),
       )
     }),
     reload,
+    resolve: Effect.fnUntraced(
+      function* () {
+        const batch = yield* CurrentBatch
+        if (dirty) yield* materialize()
+        // Resolution replaces this batch's queued rebuild only after publication succeeds.
+        batch?.reloads.delete(materializeReload)
+        return state
+      },
+      // Wait interruptibly for the owner, then finish publication and notification together.
+      (effect) => semaphore.withPermit(Effect.uninterruptible(effect)),
+    ),
   }
 }

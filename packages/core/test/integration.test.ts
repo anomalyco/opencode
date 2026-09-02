@@ -7,6 +7,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Integration } from "@opencode-ai/core/integration"
+import { State } from "@opencode-ai/core/state"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node])))
@@ -259,6 +260,41 @@ describe("Integration", () => {
           value: Credential.Key.make({ type: "key", key: "secret" }),
         }),
       ])
+    }),
+  )
+
+  it.effect("refreshes an expired OAuth credential registered in the same batch", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("opencode")
+      const methodID = Integration.MethodID.make("device")
+      const stored = yield* credentials.create({
+        integrationID,
+        label: "Work",
+        value: Credential.OAuth.make({ type: "oauth", methodID, access: "expired", refresh: "refresh", expires: 1 }),
+      })
+
+      // Plugin activation batches setup, deferring method registration until
+      // every plugin finishes. A plugin resolving its connection during setup
+      // must still reach the refresh implementation it just registered.
+      const resolved = yield* State.batch(
+        Effect.gen(function* () {
+          yield* integrations.transform((editor) =>
+            editor.method.update({
+              integrationID,
+              method: { id: methodID, type: "oauth", label: "Device" },
+              authorize: () => Effect.die(new Error("unused authorize")),
+              refresh: (credential) =>
+                Effect.succeed({ ...credential, access: "fresh", expires: Number.MAX_SAFE_INTEGER }),
+            }),
+          )
+          return yield* integrations.connection.resolve({ type: "credential", id: stored.id, label: "Work" })
+        }),
+      )
+
+      expect(resolved).toMatchObject({ type: "oauth", access: "fresh" })
+      expect((yield* credentials.get(stored.id))?.value).toMatchObject({ access: "fresh" })
     }),
   )
 
