@@ -1334,7 +1334,14 @@ describe("Task closure boundaries (CP-023 K82 and K9)", () => {
         expect(envelope).toContain(`state="${terminal}"`)
         expect(envelope).not.toContain(earlierText)
         expect(envelope).not.toContain(earlier.info.id)
-        if (terminal === "cancelled") expect(envelope).toContain("task_evidence")
+        if (terminal === "cancelled") {
+          expect(envelope).toContain("status: unknown")
+          expect(envelope).toContain(`task_evidence=${JSON.stringify({ task_id: child, status: "unknown" })}`)
+          expect(envelope.split("task_evidence=").length - 1).toBe(1)
+          expect(envelope).not.toContain("status: cancelled")
+          expect(envelope).not.toContain('state="error"')
+          expect(envelope).not.toContain("Task failed")
+        }
         if (terminal === "error") expect(envelope).toContain("K14 confusable terminal error")
 
         const blocking = exactWaits.filter((item) => item.blocking)

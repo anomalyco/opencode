@@ -29,7 +29,7 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { answered } from "../lib/background"
 import { admittingClosure, unusedJobs } from "../lib/closure"
 import { recordingPhysical } from "../lib/physical"
-import { pollWithTimeout, testEffect } from "../lib/effect"
+import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { SessionAdmission } from "@/session/closure/admission"
 import { SessionClosure } from "@/session/closure/coordinator"
 import { SessionClosureDiscovery } from "@/session/closure/discovery"
@@ -365,6 +365,146 @@ function count(text: string, value: string) {
 }
 
 describe("task attachment integration", () => {
+  it.instance("a root async cancellation delivers exactly one unknown-status envelope", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const runState = yield* SessionRunState.Service
+      const coordinator = yield* AttachmentCoordinator.make
+      const { chat, assistant } = yield* seed()
+      const childReady = yield* Deferred.make<void>()
+      const ownerCancelled = yield* Deferred.make<void>()
+      const delivered = yield* Deferred.make<void>()
+      const observerSettled = yield* Deferred.make<void>()
+      const log = continuationLog()
+      const deliveries: string[] = []
+      const exactWaits: Array<{
+        readonly handle: BackgroundJob.InvocationHandle
+        readonly status: BackgroundJob.Info["status"] | undefined
+      }> = []
+      const observerTerminals: Array<{
+        readonly handle: BackgroundJob.InvocationHandle
+        readonly status: BackgroundJob.Info["status"] | undefined
+      }> = []
+      let ownerScope: AttachmentCoordinator.Scope | undefined
+      let structuralProbe: SessionV1.WithParts | undefined
+
+      const attachments: AttachmentCoordinator.Interface = {
+        ...coordinator,
+        open: (sessionID) =>
+          coordinator.open(sessionID).pipe(
+            Effect.map((scope): AttachmentCoordinator.Scope => {
+              const instrumented: AttachmentCoordinator.Scope = {
+                ...scope,
+                claimCancellation: (status) =>
+                  scope.claimCancellation(status).pipe(Effect.tap(() => Deferred.succeed(ownerCancelled, undefined))),
+              }
+              ownerScope = instrumented
+              return instrumented
+            }),
+          ),
+      }
+      const observedJobs: BackgroundJob.Interface = {
+        ...jobs,
+        waitHandle: (input) =>
+          jobs
+            .waitHandle(input)
+            .pipe(
+              Effect.tap((waited) =>
+                input.timeout === undefined
+                  ? Effect.sync(() => exactWaits.push({ handle: input.handle, status: waited.info?.status }))
+                  : Effect.void,
+              ),
+            ),
+        waitAnswer: (input) =>
+          jobs
+            .waitAnswer(input)
+            .pipe(
+              Effect.tap((waited) =>
+                waited.info
+                  ? Effect.sync(() => observerTerminals.push({ handle: input.handle, status: waited.info?.status }))
+                  : Effect.void,
+              ),
+            ),
+      }
+      const tool = yield* TaskTool.pipe(Effect.provideService(BackgroundJob.Service, observedJobs))
+      const def = yield* tool.init()
+      const baseClosure = recordingContinuationClosure(log)
+      const closure: SessionClosure.Interface = {
+        ...baseClosure,
+        retire: (lease, disposition) =>
+          baseClosure.retire(lease, disposition).pipe(Effect.ensuring(Deferred.succeed(observerSettled, undefined))),
+      }
+      const promptOps = continuationOps(
+        closure,
+        basicOps({
+          attachments,
+          prompt: (input) =>
+            Effect.gen(function* () {
+              if (input.sessionID === chat.id) {
+                const text = input.parts.findLast((part) => part.type === "text")?.text ?? ""
+                deliveries.push(text)
+                yield* Deferred.succeed(delivered, undefined)
+                return reply(input, "parent observed cancellation")
+              }
+              if (!input.attachmentScope) return yield* Effect.die("root async owner had no attachment scope")
+              yield* persist(input)
+              structuralProbe = reply(input, "root cancellation structural status probe")
+              yield* Deferred.succeed(childReady, undefined)
+              return yield* Effect.never
+            }),
+        }),
+      )
+
+      const started = yield* def.execute(
+        { description: "root cancellation", prompt: "run", subagent_type: "general", async: true },
+        context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      const child = SessionID.make(started.metadata.sessionId)
+      yield* awaitWithTimeout(Deferred.await(childReady), "root async child never reached its deterministic hold")
+
+      yield* runState.cancel(child)
+      const terminal = yield* jobs.wait({ id: child, timeout: 5_000 })
+      expect(terminal.timedOut).toBe(false)
+      expect(terminal.info?.status).toBe("cancelled")
+      expect(terminal.info?.output).toBeUndefined()
+      expect(Object.hasOwn(terminal.info ?? {}, "cancellationStatus")).toBe(false)
+      yield* awaitWithTimeout(
+        Deferred.await(ownerCancelled),
+        "the exact cancelled terminal was not projected into the owner scope",
+      )
+      yield* awaitWithTimeout(Deferred.await(delivered), "root cancellation never attempted its parent callback")
+      yield* awaitWithTimeout(Deferred.await(observerSettled), "root cancellation observer never settled")
+
+      expect(deliveries).toHaveLength(1)
+      const envelope = deliveries[0] ?? ""
+      expect(count(envelope, `state="cancelled"`)).toBe(1)
+      expect(count(envelope, "task_evidence=")).toBe(1)
+      expect(envelope).toContain(`Task child was cancelled. task_id: ${child}. status: unknown.`)
+      expect(envelope).toContain(`task_evidence=${JSON.stringify({ task_id: child, status: "unknown" })}`)
+      expect(envelope).not.toContain("status: cancelled")
+      expect(envelope).not.toContain('state="completed"')
+      expect(envelope).not.toContain('state="error"')
+      expect(envelope).not.toContain("Task failed")
+      expect(envelope).not.toContain("interrupted")
+
+      const scope = ownerScope
+      const probe = structuralProbe
+      if (!scope || !probe) return yield* Effect.die("root cancellation did not retain its structural probe")
+      const selected = yield* scope.result(probe)
+      expect(selected).toMatchObject({ type: "cancelled", status: "cancelled" })
+      expect("fallback" in selected).toBe(false)
+
+      expect(exactWaits).toHaveLength(1)
+      expect(observerTerminals).toHaveLength(1)
+      expect(exactWaits[0]?.status).toBe("cancelled")
+      expect(observerTerminals[0]?.status).toBe("cancelled")
+      expect(observerTerminals[0]?.handle).toEqual(exactWaits[0]?.handle)
+      expect(log.acquired).toHaveLength(1)
+      expect(log.settled).toHaveLength(1)
+      expect(log.settled[0]?.disposition).toBe("retired")
+    }),
+  )
+
   it.instance("a joined dying Runner uses one message-free wake and only a later clean turn resolves", () =>
     Effect.gen(function* () {
       const coordinator = yield* AttachmentCoordinator.make
@@ -1111,13 +1251,27 @@ describe("task attachment integration", () => {
       const finalizers = { cancellations: 0, closes: 0 }
       const wrapped = new Map<SessionID, AttachmentCoordinator.Scope>()
       let resultCalls = 0
+      let ownerClosed = false
+      let finalizedScopeReads = 0
 
       const wrap = (scope: AttachmentCoordinator.Scope) => {
         const instrumented: AttachmentCoordinator.Scope = {
           ...scope,
+          current: () => {
+            if (ownerClosed) finalizedScopeReads++
+            return scope.current()
+          },
           claimCancellation: (status) =>
             Effect.sync(() => void finalizers.cancellations++).pipe(Effect.andThen(scope.claimCancellation(status))),
-          close: () => Effect.sync(() => void finalizers.closes++).pipe(Effect.andThen(scope.close())),
+          close: () =>
+            scope.close().pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  finalizers.closes++
+                  ownerClosed = true
+                }),
+              ),
+            ),
           result: (fallback) => {
             resultCalls++
             if (resultCalls !== 1) return scope.result(fallback)
@@ -1203,10 +1357,18 @@ describe("task attachment integration", () => {
       const terminal = yield* jobs.wait({ id: child.id, timeout: 5_000 })
       expect(terminal.timedOut).toBe(false)
       expect(terminal.info?.status).toBe("cancelled")
+      expect(Object.hasOwn(terminal.info ?? {}, "cancellationStatus")).toBe(false)
 
       const returned = yield* Fiber.join(foreground)
-      expect(returned.output).toContain('state="cancelled"')
-      expect(returned.output).toContain("status: cancelled")
+      expect(resultCalls).toBe(1)
+      expect(finalizedScopeReads).toBe(0)
+      expect(count(returned.output, 'state="cancelled"')).toBe(1)
+      expect(count(returned.output, "task_evidence=")).toBe(1)
+      expect(returned.output).toContain("status: unknown")
+      expect(returned.output).toContain(`task_evidence=${JSON.stringify({ task_id: child.id, status: "unknown" })}`)
+      expect(returned.output).not.toContain("status: cancelled")
+      expect(returned.output).not.toContain('state="error"')
+      expect(returned.output).not.toContain("Task failed")
       expect(returned.output).not.toContain(staleText)
       expect(returned.output).not.toContain(earlier.info.id)
 
@@ -1217,6 +1379,7 @@ describe("task attachment integration", () => {
       expect("fallback" in selected).toBe(false)
       expect(JSON.stringify(selected)).not.toContain(staleText)
       expect(JSON.stringify(selected)).not.toContain(earlier.info.id)
+      expect(resultCalls).toBe(2)
 
       // The explicit cancellation finalizer wins exactly once. acquire-release later observes a
       // successful Tool return, but the holder makes that success-shaped backstop a no-op.
@@ -1665,6 +1828,69 @@ describe("task attachment integration", () => {
     }),
   )
 
+  it.instance("a cancelled root makes one refused injection attempt and never persists or retries it", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const jobs = yield* BackgroundJob.Service
+      const runState = yield* SessionRunState.Service
+      const coordinator = yield* AttachmentCoordinator.make
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const childReady = yield* Deferred.make<void>()
+      const attempted = yield* Deferred.make<void>()
+      const observerSettled = yield* Deferred.make<void>()
+      const log = continuationLog()
+      const attempts: string[] = []
+      const beforeMessages = (yield* sessions.messages({ sessionID: chat.id })).length
+      const baseClosure = recordingContinuationClosure(log)
+      const closure: SessionClosure.Interface = {
+        ...baseClosure,
+        retire: (lease, disposition) =>
+          baseClosure.retire(lease, disposition).pipe(Effect.ensuring(Deferred.succeed(observerSettled, undefined))),
+      }
+      const promptOps = continuationOps(
+        closure,
+        basicOps({
+          attachments: coordinator,
+          prompt: (input) => {
+            if (input.sessionID !== chat.id) {
+              return Deferred.succeed(childReady, undefined).pipe(Effect.andThen(Effect.never))
+            }
+            const text = input.parts.findLast((part) => part.type === "text")?.text ?? ""
+            attempts.push(text)
+            return Deferred.succeed(attempted, undefined).pipe(
+              Effect.andThen(
+                Effect.fail(new SessionClosure.AdmissionRefused({ session: input.sessionID, reason: "closing" })),
+              ),
+            )
+          },
+        }),
+      )
+
+      const started = yield* def.execute(
+        { description: "cancelled injection refusal", prompt: "run", subagent_type: "general", async: true },
+        context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      const child = SessionID.make(started.metadata.sessionId)
+      yield* awaitWithTimeout(Deferred.await(childReady), "cancelled injection fixture never reached its child hold")
+      yield* runState.cancel(child)
+      const terminal = yield* jobs.wait({ id: child, timeout: 5_000 })
+      expect(terminal.timedOut).toBe(false)
+      expect(terminal.info?.status).toBe("cancelled")
+      yield* awaitWithTimeout(Deferred.await(attempted), "cancelled envelope injection was never attempted")
+      yield* awaitWithTimeout(Deferred.await(observerSettled), "cancelled injection refusal never settled")
+
+      expect(attempts).toHaveLength(1)
+      expect(attempts[0]).toContain('state="cancelled"')
+      expect(attempts[0]).toContain("status: unknown")
+      expect(attempts[0]).toContain(`task_evidence=${JSON.stringify({ task_id: child, status: "unknown" })}`)
+      expect(log.acquired).toHaveLength(1)
+      expect(log.settled).toEqual([{ lease: "lease_attached_1", disposition: "suppressed" }])
+      expect((yield* sessions.messages({ sessionID: chat.id })).length).toBe(beforeMessages)
+    }),
+  )
+
   it.instance("an attached observer defect degrades once and never retries", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
@@ -1797,6 +2023,59 @@ describe("task attachment integration", () => {
       // suppression rather than a degradation. Treating it as a failure would turn a routine
       // cancellation into an acceptance-blocking one.
       expect(parent.current().failed).toBe(false)
+    }),
+  )
+
+  it.instance("a cancelled root records one acquisition refusal with no callback, persistence, or retry", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const jobs = yield* BackgroundJob.Service
+      const runState = yield* SessionRunState.Service
+      const coordinator = yield* AttachmentCoordinator.make
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const childReady = yield* Deferred.make<void>()
+      const refused = yield* Deferred.make<void>()
+      const log = continuationLog()
+      const parentPrompts: SessionPrompt.TaskPromptInput[] = []
+      const beforeMessages = (yield* sessions.messages({ sessionID: chat.id })).length
+      const fenced = fencingContinuationClosure(log)
+      const closure: SessionClosure.Interface = {
+        ...fenced,
+        acquire: (input) => fenced.acquire(input).pipe(Effect.tap(() => Deferred.succeed(refused, undefined))),
+      }
+      const promptOps = continuationOps(
+        closure,
+        basicOps({
+          attachments: coordinator,
+          prompt: (input) => {
+            if (input.sessionID !== chat.id) {
+              return Deferred.succeed(childReady, undefined).pipe(Effect.andThen(Effect.never))
+            }
+            parentPrompts.push(input)
+            return Effect.succeed(reply(input, "must not persist"))
+          },
+        }),
+      )
+
+      const started = yield* def.execute(
+        { description: "cancelled acquisition refusal", prompt: "run", subagent_type: "general", async: true },
+        context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      const child = SessionID.make(started.metadata.sessionId)
+      yield* awaitWithTimeout(Deferred.await(refused), "cancelled continuation acquisition was not refused")
+      yield* awaitWithTimeout(Deferred.await(childReady), "cancelled acquisition fixture never reached its child hold")
+      yield* runState.cancel(child)
+      const terminal = yield* jobs.wait({ id: child, timeout: 5_000 })
+      expect(terminal.timedOut).toBe(false)
+      expect(terminal.info?.status).toBe("cancelled")
+
+      expect(log.events.filter((event) => event === "acquire-refused")).toHaveLength(1)
+      expect(log.acquired).toHaveLength(1)
+      expect(log.settled).toHaveLength(0)
+      expect(parentPrompts).toHaveLength(0)
+      expect((yield* sessions.messages({ sessionID: chat.id })).length).toBe(beforeMessages)
     }),
   )
 

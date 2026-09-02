@@ -518,7 +518,11 @@ describe("SessionClosure job bind", () => {
           // ---- 1. RESULT IS CANCELLATION-OWNED, and did not merely hang ----
           const answered = yield* scope.result(speech(child, "fallback must not win")).pipe(Effect.timeoutOption(2000))
           expect(Option.isSome(answered)).toBe(true)
-          if (Option.isSome(answered)) expect(answered.value).toMatchObject({ type: "cancelled" })
+          if (Option.isSome(answered)) {
+            // Coordinator-boundary evidence only: the fence establishes cancellation but supplies no
+            // optional status. TaskTool's terminal envelope is rendered from BackgroundJob.Info.
+            expect(answered.value).toMatchObject({ type: "cancelled", status: "unknown" })
+          }
 
           // ---- 2. THE DUE WAKE CANNOT START A PROVIDER TURN ----
           expect(scope.needsWake()).toBe(false)

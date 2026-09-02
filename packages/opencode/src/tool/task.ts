@@ -628,10 +628,10 @@ export const TaskTool = Tool.define(
           notes: answer.notes,
         })
 
-      // What the terminal itself adds, per status: the error envelope, the cancelled envelope when
-      // this observer may report cancellation, or a notice-only delivery when a completed terminal
-      // still carries undelivered notices. Undefined when the terminal adds nothing.
-      const renderTerminal = (info: BackgroundJob.Info, allowCancelled: boolean): string | undefined => {
+      // What the terminal itself adds, per status: the error or cancelled envelope, or a notice-only
+      // delivery when a completed terminal still carries undelivered notices. Undefined when the
+      // terminal adds nothing.
+      const renderTerminal = (info: BackgroundJob.Info): string | undefined => {
         if (info.status === "error") {
           return renderOutput({
             sessionID: nextSession.id,
@@ -640,8 +640,8 @@ export const TaskTool = Tool.define(
             notes: info.notes,
           })
         }
-        if (info.status === "cancelled" && allowCancelled) {
-          return renderCancelledTask({ sessionID: nextSession.id, status: "cancelled", notes: info.notes })
+        if (info.status === "cancelled") {
+          return renderCancelledTask({ sessionID: nextSession.id, notes: info.notes })
         }
         if (info.status === "completed" && info.notes?.length) {
           return renderNotices({ sessionID: nextSession.id, notes: info.notes })
@@ -669,7 +669,7 @@ export const TaskTool = Tool.define(
           }
           const info = step.info
           if (!info) return state.injected
-          const text = renderTerminal(info, true)
+          const text = renderTerminal(info)
           if (text !== undefined) {
             yield* inject(text, via)
             state.injected = true
@@ -733,8 +733,7 @@ export const TaskTool = Tool.define(
           // No attachment, or a scope that has already degraded: deliver each answer through the
           // ordinary parent ingress as it publishes, in conversation order, then the terminal -
           // without claiming the stronger delivery guarantee an owned scope carries. A cancelled
-          // child still keeps its envelope when this invocation was attached; ordinary root
-          // notification continues to suppress cancellation.
+          // child keeps its envelope on both attached and ordinary root notification routes.
           if (!target || !target.owner) {
             const cursor = { value: 0 }
             while (true) {
@@ -748,7 +747,7 @@ export const TaskTool = Tool.define(
               const info = step.info
               if (!info) return
               if (target?.attachment.current().cancelled) return
-              const text = renderTerminal(info, target !== undefined)
+              const text = renderTerminal(info)
               if (text !== undefined) yield* inject(text)
               return
             }
@@ -1215,7 +1214,6 @@ export const TaskTool = Tool.define(
                 metadata,
                 output: renderCancelledTask({
                   sessionID: nextSession.id,
-                  status: "cancelled",
                   notes: result.notes,
                 }),
               }

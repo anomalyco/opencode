@@ -350,8 +350,11 @@ describe("task return", () => {
     expect(rendered).toContain("<task_result>\n\n</task_result>")
   })
 
-  test("cancelled envelopes carry only task identity and known or unknown status", () => {
+  test("cancelled renderer boundary preserves literal, distinct, and missing-to-unknown status", () => {
+    // Renderer-contract evidence only: current TaskTool product terminal routes receive
+    // BackgroundJob.Info and therefore exercise the missing -> unknown arm, not these exact values.
     for (const [status, expected] of [
+      ["cancelled", "cancelled"],
       ["cancelled by fence", "cancelled by fence"],
       [undefined, "unknown"],
     ] as const) {
