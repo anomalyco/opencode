@@ -173,6 +173,8 @@ const estimateMedia = (mime: string) => {
 }
 
 const estimatePart = (part: ContentPart): number => {
+  // Encrypted checkpoints have no locally measurable token size.
+  if (part.type === "compaction") return Token.estimate(part.text ?? "")
   if (part.type === "text" || part.type === "reasoning") return Token.estimate(part.text)
   if (part.type === "media") return estimateMedia(part.mediaType)
   if (part.type === "tool-call") return Token.estimate(part.name + (JSON.stringify(part.input) ?? ""))
