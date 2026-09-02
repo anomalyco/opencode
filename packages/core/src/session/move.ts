@@ -35,7 +35,9 @@ export const prepare = Effect.fn("SessionMove.prepare")(function* (input: {
   const global = yield* Global.Service
   const projects = yield* Project.Service
   const locations = yield* LocationServiceMap.Service
-  const directory = resolveDirectory(input.directory, input.session.location.directory, global.home)
+  const value = input.directory.trim()
+  const expanded = value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
+  const directory = AbsolutePath.make(path.resolve(input.session.location.directory, expanded))
   const info = yield* fs.stat(directory).pipe(Effect.orElseSucceed(() => undefined))
   if (!info) return yield* new DestinationNotFoundError({ directory })
   if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
@@ -57,9 +59,3 @@ export const prepare = Effect.fn("SessionMove.prepare")(function* (input: {
   )
   return payload
 })
-
-export function resolveDirectory(directory: string, base: AbsolutePath, home: string) {
-  const value = directory.trim()
-  const expanded = value === "~" ? home : value.startsWith("~/") ? path.join(home, value.slice(2)) : value
-  return AbsolutePath.make(path.resolve(base, expanded))
-}

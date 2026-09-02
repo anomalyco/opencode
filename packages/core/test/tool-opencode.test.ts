@@ -5,35 +5,47 @@ import { CodeModeCatalog } from "@opencode-ai/core/codemode/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Image } from "@opencode-ai/core/image"
 import { Location } from "@opencode-ai/core/location"
-import { Permission } from "@opencode-ai/core/permission"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { Tool } from "@opencode-ai/core/tool"
-import { SessionMoveTool } from "@opencode-ai/core/tool/plugin/session-move"
+import { OpenCodeTools } from "@opencode-ai/core/tool/plugin/opencode"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Global } from "@opencode-ai/util/global"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
-import { permissionLayer } from "./lib/permission"
 import { globalProjectNode } from "./lib/project"
-import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { executeTool, toolIdentity } from "./lib/tool"
+import { host } from "./plugin/host"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Session.node, Tool.node, Permission.node, Global.node]), [
+  AppNodeBuilder.build(LayerNode.group([Session.node, Tool.node]), [
     Project.node.replace(globalProjectNode),
     SessionExecution.node.replace(SessionExecution.noopLayer),
     Image.node.replace(imagePassthrough),
-    Permission.node.replace(permissionLayer({ assert: () => Effect.void })),
   ]),
 )
 
-describe("SessionMoveTool", () => {
+const register = Effect.gen(function* () {
+  const tools = yield* Tool.Service
+  const sessions = yield* Session.Service
+  yield* OpenCodeTools.Plugin.effect(
+    host({
+      tool: {
+        transform: tools.transform,
+        reload: tools.reload,
+        hook: () => Effect.die("unused tool.hook"),
+      },
+      session: { move: (input) => sessions.move(input) },
+    }),
+  )
+})
+
+describe("OpenCodeTools session_move", () => {
   it.effect("pins the existing Code Mode path even when the inline budget is zero", () =>
     Effect.gen(function* () {
-      yield* registerToolPlugin(SessionMoveTool.Plugin)
+      yield* register
       const registry = yield* Tool.Service
       const snapshot = yield* registry.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
@@ -56,7 +68,7 @@ describe("SessionMoveTool", () => {
       const destination = yield* tmpdirScoped()
       const sessions = yield* Session.Service
       const registry = yield* Tool.Service
-      yield* registerToolPlugin(SessionMoveTool.Plugin)
+      yield* register
       const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const current = yield* sessions.create({ location })
       const other = yield* sessions.create({ location })
@@ -105,7 +117,7 @@ describe("SessionMoveTool", () => {
       const tmp = yield* tmpdirScoped()
       const sessions = yield* Session.Service
       const registry = yield* Tool.Service
-      yield* registerToolPlugin(SessionMoveTool.Plugin)
+      yield* register
       const session = yield* sessions.create({
         location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }),
       })
@@ -130,68 +142,40 @@ describe("SessionMoveTool", () => {
     }),
   )
 
-  it.effect("authorizes the caller before admitting a move for another session", () =>
+  it.effect("leaves relative destination resolution to the session API", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
-      const source = yield* tmpdirScoped()
       const sessions = yield* Session.Service
       const registry = yield* Tool.Service
+      yield* register
       const current = yield* sessions.create({
-        location: Location.Ref.make({ directory: AbsolutePath.make(source.path) }),
-      })
-      const other = yield* sessions.create({
         location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }),
       })
-      const assertions: Permission.AssertInput[] = []
-      yield* registerToolPlugin(SessionMoveTool.Plugin).pipe(
-        Effect.provide(
-          permissionLayer({
-            assert: (input) =>
-              Effect.gen(function* () {
-                assertions.push(input)
-                return yield* new Permission.BlockedError({
-                  rules: [],
-                  permission: input.action,
-                  resources: input.resources,
-                })
-              }),
-          }),
-        ),
-      )
       const result = yield* executeTool(registry, {
         sessionID: current.id,
         ...toolIdentity,
         call: {
           type: "tool-call",
-          id: "call-denied",
+          id: "call-relative",
           name: "execute",
           input: {
-            code: `return await tools.opencode.session_move({ sessionID: ${JSON.stringify(other.id)}, directory: "allowed/../private" })`,
+            code: 'return await tools.opencode.session_move({ directory: "." })',
           },
         },
       })
       expect(result.output).toMatchObject({
-        error: true,
-        toolCalls: [{ tool: "opencode.session_move", status: "error" }],
+        output: JSON.stringify({ sessionID: current.id, directory: "." }, null, 2),
+        toolCalls: [{ tool: "opencode.session_move", status: "completed" }],
       })
-      expect(assertions).toMatchObject([
-        {
-          sessionID: current.id,
-          agent: toolIdentity.agent,
-          action: "opencode_session_move",
-          resources: [path.join(tmp.path, "private")],
-          save: [path.join(tmp.path, "private")],
-          metadata: { sessionID: other.id, directory: path.join(tmp.path, "private") },
-          source: { type: "tool", messageID: toolIdentity.messageID },
-        },
+      expect(yield* sessions.inbox(current.id)).toMatchObject([
+        { type: "move", delivery: "steer", payload: { location: { directory: tmp.path } } },
       ])
-      expect(yield* sessions.inbox(other.id)).toEqual([])
     }),
   )
 
   it.effect("validates move arguments", () =>
     Effect.sync(() => {
-      const valid = Schema.is(SessionMoveTool.Input)
+      const valid = Schema.is(OpenCodeTools.MoveInput)
       expect(valid({ directory: "/project" })).toBe(true)
       expect(valid({ directory: "/project", sessionID: "ses_other", queue: false })).toBe(true)
       expect(valid({ directory: "" })).toBe(false)

@@ -1,17 +1,12 @@
-export * as SessionMoveTool from "./session-move.js"
+export * as OpenCodeTools from "./opencode.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Context } from "@opencode-ai/plugin/effect/plugin"
-import { Global } from "@opencode-ai/util/global"
+import { AbsolutePath } from "@opencode-ai/schema/schema"
+import { Session } from "@opencode-ai/schema/session"
 import { Effect, Schema } from "effect"
-import { Permission } from "../../permission.js"
-import { AbsolutePath } from "../../schema.js"
-import { Session } from "../../session.js"
-import { SessionMove } from "../../session/move.js"
 
-export const name = "session_move"
-
-export const Input = Schema.Struct({
+export const MoveInput = Schema.Struct({
   sessionID: Schema.optionalKey(Session.ID).annotate({ description: "Omit to move the current session." }),
   directory: AbsolutePath.check(Schema.isMinLength(1)).annotate({
     description: "Destination directory, relative to the target session's directory or absolute. Supports ~.",
@@ -21,47 +16,32 @@ export const Input = Schema.Struct({
   }),
 })
 
-const Output = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePath })
+const MoveOutput = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePath })
 
 export const Plugin = {
-  id: "opencode.tool.session-move",
-  effect: Effect.fn("SessionMoveTool.Plugin")(function* (ctx: Context) {
-    const sessions = yield* Session.Service
-    const permission = yield* Permission.Service
-    const global = yield* Global.Service
-
+  id: "opencode.tools",
+  effect: Effect.fn("OpenCodeTools.Plugin")(function* (ctx: Context) {
     yield* ctx.tool
       .transform((draft) => {
         draft.namespace({ name: "opencode", description: "OpenCode session and runtime tools." })
         draft.add({
-          name,
+          name: "session_move",
           description:
             "Move a session to another directory, or omit sessionID to move the current session. The current session moves at the next safe boundary; do not run destination-dependent tools in the same execute call.",
-          input: Input,
-          output: Output,
+          input: MoveInput,
+          output: MoveOutput,
           options: { namespace: "opencode", codemode: true, pinned: true },
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
-              const session = yield* sessions.get(sessionID)
-              const directory = SessionMove.resolveDirectory(input.directory, session.location.directory, global.home)
-              yield* permission.assert({
-                action: `opencode_${name}`,
-                resources: [directory],
-                save: [directory],
-                metadata: { sessionID, directory },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
-              })
-              yield* sessions.move({
+              yield* ctx.session.move({
                 sessionID,
-                directory,
+                directory: input.directory,
                 delivery: input.queue ? "queue" : "steer",
               })
               return {
-                output: { sessionID, directory },
-                content: `Moving session ${sessionID} to ${directory}.`,
+                output: { sessionID, directory: input.directory },
+                content: `Moving session ${sessionID} to ${input.directory}.`,
               }
             }).pipe(
               Effect.mapError(
