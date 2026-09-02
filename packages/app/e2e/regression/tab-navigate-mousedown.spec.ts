@@ -145,6 +145,13 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabB).toContainText(sessionB.title)
   await expect(tabB.locator('[data-slot="tab-project"]')).toHaveText("tab-project")
   await expect(sidebar.getByRole("button", { name: "New session" })).toBeVisible()
+  await expect
+    .poll(async () => {
+      const button = await sidebar.getByRole("button", { name: "New session" }).boundingBox()
+      const tab = await tabA.boundingBox()
+      return !!button && !!tab && button.y + button.height < tab.y
+    })
+    .toBe(true)
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 
   const handle = sidebar.locator('[data-component="resize-handle"]')

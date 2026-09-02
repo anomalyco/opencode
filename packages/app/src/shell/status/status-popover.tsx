@@ -1,6 +1,7 @@
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Popover } from "@opencode-ai/ui/popover"
+import { Dialog, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
 import { Suspense, createMemo, createSignal, lazy, Show, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -9,6 +10,20 @@ import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 
 const Body = lazy(() => import("./body").then((x) => ({ default: x.StatusPopoverBody })))
+
+export function StatusDialog() {
+  const language = useLanguage()
+  return (
+    <Dialog fit class="w-[360px] max-w-[calc(100vw-32px)]">
+      <DialogHeader>
+        <DialogTitle>{language.t("settings.general.row.showStatus.title")}</DialogTitle>
+      </DialogHeader>
+      <StatusPopoverBody shown>
+        <Body shown embedded />
+      </StatusPopoverBody>
+    </Dialog>
+  )
+}
 
 export function StatusPopover() {
   const language = useLanguage()
