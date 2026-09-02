@@ -1,5 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
+import { symlink } from "node:fs/promises"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
@@ -341,6 +342,79 @@ describe("tool.shell permissions", () => {
     ),
   )
 
+  each("does not let unlisted commands bypass external_directory", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const commands = [
+          "head -1 /etc/hosts",
+          "ls /etc",
+          "printf secret >/etc/opencode-permission-test",
+          "cat </etc/hosts",
+          "printf secret 2>>/etc/opencode-permission-test",
+          "command ls /etc",
+          "head -1 $HOME/.ssh/config",
+          "head -1 ${HOME}/.ssh/config",
+          'head -1 "$HOME"/.ssh/config',
+          "printf secret >|/etc/opencode-permission-test",
+          "cat <(head -1 /etc/hosts)",
+          "cat {/etc,/var}/hosts",
+          `python3 -c 'open("/etc/hosts").read()'`,
+          `sh -c 'cat /etc/hosts'`,
+        ]
+
+        for (const command of commands) {
+          const err = new Error(`stop after permission: ${command}`)
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(yield* fail({ command }, capture(requests, err))).toMatchObject({ message: err.message })
+          if (!requests.find((request) => request.permission === "external_directory")) {
+            throw new Error(`external_directory was not requested for: ${command}`)
+          }
+        }
+      }),
+    ),
+  )
+
+  each("does not treat a quoted redirection-looking argument as a path", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+        yield* run({ command: 'echo "> /etc/hosts"' }, capture(requests))
+        expect(requests.find((request) => request.permission === "external_directory")).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.live("does not treat a workspace symlink to an external directory as internal", () =>
+    Effect.gen(function* () {
+      const project = yield* tmpdirScoped()
+      const outside = yield* tmpdirScoped()
+      const linked = path.join(project, "linked")
+      yield* Effect.promise(() => symlink(outside, linked, process.platform === "win32" ? "junction" : "dir"))
+
+      const err = new Error("stop after permission")
+      const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+      yield* runIn(
+        project,
+        Effect.gen(function* () {
+          expect(
+            yield* fail({ command: `cat ${path.join(linked, "secret.txt")}` }, capture(requests, err)),
+          ).toMatchObject({ message: err.message })
+        }),
+      )
+      const extDirReq = requests.find((request) => request.permission === "external_directory")
+      expect(extDirReq).toBeDefined()
+      if (extDirReq?.permission !== "external_directory") return
+      const expected = glob(path.join(outside, "*"))
+      expect(extDirReq.patterns).toContain(expected)
+      expect(extDirReq.metadata).toMatchObject({
+        directories: [outside],
+        patterns: [expected],
+      })
+    }),
+  )
+
   if (process.platform === "win32") {
     if (bash) {
       it.live("asks for nested bash command permissions [bash]", () =>
@@ -476,6 +550,38 @@ describe("tool.shell permissions", () => {
               if (requests[0]?.permission !== "external_directory") return
               expect(requests[0].patterns).toContain(glob(path.join(os.homedir(), ".ssh", "*")))
             }),
+          ),
+        ),
+      )
+    }
+
+    for (const item of ps) {
+      it.live(`uses the shell-independent HOME path for PowerShell expansion [${item.label}]`, () =>
+        withShell(
+          item,
+          Effect.acquireUseRelease(
+            Effect.sync(() => {
+              const previous = process.env.HOME
+              process.env.HOME = path.join(projectRoot, "fake-home")
+              return previous
+            }),
+            (previous) =>
+              runIn(
+                projectRoot,
+                Effect.gen(function* () {
+                  const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+                  yield* run({ command: 'Get-Content "$HOME/.ssh/config"' }, capture(requests))
+                  const extDirReq = requests.find((request) => request.permission === "external_directory")
+                  expect(extDirReq).toBeDefined()
+                  if (extDirReq?.permission !== "external_directory") return
+                  expect(extDirReq.patterns).toContain(glob(path.join(os.homedir(), ".ssh", "*")))
+                }),
+              ),
+            (previous) =>
+              Effect.sync(() => {
+                if (previous === undefined) delete process.env.HOME
+                else process.env.HOME = previous
+              }),
           ),
         ),
       )
