@@ -113,10 +113,13 @@ test(
       expect(yield* host.execute({ type: "open" }).pipe(Effect.flip)).toMatchObject({
         message: "No desktop browser is connected.",
       })
+      const stale = yield* host.attach("stale")
+      // A newer attachment for the same session replaces the previous one.
       const attached = yield* host.attach("first")
-      expect(
-        yield* host.rpc.attach({ ...attached.input, connectionID: "duplicate" }, options).pipe(Effect.flip),
-      ).toMatchObject({ type: "unavailable" })
+      yield* Fiber.join(stale.lifetime).pipe(Effect.timeout("5 seconds"))
+      expect(yield* host.rpc.state({ ...stale.input, state }, options).pipe(Effect.flip)).toMatchObject({
+        type: "unavailable",
+      })
       const other = Location.Ref.make({ directory: AbsolutePath.make(path.join(host.location.directory, "other")) })
       yield* Effect.promise(() => mkdir(other.directory))
       yield* host.opencode.plugin.list({ location: other })

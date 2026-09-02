@@ -44,8 +44,10 @@ export default Plugin.define({
               const browser = yield* Effect.acquireRelease(
                 Effect.gen(function* () {
                   const closed = yield* Deferred.make<void>()
-                  if (!active || browsers.has(input.sessionID))
-                    return yield* Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
+                  if (!active) return yield* Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
+                  // The newest desktop attachment wins so a re-register that races the
+                  // previous connection's teardown does not leave the session detached.
+                  yield* close(input.sessionID)
                   const browser: Attachment = {
                     connectionID: input.connectionID,
                     state: null,
