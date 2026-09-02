@@ -190,7 +190,8 @@ test.each(["compaction", "canonical compaction", "user"])(
     await fixture.data.session.pending.sync(sessionID)
     expect(fixture.data.session.pending.list(sessionID)).toEqual([durable])
     fixture.response.resolve(new Response("Lost response", { status: 500 }))
-    expect(await result).toBeInstanceOf(Error)
+    if (type === "user") expect(await result).toEqual(durable)
+    else expect(await result).toBeInstanceOf(Error)
     expect(fixture.data.session.pending.list(sessionID)).toEqual([durable])
     if (type === "user")
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([{ id, type: "user", text: "Follow up" }])
@@ -207,7 +208,8 @@ test("keeps one event listener and removes it when the data owner is disposed du
   expect(fixture.listeners.size).toBe(0)
   gate.resolve()
   fixture.response.resolve(Response.json({ data: item("msg_canonical") }))
-  await Promise.all([first, compact])
+  await expect(first).rejects.toMatchObject({ reason: "cancelled" })
+  await compact
   expect(fixture.listeners.size).toBe(0)
 })
 

@@ -53,6 +53,7 @@ import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
 import { resolvePastedAttachments } from "./local-attachment"
 import { locationKey, useData } from "../../context/data"
+import { PromptSubmissionError } from "@opencode-ai/client/solid"
 import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
@@ -1346,10 +1347,9 @@ export function Prompt(props: PromptProps) {
           }
         }
       }
-      // The data layer admits optimistically: the prompt renders immediately
-      // and rolls back if the server rejects it, so submission does not wait
-      // on the network. On rejection the row is already rolled back; restore
-      // the composer unless the user has started typing something new.
+      // Admission owns retries and their identity. Definitive failures restore
+      // the draft; uncertain outcomes remain on the original retryable row.
+      let cancelCommit: (() => void) | undefined
       data.session
         .prompt({
           sessionID: target,
@@ -1358,19 +1358,18 @@ export function Prompt(props: PromptProps) {
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
+          model,
           gate: newSession?.gate,
-          prepare: () => {
-            // Commit the captured selection after earlier admissions, including
-            // compaction setup. Cached state may still precede their SSE echoes;
-            // the server makes an unchanged selection a no-op.
-            const cancelCommit = local.model.trackSessionCommit(target, model)
-            return client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
-              cancelCommit()
-              throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
-            })
+          prepare: async () => {
+            // Track selection after earlier admissions. The data layer owns
+            // the retryable model commit and skips it once it succeeds.
+            cancelCommit = local.model.trackSessionCommit(target, model)
           },
         })
         .catch((error) => {
+          cancelCommit?.()
+          // Unknown outcomes retain their original admission ID for explicit retry.
+          if (error instanceof PromptSubmissionError) return
           if (newSession) return newSession.recover(error)
           toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
           restoreEntry()

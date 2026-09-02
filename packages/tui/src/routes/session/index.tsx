@@ -21,6 +21,8 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
+import { PromptSubmissionError } from "@opencode-ai/client/solid"
+import { PromptSubmissionStatus } from "./prompt-submission"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
@@ -124,7 +126,7 @@ const BACKGROUND_TOOL_HINT_DELAY = 3_000
 // The tail comfortably overfills a tall viewport; older rows mount as the reader approaches them.
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
-type PendingAction = "steer" | "queue" | "cancel"
+type PendingAction = "steer" | "queue" | "cancel" | "retry"
 
 const context = createContext<{
   /** Content width: terminal width minus vertical tabs, sidebar, and padding. */
@@ -570,16 +572,19 @@ export function Session(props: {
   const mutatePending = async (action: PendingAction, inboxID: string) => {
     const result = await runPendingAction(inboxID, async () => {
       const request =
-        action === "steer"
-          ? client.api.session.inbox.steer({ sessionID: route.sessionID, inboxID })
-          : action === "queue"
-            ? client.api.session.inbox.queue({ sessionID: route.sessionID, inboxID })
-            : client.api.session.inbox.cancel({ sessionID: route.sessionID, inboxID })
+        action === "retry"
+          ? data.session.submission.retry(route.sessionID, inboxID)
+          : action === "steer"
+            ? client.api.session.inbox.steer({ sessionID: route.sessionID, inboxID })
+            : action === "queue"
+              ? client.api.session.inbox.queue({ sessionID: route.sessionID, inboxID })
+              : data.session.pending.cancel(route.sessionID, inboxID)
       const error = await request.then(
         () => undefined,
         (error) => error,
       )
       if (!error) return true
+      if (error instanceof PromptSubmissionError) return false
       const label = action === "cancel" ? "delete" : action
       toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
       return false
@@ -591,12 +596,14 @@ export function Session(props: {
       <DialogSelect
         title="Queued prompts"
         options={queuedPrompts().map((prompt, index) => ({
-          title: prompt.text,
+          title: `${data.session.submission.get(route.sessionID, prompt.id)?.status === "failed" ? "Send not confirmed: " : ""}${prompt.text}`,
           value: prompt.id,
           footer: `${index + 1} of ${queuedPrompts().length}`,
         }))}
         onSelect={(option) => {
-          void mutatePending("steer", option.value).then((steered) => {
+          const state = data.session.submission.get(route.sessionID, option.value)
+          if (state && state.status !== "failed") return
+          void mutatePending(state ? "retry" : "steer", option.value).then((steered) => {
             if (steered) dialog.clear()
           })
         }}
@@ -612,7 +619,7 @@ export function Session(props: {
             },
           },
         ]}
-        footerHints={[{ title: "steer", label: "enter" }]}
+        footerHints={[{ title: "steer / retry", label: "enter" }]}
       />
     ))
   const unavailable = (feature: string) => {
@@ -1267,6 +1274,21 @@ export function Session(props: {
       },
     },
     {
+      title: "Retry failed prompt",
+      id: "session.retry_prompt",
+      group: "Prompt",
+      enabled: pendingUsers().some(
+        (item) => data.session.submission.get(route.sessionID, item.id)?.status === "failed",
+      ),
+      run: () => {
+        const item = pendingUsers().find(
+          (item) => data.session.submission.get(route.sessionID, item.id)?.status === "failed",
+        )
+        if (item) void mutatePending("retry", item.id)
+        dialog.clear()
+      },
+    },
+    {
       title: "View queued prompts",
       id: "session.queued_prompts",
       group: "Prompt",
@@ -1441,7 +1463,7 @@ export function Session(props: {
             </box>
             <box flexShrink={0}>
               <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
-                <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
+                <QueuedPromptDock sessionID={route.sessionID} prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
               </Show>
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
@@ -2366,6 +2388,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
   const delivery = createMemo(() => ctx.pendingDelivery(props.message.id))
+  const submission = createMemo(() => data.session.submission.get(ctx.sessionID, props.message.id))
   const dialog = useDialog()
   const renderer = useRenderer()
   const promptRef = usePromptRef()
@@ -2392,6 +2415,23 @@ function UserMessage(props: { message: SessionMessageUser }) {
           }}
           onMouseUp={() => {
             if (renderer.getSelection()?.getSelectedText()) return
+            if (submission()) {
+              dialog.replace(() => (
+                <DialogSelect
+                  title="Prompt submission"
+                  options={[
+                    ...(submission()?.status === "failed" ? [{ title: "Retry send", value: "retry" as const }] : []),
+                    { title: "Cancel send", value: "cancel" as const },
+                  ]}
+                  onSelect={(option) => {
+                    void ctx.mutatePending(option.value, props.message.id).then((ok) => {
+                      if (ok) dialog.clear()
+                    })
+                  }}
+                />
+              ))
+              return
+            }
             if (delivery() === "steer") {
               dialog.replace(() => (
                 <DialogSelect
@@ -2422,6 +2462,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           flexShrink={0}
         >
           <text fg={theme.text.default}>{props.message.text}</text>
+          <PromptSubmissionStatus sessionID={ctx.sessionID} messageID={props.message.id} />
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>
@@ -2476,7 +2517,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   )
 }
 
-function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOpen: () => void }) {
+function QueuedPromptDock(props: { sessionID: string; prompts: { id: string; text: string }[]; onOpen: () => void }) {
   const theme = useTheme("elevated")
   const [hover, setHover] = createSignal(false)
   const next = createMemo(() => props.prompts[0]?.text.replaceAll("\n", " "))
@@ -2497,12 +2538,15 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
         paddingLeft={2}
         paddingRight={1}
         backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
-        flexDirection="row"
+        flexDirection="column"
       >
         <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
           <span style={{ fg: theme.text.default }}>{props.prompts.length} queued</span>
           <Show when={next()}>{(text) => <> · {text()}</>}</Show>
         </text>
+        <Show when={props.prompts[0]}>
+          {(prompt) => <PromptSubmissionStatus sessionID={props.sessionID} messageID={prompt().id} />}
+        </Show>
       </box>
     </box>
   )

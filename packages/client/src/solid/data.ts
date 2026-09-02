@@ -29,6 +29,7 @@ import type {
   SessionMessageAssistantTool,
   SessionInfo,
   SessionInboxInfo,
+  SessionInboxUser,
   SessionInboxCompaction,
   ShellInfo,
   SkillInfo,
@@ -44,13 +45,32 @@ import {
   isFormAlreadySettledError,
   isFormNotFoundError,
   isPermissionNotFoundError,
+  isConflictError,
+  isSessionNotFoundError,
   type SessionPromptInput,
 } from "../promise"
-import { createStore, produce, reconcile } from "solid-js/store"
+import { createStore, produce, reconcile, unwrap } from "solid-js/store"
+import { promptFailure } from "./prompt-retry"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
+export type PromptSubmission = {
+  readonly id: string
+  readonly sessionID: string
+  readonly status: "sending" | "retrying" | "failed"
+  readonly attempt: number
+}
+
+export class PromptSubmissionError extends Error {
+  constructor(
+    readonly reason: "cancelled" | "failed",
+    readonly sessionID: string,
+    readonly id: string,
+  ) {
+    super(reason === "cancelled" ? "Prompt submission cancelled" : "Could not confirm prompt delivery")
+  }
+}
 type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 
 export type CreateDataInput = {
@@ -65,6 +85,9 @@ export type CreateDataInput = {
   }
   readonly connection?: {
     readonly status: () => "connected" | "connecting" | "reconnecting"
+  }
+  readonly log?: {
+    readonly info?: (message: string, data?: Readonly<Record<string, unknown>>) => void
   }
 }
 
@@ -212,6 +235,7 @@ export function createData(config: CreateDataInput) {
   })
 
   const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({ directory: config.directory })
+  const [submissions, setSubmissions] = createStore<Record<string, PromptSubmission | undefined>>({})
   const sessions = createMemo(() =>
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
@@ -308,6 +332,23 @@ export function createData(config: CreateDataInput) {
   // submission order. Each waits for the previous POST to settle, so one
   // failure does not block the next.
   const sending = new Map<string, Promise<unknown>>()
+  const prompts = new Map<
+    string,
+    {
+      sessionID: string
+      delivery: SessionInbox.Delivery
+      attempted: boolean
+      stopped: boolean
+      signal: AbortSignal
+      accepted?: SessionInboxUser
+      confirmation?: Promise<SessionInboxUser | undefined>
+      acknowledge: (item: SessionInboxUser) => void
+      stop: () => void
+      retry: () => Promise<SessionInboxUser>
+      request?: Promise<SessionInboxUser>
+    }
+  >()
+  onCleanup(() => prompts.forEach((entry) => entry.stop()))
   const messageLoads = new Map<string, Promise<unknown>>()
   const compacting = new Map<string, { id: string; observed: Set<string>; request: Promise<SessionInboxCompaction> }>()
   onCleanup(() => compacting.clear())
@@ -323,11 +364,19 @@ export function createData(config: CreateDataInput) {
   }
 
   // Capture creation before settlement clears its entry, so dependent RPCs still see a failed create.
-  function sendAdmission<Value>(sessionID: string, send: () => Promise<Value>, gate?: Promise<unknown>) {
+  function sendAdmission<Value>(
+    sessionID: string,
+    send: () => Promise<Value>,
+    gate?: Promise<unknown>,
+    cancelled?: Promise<never>,
+  ) {
     const created = creating.get(sessionID)
     const previous = sending.get(sessionID)
     const request = Promise.resolve()
-      .then(() => Promise.all([gate, created, previous]))
+      .then(() => {
+        const ready = Promise.all([gate, created, previous])
+        return cancelled ? Promise.race([ready, cancelled]) : ready
+      })
       .then(send)
     track(
       sending,
@@ -521,6 +570,9 @@ export function createData(config: CreateDataInput) {
   }
 
   function removeSession(sessionID: string) {
+    prompts.forEach((entry) => {
+      if (entry.sessionID === sessionID) entry.stop()
+    })
     activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
@@ -706,6 +758,42 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.inbox.delivered": {
+        const item = store.session.pending[event.data.sessionID]?.find((item) => item.id === event.data.inboxID)
+        const entry = prompts.get(event.data.inboxID)
+        if (item?.type === "user" && !outbox.has(item.id)) entry?.acknowledge(item)
+        if (entry && !entry.accepted && !entry.confirmation) {
+          // Delivery proves acceptance, not the contents of an optimistic row.
+          // Fetch the exact projected message when its enqueue echo was missed.
+          entry.confirmation = api()
+            .session.message(
+              {
+                sessionID: event.data.sessionID,
+                messageID: event.data.inboxID,
+              },
+              { signal: entry.signal },
+            )
+            .then((row) => {
+              if (entry.stopped || row.type !== "user") return
+              outbox.delete(row.id)
+              removePending(event.data.sessionID, row.id)
+              message.update(event.data.sessionID, (draft, index) => {
+                const position = index.get(row.id)
+                if (position !== undefined) draft[position] = row
+              })
+              const { id, type, time, ...payload } = row
+              const result = {
+                id,
+                type,
+                sessionID: event.data.sessionID,
+                timeCreated: time.created,
+                payload,
+                delivery: entry.delivery,
+              }
+              entry.acknowledge(result)
+              return result
+            })
+            .catch(() => undefined)
+        }
         const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inboxID) ?? false
         removePending(event.data.sessionID, event.data.inboxID)
         message.update(event.data.sessionID, (draft, index) => {
@@ -725,11 +813,19 @@ export function createData(config: CreateDataInput) {
         updatePending(event.data.sessionID, event.data.inboxID, event.data.delivery)
         return
       case "session.inbox.cancelled": {
+        prompts.get(event.data.inboxID)?.stop()
         retractLocal(event.data.sessionID, event.data.inboxID)
         compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
         return
       }
       case "session.inbox.enqueued": {
+        if (event.data.item.type === "user")
+          prompts.get(event.data.inboxID)?.acknowledge({
+            id: event.data.inboxID,
+            sessionID: event.data.sessionID,
+            timeCreated: event.created,
+            ...event.data.item,
+          })
         outbox.delete(event.data.inboxID)
         admitLocal({
           id: event.data.inboxID,
@@ -1330,6 +1426,18 @@ export function createData(config: CreateDataInput) {
         },
       },
       pending: {
+        async cancel(sessionID: string, inboxID: string) {
+          const active = prompts.get(inboxID)
+          const entry = active?.sessionID === sessionID ? active : undefined
+          entry?.stop()
+          if (entry && !entry.attempted) return
+          await api()
+            .session.inbox.cancel({ sessionID, inboxID })
+            .catch((error: unknown) => {
+              if (entry && (isConflictError(error) || isSessionNotFoundError(error))) return
+              throw error
+            })
+        },
         list(sessionID: string) {
           return store.session.pending[sessionID] ?? []
         },
@@ -1337,7 +1445,10 @@ export function createData(config: CreateDataInput) {
           return sync.run(`session.pending:${sessionID}`, async () => {
             const pending = await api().session.inbox.list({ sessionID })
             // A positive read acknowledges admission even when its SSE echo is delayed.
-            pending.forEach((item) => outbox.delete(item.id))
+            pending.forEach((item) => {
+              outbox.delete(item.id)
+              if (item.type === "user") prompts.get(item.id)?.acknowledge(item)
+            })
             // Compactions also coalesce by Session, not just by the proposed ID.
             if (pending.some((item) => item.type === "compaction"))
               store.session.pending[sessionID]
@@ -1463,14 +1574,28 @@ export function createData(config: CreateDataInput) {
         compacting.set(input.sessionID, { id, observed, request })
         return request
       },
-      // Optimistic prompt admission: render the prompt immediately under a
-      // client-minted ID, send it, and let the durable inbox.enqueued echo
-      // upsert that same ID with the server's payload. Server admission is
-      // idempotent per ID, so retrying with the identical payload cannot
-      // double-admit.
-      prompt(input: SessionPromptInput & { gate?: Promise<unknown>; prepare?: () => Promise<unknown> }) {
-        const { gate, prepare, ...request } = input
+      submission: {
+        get(sessionID: string, id: string) {
+          const entry = submissions[id]
+          return entry?.sessionID === sessionID ? entry : undefined
+        },
+        retry(sessionID: string, id: string) {
+          const entry = prompts.get(id)
+          if (!entry || entry.sessionID !== sessionID) return Promise.reject(new Error("Prompt submission not found"))
+          return entry.retry()
+        },
+      },
+      // Keep a single captured payload and ID through automatic and manual retries.
+      prompt(
+        input: SessionPromptInput & { gate?: Promise<unknown>; prepare?: () => Promise<unknown>; model?: ModelRef },
+      ) {
+        const { gate, prepare, model, ...value } = input
+        const request = structuredClone(unwrap(value))
+        const selection = model && { ...model }
         const id = request.id ?? SessionMessage.ID.create()
+        const existing = prompts.get(id)
+        if (existing?.sessionID === request.sessionID) return existing.retry()
+        if (existing) return Promise.reject(new Error("Prompt submission belongs to another session"))
         // A retry may reuse an ID that is already rendered — and possibly
         // already durable. Admit optimistically only for new IDs so a failed
         // retry cannot roll back acknowledged state.
@@ -1495,19 +1620,153 @@ export function createData(config: CreateDataInput) {
             },
           })
         }
-        return sendAdmission(
-          request.sessionID,
-          async () => {
-            await prepare?.()
-            return api().session.prompt({ ...request, id })
+        const abort = new AbortController()
+        const cancelled = Promise.withResolvers<never>()
+        const acknowledged = Promise.withResolvers<SessionInboxUser>()
+        let wake: (() => void) | undefined
+        let prepared = false
+        const entry: NonNullable<ReturnType<typeof prompts.get>> = {
+          sessionID: request.sessionID,
+          delivery: request.delivery ?? "steer",
+          attempted: !fresh,
+          stopped: false,
+          signal: abort.signal,
+          acknowledge(item) {
+            if (entry.stopped || item.sessionID !== entry.sessionID) return
+            entry.accepted = item
+            outbox.delete(id)
+            acknowledged.resolve(item)
+            wake?.()
+            setSubmissions(id, undefined)
+            if (!entry.request) prompts.delete(id)
           },
-          gate,
-        ).catch((error) => {
-          // Roll back only rows this call admitted and the server has not
-          // acknowledged: anything else is server state.
-          if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
-          throw error
-        })
+          stop() {
+            if (entry.stopped) return
+            entry.stopped = true
+            abort.abort()
+            cancelled.reject(new PromptSubmissionError("cancelled", request.sessionID, id))
+            wake?.()
+            if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
+            setSubmissions(id, undefined)
+            prompts.delete(id)
+          },
+          retry() {
+            if (entry.request) return entry.request
+            let stage = "waiting"
+            let attempt = 0
+            let modelSet = !selection
+            const log = (outcome: string, extra?: Readonly<Record<string, unknown>>) =>
+              config.log?.info?.("prompt submission", {
+                sessionID: request.sessionID,
+                messageID: id,
+                stage,
+                attempt,
+                outcome,
+                ...extra,
+              })
+            setSubmissions(id, { id, sessionID: request.sessionID, status: "sending", attempt })
+            log("started")
+            entry.request = sendAdmission(
+              request.sessionID,
+              async () => {
+                if (entry.stopped) throw new PromptSubmissionError("cancelled", request.sessionID, id)
+                if (!prepared) {
+                  stage = "prepare"
+                  await Promise.race([Promise.resolve().then(prepare), cancelled.promise])
+                  prepared = true
+                }
+                for (;;) {
+                  if (entry.stopped) throw new PromptSubmissionError("cancelled", request.sessionID, id)
+                  if (entry.accepted) return entry.accepted
+                  attempt += 1
+                  setSubmissions(id, { id, sessionID: request.sessionID, status: "sending", attempt })
+                  try {
+                    if (!modelSet && selection) {
+                      stage = "model"
+                      log("attempt")
+                      await Promise.race([
+                        api().session.switchModel(
+                          { sessionID: request.sessionID, model: selection },
+                          { signal: abort.signal },
+                        ),
+                        cancelled.promise,
+                      ])
+                      modelSet = true
+                    }
+                    if (entry.stopped) throw new PromptSubmissionError("cancelled", request.sessionID, id)
+                    if (entry.accepted) return entry.accepted
+                    stage = "prompt"
+                    entry.attempted = true
+                    log("attempt")
+                    return await Promise.race([
+                      api().session.prompt({ ...request, id }, { signal: abort.signal }),
+                      acknowledged.promise,
+                      cancelled.promise,
+                    ])
+                  } catch (error) {
+                    if (entry.stopped) throw new PromptSubmissionError("cancelled", request.sessionID, id)
+                    if (entry.accepted) return entry.accepted
+                    const confirmed =
+                      entry.confirmation && (await Promise.race([entry.confirmation, cancelled.promise]))
+                    if (confirmed) return confirmed
+                    const failure = promptFailure(error)
+                    const retryable = failure.retryable || entry.confirmation !== undefined
+                    log("rejected", { ...failure, retryable })
+                    if (!retryable) throw error
+                    const delay = [250, 750, 1500][attempt - 1]
+                    if (delay === undefined) {
+                      setSubmissions(id, { id, sessionID: request.sessionID, status: "failed", attempt })
+                      throw new PromptSubmissionError("failed", request.sessionID, id)
+                    }
+                    setSubmissions(id, { id, sessionID: request.sessionID, status: "retrying", attempt })
+                    log("retrying", { delay })
+                    await new Promise<void>((resolve) => {
+                      const timer = setTimeout(resolve, delay)
+                      wake = () => {
+                        clearTimeout(timer)
+                        resolve()
+                      }
+                    })
+                    wake = undefined
+                  }
+                }
+              },
+              gate,
+              cancelled.promise,
+            )
+              .then((item) => {
+                log("accepted")
+                if (entry.confirmation) {
+                  outbox.delete(id)
+                  removePending(request.sessionID, id)
+                  message.update(request.sessionID, (draft, index) => {
+                    const position = index.get(id)
+                    if (position !== undefined)
+                      draft[position] = { id, type: "user", ...item.payload, time: draft[position].time }
+                  })
+                }
+                abort.abort()
+                setSubmissions(id, undefined)
+                prompts.delete(id)
+                return item
+              })
+              .catch((error: unknown) => {
+                log(error instanceof PromptSubmissionError && error.reason === "cancelled" ? "cancelled" : "failed")
+                if (!(error instanceof PromptSubmissionError) || error.reason !== "failed") {
+                  if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
+                  setSubmissions(id, undefined)
+                  prompts.delete(id)
+                }
+                throw error
+              })
+              .finally(() => {
+                entry.request = undefined
+              })
+            return entry.request
+          },
+        }
+        prompts.set(id, entry)
+        return entry.retry()
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
@@ -1551,6 +1810,15 @@ export function createData(config: CreateDataInput) {
           return sync.run(`session.message:${sessionID}`, async () => {
             const response = await api().message.list({ sessionID, limit: messagePageLimit, order: "desc" })
             const fetched = response.data.toReversed()
+            fetched.forEach((item) => {
+              if (item.type !== "user") return
+              outbox.delete(item.id)
+              removePending(sessionID, item.id)
+              const entry = prompts.get(item.id)
+              if (entry?.sessionID !== sessionID) return
+              const { id, type, time, ...payload } = item
+              entry.acknowledge({ id, type, sessionID, timeCreated: time.created, payload, delivery: entry.delivery })
+            })
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
             const ids = new Set(fetched.map((item) => item.id))

@@ -3198,9 +3198,9 @@ test("admits prompts optimistically and reconciles with the durable echo", async
     expect(echoed.time.created).toBe(5)
     expect(echoed.files).toEqual([echoFile])
 
-    // A late transport failure after the echo must not delete acknowledged state.
+    // The durable echo settles admission even when its HTTP response is lost.
     release(json({ _tag: "UnknownError", message: "response lost" }, { status: 500 }))
-    expect(await settled).toBeDefined()
+    expect(await settled).toBeUndefined()
     expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
     expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
   } finally {
