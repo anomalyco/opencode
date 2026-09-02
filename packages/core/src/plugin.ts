@@ -98,17 +98,17 @@ const layer = Layer.effect(
         () =>
           lock.withPermit(
             Effect.gen(function* () {
-              if (
-                active.size === definitions.length &&
-                Array.from(active.values()).every((entry, index) => {
-                  const definition = definitions[index]
-                  return entry.plugin.id === definition?.id && entry.plugin.revision === definition.revision
-                })
-              ) {
-                for (const definition of definitions) {
-                  const entry = active.get(definition.id)
-                  if (entry) active.set(definition.id, { ...entry, plugin: definition })
-                }
+              const current = Array.from(active.values())
+              const changed = definitions.findIndex((definition, index) => {
+                const entry = current[index]
+                return entry?.plugin.id !== definition.id || entry.plugin.revision !== definition.revision
+              })
+              const prefix = changed === -1 ? definitions.length : changed
+              for (const definition of definitions.slice(0, prefix)) {
+                const entry = active.get(definition.id)
+                if (entry) active.set(definition.id, { ...entry, plugin: definition })
+              }
+              if (prefix === definitions.length && active.size === definitions.length) {
                 const nextInventory = [...definitions.map(activeInfo), ...failures]
                 if (JSON.stringify(inventory) === JSON.stringify(nextInventory)) return
                 inventory = nextInventory
@@ -118,12 +118,19 @@ const layer = Layer.effect(
 
               yield* State.batch(
                 Effect.gen(function* () {
-                  const nextInventory: Plugin.Info[] = []
-                  for (const definition of definitions) {
-                    const previous = active.get(definition.id)
-                    active.delete(definition.id)
-                    if (previous) yield* Scope.close(previous.scope, Exit.void)
-
+                  // Registrations are ordered by setup, so only the unchanged prefix can stay alive.
+                  const previous = new Map(Array.from(active.entries()).slice(prefix))
+                  yield* Effect.forEach(
+                    Array.from(previous.entries()).toReversed(),
+                    ([id, entry]) =>
+                      Effect.gen(function* () {
+                        active.delete(id)
+                        yield* Scope.close(entry.scope, Exit.void)
+                      }),
+                    { discard: true },
+                  )
+                  const nextInventory = definitions.slice(0, prefix).map(activeInfo)
+                  for (const definition of definitions.slice(prefix)) {
                     const loaded = yield* load(definition)
                     if (loaded.scope !== undefined) {
                       active.set(definition.id, { plugin: definition, scope: loaded.scope })
@@ -137,10 +144,11 @@ const layer = Layer.effect(
                       features: { server: true, ...definition.features },
                     })
 
-                    if (!previous) continue
-                    const restored = yield* load(previous.plugin)
+                    const fallback = previous.get(definition.id)
+                    if (!fallback) continue
+                    const restored = yield* load(fallback.plugin)
                     if (restored.scope !== undefined) {
-                      active.set(definition.id, { plugin: previous.plugin, scope: restored.scope })
+                      active.set(definition.id, { plugin: fallback.plugin, scope: restored.scope })
                       continue
                     }
                     yield* Effect.logError("failed to restore plugin; deactivating", {
@@ -148,13 +156,6 @@ const layer = Layer.effect(
                     })
                   }
 
-                  const removed = Array.from(active.entries())
-                    .filter(([id]) => !ids.has(id))
-                    .toReversed()
-                  removed.forEach(([id]) => active.delete(id))
-                  yield* Effect.forEach(removed, ([, entry]) => Scope.close(entry.scope, Exit.void), {
-                    discard: true,
-                  })
                   inventory = [...nextInventory, ...failures]
                 }),
               )

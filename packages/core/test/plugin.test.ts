@@ -13,6 +13,76 @@ import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
+for (const scenario of [
+  {
+    name: "starts only the appended plugin",
+    before: ["a", "b"],
+    after: ["a", "b", "c"],
+    expected: ["start:c:1"],
+  },
+  {
+    name: "restarts the suffix after an insertion",
+    before: ["a", "b", "c"],
+    after: ["a", "x", "b", "c"],
+    expected: ["stop:c:1", "stop:b:1", "start:x:1", "start:b:1", "start:c:1"],
+  },
+  {
+    name: "restarts the suffix after a revision changes",
+    before: ["a", "b", "c"],
+    after: ["a", "b", "c"],
+    updated: "b",
+    expected: ["stop:c:1", "stop:b:1", "start:b:2", "start:c:1"],
+  },
+  {
+    name: "stops only the removed trailing plugin",
+    before: ["a", "b", "c"],
+    after: ["a", "b"],
+    expected: ["stop:c:1"],
+  },
+]) {
+  it.effect(scenario.name, () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const events: string[] = []
+      const plugin = (id: string, revision = "1"): Plugin.Generation => ({
+        id,
+        revision,
+        effect: () =>
+          Effect.gen(function* () {
+            events.push(`start:${id}:${revision}`)
+            yield* Effect.addFinalizer(() => Effect.sync(() => events.push(`stop:${id}:${revision}`)))
+          }),
+      })
+
+      yield* plugins.activate(scenario.before.map((id) => plugin(id)))
+      events.length = 0
+      yield* plugins.activate(scenario.after.map((id) => plugin(id, id === scenario.updated ? "2" : "1")))
+
+      expect(events).toEqual(scenario.expected)
+      expect((yield* plugins.list()).map((plugin) => plugin.id)).toEqual(scenario.after.map((id) => Plugin.ID.make(id)))
+    }),
+  )
+}
+
+it.effect("updates inventory metadata without restarting an unchanged generation", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    let loads = 0
+    const plugin = {
+      id: "metadata",
+      revision: "1",
+      source: { type: "package" as const, target: "fixture" },
+      effect: () => Effect.sync(() => loads++),
+    }
+
+    yield* plugins.activate([plugin])
+    yield* plugins.activate([{ ...plugin, source: { ...plugin.source, outdated: true } }])
+
+    expect(loads).toBe(1)
+    expect((yield* plugins.list())[0]?.source).toEqual({ type: "package", target: "fixture", outdated: true })
+  }),
+)
+
 it.live("loads a local plugin with its configured options", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
