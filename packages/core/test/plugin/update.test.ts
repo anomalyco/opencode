@@ -46,6 +46,6 @@ it.effect("publishes successful package updates", () =>
 
     yield* updates.update("fixture")
 
-    expect(Option.getOrUndefined(yield* Fiber.join(changed))).toBe("fixture")
+    expect(Option.getOrUndefined(yield* Fiber.join(changed))).toEqual({ target: "fixture", outdated: false })
   }),
 )

@@ -14,10 +14,52 @@ export const PluginHandler = HttpApiBuilder.group(Api, "server.plugin", (handler
         return yield* response(Plugin.Service.use((plugin) => plugin.list()))
       }),
     )
+    .handle("plugin.check", (ctx) =>
+      Effect.gen(function* () {
+        const supervisor = yield* PluginSupervisor.Service
+        yield* supervisor.awaitActivation
+        const plugins = yield* Plugin.Service
+        const inventory = yield* plugins.list()
+        const targets = [
+          ...new Set(
+            inventory.flatMap((plugin) => (plugin.source.type === "package" ? [plugin.source.target] : [])),
+          ),
+        ].filter((target) => ctx.payload.target === undefined || target === ctx.payload.target)
+        if (ctx.payload.target !== undefined && !targets.length)
+          return yield* new InvalidRequestError({
+            message: `Plugin package is not in the current server inventory: ${ctx.payload.target}`,
+            field: "target",
+          })
+        const updates = yield* PluginUpdate.Service
+        const outdated = new Map(
+          yield* Effect.forEach(
+            targets,
+            (target) => updates.check(target, { refresh: true }).pipe(Effect.map((value) => [target, value] as const)),
+            { concurrency: "unbounded" },
+          ),
+        )
+        return yield* response(
+          Effect.succeed(
+            inventory.map((plugin) => {
+              if (plugin.source.type !== "package" || !outdated.has(plugin.source.target)) return plugin
+              return {
+                ...plugin,
+                source: {
+                  type: "package" as const,
+                  target: plugin.source.target,
+                  ...(plugin.source.version ? { version: plugin.source.version } : {}),
+                  ...(outdated.get(plugin.source.target) ? { outdated: true as const } : {}),
+                },
+              }
+            }),
+          ),
+        )
+      }),
+    )
     .handle("plugin.update", (ctx) =>
       Effect.gen(function* () {
         const supervisor = yield* PluginSupervisor.Service
-        yield* supervisor.flush
+        yield* supervisor.awaitActivation
         const plugins = yield* Plugin.Service
         if (
           !(yield* plugins.list()).some(

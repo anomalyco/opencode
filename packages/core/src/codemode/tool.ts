@@ -40,11 +40,13 @@ type CollectedFiles = {
   readonly files: Array<typeof ExecuteFile.Type>
 }
 
-type ToolNode = {
-  tool?: Tool.Tool<never>
+type Node<T> = {
+  tool?: T
   namespace?: ToolNamespace
-  readonly children: Map<string, ToolNode>
+  readonly children: Map<string, Node<T>>
 }
+
+type ToolNode = Node<Tool.Tool<never>>
 
 type Tools = {
   [name: string]: Tool.Tool<never> | Namespace.Namespace<never> | Tools
@@ -162,12 +164,41 @@ export const catalog = (inventory: Inventory) => {
       .filter((registration) => registration.options?.pinned === true)
       .map(qualifiedName),
   )
+  const root: CatalogNode = { children: new Map() }
+  for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
+  for (const tool of runtime(inventory, () => Effect.fail(toolError("Execute context is unavailable"))).catalog())
+    getNode(root, tool.path).tool = {
+      type: "tool",
+      name: tool.path.split(".").at(-1) ?? tool.path,
+      description: tool.description,
+      signature: tool.signature,
+      pinned: pinned.has(tool.path),
+    }
   return {
-    tools: runtime(inventory, () => Effect.fail(toolError("Execute context is unavailable")))
-      .catalog()
-      .map((tool) => ({ ...tool, pinned: pinned.has(tool.path) })),
-    ...(inventory.namespaces === undefined ? {} : { namespaces: inventory.namespaces }),
+    tools: renderCatalog(root),
   } satisfies CodeModeCatalog.Inventory
+}
+
+type CatalogNode = Node<CodeModeCatalog.Tool>
+
+function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | CodeModeCatalog.Namespace> {
+  return Array.from(root.children)
+    .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .flatMap(([name, node]) => {
+      const tools = renderCatalog(node)
+      const namespace =
+        node.namespace === undefined && tools.length === 0
+          ? undefined
+          : {
+              type: "namespace" as const,
+              name,
+              ...(node.namespace?.description === undefined ? {} : { description: node.namespace.description }),
+              tools,
+            }
+      if (node.tool === undefined) return namespace === undefined ? [] : [namespace]
+      if (namespace === undefined) return [node.tool]
+      return [node.tool, namespace]
+    })
 }
 
 function runtime(
@@ -191,9 +222,9 @@ function runtime(
   return CodeMode.make<typeof tools>({ tools, ...hooks })
 }
 
-function getNode(root: ToolNode, path: string) {
+function getNode<T>(root: Node<T>, path: string) {
   return path.split(".").reduce((parent, name) => {
-    const child: ToolNode = parent.children.get(name) ?? { children: new Map() }
+    const child: Node<T> = parent.children.get(name) ?? { children: new Map() }
     parent.children.set(name, child)
     return child
   }, root)

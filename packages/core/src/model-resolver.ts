@@ -132,7 +132,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         packageName,
         settings: configured,
         modelID: resolved.modelID ?? resolved.id,
-        providerID: resolved.providerID,
+        providerID: resolved.canonical ?? resolved.providerID,
       })
     : undefined
   const native = mapping?.package ?? resolved.package
@@ -161,6 +161,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   )
   const settings = {
     ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
+    ...(resolved.canonical === undefined ? {} : { provider: resolved.canonical }),
     ...nativeCredentialSettings(specifier, credential),
     headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
     body: Provider.mergeOverlay(mapping?.body, resolved.body),
@@ -169,7 +170,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       return LanguageModel.update(runtime, {
-        provider: resolved.providerID,
+        provider: resolved.canonical ?? resolved.providerID,
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,

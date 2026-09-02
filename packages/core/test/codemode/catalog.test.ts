@@ -3,7 +3,8 @@ import { CodeModeCatalog } from "@opencode-ai/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 
 const entry = (path: string, description: string, signature?: string, pinned = false): CodeModeCatalog.Tool => ({
-  path,
+  type: "tool",
+  name: path,
   description,
   signature: signature ?? `tools.${path}(input: {\n  q: string,\n}): Promise<string>`,
   pinned,
@@ -15,12 +16,12 @@ const lookup = entry(
   "tools.orders.lookup(input: {\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
 )
 
-const render = (tools: ReadonlyArray<CodeModeCatalog.Tool>, budget?: number) =>
+const render = (tools: CodeModeCatalog.Inventory["tools"], budget?: number) =>
   CodeModeInstructions.render(CodeModeCatalog.summarize({ tools }, budget === undefined ? {} : { budget }))
 
 const update = (
-  previous: ReadonlyArray<CodeModeCatalog.Tool>,
-  current: ReadonlyArray<CodeModeCatalog.Tool>,
+  previous: CodeModeCatalog.Inventory["tools"],
+  current: CodeModeCatalog.Inventory["tools"],
   budget?: number,
 ) =>
   CodeModeInstructions.update(
@@ -103,10 +104,10 @@ describe("CodeModeCatalog.summarize", () => {
     const listingCost = Math.round(`  - ${tool.signature} // One`.length / 4)
     const namespaceCost = Math.round(CodeModeCatalog.namespaceLine({ name: "alpha", count: 1, entries: [] }).length / 4)
     const description = "A namespace description that stays visible beyond the available tool budget"
-    const namespaces = new Map([["alpha", { name: "alpha", description }]])
+    const namespace = { type: "namespace" as const, name: "alpha", description, tools: [tool] }
 
     expect(CodeModeCatalog.summarize({ tools: [tool] }, { budget: namespaceCost + listingCost }).shown).toBe(1)
-    const catalog = CodeModeCatalog.summarize({ tools: [tool], namespaces }, { budget: namespaceCost + listingCost })
+    const catalog = CodeModeCatalog.summarize({ tools: [namespace] }, { budget: namespaceCost + listingCost })
     expect(catalog.shown).toBe(0)
     expect(catalog.namespaces[0]?.description).toBe(description)
     expect(CodeModeInstructions.render(catalog)).toContain(`- alpha (1 tool, none shown) // ${description}`)
@@ -209,12 +210,10 @@ describe("CodeModeInstructions.update", () => {
 
   test("restates namespace descriptions when they change", () => {
     const previous = CodeModeCatalog.summarize({
-      tools: [echo],
-      namespaces: new Map([["notes", { name: "notes", description: "Old description" }]]),
+      tools: [{ type: "namespace", name: "notes", description: "Old description", tools: [echo] }],
     })
     const current = CodeModeCatalog.summarize({
-      tools: [echo],
-      namespaces: new Map([["notes", { name: "notes", description: "New description" }]]),
+      tools: [{ type: "namespace", name: "notes", description: "New description", tools: [echo] }],
     })
     const text = CodeModeInstructions.update(previous, current)
     expect(text).toContain("This catalog supersedes the previous Code Mode tool catalog.")

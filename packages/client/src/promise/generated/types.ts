@@ -18,7 +18,7 @@ export type PluginSource =
 
 export type PluginFeatures = { server?: true; tui?: true; rpc?: true }
 
-export type PluginState = { status: "active" } | { status: "failed"; error: string }
+export type PluginState = { status: "active" } | { status: "failed"; error: string; ref?: string }
 
 export type SessionForkBoundary = { type: "before"; messageID: string } | { type: "through"; messageID: string }
 
@@ -214,6 +214,7 @@ export type GenerateTextResponse = { data: { text: string } }
 
 export type ProviderInfo = {
   id: string
+  canonical?: string
   integrationID?: string
   name: string
   activation: "auto" | "enabled" | "disabled"
@@ -1816,6 +1817,7 @@ export type ModelInfo = {
   id: string
   modelID: string
   providerID: string
+  canonical?: string
   family?: string
   name: string
   compatibility?: ModelCompatibility
@@ -1993,6 +1995,7 @@ export type ConfigEntry =
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {
           [x: string]: {
+            canonical?: string
             name?: string
             env?: Array<string>
             package?: string
@@ -2578,6 +2581,18 @@ export type PluginListInput = {
 }
 
 export type PluginListOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: Array<PluginInfo>
+}
+
+export type PluginCheckInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly target?: { readonly target?: string | undefined }["target"]
+}
+
+export type PluginCheckOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<PluginInfo>
 }

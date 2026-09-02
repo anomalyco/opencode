@@ -53,7 +53,7 @@ const locations = makeGlobalNode({
               list: () => Effect.succeed([info]),
             }),
             Layer.succeed(PluginSupervisor.Service, {
-              flush: Effect.void,
+              awaitActivation: Effect.void,
             }),
             Layer.mock(Reference.Service, { refresh: () => Effect.void }),
           ),

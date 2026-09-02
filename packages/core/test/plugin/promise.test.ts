@@ -18,6 +18,7 @@ import { Tool } from "@opencode-ai/core/tool"
 import { Provider } from "@opencode-ai/core/provider"
 import { Project } from "@opencode-ai/core/project"
 import { Workspace } from "@opencode-ai/core/workspace"
+import { codeModeListings } from "../lib/tool"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { define } from "@opencode-ai/plugin/promise/plugin"
 import type { Info } from "@opencode-ai/plugin/promise/tool"
@@ -981,7 +982,7 @@ describe("fromPromise", () => {
 
       const snapshot = yield* registry.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-      expect(snapshot.codeModeCatalog?.tools.map((tool) => tool.path)).toEqual(["acme.hello"])
+      expect(codeModeListings(snapshot.codeModeCatalog!).map((tool) => tool.path)).toEqual(["acme.hello"])
       expect(original.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
       expect(
         yield* snapshot.execute({

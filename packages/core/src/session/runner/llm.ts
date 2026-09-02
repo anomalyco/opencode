@@ -57,7 +57,7 @@ const layer = Layer.effect(
         const control = pending.type === "compaction" || pending.type === "move"
         if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
-      yield* plugins.flush
+      yield* plugins.awaitActivation
       yield* settleStaleToolCalls(sessionID)
 
       const advanceToStep = Effect.fn("SessionRunner.advanceToStep")(() =>
@@ -185,7 +185,7 @@ const layer = Layer.effect(
           resolved: loaded.model,
           prepare: context.prepare,
         }
-        if (compaction.required(compactionInput)) {
+        if (compaction.required({ ...compactionInput, context: loaded })) {
           const compacted = yield* compaction.compact(compactionInput)
           if (compacted.status !== "completed") return yield* new StepFailedError({ error: compacted.error })
           assistantMessageID = SessionMessage.ID.create()

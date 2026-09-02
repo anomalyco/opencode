@@ -147,7 +147,7 @@ function createSync() {
     state.set(key, entry)
     entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
       .then(() => {
-        if (state.get(key) === entry) state.set(key, true)
+        if (state.get(key) === entry && !entry.invalidated) state.set(key, true)
       })
       .finally(() => {
         if (state.get(key) === entry) state.delete(key)
@@ -489,6 +489,33 @@ export function createData(config: CreateDataInput) {
         }
         const family = (draft[rootID] ??= [])
         if (!family.includes(sessionID)) family.push(sessionID)
+      }),
+    )
+  }
+
+  function evictSession(sessionID: string) {
+    if (sessionOutbox.has(sessionID)) return
+    sync.invalidate(`session.pending:${sessionID}`)
+    sync.invalidate(`session.message:${sessionID}`)
+    messageLoads.delete(sessionID)
+    // Keep unacknowledged submissions until their echo or rollback settles them.
+    const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
+    const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
+    messageIndex.delete(sessionID)
+    if (messages.length) messageIndex.set(sessionID, new Map(messages.map((item, index) => [item.id, index])))
+    setStore(
+      "session",
+      produce((draft) => {
+        delete draft.message[sessionID]
+        delete draft.messageCursor[sessionID]
+        delete draft.messageLoading[sessionID]
+        delete draft.pending[sessionID]
+        delete draft.input[sessionID]
+        if (messages.length) draft.message[sessionID] = messages
+        if (pending.length) {
+          draft.pending[sessionID] = pending
+          draft.input[sessionID] = pending.filter((item) => item.type !== "compaction").map((item) => item.id)
+        }
       }),
     )
   }
@@ -1260,9 +1287,11 @@ export function createData(config: CreateDataInput) {
         return creating.has(sessionID)
       },
       remember(info: SessionInfo) {
-        setStore("session", "info", info.id, reconcile(info))
-        sync.complete(`session:${info.id}`)
-        registerSession(info.id)
+        batch(() => {
+          setStore("session", "info", info.id, reconcile(info))
+          sync.complete(`session:${info.id}`)
+          registerSession(info.id)
+        })
       },
       setStatus(sessionID: string, status: DataSessionStatus) {
         setSessionActive(sessionID, status)
@@ -1272,6 +1301,13 @@ export function createData(config: CreateDataInput) {
       },
       family(sessionID: string) {
         return store.session.family[resolveRoot(sessionID)] ?? []
+      },
+      /** Clear heavy cached data for the root and all known descendants. */
+      evict(sessionID: string) {
+        const root = resolveRoot(sessionID)
+        batch(() => {
+          for (const id of new Set([root, sessionID, ...(store.session.family[root] ?? [])])) evictSession(id)
+        })
       },
       cost(sessionID: string) {
         const session = store.session.info[sessionID]
@@ -1484,17 +1520,19 @@ export function createData(config: CreateDataInput) {
               : [],
           ])
           const sessions = [info, ...children]
-          setStore(
-            "session",
-            "info",
-            produce((draft) => {
-              for (const session of sessions) draft[session.id] = session
-            }),
-          )
-          for (const session of sessions) {
-            sync.complete(`session:${session.id}`)
-            registerSession(session.id)
-          }
+          batch(() => {
+            setStore(
+              "session",
+              "info",
+              produce((draft) => {
+                for (const session of sessions) draft[session.id] = session
+              }),
+            )
+            for (const session of sessions) {
+              sync.complete(`session:${session.id}`)
+              registerSession(session.id)
+            }
+          })
         })
       },
       invalidate(sessionID: string) {

@@ -196,7 +196,7 @@ export const make = Effect.fn("Session.make")(function* () {
       // Resolve shell services here without pinning Session events to this Location after a move.
       const shell = yield* Effect.gen(function* () {
         const plugins = yield* PluginSupervisor.Service
-        yield* plugins.flush
+        yield* plugins.awaitActivation
         return yield* Shell.Service
       }).pipe(instances.provide(session))
       const started = yield* shell

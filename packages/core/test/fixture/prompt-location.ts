@@ -31,7 +31,7 @@ export const promptLocationNode = makeGlobalNode({
                 }),
                 Layer.succeed(FSUtil.Service, fs),
                 Layer.succeed(PluginSupervisor.Service, {
-                  flush: Effect.void,
+                  awaitActivation: Effect.void,
                 }),
                 Layer.mock(Reference.Service, { refresh: () => Effect.void }),
               ),

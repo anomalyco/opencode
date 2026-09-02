@@ -48,7 +48,7 @@ for (const selection of ["explicit", "default"] as const) {
             PluginSupervisor.Service,
             Effect.gen(function* () {
               const plugins = yield* PluginSupervisor.Service
-              return { flush: release.open.pipe(Effect.andThen(plugins.flush)) }
+              return { awaitActivation: release.open.pipe(Effect.andThen(plugins.awaitActivation)) }
             }),
           ).pipe(Layer.provide(layer)),
         )

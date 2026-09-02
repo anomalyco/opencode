@@ -13,7 +13,6 @@ import {
   RunAgentSelectBody,
   RunCommandMenuBody,
   RunModelSelectBody,
-  RunQueuedPromptSelectBody,
   RunSettingsBody,
   RunSkillSelectBody,
   RunSubagentSelectBody,
@@ -33,6 +32,7 @@ import type {
   FooterView,
   MiniSettingChange,
   MiniSettings,
+  QueuedPromptAction,
   RunAgent,
   RunCommand,
   RunInput,
@@ -160,7 +160,7 @@ async function renderFooter(
     onStatus?: (status: string) => void
     onMiniSettingChange?: (change: MiniSettingChange) => void
     queuedPrompts?: FooterQueuedPrompt[]
-    onQueuedPromptAction?: (action: "steer" | "cancel", inboxID: string) => Promise<void>
+    onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: string) => Promise<void>
   } = {},
 ) {
   const [view, setView] = createSignal<FooterView>(input.view ?? { type: "prompt" })
@@ -168,6 +168,7 @@ async function renderFooter(
     input.subagents ?? { tabs: [], details: {}, permissions: [], forms: [] },
   )
   const [state, setState] = footerState(input.state)
+  const [queuedPrompts, setQueuedPrompts] = createSignal(input.queuedPrompts ?? [])
   const config = { ...(input.tuiConfig ?? tuiConfig), animations: input.tuiConfig?.animations ?? false }
   const [miniSettings, setMiniSettings] = createSignal<MiniSettings>(input.miniSettings ?? resolveMiniSettings())
   function Harness() {
@@ -188,7 +189,7 @@ async function renderFooter(
           state={state}
           view={view}
           subagent={subagents}
-          queuedPrompts={() => input.queuedPrompts ?? []}
+          queuedPrompts={queuedPrompts}
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           tuiConfig={config}
           mono={input.mono ?? false}
@@ -231,6 +232,7 @@ async function renderFooter(
     setView,
     setState,
     setMiniSettings,
+    setQueuedPrompts,
     cleanup() {
       app.renderer.currentFocusedRenderable?.blur()
       app.renderer.currentFocusedEditor?.blur()
@@ -642,8 +644,7 @@ function footerStatusline(root: BoxRenderable | RootRenderable) {
 }
 
 function panelMenu(root: BoxRenderable | RootRenderable) {
-  const panel = child(child(root, 0), 0)
-  const content = child(panel, 0)
+  const content = boxPath(root, "InputRenderable")!.at(-2)!
   return child(content.getChildren().at(-1) as BoxRenderable, 0)
 }
 
@@ -1307,52 +1308,58 @@ test("direct subagent panel closes when moving up from the first item", async ()
   }
 })
 
-test("direct queued panel steers and deletes selected prompts", async () => {
-  const [prompts] = createSignal([
-    {
-      messageID: "m-1",
-      prompt: { text: "fix the auth test", parts: [] },
-      delivery: "queue" as const,
+test.each(["queue", "steer"] as const)("direct footer toggles and deletes pending %s prompts", async (delivery) => {
+  const actions: string[] = []
+  const app = await renderFooter({
+    height: RUN_SUBAGENT_PANEL_ROWS,
+    state: { phase: "running" },
+    queuedPrompts: [{ messageID: "m-1", prompt: { text: "follow up", parts: [] }, delivery }],
+    onQueuedPromptAction: async (action, inboxID) => {
+      actions.push(`${action}:${inboxID}`)
+      app.setQueuedPrompts((prompts) =>
+        action === "cancel" ? [] : prompts.map((prompt) => ({ ...prompt, delivery: action })),
+      )
     },
-  ])
-  const steered: string[] = []
-  const deleted: string[] = []
-
-  const app = await testRender(
-    () => (
-      <Keymap.Provider config={tuiConfig}>
-        <box width={100} height={RUN_SUBAGENT_PANEL_ROWS}>
-          <RunQueuedPromptSelectBody
-            theme={() => RUN_THEME_FALLBACK.footer}
-            prompts={prompts}
-            onClose={() => {}}
-            onSteer={(prompt) => steered.push(prompt.messageID)}
-            onDelete={(prompt) => deleted.push(prompt.messageID)}
-          />
-        </box>
-      </Keymap.Provider>
-    ),
-    { width: 100, height: RUN_SUBAGENT_PANEL_ROWS },
-  )
+  })
 
   try {
     await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("ctrl+x q 1 pending")
+    app.mockInput.pressKey("ARROW_DOWN")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("Pending prompts")
+
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
     const frame = app.captureCharFrame()
     const list = panelMenu(app.renderer.root)
-
-    expect(frame).toContain("Queued prompts")
-    expect(frame).toContain("fix the auth test")
-    expect(frame).toContain("queued")
-    expect(frame).toContain("enter steer · ctrl+d delete")
+    expect(frame).toContain("Pending prompts")
+    expect(frame).toContain("follow up")
+    expect(frame).toContain(delivery === "queue" ? "queued" : "steering")
+    expect(frame).toContain(`enter ${delivery === "queue" ? "steer" : "queue"} · ctrl+d delete`)
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expectPaletteList(list, 0)
     app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(actions).toEqual([`${delivery === "queue" ? "steer" : "queue"}:m-1`])
+    expect(app.captureCharFrame()).toContain("1 pending")
+
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain(delivery === "queue" ? "steering" : "queued")
+    expect(app.captureCharFrame()).toContain(delivery === "queue" ? "enter queue" : "enter steer")
     app.mockInput.pressKey("d", { ctrl: true })
-    expect(steered).toEqual(["m-1"])
-    expect(deleted).toEqual(["m-1"])
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(actions.at(-1)).toBe("cancel:m-1")
+    expect(app.captureCharFrame()).not.toContain("Pending prompts")
+    expect(app.captureCharFrame()).not.toContain("1 pending")
   } finally {
-    app.renderer.destroy()
+    app.cleanup()
   }
 })
 
@@ -1360,6 +1367,7 @@ test("direct footer steers the oldest queued prompt from an empty composer", asy
   const steered: string[] = []
   const app = await renderFooter({
     queuedPrompts: [
+      { messageID: "m-steering", prompt: { text: "already steering", parts: [] }, delivery: "steer" },
       { messageID: "m-1", prompt: { text: "first", parts: [] }, delivery: "queue" },
       { messageID: "m-2", prompt: { text: "second", parts: [] }, delivery: "queue" },
     ],
@@ -1377,6 +1385,38 @@ test("direct footer steers the oldest queued prompt from an empty composer", asy
     app.mockInput.pressEnter()
     await Bun.sleep(0)
     expect(steered).toEqual(["m-1"])
+    app.setQueuedPrompts((prompts) => prompts.filter((prompt) => prompt.delivery === "steer"))
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    expect(steered).toEqual(["m-1"])
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer preserves steer and queue submission shortcuts while busy", async () => {
+  const submitted: RunPrompt[] = []
+  const app = await renderFooter({
+    state: { phase: "running" },
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+  })
+
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("steer now")
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    await app.mockInput.typeText("queue later")
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    expect(submitted).toEqual([
+      { text: "steer now", parts: [], delivery: "steer" },
+      { text: "queue later", parts: [], delivery: "queue" },
+    ])
   } finally {
     app.cleanup()
   }
@@ -1795,7 +1835,7 @@ test.skip("direct footer clears the synthetic skills draft when the panel closes
   }
 })
 
-test("direct footer shows authoritative queued work while running", async () => {
+test("direct footer counts queued and steering work while running", async () => {
   const app = await renderFooter({
     width: 160,
     state: { phase: "running" },
@@ -1806,7 +1846,10 @@ test("direct footer shows authoritative queued work while running", async () => 
       permissions: [],
       forms: [],
     },
-    queuedPrompts: [{ messageID: "m-queued", prompt: { text: "follow up", parts: [] }, delivery: "queue" }],
+    queuedPrompts: [
+      { messageID: "m-queued", prompt: { text: "follow up", parts: [] }, delivery: "queue" },
+      { messageID: "m-steering", prompt: { text: "steer now", parts: [] }, delivery: "steer" },
+    ],
   })
 
   try {
@@ -1814,7 +1857,7 @@ test("direct footer shows authoritative queued work while running", async () => 
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
     const statusline = footerStatusline(app.renderer.root)
-    expect(frame).toContain("esc stop · ctrl+x q 1 queued · ↓ 1 subagent · ctrl+b background · Build")
+    expect(frame).toContain("esc stop · ctrl+x q 2 pending · ↓ 1 subagent · ctrl+b background · Build")
     expect(frame).toMatch(/opencode · ctrl\+p menu *$/m)
     expect(frame).not.toContain("1 agent")
     expect(statusline.backgroundColor.toInts()).toEqual(transparent)
@@ -2061,7 +2104,7 @@ test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)
     expect(frame).toContain(
       queued === "none"
         ? "ctrl+i interrupt · ctrl+j 1 subagent · Build · gpt-5 · ctrl+y menu"
-        : "ctrl+i interrupt · ctrl+g 1 queued · ctrl+j 1 subagent · Build · gpt-5 · ctrl+y menu",
+        : "ctrl+i interrupt · ctrl+g 1 pending · ctrl+j 1 subagent · Build · gpt-5 · ctrl+y menu",
     )
     for (const hidden of ["ctrl+b", "ctrl+x", "ctrl+p", "esc", "↓"]) expect(frame).not.toContain(hidden)
   } finally {

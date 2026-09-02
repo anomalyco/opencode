@@ -1,6 +1,6 @@
 export * as SessionCompaction from "./compaction.js"
 
-import { LLMClient, LLMEvent, Message } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, Message, type ContentPart } from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/schema/agent"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
@@ -10,18 +10,21 @@ import { llmClient } from "../effect/app-node-platform.js"
 import { SessionEvent } from "./event.js"
 import type { SessionContext } from "./context.js"
 import type { SessionMessage } from "./message.js"
-import type { SessionModelRequest } from "./model-request.js"
+import { SessionModelRequest } from "./model-request.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
 import { SessionUsage } from "./usage.js"
 import { State } from "../state.js"
+import { toLLMMessages } from "./runner/to-llm-message.js"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 15_000
 const OUTPUT_TOKEN_MAX = 32_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
+const IMAGE_TOKEN_ESTIMATE = 1_500
+const PDF_TOKEN_ESTIMATE = 2_000
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -71,7 +74,9 @@ export type AutoInput = {
   readonly prepare: SessionModelRequest.Interface["prepare"]
 }
 
-type RequiredInput = Pick<AutoInput, "messages" | "resolved">
+type RequiredInput = Pick<AutoInput, "messages" | "resolved"> & {
+  readonly context: SessionContext.Loaded
+}
 
 export type ManualInput = {
   readonly session: SessionSchema.Info
@@ -106,6 +111,67 @@ export interface Interface extends State.Transformable<Draft> {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
+
+export const estimateTokens = (input: RequiredInput) => {
+  const index = input.messages.findLastIndex(
+    (message) =>
+      message.type === "assistant" &&
+      !message.error &&
+      message.tokens !== undefined &&
+      message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
+  )
+  const last = input.messages[index]
+  // Keep the anchor's local tool results: they are not covered by its provider usage.
+  const added = SessionModelRequest.unsupportedParts(
+    toLLMMessages(input.messages.slice(Math.max(0, index)), input.resolved.ref),
+    input.resolved.capabilities,
+  )
+    .filter((message) => message.role !== "assistant" || message.id !== last?.id)
+    .reduce((sum, message) => sum + message.content.reduce((sum, part) => sum + estimatePart(part), 0), 0)
+  if (last?.type === "assistant" && last.tokens)
+    return (
+      added +
+      last.tokens.input +
+      last.tokens.cache.read +
+      last.tokens.cache.write +
+      last.tokens.output +
+      last.tokens.reasoning
+    )
+  const transcript = SessionModelRequest.baseTranscript({
+    agent: input.context.agent.info,
+    model: input.resolved,
+    tools: input.context.tools,
+    initial: input.context.initial,
+    messages: [],
+  })
+  return (
+    added +
+    transcript.system.reduce((sum, part) => sum + Token.estimate(part.text), 0) +
+    input.context.tools.definitions.reduce(
+      (sum, tool) => sum + Token.estimate(tool.name + tool.description + JSON.stringify(tool.inputSchema)),
+      0,
+    )
+  )
+}
+
+const estimateMedia = (mime: string) => {
+  const type = mime.toLowerCase()
+  return type.startsWith("image/") ? IMAGE_TOKEN_ESTIMATE : type === "application/pdf" ? PDF_TOKEN_ESTIMATE : 0
+}
+
+const estimatePart = (part: ContentPart): number => {
+  if (part.type === "text" || part.type === "reasoning") return Token.estimate(part.text)
+  if (part.type === "media") return estimateMedia(part.mediaType)
+  if (part.type === "tool-call") return Token.estimate(part.name + (JSON.stringify(part.input) ?? ""))
+  if (part.result.type === "content")
+    return part.result.value.reduce(
+      (sum, content) => sum + (content.type === "text" ? Token.estimate(content.text) : estimateMedia(content.mime)),
+      0,
+    )
+  return Token.estimate(
+    typeof part.result.value === "string" ? part.result.value : (JSON.stringify(part.result.value) ?? ""),
+  )
+}
 
 export const truncateToolOutput = (value: string) => {
   if (value.length <= TOOL_OUTPUT_MAX_CHARS) return value
@@ -364,27 +430,18 @@ export const layer = Layer.effect(
     const required = (input: RequiredInput) => {
       const config = state.get()
       if (!config.auto) return false
+      // Run the completed checkpoint before considering another automatic compaction.
+      const last = input.messages.at(-1)
+      if (last?.type === "compaction" && last.status === "completed") return false
       const limit = input.resolved.limit
       const context = limit.context
       if (context <= 0) return false
-      const last = input.messages.findLast(
-        (message): message is SessionMessage.Assistant & { tokens: NonNullable<SessionMessage.Assistant["tokens"]> } =>
-          message.type === "assistant" && message.tokens !== undefined,
-      )
-      if (!last) return false
       const output = Math.min(limit.output, OUTPUT_TOKEN_MAX)
       const promptCeiling = Math.min(
         limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,
         context - Math.max(output, config.buffer),
       )
-      const used =
-        last.tokens.input +
-        last.tokens.output +
-        last.tokens.reasoning +
-        last.tokens.cache.read +
-        last.tokens.cache.write
-      if (used <= 0) return false
-      return used >= promptCeiling
+      return estimateTokens(input) >= promptCeiling
     }
     const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
       const content = planContent(input.messages, state.get().tokens)

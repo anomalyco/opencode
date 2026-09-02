@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, SystemPart, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -150,7 +150,7 @@ test("compaction points an existing summary to the following history", () => {
   expect(prompt).not.toContain("conversation history above")
 })
 
-it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
+it.effect("auto compaction estimates current content against the buffered prompt ceiling", () =>
   Effect.gen(function* () {
     const compaction = yield* SessionCompaction.Service
     const session = Session.Info.make({
@@ -161,25 +161,45 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
       time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
       location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
     })
-    const input = (tokens: number, limit: { context: number; input?: number; output: number }) => ({
-      session,
-      resolved: SessionRunnerModel.resolved(model, {
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+    const input = (tokens: number, limit: { context: number; input?: number; output: number }) => {
+      const resolved = SessionRunnerModel.resolved(model, {
+        capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
         cost: [],
         limit,
-      }),
-      messages: [
+      })
+      const messages = [
         Schema.decodeUnknownSync(SessionMessage.Assistant)({
           id: SessionMessage.ID.make("msg_assistant"),
           type: "assistant",
           agent: Agent.defaultID,
           model: { id: "test-model", providerID: "test-provider" },
-          content: [],
+          content: [{ type: "text", text: "Done" }],
           tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, completed: 0 },
         }),
-      ],
-    })
+      ]
+      return {
+        session,
+        resolved,
+        messages,
+        context: {
+          session,
+          model: resolved,
+          messages,
+          agent: {
+            id: Agent.defaultID,
+            info: { ...Agent.Info.default(Agent.defaultID), system: "You are a helpful assistant." },
+          },
+          initial: "Project instructions.",
+          tools: {
+            definitions: [
+              ToolDefinition.make({ name: "read", description: "Read files", inputSchema: { type: "object" } }),
+            ],
+            execute: () => Effect.die("unused"),
+          },
+        },
+      }
+    }
 
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
     expect(compaction.required(input(251_999, inputLimited))).toBe(false)
@@ -192,6 +212,69 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
     const outputLimited = { context: 100_000, output: 30_000 }
     expect(compaction.required(input(69_999, outputLimited))).toBe(false)
     expect(compaction.required(input(70_000, outputLimited))).toBe(true)
+
+    const assistant = input(79_000, contextLimited).messages[0]
+    const tool = SessionMessage.AssistantTool.make({
+      type: "tool",
+      id: "call_read",
+      name: "read",
+      state: { status: "completed", input: {}, content: [{ type: "text", text: "x".repeat(4_000) }] },
+      time: { created: DateTime.makeUnsafe(0) },
+    })
+    const grown = { ...input(79_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
+    expect(SessionCompaction.estimateTokens(grown)).toBe(80_000)
+    expect(compaction.required(grown)).toBe(true)
+
+    const interrupted = { ...assistant, id: SessionMessage.ID.create(), tokens: undefined }
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [...grown.messages, interrupted] })).toBe(80_001)
+    // Without provider usage, include 20 tokens for the system prompt, instructions, and tool definition.
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [interrupted] })).toBe(21)
+    expect(
+      SessionCompaction.estimateTokens({
+        ...grown,
+        messages: [{ ...interrupted, tokens: input(0, contextLimited).messages[0].tokens }],
+      }),
+    ).toBe(21)
+
+    const media = [
+      { type: "file", mime: "image/png", uri: `data:image/png;base64,${"a".repeat(100_000)}` },
+      { type: "file", mime: "application/pdf", uri: `data:application/pdf;base64,${"a".repeat(100_000)}` },
+    ] as const
+    const messages = [
+      { ...assistant, content: [{ ...tool, state: { status: "completed" as const, input: {}, content: media } }] },
+    ]
+    expect(SessionCompaction.estimateTokens({ ...grown, messages })).toBe(82_500)
+    const user = Schema.decodeUnknownSync(SessionMessage.User)({
+      id: SessionMessage.ID.create(),
+      type: "user",
+      text: "",
+      files: media.map((file) => ({ mime: file.mime, data: "a".repeat(100_000), source: { type: "inline" } })),
+      time: { created: 0 },
+    })
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [...messages, user] })).toBe(86_000)
+    for (const [modalities, tokens, fallback] of [
+      [["text", "image"], 82_040, 1_520],
+      [["text", "pdf"], 83_042, 2_021],
+      [["text"], 79_082, 41],
+    ] as const) {
+      const selected = {
+        ...grown,
+        resolved: { ...grown.resolved, capabilities: { ...grown.resolved.capabilities, input: modalities } },
+      }
+      expect(SessionCompaction.estimateTokens({ ...selected, messages: [...messages, user] })).toBe(tokens)
+      expect(SessionCompaction.estimateTokens({ ...selected, messages: [user] })).toBe(fallback + 20)
+    }
+
+    const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
+      id: SessionMessage.ID.create(),
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
+      summary: "x".repeat(400_000),
+      recent: "",
+      time: { created: 0, completed: 0 },
+    })
+    expect(compaction.required({ ...grown, messages: [checkpoint] })).toBe(false)
   }),
 )
 

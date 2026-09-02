@@ -391,11 +391,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     onQueuedPromptAction: async (action, inboxID) => {
       if (!state.sessionID) return
       log?.write(`send.pending.${action}`, { sessionID: state.sessionID, inboxID })
-      if (action === "steer") {
-        await state.sdk.session.inbox.steer({ sessionID: state.sessionID, inboxID })
-        return
-      }
-      await state.sdk.session.inbox.cancel({ sessionID: state.sessionID, inboxID })
+      await state.sdk.session.inbox[action]({ sessionID: state.sessionID, inboxID })
     },
     onSubagentInterrupt: (sessionID) => {
       log?.write("send.subagent.interrupt", { sessionID })
@@ -889,10 +885,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       footer,
       initialInput: input.initialInput,
       trace: log,
-      onSend: (prompt, delivery) => {
+      onSend: (prompt, emittedUser) => {
         state.shown = true
         state.history.push({ ...prompt, delivery: undefined })
-        if (prompt.mode !== "shell" && delivery === "steer") {
+        // Pending inputs can still be cancelled; only replay rows already printed.
+        if (emittedUser) {
           rememberLocal({
             kind: "user",
             text: prompt.text,

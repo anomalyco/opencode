@@ -374,6 +374,7 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
   }))
   const actions = createMemo(() => {
     const sessionID = props.state.sessionID
+    const title = props.state.title
     return [
       ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
       ...(sessionID
@@ -383,7 +384,7 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
               : []),
             {
               title: "Rename",
-              run: () => DialogSessionRename.show(dialog, sessionID, props.state.title),
+              run: () => DialogSessionRename.show(dialog, sessionID, title),
             },
             { title: "Close", run: () => props.tabs.close(sessionID) },
           ]

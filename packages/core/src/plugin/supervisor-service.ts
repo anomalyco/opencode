@@ -8,10 +8,12 @@ import { Context, Effect } from "effect"
  */
 export interface Interface {
   /**
-   * Wait for the plugin generation to settle. Use this rarely: blocking reads,
-   * UI startup, or other unrelated work on plugin boot should be avoided.
+   * Wait for configured plugin activation to settle, including missing-package installs.
+   * Completion does not imply every plugin succeeded.
+   * Interrupting this wait does not cancel activation. Use rarely: avoid blocking reads,
+   * UI startup, or unrelated work on plugin boot.
    */
-  readonly flush: Effect.Effect<void>
+  readonly awaitActivation: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PluginSupervisor") {}

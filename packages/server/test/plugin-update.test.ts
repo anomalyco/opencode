@@ -37,7 +37,7 @@ it.live("updates package plugins in the requested Location", () =>
               Npm.Service.of({
                 add: () => Effect.sync(entry),
                 resolve: () => Effect.sync(entry),
-                check: () => Effect.succeed(false),
+                check: () => Effect.sync(() => version === "1.0.0"),
                 update: () => {
                   if (fail) return Effect.fail(new Npm.InstallFailedError({ dir: plugin }))
                   return Effect.sync(() => (version = "2.0.0")).pipe(Effect.map(entry))
@@ -59,6 +59,23 @@ it.live("updates package plugins in the requested Location", () =>
           }),
         ),
       )
+
+    const checked = yield* Effect.promise(async () => {
+      const response = await handler(
+        new Request(`http://opencode.local/api/plugin/check?location[directory]=${encodeURIComponent(project)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        }),
+      )
+      return response.json() as Promise<{
+        data: Array<{ id?: string; source: { target?: string; outdated?: true } }>
+      }>
+    })
+    expect(checked.data.find((item) => item.id === "fixture.plugin")?.source).toMatchObject({
+      target: "fixture-plugin",
+      outdated: true,
+    })
 
     expect((yield* update("fixture-plugin")).status).toBe(204)
     const listedVersion = yield* Effect.promise(async () => {

@@ -1,19 +1,25 @@
 export * as CodeModeCatalog from "./catalog.js"
 
-import type { Namespace } from "@opencode-ai/schema/tool"
 import { Schema } from "effect"
 
 export const Tool = Schema.Struct({
-  path: Schema.String,
+  type: Schema.Literal("tool"),
+  name: Schema.String,
   description: Schema.String,
   signature: Schema.String,
   pinned: Schema.optionalKey(Schema.Boolean),
 })
 export type Tool = typeof Tool.Type
 
+export type Namespace = {
+  readonly type: "namespace"
+  readonly name: string
+  readonly description?: string
+  readonly tools: ReadonlyArray<Tool | Namespace>
+}
+
 export type Inventory = {
-  readonly tools: ReadonlyArray<Tool>
-  readonly namespaces?: ReadonlyMap<string, Namespace>
+  readonly tools: ReadonlyArray<Tool | Namespace>
 }
 
 const Listing = Schema.Struct({
@@ -47,14 +53,15 @@ const INLINE_BUDGET = 2_000
 // considering shorter listings first until the inline budget is exhausted.
 export function summarize(inventory: Inventory, options: Options = {}): Summary {
   const budget = options.budget ?? INLINE_BUDGET
-  const namespaces = [...Map.groupBy(inventory.tools, (tool) => tool.path.split(".", 1)[0] ?? tool.path)]
+  const flattened = flatten(inventory.tools)
+  const namespaces = [...Map.groupBy(flattened.tools, (tool) => tool.path.split(".", 1)[0] ?? tool.path)]
     .sort(([left], [right]) => {
       if (left < right) return -1
       if (left > right) return 1
       return 0
     })
     .map(([name, namespaceEntries]) => {
-      const description = inventory.namespaces?.get(name)?.description
+      const description = flattened.namespaces.get(name)?.description
       const listings = namespaceEntries
         .map((entry) => {
           const firstLine = entry.description.split("\n", 1)[0]?.trim() ?? ""
@@ -126,10 +133,33 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
     entries: namespace.listings.filter((listing) => namespace.selectedListings.has(listing)),
   }))
   return {
-    total: inventory.tools.length,
+    total: flattened.tools.length,
     shown: namespaceSummaries.reduce((total, namespace) => total + namespace.entries.length, 0),
     namespaces: namespaceSummaries,
   }
+}
+
+function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<string> = []) {
+  const tools: Array<Omit<Tool, "name"> & { readonly path: string }> = []
+  const namespaces = new Map<string, Namespace>()
+  for (const entry of entries) {
+    if (entry.type === "tool") {
+      tools.push({
+        type: "tool",
+        path: [...path, entry.name].join("."),
+        description: entry.description,
+        signature: entry.signature,
+        ...(entry.pinned === undefined ? {} : { pinned: entry.pinned }),
+      })
+      continue
+    }
+    const next = [...path, entry.name]
+    namespaces.set(next.join("."), entry)
+    const nested = flatten(entry.tools, next)
+    tools.push(...nested.tools)
+    for (const [name, namespace] of nested.namespaces) namespaces.set(name, namespace)
+  }
+  return { tools, namespaces }
 }
 
 export function namespaceLine(namespace: typeof NamespaceSummary.Type) {

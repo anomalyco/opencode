@@ -123,6 +123,175 @@ describe("pretty signature rendering", () => {
     expect(pretty).toBe(["{", "  size?: number,", "}"].join("\n"))
   })
 
+  test("labels immediate item and dictionary value metadata above the field", () => {
+    const schema = {
+      properties: {
+        recipients: {
+          type: "array",
+          description: "People to notify",
+          minItems: 1,
+          items: { type: "string", description: "Email address", format: "email" },
+        },
+        scores: { type: "object", additionalProperties: { type: "number", minimum: 0 } },
+        names: { type: "array", items: { type: "string", description: "Display name" } },
+        plain: { type: "object", additionalProperties: { type: "string" } },
+      },
+    }
+    expect(jsonSchemaToTypeScript(schema, true)).toBe(
+      [
+        "{",
+        "  /**",
+        "   * People to notify. @minItems 1",
+        "   * Each item: Email address. @format email",
+        "   */",
+        "  recipients?: Array<string>,",
+        "  /** Each value: @minimum 0 */",
+        "  scores?: {",
+        "    [key: string]: number,",
+        "  },",
+        "  /** Each item: Display name */",
+        "  names?: Array<string>,",
+        "  plain?: {",
+        "    [key: string]: string,",
+        "  },",
+        "}",
+      ].join("\n"),
+    )
+    expect(jsonSchemaToTypeScript(schema)).toBe(
+      "{ recipients?: Array<string>; scores?: { [key: string]: number }; names?: Array<string>; plain?: { [key: string]: string } }",
+    )
+  })
+
+  test("does not apply additional property metadata to named properties", () => {
+    expect(
+      jsonSchemaToTypeScript(
+        {
+          properties: {
+            scores: {
+              type: "object",
+              properties: { title: { type: "string", description: "Score title" } },
+              additionalProperties: { type: "number", minimum: 0 },
+            },
+          },
+        },
+        true,
+      ),
+    ).toBe(
+      [
+        "{",
+        "  /** Each additional value: @minimum 0 */",
+        "  scores?: {",
+        "    /** Score title */",
+        "    title?: string,",
+        "    [key: string]: number,",
+        "  },",
+        "}",
+      ].join("\n"),
+    )
+  })
+
+  test("labels array and dictionary contents in type-array unions", () => {
+    expect(
+      jsonSchemaToTypeScript(
+        {
+          properties: {
+            recipients: { type: ["array", "null"], items: { type: "string", format: "email" } },
+            scores: { type: ["object", "null"], additionalProperties: { type: "number", minimum: 0 } },
+            either: {
+              type: ["array", "object"],
+              items: { type: "string", minLength: 1 },
+              additionalProperties: { type: "number", minimum: 0 },
+            },
+          },
+        },
+        true,
+      ),
+    ).toBe(
+      [
+        "{",
+        "  /** Each item: @format email */",
+        "  recipients?: Array<string> | null,",
+        "  /** Each value: @minimum 0 */",
+        "  scores?: {",
+        "      [key: string]: number,",
+        "    } | null,",
+        "  /**",
+        "   * Each item: @minLength 1",
+        "   * Each value: @minimum 0",
+        "   */",
+        "  either?: Array<string> | {",
+        "      [key: string]: number,",
+        "    },",
+        "}",
+      ].join("\n"),
+    )
+  })
+
+  test("keeps multiline item metadata indented under its label and escapes terminators", () => {
+    expect(
+      jsonSchemaToTypeScript(
+        {
+          properties: {
+            values: {
+              type: "array",
+              minItems: 1,
+              items: { type: "string", description: "\nFirst */ line\n\nSecond line\n", pattern: "^\\d+\n*/$" },
+            },
+          },
+        },
+        true,
+      ),
+    ).toBe(
+      [
+        "{",
+        "  /**",
+        "   * @minItems 1",
+        "   * Each item: First * / line",
+        "   *",
+        "   *   Second line",
+        "   *   @pattern ^\\d+",
+        "   *   * /$",
+        "   */",
+        "  values?: Array<string>,",
+        "}",
+      ].join("\n"),
+    )
+  })
+
+  test("does not flatten nested containers, reference targets, or branches into item metadata", () => {
+    expect(
+      jsonSchemaToTypeScript(
+        {
+          $defs: { Email: { type: "string", format: "email" } },
+          properties: {
+            matrix: { type: "array", items: { type: "array", minItems: 2, items: { type: "integer", minimum: 0 } } },
+            refs: { type: "array", items: { $ref: "#/$defs/Email", description: "Recipient" } },
+            choices: {
+              type: "array",
+              items: {
+                anyOf: [
+                  { type: "string", minLength: 1 },
+                  { type: "number", minimum: 0 },
+                ],
+              },
+            },
+          },
+        },
+        true,
+      ),
+    ).toBe(
+      [
+        "{",
+        "  /** Each item: @minItems 2 */",
+        "  matrix?: Array<Array<number>>,",
+        "  /** Each item: Recipient */",
+        "  refs?: Array<string>,",
+        "  choices?: Array<string | number>,",
+        "}",
+      ].join("\n"),
+    )
+  })
+
   test.each([
     [{ type: "number", minimum: 0 }, "@minimum 0", "number"],
     [{ type: "number", maximum: 0 }, "@maximum 0", "number"],
@@ -524,9 +693,10 @@ describe("JSDoc signatures in catalogs and search results", () => {
         properties: {
           count: { type: "integer", minimum: 0, maximum: 10 },
           name: { type: "string", minLength: 1, maxLength: 20, pattern: "^[a-z]+$" },
-          labels: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
+          labels: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 5 },
+          scores: { type: "object", additionalProperties: { type: "integer", minimum: 0 } },
         },
-        required: ["count", "name", "labels"],
+        required: ["count", "name", "labels", "scores"],
       },
     },
     {
@@ -534,7 +704,11 @@ describe("JSDoc signatures in catalogs and search results", () => {
       schema: Schema.Struct({
         count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(10)),
         name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20), Schema.isPattern(/^[a-z]+$/)),
-        labels: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(5)),
+        labels: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(
+          Schema.isMinLength(1),
+          Schema.isMaxLength(5),
+        ),
+        scores: Schema.Record(Schema.String, Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
       }),
     },
   ])("$source constraints survive input/output catalog and search signatures", async ({ schema }) => {
@@ -544,7 +718,7 @@ describe("JSDoc signatures in catalogs and search results", () => {
           description: "Constrained tool",
           input: schema,
           output: schema,
-          execute: () => Effect.succeed({ count: 1, name: "test", labels: ["test"] }),
+          execute: () => Effect.succeed({ count: 1, name: "test", labels: ["test"], scores: { test: 1 } }),
         }),
       },
     })
@@ -554,8 +728,15 @@ describe("JSDoc signatures in catalogs and search results", () => {
       "  count: number,",
       "  /** @minLength 1 @maxLength 20 @pattern ^[a-z]+$ */",
       "  name: string,",
-      "  /** @minItems 1 @maxItems 5 */",
+      "  /**",
+      "   * @minItems 1 @maxItems 5",
+      "   * Each item: @minLength 1",
+      "   */",
       "  labels: Array<string>,",
+      "  /** Each value: @integer @minimum 0 */",
+      "  scores: {",
+      "    [key: string]: number,",
+      "  },",
       "}",
     ].join("\n")
     const signature = `tools.constrained(input: ${type}): Promise<${type}>`

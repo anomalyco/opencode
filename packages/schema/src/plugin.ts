@@ -29,7 +29,7 @@ export type Features = typeof Features.Type
 
 export const State = Schema.Union([
   Schema.Struct({ status: Schema.Literal("active") }),
-  Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }),
+  Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String, ref: Schema.String.pipe(optional) }),
 ]).annotate({ identifier: "Plugin.State" })
 export type State = typeof State.Type
 

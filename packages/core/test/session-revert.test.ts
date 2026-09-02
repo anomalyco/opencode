@@ -67,7 +67,7 @@ describe("Session.revert files", () => {
 
         yield* Effect.gen(function* () {
           const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
+          yield* plugins.awaitActivation
           const snapshot = yield* Snapshot.Service
           const before = yield* snapshot.capture()
           if (!before) throw new Error("Initial snapshot missing")

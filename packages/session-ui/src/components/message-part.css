@@ -1547,3 +1547,9 @@
   background: var(--v2-background-bg-accent);
   color: var(--v2-text-text-contrast);
 }
+
+:root body [data-local-session] [data-component="user-message"] [data-slot="user-message-text"] {
+  background: var(--v2-state-bg-info);
+  color: var(--v2-text-text-accent);
+  border-radius: 8px;
+}

@@ -68,20 +68,13 @@ Azure supports either an API key or your existing Microsoft Entra ID session fro
      --output table
    ```
 
-3. In OpenCode, run `/connect`, select **Azure**, and choose **Microsoft Entra ID (Azure CLI)**. OpenCode lists the Azure
-   resources visible to your active CLI session, including their resource groups. Select one, or choose **Type your own
-   answer** to enter a resource name that is not listed. If resource listing is unavailable, OpenCode asks for the name
-   directly. If `AZURE_RESOURCE_NAME` is already set, OpenCode uses it without prompting.
+3. In OpenCode, run `/connect`, select **Azure**, and choose **Microsoft Entra ID (Azure CLI)**. Enter the Azure resource
+   name when prompted. If `AZURE_RESOURCE_NAME` is already set, OpenCode uses it without prompting.
 
 4. Select a deployed model with `/models`.
 
-OpenCode discovers successful model deployments from the active Azure subscription and refreshes access tokens through your
-Azure CLI session. Set `AZURE_RESOURCE_GROUP` when you already know the resource group and want to skip subscription-wide
-resource discovery.
-
-Listing deployments requires Azure management permissions, which are separate from inference permissions. If your identity
-cannot list deployments, the Azure model catalog remains available. Select a model whose name matches the deployment, or
-configure the deployment name explicitly:
+OpenCode does not query Azure management APIs or discover deployments. Select a model whose catalog name matches your
+deployment, or configure the deployment name explicitly:
 
 ```jsonc title="opencode.jsonc"
 {

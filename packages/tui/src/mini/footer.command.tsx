@@ -493,7 +493,7 @@ export function RunCommandMenuBody(props: {
             {
               action: "queued" as const,
               category: "Agent",
-              display: "View queued prompts",
+              display: "View pending prompts",
               footer: `${props.queued().length} pending`,
               keywords: props
                 .queued()
@@ -939,7 +939,7 @@ export function RunQueuedPromptSelectBody(props: {
   theme: Accessor<RunFooterTheme>
   prompts: Accessor<FooterQueuedPrompt[]>
   onClose: () => void
-  onSteer: (prompt: FooterQueuedPrompt) => void
+  onSelect: (prompt: FooterQueuedPrompt) => void
   onDelete: (prompt: FooterQueuedPrompt) => void
   onRows?: (rows: number) => void
   mono?: boolean
@@ -948,7 +948,7 @@ export function RunQueuedPromptSelectBody(props: {
     props.prompts().map((prompt) => ({
       category: "",
       display: prompt.prompt.text.replaceAll("\n", " "),
-      footer: "queued",
+      footer: prompt.delivery === "queue" ? "queued" : "steering",
       keywords: prompt.prompt.text,
       prompt,
     })),
@@ -957,7 +957,7 @@ export function RunQueuedPromptSelectBody(props: {
     entries,
     limit: SUBAGENT_LIST_ROWS,
     onClose: props.onClose,
-    onSelect: (item) => props.onSteer(item.prompt),
+    onSelect: (item) => props.onSelect(item.prompt),
     onRows: props.onRows,
   })
   const shortcuts = Keymap.useShortcuts()
@@ -967,7 +967,7 @@ export function RunQueuedPromptSelectBody(props: {
     commands: [
       {
         id: "queued_prompt.delete",
-        title: "Delete queued prompt",
+        title: "Delete pending prompt",
         group: "Prompt",
         run() {
           const item = controller.items()[controller.menu.selected()]
@@ -980,7 +980,7 @@ export function RunQueuedPromptSelectBody(props: {
 
   return (
     <PanelShell
-      title="Queued prompts"
+      title="Pending prompts"
       layout={controller.layout()}
       query={controller.query()}
       count={controller.items().length}
@@ -989,7 +989,12 @@ export function RunQueuedPromptSelectBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
-      hint={["enter steer", deleteShortcut() ? `${deleteShortcut()} delete` : undefined].filter(Boolean).join(" · ")}
+      hint={[
+        controller.items()[controller.menu.selected()]?.prompt.delivery === "steer" ? "enter queue" : "enter steer",
+        deleteShortcut() ? `${deleteShortcut()} delete` : undefined,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
       mono={props.mono}
     >
       <RunFooterMenu
@@ -1000,7 +1005,7 @@ export function RunQueuedPromptSelectBody(props: {
         rows={controller.menu.rows}
         limit={controller.menu.limit()}
         compact={controller.layout().compact}
-        empty="No queued prompts"
+        empty="No pending prompts"
         border={false}
         paddingLeft={panelPad(props.mono)}
         paddingRight={panelPad(props.mono)}

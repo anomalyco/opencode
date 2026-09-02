@@ -121,7 +121,7 @@ const compactModel = testModel("compact", { context: 4_000, output: 50 })
 const fullOutputModel = testModel("full-output", { context: 262_144, output: 262_144 })
 const unknownContextModel = testModel("unknown-context", { context: 0, output: 32_000 })
 const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
-const recoveryModel = testModel("recovery", { context: 20_000, output: 1_000 })
+const recoveryModel = testModel("recovery", { context: 200_000, output: 1_000 })
 
 test("calculates step cost using the matching context tier", () => {
   expect(
@@ -206,7 +206,7 @@ const makeRunnerState = () => {
     systemUnavailable: false,
     systemLoadHook: Effect.void,
     skillBaselines: new Map<Agent.ID, string>(),
-    pluginFlushHook: Effect.void,
+    pluginActivationHook: Effect.void,
     authorizations: new Array<Tool.Context>(),
     executions: new Array<string>(),
     closedTransports: new Array<Session.ID>(),
@@ -390,7 +390,7 @@ const layer = Layer.unwrap(
     const pluginSupervisor = Layer.succeed(
       PluginSupervisor.Service,
       PluginSupervisor.Service.of({
-        flush: Effect.suspend(() => state.pluginFlushHook),
+        awaitActivation: Effect.suspend(() => state.pluginActivationHook),
       }),
     )
     const promptCatalog = Layer.mock(Catalog.Service, {
@@ -1840,7 +1840,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("waits for initial plugin readiness before constructing the model request", function* (s) {
     const release = yield* Deferred.make<void>()
-    s.pluginFlushHook = Deferred.await(release)
+    s.pluginActivationHook = Deferred.await(release)
     yield* s.session.prompt({ sessionID, text: "Wait for plugins", resume: false })
 
     s.requests.length = 0
@@ -2540,17 +2540,16 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("recovers from provider context overflow despite an undersized configured context limit", function* (s) {
+  scenario("compacts before requesting an undersized configured context limit", function* (s) {
     yield* setupOverflowRecovery(s)
     s.currentModel = undersizedContextModel
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
       TestLLM.text("## Objective\n- Recover undersized limit", "text-summary-undersized-limit"),
       TestLLM.text("Recovered", "text-final-undersized-limit"),
     )
     yield* s.runPrompt("Continue")
 
-    expect(s.requests).toHaveLength(3)
+    expect(s.requests).toHaveLength(2)
     expect(yield* s.context).toMatchObject([
       { type: "compaction", summary: "## Objective\n- Recover undersized limit" },
       { type: "assistant", finish: "stop" },

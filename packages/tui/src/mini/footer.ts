@@ -758,7 +758,7 @@ export class RunFooter implements FooterApi {
     const height = Math.max(
       1,
       Math.min(
-        desired + (this.startup() ? 2 : 0),
+        desired + (this.startup() ? 1 : 0),
         this.renderer.terminalHeight - (type === "prompt" && route === "composer" ? 1 : 0),
       ),
     )

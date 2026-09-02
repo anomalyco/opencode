@@ -88,6 +88,13 @@ export type PluginListInput = {
 export type PluginListOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<Plugin.Info> }
 export type PluginListOperation<E = never> = (input?: PluginListInput) => Effect.Effect<PluginListOutput, E>
 
+export type PluginCheckInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly target?: string | undefined
+}
+export type PluginCheckOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<Plugin.Info> }
+export type PluginCheckOperation<E = never> = (input?: PluginCheckInput) => Effect.Effect<PluginCheckOutput, E>
+
 export type PluginUpdateInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly target: string
@@ -97,6 +104,7 @@ export type PluginUpdateOperation<E = never> = (input: PluginUpdateInput) => Eff
 
 export interface PluginApi<E = never> {
   readonly list: PluginListOperation<E>
+  readonly check: PluginCheckOperation<E>
   readonly update: PluginUpdateOperation<E>
 }
 

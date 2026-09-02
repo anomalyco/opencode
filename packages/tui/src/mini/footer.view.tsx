@@ -245,7 +245,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     if (current) details.push(variant ? `${current} ${variant}` : current)
     if (contextUsage()) details.push(contextUsage())
     if (cost()) details.push(cost())
-    if (queue().length > 0) details.push(`${queue().length} queued`)
+    if (queuedPrompts().length > 0) details.push(`${queuedPrompts().length} pending`)
     if (activeTabs().length > 0) details.push(`${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`)
     return details.join(props.mono ? " - " : " · ")
   })
@@ -323,7 +323,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   }
 
   const openQueuedMenu = () => {
-    if (queue().length === 0) return
+    if (queuedPrompts().length === 0) return
     openRoute({ type: "queued-menu" })
   }
 
@@ -341,7 +341,7 @@ export function RunFooterView(props: RunFooterViewProps) {
         (error) => error,
       )
       if (!error) return true
-      props.onStatus(`failed to ${action === "cancel" ? "delete" : action} queued prompt: ${errorMessage(error)}`)
+      props.onStatus(`failed to ${action === "cancel" ? "delete" : action} pending prompt: ${errorMessage(error)}`)
       return false
     })
     return result ?? false
@@ -463,8 +463,8 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     const items: Array<{ id: "queued" | "subagents" | "background"; key: string; label: string; expanded?: string }> =
       []
-    if (queue().length > 0 && queuedShortcut()) {
-      items.push({ id: "queued", key: queuedShortcut(), label: `${queue().length} queued` })
+    if (queuedPrompts().length > 0 && queuedShortcut()) {
+      items.push({ id: "queued", key: queuedShortcut(), label: `${queuedPrompts().length} pending` })
     }
     if (activeTabs().length > 0 && subagentShortcut()) {
       items.push({
@@ -590,11 +590,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   }))
 
   Keymap.createLayer(() => ({
-    enabled: active().type === "prompt" && route().type === "composer" && queue().length > 0,
+    enabled: active().type === "prompt" && route().type === "composer" && queuedPrompts().length > 0,
     commands: [
       {
         id: "session.queued_prompts",
-        title: "View queued prompts",
+        title: "View pending prompts",
         group: "Prompt",
         run: openQueuedMenu,
       },
@@ -651,7 +651,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
 
   createEffect(() => {
-    if (route().type !== "queued-menu" || queue().length > 0) return
+    if (route().type !== "queued-menu" || queuedPrompts().length > 0) return
     closePanel()
   })
 
@@ -694,9 +694,10 @@ export function RunFooterView(props: RunFooterViewProps) {
       gap={0}
       padding={0}
     >
+      {/* The renderer seeds the leading blank row that entrySplash includes in scrollback. */}
       <Show when={startup()}>
         {(layout) => (
-          <box id="mini-startup" height={2} flexShrink={0} paddingTop={1} flexDirection="row">
+          <box id="mini-startup" height={1} flexShrink={0} flexDirection="row">
             <Show when={layout().label.startsWith("\u25aa")}>
               <OneCellSpinner
                 animation={SEED_LAUNCH}
@@ -779,12 +780,13 @@ export function RunFooterView(props: RunFooterViewProps) {
                         <Match when={selectingQueued()}>
                           <RunQueuedPromptSelectBody
                             theme={theme}
-                            prompts={queue}
+                            prompts={queuedPrompts}
                             onClose={closePanel}
-                            onSteer={(item) => {
-                              void queuedPromptAction("steer", item.messageID).then((steered) => {
-                                if (steered) closePanel()
-                              })
+                            onSelect={async (item) => {
+                              if (
+                                await queuedPromptAction(item.delivery === "queue" ? "steer" : "queue", item.messageID)
+                              )
+                                closePanel()
                             }}
                             onDelete={(item) => {
                               void queuedPromptAction("cancel", item.messageID)
@@ -798,7 +800,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             theme={theme}
                             commands={props.commands}
                             subagents={tabs}
-                            queued={queue}
+                            queued={queuedPrompts}
                             variants={props.variants}
                             variantCycle={variantCycle()}
                             onClose={closePanel}

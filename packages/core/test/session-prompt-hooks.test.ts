@@ -60,7 +60,7 @@ const setup = Effect.gen(function* () {
   const services = locations.get(session.location)
   const hooks = yield* Effect.gen(function* () {
     const plugins = yield* PluginSupervisor.Service
-    yield* plugins.flush
+    yield* plugins.awaitActivation
     return yield* PluginHooks.Service
   }).pipe(Effect.provide(services))
   return { sessions, session, hooks, services }

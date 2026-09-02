@@ -13,6 +13,7 @@ import {
   type ToolContent,
 } from "@opencode-ai/client/promise"
 import { createSessionTransport } from "../../src/mini/stream-v2.transport"
+import { runPromptQueue } from "../../src/mini/runtime.queue"
 import { entryBody } from "../../src/mini/entry.body"
 import type { StreamCommit } from "../../src/mini/types"
 import { createFooterApiFixture } from "./fixture/footer-api"
@@ -228,7 +229,84 @@ afterEach(() => {
 })
 
 describe("V2 mini transport", () => {
-  test.each(["before", "after"])("renders materialized prompt images when delivery is %s the ack", async (order) => {
+  test.each(["steer", "queue"] as const)("cancels the first local %s after attaching while busy", async (delivery) => {
+    const events = feed()
+    events.push(connected())
+    const inbox: SessionInboxInfo[] = []
+    const idle = defer()
+    const admitted = defer()
+    const client = sdk({
+      streams: [events],
+      active: () => ({ ses_1: { type: "running" } }),
+      messages: { ses_1: [] },
+      pending: { ses_1: inbox },
+      wait: () => idle.promise,
+    })
+    spyOn(client.session, "prompt").mockImplementation((request) => {
+      const item = { ...promptAdmission(request), payload: { text: request.text } }
+      inbox.push(item)
+      return ok(item) as never
+    })
+    const ui = footer()
+    const live: StreamCommit[] = []
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      replay: true,
+      footer: ui.api,
+      onCommit: (commit) => live.push(commit),
+    })
+    const queue = runPromptQueue({
+      footer: ui.api,
+      onSend: (_prompt, emittedUser) => {
+        if (emittedUser) live.push(ui.commits.at(-1)!)
+      },
+      run: (prompt, signal, onAdmitted) =>
+        transport.runPromptTurn(
+          { agent: undefined, model: undefined, variant: undefined, prompt, files: [], includeFiles: false, signal },
+          () => {
+            onAdmitted()
+            admitted.resolve()
+          },
+        ),
+      admit: async () => {
+        throw new Error("unexpected follow-up")
+      },
+      settle: () => transport.waitForIdle(),
+    })
+    try {
+      ui.submit("cancel before delivery", undefined, delivery)
+      await admitted.promise
+      expect(ui.events.findLast((event) => event.type === "queued.prompts")?.prompts).toHaveLength(1)
+      expect(ui.commits).toEqual([])
+      const item = inbox.shift()!
+      events.push({
+        id: "evt_cancelled",
+        created: 3,
+        type: "session.inbox.cancelled",
+        durable: durable("ses_1", 1),
+        data: { sessionID: "ses_1", inboxID: item.id },
+      })
+      while (ui.events.findLast((event) => event.type === "queued.prompts")?.prompts.length !== 0) await Bun.sleep(0)
+      await transport.replayOnResize({
+        localRows: () => live.map((commit) => ({ commit })),
+        reset: async () => {
+          ui.commits.length = 0
+        },
+      })
+      expect(ui.events.findLast((event) => event.type === "stream.patch")?.patch.phase).toBe("running")
+      expect(ui.commits).toEqual([])
+      expect(live).toEqual([])
+    } finally {
+      idle.resolve()
+      ui.api.close()
+      await queue
+      await transport.close()
+    }
+  })
+
+  test.each(["admission", "delivery", "projection"])("renders user content once (%s first)", async (first) => {
     const events = feed()
     events.push(connected())
     const requested = defer()
@@ -263,7 +341,6 @@ describe("V2 mini transport", () => {
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
-    ui.api.append({ kind: "user", source: "system", text: pending.payload.text, messageID: pending.id, phase: "start" })
     const turn = transport.runPromptTurn(
       {
         agent: undefined,
@@ -289,11 +366,11 @@ describe("V2 mini transport", () => {
       admitted.resolve,
     )
     await requested.promise
-    if (order === "after") {
+    if (first === "admission") {
       ack.resolve()
       await admitted.promise
     }
-    expect(ui.commits.filter((commit) => commit.image)).toEqual([])
+    expect(ui.commits).toEqual([])
     events.push({
       id: "evt_delivered",
       created: 1,
@@ -303,6 +380,10 @@ describe("V2 mini transport", () => {
     })
     while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.status === "waiting for assistant"))
       await Bun.sleep(0)
+    messages.push({ id: pending.id, type: "user", ...pending.payload, time: { created: 1 } })
+    if (first === "projection") {
+      await transport.replayOnResize({ localRows: () => [], reset: async () => {} })
+    }
     ack.resolve()
     await admitted.promise
 
@@ -320,8 +401,14 @@ describe("V2 mini transport", () => {
       }),
       expect.anything(),
     )
-    const images = ui.commits.filter((commit) => commit.image)
-    expect(images).toEqual([
+    const expected = [
+      {
+        kind: "user",
+        source: "system",
+        text: pending.payload.text,
+        messageID: pending.id,
+        phase: "start",
+      },
       {
         kind: "user",
         source: "system",
@@ -340,20 +427,19 @@ describe("V2 mini transport", () => {
         partID: "image:1",
         phase: "final",
       },
-    ])
-    messages.push({ id: pending.id, type: "user", ...pending.payload, time: { created: 1 } })
+    ] satisfies StreamCommit[]
+    expect(ui.commits).toEqual(expected)
     idle.resolve()
     await turn
 
-    expect(ui.commits.filter((commit) => commit.image)).toEqual(images)
-    expect(ui.commits.filter((commit) => commit.kind === "user" && !commit.image)).toHaveLength(1)
+    expect(ui.commits).toEqual(expected)
     await transport.replayOnResize({
       localRows: () => live.map((commit) => ({ commit })),
       reset: async () => {
         ui.commits.length = 0
       },
     })
-    expect(ui.commits.filter((commit) => commit.image)).toEqual(images)
+    expect(ui.commits).toEqual(expected)
     await transport.close()
   })
 
@@ -790,7 +876,7 @@ describe("V2 mini transport", () => {
     let admitted = false
     spyOn(client.session, "prompt").mockImplementation((request) => {
       admitted = true
-      return ok({ data: promptAdmission(request) }) as never
+      return ok(promptAdmission(request)) as never
     })
 
     const turn = transport.runPromptTurn({
@@ -850,11 +936,11 @@ describe("V2 mini transport", () => {
     settled.resolve()
     await turn
 
-    expect(ui.commits.map((item) => item.text)).toEqual(["ans", "wer"])
+    expect(ui.commits.map((item) => item.text)).toEqual(["hello", "ans", "wer"])
     await transport.close()
   })
 
-  test("shows durable pending delivery and appends queued input on promotion", async () => {
+  test.each(["queue", "steer"] as const)("keeps pending %s out of scrollback until delivery", async (delivery) => {
     const events = feed()
     events.push(connected())
     const client = sdk({
@@ -882,7 +968,7 @@ describe("V2 mini transport", () => {
             timeCreated: 2,
             type: "user",
             payload: { text: "remove me", files: [image] },
-            delivery: "queue",
+            delivery,
           },
         ],
       },
@@ -901,7 +987,7 @@ describe("V2 mini transport", () => {
 
     expect(pending()).toEqual([
       ["msg_queued", "queue"],
-      ["msg_cancelled", "queue"],
+      ["msg_cancelled", delivery],
     ])
     events.push({
       id: "evt_steered",
@@ -910,14 +996,13 @@ describe("V2 mini transport", () => {
       durable: durable("ses_1", 2),
       data: { sessionID: "ses_1", inboxID: "msg_queued", delivery: "steer" },
     })
-    while (!ui.commits.some((item) => item.messageID === "msg_queued")) await Bun.sleep(0)
+    while (pending()?.[0]?.[1] !== "steer") await Bun.sleep(0)
 
-    expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toEqual([
-      expect.objectContaining({ kind: "system", partID: "skill:effect", text: '→ Skill "Effect"' }),
-      expect.objectContaining({ kind: "user", text: "follow up" }),
+    expect(pending()).toEqual([
+      ["msg_queued", "steer"],
+      ["msg_cancelled", delivery],
     ])
-    expect(pending()).toEqual([["msg_cancelled", "queue"]])
-    expect(ui.commits.some((commit) => commit.image)).toBe(false)
+    expect(ui.commits).toEqual([])
     events.push({
       id: "evt_queued",
       created: 4,
@@ -925,10 +1010,10 @@ describe("V2 mini transport", () => {
       durable: durable("ses_1", 3),
       data: { sessionID: "ses_1", inboxID: "msg_queued", delivery: "queue" },
     })
-    while (pending()?.length !== 2) await Bun.sleep(0)
+    while (pending()?.[0]?.[1] !== "queue") await Bun.sleep(0)
     expect(pending()).toEqual([
       ["msg_queued", "queue"],
-      ["msg_cancelled", "queue"],
+      ["msg_cancelled", delivery],
     ])
     events.push({
       id: "evt_cancelled",
@@ -939,6 +1024,7 @@ describe("V2 mini transport", () => {
     })
     while (pending()?.length !== 1) await Bun.sleep(0)
     expect(pending()).toEqual([["msg_queued", "queue"]])
+    expect(ui.commits).toEqual([])
     events.push({
       id: "evt_promoted",
       created: 6,
@@ -948,6 +1034,10 @@ describe("V2 mini transport", () => {
     })
     while (pending()?.length !== 0) await Bun.sleep(0)
     expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toHaveLength(3)
+    expect(ui.commits.filter((commit) => !commit.image)).toEqual([
+      expect.objectContaining({ kind: "system", partID: "skill:effect", text: '→ Skill "Effect"' }),
+      expect.objectContaining({ kind: "user", text: "follow up" }),
+    ])
     expect(ui.commits.filter((commit) => commit.image)).toEqual([
       expect.objectContaining({ kind: "user", messageID: "msg_queued", image: "data:image/png;base64,cG5n" }),
     ])
@@ -963,14 +1053,16 @@ describe("V2 mini transport", () => {
         files: [],
         includeFiles: false,
       },
-      "queue",
+      delivery,
     )
     expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: "ses_1", agent: "review" }, expect.anything())
     expect(client.session.switchModel).toHaveBeenCalledWith(
       { sessionID: "ses_1", model: { providerID: "test", id: "next", variant: "high" } },
       expect.anything(),
     )
-    expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ delivery: "queue" }), expect.anything())
+    expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ delivery }), expect.anything())
+    expect(pending()).toEqual([["msg_next", delivery]])
+    expect(ui.commits.some((commit) => commit.messageID === "msg_next")).toBe(false)
     events.push({
       id: "evt_earlier_admission",
       created: 3,
@@ -983,7 +1075,11 @@ describe("V2 mini transport", () => {
       },
     })
     await Bun.sleep(10)
-    expect(pending()).toEqual([["msg_next", "queue"]])
+    expect(pending()).toEqual([
+      ["msg_next", delivery],
+      ["msg_earlier", "steer"],
+    ])
+    expect(ui.commits.some((commit) => commit.messageID === "msg_earlier")).toBe(false)
     await transport.close()
   })
 
@@ -1476,7 +1572,7 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("does not duplicate the optimistic user row when reconnect hydration recovers a missed prompt", async () => {
+  test("renders the user row once when reconnect hydration recovers a missed delivery", async () => {
     const first = feed()
     const second = feed()
     first.push(connected("evt_connected_1"))
@@ -1511,7 +1607,6 @@ describe("V2 mini transport", () => {
       }),
     )
     const ui = footer()
-    ui.commits.push({ kind: "user", source: "system", text: "hello", phase: "start", messageID: "msg_prompt" })
     const transport = await createSessionTransport({
       sdk: client,
       sessionID: "ses_1",
@@ -1519,11 +1614,9 @@ describe("V2 mini transport", () => {
       footer: ui.api,
     })
     let admitted = false
-    // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
-    // @ts-expect-error successful SDK response is valid for both modes at runtime
     spyOn(client.session, "prompt").mockImplementation((request) => {
       admitted = true
-      return ok({ data: promptAdmission(request) })
+      return ok(promptAdmission(request)) as never
     })
 
     const turn = transport.runPromptTurn({

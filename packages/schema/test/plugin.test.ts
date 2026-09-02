@@ -23,3 +23,17 @@ test("embeds plugin state with a status discriminator", () => {
     outdated: true,
   })
 })
+
+test("plugin failure references round trip and absent references stay omitted", () => {
+  const codec = Schema.fromJsonString(Plugin.State)
+  const failed = { status: "failed", error: "Plugin failed to load", ref: "err_a1b2c3d4" } as const
+  expect(Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(failed))).toEqual(failed)
+  expect(Schema.encodeSync(Plugin.State)({ ...failed, ref: undefined })).toEqual({
+    status: "failed",
+    error: failed.error,
+  })
+  expect(Schema.decodeUnknownSync(Plugin.State)({ status: "failed", error: failed.error })).toMatchObject({
+    status: "failed",
+    error: failed.error,
+  })
+})

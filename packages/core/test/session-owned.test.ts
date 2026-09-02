@@ -95,7 +95,7 @@ const setup = Effect.fnUntraced(function* (options?: {
   )
   const hooks = yield* PluginHooks.Service.pipe(Effect.provide(LayerNode.compile(PluginHooks.node)))
   const locations: Location.Ref[] = []
-  const flushes: Location.Ref[] = []
+  const activationWaits: Location.Ref[] = []
   const resumes: SessionSchema.ID[] = []
   const wakes: Array<{ sessionID: SessionSchema.ID; pending: SessionMessage.ID[]; enqueued: number }> = []
   const execution = SessionExecution.Service.of({
@@ -143,8 +143,8 @@ const setup = Effect.fnUntraced(function* (options?: {
             }),
           options?.snapshot?.(ref) ?? Layer.mock(Snapshot.Service, {}),
           Layer.succeed(PluginSupervisor.Service, {
-            flush: Effect.sync(() => {
-              flushes.push(ref)
+            awaitActivation: Effect.sync(() => {
+              activationWaits.push(ref)
             }),
           }),
         ),
@@ -175,7 +175,7 @@ const setup = Effect.fnUntraced(function* (options?: {
     }),
     Effect.provideService(SessionExecution.Service, options?.execution ?? execution),
   )
-  return { sessions, hooks, locations, flushes, resumes, wakes, db: database.db, bus, store }
+  return { sessions, hooks, locations, activationWaits, resumes, wakes, db: database.db, bus, store }
 })
 
 describe("Session-owned handles", () => {
@@ -252,7 +252,7 @@ describe("Session-owned handles", () => {
       const calls: string[] = []
       yield* fixture.hooks.register("session", "prompt", (event) =>
         Effect.sync(() => {
-          expect(fixture.flushes).toEqual([source])
+          expect(fixture.activationWaits).toEqual([source])
           calls.push(event.prompt.text)
           event.prompt.text += " prepared"
         }),
@@ -277,7 +277,7 @@ describe("Session-owned handles", () => {
       )
       expect(calls).toEqual(["Original"])
       expect(fixture.locations).toEqual([source])
-      expect(fixture.flushes).toEqual([source])
+      expect(fixture.activationWaits).toEqual([source])
       expect(fixture.wakes).toEqual([
         { sessionID, pending: [synthetic.id, first.id], enqueued: 2 },
         { sessionID, pending: [synthetic.id, first.id], enqueued: 2 },
@@ -363,7 +363,7 @@ describe("Session-owned handles", () => {
       expect(fixture.locations).toEqual([source])
       yield* prompt
       expect(fixture.locations).toEqual([source, destination])
-      expect(fixture.flushes).toEqual([source, destination])
+      expect(fixture.activationWaits).toEqual([source, destination])
       expect((yield* fixture.sessions.forSession(otherID).get()).location).toEqual(source)
     }),
   )
@@ -408,7 +408,7 @@ describe("Session-owned handles", () => {
       expect(
         events.filter((event) => event.type === SessionEvent.Skill.Activated.type).map((event) => event.location),
       ).toEqual([undefined, undefined, source])
-      expect(fixture.flushes).toEqual([])
+      expect(fixture.activationWaits).toEqual([])
       expect(fixture.resumes).toEqual([])
       expect(fixture.wakes).toEqual([])
     }),
@@ -442,7 +442,7 @@ describe("Session-owned handles", () => {
       expect(yield* handle.get()).toEqual(before)
       expect(yield* handle.inbox()).toEqual([])
       expect(yield* fixture.store.context(sessionID)).toEqual([])
-      expect(fixture.flushes).toEqual([])
+      expect(fixture.activationWaits).toEqual([])
       expect(fixture.resumes).toEqual([])
       expect(fixture.wakes).toEqual([])
     }),
@@ -776,7 +776,7 @@ describe("Session-owned handles", () => {
 
       expect(captures).toEqual([source, destination])
       expect(fixture.locations).toEqual([source, destination, destination])
-      expect(fixture.flushes).toEqual([source, destination, destination])
+      expect(fixture.activationWaits).toEqual([source, destination, destination])
       expect((yield* handle.get()).revert).toBeUndefined()
     }),
   )
@@ -800,7 +800,7 @@ describe("SessionPrompt construction", () => {
               Layer.mergeAll(
                 Layer.succeed(PluginHooks.Service, fixture.hooks),
                 Layer.succeed(PluginSupervisor.Service, {
-                  flush: Effect.sync(() => {
+                  awaitActivation: Effect.sync(() => {
                     calls.push("ready")
                   }),
                 }),
@@ -842,8 +842,8 @@ describe("SessionRevert construction", () => {
         Effect.provide(
           Layer.merge(
             Layer.succeed(PluginSupervisor.Service, {
-              flush: Effect.sync(() => {
-                calls.push("flush")
+              awaitActivation: Effect.sync(() => {
+                calls.push("awaitActivation")
               }),
             }),
             Layer.mock(Snapshot.Service, {
@@ -871,7 +871,7 @@ describe("SessionRevert construction", () => {
       yield* revert
         .stage({ session, messageID: boundary.id, files: false })
         .pipe(Effect.satisfiesServicesType<never>(), Effect.provide(unrelated))
-      expect(calls).toEqual(["flush", "capture", "capture", "diff"])
+      expect(calls).toEqual(["awaitActivation", "capture", "capture", "diff"])
 
       const staged = yield* handle.get()
       expect(staged.revert?.snapshot).toBe(Snapshot.ID.make("captured-tree"))
@@ -879,7 +879,15 @@ describe("SessionRevert construction", () => {
       const cleared = yield* handle.get()
       expect(cleared.revert).toBeUndefined()
       yield* revert.clear(cleared).pipe(Effect.satisfiesServicesType<never>(), Effect.provide(unrelated))
-      expect(calls).toEqual(["flush", "capture", "capture", "diff", "flush", "restore", "flush"])
+      expect(calls).toEqual([
+        "awaitActivation",
+        "capture",
+        "capture",
+        "diff",
+        "awaitActivation",
+        "restore",
+        "awaitActivation",
+      ])
     }),
   )
 })

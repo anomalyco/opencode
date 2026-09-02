@@ -78,16 +78,39 @@ const docTags = (schema: JsonSchema): Array<string> => {
   return tags
 }
 
-// Neutralize `*\/` so model-provided schema text cannot terminate generated documentation.
-const jsdoc = (description: string | undefined, summary: string, pad: string): string => {
-  const lines = (description ?? "").split("\n").map((line) => line.replace(/\s+$/, ""))
+const docLines = (schema: JsonSchema, width: number): Array<string> => {
+  const summary = docTags(schema).join(" ")
+  const lines = (schema.description ?? "").split("\n").map((line) => line.replace(/\s+$/, ""))
   while (lines.length > 0 && lines[0]!.trim() === "") lines.shift()
   while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()
   const inline = lines.length === 1 ? `${lines[0]}${lines[0].endsWith(".") ? "" : "."} ${summary}` : summary
-  const content =
-    summary && lines.length === 1 && !summary.includes("\n") && pad.length + inline.length + 7 <= 120
-      ? [inline]
-      : [...lines, ...(summary ? summary.split("\n") : [])]
+  return summary && lines.length === 1 && !summary.includes("\n") && width + inline.length + 7 <= 120
+    ? [inline]
+    : [...lines, ...(summary ? summary.split("\n") : [])]
+}
+
+// Neutralize `*\/` so model-provided schema text cannot terminate generated documentation.
+const jsdoc = (schema: JsonSchema, pad: string): string => {
+  const content = docLines(schema, pad.length)
+  const types = typeof schema.type === "string" ? [schema.type] : (schema.type ?? [])
+
+  const append = (label: string, child: JsonSchema) => {
+    docLines(child, pad.length + label.length + 2).forEach((line, index) => {
+      if (index === 0) {
+        content.push(`${label}: ${line}`)
+        return
+      }
+      content.push(line ? `  ${line}` : "")
+    })
+  }
+
+  // Document only the immediate contents; recursive labels obscure which level a constraint belongs to.
+  if (types.includes("array") && schema.items) append("Each item", schema.items)
+  if ((types.includes("object") || schema.properties) && typeof schema.additionalProperties === "object") {
+    const label = Object.keys(schema.properties ?? {}).length > 0 ? "Each additional value" : "Each value"
+    append(label, schema.additionalProperties)
+  }
+
   if (content.length === 0) return ""
   const escaped = content.map((line) => line.replaceAll("*/", "* /"))
   if (escaped.length === 1 && pad.length + escaped[0].length + 7 <= 120) return `${pad}/** ${escaped[0]} */\n`
@@ -170,9 +193,7 @@ const renderSchema = (
 
     if (properties.length === 0 && indexType === undefined) return "{}"
     const pad = "  ".repeat(depth + 1)
-    const lines = properties.map(
-      (entry) => `${jsdoc(entry[1].description, docTags(entry[1]).join(" "), pad)}${pad}${field(entry)},`,
-    )
+    const lines = properties.map((entry) => `${jsdoc(entry[1], pad)}${pad}${field(entry)},`)
     if (indexType !== undefined) lines.push(`${pad}[key: string]: ${indexType},`)
     return `{\n${lines.join("\n")}\n${"  ".repeat(depth)}}`
   }

@@ -101,6 +101,7 @@ export const Info = Schema.Struct({
   id: ID,
   modelID: ID,
   providerID: Provider.ID,
+  canonical: Provider.ID.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String,
   compatibility: Compatibility.pipe(optional),

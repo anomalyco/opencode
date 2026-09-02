@@ -66,7 +66,7 @@ async function createRegistryFixture(directory: string) {
       exports: "./index.js",
     })
     await Bun.write(path.join(root, "package", "index.js"), `export const version = "${version}"\n`)
-    await Bun.$`tar -czf ${path.join(root, "package.tgz")} -C ${root} package`
+    await Bun.$`tar -czf package.tgz package`.cwd(root)
     tarballs.set(version, await Bun.file(path.join(root, "package.tgz")).bytes())
   }
   const state = { latest: "1.0.0" }
@@ -252,7 +252,7 @@ describe("Npm.add", () => {
         }
       }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
 
-      expect(entries.added.entrypoint).toEndWith("/index.js")
+      expect(entries.added.entrypoint).toBe(pathToFileURL(path.join(entries.added.directory, "index.js")).href)
       expect(entries.added.version).toBe(fixture.commit)
       expect(entries.cached).toEqual(entries.added)
       expect(entries.resolved).toEqual(entries.added)

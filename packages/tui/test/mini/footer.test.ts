@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { CliRenderEvents, RGBA, TextRenderable } from "@opentui/core"
 import path from "node:path"
+import { Writable } from "node:stream"
 import { coalesceProgressCommit, resolveRunAgent, RunFooter } from "../../src/mini/footer"
 import { createRunDemo } from "../../src/mini/demo"
 import { resolveMiniSettings } from "../../src/mini/runtime.boot"
@@ -51,17 +52,32 @@ async function setup(
     mono?: boolean
     theme?: RunTuiConfig["theme"]
     startup?: { version: string; detail: string }
+    cursorRow?: number
     update?: (change: MiniSettingChange) => Promise<MiniSettings>
   } = {},
 ) {
   const mono = input.mono ?? true
+  const output: string[] = []
   const app = await createTestRenderer({
     width: 112,
     height: 24,
     screenMode: "split-footer",
     footerHeight: 4,
     externalOutputMode: "capture-stdout",
+    bufferedOutput: input.cursorRow ? "stdout" : "memory",
+    stdout: input.cursorRow
+      ? (new Writable({
+          write(chunk, _encoding, callback) {
+            output.push(chunk.toString())
+            callback()
+          },
+        }) as NodeJS.WriteStream)
+      : undefined,
   })
+  if (input.cursorRow) {
+    await app.renderer.setupTerminal()
+    await app.mockInput.pressKeys([`\x1b[${input.cursorRow};1R`])
+  }
   const footer = new RunFooter(app.renderer, {
     directory: () => "/project",
     findFiles: async () => [],
@@ -86,8 +102,24 @@ async function setup(
     onEditorOpen: async () => undefined,
     subscribeThemeSignal: () => () => {},
   })
-  return { ...app, footer }
+  return { ...app, footer, output }
 }
+
+test.each([1, 5, 24])("startup preserves the terminal prompt row from cursor row %s", async (cursorRow) => {
+  const app = await setup({ mono: false, startup: { version: "test", detail: "/project" }, cursorRow })
+  try {
+    await app.renderOnce()
+    app.footer.finishStartup()
+    await app.renderOnce()
+    // Inspect terminal cursor coordinates, not the footer-local render buffer.
+    const rows = Array.from(app.output.join("").matchAll(/\x1b\[(\d+);3H\x1b\[\?25h/g), (match) => Number(match[1]))
+    expect(rows.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(rows).size).toBe(1)
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
 
 test.each(["timer", "output", "close", "panel"] as const)(
   "startup stays editable and settles exactly once before %s",

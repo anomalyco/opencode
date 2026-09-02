@@ -46,7 +46,7 @@ import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
-import { executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
+import { codeModeListings, executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<Permission.AssertInput> | undefined
 let decision: Effect.Effect<void, Permission.Error> = Effect.void
@@ -1764,7 +1764,7 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
       "direct_media",
       "execute",
     ])
-    expect(toolSet.codeModeCatalog?.tools.find((tool) => tool.path === "demo.search")?.signature).toContain(
+    expect(codeModeListings(toolSet.codeModeCatalog!).find((tool) => tool.path === "demo.search")?.line).toContain(
       "ok: boolean",
     )
     expect(execute?.description).not.toContain("tools.demo.search")
@@ -1784,7 +1784,7 @@ it.effect("forwards the invoking session through direct and Code Mode MCP tools"
     expect(toolSet.definitions.find((tool) => tool.name === "direct_lookup")?.inputSchema).not.toHaveProperty(
       "properties.sessionID",
     )
-    expect(toolSet.codeModeCatalog?.tools.find((tool) => tool.path === "demo.search")?.signature).not.toContain(
+    expect(codeModeListings(toolSet.codeModeCatalog!).find((tool) => tool.path === "demo.search")?.line).not.toContain(
       "sessionID",
     )
 
@@ -1830,7 +1830,7 @@ it.effect("returns content-only MCP results through Code Mode", () =>
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
 
-    expect(toolSet.codeModeCatalog?.tools.some((tool) => tool.path === "demo.status")).toBe(true)
+    expect(codeModeListings(toolSet.codeModeCatalog!).some((tool) => tool.path === "demo.status")).toBe(true)
 
     const execution = yield* toolSet.execute({
       sessionID: Session.ID.make("ses_mcp_content_only"),
@@ -1916,7 +1916,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
     const registration = yield* McpTool.Service
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
-    expect(toolSet.codeModeCatalog?.tools.some((tool) => tool.path === "demo.search")).toBe(true)
+    expect(codeModeListings(toolSet.codeModeCatalog!).some((tool) => tool.path === "demo.search")).toBe(true)
 
     const fiber = yield* toolSet
       .execute({
@@ -1960,7 +1960,7 @@ it.effect("does not call MCP when permission is blocked", () =>
     const registration = yield* McpTool.Service
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
-    expect(toolSet.codeModeCatalog?.tools.some((tool) => tool.path === "demo.search")).toBe(true)
+    expect(codeModeListings(toolSet.codeModeCatalog!).some((tool) => tool.path === "demo.search")).toBe(true)
 
     const execution = yield* toolSet.execute({
       sessionID: Session.ID.make("ses_mcp_blocked"),

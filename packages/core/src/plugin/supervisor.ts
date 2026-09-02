@@ -55,11 +55,13 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     }
 
     const plugin = yield* PluginModule.load(operation, { install }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("failed to load plugin", { target: operation.target, cause }).pipe(
-          Effect.as({ error: Cause.pretty(cause) }),
-        ),
-      ),
+      Effect.catchCause((cause) => {
+        const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+        const error = Cause.squash(cause)
+        return Effect.logWarning("failed to load plugin", { target: operation.target, ref, cause }).pipe(
+          Effect.as({ error: error instanceof PluginModule.LoadError ? error.message : "Plugin failed to load", ref }),
+        )
+      }),
     )
     if ("pending" in plugin) {
       pending.add(operation.target)
@@ -68,7 +70,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     if ("error" in plugin) {
       failures.set(operation.target, {
         source: pluginSource(operation.target),
-        state: { status: "failed", error: plugin.error },
+        state: { status: "failed", error: plugin.error, ref: plugin.ref },
         features: { server: true },
       })
       continue
@@ -127,9 +129,7 @@ export const layer = Layer.effect(
       // Activate everything available locally before waiting on missing package installs.
       const immediate = yield* resolve(pre, post, operations, false)
       const source = (source: Plugin.Source) =>
-        source.type === "package" && outdated.has(source.target)
-          ? { ...source, outdated: true as const }
-          : source
+        source.type === "package" && outdated.has(source.target) ? { ...source, outdated: true as const } : source
       const apply = (resolved: typeof immediate) =>
         registry.activate(
           resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
@@ -162,12 +162,14 @@ export const layer = Layer.effect(
     const reloads = Stream.merge(
       Stream.merge(sources.changes(), bus.subscribe([Event.Updated, SdkPlugins.Updated])),
       updates.changes().pipe(
-        Stream.filter((target) => packages.has(target)),
-        Stream.tap((target) => Effect.sync(() => outdated.delete(target))),
+        Stream.filter((update) => packages.has(update.target)),
+        Stream.tap((update) =>
+          Effect.sync(() => (update.outdated ? outdated.add(update.target) : outdated.delete(update.target))),
+        ),
         Stream.map(() => undefined),
       ),
     ).pipe(
-      // Make accepted work visible to flush before coalescing the burst.
+      // Make accepted work visible to awaitActivation before coalescing the burst.
       Stream.mapEffect(() =>
         Effect.gen(function* () {
           observed++
@@ -189,7 +191,7 @@ export const layer = Layer.effect(
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* Effect.sleep("24 hours").pipe(Effect.andThen(activate()), Effect.forever, Effect.forkScoped)
-    return Service.of({ flush: ready.await })
+    return Service.of({ awaitActivation: ready.await })
   }),
 )
 

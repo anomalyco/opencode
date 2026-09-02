@@ -44,7 +44,7 @@ function withFormatter<A, E, R>(
       Effect.andThen(
         Effect.gen(function* () {
           const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
+          yield* plugins.awaitActivation
           return yield* body(yield* Formatter.Service, directory)
         }).pipe(
           Effect.scoped,

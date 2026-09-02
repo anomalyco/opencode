@@ -69,7 +69,7 @@ describe("InstancePlugins", () => {
           const agents = (ref: Location.Ref) =>
             Effect.gen(function* () {
               const supervisor = yield* PluginSupervisor.Service
-              yield* supervisor.flush
+              yield* supervisor.awaitActivation
               const service = yield* Agent.Service
               return {
                 bound: yield* service.get(Agent.ID.make("thread-a-agent")),

@@ -37,7 +37,7 @@ export const make = Effect.fn("SessionPrompt.make")(function* () {
     messageID: SessionMessage.ID
     input: Input
   }) {
-    yield* plugins.flush
+    yield* plugins.awaitActivation
     const event = yield* hooks.trigger("session", "prompt", {
       sessionID: request.sessionID,
       messageID: request.messageID,

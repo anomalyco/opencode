@@ -486,6 +486,132 @@
         "summary": "List plugins"
       }
     },
+    "/api/plugin/check": {
+      "post": {
+        "tags": ["plugin"],
+        "operationId": "v2.plugin.check",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Plugin.Info"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Check one or all package plugins for available updates.",
+        "summary": "Check plugin updates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/plugin/update": {
       "post": {
         "tags": ["plugin"],
@@ -14174,6 +14300,9 @@
       "Config.ProviderEncoded": {
         "type": "object",
         "properties": {
+          "canonical": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -16088,6 +16217,9 @@
           "providerID": {
             "type": "string"
           },
+          "canonical": {
+            "type": "string"
+          },
           "family": {
             "type": "string"
           },
@@ -16766,6 +16898,9 @@
               },
               "error": {
                 "type": "string"
+              },
+              "ref": {
+                "type": "string"
               }
             },
             "required": ["status", "error"],
@@ -17030,6 +17165,9 @@
         "type": "object",
         "properties": {
           "id": {
+            "type": "string"
+          },
+          "canonical": {
             "type": "string"
           },
           "integrationID": {

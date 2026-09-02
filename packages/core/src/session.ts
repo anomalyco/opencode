@@ -407,7 +407,7 @@ const layer = Layer.effect(
         const session = yield* result.get(input.sessionID)
         const commands = yield* Effect.gen(function* () {
           const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
+          yield* plugins.awaitActivation
           return yield* Command.Service
         }).pipe(instances.provide(session))
         const delivery = input.delivery ?? "steer"

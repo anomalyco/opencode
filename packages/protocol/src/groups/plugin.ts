@@ -21,6 +21,22 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
       ),
   )
   .add(
+    HttpApiEndpoint.post("plugin.check", "/api/plugin/check", {
+      query: LocationQuery,
+      payload: Schema.Struct({ target: Schema.String.pipe(Schema.optional) }),
+      success: Location.response(Schema.Array(Plugin.Info)),
+      error: InvalidRequestError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.plugin.check",
+          summary: "Check plugin updates",
+          description: "Check one or all package plugins for available updates.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("plugin.update", "/api/plugin/update", {
       query: LocationQuery,
       payload: Schema.Struct({ target: Schema.String }),
