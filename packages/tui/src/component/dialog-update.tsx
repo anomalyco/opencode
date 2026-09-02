@@ -80,7 +80,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
         <Switch>
           <Match when={state.type === "ready"}>
             <text fg={theme.text.subdued}>
-              Update v{props.version}? It will be applied in the background and active sessions will be restarted.
+              Update to v{props.version}? It will be applied in the background and active sessions will be restarted.
             </text>
           </Match>
           <Match when={state.type === "installing"}>
