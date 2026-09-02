@@ -5,12 +5,14 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { Effect } from "effect"
 import { EmbeddedHost } from "./internal/host"
 
+export type SessionClient = OpenCodeClient["session"]
+
 export interface CreateOptions extends Omit<EmbeddedHost.CreateOptions, "workspaceProviders"> {
   readonly plugins?: ReadonlyArray<Plugin.Plugin>
 }
 
 export type Interface = Omit<OpenCodeClient, "plugin"> & {
-  readonly sessions: OpenCodeClient["session"]
+  readonly sessions: SessionClient
   readonly events: OpenCodeClient["event"]
   readonly plugin: ((plugin: Plugin.Plugin) => Promise<void>) & OpenCodeClient["plugin"]
   readonly close: () => Promise<void>

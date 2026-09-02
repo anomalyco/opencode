@@ -8,12 +8,13 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { EmbeddedHost } from "../internal/host"
 
 export type { LogEntry, LogLevel, LogOptions, LogWriter } from "../logging"
+export type SessionClient = OpenCodeClient["session"]
 
 export type CreateOptions = EmbeddedHost.CreateOptions
 export type EmbedOptions = EmbeddedHost.EmbedOptions
 
 export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
-  readonly sessions: OpenCodeClient["session"]
+  readonly sessions: SessionClient
   readonly events: OpenCodeClient["event"]
   readonly workspace: {
     readonly create: Workspace.Interface["create"]
