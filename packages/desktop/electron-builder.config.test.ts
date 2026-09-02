@@ -18,6 +18,20 @@ const channels = [
 ] as const
 
 for (const channel of channels) {
+  test(`includes the Windows sandbox permission hook for ${channel.channel}`, async () => {
+    const previous = process.env.OPENCODE_CHANNEL
+    process.env.OPENCODE_CHANNEL = channel.channel
+    try {
+      const config = (await import(`./electron-builder.config.ts?channel=${channel.channel}`)).default as Configuration
+      const include = path.join(import.meta.dirname, "resources/windows/installer.nsh")
+      expect(config.nsis?.include).toBe(include)
+      expect(await Bun.file(include).exists()).toBe(true)
+    } finally {
+      if (previous === undefined) delete process.env.OPENCODE_CHANNEL
+      else process.env.OPENCODE_CHANNEL = previous
+    }
+  })
+
   test(`uses one Linux desktop identity for ${channel.channel}`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
     process.env.OPENCODE_CHANNEL = channel.channel

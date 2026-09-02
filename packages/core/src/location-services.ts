@@ -1,11 +1,9 @@
 import { Duration, Effect, Layer, LayerMap } from "effect"
 import { existsSync } from "fs"
-import path from "path"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Instance } from "./instance.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
-import { AbsolutePath } from "./schema.js"
 
 export { LocationServiceMap } from "./location-service-map.js"
 
@@ -15,13 +13,6 @@ export type LocationError = Instance.Error
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
-  // Structural Equal distinguishes optional-key shape and Windows separator style.
-  // The RcMap caches the raw key before the build callback, so normalize both here.
-  const canonical = (ref: Location.Ref) =>
-    Location.Ref.make({
-      directory: AbsolutePath.make(process.platform === "win32" ? path.normalize(ref.directory) : ref.directory),
-      workspaceID: ref.workspaceID,
-    })
   return Layer.effect(
     LocationServiceMap.Service,
     Effect.gen(function* () {
@@ -35,10 +26,10 @@ export function buildLocationServiceMap(
       })
       const map = {
         ...inner,
-        get: (ref: Location.Ref) => inner.get(canonical(ref)),
-        contextEffect: (ref: Location.Ref) => inner.contextEffect(canonical(ref)),
-        contextEffectOption: (ref: Location.Ref) => inner.contextEffectOption(canonical(ref)),
-        invalidate: (ref: Location.Ref) => inner.invalidate(canonical(ref)),
+        get: (ref: Location.Ref) => inner.get(LocationServiceMap.canonical(ref)),
+        contextEffect: (ref: Location.Ref) => inner.contextEffect(LocationServiceMap.canonical(ref)),
+        contextEffectOption: (ref: Location.Ref) => inner.contextEffectOption(LocationServiceMap.canonical(ref)),
+        invalidate: (ref: Location.Ref) => inner.invalidate(LocationServiceMap.canonical(ref)),
       }
       // Cached instances borrow their owner instead of retaining its Layer scope.
       const bindings: LayerNode.Replacements = [

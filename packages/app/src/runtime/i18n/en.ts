@@ -694,6 +694,7 @@ export const dict = {
   "session.queue.remove": "Remove",
   "session.queue.reorder": "Reorder queued prompt",
   "session.queue.attachments": "+ attachments",
+  "session.timeline.working": "Working",
   "session.timeline.notice.finished": "{{actor}} finished",
   "session.timeline.notice.failed": "{{actor}} failed",
   "session.timeline.notice.cancelled": "{{actor}} cancelled",

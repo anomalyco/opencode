@@ -124,6 +124,7 @@ const getBase = (appId: string): Configuration => ({
     verifyUpdateCodeSignature: false,
   },
   nsis: {
+    include: path.join(packageDir, "resources", "windows", "installer.nsh"),
     oneClick: true,
     perMachine: false,
     installerIcon: `resources/icons/icon.ico`,

@@ -26,7 +26,7 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { re
 
 function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets: AssetMap) {
   const key = url.pathname.replace(/^\//, "")
-  if (key.startsWith("_assets/") && assets[key] === undefined)
+  if ((key.startsWith("_assets/") || key.startsWith("icons/")) && assets[key] === undefined)
     return Effect.succeed(HttpServerResponse.empty({ status: 404, headers: { "cache-control": "no-store" } }))
   const name = assets[key] !== undefined ? key : "index.html"
   const file = assets[name]
@@ -45,7 +45,7 @@ function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets:
   }
   return Effect.succeed(
     request.method === "HEAD"
-      ? HttpServerResponse.empty({ headers })
+      ? HttpServerResponse.empty({ status: 200, headers })
       : HttpServerResponse.raw(file, { headers, contentType: headers["content-type"] }),
   )
 }

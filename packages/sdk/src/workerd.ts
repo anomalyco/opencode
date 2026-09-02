@@ -9,6 +9,7 @@ export type Configuration = WorkerdProfile.Configuration
 export interface CreateOptions extends WorkerdProfile.Options {
   readonly log?: LogOptions
   readonly plugins?: PromiseSdk.CreateOptions["plugins"]
+  readonly instances?: PromiseSdk.CreateOptions["instances"]
 }
 
 /**
@@ -25,9 +26,9 @@ export interface CreateOptions extends WorkerdProfile.Options {
  * session operations plus the live `events.subscribe()` stream — served over
  * an in-process fetch transport, so no request leaves the isolate.
  */
-export const create = ({ log, plugins, ...options }: CreateOptions) => {
+export const create = ({ log, plugins, instances, ...options }: CreateOptions) => {
   const profile = WorkerdProfile.make(options)
-  return PromiseSdk.create({ ...profile.options, log, plugins }, { overrides: profile.replacements })
+  return PromiseSdk.create({ ...profile.options, log, plugins, instances }, { overrides: profile.replacements })
 }
 
 export type Interface = PromiseSdk.Interface
