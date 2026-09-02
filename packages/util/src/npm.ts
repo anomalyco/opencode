@@ -286,7 +286,13 @@ const layer = Layer.effect(
 
       yield* mkdir(dir)
       const startedAt = yield* Clock.currentTimeMillis
-      const staging = path.join(dir, `.staging-${startedAt}-${randomUUID()}`)
+      // Arborist keys lockfile entries relative to the root's real path. When the cache
+      // directory is reached through a symlink (macOS `/var` → `/private/var`, a linked
+      // XDG cache), the keys become `../../…` paths that installedRevision never finds,
+      // so Git checks report "not installed" and updates go undetected. Stage under the
+      // resolved directory so the root path and real path agree.
+      const root = yield* fs.realPath(dir).pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
+      const staging = path.join(root, `.staging-${startedAt}-${randomUUID()}`)
       const staged = yield* Effect.gen(function* () {
         const tree = yield* reify({ dir: staging, config: dir, add: [pkg], update })
         const installed = tree.edgesOut.values().next().value?.to
