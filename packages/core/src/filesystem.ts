@@ -44,6 +44,8 @@ export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
   pattern: Schema.String,
   path: Schema.optionalKey(RelativePath),
   include: Schema.optionalKey(Schema.String),
+  literal: Schema.optionalKey(Schema.Boolean),
+  caseSensitive: Schema.optionalKey(Schema.Boolean),
   limit: Schema.optionalKey(PositiveInt),
 }) {}
 
