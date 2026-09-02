@@ -911,6 +911,8 @@ export const dict = {
   "settings.appearance.row.tabs.description": "Choose how session tabs are arranged",
   "settings.appearance.row.tabs.horizontal": "Horizontal",
   "settings.appearance.row.tabs.vertical": "Vertical",
+  "settings.appearance.row.projectName.title": "Show project names",
+  "settings.appearance.row.projectName.description": "Show project names in vertical tabs and the mobile tab drawer",
   "settings.notifications.description": "Choose when to receive notifications and hear sounds",
   "settings.shortcuts.description": "Customize shortcuts for common actions",
   "settings.servers.description": "Manage server connections",

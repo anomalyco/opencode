@@ -85,6 +85,10 @@ export function createAppearanceSettingsController() {
       current: settings.appearance.tabLayout,
       select: settings.appearance.setTabLayout,
     },
+    projectName: {
+      current: settings.appearance.showProjectName,
+      set: settings.appearance.setShowProjectName,
+    },
   }
 }
 

@@ -14,6 +14,7 @@ import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { sessionLabel } from "@/session/title"
+import { useSettings } from "@/settings/model"
 import { canOpenTabRename, forwardTabRef } from "./tab-gesture"
 import { TabPreviewPopover } from "./tab-popover"
 import "./tab-nav.css"
@@ -39,6 +40,7 @@ export function TabNavItem(props: {
   orientation?: "horizontal" | "vertical"
 }) {
   const language = useLanguage()
+  const settings = useSettings()
   const [menu, setMenu] = createStore({ open: false, rename: false })
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
@@ -298,7 +300,7 @@ export function TabNavItem(props: {
             event.preventDefault()
           }}
         />
-        <Show when={props.orientation === "vertical" && projectName()}>
+        <Show when={props.orientation === "vertical" && settings.appearance.showProjectName() && projectName()}>
           {(name) => (
             <span data-slot="tab-project" dir="auto">
               {name()}

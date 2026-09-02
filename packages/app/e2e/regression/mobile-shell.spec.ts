@@ -42,7 +42,7 @@ test("mobile project selection and drawer navigation preserve session identity",
   const drawer = page.locator('[data-slot="mobile-tabs-drawer"]')
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
-  await expect(drawer.locator('[data-slot="tab-project"]')).toHaveText([fixture.project.name, fixture.project.name])
+  await expect(drawer.locator('[data-slot="tab-project"]')).toHaveCount(0)
   const settings = drawer.getByRole("button", { name: "Settings", exact: true })
   const help = drawer.getByRole("button", { name: "Help", exact: true })
   await expect(settings).toBeVisible()
