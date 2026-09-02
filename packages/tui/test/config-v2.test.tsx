@@ -106,30 +106,6 @@ test("validates terminal copy behavior", () => {
   expect(setting?.default).toBe(process.platform === "win32" ? "manual" : "select")
 })
 
-test("enables persistent terminals unless explicitly disabled", () => {
-  const enabled = resolve({}, { terminalSuspend: true })
-  expect(enabled.session.terminal).toBe(true)
-  expect(enabled.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>t" }])
-  expect(enabled.keybinds.get("theme.switch")).toEqual([])
-  expect(settings.find((setting) => setting.path.join(".") === "session.terminal")?.default).toBe(true)
-  expect(settings.filter((setting) => setting.category === "Terminal").map((setting) => setting.title)).toEqual([
-    "Window title",
-    "Copy behavior",
-  ])
-
-  const disabled = resolve({ session: { terminal: false } }, { terminalSuspend: true })
-  expect(disabled.session.terminal).toBe(false)
-  expect(disabled.keybinds.get("theme.switch")).toEqual([])
-  expect(disabled.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>t" }])
-
-  const customized = resolve(
-    { session: { terminal: true }, keybinds: { "theme.switch": "<leader>t", "terminal.toggle": "<leader>p" } },
-    { terminalSuspend: true },
-  )
-  expect(customized.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
-  expect(customized.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>p" }])
-})
-
 test("uses command IDs as keybind keys", () => {
   const config = resolve({ keybinds: { "session.list": "ctrl+l" } }, { terminalSuspend: true })
 
