@@ -102,6 +102,7 @@ const setup = Effect.fnUntraced(function* (options?: {
     resume: (id) =>
       Effect.sync(() => {
         resumes.push(id)
+        return { type: "succeeded" as const }
       }),
     awaitIdle: () => Effect.void,
     interrupt: () => Effect.succeed(false),
@@ -449,6 +450,7 @@ describe("Session-owned handles", () => {
             Effect.gen(function* () {
               calls.push(`resume:${id}`)
               yield* Effect.never
+              return { type: "succeeded" as const }
             }).pipe(
               Effect.onInterrupt(() =>
                 Effect.sync(() => {
@@ -634,6 +636,7 @@ describe("Session-owned handles", () => {
               resumes.push(id)
               if (resumes.length === 2) yield* Deferred.succeed(joining, undefined)
               yield* coordinator.run(id)
+              return { type: "succeeded" as const }
             }),
           wake: coordinator.wake,
           awaitIdle: coordinator.awaitIdle,

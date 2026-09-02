@@ -277,7 +277,7 @@ export const make = Effect.fn("Session.make")(function* () {
   })
   const resume = Effect.fn("Session.resume")(function* (sessionID: SessionSchema.ID) {
     yield* get(sessionID)
-    yield* execution.resume(sessionID)
+    return yield* execution.resume(sessionID)
   })
   const synthetic = Effect.fn("Session.synthetic")(
     (

@@ -47,6 +47,7 @@ type Active = {
   done: Deferred.Deferred<Info, NotFoundError>
   timeoutFiber?: Fiber.Fiber<void>
   timeout?: (duration: number) => Effect.Effect<void>
+  stop?: Effect.Effect<void>
 }
 
 /**
@@ -73,6 +74,10 @@ export interface Interface {
   // Replaces the running command's timeout from now; zero clears it.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
+  // Kills a running command. It ends as `killed` and stays observable like any exited command, so
+  // waiters see the real terminal Info and its captured output remains readable. Stopping is not
+  // removal: `remove` forgets the command and its capture. Resolves once the command is terminal.
+  readonly stop: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
 
@@ -190,6 +195,13 @@ const layer = () =>
         const command = yield* require(id)
         if (command.info.status !== "running" || !command.timeout) return command.info
         yield* command.timeout(duration)
+        return command.info
+      })
+
+      const stop = Effect.fn("Shell.stop")(function* (id: Shell.ID) {
+        const command = yield* require(id)
+        if (command.info.status !== "running" || !command.stop) return command.info
+        yield* command.stop
         return command.info
       })
 
@@ -372,6 +384,7 @@ const layer = () =>
                   // Keep exited history data-only. Interrupt last because finish may run on the timeout fiber.
                   const timeoutFiber = command.timeoutFiber
                   command.timeout = undefined
+                  command.stop = undefined
                   command.timeoutFiber = undefined
                   if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 })
@@ -395,6 +408,11 @@ const layer = () =>
                 })
 
               yield* command.timeout(invocation.timeout)
+              command.stop = finish(
+                "killed",
+                undefined,
+                handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
+              )
 
               runFork(
                 handle.exitCode.pipe(
@@ -416,7 +434,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, output, stop, remove })
     }),
   )
 

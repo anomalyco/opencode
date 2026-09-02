@@ -78,6 +78,23 @@ export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers)
         }),
       )
       .handle(
+        "shell.stop",
+        Effect.fn(function* (ctx) {
+          const shell = yield* Shell.Service
+          return yield* response(
+            shell
+              .stop(ctx.params.id)
+              .pipe(
+                Effect.catchTag(
+                  "Shell.NotFoundError",
+                  () =>
+                    new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+                ),
+              ),
+          )
+        }),
+      )
+      .handle(
         "shell.remove",
         Effect.fn(function* (ctx) {
           const shell = yield* Shell.Service

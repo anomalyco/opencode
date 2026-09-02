@@ -6057,6 +6057,18 @@ export type ShellOutputOutput = {
   data: { output: string; cursor: number; size: number; truncated: boolean }
 }
 
+export type ShellStopInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type ShellStopOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: ShellInfo1
+}
+
 export type ShellRemoveInput = {
   readonly id: { readonly id: string }["id"]
   readonly location?: {

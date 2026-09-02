@@ -355,6 +355,42 @@ it.live("serves the session view operation and missing-session error", () =>
   }),
 )
 
+it.live("stops a shell command over HTTP without removing it", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const json = (input: Request) => Effect.promise(() => handler(input).then((response) => response.json()))
+    const created = yield* json(
+      new Request("http://opencode.local/api/shell", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          command: process.platform === "win32" ? "Start-Sleep -Seconds 60" : "sleep 60",
+          timeout: 0,
+        }),
+      }),
+    )
+    const id = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }))(created).data.id
+
+    const stopped = yield* Effect.promise(() =>
+      handler(new Request(`http://opencode.local/api/shell/${id}/stop`, { method: "POST" })),
+    )
+    expect(stopped.status).toBe(200)
+    expect(yield* Effect.promise(() => stopped.json())).toMatchObject({ data: { id, status: "killed" } })
+    // Still readable after the stop; a second stop is idempotent.
+    expect(yield* json(new Request(`http://opencode.local/api/shell/${id}`))).toMatchObject({
+      data: { id, status: "killed" },
+    })
+    expect(yield* json(new Request(`http://opencode.local/api/shell/${id}/stop`, { method: "POST" }))).toMatchObject({
+      data: { id, status: "killed" },
+    })
+
+    const missing = yield* Effect.promise(() =>
+      handler(new Request("http://opencode.local/api/shell/sh_missing/stop", { method: "POST" })),
+    )
+    expect(missing.status).toBe(404)
+  }),
+)
+
 it.live("routes pending requests through the Session's instance", () =>
   Effect.gen(function* () {
     const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-pending-read-")))

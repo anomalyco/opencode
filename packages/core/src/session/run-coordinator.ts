@@ -1,7 +1,15 @@
 export * as SessionRunCoordinator from "./run-coordinator.js"
 
-import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
 import type { Promotable } from "./inbox.js"
+
+/**
+ * How an execution ended, as observed by joiners. Interruption is reported as a value: the
+ * execution was interrupted, not the fiber asking how it went. Failures still fail with `E`.
+ */
+export type Terminal<Reason> =
+  | { readonly type: "succeeded" }
+  | { readonly type: "interrupted"; readonly reason?: Reason }
 
 /** Serializes execution for each key while allowing different keys to run concurrently. */
 export interface Coordinator<Key, E, Reason = never> {
@@ -9,8 +17,8 @@ export interface Coordinator<Key, E, Reason = never> {
   readonly active: Effect.Effect<ReadonlySet<Key>>
   /** Checks ownership for one key, including cleanup and terminal settlement. */
   readonly isActive: (key: Key) => Effect.Effect<boolean>
-  /** Starts an execution while idle, or joins the active execution and returns its exit. */
-  readonly run: (key: Key) => Effect.Effect<void, E>
+  /** Starts an execution while idle, or joins the active execution, and returns how it ended. */
+  readonly run: (key: Key) => Effect.Effect<Terminal<Reason>, E>
   /** Rings the doorbell: an idle key starts an execution; an active one drains again before settling. */
   readonly wake: (key: Key, scope?: Promotable) => Effect.Effect<void>
   /**
@@ -30,10 +38,10 @@ export interface Coordinator<Key, E, Reason = never> {
  * execution rings it with the scope that work needs, and the execution loop drains again
  * instead of ending. The doorbell closes the gap between a drain's last eligibility check
  * and the idle transition, since those cannot be one atomic step. `done` resolves joiners
- * with this execution's exit.
+ * with how this execution ended.
  */
 type Execution<E, Reason> = {
-  readonly done: Deferred.Deferred<void, E>
+  readonly done: Deferred.Deferred<Terminal<Reason>, E>
   owner?: Fiber.Fiber<void>
   scope: Promotable
   pendingWake?: Promotable
@@ -81,7 +89,7 @@ export const make = <Key, E, Reason = never>(options: {
 
     const start = (key: Key, force: boolean, scope: Promotable) => {
       const execution: Execution<E, Reason> = {
-        done: Deferred.makeUnsafe<void, E>(),
+        done: Deferred.makeUnsafe<Terminal<Reason>, E>(),
         scope,
         stopping: false,
       }
@@ -111,12 +119,17 @@ export const make = <Key, E, Reason = never>(options: {
     const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>) => {
       if (execution.pendingWake) start(key, false, execution.pendingWake)
       else executions.delete(key)
-      Deferred.doneUnsafe(execution.done, exit)
+      const ended: Effect.Effect<Terminal<Reason>, E> = Exit.isSuccess(exit)
+        ? Effect.succeed({ type: "succeeded" })
+        : Cause.hasInterrupts(exit.cause)
+          ? Effect.succeed({ type: "interrupted", reason: execution.interruptionReason })
+          : Effect.failCause(exit.cause)
+      Deferred.doneUnsafe(execution.done, ended)
     }
 
     const isActive = (key: Key) => Effect.sync(() => executions.has(key))
 
-    const run = (key: Key): Effect.Effect<void, E> =>
+    const run = (key: Key): Effect.Effect<Terminal<Reason>, E> =>
       Effect.suspend(() => {
         const execution = executions.get(key)
         if (execution !== undefined) {

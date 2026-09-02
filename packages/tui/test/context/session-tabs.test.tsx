@@ -898,6 +898,49 @@ test("closing a tab is not undone by another TUI viewing the same session", asyn
   }
 })
 
+test("a pending user-stop notice does not keep its tab busy", async () => {
+  const setup = await renderSessionTabs("parent", { persisted: ["parent"] })
+
+  try {
+    await wait(() => setup.tabs.current() === "parent")
+    setup.emit({
+      id: "evt_stopped",
+      created: 1,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "parent", seq: 1, version: 1 },
+      data: {
+        sessionID: "parent",
+        inboxID: "msg_stopped",
+        item: {
+          type: "synthetic",
+          delivery: "steer",
+          payload: { text: "Stopped by user", metadata: { source: "shell", state: "stopped" } },
+        },
+      },
+    })
+    await wait(() => setup.data.session.pending.list("parent").length === 1)
+    expect(setup.tabs.status("parent").busy).toBe(false)
+
+    // Real execution still shows busy while the notice is pending.
+    for (const [index, type] of (["session.execution.started", "session.execution.succeeded"] as const).entries()) {
+      setup.emit({
+        id: `evt_execution_${index}`,
+        created: 2 + index,
+        type,
+        durable: { aggregateID: "parent", seq: 2 + index, version: 1 },
+        data: { sessionID: "parent" },
+      })
+      await wait(() => setup.tabs.status("parent").busy === (index === 0))
+    }
+
+    // As does any other pending input.
+    setup.emit(admitted("parent", "msg_4"))
+    await wait(() => setup.tabs.status("parent").busy)
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("user prompt admissions pulse an already-busy background tab", async () => {
   const setup = await renderSessionTabs("background", { persisted: ["background"] })
 

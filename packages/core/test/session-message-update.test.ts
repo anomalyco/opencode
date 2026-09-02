@@ -38,7 +38,7 @@ const it = testEffect(
           SessionExecution.Service.of({
             active: Effect.sync(() => active),
             isActive: (sessionID) => Effect.sync(() => active.has(sessionID)),
-            resume: () => Effect.void,
+            resume: () => Effect.succeed({ type: "succeeded" as const }),
             wake: () => Effect.void,
             interrupt: () => Effect.succeed(false),
             awaitIdle: () => Effect.void,

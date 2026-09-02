@@ -47,6 +47,7 @@ const execution = Layer.succeed(
     resume: (sessionID) =>
       Effect.sync(() => {
         executionCalls.push(sessionID)
+        return { type: "succeeded" as const }
       }),
     interrupt: (sessionID, options) =>
       Effect.sync(() => {

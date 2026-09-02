@@ -12,6 +12,8 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { Shell } from "@opencode-ai/core/shell"
+import { ShellResult } from "@opencode-ai/core/shell/result"
+import { ID } from "@opencode-ai/schema/shell"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { location } from "./fixture/location"
 import { offlineModels } from "./fixture/models"
@@ -47,7 +49,14 @@ const executionLayer = Layer.effect(
     return SessionExecution.Service.of({
       active: coordinator.active,
       isActive: coordinator.isActive,
-      resume: coordinator.run,
+      resume: (id) =>
+        coordinator
+          .run(id)
+          .pipe(
+            Effect.map((ended) =>
+              ended.type === "succeeded" ? ended : { type: "interrupted" as const, reason: "user" as const },
+            ),
+          ),
       interrupt: (sessionID) => coordinator.interrupt(sessionID),
       awaitIdle: coordinator.awaitIdle,
       wake: (sessionID) =>
@@ -277,22 +286,38 @@ describe("Session.shell", () => {
     )
   }
 
+  // Any external kill is a user stop: stopping keeps the captured output readable, removal forgets it.
   for (const outcome of [
     {
       status: "killed",
-      state: "cancelled",
-      text: "Command cancelled",
+      via: "stop",
+      end: (shell: Shell.Interface, id: ID) => shell.stop(id),
+      state: "stopped",
+      text: "Command stopped by user. Do not restart it unless the user asks.",
+      output: "killed started",
+    },
+    {
+      status: "killed",
+      via: "remove",
+      end: (shell: Shell.Interface, id: ID) => shell.remove(id),
+      state: "stopped",
+      text: "Command stopped by user. Do not restart it unless the user asks.",
       output: "Shell command output is no longer available.",
     },
-    { status: "timeout", state: "completed", text: "Command timed out", output: "timeout started" },
+    {
+      status: "timeout",
+      via: "timeout",
+      end: (shell: Shell.Interface, id: ID) => shell.timeout(id, 1),
+      state: "completed",
+      text: "Command timed out",
+      output: "timeout started",
+    },
   ]) {
-    it.live(`records a ${outcome.status} shell and admits its completion without waking the model`, () =>
+    it.live(`records a  shell via  and admits its completion without waking the model`, () =>
       Effect.gen(function* () {
         const fixture = yield* setup
         const command = yield* launch(fixture, outcome.status)
-        yield* outcome.status === "killed"
-          ? fixture.shell.remove(command.shellID)
-          : fixture.shell.timeout(command.shellID, 1)
+        yield* outcome.end(fixture.shell, command.shellID)
         yield* Fiber.join(command.caller).pipe(Effect.timeout("5 seconds"))
         expect(yield* fixture.session.messages({ sessionID: fixture.created.id })).toMatchObject([
           {
@@ -319,6 +344,32 @@ describe("Session.shell", () => {
       }),
     )
   }
+
+  it.live("reports a stop that lands before anyone waits, with its output still readable", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const started = yield* fixture.shell.create({
+        command: process.platform === "win32" ? "Write-Output early; Start-Sleep -Seconds 60" : "echo early; sleep 60",
+        timeout: 0,
+      })
+      yield* fixture.shell
+        .output(started.id)
+        .pipe(Effect.repeat({ until: (page) => page.size > 0, schedule: Schedule.spaced("10 millis") }))
+      expect(yield* fixture.shell.stop(started.id)).toMatchObject({ id: started.id, status: "killed" })
+      // A second stop is a no-op on an already terminal command.
+      expect(yield* fixture.shell.stop(started.id)).toMatchObject({ status: "killed" })
+      expect(yield* fixture.shell.list()).toEqual([])
+      expect(yield* fixture.shell.result(started)).toMatchObject({
+        info: { id: started.id, status: "killed" },
+        capture: { output: expect.stringContaining("early"), truncated: false },
+      })
+      expect(ShellResult.outcome(yield* fixture.shell.result(started))).toMatchObject({
+        kind: "shell",
+        status: "killed",
+        output: expect.stringContaining("early"),
+      })
+    }),
+  )
 
   it.live("admits a spawn failure without waking the model before failing the caller", () =>
     Effect.gen(function* () {

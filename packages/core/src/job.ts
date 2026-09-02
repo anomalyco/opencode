@@ -6,6 +6,17 @@ import { Identifier } from "./id/id.js"
 import { KV } from "./kv.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
+import { ShellResult } from "./shell/result.js"
+import { SubagentOutcome } from "./session/subagent-outcome.js"
+
+/**
+ * The producer's typed account of how its work ended. A job never classifies the work itself:
+ * `status` says whether the run reported an outcome (`completed`), died (`error`), or was
+ * abandoned before reporting (`cancelled`). A user stop, a timeout, or a nonzero exit are all
+ * `completed` runs whose outcome says so.
+ */
+export const Outcome = Schema.Union([ShellResult.Outcome, SubagentOutcome.Outcome])
+export type Outcome = typeof Outcome.Type
 
 const Background = Schema.Struct({
   id: Schema.String,
@@ -26,13 +37,15 @@ const Background = Schema.Struct({
     }),
   ]),
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
-  output: Schema.optionalKey(Schema.String),
+  result: Schema.optionalKey(Outcome),
   error: Schema.optionalKey(Schema.String),
 })
 
 export type Background = typeof Background.Type
 export type Recovery = Background["recovery"]
 export type Status = Background["status"]
+/** One job's terminal facts, shared by live Info and the durable background marker. */
+export type Terminal = Pick<Background, "status" | "result" | "error">
 
 const decodeBackground = Schema.decodeUnknownResult(Background)
 const backgroundPrefix = "job.background/"
@@ -44,7 +57,7 @@ export type Info = {
   status: Status
   started_at: number
   completed_at?: number
-  output?: string
+  result?: Outcome
   error?: string
   metadata?: Record<string, unknown>
   notificationID?: SessionMessage.ID
@@ -96,7 +109,7 @@ export type StartInput = {
   metadata?: Record<string, unknown>
   recovery?: Recovery
   notificationID?: SessionMessage.ID
-  run: Effect.Effect<string, unknown>
+  run: Effect.Effect<Outcome, unknown>
 }
 
 export type WaitInput = {
@@ -178,12 +191,12 @@ export const make = Effect.gen(function* () {
       notificationID: job.info.notificationID,
       recovery: job.recovery,
       status: job.info.status,
-      ...(job.info.output !== undefined ? { output: job.info.output } : {}),
+      ...(job.info.result !== undefined ? { result: job.info.result } : {}),
       ...(job.info.error !== undefined ? { error: job.info.error } : {}),
     })
   })
 
-  const settle = Effect.fnUntraced(function* (id: string, scope: Scope.Closeable, exit: Exit.Exit<string, unknown>) {
+  const settle = Effect.fnUntraced(function* (id: string, scope: Scope.Closeable, exit: Exit.Exit<Outcome, unknown>) {
     const completed_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
@@ -204,7 +217,7 @@ export const make = Effect.gen(function* () {
             ...job.info,
             status,
             completed_at,
-            ...(Exit.isSuccess(exit) ? { output: exit.value } : {}),
+            ...(Exit.isSuccess(exit) ? { result: exit.value } : {}),
             ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
           },
         }

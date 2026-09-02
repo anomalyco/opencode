@@ -3,7 +3,7 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Schedule, Scope, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -115,7 +115,7 @@ const executionNode = makeGlobalNode({
       return SessionExecution.Service.of({
         active: Effect.succeed(new Set()),
         isActive: () => Effect.succeed(false),
-        resume: complete,
+        resume: (id) => complete(id).pipe(Effect.as({ type: "succeeded" as const })),
         wake: () => Effect.void,
         interrupt: () => Effect.succeed(false),
         awaitIdle: (id) => complete(id).pipe(Effect.exit, Effect.asVoid),
@@ -168,6 +168,14 @@ const permissionIt = testEffect(
     Global.node.replace(tempGlobalLayer),
     PluginSupervisor.node.replace(shellPluginSupervisor),
     offlineModels,
+  ]),
+)
+// Real SessionExecution: the fake above fabricates a step on wake, so "nothing started" is only observable here.
+const executionIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    Permission.node.replace(permission),
+    Global.node.replace(tempGlobalLayer),
+    PluginSupervisor.node.replace(shellPluginSupervisor),
   ]),
 )
 
@@ -1435,6 +1443,115 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  it.live("returns a stopped result with the captured output when the user kills a foreground command", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      reset()
+      yield* withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const ready = yield* Deferred.make<string>()
+          const running = yield* executeTool(registry, {
+            ...call({
+              command: isWindows ? "Write-Output started; Start-Sleep -Seconds 60" : "echo started; sleep 60",
+            }),
+            progress: (update) =>
+              typeof update.shellID === "string"
+                ? Deferred.succeed(ready, update.shellID).pipe(Effect.asVoid)
+                : Effect.void,
+          }).pipe(Effect.forkScoped)
+          const id = ID.make(yield* Deferred.await(ready))
+          yield* shell
+            .output(id)
+            .pipe(Effect.repeat({ until: (page) => page.size > 0, schedule: Schedule.spaced("10 millis") }))
+          expect(yield* shell.stop(id)).toMatchObject({ id, status: "killed" })
+
+          const result = yield* Fiber.join(running)
+          expect(result.metadata).toMatchObject({ status: "stopped", truncated: false })
+          expect(result.metadata).not.toHaveProperty("exit")
+          expect(result.content).toEqual([
+            Expected.text(expect.stringContaining("started")),
+            Expected.text("Command stopped by user. Do not restart it unless the user asks."),
+          ])
+          const jobs = yield* Job.Service
+          expect(yield* jobs.get(id)).toMatchObject({
+            status: "completed",
+            result: { kind: "shell", status: "killed" },
+          })
+          // Stopping keeps the command readable; only removal forgets it.
+          expect(yield* shell.get(id)).toMatchObject({ status: "killed" })
+        }),
+      )
+    }),
+  )
+
+  it.live("cancels the shell job when interrupted during initial progress", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      reset()
+      yield* withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const ready = yield* Deferred.make<string>()
+          const running = yield* executeTool(registry, {
+            ...call({ command: idleCommand, background: true }),
+            progress: (update) =>
+              typeof update.shellID === "string"
+                ? Deferred.succeed(ready, update.shellID).pipe(Effect.andThen(Effect.never))
+                : Effect.void,
+          }).pipe(Effect.forkScoped)
+          const id = yield* Deferred.await(ready)
+          yield* Fiber.interrupt(running)
+          const jobs = yield* Job.Service
+          const shell = yield* Shell.Service
+          expect(yield* jobs.get(id)).toMatchObject({ status: "cancelled" })
+          expect(yield* shell.list()).toEqual([])
+          expect(yield* jobs.pendingBackground).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  executionIt.live("records a background user stop as a quiet notice without waking the idle session", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      reset()
+      yield* withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const bus = yield* Bus.Service
+          const jobs = yield* Job.Service
+          const sessions = yield* Session.Service
+          const execution = yield* SessionExecution.Service
+          const shell = yield* Shell.Service
+          const started: Session.ID[] = []
+          yield* bus.project(SessionEvent.Execution.Started, (event) =>
+            Effect.sync(() => void started.push(event.data.sessionID)),
+          )
+          const result = yield* executeTool(registry, call({ command: idleCommand, background: true }))
+          const id = result.metadata?.shellID
+          if (typeof id !== "string") return yield* Effect.die("Expected shell ID")
+          yield* shell.stop(ID.make(id))
+          yield* jobs.pendingBackground.pipe(
+            Effect.repeat({ until: (pending) => pending.length === 0, schedule: Schedule.spaced("10 millis") }),
+            Effect.timeout("5 seconds"),
+          )
+          yield* execution.awaitIdle(sessionID)
+          expect(started).toEqual([])
+          expect(yield* sessions.inbox(sessionID)).toMatchObject([
+            {
+              type: "synthetic",
+              payload: {
+                text: expect.stringContaining("Command stopped by user. Do not restart it unless the user asks."),
+                metadata: { source: "shell", state: "stopped", shellID: id, jobID: id },
+              },
+            },
+          ])
+          // The stop reached the model-facing notice, so the shell must not have been forgotten.
+          expect(yield* shell.get(ID.make(id))).toMatchObject({ status: "killed" })
+        }),
+      )
+    }),
+  )
+
   it.live("returns the shell id for a background command", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -1557,7 +1674,7 @@ describe("ShellTool", () => {
               {
                 id: settled.metadata?.shellID,
                 status: "completed",
-                output: "(no output)\n\nCommand exited with code 7.",
+                result: { kind: "shell", status: "exited", exit: 7, output: "(no output)", truncated: false },
               },
             ])
           }),

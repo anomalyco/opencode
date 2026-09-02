@@ -3,7 +3,8 @@ export * as SubagentJob from "./subagent-job.js"
 import { Effect, Scope } from "effect"
 import { Job } from "../job.js"
 import { Session } from "../session.js"
-import { SubagentCompletion } from "./subagent-completion.js"
+import { BackgroundNotice } from "./background-notice.js"
+import { SubagentOutcome } from "./subagent-outcome.js"
 
 type Recovery = Extract<Job.Recovery, { kind: "subagent" }>
 
@@ -26,7 +27,7 @@ export const make: Effect.Effect<Runner, never, Session.Service | Job.Service | 
     notifications.add(key)
     yield* Effect.gen(function* () {
       const info = (yield* jobs.wait({ id: recovery.childSessionID })).info
-      if (info) yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
+      if (info && info.status !== "running") yield* BackgroundNotice.deliver(sessions, jobs, { ...info, recovery })
     }).pipe(
       Effect.ensuring(Effect.sync(() => notifications.delete(key))),
       Effect.forkIn(scope, { startImmediately: true }),
@@ -41,15 +42,7 @@ export const make: Effect.Effect<Runner, never, Session.Service | Job.Service | 
         title: recovery.description,
         metadata: {},
         recovery,
-        run: Effect.gen(function* () {
-          yield* sessions.resume(recovery.childSessionID)
-          const messages = yield* sessions.messages({ sessionID: recovery.childSessionID, order: "desc", limit: 20 })
-          const assistant = messages.find(
-            (message) =>
-              message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-          )
-          return SubagentCompletion.text(assistant)
-        }),
+        run: SubagentOutcome.run(sessions, recovery.childSessionID),
       }),
     background: Effect.fn("SubagentJob.background")(function* (recovery: Recovery) {
       const info = yield* jobs.background(recovery.childSessionID)
