@@ -20780,7 +20780,7 @@
                     "enum": [false]
                   }
                 ],
-                "description": "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout."
+                "description": "Timeout in milliseconds to wait for response headers (default: 300000). Set to false to disable timeout."
               },
               "chunkTimeout": {
                 "anyOf": [

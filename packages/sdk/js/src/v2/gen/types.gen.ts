@@ -1751,7 +1751,7 @@ export type ProviderConfig = {
      */
     timeout?: number | false
     /**
-     * Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.
+     * Timeout in milliseconds to wait for response headers (default: 300000). Set to false to disable timeout.
      */
     headerTimeout?: number | false
     /**

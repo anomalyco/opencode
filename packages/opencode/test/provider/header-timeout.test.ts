@@ -48,40 +48,46 @@ it.live("headerTimeout does not abort delayed SSE body after headers arrive", ()
   }),
 )
 
-it.live("default chunkTimeout is applied at fetch without changing provider options", () =>
-  Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(
-      Effect.promise(() => delayedBodyServer(250)),
-      (server) => Effect.sync(() => server.server.close()),
-    )
+for (const timeout of ["chunkTimeout", "headerTimeout"] as const) {
+  it.live(`default ${timeout} is applied at fetch without changing provider options`, () =>
+    Effect.gen(function* () {
+      const server = yield* Effect.acquireRelease(
+        Effect.promise(() => delayedBodyServer(250)),
+        (server) => Effect.sync(() => server.server.close()),
+      )
 
-    yield* provideTmpdirInstance(
-      () =>
-        Effect.gen(function* () {
-          const provider = yield* Provider.Service
-          const configured = yield* provider.getProvider(ProviderV2.ID.make("test"))
-          const signals: (AbortSignal | null | undefined)[] = []
-          configured.options.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-            signals.push(init?.signal)
-            return fetch(input, init)
-          }
-          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
-          const language = yield* provider.getLanguage(model)
-          yield* Effect.acquireRelease(
-            Effect.promise(() =>
-              language.doStream({ prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }),
-            ),
-            (result) => Effect.promise(() => result.stream.cancel()),
-          )
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const provider = yield* Provider.Service
+            const configured = yield* provider.getProvider(ProviderV2.ID.make("test"))
+            const signals: (AbortSignal | null | undefined)[] = []
+            configured.options.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+              signals.push(init?.signal)
+              return fetch(input, init)
+            }
+            const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
+            const language = yield* provider.getLanguage(model)
+            yield* Effect.acquireRelease(
+              Effect.promise(() =>
+                language.doStream({ prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }),
+              ),
+              (result) => Effect.promise(() => result.stream.cancel()),
+            )
 
-          expect(signals).toHaveLength(1)
-          expect(signals[0]).toBeInstanceOf(AbortSignal)
-          expect(configured.options.chunkTimeout).toBeUndefined()
-        }),
-      { config: providerConfig(server.url) },
-    )
-  }),
-)
+            expect(signals).toHaveLength(1)
+            expect(signals[0]).toBeInstanceOf(AbortSignal)
+            expect(configured.options[timeout]).toBeUndefined()
+          }),
+        {
+          config: providerConfig(server.url, {
+            [timeout === "chunkTimeout" ? "headerTimeout" : "chunkTimeout"]: false,
+          }),
+        },
+      )
+    }),
+  )
+}
 
 it.live("configured chunkTimeout raises a retryable response stream error when SSE body stalls", () =>
   Effect.gen(function* () {
@@ -178,7 +184,7 @@ it.live("headerTimeout aborts when response headers do not arrive", () =>
   }),
 )
 
-it.live("headerTimeout is opt-in for non-OpenAI providers", () =>
+it.live("headerTimeout can be disabled with false for non-OpenAI providers", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
       Effect.promise(() => delayedHeaderServer(100)),
@@ -197,7 +203,7 @@ it.live("headerTimeout is opt-in for non-OpenAI providers", () =>
 
           expect(yield* Effect.promise(() => result.text)).toBe("ok")
         }),
-      { config: providerConfig(server.url) },
+      { config: providerConfig(server.url, { headerTimeout: false }) },
     )
   }),
 )
