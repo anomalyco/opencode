@@ -6,8 +6,8 @@ for (const open of [true, false]) {
     async ({ mount }, info) => {
       const root = await mount("current-session-file-changes--appending-tool-calls")
       const group = root.locator('[data-component="collapsed-tool-group"]')
-      const trigger = group.getByRole("button", { name: /^Used \d+ Shell, Patch$/ })
-      await expect(trigger).toHaveAccessibleName("Used 2 Shell, Patch")
+      const trigger = group.getByRole("button", { name: /^Used 1 Shell, \d+ Patch$/ })
+      await expect(trigger).toHaveAccessibleName("Used 1 Shell, 1 Patch")
       await trigger.click()
       const shell = group.locator('[data-timeline-part-id="tool_shell_existing"] [data-slot="collapsible-trigger"]')
       await group.locator('[data-timeline-part-id="tool_patch_existing"]').evaluate((element) => {
@@ -33,8 +33,8 @@ for (const open of [true, false]) {
         await root.getByRole("button", { name: "Append tool call", exact: true }).click()
         await expect(
           group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-        ).toHaveText(`${count} Shell, Patch`)
-        await expect(trigger).toHaveAccessibleName(`Used ${count} Shell, Patch`)
+        ).toHaveText(`1 Shell, ${count - 1} Patch`)
+        await expect(trigger).toHaveAccessibleName(`Used 1 Shell, ${count - 1} Patch`)
         await expect(diff).toBeVisible()
         await root
           .locator('[data-component="session-timeline"]')

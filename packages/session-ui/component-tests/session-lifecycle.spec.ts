@@ -19,7 +19,7 @@ for (const tool of ["shell", "execute", "subagent"]) {
         await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle,tool_shell_lifecycle")
         await expect(
           group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-        ).toHaveText(/^2 /)
+        ).toHaveText(`1 Read, 1 ${tool === "subagent" ? "Agent" : tool[0]!.toUpperCase() + tool.slice(1)}`)
         await expect(timeline.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(1)
         await expect(trigger).toHaveAttribute("aria-expanded", String(open))
         expect(await original!.evaluate((node) => node.isConnected)).toBe(true)
@@ -187,10 +187,10 @@ for (const locale of ["de", "ar"] as const) {
     await timeline.getByRole("button", { name: "Complete read" }).click()
     await timeline.getByRole("button", { name: "Complete glob" }).click()
     const group = timeline.locator('[data-timeline-part-ids="tool_context_read,tool_context_glob"]')
-    await expect(group.getByRole("button")).toHaveAccessibleName(/^Used 2 /)
+    await expect(group.getByRole("button")).toHaveAccessibleName(/^Used 1 .+, 1 /)
     await expect(
       group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-    ).toHaveText(/^2 /)
+    ).toHaveText(/^1 .+, 1 /)
     await expect(page.locator("html")).toHaveAttribute("lang", locale)
   })
 }

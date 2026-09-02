@@ -193,8 +193,22 @@ const LoadingSpecializedSkills = {
       title="Loading specialized skills"
       description="Active and completed skills display their identifier or resolved name."
       document={storyDocument([
-        storyTool("tool_skill_id", "skill", "running", { id: "frontend-design" }),
+        storyTool("tool_skill_id", "skill", "completed", { id: "frontend-design" }),
         storyTool("tool_skill_name", "skill", "completed", { id: "opencode" }, { metadata: { name: "OpenCode" } }),
+        storyTool(
+          "tool_skill_agent",
+          "subagent",
+          "completed",
+          {
+            description: "Review skill usage",
+            agent: "explore",
+            prompt: "Review the loaded skills.",
+          },
+          {
+            output: "The loaded skills are ready.",
+            metadata: { sessionID: "session_child_review", status: "completed" },
+          },
+        ),
       ])}
     />
   ),

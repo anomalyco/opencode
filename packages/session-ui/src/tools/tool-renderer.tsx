@@ -507,11 +507,20 @@ export function CurrentContextToolGroup(props: {
             : tool.name === "subagent"
               ? i18n.t("ui.tool.agent.default")
               : getToolInfo(tool.name, input, currentToolMetadata(tool)).title
-        counts.set(name, (counts.get(name) ?? 0) + 1)
+        const current = counts.get(name)
+        counts.set(name, {
+          count: (current?.count ?? 0) + 1,
+          plural:
+            tool.name === "skill"
+              ? "ui.messagePart.tools.skill"
+              : tool.name === "subagent"
+                ? "ui.messagePart.tools.agent"
+                : undefined,
+        })
         return counts
-      }, new Map<string, number>()),
+      }, new Map<string, { count: number; plural?: "ui.messagePart.tools.skill" | "ui.messagePart.tools.agent" }>()),
     ]
-      .map(([name, count]) => `${count} ${name}`)
+      .map(([name, item]) => (item.plural ? i18n.plural(item.plural, item.count) : `${item.count} ${name}`))
       .join(", "),
   )
   const label = createMemo(() => {
