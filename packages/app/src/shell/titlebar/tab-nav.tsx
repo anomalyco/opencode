@@ -431,7 +431,7 @@ export function DraftTabItem(props: {
           props.onNavigate()
         }}
         class="flex h-full min-w-0 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
-        classList={{ "flex-1": props.orientation === "vertical", "flex-none pe-5": props.orientation !== "vertical" }}
+        classList={{ "flex-1": props.orientation === "vertical", "flex-none pe-10": props.orientation !== "vertical" }}
       >
         <span class="flex size-4 shrink-0 items-center justify-center">
           <Icon name="edit" />
