@@ -5,6 +5,7 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Cause, Context, Effect, Layer, PubSub, RcMap, Schema, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
 import { watch } from "node:fs"
@@ -70,7 +71,7 @@ export type Options = typeof Options.Type
 export class Service extends Context.Service<Service, Interface>()("@opencode/Watcher") {}
 
 export interface TestInterface extends Interface {
-  /** Broadcasts one update to every subscriber. */
+  /** Delivers one update to every active watch whose target covers `update.path`. */
   readonly emit: (update: Update) => Effect.Effect<void>
   /** Returns every subscribe call observed so far, in order. */
   readonly subscriptions: () => Effect.Effect<readonly WatchInput[]>
@@ -150,12 +151,14 @@ export const layer = (options?: Options) =>
 
 /**
  * Watcher for tests: the real lifecycle over an in-memory Native that records
- * acquired watches and broadcasts emitted updates to every active watch.
+ * acquired watches and routes emitted updates the way the OS watches would: a
+ * file watch receives updates for its own path, a directory watch receives
+ * updates for paths inside it that no ignore entry covers.
  */
 export const testLayer = Layer.effectContext(
   Effect.gen(function* () {
     const subscriptions: WatchInput[] = []
-    const active = new Set<(update: Update) => void>()
+    const active = new Map<(update: Update) => void, (path: string) => boolean>()
     const native = Native.of({
       subscribe: (input) =>
         Effect.sync(() => {
@@ -166,7 +169,17 @@ export const testLayer = Layer.effectContext(
                 ? { path: input.target, type: "directory", ignore: input.ignore }
                 : { path: input.target, type: "directory" },
           )
-          active.add(input.publish)
+          // Ignore entries resolve against the target like the parcel wrapper's
+          // literal paths. Glob entries resolve to paths nothing lives under, so
+          // they are inert here rather than compiled the way parcel compiles them.
+          const ignored = input.ignore.map((entry) => path.resolve(input.target, entry))
+          active.set(
+            input.publish,
+            input.type === "file"
+              ? (target) => target === input.target
+              : (target) =>
+                  FSUtil.contains(input.target, target) && !ignored.some((entry) => FSUtil.contains(entry, target)),
+          )
           return {
             unsubscribe: () => {
               active.delete(input.publish)
@@ -178,7 +191,13 @@ export const testLayer = Layer.effectContext(
     const context = yield* Layer.build(layer().pipe(Layer.provide(Layer.succeed(Native, native))))
     const test = Test.of({
       subscribe: Context.get(context, Service).subscribe,
-      emit: (update) => Effect.sync(() => active.forEach((publish) => publish(update))),
+      emit: (update) =>
+        Effect.sync(() => {
+          const target = path.resolve(update.path)
+          active.forEach((matches, publish) => {
+            if (matches(target)) publish(update)
+          })
+        }),
       subscriptions: () => Effect.sync(() => [...subscriptions]),
     })
     return Context.empty().pipe(Context.add(Service, test), Context.add(Test, test))
