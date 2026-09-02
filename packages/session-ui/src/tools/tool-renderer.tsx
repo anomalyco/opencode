@@ -511,7 +511,7 @@ export function CurrentContextToolGroup(props: {
         return counts
       }, new Map<string, number>()),
     ]
-      .map(([name, count]) => `${count} ${name}${count === 1 ? "" : "s"}`)
+      .map(([name, count]) => `${count} ${name}`)
       .join(", "),
   )
   const label = createMemo(() => {
