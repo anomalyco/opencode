@@ -614,7 +614,6 @@
         "effect": "catalog:",
       },
       "devDependencies": {
-        "@opencode-ai/script": "workspace:*",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
