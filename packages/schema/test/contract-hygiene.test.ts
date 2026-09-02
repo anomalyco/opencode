@@ -165,10 +165,21 @@ describe("contract hygiene", () => {
     expect(Schema.encodeSync(Vcs.Info)({ branch: { current: undefined, default: undefined } })).toEqual({ branch: {} })
   })
 
+  test("filesystem writes decode base64 once and preserve exact bytes on the wire", () => {
+    const wire = { path: "file.bin", content: "77u/AID/DQo=", expected: "" }
+    const decoded = Schema.decodeUnknownSync(FileSystem.WriteInput)(wire)
+    expect(decoded.content).toEqual(new Uint8Array([0xef, 0xbb, 0xbf, 0, 128, 255, 13, 10]))
+    expect(decoded.expected).toEqual(new Uint8Array())
+    expect(Schema.encodeSync(FileSystem.WriteInput)(decoded)).toEqual(wire)
+    expect(() => Schema.decodeUnknownSync(FileSystem.WriteInput)({ ...wire, content: "!invalid!" })).toThrow()
+    expect(() => Schema.decodeUnknownSync(FileSystem.WriteInput)({ ...wire, expected: "!invalid!" })).toThrow()
+  })
+
   test("reusable public identifiers are stable and unique", () => {
     const identifiers = [
       Agent.Color,
       FileSystem.Submatch,
+      FileSystem.WriteInput,
       Form.Field,
       Form.Fields,
       Form.Info,

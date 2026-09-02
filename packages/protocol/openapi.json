@@ -8755,6 +8755,126 @@
         "summary": "Read file"
       }
     },
+    "/api/fs/write": {
+      "post": {
+        "tags": ["filesystem"],
+        "operationId": "v2.fs.write",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FileSystemWriteConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSystemWriteConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace an existing regular file relative to the requested location only when its bytes match expected.",
+        "summary": "Write file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileSystem.WriteInput"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/fs/list": {
       "get": {
         "tags": ["filesystem"],
@@ -14506,6 +14626,43 @@
           }
         },
         "required": ["path", "type"],
+        "additionalProperties": false
+      },
+      "FileSystem.WriteInput": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "format": "byte",
+            "contentEncoding": "base64"
+          },
+          "expected": {
+            "type": "string",
+            "format": "byte",
+            "contentEncoding": "base64"
+          }
+        },
+        "required": ["path", "content", "expected"],
+        "additionalProperties": false
+      },
+      "FileSystemWriteConflictErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["FileSystemWriteConflictError"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "path", "message"],
         "additionalProperties": false
       },
       "ForbiddenErrorEncoded": {

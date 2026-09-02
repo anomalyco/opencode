@@ -61,6 +61,11 @@ export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
 /** Share transaction locks across Location graphs that address the same file. */
 const transactionLocks = KeyedMutex.makeUnsafe<string>()
 
+export const withLock: Interface["withLock"] = (targets) => (effect) =>
+  [...new Set(targets.map(FSUtil.resolve))]
+    .sort()
+    .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
+
 /**
  * Mutation locking is process-local and serializes cooperating OpenCode
  * changes; external writes can still race.
@@ -70,10 +75,6 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const environment = yield* Environment.Service
     const locks = KeyedMutex.makeUnsafe<string>()
-    const withLock: Interface["withLock"] = (targets) => (effect) =>
-      [...new Set(targets.map(FSUtil.resolve))]
-        .sort()
-        .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>

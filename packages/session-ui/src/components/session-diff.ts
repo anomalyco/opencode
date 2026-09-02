@@ -1,5 +1,6 @@
 import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
 import { parsePatch } from "diff"
+import { checksum } from "@opencode-ai/util/encode"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { PresentationFileDiff } from "../file-presentation"
 
@@ -65,6 +66,8 @@ function fileDiffFromPatch(file: string, patch: string) {
   const value = contents
     ? fileDiffFromContent(file, contents.before, contents.after)
     : ((input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file))
+  // Pierre's default key is filename-based; refreshed patches need a new worker cache entry.
+  value.cacheKey = `${file}:${checksum(patch)}`
   patchFileDiffCache.set(key, value)
   while (patchFileDiffCache.size > diffCacheLimit) patchFileDiffCache.delete(patchFileDiffCache.keys().next().value!)
   return value
@@ -136,7 +139,10 @@ function patchInput(file: string, patch: string) {
 
 function fileDiffFromContent(file: string, before: string, after: string) {
   if (!before && !after) return emptyFileDiff(file)
-  return parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+  return parseDiffFromFile(
+    { name: file, contents: before, cacheKey: `${file}:${checksum(before)}` },
+    { name: file, contents: after, cacheKey: `${file}:${checksum(after)}` },
+  )
 }
 
 function emptyFileDiff(file: string) {

@@ -3,6 +3,7 @@ import { Location } from "@opencode-ai/schema/location"
 import { PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { InvalidRequestError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const ListQuery = Schema.Struct({
@@ -29,6 +30,24 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
           identifier: "v2.fs.read",
           summary: "Read file",
           description: "Serve one file relative to the requested location.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("fs.write", "/api/fs/write", {
+      query: LocationQuery,
+      // Keep the JSON wire type explicit for clients; the handler decodes bytes.
+      payload: Schema.toEncoded(FileSystem.WriteInput),
+      success: Location.response(Schema.Boolean),
+      error: [FileSystem.WriteConflictError, InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.fs.write",
+          summary: "Write file",
+          description:
+            "Replace an existing regular file relative to the requested location only when its bytes match expected.",
         }),
       ),
   )

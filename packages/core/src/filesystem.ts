@@ -7,8 +7,9 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "./location.js"
 import { PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
-import { Entry, FileSystem, FindInput } from "@opencode-ai/schema/filesystem"
-export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
+import { FileMutation } from "./file-mutation.js"
+import { Entry, FileSystem, FindInput, WriteConflictError, WriteInput } from "@opencode-ai/schema/filesystem"
+export { Entry, Match, Submatch, WriteConflictError, WriteInput } from "@opencode-ai/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
@@ -51,6 +52,7 @@ export const Event = FileSystem.Event
 
 export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }>
+  readonly write: (input: WriteInput) => Effect.Effect<boolean, WriteConflictError>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
 }
@@ -88,6 +90,23 @@ const baseLayer = Layer.effect(
           content: yield* fs.readFile(target.real).pipe(Effect.orDie),
           mime: FSUtil.mimeType(target.real),
         }
+      }),
+      write: Effect.fn("FileSystem.write")(function* (input) {
+        // Host filesystem operations do not yet address workspace placement (#44568).
+        if (location.workspaceID) return yield* Effect.die(new Error("Writing workspace files is not supported"))
+        const target = yield* resolve(input.path)
+        return yield* Effect.gen(function* () {
+          const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+          const current = yield* fs.readFile(target.real).pipe(Effect.orDie)
+          if (
+            current.length !== input.expected.length ||
+            !current.every((byte, index) => byte === input.expected[index])
+          )
+            return yield* new WriteConflictError({ path: input.path, message: "File changed since it was read" })
+          yield* fs.writeFile(target.real, input.content).pipe(Effect.orDie)
+          return true
+        }).pipe(Effect.uninterruptible, FileMutation.withLock([target.absolute, target.real]))
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         const target = yield* resolve(input.path)

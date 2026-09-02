@@ -1,6 +1,7 @@
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { RelativePath } from "@opencode-ai/core/schema"
-import { Effect } from "effect"
+import { InvalidRequestError } from "@opencode-ai/protocol/errors"
+import { Effect, Schema } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -19,6 +20,17 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
           })
           return HttpServerResponse.uint8Array(file.content, { contentType: file.mime })
         }),
+      )
+      .handle("fs.write", (ctx) =>
+        response(
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.Service
+            const input = yield* Schema.decodeEffect(FileSystem.WriteInput)(ctx.payload).pipe(
+              Effect.mapError(() => new InvalidRequestError({ message: "Content and expected must be valid base64" })),
+            )
+            return yield* fs.write(input)
+          }),
+        ),
       )
       .handle("fs.list", (ctx) =>
         response(

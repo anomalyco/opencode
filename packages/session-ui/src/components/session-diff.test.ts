@@ -2,6 +2,22 @@ import { describe, expect, test } from "bun:test"
 import { normalize, resolveFileDiff, text } from "./session-diff"
 
 describe("session diff", () => {
+  test.each([1, 4])("uses content-specific worker cache keys for patches starting at line %s", (line) => {
+    const patch = `diff --git a/file.ts b/file.ts\n--- a/file.ts\n+++ b/file.ts\n@@ -${line} +${line} @@\n-old\n+new\n`
+    const first = resolveFileDiff({ file: "file.ts", patch })
+    const updated = resolveFileDiff({ file: "file.ts", patch: patch.replace("+new", "+edited") })
+    expect(first.cacheKey).toBeDefined()
+    expect(updated.cacheKey).not.toBe(first.cacheKey)
+    expect(resolveFileDiff({ file: "file.ts", patch })).toBe(first)
+  })
+
+  test("uses content-specific worker cache keys for full file pairs", () => {
+    const first = resolveFileDiff({ file: "file.ts", before: "before", after: "after" })
+    const updated = resolveFileDiff({ file: "file.ts", before: "before", after: "edited" })
+    expect(first.cacheKey).toBeDefined()
+    expect(updated.cacheKey).not.toBe(first.cacheKey)
+  })
+
   test.each([
     ["carriage return", "\r"],
     ["line separator", "\u2028"],

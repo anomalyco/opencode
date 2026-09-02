@@ -41,3 +41,19 @@ export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
   type: Schema.Literals(["file", "directory"]).pipe(optional),
   limit: PositiveInt.pipe(optional),
 }) {}
+
+export interface WriteInput extends Schema.Schema.Type<typeof WriteInput> {}
+export const WriteInput = Schema.Struct({
+  path: RelativePath,
+  content: Schema.Uint8ArrayFromBase64,
+  expected: Schema.Uint8ArrayFromBase64,
+}).annotate({ identifier: "FileSystem.WriteInput" })
+
+export class WriteConflictError extends Schema.TaggedError<WriteConflictError>()(
+  "FileSystemWriteConflictError",
+  {
+    path: RelativePath,
+    message: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}

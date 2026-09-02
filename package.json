@@ -65,7 +65,7 @@
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/diffs": "1.2.10",
+      "@pierre/diffs": "1.3.6",
       "opentui-spinner": "0.0.7",
       "@solid-primitives/event-listener": "2.4.6",
       "@solid-primitives/media": "2.3.6",

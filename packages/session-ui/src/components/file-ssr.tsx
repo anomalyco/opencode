@@ -119,21 +119,17 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
     // @ts-expect-error private field required for hydration
     fileDiffInstance.fileContainer = fileDiffRef
     fileDiffInstance.hydrate(
-      local.fileDiff
+      props.fileDiff !== undefined
         ? {
-            fileDiff: local.fileDiff,
+            fileDiff: props.fileDiff,
             lineAnnotations: annotations,
             fileContainer: fileDiffRef,
             containerWrapper: container,
             prerenderedHTML: local.preloadedDiff.prerenderedHTML,
           }
         : {
-            oldFile: local.before
-              ? { ...local.before, contents: typeof local.before.contents === "string" ? local.before.contents : "" }
-              : local.before,
-            newFile: local.after
-              ? { ...local.after, contents: typeof local.after.contents === "string" ? local.after.contents : "" }
-              : local.after,
+            oldFile: props.before,
+            newFile: props.after,
             lineAnnotations: annotations,
             fileContainer: fileDiffRef,
             containerWrapper: container,

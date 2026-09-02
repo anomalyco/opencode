@@ -6,12 +6,16 @@ import { createQuery, skipToken, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
 import { createEffect, createMemo, on, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Encoding } from "effect"
+import { useBeforeLeave } from "@solidjs/router"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { useComments } from "@/composer/comments"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
 import { useComposerState } from "@/composer/persistence"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { containsDirectory } from "@/workspaces/paths"
 import { useServerSDK } from "@/runtime/server/client"
 import { createOpenReviewFile } from "../helpers"
 import type { SessionModel } from "../model"
@@ -19,6 +23,7 @@ import type { SessionScreenLayout } from "../screen-layout"
 import { createReviewPanelState } from "./panel-state"
 import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "./review-diff-kinds"
 import type { DiffStyle } from "./review-tab"
+import { createReviewEditor } from "./editor"
 
 export type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
@@ -126,6 +131,36 @@ export function createSessionReview(input: {
       queryKey: [server.scope, "session-details", input.session.workspace.directory()],
     })
   }, 100)
+  const reviewDirectory = () => reviewRootDirectory(location().current?.project.directory ?? location().directory)
+  const editor = createReviewEditor({
+    directory: reviewDirectory,
+    read: (directory, path) => server.api.file.read({ location: { directory }, path }),
+    write: (directory, path, content, expected) =>
+      server.api.file.write({
+        location: { directory },
+        path,
+        content: Encoding.encodeBase64(content),
+        expected: Encoding.encodeBase64(expected),
+      }),
+    onSaved: (directory, path) => {
+      const target = `${directory}/${path}`
+      if (containsDirectory(location().directory, target)) void file.load(target, { force: true })
+      // A save can finish after navigation; invalidate the originating server's caches,
+      // not only whichever session happens to be active now.
+      void queryClient.invalidateQueries({ queryKey: [server.scope, "session-vcs"] })
+      void queryClient.invalidateQueries({ queryKey: [server.scope, "session-details"] })
+    },
+  })
+  makeEventListener(window, "beforeunload", (event) => {
+    if (!editor.pending()) return
+    event.preventDefault()
+    event.returnValue = ""
+  })
+  useBeforeLeave((event) => {
+    if (event.defaultPrevented) return
+    if (!editor.pending() || window.confirm(language.t("session.review.leaveUnsaved"))) return
+    event.preventDefault()
+  })
   createEffect(() => {
     const stop = location().event.listen((event) => {
       if (event.type === "filesystem.changed") refresh()
@@ -143,8 +178,9 @@ export function createSessionReview(input: {
     ),
   )
   const diffs = () => {
-    if (mode() === "git" || mode() === "branch") return vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
-    return []
+    const current = (mode() === "git" || mode() === "branch") && vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
+    // Keep open drafts reachable even when an external edit removes a file from the diff.
+    return [...current, ...editor.diffs().filter((draft) => !current.some((diff) => diff.file === draft.file))]
   }
   const activeFile = () => {
     const list = diffs()
@@ -161,7 +197,7 @@ export function createSessionReview(input: {
   const loadDiff = async (path: string, version?: number): Promise<FileDiffInfo | undefined> => {
     const value = vcsMode()
     if (!value) return undefined
-    const root = reviewRootDirectory(input.session.project()?.worktree ?? location().directory)
+    const root = reviewDirectory()
     const directory = reviewDiffDirectory(root, path)
     const source = diffs().find((diff) => diff.file === path)
     const valid = (diff: FileDiffInfo | undefined): FileDiffInfo | undefined => {
@@ -404,6 +440,7 @@ export function createSessionReview(input: {
       set: (style: DiffStyle) => layout.review.setDiffStyle(style),
     },
     diffs,
+    editor: () => (location().current && !location().ref.workspaceID ? editor : undefined),
     focusFile,
     hasChanges,
     loadDiff,

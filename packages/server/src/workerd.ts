@@ -111,6 +111,7 @@ const fileSystemLayer = Layer.succeed(
   FileSystem.Service,
   FileSystem.Service.of({
     read: () => unavailable("FileSystem.read"),
+    write: () => unavailable("FileSystem.write"),
     list: () => unavailable("FileSystem.list"),
     find: () => unavailable("FileSystem.find"),
   }),

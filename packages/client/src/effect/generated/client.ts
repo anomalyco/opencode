@@ -181,6 +181,8 @@ import type {
   PermissionGetOutput,
   PermissionReplyInput,
   PermissionReplyOutput,
+  FileWriteInput,
+  FileWriteOutput,
   FileListInput,
   FileListOutput,
   FileFindInput,
@@ -1160,6 +1162,14 @@ const adaptGroupPermission = (raw: RawClient["server.permission"]) => ({
   reply: EndpointPermissionReply(raw),
 })
 
+const EndpointFileWrite = (raw: RawClient["server.fs"]) => (input: FileWriteInput) =>
+  preserveEffect<FileWriteOutput>()(
+    raw["fs.write"]({
+      query: { location: input["location"] },
+      payload: { path: input["path"], content: input["content"], expected: input["expected"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointFileList = (raw: RawClient["server.fs"]) => (input?: FileListInput) =>
   preserveEffect<FileListOutput>()(
     raw["fs.list"]({ query: { location: input?.["location"], path: input?.["path"] } }).pipe(
@@ -1174,7 +1184,11 @@ const EndpointFileFind = (raw: RawClient["server.fs"]) => (input: FileFindInput)
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupFile = (raw: RawClient["server.fs"]) => ({ list: EndpointFileList(raw), find: EndpointFileFind(raw) })
+const adaptGroupFile = (raw: RawClient["server.fs"]) => ({
+  write: EndpointFileWrite(raw),
+  list: EndpointFileList(raw),
+  find: EndpointFileFind(raw),
+})
 
 const EndpointCommandList = (raw: RawClient["server.command"]) => (input?: CommandListInput) =>
   preserveEffect<CommandListOutput>()(

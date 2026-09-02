@@ -2,6 +2,18 @@ import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 
 export const dict = {
   ...DESKTOP_NATIVE_ENGLISH,
+  "session.review.editFile": "Edit file",
+  "session.review.unsaved": "Unsaved",
+  "session.review.discard": "Discard",
+  "session.review.saving": "Saving...",
+  "session.review.leaveUnsaved": "You have unsaved file edits. Leave this page?",
+  "session.review.editError.load": "Could not read this file. Discard to return to the review and try again.",
+  "session.review.editError.save": "Could not save this file. Your edits are still available. Try saving again.",
+  "session.review.editError.conflict":
+    "This file changed on disk. Your edits were not saved. Copy any edits you want to keep, then discard and reopen the file.",
+  "session.review.editError.unsupported": "Only UTF-8 text files can be edited here.",
+  "session.review.editError.editor":
+    "Could not load the editor. Your edits are still available. Switch files and return to try again.",
   "session.location.unavailable": "Session location unavailable",
   "session.location.description": "Choose another directory to continue this session.",
   "session.location.choose": "Choose directory",
@@ -982,8 +994,7 @@ export const dict = {
   "settings.general.row.showProjectIcon.title": "Project icon",
   "settings.general.row.showProjectIcon.description": "Show the project icon in the session header",
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
-  "settings.general.row.mobileTitlebarBottom.description":
-    "Place the title bar at the bottom of the screen on mobile",
+  "settings.general.row.mobileTitlebarBottom.description": "Place the title bar at the bottom of the screen on mobile",
   "settings.general.row.mobileDiffWrap.description":
     "Wrap long lines in mobile diffs instead of scrolling horizontally",
   "settings.general.row.showCustomAgents.title": "Show agent",

@@ -14,6 +14,7 @@
     "./basic-tool": "./src/components/basic-tool.tsx",
     "./dock-prompt": "./src/components/dock-prompt.tsx",
     "./file": "./src/components/file.tsx",
+    "./file-editor": "./src/components/file-editor.tsx",
     "./file-media": "./src/components/file-media.tsx",
     "./file-search": "./src/components/file-search.tsx",
     "./file-ssr": "./src/components/file-ssr.tsx",

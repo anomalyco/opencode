@@ -1548,6 +1548,15 @@ export interface PermissionApi<E = never> {
   readonly reply: PermissionReplyOperation<E>
 }
 
+export type FileWriteInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly path: RelativePath
+  readonly content: string
+  readonly expected: string
+}
+export type FileWriteOutput = { readonly location: Location.Info; readonly data: boolean }
+export type FileWriteOperation<E = never> = (input: FileWriteInput) => Effect.Effect<FileWriteOutput, E>
+
 export type FileListInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly path?: RelativePath | undefined
@@ -1565,6 +1574,7 @@ export type FileFindOutput = { readonly location: Location.Info; readonly data: 
 export type FileFindOperation<E = never> = (input: FileFindInput) => Effect.Effect<FileFindOutput, E>
 
 export interface FileApi<E = never> {
+  readonly write: FileWriteOperation<E>
   readonly list: FileListOperation<E>
   readonly find: FileFindOperation<E>
 }

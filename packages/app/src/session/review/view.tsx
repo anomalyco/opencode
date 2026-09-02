@@ -222,6 +222,7 @@ function ReviewPanelContent(props: { review: SessionReviewModel }) {
           diffsReady={props.review.ready()}
           diffVersion={props.review.diffVersion()}
           loadDiff={props.review.loadDiff}
+          editor={props.review.editor()}
           activeFile={props.review.activeFile()}
           onSelectFile={props.review.focusFile}
           diffStyle={props.review.diffStyle.current()}

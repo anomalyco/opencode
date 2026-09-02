@@ -329,6 +329,23 @@
   unicode-bidi: isolate;
 }
 
+[data-component="session-review-v2"]
+  [data-slot="session-review-v2-file-header"]:has([data-slot="session-review-v2-file-actions"]) {
+  flex-wrap: wrap;
+
+  [data-slot="session-review-v2-file-title"] {
+    flex-basis: 120px;
+    overflow: hidden;
+  }
+}
+
+[data-component="session-review-v2"] [data-slot="session-review-v2-file-actions"] {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  margin-inline-start: auto;
+}
+
 [data-component="session-review-v2"] [data-slot="session-review-v2-file-diff"] {
   position: relative;
   flex-shrink: 0;

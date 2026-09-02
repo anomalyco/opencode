@@ -395,6 +395,13 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
       const sig = signatureFromEvent(event)
       const isPalette = palette().has(sig)
+      // Shadow DOM retargets event.target to the host; editor shortcuts own their
+      // composed path even before the editor's bubbling handlers run.
+      if (
+        !isPalette &&
+        event.composedPath().some((node) => node instanceof HTMLElement && node.dataset.component === "file-editor")
+      )
+        return
       const option = resolveKeybindOption(keymap().get(sig), event)
       const modified = event.ctrlKey || event.metaKey || event.altKey
       const isTab = event.key === "Tab"

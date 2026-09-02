@@ -2498,6 +2498,14 @@ export type PermissionNotFoundError = {
 export const isPermissionNotFoundError = (value: unknown): value is PermissionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PermissionNotFoundError"
 
+export type FileSystemWriteConflictError = {
+  readonly _tag: "FileSystemWriteConflictError"
+  readonly path: string
+  readonly message: string
+}
+export const isFileSystemWriteConflictError = (value: unknown): value is FileSystemWriteConflictError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FileSystemWriteConflictError"
+
 export type RpcError = {
   readonly _tag: "RpcError"
   readonly type: string
@@ -5654,6 +5662,20 @@ export type FileReadInput = {
 }
 
 export type FileReadOutput = globalThis.Uint8Array
+
+export type FileWriteInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly path: { readonly path: string; readonly content: string; readonly expected: string }["path"]
+  readonly content: { readonly path: string; readonly content: string; readonly expected: string }["content"]
+  readonly expected: { readonly path: string; readonly content: string; readonly expected: string }["expected"]
+}
+
+export type FileWriteOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: boolean
+}
 
 export type FileListInput = {
   readonly location?: {

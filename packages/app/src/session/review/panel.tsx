@@ -6,7 +6,8 @@ import {
   SessionReviewV2,
   SessionReviewV2Sidebar,
 } from "@opencode-ai/session-ui/v2/session-review-v2"
-import { SessionReviewFilePreviewV2 } from "@opencode-ai/session-ui/v2/session-review-file-preview-v2"
+import { ReviewFilePreview } from "./file-preview"
+import type { createReviewEditor } from "./editor"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import type {
   SessionReviewComment,
@@ -54,6 +55,7 @@ export type ReviewPanelProps = {
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
   fileList?: "tree" | "flat"
+  editor?: ReturnType<typeof createReviewEditor>
 }
 
 export function ReviewPanel(props: ReviewPanelProps) {
@@ -159,7 +161,8 @@ export function ReviewPanelView(
           {(file) => (
             <Show when={activeItem()}>
               {(diff) => (
-                <SessionReviewFilePreviewV2
+                <ReviewFilePreview
+                  editor={props.editor}
                   file={file}
                   diff={diff()}
                   diffStyle={props.diffStyle}
