@@ -59,6 +59,10 @@ export default Plugin.define({
 })
 ```
 
+OpenCode reloads a local plugin when its `index.*` entrypoint changes. Edits to sibling modules such as `rpc.ts` or
+`tui.ts` are not picked up until the entrypoint changes too or the server restarts, so touch `index.ts` after editing
+a sibling.
+
 ### Context
 
 The plugin context is essentially an [OpenCode server client](/build/client).
