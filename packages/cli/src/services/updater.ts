@@ -117,7 +117,7 @@ export const monitorServer = Effect.fnUntraced(function* (input: MonitorInput) {
     const pending = yield* Ref.get(state)
     if (
       pending.type === "available" &&
-      Date.now() - pending.availableSince >= Duration.toMillis(input.notificationThreshold ?? "1 day")
+      Date.now() - pending.availableSince >= Duration.toMillis(input.notificationThreshold ?? "3 days")
     )
       yield* input.notify(pending.version)
   }).pipe(Effect.catch((cause) => Effect.logWarning("automatic update check failed", { cause })))
