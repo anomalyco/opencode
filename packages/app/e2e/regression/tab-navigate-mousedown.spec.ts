@@ -9,30 +9,42 @@ const sessionB = session("ses_tab_b", "Tab B session")
 const sessionC = session("ses_tab_c", "Tab C session")
 const unresolvedSessionID = "ses_tab_unresolved"
 
-test("new session tab hugs its content", async ({ page }) => {
+test("new session tab matches neighboring session widths", async ({ page }, testInfo) => {
   await mockServer(page)
   await page.addInitScript(
-    ({ server, sessionID, directory }) => {
+    ({ server, sessionA, sessionB, directory }) => {
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([
-          { type: "session", server, sessionId: sessionID },
+          { type: "session", server, sessionId: sessionA },
           { type: "draft", server, directory, draftID: "draft_tab_width" },
+          { type: "session", server, sessionId: sessionB },
         ]),
       )
     },
-    { server, sessionID: sessionA.id, directory: sessionA.directory },
+    { server, sessionA: sessionA.id, sessionB: sessionB.id, directory: sessionA.directory },
   )
 
   const href = `/server/${base64Encode(server)}/session/${sessionA.id}`
   await page.goto(href)
 
-  const sessionTab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${href}"])`)
-  const draftTab = page.locator('[data-titlebar-tab-slot]:has(a[href^="/new-session?draftId="])')
-  await expect(draftTab).toContainText("New session")
-  const width = (await draftTab.boundingBox())?.width ?? 0
-  expect(width).toBeGreaterThan(100)
-  expect(width).toBeLessThan((await sessionTab.boundingBox())?.width ?? 0)
+  const tabs = page.locator("[data-titlebar-tab-slot]")
+  await expect(tabs.locator("[data-titlebar-tab-title]")).toHaveText([sessionA.title, "New session", sessionB.title])
+  await testInfo.attach("new-session-between-tabs", {
+    body: await page.locator('[data-slot="titlebar-v2"]').screenshot(),
+    contentType: "image/png",
+  })
+  for (const width of [1280, 800]) {
+    await page.setViewportSize({ width, height: 720 })
+    await expect
+      .poll(() =>
+        tabs.evaluateAll((tabs) => {
+          const widths = tabs.map((tab) => tab.getBoundingClientRect().width)
+          return Math.max(...widths) - Math.min(...widths)
+        }),
+      )
+      .toBeLessThan(1)
+  }
 })
 
 test("pressing mouse down on a tab navigates before mouse up", async ({ page }) => {
@@ -280,9 +292,7 @@ test("appearance experimental settings control vertical tab details", async ({ p
   await page.reload()
   const href = `/server/${base64Encode(server)}/session/${sessionA.id}`
   await page.getByRole("button", { name: "Tabs", exact: true }).click()
-  await expect(page.locator('[data-slot="mobile-tabs-drawer"] [data-slot="tab-project"]')).toHaveText([
-    "tab-project",
-  ])
+  await expect(page.locator('[data-slot="mobile-tabs-drawer"] [data-slot="tab-project"]')).toHaveText(["tab-project"])
   await expect(
     page
       .locator('[data-slot="mobile-tabs-drawer"]')
