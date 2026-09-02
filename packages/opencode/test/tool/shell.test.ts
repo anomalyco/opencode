@@ -362,6 +362,10 @@ describe("tool.shell permissions", () => {
           `python3 -c 'open("/etc/hosts").read()'`,
           `sh -c 'cat /etc/hosts'`,
         ]
+        if (process.platform === "win32") {
+          const windowsFile = path.join(process.env.WINDIR!, "win.ini").replaceAll("\\", "/")
+          commands.push(`python -c 'open("${windowsFile}").read()'`)
+        }
 
         for (const command of commands) {
           const err = new Error(`stop after permission: ${command}`)

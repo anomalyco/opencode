@@ -253,6 +253,15 @@ function embeddedPathArgs(text: string) {
     if (text.slice(0, match.index).trimEnd().endsWith(">")) continue
     out.push(match[0])
   }
+
+  // Apply the same protection to Windows drive and UNC paths embedded in a
+  // nested command, including quoted paths with spaces.
+  const quotedWindows = /(["'])(?:(?:[A-Za-z]:[\\/])|(?:\\\\[^\\/\s]+[\\/][^\\/\s]+[\\/]))[^"']*\1/g
+  for (const match of text.matchAll(quotedWindows)) out.push(match[0].slice(1, -1))
+
+  const windows = /(?<![\w])(?:[A-Za-z]:[\\/]|\\\\[^\\/\s]+[\\/][^\\/\s]+[\\/])[^\s"'`;&|<>()]+/g
+  for (const match of text.matchAll(windows)) out.push(match[0])
+
   return out
 }
 
