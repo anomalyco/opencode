@@ -3,7 +3,7 @@ import { LLMEvent, type AIError, type ToolResultPart } from "../../schema/index.
 import { OpenResponses } from "../open-responses.js"
 import { Lifecycle } from "./lifecycle.js"
 
-export type Item = OpenResponses.StreamItem & {
+export type Item = OpenResponses.OutputItem & {
   readonly status?: string
   readonly action?: unknown
   readonly queries?: unknown
@@ -26,7 +26,7 @@ export interface Definition {
 
 export type Definitions = Readonly<Record<string, Definition>>
 
-export const isItem = <Tools extends Definitions>(item: OpenResponses.StreamItem, tools: Tools): item is Item =>
+export const isItem = <Tools extends Definitions>(item: OpenResponses.OutputItem, tools: Tools): item is Item =>
   item.type in tools
 
 export const onDone: (

@@ -329,6 +329,96 @@ describe("Open Responses basic-item lifecycles", () => {
       ])
     }),
   )
+  // Captured from Bedrock Mantle (openai.gpt-oss-120b): the terminal function_call
+  // items rename `id` to `item_id` and carry a stray `output_index`.
+  it.effect("recovers a terminal function_call id from its output slot", () =>
+    Effect.gen(function* () {
+      const terminal = {
+        type: "function_call",
+        item_id: "fc_828bee50dee1d029",
+        call_id: "call_bc1eb4b42e70ee53",
+        name: "get_weather",
+        arguments: '{\n  "city": "Paris"\n}',
+        output_index: 1,
+        status: "completed",
+      }
+      const events = yield* collect(
+        {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "reasoning", id: "msg_879a68b589198b4c" },
+        },
+        { type: "response.output_item.done", output_index: 0, item: { type: "reasoning", id: "msg_879a68b589198b4c" } },
+        {
+          type: "response.output_item.added",
+          output_index: 1,
+          item: {
+            type: "function_call",
+            id: "fc_828bee50dee1d029",
+            call_id: "call_bc1eb4b42e70ee53",
+            name: "get_weather",
+            arguments: "",
+            status: "in_progress",
+          },
+        },
+        {
+          type: "response.function_call_arguments.delta",
+          output_index: 1,
+          item_id: "fc_828bee50dee1d029",
+          delta: '{\n  "city": "Paris"\n}',
+        },
+        {
+          type: "response.function_call_arguments.done",
+          output_index: 1,
+          item_id: "fc_828bee50dee1d029",
+          arguments: '{\n  "city": "Paris"\n}',
+        },
+        { type: "response.output_item.done", output_index: 1, item: terminal },
+        {
+          type: "response.completed",
+          response: { id: "resp_1", output: [{ type: "reasoning", id: "msg_879a68b589198b4c" }, terminal] },
+        },
+      )
+      const providerMetadata = { "openai-compatible": { itemId: "fc_828bee50dee1d029" } }
+      expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
+        { type: "tool-input-start", id: "call_bc1eb4b42e70ee53", name: "get_weather", providerMetadata },
+        {
+          type: "tool-input-delta",
+          id: "call_bc1eb4b42e70ee53",
+          name: "get_weather",
+          text: '{\n  "city": "Paris"\n}',
+          input: { city: "Paris" },
+        },
+        { type: "tool-input-end", id: "call_bc1eb4b42e70ee53", name: "get_weather", providerMetadata },
+        {
+          type: "tool-call",
+          id: "call_bc1eb4b42e70ee53",
+          name: "get_weather",
+          input: { city: "Paris" },
+          providerMetadata,
+        },
+      ])
+    }),
+  )
+
+  it.effect("mints an id for a done-only tool that never had one", () =>
+    Effect.gen(function* () {
+      const events = yield* collect(
+        {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+        },
+        completed,
+      )
+      const call = events.find(LLMEvent.is.toolCall)
+      expect(call).toMatchObject({ id: "call_1", name: "lookup", input: { query: "weather" } })
+      expect(call?.providerMetadata?.["openai-compatible"]).toMatchObject({
+        itemId: expect.stringMatching(/^fc_[0-9a-f]{32}$/),
+      })
+    }),
+  )
+
   it.effect("opens and closes a done-only tool once", () =>
     Effect.gen(function* () {
       const item = {

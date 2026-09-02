@@ -586,23 +586,21 @@ describe("Open Responses-compatible route", () => {
       Effect.gen(function* () {
         yield* Effect.forEach(["response.output_item.added", "response.output_item.done"], (type) =>
           Effect.forEach(fixtures, (fixture) =>
-            Effect.forEach(
-              fixture.item.type === "message" ? [undefined, null, 0, false, {}, []] : [null, 0, false, {}, []],
-              (id) =>
-                Effect.gen(function* () {
-                  const error = yield* LLMClient.generate(request).pipe(
-                    Effect.provide(
-                      fixedResponse(
-                        sseEvents(
-                          { type, item: { ...fixture.item, id } },
-                          { type: "response.completed", response: { id: "resp_1" } },
-                        ),
+            Effect.forEach([null, 0, false, {}, []], (id) =>
+              Effect.gen(function* () {
+                const error = yield* LLMClient.generate(request).pipe(
+                  Effect.provide(
+                    fixedResponse(
+                      sseEvents(
+                        { type, item: { ...fixture.item, id } },
+                        { type: "response.completed", response: { id: "resp_1" } },
                       ),
                     ),
-                    Effect.flip,
-                  )
-                  expect(error.reason._tag).toBe("InvalidProviderOutput")
-                }),
+                  ),
+                  Effect.flip,
+                )
+                expect(error.reason._tag).toBe("InvalidProviderOutput")
+              }),
             ),
           ),
         )

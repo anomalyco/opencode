@@ -304,13 +304,15 @@ export const OpenResponsesUsage = Schema.Struct({
 })
 type OpenResponsesUsage = Schema.Schema.Type<typeof OpenResponsesUsage>
 
-// Every output item carries a server-issued `id`; streamed part events
-// reference it through `item_id`.
+// The spec requires `id` on every output item, but some gateways drop it from
+// later item events (Bedrock Mantle renames it to `item_id` on
+// `output_item.done` and `response.completed.output`). Decode it as optional
+// and let `normalize` recover or mint it once before the parser runs.
 // https://www.openresponses.org/specification#extending-items
 export const StreamItem = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
-    id: Schema.String,
+    id: Schema.optional(Schema.String),
     call_id: Schema.optional(Schema.String),
     name: Schema.optional(Schema.String),
     arguments: Schema.optional(Schema.String),
@@ -319,6 +321,7 @@ export const StreamItem = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 export type StreamItem = Schema.Schema.Type<typeof StreamItem>
+export type OutputItem = StreamItem & { readonly id: string }
 
 // The Responses schema puts streaming error details at the top level and
 // response failures under `response.error`. WebSocket failures use an
@@ -398,6 +401,7 @@ export const Event = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 export type Event = Schema.Schema.Type<typeof Event>
+export type NormalizedEvent = Event & { readonly item?: OutputItem | null }
 
 export interface ProviderAdapter {
   readonly id: string
@@ -920,8 +924,33 @@ const joinReasoningText = (parts: ReadonlyArray<string | undefined>) => {
   return parts.filter((part) => part !== undefined).join("\n\n")
 }
 
-export const outputItemID = (state: ParserState, event: Event) =>
+const outputItemID = (state: ParserState, event: Event) =>
   event.output_index === undefined ? event.item_id : (state.outputItems[event.output_index] ?? event.item_id)
+
+const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
+  message: "msg",
+  reasoning: "rs",
+  function_call: "fc",
+  compaction: "cmp",
+}
+
+// Mirror Codex: an item that arrives without an id adopts the id of the item
+// already open in its output slot, otherwise it gets a locally minted one.
+const hasID = (item: StreamItem): item is OutputItem => item.id !== undefined
+
+const resolveItem = (state: ParserState, item: StreamItem, index: number | undefined): OutputItem => {
+  if (hasID(item)) return item
+  const slot = index === undefined ? undefined : state.outputItems[index]
+  return { ...item, id: slot ?? `${ITEM_ID_PREFIX[item.type] ?? "item"}_${crypto.randomUUID().replaceAll("-", "")}` }
+}
+
+// Registered output slots are authoritative for `item_id` routing, and items
+// are resolved here so everything downstream can rely on `item.id`.
+export const normalize = (state: ParserState, input: Event): NormalizedEvent => ({
+  ...input,
+  item_id: input.item_id === undefined ? undefined : outputItemID(state, input),
+  item: input.item ? resolveItem(state, input.item, input.output_index) : input.item,
+})
 
 const startReasoningSummaryPart = (state: ParserState, itemID: string, index: number): StepResult => {
   const item = state.reasoningItems[itemID]
@@ -996,7 +1025,7 @@ export const onReasoningDone = (state: ParserState, event: Event, itemID: string
   return onReasoningDelta(state, { ...event, delta: event.text }, itemID)
 }
 
-const reasoningMetadata = (state: ParserState, item: StreamItem) =>
+const reasoningMetadata = (state: ParserState, item: OutputItem) =>
   providerMetadata(state, { itemId: item.id, reasoningEncryptedContent: item.encrypted_content ?? null })
 
 // Responses APIs normally stream reasoning items in this order:
@@ -1009,7 +1038,7 @@ const reasoningMetadata = (state: ParserState, item: StreamItem) =>
 // `onOutputItemAdded` seeds the per-item entry, while each later part start is
 // also an implicit boundary for the previous part. This keeps the common event
 // lifecycle ordered when a compatible provider omits or delays a part-done event.
-const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
+const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResult => {
   const item = event.item
   if (!item) return [state, NO_EVENTS]
   if (item.type === "message") {
@@ -1145,7 +1174,7 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
 
 const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   state: ParserState,
-  item: Event["item"],
+  item: NormalizedEvent["item"],
 ) {
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
@@ -1318,7 +1347,8 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
   let current = state
   const events: LLMEvent[] = []
   if (event.type === "response.completed") {
-    for (const item of event.response?.output ?? []) {
+    // An output item's array position is its output index.
+    for (const item of (event.response?.output ?? []).map((item, index) => resolveItem(state, item, index))) {
       // Terminal recovery cannot insert a checkpoint before already-emitted content.
       if (item.type === "compaction" && state.lifecycle.stepStarted && !state.completedCompactions.has(item.id))
         return yield* ProviderShared.eventError(
@@ -1394,12 +1424,9 @@ export const providerFailure = (event: Event, fallback: string, body = ProviderS
   return new AIError({ reason })
 }
 
-export const step = (state: ParserState, input: Event) => {
-  // The OpenAPI requires string IDs but imposes no minLength; empty is not missing.
-  const event =
-    input.item_id !== undefined && outputItemID(state, input) !== input.item_id
-      ? { ...input, item_id: outputItemID(state, input) }
-      : input
+// Callers must pass events through `normalize` first. The OpenAPI requires
+// string IDs but imposes no minLength; empty is not missing.
+export const step = (state: ParserState, event: NormalizedEvent) => {
   if (event.type === "response.output_text.delta" || event.type === "response.output_text.done") {
     if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(
@@ -1508,7 +1535,7 @@ export const protocol = Protocol.make({
   stream: {
     event: Protocol.jsonEvent(Event),
     initial,
-    step,
+    step: (state: ParserState, event: Event) => step(state, normalize(state, event)),
     terminal,
   },
 })
