@@ -1,10 +1,13 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { type Accessor, createMemo, For, Show, Suspense } from "solid-js"
+import { createStore } from "solid-js/store"
+import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
@@ -53,6 +56,7 @@ export type HomeSessionsViewProps = {
   isOpenTab: (record: HomeSessionRecord) => boolean
   onCreateSession: () => void
   onOpenSession: (session: Session, options?: OpenSessionOptions) => void
+  onRenameSession: (session: Session, title: string) => Promise<boolean>
   onArchiveSession: (session: Session) => Promise<void>
   onSetHoverTarget: (element: HTMLElement) => void
   onSetThumbTrack: (element: HTMLDivElement) => void
@@ -122,22 +126,30 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
             }
           >
             <div ref={props.onSetContent} class="flex flex-col pt-3 pr-3 pb-16">
-              <For each={props.groups()}>
-                {(group, index) => (
-                  <>
-                    <HomeSessionGroupHeader
-                      title={group.title}
-                      titleOpacity={props.titleOpacity(group.id)}
-                      onSetRef={(element) => props.onSetHeader(group.id, element)}
-                      elevated={index() === 0}
-                    />
-                    <div
-                      class={`flex min-w-0 flex-col gap-px pt-4 ${index() === props.groups().length - 1 ? "" : "mb-6"}`}
-                    >
-                      <For each={group.sessions}>{(record) => <HomeSessionRow {...props} record={record} />}</For>
-                    </div>
-                  </>
-                )}
+              <For each={props.groups().map((group) => group.id)}>
+                {(id, index) => {
+                  const group = createMemo(() => props.groups().find((group) => group.id === id)!)
+                  const records = createMemo(
+                    () => new Map(group().sessions.map((record) => [record.session.id, record])),
+                  )
+                  return (
+                    <>
+                      <HomeSessionGroupHeader
+                        title={group().title}
+                        titleOpacity={props.titleOpacity(id)}
+                        onSetRef={(element) => props.onSetHeader(id, element)}
+                        elevated={index() === 0}
+                      />
+                      <div
+                        class={`flex min-w-0 flex-col gap-px pt-4 ${index() === props.groups().length - 1 ? "" : "mb-6"}`}
+                      >
+                        <For each={[...records().keys()]}>
+                          {(id) => <HomeSessionRow {...props} record={records().get(id)!} />}
+                        </For>
+                      </div>
+                    </>
+                  )
+                }}
               </For>
             </div>
           </Show>
@@ -417,66 +429,136 @@ function HomeSessionGroupHeader(props: {
 function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord }) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const showProjectName = () => props.showProjectName() && props.record.projectName
+  const [state, setState] = createStore({ open: false, rename: false, editing: false, draft: "", pending: false })
+  let input: HTMLInputElement | undefined
+  let trigger: HTMLButtonElement | undefined
+
+  const closeRename = () => {
+    setState("editing", false)
+    trigger?.focus()
+  }
+
+  const save = async () => {
+    if (!state.editing || state.pending) return
+    const next = state.draft.trim()
+    if (!next || next === props.record.session.title) {
+      closeRename()
+      return
+    }
+    setState("pending", true)
+    const saved = await props.onRenameSession(props.record.session, next)
+    setState("pending", false)
+    if (saved) closeRename()
+  }
 
   return (
-    <div
-      class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]"
-      classList={{ group: !!showProjectName() }}
-    >
-      <button
-        type="button"
-        data-component="home-session-row"
-        class={`
+    <MenuV2.Context onOpenChange={(open) => setState("open", open)}>
+      <div
+        class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]"
+        classList={{ group: !!showProjectName() }}
+      >
+        <Show when={state.editing}>
+          <InlineInput
+            ref={input}
+            data-action="home-session-rename"
+            aria-label={props.language.t("common.rename")}
+            class="ml-9 mr-10 min-w-0 flex-1 text-v2-text-text-base [font-weight:530]"
+            value={state.draft}
+            readOnly={state.pending}
+            aria-busy={state.pending}
+            onInput={(event) => setState("draft", event.currentTarget.value)}
+            onBlur={() => void save()}
+            onKeyDown={(event) => {
+              if (event.isComposing) return
+              if (event.key === "Enter") {
+                event.preventDefault()
+                void save()
+              }
+              if (event.key === "Escape") {
+                event.preventDefault()
+                if (!state.pending) closeRename()
+              }
+            }}
+          />
+        </Show>
+        <MenuV2.Context.Trigger
+          as="button"
+          ref={trigger}
+          type="button"
+          data-component="home-session-row"
+          aria-haspopup="menu"
+          aria-expanded={state.open}
+          disabled={state.editing}
+          style={{ display: state.editing ? "none" : undefined }}
+          class={`
           flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
           bg-transparent py-3 pl-3 pr-10 text-left text-v2-text-text-muted [font-weight:530]
           transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
           hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
         `}
-        onMouseDown={(event) => {
-          if (event.button === 1) event.preventDefault()
-        }}
-        onClick={(event) => props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })}
-        onAuxClick={(event) => {
-          if (!isBackgroundOpen(event)) return
-          event.preventDefault()
-          props.onOpenSession(props.record.session, { background: true })
-        }}
-      >
-        <HomeSessionLeadingController
-          server={props.server}
-          isOpenTab={props.isOpenTab}
-          record={props.record}
-          revealProjectOnHover={!!showProjectName()}
-        />
-        <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
-        <Show when={showProjectName()}>
-          <HomeSessionProjectName name={props.record.projectName} />
-        </Show>
-      </button>
-      <Show when={SHOW_HOME_SESSION_ARCHIVE}>
-        <div
-          class={`
+          onMouseDown={(event: MouseEvent) => {
+            if (event.button === 1) event.preventDefault()
+          }}
+          onClick={(event: MouseEvent) =>
+            props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })
+          }
+          onAuxClick={(event: MouseEvent) => {
+            if (!isBackgroundOpen(event)) return
+            event.preventDefault()
+            props.onOpenSession(props.record.session, { background: true })
+          }}
+        >
+          <HomeSessionLeadingController
+            server={props.server}
+            isOpenTab={props.isOpenTab}
+            record={props.record}
+            revealProjectOnHover={!!showProjectName()}
+          />
+          <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
+          <Show when={showProjectName()}>
+            <HomeSessionProjectName name={props.record.projectName} />
+          </Show>
+        </MenuV2.Context.Trigger>
+        <Show when={SHOW_HOME_SESSION_ARCHIVE}>
+          <div
+            class={`
             hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1
             group-hover/session:opacity-100 focus-within:opacity-100
           `}
+          >
+            <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
+              <IconButtonV2
+                data-action="home-session-archive"
+                variant="ghost-muted"
+                size="large"
+                icon={<IconV2 name="archive" />}
+                aria-label={props.language.t("common.archive")}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void props.onArchiveSession(props.record.session)
+                }}
+              />
+            </TooltipV2>
+          </div>
+        </Show>
+      </div>
+      <MenuV2.Context.Portal>
+        <MenuV2.Context.Content
+          onCloseAutoFocus={(event) => {
+            if (!state.rename) return
+            event.preventDefault()
+            setState({ rename: false, editing: true, draft: props.record.session.title })
+            requestAnimationFrame(() => {
+              input?.focus()
+              input?.select()
+            })
+          }}
         >
-          <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
-            <IconButtonV2
-              data-action="home-session-archive"
-              variant="ghost-muted"
-              size="large"
-              icon={<IconV2 name="archive" />}
-              aria-label={props.language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void props.onArchiveSession(props.record.session)
-              }}
-            />
-          </TooltipV2>
-        </div>
-      </Show>
-    </div>
+          <MenuV2.Item onSelect={() => setState("rename", true)}>{props.language.t("common.rename")}</MenuV2.Item>
+        </MenuV2.Context.Content>
+      </MenuV2.Context.Portal>
+    </MenuV2.Context>
   )
 }
 
