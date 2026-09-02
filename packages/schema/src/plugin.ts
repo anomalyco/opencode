@@ -42,12 +42,8 @@ export const Info = Schema.Struct({
   state: State,
 }).annotate({ identifier: "Plugin.Info" })
 
-const Added = ephemeral({
-  type: "plugin.added",
-  schema: { id: ID },
-})
 const Updated = ephemeral({
   type: "plugin.updated",
   schema: {},
 })
-export const Event = { Added, Updated, Definitions: inventory(Added, Updated) }
+export const Event = { Updated, Definitions: inventory(Updated) }

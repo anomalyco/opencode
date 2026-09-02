@@ -985,15 +985,6 @@ export type ReferenceUpdated = {
   data: {}
 }
 
-export type PluginAdded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "plugin.added"
-  location?: LocationRef
-  data: { id: string }
-}
-
 export type PluginUpdated = {
   id: string
   created: number
@@ -2299,7 +2290,6 @@ export type V2Event =
   | ReferenceUpdated
   | PermissionAsked
   | PermissionReplied
-  | PluginAdded
   | PluginUpdated
   | ProjectUpdated
   | WorktreeUpdated

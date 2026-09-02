@@ -2,6 +2,7 @@ import type { PluginInfo } from "@opencode-ai/client"
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { DialogErrorDetails } from "../../component/dialog-error-details"
+import { Spinner } from "../../component/spinner"
 import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
@@ -30,12 +31,17 @@ export function PluginsDialog(props: {
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<Entry>()
   const [showInternal, setShowInternal] = createSignal(false)
+  const [pending, setPending] = createSignal<readonly string[]>([])
   const [server, { refetch }] = createResource(
     () => (props.server ? undefined : (props.context.location ?? props.context.data.location.default())),
     (location) => props.context.client.plugin.list({ location }).then((result) => result.data),
   )
   onMount(() => dialog.setSize("medium"))
   onCleanup(props.context.data.on("plugin.updated", () => void refetch()))
+  const updating = (entry: Entry) =>
+    pending().includes(entry.key) ||
+    (entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.updating === true)
+  const updatable = (entry: Entry | undefined) => entry !== undefined && outdated(entry) && !updating(entry)
   const entries = createMemo<Entry[]>(() => {
     const builtins: Entry[] = props.plugins
       .registered()
@@ -85,15 +91,16 @@ export function PluginsDialog(props: {
         value: entry.key,
         category: entry.runtime === "tui" ? "TUI" : "Server",
         searchText: entry.runtime === "tui" ? entry.target : source(entry.plugin, props.context),
-        footer: footer(entry),
+        footer: updating(entry) ? "updating" : footer(entry),
         footerColor:
           status(entry) === "failed"
             ? props.context.theme.text.feedback.error.default
             : outdated(entry)
               ? props.context.theme.text.feedback.info.default
               : props.context.theme.text.subdued,
-        gutter:
-          status(entry) === "failed"
+        gutter: updating(entry)
+          ? (color) => <Spinner color={color} />
+          : status(entry) === "failed"
             ? () => <text fg={props.context.theme.text.feedback.error.default}>x</text>
             : undefined,
       }),
@@ -130,20 +137,22 @@ export function PluginsDialog(props: {
   }
   const update = (entry: Entry | undefined) => {
     if (entry?.runtime !== "server" || entry.plugin.source.type !== "package" || !updatable(entry)) return
+    const location = props.context.location ?? props.context.data.location.default()
+    setPending((keys) => [...keys, entry.key])
     props.context.client.plugin
       .update({
-        location: props.context.location ?? props.context.data.location.default(),
+        location,
         targets: [entry.plugin.source.target],
       })
-      .then(() =>
-        props.context.ui.toast.show({ variant: "success", message: `Updated plugin ${label(entry, props.context)}` }),
-      )
+      .then(() => props.context.client.plugin.awaitActivation({ location }))
+      .then(() => refetch())
       .catch((cause) => {
         props.context.ui.toast.show({
           variant: "error",
           message: cause instanceof Error ? cause.message : String(cause),
         })
       })
+      .finally(() => setPending((keys) => keys.filter((key) => key !== entry.key)))
   }
 
   return (
@@ -248,21 +257,13 @@ function outdated(entry: Entry) {
   return entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.outdated === true
 }
 
-function updating(entry: Entry) {
-  return entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.updating === true
-}
-
-function updatable(entry: Entry | undefined) {
-  return entry !== undefined && outdated(entry) && !updating(entry)
-}
-
 function footer(entry: Entry) {
   const details = [
     ...(status(entry) === "active" ? [] : [status(entry)]),
     ...(entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.version
       ? [displayVersion(entry.plugin.source.version)]
       : []),
-    ...(updating(entry) ? ["updating"] : outdated(entry) ? ["update available"] : []),
+    ...(outdated(entry) ? ["update available"] : []),
   ]
   return details.length ? details.join(", ") : undefined
 }
