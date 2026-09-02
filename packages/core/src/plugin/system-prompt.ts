@@ -10,13 +10,9 @@ import PROMPT_KIMI from "./system-prompt/kimi.txt"
 import PROMPT_META from "./system-prompt/meta.txt"
 import PROMPT_TRINITY from "./system-prompt/trinity.txt"
 
-export const OpenAIPlugin = make(
-  "openai",
-  (id) => {
-    if (id.includes("gpt") || id.includes("o1") || id.includes("o3")) return PROMPT_GPT
-  },
-  { operation: "append" },
-)
+export const OpenAIPlugin = make("openai", (id) => (id.includes("gpt") ? PROMPT_GPT : undefined), {
+  operation: "append",
+})
 
 export const AnthropicPlugin = make("anthropic", (id) => (id.includes("claude") ? PROMPT_ANTHROPIC : undefined), {
   operation: "replace",

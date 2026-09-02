@@ -68,7 +68,7 @@ describe("SystemPromptPlugin", () => {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((draft) => {
-        for (const id of ["gpt-5", "gpt-4.1", "o3", "gpt-5-codex"])
+        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex"])
           draft.model.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
       })
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
@@ -77,7 +77,7 @@ describe("SystemPromptPlugin", () => {
       const cases = [
         ["gpt-5", "# Response channels"],
         ["gpt-4.1", "# Response channels"],
-        ["o3", "# Response channels"],
+        ["o3", fallback],
         ["gpt-5-codex", "# Response channels"],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", "# Professional objectivity"],
