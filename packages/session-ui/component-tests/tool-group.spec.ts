@@ -74,6 +74,12 @@ story("summarizes subagents as Agent while retaining their card titles", async (
   await expect(
     group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
   ).toHaveText("4 Shell, Read, Agent")
+  const gap = await group.evaluate((element) => {
+    const title = element.querySelector('[data-component="context-tool-group-trigger"]')!.getBoundingClientRect()
+    const arrow = element.querySelector('[data-slot="collapsible-arrow-icon"]')!.getBoundingClientRect()
+    return arrow.left - title.right
+  })
+  expect(gap).toBeLessThanOrEqual(12)
   await expect(group.locator('[data-component="task-tool-title"]')).toHaveText(["General", "Explore"])
 })
 

@@ -690,7 +690,7 @@
 }
 
 [data-component="context-tool-group-trigger"] {
-  width: 100%;
+  width: auto;
   min-height: 24px;
   display: flex;
   align-items: center;
