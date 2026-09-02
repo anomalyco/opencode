@@ -37,7 +37,7 @@ export const ModelsDevPlugin = define({
         })
         for (const model of provider.models) {
           if (model.status === "deprecated") continue
-          catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, structuredClone(model)))
+          catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, copy(model)))
         }
       }
     })
@@ -65,8 +65,21 @@ function environmentNames(provider: ModelsDev.Snapshot) {
 }
 
 function snapshots(data: readonly ModelsDev.Snapshot[]) {
-  return structuredClone(data).filter(
+  return copy(data).filter(
     // These deprecated aliases are replaced by the canonical Azure and Google Vertex providers.
     (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
   )
+}
+
+// The catalog owns and mutates its model records, so every rebuild needs fresh copies of the
+// thousands of snapshot models. Snapshot data is plain JSON, and a direct copy is an order of
+// magnitude faster than structuredClone's general graph walk on the startup path.
+function copy<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(copy) as T
+  if (value !== null && typeof value === "object") {
+    const result: Record<string, unknown> = {}
+    for (const key in value) result[key] = copy((value as Record<string, unknown>)[key])
+    return result as T
+  }
+  return value
 }
