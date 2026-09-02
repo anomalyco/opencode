@@ -2,6 +2,8 @@ export type JsonValue = null | boolean | number | string | Array<JsonValue> | { 
 
 export type ServiceHealth = { healthy: true; version: string; pid: number }
 
+export type FileSystemEntry = { path: string; type: "file" | "directory" }
+
 export type ModelRef = { id: string; providerID: string; variant?: string }
 
 export type ProviderSettings = { [x: string]: any }
@@ -324,8 +326,6 @@ export type PermissionSource = { type: "tool"; messageID: string; id: string }
 
 export type PermissionSavedInfo = { id: string; projectID: string; action: string; resource: string }
 
-export type FileSystemEntry = { path: string; type: "file" | "directory" }
-
 export type CommandInfo = { name: string; description?: string }
 
 export type SkillInfo = {
@@ -440,6 +440,8 @@ export type VcsBranchList = Array<string>
 export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
+
+export type BrowseResult = { directory: string; entries: Array<FileSystemEntry> }
 
 export type ProviderRequest = {
   settings: ProviderSettings
@@ -2349,6 +2351,10 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
+export type BrowseError = { readonly name: "BrowseError"; readonly data: { readonly message: string } }
+export const isBrowseError = (value: unknown): value is BrowseError =>
+  typeof value === "object" && value !== null && "name" in value && value["name"] === "BrowseError"
+
 export type AgentNotFoundError = {
   readonly _tag: "AgentNotFoundError"
   readonly agentID: string
@@ -2538,6 +2544,10 @@ export const isWorktreeError = (value: unknown): value is WorktreeError =>
 export type HealthGetOutput = ServiceHealth
 
 export type ServerGetOutput = { urls: Array<string> }
+
+export type BrowseListInput = { readonly directory: { readonly directory: string }["directory"] }
+
+export type BrowseListOutput = BrowseResult
 
 export type LocationGetInput = {
   readonly location?: {

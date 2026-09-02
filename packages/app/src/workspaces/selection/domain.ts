@@ -24,7 +24,6 @@ export function pickerSearchEntries<T extends { type: "file" | "directory" }>(
 export function pickerMode(mode: "directory" | "file", base?: string) {
   if (mode === "file") {
     return {
-      includeFiles: true,
       action: "file" as const,
       entries(parent: string, nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>) {
         return treeEntries(parent, nodes)
@@ -42,7 +41,6 @@ export function pickerMode(mode: "directory" | "file", base?: string) {
     }
   }
   return {
-    includeFiles: false,
     action: "directory" as const,
     entries(parent: string, nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>) {
       return treeEntries(
@@ -342,9 +340,9 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const key = trimPickerPath(directory)
     const existing = cache.get(key)
     if (existing) return existing
-    const request = args.sdk.api.file
-      .list({ location: { directory: key } })
-      .then((result) => result.data)
+    const request = args.sdk.api.browse
+      .list({ directory: key })
+      .then((result) => result.entries)
       .catch(() => [])
       .then((nodes) =>
         nodes
@@ -374,19 +372,11 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)
     if (!pathInput) {
-      const results = await args.sdk.api.file
-        .find({ location: { directory: input.directory }, query, type: "directory", limit: 50 })
-        .then((result) => result.data.map((entry) => entry.path))
-        .catch(() => [])
-      if (!active()) return []
-      if (results.length) {
-        return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
-      }
-      const fallback = query
+      const results = query
         ? await match(input.directory, query, 50)
         : (await directories(input.directory)).map((item) => item.absolute)
       if (!active()) return []
-      return fallback
+      return results
     }
     const segments = query.replace(/^\/+/, "").split("/")
     const head = segments.slice(0, -1).filter((part) => part && part !== ".")

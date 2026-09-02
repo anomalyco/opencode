@@ -1,6 +1,8 @@
 import type {
   HealthGetOutput,
   ServerGetOutput,
+  BrowseListInput,
+  BrowseListOutput,
   LocationGetInput,
   LocationGetOutput,
   AgentListInput,
@@ -414,6 +416,20 @@ export function make(options: ClientOptions) {
       get: (requestOptions?: RequestOptions) =>
         request<ServerGetOutput>(
           { method: "GET", path: `/api/server`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ),
+    },
+    browse: {
+      list: (input: BrowseListInput, requestOptions?: RequestOptions) =>
+        request<BrowseListOutput>(
+          {
+            method: "GET",
+            path: `/api/browse/list`,
+            query: { directory: input["directory"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
           requestOptions,
         ),
     },

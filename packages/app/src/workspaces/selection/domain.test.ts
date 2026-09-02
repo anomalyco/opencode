@@ -58,7 +58,6 @@ test("includes files in file autocomplete while preserving directory navigation"
 
 test("centralizes file and directory selection policy", () => {
   const file = pickerMode("file", "/repo")
-  expect(file.includeFiles).toBeTrue()
   expect(file.selection("/repo/src", "index.ts")).toBe("src/index.ts")
   expect(file.selection("/repo", "src/")).toBeUndefined()
   expect(file.result("/repo", "src/index.ts")).toBe("src/index.ts")
@@ -67,7 +66,6 @@ test("centralizes file and directory selection policy", () => {
   expect(file.navigation("/tmp")).toBeUndefined()
 
   const directory = pickerMode("directory")
-  expect(directory.includeFiles).toBeFalse()
   expect(directory.selection("/repo", "src/")).toBe("/repo/src")
   expect(directory.selection("C:/Users/luke", "repos/")).toBe("C:\\Users\\luke\\repos")
   expect(directory.selection("//Server/Share", "repo/")).toBe("\\\\Server\\Share\\repo")
@@ -134,12 +132,11 @@ test("resolves directory autocomplete from the current browser root", async () =
   const directories: string[] = []
   const sdk = {
     api: {
-      file: {
-        find: (input: { location?: { directory?: string } }) => {
-          directories.push(input.location?.directory ?? "")
-          return Promise.resolve({ data: [] })
+      browse: {
+        list: (input: { directory?: string }) => {
+          directories.push(input.directory ?? "")
+          return Promise.resolve({ entries: [] })
         },
-        list: () => Promise.resolve({ data: [] }),
       },
     },
   } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
@@ -153,21 +150,7 @@ test("resolves directory autocomplete from the current browser root", async () =
   expect(directories).toEqual(["/repo", "/repo/src"])
 })
 
-test("keeps indexed directory results for servers that support empty search", async () => {
-  const sdk = {
-    api: {
-      file: {
-        find: () => Promise.resolve({ data: [{ path: "projects/", type: "directory" }] }),
-        list: () => Promise.reject(new Error("listing should not run when search returns results")),
-      },
-    },
-  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
-  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
-
-  expect(await search("")).toEqual(["/home/luke/projects"])
-})
-
-test("lists the default directory when empty search is unsupported", async () => {
+test("lists immediate directory children for empty search", async () => {
   const calls: string[] = []
   const directories = Array.from({ length: 60 }, (_, index) => ({
     path: `project-${index}/`,
@@ -175,12 +158,11 @@ test("lists the default directory when empty search is unsupported", async () =>
   }))
   const sdk = {
     api: {
-      file: {
-        find: () => Promise.resolve({ data: [] }),
-        list: (input: { location?: { directory?: string } }) => {
-          calls.push(input.location?.directory ?? "")
+      browse: {
+        list: (input: { directory?: string }) => {
+          calls.push(input.directory ?? "")
           return Promise.resolve({
-            data: [...directories, { path: "README.md", type: "file" }],
+            entries: [...directories, { path: "README.md", type: "file" }],
           })
         },
       },
@@ -194,14 +176,13 @@ test("lists the default directory when empty search is unsupported", async () =>
   expect(calls).toEqual(["/home/luke"])
 })
 
-test("matches the default directory listing when typed search is unsupported", async () => {
+test("matches typed queries against immediate children", async () => {
   const sdk = {
     api: {
-      file: {
-        find: () => Promise.resolve({ data: [] }),
+      browse: {
         list: () =>
           Promise.resolve({
-            data: [
+            entries: [
               { path: "Documents/", type: "directory" },
               { path: "Downloads/", type: "directory" },
             ],
@@ -218,11 +199,11 @@ test("searches from an absolute root without a default base", async () => {
   const directories: string[] = []
   const sdk = {
     api: {
-      file: {
-        list: (input: { location?: { directory?: string } }) => {
-          directories.push(input.location?.directory ?? "")
+      browse: {
+        list: (input: { directory?: string }) => {
+          directories.push(input.directory ?? "")
           return Promise.resolve({
-            data: [
+            entries: [
               { path: "Users/", type: "directory" },
               { path: "tmp/", type: "directory" },
             ],

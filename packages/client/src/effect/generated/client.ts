@@ -7,6 +7,8 @@ import { ClientApi } from "../../contract"
 import type {
   HealthGetOutput,
   ServerGetOutput,
+  BrowseListInput,
+  BrowseListOutput,
   LocationGetInput,
   LocationGetOutput,
   AgentListInput,
@@ -296,6 +298,13 @@ const EndpointServerGet = (raw: RawClient["server.server"]) => () =>
   preserveEffect<ServerGetOutput>()(raw["server.get"]({}).pipe(Effect.mapError(mapClientError)))
 
 const adaptGroupServer = (raw: RawClient["server.server"]) => ({ get: EndpointServerGet(raw) })
+
+const EndpointBrowseList = (raw: RawClient["server.browse"]) => (input: BrowseListInput) =>
+  preserveEffect<BrowseListOutput>()(
+    raw["browse.list"]({ query: { directory: input["directory"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupBrowse = (raw: RawClient["server.browse"]) => ({ list: EndpointBrowseList(raw) })
 
 const EndpointLocationGet = (raw: RawClient["server.location"]) => (input?: LocationGetInput) =>
   preserveEffect<LocationGetOutput>()(
@@ -1582,6 +1591,7 @@ const adaptGroupConfig = (raw: RawClient["server.config"]) => ({ get: EndpointCo
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroupHealth(raw["server.health"]),
   server: adaptGroupServer(raw["server.server"]),
+  browse: adaptGroupBrowse(raw["server.browse"]),
   location: adaptGroupLocation(raw["server.location"]),
   agent: adaptGroupAgent(raw["server.agent"]),
   plugin: adaptGroupPlugin(raw["server.plugin"]),

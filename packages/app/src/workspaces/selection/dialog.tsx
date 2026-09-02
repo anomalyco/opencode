@@ -99,26 +99,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     const current = displayPickerPath(root(), value, home()).replace(/\/+$/, "")
     if (!cleaned || (root() && typed === current)) return { query: value, items: [] }
     const directories = (await search(value)).map((absolute) => ({ absolute, type: "directory" as const }))
-    if (!policy.includeFiles) return { query: value, items: directories.slice(0, 5) }
-    const base = pickerRoot(cleaned) || root() || start()
-    if (!base) return { query: value, items: directories.slice(0, 5) }
-    const files = await sdk.api.file
-      .find({
-        location: { directory: base },
-        query: pickerFileSearchQuery(base, value, home()),
-        type: "file",
-        limit: 20,
-      })
-      .then((result) => result.data)
-      .catch(() => [])
-    const results = [
-      ...directories,
-      ...files.map((entry) => ({ absolute: absoluteTreePath(base, entry.path), type: "file" as const })),
-    ]
-    return {
-      query: value,
-      items: Array.from(new Map(results.map((result) => [result.absolute, result])).values()).slice(0, 8),
-    }
+    return { query: value, items: directories.slice(0, 5) }
   })
   const currentSuggestions = createMemo(() => currentPickerSuggestions(suggestions(), input()))
 
@@ -132,10 +113,10 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       existing ??
       loads.schedule(`${generation}:${key}`, eager ? "background" : "user", () => {
         if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
-        return sdk.api.file
-          .list({ location: { directory: absolute } })
+        return sdk.api.browse
+          .list({ directory: absolute })
           .then((result) =>
-            result.data.map((entry) => ({
+            result.entries.map((entry) => ({
               name: getFilename(entry.path.replace(/[\\/]+$/, "")),
               type: entry.type,
             })),
@@ -183,11 +164,6 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     if (!match) return
     const value = displayPickerPath(match.absolute, input(), home())
     setInput(match.type === "directory" && !value.endsWith("/") ? value + "/" : value)
-    if (match.type === "file") {
-      setSelected(policy.selection(root(), pickerFileSearchQuery(root(), match.absolute, home())) ?? "")
-      setSuggestionsOpen(false)
-      setActiveSuggestion(-1)
-    }
   }
 
   function chooseSuggestion(suggestion: { absolute: string; type: "file" | "directory" }) {

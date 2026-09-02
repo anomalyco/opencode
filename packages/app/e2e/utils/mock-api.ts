@@ -109,6 +109,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(HttpApiEndpoint.get("fsFind", "/api/fs/find", { query: Query, success: Json }))
+  .add(HttpApiEndpoint.get("browseList", "/api/browse/list", { query: Query, success: Json }))
   .add(HttpApiEndpoint.get("shell", "/api/shell", { success: Json }))
   .add(
     HttpApiEndpoint.get("ptyConnectToken", "/api/pty/:ptyID/connect-token", {

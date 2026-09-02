@@ -2,6 +2,7 @@ import { Context } from "effect"
 import { HttpApi, HttpApiGroup, HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
 import { SchemaErrorMiddleware } from "./middleware/schema-error.js"
 import { GenerateGroup } from "./groups/generate.js"
+import { BrowseGroup } from "./groups/browse.js"
 import { MessageGroup } from "./groups/message.js"
 import { ModelGroup } from "./groups/model.js"
 import { ProviderGroup } from "./groups/provider.js"
@@ -86,6 +87,7 @@ type ApiGroups<
 > =
   | typeof HealthGroup
   | typeof ServerGroup
+  | typeof BrowseGroup
   | typeof DebugGroup
   | typeof MigrationGroup
   | typeof WorktreeGroup
@@ -153,6 +155,7 @@ const makeApiFromGroup = <
   HttpApi.make("server")
     .add(HealthGroup)
     .add(ServerGroup)
+    .add(BrowseGroup)
     .add(LocationGroup.middleware(locationMiddleware))
     .add(AgentGroup.middleware(locationMiddleware))
     .add(PluginGroup.middleware(locationMiddleware))

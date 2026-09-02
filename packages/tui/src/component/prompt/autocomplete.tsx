@@ -349,13 +349,18 @@ export function Autocomplete(props: {
           : undefined
 
       const requestLocation = {
-        directory: directorySearch?.directory ?? input.location?.directory,
+        directory: input.location?.directory,
         workspace: input.location?.workspaceID ?? data.location.default().workspaceID,
       }
+      // Directory completion is host navigation: browse lists one directory without materializing a location.
       const result = await (
         input.visible === "directory"
-          ? client.api.file.list({ location: requestLocation })
-          : client.api.file.find({ query: base, limit: 20, location: requestLocation })
+          ? client.api.browse.list({
+              directory: directorySearch?.directory ?? input.location?.directory ?? paths.cwd,
+            })
+          : client.api.file
+              .find({ query: base, limit: 20, location: requestLocation })
+              .then((result) => ({ directory: result.location.directory, entries: result.data }))
       ).then(
         (result) => result,
         () => undefined,
@@ -376,17 +381,17 @@ export function Autocomplete(props: {
           value: exact,
           isDirectory: true,
           path: exact,
-          absolute: result.location.directory,
+          absolute: result.directory,
           onSelect: () => insertDirectory(exact),
         })
       }
       const entries =
         input.visible === "directory"
-          ? result.data.filter(
+          ? result.entries.filter(
               (item) =>
                 item.type === "directory" && directoryAutocompleteMatches(item.path, directorySearch?.query ?? ""),
             )
-          : result.data
+          : result.entries
       options.push(
         ...entries.map((item): AutocompleteOption => {
           if (input.visible === "directory") {
@@ -396,11 +401,11 @@ export function Autocomplete(props: {
               value: directory,
               isDirectory: true,
               path: directory,
-              absolute: path.resolve(result.location.directory, item.path),
+              absolute: path.resolve(result.directory, item.path),
               onSelect: () => insertDirectory(directory),
             }
           }
-          const { filename, part } = createFilePart(item, path.join(result.location.directory, item.path), lineRange)
+          const { filename, part } = createFilePart(item, path.join(result.directory, item.path), lineRange)
           return {
             display: Locale.truncateMiddle(filename, width),
             value: filename,

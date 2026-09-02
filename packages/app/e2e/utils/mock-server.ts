@@ -308,6 +308,12 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           Effect.promise(() => Promise.resolve(config.fileList?.(ctx.query.path ?? ""))).pipe(
             Effect.map((data) => ({ location: location(config), data })),
           ),
+        // The picker lists by absolute directory, so the stub's root branch serves every listing —
+        // matching how fs.list arrived with no path for the same call sites.
+        browseList: (ctx) =>
+          Effect.promise(() => Promise.resolve(config.fileList?.(""))).pipe(
+            Effect.map((entries) => ({ directory: ctx.query.directory ?? config.directory, entries })),
+          ),
         fsFind: (ctx) =>
           Effect.promise(() =>
             Promise.resolve(
