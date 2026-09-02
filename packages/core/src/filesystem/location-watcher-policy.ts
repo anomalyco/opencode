@@ -25,7 +25,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Lo
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    let current: readonly string[] = []
     const listeners = new Set<(ignore: readonly string[]) => Effect.Effect<void>>()
     const state = State.create<Data, Draft>({
       name: "location-watcher-policy",
@@ -34,11 +33,10 @@ const layer = Layer.effect(
         add: (ignore) => draft.ignore.push(...ignore),
         list: () => draft.ignore,
       }),
-      finalize: (draft) =>
-        Effect.sync(() => {
-          current = [...draft.list()]
-        }).pipe(Effect.andThen(Effect.forEach(listeners, (listener) => listener(current), { discard: true }))),
+      notify: Effect.forEach(listeners, (listener) => listener(current()), { discard: true }),
     })
+    // Annotated to break the inference cycle through notify: notify reads current, current reads state.
+    const current = (): readonly string[] => state.get().ignore
     const observe = Effect.fn("LocationWatcherPolicy.observe")(function* (
       listener: (ignore: readonly string[]) => Effect.Effect<void>,
     ) {
@@ -56,7 +54,7 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      current: () => current,
+      current,
       observe,
     })
   }),

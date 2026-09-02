@@ -1,7 +1,10 @@
 import { expect } from "bun:test"
 import path from "path"
-import { Effect } from "effect"
+import { Clock, Effect } from "effect"
+import { TestClock } from "effect/testing"
 import { Command } from "@opencode-ai/core/command"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginModule } from "@opencode-ai/core/plugin/module"
 import { Session } from "@opencode-ai/schema/session"
@@ -117,5 +120,70 @@ it.effect("reloading a plugin replaces its command implementation", () =>
     yield* load("2", "after")
     yield* commands.execute(request)
     expect(output).toEqual(["before", "after"])
+  }),
+)
+
+it.effect("refreshes expired OAuth credentials through the context during activation", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const credentials = yield* Credential.Service
+    const integrations = yield* Integration.Service
+    const clock = yield* Clock.Clock
+    const integrationID = Integration.ID.make("refresh-fixture")
+    const methodID = Integration.MethodID.make("oauth")
+    const expired = Credential.OAuth.make({
+      type: "oauth",
+      methodID,
+      access: "expired-access",
+      refresh: "fixture-refresh",
+      expires: (yield* Clock.currentTimeMillis) + 60_000,
+    })
+    const stored = yield* credentials.create({ integrationID, label: "Fixture", value: expired })
+    yield* TestClock.adjust("2 minutes")
+    const refreshed = Credential.OAuth.make({
+      ...expired,
+      access: "fresh-access",
+      refresh: "rotated-refresh",
+      expires: (yield* Clock.currentTimeMillis) + 3_600_000,
+    })
+    const refreshes: Credential.OAuth[] = []
+    const resolved: Array<Credential.Value | undefined> = []
+
+    yield* plugins.activate([
+      {
+        id: "oauth-refresh",
+        revision: "1",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* ctx.integration.transform((draft) =>
+              draft.method.update({
+                integrationID,
+                method: { id: methodID, type: "oauth", label: "Fixture" },
+                authorize: () => Effect.die("unexpected authorization"),
+                refresh: (value) =>
+                  Effect.sync(() => {
+                    refreshes.push(value)
+                    return refreshed
+                  }),
+              }),
+            )
+            // The method registered above must be readable before the activation batch ends.
+            const connection = yield* ctx.integration.connection.active(integrationID)
+            if (!connection) return yield* Effect.die("fixture connection not found")
+            resolved.push(yield* ctx.integration.connection.resolve(connection).pipe(Effect.orDie))
+          }).pipe(
+            // Plugin activation isolates ambient services, including the test clock.
+            Effect.provideService(Clock.Clock, clock),
+          ),
+      },
+    ])
+
+    expect(yield* plugins.list()).toMatchObject([{ id: "oauth-refresh", state: { status: "active" } }])
+    expect(resolved).toEqual([refreshed])
+    expect((yield* credentials.get(stored.id))?.value).toEqual(refreshed)
+    expect(yield* integrations.connection.resolve({ type: "credential", id: stored.id, label: stored.label })).toEqual(
+      refreshed,
+    )
+    expect(refreshes).toEqual([expired])
   }),
 )

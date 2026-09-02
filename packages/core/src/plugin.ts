@@ -169,7 +169,7 @@ const layer = Layer.effect(
       lock.withPermit(
         Effect.gen(function* () {
           active.clear()
-          yield* State.batch(Scope.close(scope, exit), { flush: false })
+          yield* State.shutdown(Scope.close(scope, exit))
         }),
       )
     yield* Effect.addFinalizer(close)

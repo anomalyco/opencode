@@ -1,7 +1,7 @@
 export * as Vcs from "./vcs.js"
 
 import path from "path"
-import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, FiberSet, Layer, Schema, Semaphore, Stream } from "effect"
 import type { VcsDefinition, VcsDraft } from "@opencode-ai/plugin/effect/vcs"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
@@ -55,8 +55,11 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const bus = yield* Bus.Service
+    const root = yield* Effect.scope
+    const fork = yield* FiberSet.makeRuntime<never, void, never>()
     const vcs = location.vcs
     const current: { info: Info } = { info: { branch: {} } }
+    const refreshLock = Semaphore.makeUnsafe(1)
     const scope = {
       directory: location.directory,
       worktree: location.project.directory,
@@ -78,7 +81,7 @@ const layer = Layer.effect(
           set: (selection) => (draft.selection = selection),
         },
       }),
-      finalize: () => refresh(),
+      notify: State.reconcile(root, fork, () => refresh()),
     })
     const selected = () => {
       const value = state.get()
@@ -117,13 +120,23 @@ const layer = Layer.effect(
         }),
       )
     const refresh = Effect.fn("Vcs.refresh")(function* () {
-      const provider = selected()
-      const next: Info = provider
-        ? yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), { branch: {} })
-        : { branch: {} }
-      const changed = current.info.branch.current !== next.branch.current
-      current.info = next
-      if (changed) yield* bus.publish(VcsEvent.BranchUpdated, { branch: next.branch.current })
+      const changed = yield* Effect.gen(function* () {
+        const provider = selected()
+        const next: Info = provider
+          ? yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), { branch: {} })
+          : { branch: {} }
+        const changed = current.info.branch.current !== next.branch.current
+        current.info = next
+        return changed
+      }).pipe(Semaphore.withPermit(refreshLock))
+      if (!changed) return
+      // Legacy listeners can publish nested updates before streams and SSE receive
+      // this event. Re-announce the latest branch if publication was overtaken.
+      while (true) {
+        const branch = current.info.branch.current
+        yield* bus.publish(VcsEvent.BranchUpdated, { branch })
+        if (branch === current.info.branch.current) return
+      }
     })
 
     if (vcs) {
@@ -135,7 +148,13 @@ const layer = Layer.effect(
       yield* bus.subscribe(FileSystem.Event.Changed).pipe(
         Stream.filter((event) => isBranchMetadata(event.data.file)),
         Stream.runForEach((event) =>
-          refresh().pipe(Effect.withSpan("Vcs.refreshBranch", { attributes: { file: event.data.file } })),
+          refresh().pipe(
+            Effect.catchCauseIf(
+              (cause) => !Cause.hasInterrupts(cause),
+              (cause) => Effect.logWarning("vcs refresh failed", { file: event.data.file, cause }),
+            ),
+            Effect.withSpan("Vcs.refreshBranch", { attributes: { file: event.data.file } }),
+          ),
         ),
         Effect.forkScoped({ startImmediately: true }),
       )

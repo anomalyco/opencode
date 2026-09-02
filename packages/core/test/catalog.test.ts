@@ -1,4 +1,6 @@
 import { describe, expect } from "bun:test"
+import { LanguageModel } from "@opencode-ai/ai"
+import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -9,6 +11,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
@@ -30,6 +33,52 @@ const catalogLayer = AppNodeBuilder.build(
 const it = testEffect(catalogLayer)
 
 describe("Catalog", () => {
+  ;["variant", "empty-key", "metadata", "aisdk"].forEach((path) =>
+    it.effect(`keeps nested catalog values editable after ${path} model resolution`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        const providerID = Provider.ID.make("resolve-fixture")
+        const modelID = Model.ID.make("fixture-model")
+        yield* catalog.transform((draft) =>
+          draft.model.update(providerID, modelID, (model) => {
+            model.package = path === "aisdk" ? Provider.aisdk("@ai-sdk/fixture") : "@opencode-ai/ai/providers/openai"
+            model.settings = {
+              apiKey: path === "empty-key" ? "" : "fixture-key",
+              baseURL: "https://fixture.example/v1",
+            }
+            model.variants = [{ id: Model.VariantID.make("high"), body: { reasoning: { effort: "high" } } }]
+          }),
+        )
+        const selected = required(yield* catalog.model.get(providerID, modelID))
+        if (path === "variant") yield* ModelResolver.withVariant(selected, Model.VariantID.make("high"))
+        if (path !== "variant")
+          yield* ModelResolver.fromCatalogModel(
+            selected,
+            path === "metadata"
+              ? Credential.Key.make({ type: "key", key: "fixture-key", metadata: { tenant: "fixture" } })
+              : undefined,
+            {
+              loadAISDK: () =>
+                Effect.succeed(LanguageModel.make({ id: modelID, provider: providerID, route: OpenAIChat.route })),
+            },
+          )
+
+        yield* catalog.transform((draft) =>
+          draft.model.update(providerID, modelID, (model) => {
+            model.limit.context = 100_000
+            model.capabilities.tools = false
+            model.variants.push({ id: Model.VariantID.make("other") })
+          }),
+        )
+        expect(required(yield* catalog.model.get(providerID, modelID))).toMatchObject({
+          limit: { context: 100_000 },
+          capabilities: { tools: false },
+          variants: [{ id: "high" }, { id: "other" }],
+        })
+      }),
+    ),
+  )
+
   it.effect("publishes an updated event after catalog changes", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

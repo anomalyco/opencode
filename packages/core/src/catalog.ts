@@ -135,9 +135,7 @@ const layer = Layer.effect(
         }
         return result
       },
-      finalize: Effect.fn("Catalog.finalize")(function* () {
-        yield* bus.publish(Catalog.Event.Updated, {})
-      }),
+      notify: bus.publish(Catalog.Event.Updated, {}).pipe(Effect.asVoid, Effect.withSpan("Catalog.notify")),
     })
     const result: Interface = {
       transform: state.transform,

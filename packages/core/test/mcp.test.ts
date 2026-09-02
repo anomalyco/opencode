@@ -34,9 +34,24 @@ import { McpStdio } from "@opencode-ai/core/mcp/stdio"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
+import { State } from "@opencode-ai/core/state"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { Tool } from "@opencode-ai/core/tool"
-import { Deferred, Effect, Exit, Fiber, Layer, PubSub, Ref, Schedule, Schema, Sink, Stream } from "effect"
+import {
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  PubSub,
+  Ref,
+  Schedule,
+  Schema,
+  Scope,
+  Sink,
+  Stream,
+} from "effect"
 import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
@@ -69,7 +84,7 @@ function resourceServer(
     listChanged?: boolean
     emptyElicitation?: boolean
     urlElicitation?: boolean
-    respond?: (request: Request) => Response | undefined
+    respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
 ) {
   return Effect.acquireRelease(
@@ -178,7 +193,7 @@ function resourceServer(
           if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
             state.initializations += 1
           }
-          return input.respond?.(request) ?? transport.handleRequest(request)
+          return (await input.respond?.(request)) ?? transport.handleRequest(request)
         },
       })
       return {
@@ -1331,6 +1346,9 @@ testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unus
           )
           expect(yield* service.tools()).toHaveLength(2)
 
+          yield* service.transform((draft) => draft.update("dynamic", (server) => (server.codemode = false)))
+          expect((yield* service.tools()).map((tool) => tool.codemode)).toEqual([false, false])
+
           const settings = { disabled: true }
           yield* service.transform((draft) => {
             draft.update("dynamic", (server) => {
@@ -1415,7 +1433,7 @@ test("isolates nested configured MCP mutations and reconciles them", async () =>
         expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(1)
         yield* service.transform((draft) =>
           draft.update("resources", (server) => {
-            if (server.type === "remote") server.headers = { Authorization: "transformed" }
+            if (server.type === "remote" && server.headers) server.headers.Authorization = "transformed"
           }),
         )
 
@@ -1425,6 +1443,41 @@ test("isolates nested configured MCP mutations and reconciles them", async () =>
     ),
   )
 })
+
+testEffect(Layer.empty).live("batches MCP transforms without connecting intermediate configurations", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const registrations = yield* State.batch(
+        Effect.gen(function* () {
+          const added = yield* service.transform((draft) =>
+            draft.set("dynamic", {
+              type: "remote",
+              url: server.url,
+              oauth: false,
+            }),
+          )
+          expect((yield* service.servers()).some((server) => server.name === "dynamic")).toBe(false)
+          const disabled = yield* service.transform((draft) =>
+            draft.update("dynamic", (config) => (config.disabled = true)),
+          )
+          return [added, disabled]
+        }),
+      )
+
+      expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status).toEqual({
+        status: "disabled",
+      })
+      expect(yield* service.tools()).toEqual([])
+      yield* State.batch(Effect.forEach(registrations, (registration) => registration.dispose))
+      expect((yield* service.servers()).some((server) => server.name === "dynamic")).toBe(false)
+      expect(server.state.initializations).toBe(0)
+    }).pipe(
+      Effect.provide(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))),
+    )
+  }),
+)
 
 test("reconciles only changed MCP server config", async () => {
   await Effect.runPromise(
@@ -1515,6 +1568,130 @@ test("reconciles only changed MCP server config", async () => {
     ),
   )
 })
+
+testEffect(Layer.empty).live("keeps MCP config snapshots stable during an in-flight replacement", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const accepted = yield* Deferred.make<void>()
+    const server = yield* resourceServer({
+      respond: (request) =>
+        request.method !== "POST"
+          ? undefined
+          : Effect.runPromise(
+              Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(undefined)),
+            ),
+    })
+
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const replacing = yield* service
+        .transform((draft) => draft.update("resources", (config) => (config.disabled = false)))
+        .pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.await(started)
+
+      const restoring = yield* State.batch(
+        Effect.gen(function* () {
+          yield* service.transform((draft) => draft.update("resources", (config) => (config.disabled = true)))
+          yield* Deferred.succeed(accepted, undefined)
+        }),
+      ).pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.await(accepted)
+      expect((yield* service.servers())[0]?.status).toEqual({ status: "pending" })
+
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(replacing)
+      yield* Fiber.join(restoring)
+      expect((yield* service.servers())[0]?.status).toEqual({ status: "disabled" })
+      expect(yield* service.tools()).toEqual([])
+      expect(server.state.initializations).toBe(1)
+    }).pipe(
+      Effect.ensuring(Deferred.succeed(release, undefined)),
+      Effect.provide(
+        resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, disabled: true })),
+      ),
+    )
+  }),
+)
+
+const shutdownIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Bus.node, Integration.node, Credential.node, Form.node, Environment.node, Location.node]),
+    [
+      Location.node.replace(
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
+        ),
+      ),
+      Environment.node.replace(hostEnvironmentLayer),
+    ],
+  ),
+)
+shutdownIt.effect("discards in-flight and queued MCP notifications after its layer closes", () =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const root = yield* Scope.make()
+    yield* Effect.addFinalizer(() =>
+      Deferred.succeed(release, undefined).pipe(
+        Effect.andThen(State.shutdown(Scope.close(root, Exit.void))),
+        Effect.andThen(TestClock.adjust("500 millis")),
+      ),
+    )
+    const context = yield* Layer.buildWithScope(Mcp.layer(), root)
+    const service = Context.get(context, Mcp.Service)
+    const observed: string[] = []
+    let block = false
+    yield* Effect.acquireRelease(
+      bus.listen((event) =>
+        Effect.gen(function* () {
+          if (event.type !== McpEvent.StatusChanged.type) return
+          observed.push(Schema.decodeUnknownSync(McpEvent.StatusChanged.data)(event.data).server)
+          if (!block) return
+          block = false
+          yield* Deferred.succeed(entered, undefined)
+          yield* Deferred.await(release)
+        }),
+      ),
+      (unsubscribe) => unsubscribe,
+    )
+    const source = { url: "https://example.com/initial", added: false }
+    yield* service
+      .transform((draft) => {
+        draft.set("fixture", { type: "remote", url: source.url, oauth: false, disabled: true })
+        if (source.added) draft.set("queued", { type: "local", command: ["unused"], disabled: true })
+      })
+      .pipe(Scope.provide(root))
+
+    block = true
+    source.url = "https://example.com/first"
+    source.added = true
+    const first = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+    yield* TestClock.adjust("500 millis")
+    yield* Deferred.await(entered)
+    source.url = "https://example.com/second"
+    const second = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+    yield* TestClock.adjust("500 millis")
+
+    const shutdown = yield* State.shutdown(Scope.close(root, Exit.void)).pipe(
+      Effect.forkChild({ startImmediately: true }),
+    )
+    yield* TestClock.adjust("1 millis")
+    expect(shutdown.pollUnsafe()).toBeDefined()
+    expect(first.pollUnsafe()).toBeDefined()
+    expect(second.pollUnsafe()).toBeDefined()
+    expect(yield* Deferred.isDone(release)).toBe(false)
+    yield* Fiber.join(shutdown)
+    observed.length = 0
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(first)
+    yield* Fiber.join(second)
+    expect(observed).toEqual([])
+    expect((yield* service.servers()).map((server) => server.name)).toEqual([Mcp.ServerName.make("fixture")])
+  }),
+)
 
 test("serializes concurrent MCP lifecycle operations", async () => {
   await Effect.runPromise(
