@@ -1,15 +1,18 @@
 import { describe, expect } from "bun:test"
+import { BackgroundJob as CoreBackgroundJob } from "@opencode-ai/core/background-job"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Effect, Exit, Layer, Option, Queue } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Option, Queue, Ref, Scope } from "effect"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { AttachmentContract } from "@/session/attachment/contract"
 import { BackgroundJob } from "@/background/job"
-import { noAnswer } from "../lib/background"
+import { BackgroundJobBinder } from "@/background/binder"
+import { answered, noAnswer } from "../lib/background"
 import { AttachmentCoordinator } from "@/session/attachment/coordinator"
 import { AttachmentParticipant } from "@/session/attachment/participant"
 import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionClosureDriver } from "@/session/closure/driver"
 import { SessionToolPartPermit } from "@/session/toolpart-permit"
 import { SessionClosureModel as Model } from "@/session/closure/model"
 import { SessionClosurePorts as Ports } from "@/session/closure/ports"
@@ -17,21 +20,22 @@ import { SessionRunState } from "@/session/run-state"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { SessionStatus } from "@/session/status"
 import { provideInstanceEffect, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
-import { itBounded as it } from "../lib/effect"
+import { awaitWithTimeout, itBounded as it } from "../lib/effect"
 
 /**
  * The coordinator half of the bind-before-arm protocol.
  *
  * Everything here is proved against the real coordinator and the real model - `realClosure` builds
- * `SessionClosure.layer` itself - with only the driver scripted, because the driver is what lets a
- * fence be held mid-flight. Every test but the last calls the coordinator directly and touches no
+ * `SessionClosure.layer` itself. Most rows script the driver because that is what lets a fence be
+ * held mid-flight; the B-2 composition instead runs the production driver and holds only its real
+ * physical signal. Every test but the last three calls the coordinator directly and touches no
  * BackgroundJob registry. That separation is deliberate: proving the coordinator's answers on their
  * own is what makes connecting the two checkable, rather than wiring two unproved halves together
  * and testing only the composition.
  *
- * The final test is the end-to-end proof and deliberately breaks that rule, because once both
- * halves are proved the remaining risk is the join itself - and nothing else in the codebase
- * exercises a real admission through the registry to a real coordinator.
+ * The final three rows deliberately cross that boundary: sequence-zero end to end, the revoked
+ * extension's cancelled winner, and its ordinary-rejection control. Once both halves are proved,
+ * their remaining risk is the join itself.
  *
  * Covered: a bind after the fence is cancellation-owned with no escape, both orderings of the
  * permit compare-and-set, and the epoch and stale-handle rejections.
@@ -1045,6 +1049,324 @@ describe("SessionClosure job bind", () => {
           const terminal = yield* closure.view
           expect(terminal.leases.find((item) => item.id === held.lease)).toBeUndefined()
           expect(terminal.jobs.find((item) => item.id === owner.job)).toBeUndefined()
+        }),
+      )
+    }),
+  )
+
+  /**
+   * CP-032 T-032-4 — the missing production B-2 composition.
+   *
+   * The adapter's shipped layer adds InstanceState delegation but no admission decision. This
+   * fixture therefore constructs the same REAL core registry with the same REAL
+   * `BackgroundJobBinder.make(closure)`, wrapping only the two binder methods so the extension can
+   * be held after SessionClosure has issued its permit but before core receives it. The decision,
+   * permit claim and terminal publication all remain production implementations.
+   *
+   * That hold exposes the otherwise scheduler-dependent ordering: owner sequence zero files while
+   * sequence one remains reserved; a fence revokes sequence one's issued permit while the physical
+   * driver is held; then core receives the unchanged permit, loses its real claim, and must publish
+   * one cancelled lifetime winner immediately rather than waiting for physical completion.
+   */
+  it.live("a revoked real extension permit gives BackgroundJob and closure one cancelled winner", () =>
+    Effect.gen(function* () {
+      const ports: Ports.RuntimePorts = { driver: SessionClosureDriver.make(), participants: [], hooks: {} }
+      const root = SessionID.make("ses_g4_b2_composed")
+      const node = Model.id("session", root)
+
+      yield* withRunState(realClosure(ports), () =>
+        Effect.gen(function* () {
+          const closure = yield* SessionClosure.Service
+          const closureTerminals: SessionClosure.JobTerminalInput[] = []
+          const observedClosure: SessionClosure.Interface = {
+            ...closure,
+            jobTerminal: (input) =>
+              Effect.sync(() => closureTerminals.push(input)).pipe(Effect.andThen(closure.jobTerminal(input))),
+          }
+          const realBinder = yield* BackgroundJobBinder.make(observedClosure)
+          const issued = yield* Deferred.make<{
+            readonly request: CoreBackgroundJob.BindRequest
+            readonly decision: Extract<CoreBackgroundJob.BindDecision, { readonly kind: "arm_allowed" }>
+          }>()
+          const releaseBind = yield* Deferred.make<void>()
+          const ownerRelease = yield* Deferred.make<void>()
+          const physicalStarted = yield* Deferred.make<void>()
+          const physicalRelease = yield* Deferred.make<void>()
+          const requestDone = yield* Deferred.make<void>()
+          const visible = yield* Ref.make(true)
+          const releases = yield* Ref.make<readonly Deferred.Deferred<void>[]>([
+            releaseBind,
+            ownerRelease,
+            physicalRelease,
+          ])
+          const terminals: CoreBackgroundJob.TerminalInput[] = []
+
+          const binder: CoreBackgroundJob.Binder = {
+            bind: (input) =>
+              realBinder.bind(input).pipe(
+                Effect.tap((decision) => {
+                  if (input.sequence < 1 || decision.kind !== "arm_allowed") return Effect.void
+                  return Deferred.succeed(issued, { request: input, decision }).pipe(
+                    Effect.andThen(Deferred.await(releaseBind)),
+                  )
+                }),
+              ),
+            terminal: (input) =>
+              Effect.sync(() => terminals.push(input)).pipe(Effect.andThen(realBinder.terminal(input))),
+          }
+
+          const scope = yield* Scope.make()
+          yield* Effect.addFinalizer(() =>
+            Ref.get(releases).pipe(
+              Effect.flatMap((items) =>
+                Effect.forEach(items, (item) => Deferred.succeed(item, undefined), { discard: true }),
+              ),
+              Effect.andThen(Scope.close(scope, Exit.void)),
+              Effect.ignore,
+            ),
+          )
+          const jobs = yield* CoreBackgroundJob.makeWith(binder).pipe(Scope.provide(scope))
+
+          const ownerLease = yield* holdLease(closure, root, "b2_owner")
+          const started = yield* jobs.startExact({
+            id: "job_b2_composed",
+            type: "test",
+            metadata: { background: true },
+            run: Deferred.await(ownerRelease).pipe(Effect.as(answered("assistant_b2_owner", 1, "B2 owner answer"))),
+            admission: { lease: ownerLease.lease, epoch: ownerLease.epoch },
+          })
+          if (!started.lifetime || !started.handle) return yield* Effect.die("B2 owner did not arm")
+
+          const extensionLease = yield* holdLease(closure, root, "b2_extension")
+          const extension = yield* jobs
+            .extendExact({
+              lifetime: started.lifetime,
+              run: Effect.succeed(noAnswer),
+              admission: { lease: extensionLease.lease, epoch: extensionLease.epoch },
+            })
+            .pipe(Effect.forkScoped)
+          const captured = yield* awaitWithTimeout(
+            Deferred.await(issued),
+            "B2 extension never reached the issued-permit hold",
+          )
+          expect(captured.request.lifetime).toBe(started.lifetime)
+          expect(captured.request.sequence).toBe(1)
+          expect(captured.decision.permit.lifetime.id).toBe(captured.request.lifetime.id)
+          expect(captured.decision.permit.lifetime.token).toBe(captured.request.lifetime.token)
+          expect(captured.decision.permit.sequence).toBe(1)
+
+          const job = Model.id("job", `job_${started.lifetime.id}`)
+          const binding = yield* closure.view
+          const bindingJob = binding.jobs.find((item) => item.id === job)
+          expect(bindingJob?.state).toBe("armed")
+          expect(bindingJob?.extensions).toHaveLength(1)
+          expect(bindingJob?.extensions[0]?.state).toBe("binding")
+          expect(bindingJob?.extensions[0]?.sequence).toBe(1n)
+          const extensionPermit = binding.armPermits.find((item) => item.job === job && item.sequence === 1n)
+          expect(extensionPermit?.state).toBe("issued")
+          expect(terminals).toHaveLength(0)
+
+          // Owner settlement is real and visible while the reserved extension still prevents a
+          // terminal winner. No timeout sample is used as the oracle: the retained answer is the
+          // positive settlement fact, and exact observation reports the still-running lifetime.
+          yield* Deferred.succeed(ownerRelease, undefined)
+          const owner = yield* awaitWithTimeout(
+            jobs.waitAnswer({ handle: started.handle, after: 0 }),
+            "B2 owner answer never filed while the extension remained pending",
+          )
+          expect(owner.answer?.detected).toBe("B2 owner answer")
+          expect((yield* jobs.observeHandle(started.handle))?.status).toBe("running")
+          expect(terminals).toHaveLength(0)
+
+          const pending = yield* closure
+            .request({
+              root,
+              runState: capability,
+              discovery: {
+                runners: Effect.succeed([]),
+                jobs: Ref.get(visible).pipe(
+                  Effect.map((active) =>
+                    active
+                      ? [
+                          {
+                            job: started.lifetime.id,
+                            state: "armed" as const,
+                            status: "running" as const,
+                            target: root,
+                            owner: root,
+                            interrupt: Deferred.succeed(physicalStarted, undefined).pipe(
+                              Effect.andThen(Deferred.await(physicalRelease)),
+                              Effect.andThen(Ref.set(visible, false)),
+                              Effect.as("interrupted" as const),
+                            ),
+                          },
+                        ]
+                      : [],
+                  ),
+                ),
+              },
+              lineage: { parents: () => Effect.succeed([]) },
+              validateSession: () => Effect.succeed(true),
+              planIdentity: {
+                resolve: (targets) =>
+                  Effect.succeed(
+                    targets.map((session) => ({
+                      session,
+                      identity: {
+                        source: "session_identity" as const,
+                        agent: "general",
+                        model: {
+                          providerID: "test",
+                          modelID: "test",
+                          variant: { present: false as const },
+                        },
+                      },
+                    })),
+                  ),
+              },
+              highWater: { read: () => Effect.succeed([]) },
+              record: {
+                write: () => Effect.succeed({ message: "verified" as const, part: "verified" as const }),
+                verify: () => Effect.succeed("verified" as const),
+              },
+            })
+            .pipe(Effect.ensuring(Deferred.succeed(requestDone, undefined)), Effect.forkScoped)
+          yield* awaitWithTimeout(
+            Deferred.await(physicalStarted),
+            "B2 production driver never reached its held physical cancellation",
+          )
+          expect(yield* Deferred.isDone(requestDone)).toBe(false)
+
+          // The real fence has already won the permit CAS while physical cancellation is still
+          // held. SessionClosure reaps the terminal row and permit; core has not yet seen the
+          // decision and therefore still reports running with no terminal notification.
+          const revoked = yield* closure.view
+          expect(revoked.armPermits.find((item) => item.id === extensionPermit?.id)).toBeUndefined()
+          expect(revoked.jobs.find((item) => item.id === job)).toBeUndefined()
+          expect((yield* jobs.observeHandle(started.handle))?.status).toBe("running")
+          expect(terminals).toHaveLength(0)
+
+          // Return the UNCHANGED real decision. Core performs the real claim, loses to revocation,
+          // maps that loss to its tagged-cancelled exit, and settles the exact lifetime immediately.
+          yield* Deferred.succeed(releaseBind, undefined)
+          const extended = yield* awaitWithTimeout(
+            Fiber.join(extension),
+            "B2 extension did not settle after its revoked claim lost",
+          )
+          expect(extended.extended).toBe(false)
+          const terminal = yield* awaitWithTimeout(
+            jobs.waitHandle({ handle: started.handle }),
+            "B2 exact handle never published its cancelled winner",
+          )
+          expect(terminal.info?.status).toBe("cancelled")
+          expect(terminal.info?.status).not.toBe("completed")
+          expect(terminal.info?.status).not.toBe("error")
+          expect(terminal.info?.output).toBeUndefined()
+          expect(terminals).toHaveLength(1)
+          // Core constructs a fresh `Lifetime` wrapper at terminal publication, so object identity
+          // is not the authority. The opaque token inside it is: it must be the exact token the
+          // binder received on this extension request, under the same public id.
+          expect(terminals[0]?.lifetime.id).toBe(captured.request.lifetime.id)
+          expect(terminals[0]?.lifetime.token).toBe(captured.request.lifetime.token)
+          expect(terminals[0]?.winner).toBe("cancelled")
+          expect(closureTerminals).toHaveLength(1)
+          expect(closureTerminals[0]?.winner).toBe("cancelled")
+          expect(yield* Deferred.isDone(requestDone)).toBe(false)
+
+          // The binder's terminal publication is idempotent against the closure winner selected by
+          // revocation: no job or permit reappears, and no contradictory terminal is introduced.
+          const beforePhysical = yield* closure.view
+          expect(beforePhysical.jobs.find((item) => item.id === job)).toBeUndefined()
+          expect(beforePhysical.armPermits.find((item) => item.id === extensionPermit?.id)).toBeUndefined()
+
+          yield* Deferred.succeed(physicalRelease, undefined)
+          const request = yield* awaitWithTimeout(
+            Fiber.join(pending).pipe(Effect.exit),
+            "B2 closure request did not finish after physical release",
+          )
+          expect(Exit.isSuccess(request)).toBe(true)
+          expect(yield* Deferred.isDone(requestDone)).toBe(true)
+
+          const final = yield* closure.view
+          expect(final.fences.map((item) => item.session)).not.toContain(node)
+          expect(final.jobs.find((item) => item.id === job)).toBeUndefined()
+          expect(final.armPermits.find((item) => item.id === extensionPermit?.id)).toBeUndefined()
+          expect((yield* jobs.observeHandle(started.handle))?.status).toBe("cancelled")
+          expect(terminals).toHaveLength(1)
+          expect(terminals[0]?.winner).toBe("cancelled")
+          expect(closureTerminals).toHaveLength(1)
+          expect(closureTerminals[0]?.winner).toBe("cancelled")
+        }),
+      )
+    }),
+  )
+
+  it.live("an ordinary real binder rejection leaves the exact BackgroundJob completed", () =>
+    Effect.gen(function* () {
+      const { ports } = yield* inflightPorts()
+      const root = SessionID.make("ses_g4_b2_declined")
+
+      yield* withRunState(realClosure(ports), () =>
+        Effect.gen(function* () {
+          const closure = yield* SessionClosure.Service
+          const closureTerminals: SessionClosure.JobTerminalInput[] = []
+          const observedClosure: SessionClosure.Interface = {
+            ...closure,
+            jobTerminal: (input) =>
+              Effect.sync(() => closureTerminals.push(input)).pipe(Effect.andThen(closure.jobTerminal(input))),
+          }
+          const realBinder = yield* BackgroundJobBinder.make(observedClosure)
+          const terminals: CoreBackgroundJob.TerminalInput[] = []
+          const binder: CoreBackgroundJob.Binder = {
+            bind: realBinder.bind,
+            terminal: (input) =>
+              Effect.sync(() => terminals.push(input)).pipe(Effect.andThen(realBinder.terminal(input))),
+          }
+          const scope = yield* Scope.make()
+          const ownerRelease = yield* Deferred.make<void>()
+          yield* Effect.addFinalizer(() =>
+            Deferred.succeed(ownerRelease, undefined).pipe(
+              Effect.andThen(Scope.close(scope, Exit.void)),
+              Effect.ignore,
+            ),
+          )
+          const jobs = yield* CoreBackgroundJob.makeWith(binder).pipe(Scope.provide(scope))
+
+          const ownerLease = yield* holdLease(closure, root, "b2_declined_owner")
+          const started = yield* jobs.startExact({
+            id: "job_b2_declined",
+            type: "test",
+            metadata: { background: true },
+            run: Deferred.await(ownerRelease).pipe(Effect.as(answered("assistant_b2_declined", 1, "B2 ordinary"))),
+            admission: { lease: ownerLease.lease, epoch: ownerLease.epoch },
+          })
+          if (!started.lifetime || !started.handle) return yield* Effect.die("B2 ordinary owner did not arm")
+
+          const extensionLease = yield* holdLease(closure, root, "b2_declined_extension")
+          const declined = yield* jobs.extendExact({
+            lifetime: started.lifetime,
+            run: Effect.succeed(noAnswer),
+            // A wrong observed epoch is an ordinary binder rejection, not cancellation ownership.
+            admission: { lease: extensionLease.lease, epoch: extensionLease.epoch + 1n },
+          })
+          expect(declined.extended).toBe(false)
+          expect((yield* jobs.observeHandle(started.handle))?.status).toBe("running")
+          expect(terminals).toHaveLength(0)
+          expect(closureTerminals).toHaveLength(0)
+
+          yield* Deferred.succeed(ownerRelease, undefined)
+          const terminal = yield* awaitWithTimeout(
+            jobs.waitHandle({ handle: started.handle }),
+            "B2 ordinary rejection stranded the owner lifetime",
+          )
+          expect(terminal.info?.status).toBe("completed")
+          expect(terminal.info?.status).not.toBe("cancelled")
+          expect(terminal.info?.status).not.toBe("error")
+          expect(terminal.info?.output).toBeUndefined()
+          expect(terminals).toHaveLength(1)
+          expect(terminals[0]?.winner).toBe("completed")
+          expect(closureTerminals).toHaveLength(1)
+          expect(closureTerminals[0]?.winner).toBe("completed")
         }),
       )
     }),
