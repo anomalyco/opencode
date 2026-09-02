@@ -12,6 +12,7 @@ await Effect.runPromise(
     process.argv.slice(2),
   ).pipe(
     Effect.provideService(Updater.Service, {
+      package: "@opencode-ai/cli",
       check: () => Effect.die("Manual upgrades must not run the automatic update check"),
       monitor: () => Effect.die("Manual upgrades must not monitor automatic updates"),
       apply: () => Effect.die("Manual upgrades must not apply automatic updates"),
@@ -25,11 +26,11 @@ await Effect.runPromise(
           record("latest")
           return process.env.UPGRADE_TEST_LATEST_ERROR
             ? Effect.fail(new Error("Update check failed"))
-            : Effect.succeed("0.0.0-beta-new")
+            : Effect.succeed({ package: "@opencode-ai/cli", version: "0.0.0-beta-new" })
         }),
-      upgrade: (method, version) =>
+      upgrade: (method, target) =>
         Effect.suspend(() => {
-          record({ method, version })
+          record({ method, version: typeof target === "string" ? target : target.version })
           return process.env.UPGRADE_TEST_INSTALL_ERROR ? Effect.fail(new Error("Permission denied")) : Effect.void
         }),
     }),

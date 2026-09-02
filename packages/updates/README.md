@@ -16,6 +16,43 @@ The `/admin*` route must be protected by a Cloudflare Access self-hosted applica
 
 The Worker has `workers_dev` and preview URLs disabled so the custom hostname is its only public entry point.
 
+## CLI package targets
+
+The CLI npm artifact keeps the existing top-level `version` and includes package
+names by executable in release metadata:
+
+```json
+{
+  "version": "2.4.0",
+  "metadata": {
+    "packages": {
+      "opencode2": "@opencode/cli",
+      "opencode2-node": "opencode-node"
+    }
+  }
+}
+```
+
+The publisher advertises only packages it has finished publishing. Clients select
+their own executable's entry and use their locally detected package manager.
+The curl installation method still uses the V2 installer.
+Explicit version upgrades stay on the currently installed package without an
+endpoint lookup. Older artifacts without `metadata.packages` also retain the
+installed package; when the map is present, a missing executable entry is an error.
+
+Package-manager detection reads the installed wrapper's manifest, independently
+of the advertised target. npm package-name migrations allow replacement of the
+shared executable but retain the old global package: removing it can unlink the
+new executable. Cleanup is a separate migration step.
+pnpm and Yarn package-name changes currently require a manual reinstall: pnpm
+rejects the shared executable, while Yarn can leave it pointing at the old package.
+The updater reports an error for these migrations instead of claiming success.
+
+Changing this metadata does not redirect pre-capability clients, which only read
+`version`. Before retiring the old package, publish a bridge release and add
+compatibility routing that keeps pre-bridge clients on that version. Until that
+routing is deployed, every advertised version must still exist under the old name.
+
 ## Request logging
 
 Every request reaching the Worker emits an unsampled event at request start to the shared production

@@ -93,5 +93,10 @@ await UpdateArtifact.publish({
   name: "cli",
   distribution: "npm",
   version: Script.version,
-  metadata: {},
+  metadata: {
+    packages: {
+      opencode2: pkg.name,
+      ...(existsSync("./dist/node") ? { "opencode2-node": "opencode-node" } : {}),
+    },
+  },
 })
