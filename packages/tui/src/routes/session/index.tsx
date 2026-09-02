@@ -2110,14 +2110,9 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
   const target = createMemo<BackgroundToolTarget | undefined>(() => {
-    if (source() === "shell") {
-      const id = stringValue(metadata()?.shellID) ?? stringValue(metadata()?.jobID)
-      return id ? { source: "shell", id } : undefined
-    }
-    if (source() === "subagent") {
-      const id = stringValue(metadata()?.childID)
-      return id ? { source: "subagent", id } : undefined
-    }
+    if (source() !== "shell") return
+    const id = stringValue(metadata()?.shellID) ?? stringValue(metadata()?.jobID)
+    return id ? { source: "shell", id } : undefined
   })
   const completion = () => source() === "subagent" || source() === "shell"
   const state = () => stringValue(metadata()?.state)
