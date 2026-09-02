@@ -1,6 +1,6 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { App } from "@opencode-ai/core/app"
-import { Agent } from "@opencode-ai/schema/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Session } from "@opencode-ai/schema/session"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
@@ -141,6 +141,94 @@ describe("GithubCopilotPlugin", () => {
         request: new Request("https://api.githubcopilot.com/chat/completions"),
       })
       expect(event.request.headers.get("x-interaction-type")).toBe("conversation-background")
+    }),
+  )
+
+  it.effect("reroutes auto-selected title requests to a utility model", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* addPlugin()
+      yield* catalog.transform((evt) => {
+        evt.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.4-nano"), (model) => {
+          model.enabled = false
+          model.settings = { endpoint: "responses" }
+        })
+      })
+      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+        sessionID: Session.ID.make("ses_title"),
+        agent: Agent.ID.make("title"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.6-luna") }),
+        request: new Request("https://api.githubcopilot.com/responses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-5.6-luna", input: [{ role: "user", content: "hello" }] }),
+        }),
+      })
+      expect(yield* Effect.promise(() => event.request.clone().json())).toEqual({
+        model: "gpt-5.4-nano",
+        input: [{ role: "user", content: "hello" }],
+      })
+      expect(event.request.headers.get("x-interaction-type")).toBe("conversation-background")
+    }),
+  )
+
+  it.effect("keeps an explicitly configured title model", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const catalog = yield* Catalog.Service
+      yield* addPlugin()
+      yield* agents.transform((draft) => {
+        draft.update(Agent.ID.make("title"), (agent) => {
+          agent.model = Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.6-luna") })
+        })
+      })
+      yield* catalog.transform((evt) => {
+        evt.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.4-nano"), (model) => {
+          model.enabled = false
+          model.settings = { endpoint: "responses" }
+        })
+      })
+      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+        sessionID: Session.ID.make("ses_title"),
+        agent: Agent.ID.make("title"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.6-luna") }),
+        request: new Request("https://api.githubcopilot.com/responses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-5.6-luna", input: [{ role: "user", content: "hello" }] }),
+        }),
+      })
+      expect(yield* Effect.promise(() => event.request.clone().json())).toEqual({
+        model: "gpt-5.6-luna",
+        input: [{ role: "user", content: "hello" }],
+      })
+    }),
+  )
+
+  it.effect("keeps title requests on an endpoint without a utility model", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* addPlugin()
+      yield* catalog.transform((evt) => {
+        evt.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.4-nano"), (model) => {
+          model.enabled = false
+          model.settings = { endpoint: "responses" }
+        })
+      })
+      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+        sessionID: Session.ID.make("ses_title"),
+        agent: Agent.ID.make("title"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("claude-haiku-4.5") }),
+        request: new Request("https://api.githubcopilot.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "claude-haiku-4.5", messages: [{ role: "user", content: "hello" }] }),
+        }),
+      })
+      expect(yield* Effect.promise(() => event.request.clone().json())).toEqual({
+        model: "claude-haiku-4.5",
+        messages: [{ role: "user", content: "hello" }],
+      })
     }),
   )
 

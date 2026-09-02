@@ -148,6 +148,7 @@ const oauth = (app: App.Info) =>
 export const GithubCopilotPlugin = define({
   id: "opencode.provider.github.copilot",
   effect: Effect.fn(function* (ctx) {
+    const agents = yield* Agent.Service
     const catalog = yield* Catalog.Service
     const bus = yield* Bus.Service
     const loading = Semaphore.makeUnsafe(1)
@@ -246,8 +247,14 @@ export const GithubCopilotPlugin = define({
       (evt) =>
         Effect.gen(function* () {
           if (evt.model.providerID !== Provider.ID.githubCopilot) return
-          if (evt.agent === Agent.ID.make("title"))
+          if (evt.agent === Agent.ID.make("title")) {
             evt.request.headers.set("X-Interaction-Type", "conversation-background")
+            // Auto-selected title models come from the regular catalog and consume
+            // premium request quota, so reroute them to a utility model unless the
+            // user explicitly configured a title model.
+            if (!(yield* agents.get(Agent.ID.make("title")))?.model)
+              evt.request = (yield* utilityTitleRequest(catalog, evt.request)) ?? evt.request
+          }
           if (evt.agent === Agent.ID.make("compaction"))
             evt.request.headers.set("X-Interaction-Type", "conversation-compaction")
           const token = evt.request.headers.get("x-api-key")
@@ -282,6 +289,32 @@ export const GithubCopilotPlugin = define({
     )
   }),
 } satisfies PluginInternal.InternalPlugin)
+
+// GitHub exposes utility models for background work such as title generation
+// without including them in the model picker or premium request quota.
+const utilityModels = ["gpt-5.4-nano", "gpt-4.1", "gpt-4o", "gpt-4o-mini"].map((id) => Model.ID.make(id))
+
+const utilityTitleRequest = Effect.fn("GithubCopilotPlugin.utilityTitleRequest")(function* (
+  catalog: Catalog.Interface,
+  request: Request,
+) {
+  const endpoint = request.url.includes("/chat/completions")
+    ? "chat"
+    : request.url.includes("/responses")
+      ? "responses"
+      : undefined
+  if (!endpoint) return
+  const target = (yield* Effect.forEach(utilityModels, (id) => catalog.model.get(Provider.ID.githubCopilot, id)))
+    .filter((model) => model !== undefined)
+    .find((model) => (model.settings?.endpoint ?? "chat") === endpoint)
+  if (!target) return
+  const body = Option.getOrUndefined(decodeBody(yield* Effect.promise(() => request.clone().text())))
+  if (!record(body) || typeof body.model !== "string" || body.model === target.modelID) return
+  const rewritten = new Request(request, { body: JSON.stringify({ ...body, model: target.modelID }) })
+  // The stale length would no longer match the rewritten body.
+  rewritten.headers.delete("content-length")
+  return rewritten
+})
 
 function normalizeDomain(input: string) {
   return input.replace(/^https?:\/\//, "").replace(/\/$/, "")
