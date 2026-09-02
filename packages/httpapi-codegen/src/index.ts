@@ -129,9 +129,12 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
       }
       const payloads = sourcePayloads.map((schema) => normalizeTransport(schema, "payload", endpoint, name)!)
       const success = normalizeTransport(successSchemas[0], "success", endpoint, name)!
-      const errorSchemas = Array.from(errors).flatMap(([status, schemas]) =>
-        schemas.map((schema) => ({ status, ...normalizeTransport(schema, "error", endpoint, name)! })),
-      )
+      // Sort by status so output does not churn when middleware changes the declaration order.
+      const errorSchemas = Array.from(errors)
+        .toSorted(([a], [b]) => a - b)
+        .flatMap(([status, schemas]) =>
+          schemas.map((schema) => ({ status, ...normalizeTransport(schema, "error", endpoint, name)! })),
+        )
       const inputs = [
         ...inputFields(params?.schema, "params", name),
         ...inputFields(query?.schema, "query", name),

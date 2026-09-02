@@ -2336,10 +2336,6 @@ export type V2Event =
 
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
-export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly message: string }
-export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
-
 export type InvalidRequestError = {
   readonly _tag: "InvalidRequestError"
   readonly message: string
@@ -2348,6 +2344,10 @@ export type InvalidRequestError = {
 }
 export const isInvalidRequestError = (value: unknown): value is InvalidRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidRequestError"
+
+export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly message: string }
+export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
 export type AgentNotFoundError = {
   readonly _tag: "AgentNotFoundError"
@@ -2369,14 +2369,6 @@ export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly
 export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidCursorError"
 
-export type ConflictError = {
-  readonly _tag: "ConflictError"
-  readonly message: string
-  readonly resource?: string | undefined
-}
-export const isConflictError = (value: unknown): value is ConflictError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
-
 export type SessionNotFoundError = {
   readonly _tag: "SessionNotFoundError"
   readonly sessionID: string
@@ -2384,6 +2376,14 @@ export type SessionNotFoundError = {
 }
 export const isSessionNotFoundError = (value: unknown): value is SessionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SessionNotFoundError"
+
+export type ConflictError = {
+  readonly _tag: "ConflictError"
+  readonly message: string
+  readonly resource?: string | undefined
+}
+export const isConflictError = (value: unknown): value is ConflictError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
 
 export type UnknownError = {
   readonly _tag: "UnknownError"
@@ -2474,14 +2474,6 @@ export type FormNotFoundError = { readonly _tag: "FormNotFoundError"; readonly i
 export const isFormNotFoundError = (value: unknown): value is FormNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormNotFoundError"
 
-export type FormAlreadySettledError = {
-  readonly _tag: "FormAlreadySettledError"
-  readonly id: string
-  readonly message: string
-}
-export const isFormAlreadySettledError = (value: unknown): value is FormAlreadySettledError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormAlreadySettledError"
-
 export type FormInvalidAnswerError = {
   readonly _tag: "FormInvalidAnswerError"
   readonly id: string
@@ -2489,6 +2481,14 @@ export type FormInvalidAnswerError = {
 }
 export const isFormInvalidAnswerError = (value: unknown): value is FormInvalidAnswerError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormInvalidAnswerError"
+
+export type FormAlreadySettledError = {
+  readonly _tag: "FormAlreadySettledError"
+  readonly id: string
+  readonly message: string
+}
+export const isFormAlreadySettledError = (value: unknown): value is FormAlreadySettledError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormAlreadySettledError"
 
 export type PermissionNotFoundError = {
   readonly _tag: "PermissionNotFoundError"
