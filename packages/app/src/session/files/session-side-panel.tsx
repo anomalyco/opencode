@@ -442,6 +442,9 @@ export function SessionSidePanel(props: {
                                   variant="ghost-muted"
                                   size="large"
                                   aria-label={language.t("session.tab.add")}
+                                  // The tablist redirects focus entering it to the selected
+                                  // tab, which counts as focus-outside and closes the menu.
+                                  onPointerDown={(event: PointerEvent) => event.preventDefault()}
                                 />
                                 <Menu.Portal>
                                   <Menu.Content>

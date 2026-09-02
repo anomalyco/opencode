@@ -38,6 +38,8 @@ export function createDesktopPlatform(
           if (!closed && value.bindingID === bindingID) onEvent(value.event)
         })
         const ready = api.browserPane.request({ type: "register", bindingID, target })
+        // Failures reach the owner through the closed-state event; keep the bare promise handled.
+        void ready.catch(() => undefined)
         return {
           setLayout(layout) {
             if (!closed)
