@@ -265,7 +265,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
 
 export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
-  if (input.session?.terminal) {
+  if (input.session?.terminal !== false) {
     if (input.keybinds?.["terminal.toggle"] === undefined && input.keybinds?.["theme.switch"] === undefined) {
       keybinds["terminal.toggle"] = "<leader>t"
       keybinds["theme.switch"] = "none"
@@ -305,6 +305,7 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
+      terminal: input.session?.terminal ?? true,
       tps: input.session?.tps ?? true,
     },
     tabs: {

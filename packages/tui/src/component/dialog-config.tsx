@@ -55,7 +55,7 @@ export const settings: Setting[] = [
     title: "Terminal",
     category: "Session",
     path: ["session", "terminal"],
-    default: false,
+    default: true,
     values: [false, true],
     labels: ["off", "on"],
     keywords: ["pty", "shell", "terminal pane"],
