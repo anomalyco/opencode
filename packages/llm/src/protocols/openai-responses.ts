@@ -872,21 +872,43 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+const onResponseFinish = Effect.fn("OpenAIResponses.onResponseFinish")(function* (
+  state: ParserState,
+  event: OpenAIResponsesEvent,
+) {
+  // A function call announced via `response.output_item.added` but never
+  // completed by `response.output_item.done` stays pending in `state.tools`.
+  // Finalize any remaining assembly so the call settles instead of leaving a
+  // client tool permanently pending. Empty accumulated input parses to `{}`,
+  // so an abandoned call fails normal schema validation rather than hanging.
+  const pending = Object.keys(state.tools)
+  const flush = pending.length > 0 ? yield* ToolStream.finishAll(ADAPTER, state.tools) : undefined
   const events: LLMEvent[] = []
-  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
-    reason: mapFinishReason(event, state.hasFunctionCall),
-    usage: mapUsage(event.response?.usage),
-    providerMetadata:
-      event.response?.id || event.response?.service_tier
-        ? openaiMetadata({
-            responseId: event.response.id,
-            serviceTier: event.response.service_tier,
-          })
-        : undefined,
-  })
-  return [{ ...state, lifecycle }, events]
-}
+  const lifecycle = Lifecycle.finish(
+    flush?.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle,
+    events,
+    {
+      reason: mapFinishReason(event, pending.length > 0 || state.hasFunctionCall),
+      usage: mapUsage(event.response?.usage),
+      providerMetadata:
+        event.response?.id || event.response?.service_tier
+          ? openaiMetadata({
+              responseId: event.response.id,
+              serviceTier: event.response.service_tier,
+            })
+          : undefined,
+    },
+  )
+  return [
+    {
+      ...state,
+      lifecycle,
+      hasFunctionCall: pending.length > 0 || state.hasFunctionCall,
+      tools: flush?.tools ?? state.tools,
+    },
+    [...(flush?.events ?? []), ...events],
+  ] satisfies StepResult
+})
 
 // Build a single human-readable message from whatever the provider supplied.
 // When both code and message are present, prefix the code so consumers see
@@ -940,9 +962,9 @@ const step = (state: ParserState, event: OpenAIResponsesEvent) => {
     return Effect.succeed(onReasoningSummaryPartDone(state, event))
   if (event.type === "response.output_item.added") return Effect.succeed(onOutputItemAdded(state, event))
   if (event.type === "response.function_call_arguments.delta") return onFunctionCallArgumentsDelta(state, event)
-  if (event.type === "response.output_item.done") return onOutputItemDone(state, event)
+if (event.type === "response.output_item.done") return onOutputItemDone(state, event)
   if (event.type === "response.completed" || event.type === "response.incomplete")
-    return Effect.succeed(onResponseFinish(state, event))
+    return onResponseFinish(state, event)
   if (event.type === "response.failed") return Effect.succeed(onResponseFailed(state, event))
   if (event.type === "error") return Effect.succeed(onError(state, event))
   return Effect.succeed<StepResult>([state, NO_EVENTS])
