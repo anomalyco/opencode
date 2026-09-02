@@ -49,6 +49,7 @@ import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { countryFromRequest, isModelCountryRestricted } from "~/lib/request-country"
 import { isPeakPricing } from "./pricing"
 import { prepareRequestBody } from "./requestBody"
+import { requiresGoTrainingConsent } from "./trainingConsent"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type PreparedBody = Awaited<ReturnType<typeof prepareRequestBody>>
@@ -125,7 +126,7 @@ export async function handler(
     if (
       authInfo &&
       opts.modelList === "lite" &&
-      modelInfo.id === "muse-spark-1.2-contributor" &&
+      requiresGoTrainingConsent(modelInfo.id) &&
       !authInfo.allowTraining
     )
       throw new DataPolicyError(
