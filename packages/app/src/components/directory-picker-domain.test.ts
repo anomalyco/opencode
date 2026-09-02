@@ -406,14 +406,14 @@ test("pickerTabTargetDirectory determines the absolute directory to list for Tab
 test("pickerTabCompletions completes folders up to next slash and supports cycling", () => {
   const homeDirs = ["Documents", "Downloads", "Desktop", "Music", "Pictures"]
 
-  // Prefix match in home directory
+  // Prefix match in home directory (no trailing slash added)
   expect(
     pickerTabCompletions({
       input: "~/Doc",
       home: "/home/luke",
       directories: homeDirs,
     }),
-  ).toEqual(["~/Documents/"])
+  ).toEqual(["~/Documents"])
 
   // Multiple matches returned in alphabetical order for cycling
   expect(
@@ -422,9 +422,9 @@ test("pickerTabCompletions completes folders up to next slash and supports cycli
       home: "/home/luke",
       directories: homeDirs,
     }),
-  ).toEqual(["~/Desktop/", "~/Documents/", "~/Downloads/"])
+  ).toEqual(["~/Desktop", "~/Documents", "~/Downloads"])
 
-  // Empty prefix inside directory expands all child folders
+  // When user adds trailing slash, expands all child folders
   const docDirs = ["work", "personal", "archive"]
   expect(
     pickerTabCompletions({
@@ -432,7 +432,7 @@ test("pickerTabCompletions completes folders up to next slash and supports cycli
       home: "/home/luke",
       directories: docDirs,
     }),
-  ).toEqual(["~/Documents/archive/", "~/Documents/personal/", "~/Documents/work/"])
+  ).toEqual(["~/Documents/archive", "~/Documents/personal", "~/Documents/work"])
 
   // Prefix inside subfolder
   expect(
@@ -441,41 +441,41 @@ test("pickerTabCompletions completes folders up to next slash and supports cycli
       home: "/home/luke",
       directories: docDirs,
     }),
-  ).toEqual(["~/Documents/work/"])
+  ).toEqual(["~/Documents/work"])
 
-  // Windows backslash path preserves backslashes
+  // Windows backslash path preserves backslashes without trailing slash
   expect(
     pickerTabCompletions({
       input: "C:\\Users\\luke\\D",
       home: "C:/Users/luke",
       directories: homeDirs,
     }),
-  ).toEqual(["C:\\Users\\luke\\Desktop\\", "C:\\Users\\luke\\Documents\\", "C:\\Users\\luke\\Downloads\\"])
+  ).toEqual(["C:\\Users\\luke\\Desktop", "C:\\Users\\luke\\Documents", "C:\\Users\\luke\\Downloads"])
 
-  // Multi-step tab navigation: single match completes folder with trailing slash,
-  // then next step targets the completed folder to explore its subdirectories
+  // Multi-step tab navigation:
+  // 1. Single match completes folder without trailing slash
   const dir1Children = ["Dir2"]
   const firstStep = pickerTabCompletions({
     input: "/Dir1/Di",
     home: "/home/luke",
     directories: dir1Children,
   })
-  expect(firstStep).toEqual(["/Dir1/Dir2/"])
+  expect(firstStep).toEqual(["/Dir1/Dir2"])
 
-  // Next tab targets /Dir1/Dir2 directly because input ends with /
+  // 2. When user adds slash (or re-presses tab), targets /Dir1/Dir2/ to explore subdirectories
   const nextTarget = pickerTabTargetDirectory({
-    input: firstStep[0],
+    input: `${firstStep[0]}/`,
     home: "/home/luke",
   })
   expect(nextTarget).toBe("/Dir1/Dir2")
 
   const dir2Children = ["subA", "subB"]
   const secondStep = pickerTabCompletions({
-    input: firstStep[0],
+    input: `${firstStep[0]}/`,
     home: "/home/luke",
     directories: dir2Children,
   })
-  expect(secondStep).toEqual(["/Dir1/Dir2/subA/", "/Dir1/Dir2/subB/"])
+  expect(secondStep).toEqual(["/Dir1/Dir2/subA", "/Dir1/Dir2/subB"])
 
   // Tilde alone expands all home directories
   expect(
@@ -484,5 +484,5 @@ test("pickerTabCompletions completes folders up to next slash and supports cycli
       home: "/home/luke",
       directories: ["Desktop", "Documents"],
     }),
-  ).toEqual(["~/Desktop/", "~/Documents/"])
+  ).toEqual(["~/Desktop", "~/Documents"])
 })

@@ -374,7 +374,7 @@ export function pickerTabCompletions(args: {
   const candidates = matching
 
   const prefix = head || (args.input.startsWith("~") ? `~${sep}` : "")
-  return candidates.map((name) => `${prefix}${name}${sep}`)
+  return candidates.map((name) => `${prefix}${name}`)
 }
 
 export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string | undefined; home: () => string }) {

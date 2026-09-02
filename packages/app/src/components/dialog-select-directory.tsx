@@ -15,6 +15,7 @@ import {
   pickerAbsoluteInput,
   pickerTabCompletions,
   pickerTabTargetDirectory,
+  trimPickerPath,
 } from "./directory-picker-domain"
 import type { Path } from "@opencode-ai/sdk/v2/client"
 
@@ -174,13 +175,13 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
               return
             }
 
-            const target = pickerTabTargetDirectory({
+            let target = pickerTabTargetDirectory({
               input: current,
               home: home(),
               base: start(),
             })
 
-            const entries = await sdk.api.file
+            let entries = await sdk.api.file
               .list({ location: { directory: target } })
               .then((result) =>
                 result.data
@@ -192,12 +193,51 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
             // Bail if the user typed while the async list was in flight.
             if (filter() !== current) return
 
-            const completions = pickerTabCompletions({
+            let completions = pickerTabCompletions({
               input: current,
               home: home(),
               base: start(),
               directories: entries,
             })
+
+            // When pressing tab on an exact single directory without trailing slash,
+            // shift into that directory to complete its subdirectories.
+            const isWindows =
+              /^[A-Za-z]:\//.test(trimPickerPath(home())) ||
+              (start() ? /^[A-Za-z]:\//.test(trimPickerPath(start()!)) : false) ||
+              current.includes("\\")
+            const sep = current.includes("\\") || (isWindows && !current.includes("/")) ? "\\" : "/"
+
+            if (
+              completions.length === 1 &&
+              completions[0] === current &&
+              !current.endsWith("/") &&
+              !current.endsWith("\\")
+            ) {
+              target = pickerTabTargetDirectory({
+                input: `${current}${sep}`,
+                home: home(),
+                base: start(),
+              })
+
+              entries = await sdk.api.file
+                .list({ location: { directory: target } })
+                .then((result) =>
+                  result.data
+                    .filter((entry) => entry.type === "directory")
+                    .map((entry) => getFilename(entry.path.replace(/[\\/]+$/, ""))),
+                )
+                .catch(() => [])
+
+              if (filter() !== current) return
+
+              completions = pickerTabCompletions({
+                input: `${current}${sep}`,
+                home: home(),
+                base: start(),
+                directories: entries,
+              })
+            }
 
             if (completions.length === 0) return
 
