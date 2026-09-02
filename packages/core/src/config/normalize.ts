@@ -191,7 +191,7 @@ export function normalize(input: unknown): Result {
     shell: Info.fields.shell,
     model: Info.fields.model,
     default_agent: Info.fields.default_agent,
-    autoupdate: Info.fields.autoupdate,
+    update: Info.fields.update,
     share: Info.fields.share,
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,

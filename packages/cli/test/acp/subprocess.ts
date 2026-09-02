@@ -179,7 +179,7 @@ function verifierConfig(llmUrl: string, skills?: string) {
     limit: { context: 100_000, output: 10_000 },
   }
   return {
-    autoupdate: false,
+    update: "disable",
     model: "test/test-model",
     ...(skills ? { skills: [skills] } : {}),
     providers: {

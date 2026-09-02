@@ -13818,16 +13818,9 @@
           "default_agent": {
             "type": "string"
           },
-          "autoupdate": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "string",
-                "enum": ["notify"]
-              }
-            ]
+          "update": {
+            "type": "string",
+            "enum": ["disable", "notify", "auto"]
           },
           "share": {
             "type": "string",
@@ -16897,6 +16890,9 @@
                 "enum": ["failed"]
               },
               "error": {
+                "type": "string"
+              },
+              "ref": {
                 "type": "string"
               }
             },

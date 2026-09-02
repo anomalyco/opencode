@@ -160,9 +160,16 @@ export function decodePolicy(text: string): Policy | undefined {
   // the location-scoped server configuration graph.
   const errors: ParseError[] = []
   const input: unknown = parse(text, errors, { allowTrailingComma: true })
-  if (errors.length || typeof input !== "object" || input === null || !("autoupdate" in input)) return
-  const value = input.autoupdate
-  if (typeof value === "boolean" || value === "notify") return value
+  if (errors.length || typeof input !== "object" || input === null) return
+  if ("update" in input) {
+    const value = input.update
+    if (value === "disable" || value === "notify" || value === "auto") return value
+    return
+  }
+  if (!("autoupdate" in input)) return
+  if (input.autoupdate === false) return "disable"
+  if (input.autoupdate === "notify") return "notify"
+  if (input.autoupdate === true) return "auto"
 }
 
 const make = Effect.gen(function* () {
@@ -178,7 +185,7 @@ const make = Effect.gen(function* () {
         Effect.orElseSucceed(() => undefined),
       ),
     )
-    return values.findLast((value) => value !== undefined) ?? true
+    return values.findLast((value) => value !== undefined) ?? "auto"
   })
 
   const run = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "10 seconds") {
@@ -283,7 +290,7 @@ const make = Effect.gen(function* () {
       return { action: "none" }
     }
     const policy = yield* readPolicy()
-    if (policy === false) {
+    if (policy === "disable") {
       yield* Effect.logInfo("update check skipped", { reason: "policy-disabled" })
       return { action: "none" }
     }

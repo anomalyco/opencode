@@ -586,6 +586,13 @@ describe("Config", () => {
     })
   })
 
+  test("migrates the v1 update policy", () => {
+    expect(ConfigMigrateV1.migrate({ autoupdate: false }).update).toBe("disable")
+    expect(ConfigMigrateV1.migrate({ autoupdate: "notify" }).update).toBe("notify")
+    expect(ConfigMigrateV1.migrate({ autoupdate: true }).update).toBe("auto")
+    expect(ConfigMigrateV1.migrate({}).update).toBeUndefined()
+  })
+
   test("migrates v1 provider lists to policies", () => {
     expect(
       ConfigMigrateV1.migrate({
@@ -1026,7 +1033,7 @@ describe("Config", () => {
                 shell: "/bin/bash",
                 model: "anthropic/claude",
                 default_agent: "reviewer",
-                autoupdate: "notify",
+                update: "notify",
                 share: "disabled",
                 enterprise: { url: "https://share.example.com" },
                 username: "test-user",
@@ -1113,7 +1120,7 @@ describe("Config", () => {
             expect(documents[0]?.info.shell).toBe("/bin/bash")
             expect(documents[0]?.info.model).toEqual(selection("anthropic/claude"))
             expect(documents[0]?.info.default_agent).toBe("reviewer")
-            expect(documents[0]?.info.autoupdate).toBe("notify")
+            expect(documents[0]?.info.update).toBe("notify")
             expect(documents[0]?.info.share).toBe("disabled")
             expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
             expect(documents[0]?.info.username).toBe("test-user")
