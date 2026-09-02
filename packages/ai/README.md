@@ -253,7 +253,7 @@ over the same implementation, including the legacy live `requests` array. New te
 
 ## Provider compaction
 
-Compaction is opt-in. The package supports automatic compaction in OpenAI/Azure Responses and Anthropic Messages (including Claude on Vertex and Bedrock Messages), and explicit compaction calls in OpenAI/Azure/xAI Responses. Model and deployment support still depends on the provider.
+Compaction is opt-in. The package supports automatic compaction in OpenAI/Azure Responses and Anthropic Messages (including Claude on Vertex), and explicit compaction calls in OpenAI/Azure/xAI Responses. Model and deployment support still depends on the provider. Bedrock compaction is deferred to a separate follow-up.
 
 This is different from prompt caching, server-side history storage, or truncation. Compaction returns provider-owned context that must be replayed to continue the conversation.
 
@@ -311,16 +311,6 @@ providerOptions: {
 - Anthropic can return a compaction block with `content: null` when summarization fails. This becomes a compaction part with `text: null`, which is **not** a successful replacement for prior history. The package never prunes history automatically.
 - `Usage` totals include all reported Anthropic `usage.iterations`, including compaction. `contextTokens` separately reports the final message iteration's inclusive input size, when available. A compaction-only pause does not report a post-compaction context size. Raw iteration usage remains in `providerMetadata`.
 
-Bedrock's Converse API does not support this feature. Select the native Claude Messages route explicitly; the default `.model(...)` remains Converse:
-
-```ts
-import { AmazonBedrock } from "@opencode-ai/ai/providers"
-
-const model = AmazonBedrock.configure({ region: "us-east-1", credentials }).messages("us.anthropic.claude-opus-4-6-v1")
-```
-
-The corresponding package entrypoint is `@opencode-ai/ai/providers/amazon-bedrock/messages`. It uses InvokeModelWithResponseStream, AWS event-stream framing, bearer or SigV4 auth, and `anthropic_beta` in the request body.
-
 ### Explicit compaction
 
 `LLMClient.compact(request)` performs exactly one HTTP call to `/responses/compact`, using the selected route's endpoint, credentials, query, and HTTP middleware. It returns a `CompactionResponse` containing replacement `messages` and usage, not a normal generation response.
@@ -339,13 +329,13 @@ Replace the prior window with `compacted.messages`. Do not append it to the orig
 
 Supported compact controls such as service tier and prompt-cache settings preserve request defaults and HTTP-overlay precedence. Retained image and file detail settings survive serialization and replay.
 
-The input must still fit the model's context window. Explicit compaction is not an overflow-recovery operation. xAI supports this explicit path, not the automatic OpenAI option. Unsupported routes, including Bedrock Mantle, do not inherit an explicit compact endpoint simply because they use a Responses protocol.
+The input must still fit the model's context window. Explicit compaction is not an overflow-recovery operation. xAI supports this explicit path, not the automatic OpenAI option. Compatible routes do not inherit an explicit compact endpoint simply because they use a Responses protocol.
 
 ### Ownership and verification
 
 The AI package transports options and typed conversation parts. It does not schedule compaction, persist Session checkpoints, select history, switch providers, or replace Core's existing local compaction policy. Native compaction is not enabled for OpenCode Sessions by this feature; Session integration must persist these parts before enabling it. The AI SDK bridge rejects native compaction parts rather than dropping them. Provider-executed tool APIs and persistence changes are a separate follow-up.
 
-Tests cover serialized round trips, real local HTTP plus a tool loop, AWS binary frames and signing, provider errors, malformed blocks, and usage accounting. Live provider tests are gated by `RECORD=true` and the relevant API keys:
+Tests cover serialized round trips, real local HTTP plus a tool loop, WebSocket recovery, provider errors, malformed blocks, and usage accounting. Live provider tests are gated by `RECORD=true` and the relevant API keys:
 
 ```sh
 # Run from packages/ai. Only records the selected new cassette group.
@@ -354,7 +344,7 @@ RECORD=true RECORDED_PREFIX=xai-compaction bun test test/provider/compaction.rec
 RECORD=true RECORDED_PREFIX=anthropic-compaction bun test test/provider/compaction.recorded.test.ts
 ```
 
-Provider references: [OpenAI](https://developers.openai.com/api/docs/guides/compaction), [Azure](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses#server-side-compaction), [Anthropic](https://platform.claude.com/docs/en/build-with-claude/compaction), [Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/claude-messages-compaction.html), [xAI](https://docs.x.ai/developers/advanced-api-usage/context-compaction).
+Provider references: [OpenAI](https://developers.openai.com/api/docs/guides/compaction), [Azure](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses#server-side-compaction), [Anthropic](https://platform.claude.com/docs/en/build-with-claude/compaction), [xAI](https://docs.x.ai/developers/advanced-api-usage/context-compaction).
 
 ## Caching
 

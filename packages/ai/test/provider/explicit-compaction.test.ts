@@ -5,7 +5,7 @@ import { LLMClient, Route } from "../../src/route/client.js"
 import { Auth } from "../../src/route/auth.js"
 import { Endpoint } from "../../src/route/endpoint.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
-import { OpenAI, Azure, XAI, Anthropic, AmazonBedrockMantle } from "../../src/providers/index.js"
+import { OpenAI, Azure, XAI, Anthropic, OpenAICompatibleResponses } from "../../src/providers/index.js"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -420,7 +420,7 @@ for (const model of [
 
 for (const model of [
   Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"),
-  AmazonBedrockMantle.configure({ apiKey: "test" }).responses("model"),
+  OpenAICompatibleResponses.configure({ apiKey: "test", baseURL: "https://compatible.example/v1" }).model("model"),
 ]) {
   testEffect(fixedResponse("must not execute")).effect(
     `${model.route.id} does not inherit an unsupported compact endpoint`,

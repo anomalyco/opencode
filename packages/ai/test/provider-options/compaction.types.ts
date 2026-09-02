@@ -9,15 +9,7 @@ import {
   Message,
   ProviderID,
 } from "../../src/index.js"
-import {
-  OpenAI,
-  Azure,
-  XAI,
-  Anthropic,
-  AmazonBedrock,
-  AmazonBedrockMantle,
-  OpenAICompatibleResponses,
-} from "../../src/providers.js"
+import { OpenAI, Azure, XAI, Anthropic, OpenAICompatibleResponses } from "../../src/providers.js"
 
 const openai = OpenAI.configure({
   apiKey: "test",
@@ -44,9 +36,6 @@ const unsupported = {
   openaiChat: LLM.request({ model: OpenAI.configure().chat("fixture") }),
   azureChat: LLM.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture") }),
   xaiChat: LLM.request({ model: XAI.configure().chat("fixture") }),
-  converse: LLM.request({ model: AmazonBedrock.configure().model("fixture") }),
-  bedrockMessages: LLM.request({ model: AmazonBedrock.configure().messages("fixture") }),
-  mantle: LLM.request({ model: AmazonBedrockMantle.configure().responses("fixture") }),
   compatible: LLM.request({
     model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
   }),
@@ -59,12 +48,6 @@ LLMClient.compact(unsupported.openaiChat)
 LLMClient.compact(unsupported.azureChat)
 // @ts-expect-error xAI Chat does not expose Responses compaction.
 LLMClient.compact(unsupported.xaiChat)
-// @ts-expect-error Converse has no standalone compact endpoint.
-LLMClient.compact(unsupported.converse)
-// @ts-expect-error Bedrock Messages has no standalone compact endpoint.
-LLMClient.compact(unsupported.bedrockMessages)
-// @ts-expect-error Mantle does not inherit the OpenAI compact endpoint.
-LLMClient.compact(unsupported.mantle)
 // @ts-expect-error Protocol compatibility does not guarantee endpoint support.
 LLMClient.compact(unsupported.compatible)
 LLMClient.Service.use((client) => {
@@ -130,25 +113,19 @@ LLM.request({
     contextManagement: [{ type: "compaction", compactThreshold: "100000" }],
   },
 })
-for (const model of [
-  Anthropic.configure().model("claude-opus-4-6"),
-  AmazonBedrock.configure().messages("anthropic.claude-opus-4-6-v1"),
-]) {
-  LLM.request({
-    model,
-    providerOptions: {
-      contextManagement: {
-        edits: [
-          { type: "compact_20260112", pauseAfterCompaction: true, instructions: "Summarize without using tools" },
-        ],
-      },
+const anthropic = Anthropic.configure().model("claude-opus-4-6")
+LLM.request({
+  model: anthropic,
+  providerOptions: {
+    contextManagement: {
+      edits: [{ type: "compact_20260112", pauseAfterCompaction: true, instructions: "Summarize without using tools" }],
     },
-  })
-  LLM.request({
-    model,
-    providerOptions: {
-      // @ts-expect-error A pause setting is boolean.
-      contextManagement: { edits: [{ type: "compact_20260112", pauseAfterCompaction: "yes" }] },
-    },
-  })
-}
+  },
+})
+LLM.request({
+  model: anthropic,
+  providerOptions: {
+    // @ts-expect-error A pause setting is boolean.
+    contextManagement: { edits: [{ type: "compact_20260112", pauseAfterCompaction: "yes" }] },
+  },
+})

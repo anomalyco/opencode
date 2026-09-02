@@ -189,7 +189,9 @@ export type CompactOperation = (
   options?: Pick<StreamOptions, "http">,
 ) => Effect.Effect<CompactionResponse, AIError>
 
-export type CompactionRequest = LLMRequest<LanguageModel<ProviderOptions, CompactOperation>>
+export type CompactionRequest = LLMRequest & {
+  readonly model: LanguageModel<ProviderOptions, CompactOperation>
+}
 
 export const canCompact = (request: LLMRequest): request is CompactionRequest =>
   request.model.route.compact !== undefined
