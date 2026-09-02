@@ -164,12 +164,13 @@ export default {
     Bun.write(
       join(consumer, "boot.mjs"),
       `import { Miniflare } from "miniflare"
+import { fileURLToPath } from "node:url"
 
 const miniflare = new Miniflare({
   compatibilityDate: "2026-07-15",
   compatibilityFlags: ["nodejs_compat"],
   modules: true,
-  scriptPath: new URL("./dist/worker.js", import.meta.url).pathname,
+  scriptPath: fileURLToPath(new URL("./dist/worker.js", import.meta.url)),
   durableObjects: { OPENCODE: { className: "OpenCodeDO", useSQLite: true } },
 })
 
