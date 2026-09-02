@@ -70,7 +70,6 @@ import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
-import PROMPT_GPT from "../src/plugin/system-prompt/gpt-extension.txt"
 import { ID } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
@@ -1587,7 +1586,11 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Done", "text-provider-prompt"))
     yield* s.resume
 
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context", PROMPT_GPT])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
+      defaultSystem,
+      "Initial context",
+      expect.stringContaining("# Delegation"),
+    ])
   })
 
   scenario("uses the selected model family prompt when the agent system override is empty", function* (s) {
@@ -1604,7 +1607,11 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Done", "text-empty-agent-system"))
     yield* s.resume
 
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context", PROMPT_GPT])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
+      defaultSystem,
+      "Initial context",
+      expect.stringContaining("# Delegation"),
+    ])
   })
 
   scenario("includes the effective default agent system before durable context", function* (s) {

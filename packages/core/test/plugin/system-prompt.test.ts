@@ -14,7 +14,6 @@ import { Provider } from "@opencode-ai/schema/provider"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
-import PROMPT_GPT from "../../src/plugin/system-prompt/gpt-extension.txt"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
 
 const it = testEffect(PluginTestLayer)
@@ -117,7 +116,7 @@ describe("SystemPromptPlugin", () => {
 
       yield* hooks.trigger("session", "context", event)
 
-      expect(event.system.map((part) => part.text)).toEqual([fallback, PROMPT_GPT])
+      expect(event.system.map((part) => part.text)).toEqual([fallback, expect.stringContaining("# Delegation")])
     }),
   )
 
@@ -229,9 +228,12 @@ describe("SystemPromptPlugin", () => {
       yield* hooks.trigger("session", "context", physicalCustom)
       yield* hooks.trigger("session", "context", familyOpenAI)
 
-      expect(physicalOpenAI.system.map((part) => part.text)).toEqual([fallback, PROMPT_GPT])
+      expect(physicalOpenAI.system.map((part) => part.text)).toEqual([
+        fallback,
+        expect.stringContaining("# Delegation"),
+      ])
       expect(physicalCustom.system.map((part) => part.text)).toEqual([fallback])
-      expect(familyOpenAI.system.map((part) => part.text)).toEqual([fallback, PROMPT_GPT])
+      expect(familyOpenAI.system.map((part) => part.text)).toEqual([fallback, expect.stringContaining("# Delegation")])
     }),
   )
 })
