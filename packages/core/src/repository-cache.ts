@@ -160,7 +160,7 @@ const layer = Layer.effect(
               const status = !reuse ? ("cloned" as const) : refresh ? ("refreshed" as const) : ("cached" as const)
 
               if (status !== "cached") {
-                // Record attempts before network work so offline/auth failures don't retry on every prompt.
+                // Record attempts before network work so failures obey the same refresh interval.
                 yield* kv.set(key, { ...previous, attemptedAt: now })
 
                 if (status === "cloned") {

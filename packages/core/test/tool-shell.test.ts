@@ -31,12 +31,10 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
-import { PluginRuntimeProvider } from "@opencode-ai/core/plugin/runtime-provider"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
-import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
+import { ID } from "@opencode-ai/schema/shell"
 import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { Tool } from "@opencode-ai/core/tool"
@@ -134,7 +132,8 @@ const shellPluginSupervisor = makeLocationNode({
     Environment.node,
     LocationMutation.node,
     Permission.node,
-    PluginRuntime.node,
+    Session.node,
+    Job.node,
     Shell.node,
     ShellSelect.node,
     Tool.node,
@@ -147,7 +146,6 @@ const nodes = LayerNode.group([
   Job.node,
   Session.node,
   SessionExecution.node,
-  PluginRuntimeProvider.node,
   LocationServiceMap.node,
   filesystem,
   FSUtil.node,
@@ -1310,7 +1308,7 @@ describe("ShellTool", () => {
 
             const shell = yield* Shell.Service
             if (!shellID) return
-            const id = ShellSchema.ID.make(shellID)
+            const id = ID.make(shellID)
             const info = yield* shell.get(id)
             expect(settled.content).toEqual([
               {
@@ -1404,7 +1402,7 @@ describe("ShellTool", () => {
               // The command can finish while its initial progress update is being published.
               progress: (update) =>
                 typeof update.shellID === "string"
-                  ? shell.wait(ShellSchema.ID.make(update.shellID)).pipe(Effect.orDie, Effect.asVoid)
+                  ? shell.wait(ID.make(update.shellID)).pipe(Effect.orDie, Effect.asVoid)
                   : Effect.void,
             })
 
@@ -1439,7 +1437,7 @@ describe("ShellTool", () => {
               const timedID = timed.metadata?.shellID
               expect(typeof timedID).toBe("string")
               if (typeof timedID !== "string") return
-              const timedShellID = ShellSchema.ID.make(timedID)
+              const timedShellID = ID.make(timedID)
               yield* shell.timeout(timedShellID, 50)
               expect((yield* shell.wait(timedShellID)).status).toBe("timeout")
 
@@ -1450,7 +1448,7 @@ describe("ShellTool", () => {
               const clearedID = cleared.metadata?.shellID
               expect(typeof clearedID).toBe("string")
               if (typeof clearedID !== "string") return
-              const clearedShellID = ShellSchema.ID.make(clearedID)
+              const clearedShellID = ID.make(clearedID)
               yield* shell.timeout(clearedShellID, 0)
               yield* Effect.sleep(Duration.millis(100))
               expect((yield* shell.get(clearedShellID)).status).toBe("running")
@@ -1557,7 +1555,7 @@ describe("ShellTool", () => {
               const shellID = settled.metadata?.shellID
               expect(typeof shellID).toBe("string")
               if (typeof shellID !== "string") return
-              const id = ShellSchema.ID.make(shellID)
+              const id = ID.make(shellID)
               const info = yield* shell.get(id)
               expect(typeof info.pid).toBe("number")
               if (info.pid === undefined) return
@@ -1606,7 +1604,7 @@ describe("ShellTool", () => {
 
             const shell = yield* Shell.Service
             if (!shellID) return
-            const id = ShellSchema.ID.make(shellID)
+            const id = ID.make(shellID)
             const info = yield* shell.get(id)
             expect(settled.content?.[0]).toEqual({
               type: "text",

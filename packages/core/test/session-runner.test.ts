@@ -45,6 +45,7 @@ import { SessionRunnerLLM } from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionUsage } from "@opencode-ai/core/session/usage"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { QuestionTool } from "@opencode-ai/core/tool/plugin/question"
@@ -407,6 +408,7 @@ const layer = Layer.unwrap(
       Permission.node.replace(permission),
       Config.node.replace(config),
       PluginSupervisor.node.replace(Layer.empty),
+      Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
       SessionModelTransport.node.replace(modelTransport),
     ]
     const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
@@ -442,7 +444,7 @@ const layer = Layer.unwrap(
           awaitIdle: coordinator.awaitIdle,
         })
       }),
-    ).pipe(Layer.provide(runnerLayer))
+    ).pipe(Layer.provide(runnerLayer), Layer.orDie)
     return AppNodeBuilder.build(
       LayerNode.group([
         Database.node,

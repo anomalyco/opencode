@@ -30,8 +30,6 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
-import { PluginRuntimeProvider } from "@opencode-ai/core/plugin/runtime-provider"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Permission } from "@opencode-ai/core/permission"
 import { SubagentTool } from "@opencode-ai/core/tool/plugin/subagent"
@@ -108,7 +106,7 @@ const executionNode = makeGlobalNode({
 const subagentPluginSupervisor = makeLocationNode({
   name: "test/subagent-plugins",
   layer: Layer.effectDiscard(registerToolPlugin(SubagentTool.Plugin)),
-  deps: [Agent.node, Config.node, Permission.node, PluginRuntime.node, Tool.node],
+  deps: [Agent.node, Config.node, Permission.node, Session.node, Job.node, Tool.node],
 })
 
 const nodes = LayerNode.group([
@@ -117,7 +115,6 @@ const nodes = LayerNode.group([
   Job.node,
   Session.node,
   SessionExecution.node,
-  PluginRuntimeProvider.node,
   LocationServiceMap.node,
 ])
 const replacements = [

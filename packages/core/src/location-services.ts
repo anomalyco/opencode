@@ -24,22 +24,33 @@ export function buildLocationServiceMap(
     })
   return Layer.effect(
     LocationServiceMap.Service,
-    Effect.map(
-      LayerMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements }), {
+    Effect.gen(function* () {
+      const inner = yield* LayerMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements: bindings }), {
         // Workspace-placed directories exist only inside the workspace, so a
         // local stat consults the wrong filesystem. Workspace liveness is
         // owned by placement; do not probe the sandbox here, which would
         // provision lazily-idle workspaces.
         idleTimeToLive: (ref) =>
           ref.workspaceID !== undefined || existsSync(ref.directory) ? Duration.infinity : Duration.zero,
-      }),
-      (inner) => ({
+      })
+      const map = {
         ...inner,
         get: (ref: Location.Ref) => inner.get(canonical(ref)),
         contextEffect: (ref: Location.Ref) => inner.contextEffect(canonical(ref)),
         contextEffectOption: (ref: Location.Ref) => inner.contextEffectOption(canonical(ref)),
         invalidate: (ref: Location.Ref) => inner.invalidate(canonical(ref)),
-      }),
-    ),
+      }
+      // Cached instances borrow their owner instead of retaining its Layer scope.
+      const bindings: LayerNode.Replacements = [
+        Instance.node.replace(
+          Layer.succeed(Instance.Service, {
+            provide: (session) => Effect.provide(map.get(session.location)),
+          }),
+        ),
+        ...replacements,
+        LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
+      ]
+      return map
+    }),
   )
 }

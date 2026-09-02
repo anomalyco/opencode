@@ -36,8 +36,6 @@ type Draft = {
 
 export interface Interface extends State.Transformable<Draft> {
   readonly list: () => Effect.Effect<Info[]>
-  /** Schedules daily refresh checks in the Location scope without waiting for Git. */
-  readonly refresh: () => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Reference") {}
@@ -67,7 +65,7 @@ const layer = Layer.effect(
             ),
           ),
         { concurrency: 4, discard: true },
-      ).pipe(Effect.forkIn(scope), Effect.asVoid)
+      )
     })
     const state = State.create<Data, Draft>({
       name: "reference",
@@ -108,15 +106,17 @@ const layer = Layer.effect(
               }),
             )
           }
-          yield* refresh()
+          yield* refresh().pipe(Effect.forkIn(scope))
           yield* bus.publish(Reference.Event.Updated, {})
         }),
     })
 
+    // Check independently of session activity; the shared cache throttles Git work daily.
+    yield* Effect.sleep("1 hour").pipe(Effect.andThen(refresh()), Effect.forever, Effect.forkScoped)
+
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      refresh,
       list: Effect.fn("Reference.list")(function* () {
         return Array.from(materialized.values())
       }),

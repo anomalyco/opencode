@@ -3,7 +3,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Session } from "@opencode-ai/core/session"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { PermissionNotFoundError } from "@opencode-ai/protocol/errors"
@@ -62,8 +62,8 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
           const session = yield* sessionInfo(sessions, ctx.params.sessionID)
           const requests = yield* Permission.Service.use((permission) =>
             permission.forSession(ctx.params.sessionID),
-          ).pipe(instances.provideIfLoaded(session))
-          return { data: Option.getOrElse(requests, () => []) }
+          ).pipe(instances.provide(session))
+          return { data: requests }
         }),
       )
       .handle(

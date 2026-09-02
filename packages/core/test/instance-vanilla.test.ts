@@ -32,18 +32,30 @@ const hostConfig: LayerNode.Replacements = [
 // Same directory contents, two instances: one vanilla, one with discovery.
 const instances = Layer.effect(
   LocationServiceMap.Service,
-  LayerMap.make(
-    (ref: Location.Ref) => {
-      const name = path.basename(ref.directory)
-      return Instance.layer(ref, {
-        // "bare" exercises the vanilla defaults themselves: no caller Config.
-        discovery: name !== "vanilla" && name !== "bare",
-        // Caller replacements win over the vanilla defaults.
-        replacements: [Global.node.replace(tempGlobalLayer), ...(name === "vanilla" ? hostConfig : [])],
-      })
-    },
-    { idleTimeToLive: Duration.infinity },
-  ),
+  Effect.gen(function* () {
+    const map = yield* LayerMap.make(
+      (ref: Location.Ref) => {
+        const name = path.basename(ref.directory)
+        return Instance.layer(ref, {
+          // "bare" exercises the vanilla defaults themselves: no caller Config.
+          discovery: name !== "vanilla" && name !== "bare",
+          // Caller replacements win over the vanilla defaults.
+          replacements: [...bindings, ...(name === "vanilla" ? hostConfig : [])],
+        })
+      },
+      { idleTimeToLive: Duration.infinity },
+    )
+    const bindings: LayerNode.Replacements = [
+      Global.node.replace(tempGlobalLayer),
+      LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
+      Instance.node.replace(
+        Layer.succeed(Instance.Service, {
+          provide: (session) => Effect.provide(map.get(session.location)),
+        }),
+      ),
+    ]
+    return map
+  }),
 )
 
 const it = testEffect(

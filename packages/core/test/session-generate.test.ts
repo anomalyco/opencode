@@ -10,6 +10,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
+import { Instance } from "@opencode-ai/core/instance/service"
 import { Instructions } from "@opencode-ai/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
 import { Location } from "@opencode-ai/core/location"
@@ -20,8 +21,8 @@ import { Provider } from "@opencode-ai/core/provider"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionContext } from "@opencode-ai/core/session/context"
 import { SessionGenerate } from "@opencode-ai/core/session/generate"
-import { SessionGenerateNode } from "@opencode-ai/core/session/generate-node"
 import { InstructionState } from "@opencode-ai/core/session/instruction-state"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -131,7 +132,8 @@ const it = testEffect(
       SessionStore.node,
       Agent.node,
       InstructionBuiltIns.node,
-      SessionGenerateNode.node,
+      SessionContext.node,
+      llmClient,
     ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
@@ -196,6 +198,8 @@ const setup = Effect.gen(function* () {
   const agents = yield* Agent.Service
   const projects = yield* Project.Service
   const instructionBuiltIns = yield* InstructionBuiltIns.Service
+  const context = yield* SessionContext.Service
+  const store = yield* SessionStore.Service
   yield* agents.transform((draft) =>
     draft.update(Agent.ID.make("build"), (agent) => {
       agent.mode = "primary"
@@ -214,7 +218,18 @@ const setup = Effect.gen(function* () {
     })
     .run()
     .pipe(Effect.orDie)
-  return { db, bus, instructions: yield* instructionBuiltIns.load(sessionID) }
+  const session = yield* store.get(sessionID)
+  if (!session) return yield* Effect.die("Session fixture missing")
+  return {
+    db,
+    bus,
+    session,
+    instructions: yield* instructionBuiltIns.load(sessionID),
+    instances: Instance.Service.of({
+      // Generation only exercises the Location's model context.
+      provide: () => Effect.provide(Layer.succeed(SessionContext.Service, context) as Layer.Layer<Instance.Services>),
+    }),
+  }
 })
 
 it.effect(
@@ -224,7 +239,7 @@ it.effect(
       requests.length = 0
       options.length = 0
       instruction = "Initial context"
-      const { db, bus, instructions } = yield* setup
+      const { db, bus, instructions, session, instances } = yield* setup
       yield* InstructionState.prepare(db, bus, instructions, sessionID)
       const existing = SessionMessage.ID.create()
       yield* bus.publish(SessionEvent.InboxEnqueued, {
@@ -288,8 +303,9 @@ it.effect(
       instruction = "Changed context"
       const before = yield* durableState(db, sessionID)
 
-      const generate = yield* SessionGenerate.Service
-      const result = yield* generate.generate({ sessionID, prompt: "Summarize privately" })
+      const result = yield* SessionGenerate.generate({ session, prompt: "Summarize privately" }).pipe(
+        Effect.provideService(Instance.Service, instances),
+      )
 
       expect(result).toBe("Transient answer")
       expect(requests).toHaveLength(1)
@@ -327,11 +343,13 @@ it.effect(
     Effect.gen(function* () {
       requests.length = 0
       instruction = Instructions.unavailable
-      const { db } = yield* setup
+      const { db, session, instances } = yield* setup
       const before = yield* durableState(db, sessionID)
-      const generate = yield* SessionGenerate.Service
 
-      const error = yield* generate.generate({ sessionID, prompt: "Summarize privately" }).pipe(Effect.flip)
+      const error = yield* SessionGenerate.generate({ session, prompt: "Summarize privately" }).pipe(
+        Effect.provideService(Instance.Service, instances),
+        Effect.flip,
+      )
 
       expect(error).toBeInstanceOf(Instructions.InitializationBlocked)
       expect(requests).toEqual([])

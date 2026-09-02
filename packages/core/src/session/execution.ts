@@ -173,7 +173,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, Instance.byLocationNode, Bus.node, Database.node, Job.node],
+  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */

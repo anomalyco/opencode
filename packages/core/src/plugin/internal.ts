@@ -39,6 +39,7 @@ import { Global } from "@opencode-ai/util/global"
 import { Image } from "../image.js"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Integration } from "../integration.js"
+import { Job } from "../job.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { LocationMutation } from "../location-mutation.js"
@@ -49,6 +50,7 @@ import { Permission } from "../permission.js"
 import { Reference } from "../reference.js"
 import { WebSearch } from "../websearch.js"
 import { Ripgrep } from "../ripgrep.js"
+import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
 import { Shell } from "../shell.js"
@@ -80,7 +82,6 @@ import { ModelsDevPlugin } from "./models-dev.js"
 import { McpCodeModeExclusionPlugin } from "./mcp-codemode-exclusion.js"
 import { ProviderPlugins } from "./provider.js"
 import { WebSearchPlugins } from "./websearch/index.js"
-import { PluginRuntime } from "./runtime.js"
 import { SkillPlugin } from "./skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { SystemPromptPlugin } from "./system-prompt.js"
@@ -108,6 +109,7 @@ const services = [
   Image.Service,
   InstructionDiscovery.Service,
   Integration.Service,
+  Job.Service,
   KV.Service,
   Location.Service,
   LocationMutation.Service,
@@ -115,12 +117,12 @@ const services = [
   Mcp.Service,
   Npm.Service,
   Permission.Service,
-  PluginRuntime.Service,
   Form.Service,
   ReadToolFileSystem.Service,
   Reference.Service,
   WebSearch.Service,
   Ripgrep.Service,
+  Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
   Shell.Service,
@@ -155,6 +157,7 @@ export const requirements = LayerNode.group([
   Image.node,
   InstructionDiscovery.node,
   Integration.node,
+  Job.node,
   KV.node,
   Location.node,
   LocationMutation.node,
@@ -162,12 +165,12 @@ export const requirements = LayerNode.group([
   Mcp.node,
   Npm.node,
   Permission.node,
-  PluginRuntime.node,
   Form.node,
   ReadToolFileSystem.node,
   Reference.node,
   WebSearch.node,
   Ripgrep.node,
+  Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
   Shell.node,

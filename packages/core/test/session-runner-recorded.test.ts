@@ -33,6 +33,7 @@ import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { describe, expect } from "bun:test"
@@ -112,6 +113,7 @@ const runnerLayer = (llmClient: Layer.Layer<LLMClientService>) =>
     Config.node.replace(config),
     Permission.node.replace(permission),
     PluginSupervisor.node.replace(Layer.empty),
+    Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
   ])
 const execution = (llmClient: Layer.Layer<LLMClientService>) =>
   Layer.effect(
@@ -130,7 +132,7 @@ const execution = (llmClient: Layer.Layer<LLMClientService>) =>
         awaitIdle: coordinator.awaitIdle,
       })
     }),
-  ).pipe(Layer.provide(runnerLayer(llmClient)))
+  ).pipe(Layer.provide(runnerLayer(llmClient)), Layer.orDie)
 const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
   AppNodeBuilder.build(
     LayerNode.group([
@@ -167,6 +169,7 @@ const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
       Config.node.replace(config),
       Snapshot.node.replace(Snapshot.noopLayer),
       PluginSupervisor.node.replace(Layer.empty),
+      Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
       SessionExecution.node.replace(execution(llmClient)),
     ],
   )

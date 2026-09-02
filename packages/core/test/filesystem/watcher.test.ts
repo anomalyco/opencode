@@ -124,7 +124,7 @@ function provide(
   vcs?: Location.Interface["vcs"],
   watcher?: Layer.Layer<Watcher.Service>,
   config: Layer.Layer<Config.Service> = configLayer,
-  plugins?: typeof PluginSupervisor.node,
+  plugins?: LayerNode.Replacement,
 ) {
   const locationLayer = Layer.succeed(
     Location.Service,
@@ -135,7 +135,7 @@ function provide(
     [
       Config.node.replace(config),
       Location.node.replace(locationLayer),
-      PluginSupervisor.node.replace(plugins ?? Layer.empty),
+      plugins ?? PluginSupervisor.node.replace(Layer.empty),
       ...(watcher ? ([Watcher.node.replace(watcher)] as const) : []),
     ],
   )
@@ -149,7 +149,7 @@ function withTmp<A, E, R>(
     init?: (directory: string) => Promise<void>
     watcher?: Layer.Layer<Watcher.Service>
     config?: Layer.Layer<Config.Service>
-    plugins?: typeof PluginSupervisor.node
+    plugins?: LayerNode.Replacement
   },
 ) {
   return Effect.acquireRelease(
@@ -318,7 +318,7 @@ describe("LocationWatcher subscriptions", () => {
           yield* Effect.sleep("50 millis")
           expect(subscriptions).toEqual([])
         }),
-      { vcs: "git", watcher, plugins },
+      { vcs: "git", watcher, plugins: PluginSupervisor.node.replace(plugins) },
     )
   })
 })

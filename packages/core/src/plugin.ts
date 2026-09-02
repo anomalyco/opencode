@@ -3,7 +3,9 @@ export { Event, ID, Info, Source, State } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { Node } from "@opencode-ai/util/effect/app-node"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import type { PersistentPty } from "./persistent-pty.js"
 import { Cause, Context, Effect, Exit, Latch, Layer, Logger, References, Scope, Semaphore } from "effect"
 import { Bus } from "./bus.js"
 import { KV } from "./kv.js"
@@ -50,7 +52,10 @@ const layer = Layer.effect(
         })
       })
     let inventory: Plugin.Info[] = []
-    let host: Parameters<PluginDefinition["effect"]>[0]
+    const list = Effect.fn("Plugin.list")(function* () {
+      return inventory
+    })
+    const host = yield* PluginHost.make({ list })
     const load = Effect.fnUntraced(function* (plugin: Generation) {
       const child = yield* Scope.fork(scope)
       const inherit = yield* State.inherit()
@@ -169,17 +174,13 @@ const layer = Layer.effect(
       )
     yield* Effect.addFinalizer(close)
 
-    const service = Service.of({
+    return Service.of({
       activate,
       close,
       awaitActivation: ready.await,
       hold,
-      list: Effect.fn("Plugin.list")(function* () {
-        return inventory
-      }),
+      list,
     })
-    host = yield* PluginHost.make(service)
-    return service
   }),
 )
 
@@ -192,8 +193,9 @@ function activeInfo(plugin: Generation): Plugin.Info {
   }
 }
 
-export const node = makeLocationNode({
-  service: Service,
-  layer,
-  deps: [PluginHost.requirements],
-})
+export const node: LayerNode.Provider<Service, PersistentPty.UnavailableError, typeof Node.tags.values.location> =
+  Node.makeLocationNode({
+    service: Service,
+    layer,
+    deps: [PluginHost.requirements],
+  })
