@@ -79,7 +79,7 @@ story("summarizes subagents as Agent while retaining their card titles", async (
     const arrow = element.querySelector('[data-slot="collapsible-arrow-icon"]')!.getBoundingClientRect()
     return arrow.left - title.right
   })
-  expect(gap).toBeLessThanOrEqual(12)
+  expect(gap).toBeLessThanOrEqual(8)
   await expect(group.locator('[data-component="task-tool-title"]')).toHaveText(["General", "Explore"])
 })
 
