@@ -506,7 +506,6 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
     "update-notifications",
     { initial: { versions: [] } },
   )
-  const notifying = new Set<string>()
   const tabsResize = createPaneResize({
     value: () => layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH,
     defaultValue: () => SESSION_SIDEBAR_WIDTH,
@@ -1220,14 +1219,10 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
     const restart = client.restart
     if (!updater || !restart) return
     const version = evt.data.version
-    if (updateNotifications.versions.includes(version) || notifying.has(version)) return
-    notifying.add(version)
+    if (updateNotifications.versions.includes(version)) return
     void markUpdateNotification((draft) => {
       draft.versions = [...draft.versions, version].slice(-100)
-    }).catch((error) => {
-      notifying.delete(version)
-      toast.error(error)
-    })
+    }).catch(toast.error)
     toast.show({
       variant: "info",
       message: "An update is ready. Active sessions will be restarted.",
