@@ -50,6 +50,53 @@ export const HashingProvider: EmbeddingProvider = {
     ),
 }
 
+/**
+ * Sprint 4 M6: OpenAI-compatible provider interface.
+ * Calls POST {baseURL}/v1/embeddings with `{input: texts[], model}`.
+ * Sprint 4 does NOT wire this to 9router or any external service - the default
+ * remains HashingProvider. This is plumbing for future providers (Phase 2).
+ *
+ * To use in production, the caller must:
+ *   1. Set OPENCODE_RECALL_EMBEDDING_PROVIDER=openai-compatible
+ *   2. Set OPENCODE_RECALL_EMBEDDING_BASE_URL=https://api.openai.com (or compatible)
+ *   3. Set OPENCODE_RECALL_EMBEDDING_API_KEY=sk-...
+ *   4. Set OPENCODE_RECALL_EMBEDDING_MODEL=text-embedding-3-small
+ *   5. Set OPENCODE_RECALL_EMBEDDING_DIM=1536
+ */
+export function makeOpenAICompatibleProvider(opts: {
+  baseURL: string
+  apiKey: string
+  model: string
+  dim: number
+}): EmbeddingProvider {
+  return {
+    id: "openai-compatible",
+    dim: opts.dim,
+    modelID: opts.model,
+    embed: (texts) =>
+      Effect.tryPromise({
+        try: async () => {
+          const res = await fetch(`${opts.baseURL}/v1/embeddings`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${opts.apiKey}`,
+            },
+            body: JSON.stringify({ input: texts, model: opts.model }),
+          })
+          if (!res.ok) {
+            throw new Error(`embeddings API returned ${res.status}: ${await res.text()}`)
+          }
+          const json = (await res.json()) as { data: { embedding: number[]; index: number }[] }
+          // Sort by index to preserve input order
+          const sorted = json.data.slice().sort((a, b) => a.index - b.index)
+          return sorted.map((d) => Float32Array.from(d.embedding))
+        },
+        catch: (e) => Effect.fail(e instanceof Error ? e : new Error(String(e))),
+      }),
+  }
+}
+
 export function cosine(a: Float32Array, b: Float32Array): number {
   let dot = 0
   for (let i = 0; i < a.length; i++) dot += a[i] * b[i]
