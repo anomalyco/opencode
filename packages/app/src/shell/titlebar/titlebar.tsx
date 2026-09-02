@@ -627,11 +627,7 @@ export function Titlebar(props: {
                                 class="relative w-full shrink-0"
                                 style={{ height: `${macTrafficLightsTopClearance / zoom()}px` }}
                                 data-tauri-drag-region
-                              >
-                                <div class="absolute right-0 top-0 flex h-full items-center [app-region:no-drag]">
-                                  <TitlebarRightMount />
-                                </div>
-                              </div>
+                              ></div>
                             </Show>
                             {homeButton(true)}
                             <button
@@ -665,6 +661,9 @@ export function Titlebar(props: {
                               <div class="absolute bottom-0 left-0 flex h-9 items-center">
                                 <ChannelIndicator debugTools={props.debugTools} />
                               </div>
+                              <div class="absolute bottom-0 right-0 flex h-9 items-center">
+                                <TitlebarRightMount />
+                              </div>
                             </div>
                           </Portal>
                         )}
@@ -675,7 +674,7 @@ export function Titlebar(props: {
                 <Show when={!mobile()}>
                   <div class="flex-1" />
                 </Show>
-                <TitlebarRight state={rightState()} mount={!macVerticalTabs()} />
+                <TitlebarRight state={rightState()} mount={!props.verticalTabs} />
               </div>
             )
           }}

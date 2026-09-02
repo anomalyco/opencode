@@ -13,6 +13,13 @@ for (const direction of ["ltr", "rtl"] as const) {
       pageMessages,
     })
     await installStressSessionTabs(page)
+    await page.addInitScript(() => {
+      const settings = JSON.parse(localStorage.getItem("settings.v3") ?? "{}")
+      localStorage.setItem(
+        "settings.v3",
+        JSON.stringify({ ...settings, general: { ...settings.general, showStatus: true } }),
+      )
+    })
     await page.goto(stressSessionHref(fixture.targetID))
     const header = page.locator("[data-session-title]")
     const more = header.getByRole("button", { name: "More options", exact: true })
@@ -22,7 +29,8 @@ for (const direction of ["ltr", "rtl"] as const) {
     await page.evaluate((direction) => document.documentElement.setAttribute("dir", direction), direction)
     await expect(review).toBeVisible()
     await expect(details).toBeVisible()
-    await expect(page.locator('[data-slot="titlebar-v2"]').getByRole("button", { name: "Status" })).toHaveCount(0)
+    const status = page.locator('[data-slot="titlebar-v2"]').getByRole("button", { name: "Status" })
+    await expect(status).toBeVisible()
     await expect
       .poll(async () => {
         const boxes = await Promise.all(
@@ -47,23 +55,15 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(review).toHaveAttribute("aria-expanded", "false")
 
     await more.click()
-    const status = page.getByRole("menuitem", { name: "Server status", exact: true })
+    await expect(page.getByRole("menuitem", { name: "Server status", exact: true })).toHaveCount(0)
+    await page.keyboard.press("Escape")
     await status.click()
-    const dialog = page.getByRole("dialog", { name: "Server status", exact: true })
-    const mcp = dialog.getByRole("tab", { name: "MCP", exact: true })
-    const plugins = dialog.getByRole("tab", { name: "Plugins", exact: true })
+    const mcp = page.getByRole("tab", { name: "MCP", exact: true })
+    const plugins = page.getByRole("tab", { name: "Plugins", exact: true })
     await expect(mcp).toHaveAttribute("aria-selected", "true")
     await plugins.click()
     await expect(plugins).toHaveAttribute("aria-selected", "true")
     await page.keyboard.press("Escape")
-    await expect(dialog).toBeHidden()
-
-    await more.click()
-    await page.keyboard.press("s")
-    await expect(status).toBeFocused()
-    await page.keyboard.press("Enter")
-    await expect(mcp).toBeVisible()
-    await page.keyboard.press("Tab")
-    await expect(mcp).toBeFocused()
+    await expect(mcp).toBeHidden()
   })
 }

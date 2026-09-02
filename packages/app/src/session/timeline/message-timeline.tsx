@@ -33,8 +33,6 @@ import { useCommand } from "@/shell/commands/command"
 import { useSettings } from "@/settings/model"
 import { SessionTitleHeader } from "../session-identity-header"
 import { SessionHeader } from "@/session/header/session-header"
-import { StatusDialog } from "@/shell/status/status-popover"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 type BackgroundTask = {
   id: string
@@ -468,16 +466,13 @@ function MessageTimelineView(
     setScrollToEnd: props.setScrollToEnd,
   })
   const VirtualizedTimeline = virtualized.View
-  const dialog = useDialog()
   const [title, setTitle] = createStore({
     draft: "",
     editing: false,
     menuOpen: false,
     pendingRename: false,
-    pendingStatus: false,
   })
   let titleRef: HTMLInputElement | undefined
-  let menuRef: HTMLButtonElement | undefined
 
   createEffect(
     on(
@@ -488,7 +483,6 @@ function MessageTimelineView(
           editing: false,
           menuOpen: false,
           pendingRename: false,
-          pendingStatus: false,
         }),
       { defer: true },
     ),
@@ -749,9 +743,6 @@ function MessageTimelineView(
                       >
                         <Menu.Trigger
                           as={IconButton}
-                          ref={(element: HTMLButtonElement) => {
-                            menuRef = element
-                          }}
                           icon={<Icon name="outline-dots" />}
                           variant="ghost-muted"
                           size="large"
@@ -763,13 +754,6 @@ function MessageTimelineView(
                           <Menu.Content
                             style={{ "min-width": "160px" }}
                             onCloseAutoFocus={(event) => {
-                              if (title.pendingStatus) {
-                                event.preventDefault()
-                                setTitle("pendingStatus", false)
-                                menuRef?.focus()
-                                void dialog.show(() => <StatusDialog />)
-                                return
-                              }
                               if (!title.pendingRename) return
                               event.preventDefault()
                               setTitle("pendingRename", false)
@@ -789,9 +773,6 @@ function MessageTimelineView(
                                 {language.t("common.export")}...
                               </Menu.Item>
                             </Show>
-                            <Menu.Item onSelect={() => setTitle({ pendingStatus: true, menuOpen: false })}>
-                              {language.t("settings.general.row.showStatus.title")}
-                            </Menu.Item>
                             <Show when={!parentID()}>
                               {/* TODO: Need a session archive API. */}
                               <Menu.Separator />

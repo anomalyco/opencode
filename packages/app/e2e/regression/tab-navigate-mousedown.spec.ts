@@ -121,7 +121,10 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA, sessionB }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ appearance: { tabLayout: "vertical" } }))
+      localStorage.setItem(
+        "settings.v3",
+        JSON.stringify({ appearance: { tabLayout: "vertical" }, general: { showStatus: true } }),
+      )
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([
@@ -147,6 +150,15 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toHaveText("Home")
   await expect(sidebar.getByRole("button", { name: "New session" })).toBeVisible()
   await expect(sidebar.locator('[data-slot="vertical-tabs-footer"]')).toBeVisible()
+  const status = sidebar.getByRole("button", { name: "Status", exact: true })
+  await expect(status).toBeVisible()
+  await expect
+    .poll(async () => {
+      const bounds = await sidebar.boundingBox()
+      const button = await status.boundingBox()
+      return !!bounds && !!button && bounds.x + bounds.width - button.x - button.width <= 12
+    })
+    .toBe(true)
   await expect(page.locator('[data-slot="titlebar-v2"]')).toBeHidden()
   await expect
     .poll(async () => {
