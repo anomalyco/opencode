@@ -491,6 +491,29 @@ Recent work
     ])
   })
 
+  test("exposes desktop media source paths retained on inline attachments", () => {
+    const data = Base64.make("AAECAw==")
+    const location = "/Users/vogel/Downloads/preview.gif"
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-inline-image-path"),
+          type: "user",
+          text: "Add this GIF to the page",
+          files: [FileAttachment.make({ data, mime: "image/gif", source: { type: "inline" }, name: location })],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Add this GIF to the page" },
+      { type: "text", text: `Attached file: ${location}` },
+      { type: "media", mediaType: "image/gif", data, filename: location },
+    ])
+  })
+
   test("falls back to attachment names for invalid local source paths", () => {
     const data = Base64.make("AAECAw==")
     const messages = toLLMMessages(

@@ -2,6 +2,7 @@ import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderM
 import type { Model } from "@opencode-ai/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
+import path from "path"
 import { SessionMessage } from "../message.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
@@ -16,7 +17,10 @@ const media = (file: FileAttachment): ContentPart => ({
 })
 
 const attachmentLocation = (file: FileAttachment) => {
-  if (file.source.type !== "uri") return undefined
+  if (file.source.type === "inline") {
+    if (!file.name) return undefined
+    return path.posix.isAbsolute(file.name) || path.win32.isAbsolute(file.name) ? file.name : undefined
+  }
   const url = URL.parse(file.source.uri)
   if (url?.protocol !== "file:") return undefined
   try {
