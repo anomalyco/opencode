@@ -26,10 +26,23 @@ export type Options = {
   readonly cors?: readonly string[]
 }
 
+export type Dependencies = {
+  readonly updater?: Updater.Service["Service"]
+  readonly spawnReplacement?: (handoff: PersistentPty.Handoff | null) => Effect.Effect<void, Error>
+}
+
 // The process effect lives until server shutdown; tracing it would parent every request to one process-lifetime trace.
 export const run = Effect.fnUntraced(function* (options: Options) {
-  return yield* processEffect(options).pipe(
-    Effect.provide(Updater.layer),
+  return yield* runWith(options)
+})
+
+export const runWith = Effect.fnUntraced(function* (options: Options, dependencies: Dependencies = {}) {
+  const effect = processEffect(options, dependencies.spawnReplacement ?? spawnReplacement)
+  return yield* (
+    dependencies.updater
+      ? effect.pipe(Effect.provideService(Updater.Service, dependencies.updater))
+      : effect.pipe(Effect.provide(Updater.layer))
+  ).pipe(
     Effect.provide(
       LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {
         replacements: [
@@ -43,7 +56,10 @@ export const run = Effect.fnUntraced(function* (options: Options) {
   )
 })
 
-const processEffect = Effect.fnUntraced(function* (options: Options) {
+const processEffect = Effect.fnUntraced(function* (
+  options: Options,
+  replace: (handoff: PersistentPty.Handoff | null) => Effect.Effect<void, Error>,
+) {
   const inherited = process.env.OPENCODE_PTY_HANDOFF
   delete process.env.OPENCODE_PTY_HANDOFF
   const handoff =
@@ -188,7 +204,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
     }).pipe(Effect.annotateLogs({ role: "server" })),
   )
   if (Option.isNone(next)) return
-  yield* spawnReplacement(next.value)
+  yield* replace(next.value)
 })
 
 const spawnReplacement = Effect.fnUntraced(function* (handoff: PersistentPty.Handoff | null) {
