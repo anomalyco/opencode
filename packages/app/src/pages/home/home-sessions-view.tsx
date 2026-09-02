@@ -457,6 +457,14 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
         class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]"
         classList={{ group: !!showProjectName() }}
       >
+        <div class="pointer-events-none absolute left-3">
+          <HomeSessionLeadingController
+            server={props.server}
+            isOpenTab={props.isOpenTab}
+            record={props.record}
+            revealProjectOnHover={!!showProjectName()}
+          />
+        </div>
         <Show when={state.editing}>
           <InlineInput
             ref={input}
@@ -492,7 +500,7 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
           style={{ display: state.editing ? "none" : undefined }}
           class={`
           flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
-          bg-transparent py-3 pl-3 pr-10 text-left text-v2-text-text-muted [font-weight:530]
+          bg-transparent py-3 pl-9 pr-10 text-left text-v2-text-text-muted [font-weight:530]
           transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
           hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
         `}
@@ -508,12 +516,6 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
             props.onOpenSession(props.record.session, { background: true })
           }}
         >
-          <HomeSessionLeadingController
-            server={props.server}
-            isOpenTab={props.isOpenTab}
-            record={props.record}
-            revealProjectOnHover={!!showProjectName()}
-          />
           <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
           <Show when={showProjectName()}>
             <HomeSessionProjectName name={props.record.projectName} />
