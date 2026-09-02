@@ -2056,7 +2056,23 @@ ToolRegistry.register({
           "--task-agent-legacy-color": tone(),
         }}
       >
-        <div data-component="task-tool-surface">
+        <div
+          data-component="task-tool-surface"
+          role={clickable() ? "button" : undefined}
+          tabIndex={clickable() ? 0 : undefined}
+          onClick={(e) => {
+            if (clickable()) {
+              e.stopPropagation()
+              navigate(e)
+            }
+          }}
+          onKeyDown={(e) => {
+            if (clickable()) {
+              e.stopPropagation()
+              navigateKey(e)
+            }
+          }}
+        >
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <Show
@@ -2105,8 +2121,8 @@ ToolRegistry.register({
 
     return (
       <BasicTool
+        {...props}
         icon="task"
-        status={props.status}
         trigger={trigger()}
         clickable={clickable()}
       >
