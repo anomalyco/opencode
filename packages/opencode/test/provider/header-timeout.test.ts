@@ -80,6 +80,41 @@ it.live("chunkTimeout raises a response stream error when SSE body stalls", () =
   }),
 )
 
+it.live("chunkTimeout ignores SSE comment heartbeats", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.promise(() => keepaliveBodyServer(20)),
+      (server) => Effect.sync(() => server.server.close()),
+    )
+
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
+          const result = streamText({
+            model: yield* provider.getLanguage(model),
+            onError() {},
+            messages: [{ role: "user", content: "hello" }],
+          })
+
+          const error = yield* Effect.promise(async () => {
+            try {
+              for await (const part of result.fullStream) {
+                if (part.type === "error") return part.error
+              }
+            } catch (error) {
+              return error
+            }
+            return undefined
+          })
+          expect(error).toBeInstanceOf(ProviderError.ResponseStreamError)
+        }),
+      { config: providerConfig(server.url, { chunkTimeout: 50 }) },
+    )
+  }),
+)
+
 it.live("headerTimeout aborts when response headers do not arrive", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
@@ -204,6 +239,19 @@ async function delayedBodyServer(delay: number): Promise<{ server: Server; url: 
     setTimeout(() => {
       res.end('data: {"choices":[{"delta":{"content":"late"}}]}\n\ndata: [DONE]\n\n')
     }, delay)
+  })
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("server did not bind to a TCP port")
+  return { server, url: `http://127.0.0.1:${address.port}` }
+}
+
+async function keepaliveBodyServer(interval: number): Promise<{ server: Server; url: string }> {
+  const server = createServer((_, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" })
+    res.write('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n')
+    const keepalive = setInterval(() => res.write(": keepalive\n\n"), interval)
+    res.on("close", () => clearInterval(keepalive))
   })
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address()
