@@ -1,7 +1,9 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose"
+import type { Pipeline } from "cloudflare:pipelines"
 
 interface Env {
   DB: D1Database
+  EVENTS: Pipeline
 }
 
 type ArtifactRow = {
@@ -31,8 +33,24 @@ const audience = "https://update.opencode.ai"
 const githubKeys = createRemoteJWKSet(new URL("https://token.actions.githubusercontent.com/.well-known/jwks"))
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: Pick<ExecutionContext, "waitUntil">): Promise<Response> {
     const url = new URL(request.url)
+    ctx.waitUntil(
+      env.EVENTS.send([
+        {
+          source: "update",
+          type: "request",
+          timestamp: new Date().toISOString(),
+          payload: {
+            method: request.method,
+            path: url.pathname,
+            user_agent: request.headers.get("user-agent"),
+            cf_country: request.cf?.country,
+            cf_colo: request.cf?.colo,
+          },
+        },
+      ]).catch(() => console.error("Failed to send update request event to the data lake")),
+    )
 
     if (url.pathname === "/") return json({ service: "opencode-updates" })
     if (url.pathname === "/admin" && request.method === "GET") return admin(request, env)
