@@ -9,7 +9,7 @@ import { useDialog } from "../ui/dialog"
 import { Spinner } from "./spinner"
 
 type State =
-  | { type: "ready"; active: "install" | "ignore" }
+  | { type: "ready"; active: "update" | "ignore" }
   | { type: "installing" }
   | { type: "restarting" }
   | { type: "failed"; message: string }
@@ -17,7 +17,7 @@ type State =
 export function DialogUpdate(props: { version: string; install: () => Promise<void>; restart: () => Promise<void> }) {
   const dialog = useDialog()
   const theme = useTheme("elevated")
-  const [state, setState] = createStore<State>({ type: "ready", active: "install" })
+  const [state, setState] = createStore<State>({ type: "ready", active: "update" })
 
   const install = async () => {
     setState({ type: "installing" })
@@ -52,7 +52,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
         title: "Previous update action",
         group: "Dialog",
         run: () => {
-          if (state.type === "ready") setState("active", state.active === "install" ? "ignore" : "install")
+          if (state.type === "ready") setState("active", state.active === "update" ? "ignore" : "update")
         },
       },
       {
@@ -60,7 +60,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
         title: "Next update action",
         group: "Dialog",
         run: () => {
-          if (state.type === "ready") setState("active", state.active === "install" ? "ignore" : "install")
+          if (state.type === "ready") setState("active", state.active === "update" ? "ignore" : "update")
         },
       },
     ],
@@ -80,8 +80,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
         <Switch>
           <Match when={state.type === "ready"}>
             <text fg={theme.text.subdued}>
-              OpenCode v{props.version} is ready. It will be applied in the background and active sessions will be
-              restarted.
+              Update v{props.version}? It will be applied in the background and active sessions will be restarted.
             </text>
           </Match>
           <Match when={state.type === "installing"}>
@@ -113,7 +112,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
         }
       >
         <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
-          <For each={["ignore", "install"] as const}>
+          <For each={["ignore", "update"] as const}>
             {(action) => (
               <box
                 paddingLeft={1}
@@ -135,7 +134,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
                       : theme.text.subdued
                   }
                 >
-                  {action === "install" ? "Install" : "Ignore"}
+                  {action === "update" ? "Update" : "Ignore"}
                 </text>
               </box>
             )}
