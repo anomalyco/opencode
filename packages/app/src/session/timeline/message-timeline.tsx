@@ -539,7 +539,12 @@ function MessageTimelineView(
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
   const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
-  const backgroundHintPresence = createAnimatedPresence(backgroundHintPartID, () => backgroundHintRef() ?? null)
+  const backgroundHintPresence = createAnimatedPresence(
+    backgroundHintPartID,
+    () => backgroundHintRef() ?? null,
+    sessionID,
+    1000,
+  )
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
