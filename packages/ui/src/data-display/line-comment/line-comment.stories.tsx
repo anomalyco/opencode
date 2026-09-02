@@ -3,7 +3,7 @@ import { createSignal } from "solid-js"
 import { LineCommentEditor, LineComment, LineCommentOverflowIcon } from "./line-comment"
 
 const docs = `### Overview
-Line comment **display** and **editor** cards aligned with OpenCode line-comment specs (raised \`#FAFAFA\` surface, footer line context, \`Button\` neutral + contrast actions).
+Line comment **display** and **editor** cards aligned with OpenCode line-comment specs (raised \`#FAFAFA\` surface, footer line context, \`Button\` ghost + contrast actions).
 
 ### Display
 - \`LineComment\`: column stack (body + meta) beside optional \`actions\` (overflow).
