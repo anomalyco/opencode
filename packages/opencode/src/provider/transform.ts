@@ -684,6 +684,45 @@ function anthropicOmitsThinking(apiId: string) {
   return anthropicUsesModernAdaptiveThinking(apiId)
 }
 
+// Default to binding controls for Claude 5.1+ as enforcement expands to later models.
+// Mythos 5.1 explicitly does not run the conversation-prefix check.
+// https://platform.claude.com/docs/en/build-with-claude/thinking#preserved-in-conversation
+function anthropicBindsThinking(apiId: string) {
+  // Capture either family/version order, without reading release dates as minor versions.
+  const version = /claude-(?:([a-z]+)-)?(\d+)(?:[.-](\d{1,2}))?(?:-([a-z]+))?(?:[.@-]|$)/i.exec(apiId)
+  if (!version) return false
+  const major = Number(version[2])
+  const minor = Number(version[3] ?? 0)
+  if (major === 5 && minor === 1 && (version[1] ?? version[4])?.toLowerCase() === "mythos") return false
+  return major > 5 || (major === 5 && minor >= 1)
+}
+
+// Fable 5.1 binds each thinking signature to the system prompt, tool list, and
+// messages above it, and rejects the request when any of that changes. opencode
+// re-renders parts of that prefix between turns (system prompt, tools, compaction),
+// so ask the API to drop the affected blocks instead of failing the request.
+// Older model deployments may reject this field, even with thinking enabled.
+// The patched AI SDK adds the thinking-binding-controls beta whenever it is set.
+const ANTHROPIC_BLOCK_BINDING = { prefixMismatchBehavior: "drop_block" }
+
+function anthropicBlockBinding(model: Provider.Model, options: { [x: string]: any }) {
+  if (!anthropicBindsThinking(model.api.id)) return options
+  switch (model.api.npm) {
+    case "@ai-sdk/anthropic":
+    case "@ai-sdk/google-vertex/anthropic": {
+      const thinking = options.thinking ?? { type: "adaptive" }
+      if (thinking.type !== "adaptive" && thinking.type !== "enabled") return options
+      return { ...options, thinking: { ...thinking, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+    }
+    case "@ai-sdk/amazon-bedrock": {
+      const reasoningConfig = options.reasoningConfig ?? { type: "adaptive" }
+      if (reasoningConfig.type !== "adaptive" && reasoningConfig.type !== "enabled") return options
+      return { ...options, reasoningConfig: { ...reasoningConfig, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+    }
+  }
+  return options
+}
+
 function googleThinkingLevelEfforts(apiId: string) {
   const id = apiId.toLowerCase()
   if (!id.includes("gemini-3")) return ["low", "high"]
@@ -1363,7 +1402,7 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     usesOpenAIReasoningGate &&
     (model.capabilities.reasoning || options.reasoningEffort !== undefined || options.reasoningSummary !== undefined)
       ? { ...options, forceReasoning: true }
-      : options
+      : anthropicBlockBinding(model, options)
 
   if (model.api.npm === "@ai-sdk/gateway") {
     // Gateway providerOptions are split across two namespaces:
