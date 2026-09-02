@@ -40,7 +40,9 @@ export function createBrowserPane() {
         registered: Promise.withResolvers(),
         requests: new Map(),
       }
-      const stop = () => close(entry)
+      // "unsupported" means the server has no browser plugin; the renderer stops retrying.
+      let reason: "browser.pane.unsupported" | undefined
+      const stop = () => close(entry, reason)
       const navigate = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
         if (event.isMainFrame && !event.isSameDocument) stop()
       }
@@ -134,11 +136,21 @@ export function createBrowserPane() {
               Stream.fromQueue(outbound).pipe(Stream.runForEach((send) => send)),
               Deferred.await(connected).pipe(Effect.andThen(rpc.attach(attachment, options))),
             ])
-          }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(stop))),
+          }).pipe(
+            Effect.scoped,
+            Effect.tapError((error) =>
+              Effect.sync(() => {
+                const type = error instanceof Object && "type" in error ? error.type : undefined
+                if (type === "rpc.unavailable" || type === "rpc.method_not_found") reason = "browser.pane.unsupported"
+              }),
+            ),
+            Effect.ensuring(Effect.sync(stop)),
+          ),
           { signal: entry.abort.signal },
         )
         .catch(stop)
-      await entry.registered.promise
+      const timeout = setTimeout(stop, 15_000)
+      await entry.registered.promise.finally(() => clearTimeout(timeout))
       if (entries.get(bindingID) !== entry) throw new Error("browser.pane.registration.closed")
       publishState(entry)
     },
@@ -183,10 +195,10 @@ export function createBrowserPane() {
     emitIpcEvent(entry.win.webContents, new BrowserPaneEvent({ bindingID: entry.bindingID, event }))
   }
 
-  function close(entry: Entry) {
+  function close(entry: Entry, reason = "browser.pane.registration.closed") {
     if (entries.get(entry.bindingID) !== entry) return
     entry.report = undefined
-    closePage(entry, "browser.pane.registration.closed")
+    closePage(entry, reason)
     entries.delete(entry.bindingID)
     entry.registered.reject(new Error("browser.pane.registration.closed"))
     entry.cleanup?.()

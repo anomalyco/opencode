@@ -17,6 +17,8 @@ export function createSessionBrowser(session: SessionModel) {
     registration: undefined as BrowserPaneRegistration | undefined,
     browser: null as BrowserPaneState,
     error: undefined as string | undefined,
+    // The connected server has no browser plugin.
+    unsupported: false,
   })
   const available = createMemo(
     () =>
@@ -25,7 +27,8 @@ export function createSessionBrowser(session: SessionModel) {
       settings.general.experimentalBrowser() &&
       session.isDesktop() &&
       !!session.identity.sessionID() &&
-      !server.health?.incompatible,
+      !server.health?.incompatible &&
+      !state.unsupported,
   )
   const opened = () => state.registration !== undefined && session.layout.tabs().all().includes(SESSION_BROWSER_TAB)
   const open = () => {
@@ -49,6 +52,7 @@ export function createSessionBrowser(session: SessionModel) {
       registration = pane.register(target, (event) =>
         owner.run(() => {
           if (event.type === "open") return open()
+          if (event.error === "browser.pane.unsupported") return setState("unsupported", true)
           // The desktop dropped the attachment (server restart, attach race).
           // Re-register so the agent's browser tool comes back without a reload.
           if (event.error === "browser.pane.registration.closed") {
@@ -58,6 +62,7 @@ export function createSessionBrowser(session: SessionModel) {
             retry = setTimeout(register, Math.min(30_000, 1_000 * 2 ** attempts++))
             return
           }
+          if (event.state) attempts = 0
           setState({ browser: event.state, error: event.error })
         }),
       )
