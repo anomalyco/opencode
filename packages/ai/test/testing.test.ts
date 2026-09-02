@@ -83,7 +83,7 @@ describe("TestLLM first-class client", () => {
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       const request = LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" })
-      yield* client.push(TestLLM.stop(), new CompactionResponse({ messages: [] }))
+      yield* client.push(TestLLM.stop(), new CompactionResponse({ replacement: [] }))
       expect(yield* client.compact(request).pipe(Effect.catchDefect(Effect.succeed))).toBe(
         "TestLLM compaction requires a CompactionResponse",
       )
@@ -98,7 +98,7 @@ describe("TestLLM first-class client", () => {
       const client = yield* TestLLM.Test
       const request = LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" })
       const compacted = new CompactionResponse({
-        messages: [
+        replacement: [
           Message.user("retained input"),
           Message.assistant(CompactionPart.make({ provider: ProviderID.make("openai"), encrypted: "checkpoint" })),
           Message.user("retained tail"),
@@ -114,7 +114,7 @@ describe("TestLLM first-class client", () => {
       expect(fiber.pollUnsafe()).toBeUndefined()
       yield* gate.release
       expect(yield* Fiber.join(fiber)).toBe(compacted)
-      const next = LLMRequest.update(request, { messages: compacted.messages })
+      const next = LLMRequest.update(request, { messages: compacted.replacement })
       expect((yield* LLMClient.generate(next)).text).toBe("continued")
       yield* client.serve((observed) => {
         expect(observed).toBe(next)

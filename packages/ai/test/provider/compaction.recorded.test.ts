@@ -33,7 +33,7 @@ for (const provider of [
         const result = yield* LLMClient.generate(
           LLMRequest.update(request, {
             messages: [
-              ...compacted.messages,
+              ...compacted.replacement,
               Message.user("What is the project codename? Reply only with the codename."),
             ],
           }),

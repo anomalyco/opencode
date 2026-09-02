@@ -124,7 +124,7 @@ export const make = (adapter: OpenResponses.ProviderAdapter): CompactOperation =
     if (!result.output.some((item) => item.type === "compaction"))
       return yield* invalid("Compaction response did not contain a checkpoint")
     return new CompactionResponse({
-      messages: result.output.map((item) => toMessage(item, request.model)),
+      replacement: result.output.map((item) => toMessage(item, request.model)),
       usage: OpenResponses.mapUsage(result.usage, OpenResponses.metadataKey(request.model)),
     })
   })

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { CompactionPart, LLMEvent, LLMResponse, Message, ProviderID } from "../src/schema/index.js"
+import { CompactionPart, CompactionResponse, LLMEvent, LLMResponse, Message, ProviderID } from "../src/schema/index.js"
 import { LLM, LLMClient, LLMRequest, LanguageModel } from "../src/index.js"
 import { OpenAI, Anthropic } from "../src/providers.js"
 
@@ -15,6 +15,19 @@ test("runtime capability checks follow model and route updates", () => {
     LLMClient.canCompact(LLM.request({ model: LanguageModel.update(supported, { route: unsupported.route }) })),
   ).toBe(false)
   expect(LLMClient.canCompact(LLM.request({ model: LanguageModel.update(supported, { route: undefined }) }))).toBe(true)
+})
+
+test("explicit compaction serializes a replacement window without a messages alias", () => {
+  const response = new CompactionResponse({
+    replacement: [
+      Message.user("retained input"),
+      Message.assistant(CompactionPart.make({ provider: ProviderID.make("openai"), encrypted: "checkpoint" })),
+    ],
+  })
+  const codec = Schema.fromJsonString(CompactionResponse)
+  const decoded = Schema.decodeSync(codec)(Schema.encodeSync(codec)(response))
+  expect(decoded.replacement).toEqual(response.replacement)
+  expect("messages" in decoded).toBe(false)
 })
 
 test("compaction survives event assembly and message serialization without becoming text", () => {

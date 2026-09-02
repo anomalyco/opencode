@@ -141,7 +141,7 @@ for (const model of [
         const error = yield* LLMClient.generate(candidate).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidRequest")
         const response = yield* LLMClient.compact(candidate)
-        expect(response.messages[0]?.content[0]?.type).toBe("compaction")
+        expect(response.replacement[0]?.content[0]?.type).toBe("compaction")
       }
     }),
   )
@@ -215,7 +215,7 @@ for (const model of [
         prompt: "hello",
       })
       const compacted = yield* LLMClient.compact(request)
-      expect(compacted.messages.map((message) => message.role)).toEqual([
+      expect(compacted.replacement.map((message) => message.role)).toEqual([
         "user",
         "assistant",
         "assistant",
@@ -223,14 +223,14 @@ for (const model of [
         "user",
         "assistant",
       ])
-      expect(compacted.messages[1]?.content).toEqual([
+      expect(compacted.replacement[1]?.content).toEqual([
         { type: "text", text: "First" },
         { type: "text", text: "Second" },
       ])
-      expect(compacted.messages[2]?.content.map((part) => part.type)).toEqual(["reasoning", "reasoning"])
-      expect(compacted.messages[4]?.content.map((part) => part.type)).toEqual(["media", "media", "media"])
+      expect(compacted.replacement[2]?.content.map((part) => part.type)).toEqual(["reasoning", "reasoning"])
+      expect(compacted.replacement[4]?.content.map((part) => part.type)).toEqual(["media", "media", "media"])
       const codec = Schema.fromJsonString(Schema.Array(Message))
-      const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.messages))
+      const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
       yield* LLMClient.generate(LLMRequest.update(request, { messages }))
     }),
   )
@@ -348,7 +348,7 @@ for (const model of [
       const request = LLM.request({ model, prompt: "hello" })
       const compacted = yield* LLMClient.compact(request)
       const codec = Schema.fromJsonString(Schema.Array(Message))
-      const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.messages))
+      const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
       yield* LLMClient.generate(LLMRequest.update(request, { messages }))
     }),
   )
@@ -406,13 +406,13 @@ for (const model of [
       const request = LLM.request({ model, prompt: "original", system: "system", http: { body: { store: false } } })
       const compacted = yield* LLMClient.compact(request)
       expect(compacted.usage?.totalTokens).toBe(1010)
-      expect(compacted.messages.map((message) => message.role)).toEqual(["user", "assistant"])
-      expect(compacted.messages[0]?.content).toEqual([{ type: "text", text: "retained" }])
-      expect(compacted.messages[1]?.content).toEqual([
+      expect(compacted.replacement.map((message) => message.role)).toEqual(["user", "assistant"])
+      expect(compacted.replacement[0]?.content).toEqual([{ type: "text", text: "retained" }])
+      expect(compacted.replacement[1]?.content).toEqual([
         { type: "compaction", provider: model.provider, id: "cmp_1", encrypted: "opaque" },
       ])
       const codec = Schema.fromJsonString(Schema.Array(Message))
-      const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.messages))
+      const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
       yield* LLMClient.generate(LLMRequest.update(request, { messages: [...messages, Message.user("continue")] }))
     }),
   )

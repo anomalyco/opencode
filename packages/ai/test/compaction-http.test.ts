@@ -78,7 +78,7 @@ testEffect(runtimeLayer(FetchHttpClient.layer)).live("compaction and a tool loop
       tools: [{ name: "lookup", description: "Lookup a number", inputSchema: { type: "object", properties: {} } }],
     })
     const compacted = yield* LLMClient.compact(request)
-    const messages = [...compacted.messages, Message.user("Look up the answer")]
+    const messages = [...compacted.replacement, Message.user("Look up the answer")]
     const first = yield* LLMClient.generate(LLMRequest.update(request, { messages }))
     expect(first.toolCalls).toHaveLength(1)
     const call = first.toolCalls[0]!

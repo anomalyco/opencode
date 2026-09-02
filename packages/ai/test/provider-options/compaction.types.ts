@@ -101,6 +101,8 @@ checkpoint.encrypted
 checkpoint.value
 LLMClient.compact(LLM.request({ model: openai, prompt: "hello" })).pipe(
   Effect.map((result) => {
+    result.replacement satisfies ReadonlyArray<Message>
+    // @ts-expect-error The replacement window is named explicitly; the old field is not an alias.
     result.messages
     // @ts-expect-error Compaction returns replacement history, not a synthetic assistant message.
     result.message

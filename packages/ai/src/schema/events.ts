@@ -91,9 +91,9 @@ export class Usage extends Schema.Class<Usage>("AI.Usage")({
 
 export type UsageInput = Usage | ConstructorParameters<typeof Usage>[0]
 
-/** A replacement context window. Replace prior history with these messages. */
+/** A replacement context window, not an assistant message to append to prior history. */
 export class CompactionResponse extends Schema.Class<CompactionResponse>("LLM.CompactionResponse")({
-  messages: Schema.Array(Message),
+  replacement: Schema.Array(Message),
   usage: Schema.optional(Usage),
 }) {}
 
