@@ -66,6 +66,7 @@ import { GrepTool } from "../tool/plugin/grep.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { ReadToolFileSystem } from "../tool/read-filesystem.js"
 import { ReadTool } from "../tool/plugin/read.js"
+import { SessionMoveTool } from "../tool/plugin/session-move.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
@@ -206,6 +207,7 @@ const pre = [
   GrepTool.Plugin,
   QuestionTool.Plugin,
   ReadTool.Plugin,
+  SessionMoveTool.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
