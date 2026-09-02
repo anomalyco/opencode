@@ -58,7 +58,7 @@ describe("fromPromise", () => {
         define({
           id: "promise-terminal-read",
           setup: async (ctx) => {
-            expect(Object.keys(ctx.experimental)).toEqual(["terminal"])
+            expect(Object.keys(ctx.experimental).sort()).toEqual(["instructions", "terminal"])
             expect(Object.keys(ctx.experimental.terminal)).toEqual(["read"])
             for (const lines of [0, -1, 1.5, 65536, NaN, Infinity, "3"]) {
               await expect(

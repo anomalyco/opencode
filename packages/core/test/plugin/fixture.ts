@@ -19,6 +19,7 @@ import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Npm } from "@opencode-ai/util/npm"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { PluginInstructions } from "@opencode-ai/core/plugin/instructions"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Permission } from "@opencode-ai/core/permission"
 import { Reference } from "@opencode-ai/core/reference"
@@ -81,6 +82,7 @@ export const PluginTestLayer = LayerNode.compile(
     PluginRuntime.node,
     Permission.node,
     PluginHooks.node,
+    PluginInstructions.node,
     Reference.node,
     Rpc.node,
     Skill.node,

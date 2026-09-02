@@ -9,6 +9,7 @@ import { Database } from "../database/database.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
+import { PluginInstructions } from "../plugin/instructions.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
 import { McpInstructions } from "../mcp/instructions.js"
@@ -86,6 +87,7 @@ const layer = Layer.effect(
     const models = yield* SessionRunnerModel.Service
     const modelRequests = yield* SessionModelRequest.Service
     const plugins = yield* PluginSupervisor.Service
+    const pluginInstructions = yield* PluginInstructions.Service
     const referenceInstructions = yield* ReferenceInstructions.Service
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
@@ -152,6 +154,15 @@ const layer = Layer.effect(
           loaded.references,
           loaded.mcp,
           loaded.entries,
+          pluginInstructions.load({
+            sessionID: session.id,
+            agent: agent.id,
+            location: Location.Info.make({
+              directory: location.directory,
+              workspaceID: location.workspaceID,
+              project: location.project,
+            }),
+          }),
         ]),
         tools: loaded.tools,
       }
@@ -191,6 +202,7 @@ export const node = makeLocationNode({
     McpInstructions.node,
     McpTool.node,
     PluginSupervisor.node,
+    PluginInstructions.node,
     ReferenceInstructions.node,
     SessionRunnerModel.node,
     SessionModelRequest.node,

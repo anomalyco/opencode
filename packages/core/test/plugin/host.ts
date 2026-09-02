@@ -12,8 +12,9 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { Effect, Stream } from "effect"
 
-type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
+type Overrides = Partial<Omit<Plugin.Context, "options" | "session" | "experimental">> & {
   readonly session?: Partial<Plugin.Context["session"]>
+  readonly experimental?: Partial<Plugin.Context["experimental"]>
 }
 export function host(overrides: Overrides = {}): Plugin.Context {
   return {
@@ -66,8 +67,12 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
     },
-    experimental: overrides.experimental ?? {
-      terminal: {
+    experimental: {
+      instructions: overrides.experimental?.instructions ?? {
+        transform: () => Effect.die("unused experimental.instructions.transform"),
+        reload: () => Effect.die("unused experimental.instructions.reload"),
+      },
+      terminal: overrides.experimental?.terminal ?? {
         read: () => Effect.die("unused experimental.terminal.read"),
       },
     },

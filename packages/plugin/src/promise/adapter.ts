@@ -336,6 +336,25 @@ export function fromPromise(plugin: Plugin) {
               ),
           },
           experimental: {
+            instructions: {
+              transform: (callback) =>
+                register(
+                  host.experimental.instructions.transform((draft) =>
+                    callback({
+                      add: (source) =>
+                        draft.add({
+                          ...source,
+                          read: (context) =>
+                            Effect.tryPromise({
+                              try: () => Promise.resolve(source.read(context)),
+                              catch: (cause) => cause,
+                            }),
+                        }),
+                    }),
+                  ),
+                ),
+              reload: () => run(host.experimental.instructions.reload()),
+            },
             terminal: {
               read: adaptApiMethod(ExperimentalEndpoints["persistentPty.read"], host.experimental.terminal.read),
             },

@@ -31,6 +31,7 @@ import { WebSearch } from "../websearch.js"
 import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
+import { PluginInstructions } from "./instructions.js"
 import type { Interface } from "../plugin.js"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
@@ -60,6 +61,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const generate = yield* Generate.Service
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
+  const instructions = yield* PluginInstructions.Service
   const runtime = yield* PluginRuntime.Service
   const locationInfo = () =>
     new Location.Info({
@@ -213,6 +215,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           ),
     },
     experimental: {
+      instructions: {
+        transform: instructions.transform,
+        reload: instructions.reload,
+      },
       terminal: {
         read: (input) => runtime.persistentPty.read(input.sessionID, input.lines),
       },

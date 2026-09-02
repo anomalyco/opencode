@@ -55,7 +55,7 @@ describe("Plugin", () => {
         },
       }
 
-      expect(Object.keys(host.experimental)).toEqual(["terminal"])
+      expect(Object.keys(host.experimental)).toEqual(["instructions", "terminal"])
       expect(Object.keys(host.experimental.terminal)).toEqual(["read"])
       expect(yield* pending).toBe(terminal)
       expect(yield* host.experimental.terminal.read({ sessionID })).toBe(terminal)

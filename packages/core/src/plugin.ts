@@ -25,6 +25,7 @@ import { State } from "./state.js"
 import { Tool } from "./tool.js"
 import { Vcs } from "./vcs.js"
 import { PluginHooks } from "./plugin/hooks.js"
+import { PluginInstructions } from "./plugin/instructions.js"
 import { Generate } from "./generate.js"
 import { Permission } from "./permission.js"
 
@@ -207,6 +208,7 @@ export const node = makeLocationNode({
     Tool.node,
     Vcs.node,
     PluginHooks.node,
+    PluginInstructions.node,
     PluginRuntime.node,
     WebSearch.node,
     Generate.node,
