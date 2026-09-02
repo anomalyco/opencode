@@ -10,7 +10,7 @@ export const dict: Record<string, string> = {
   "ui.sessionReview.change.added": "Qo'shilgan",
   "ui.sessionReview.change.removed": "Oʻchirildi",
   "ui.sessionReview.change.modified": "Oʻzgartirilgan",
-  "ui.sessionReview.image.loading": "Yuklanmoqda...",
+  "ui.sessionReview.image.loading": "Yuklanmoqda…",
   "ui.sessionReview.image.placeholder": "Rasm",
   "ui.sessionReview.largeDiff.title": "Farq koʻrsatish uchun juda katta",
   "ui.sessionReview.largeDiff.meta":
@@ -30,7 +30,7 @@ export const dict: Record<string, string> = {
   "ui.sessionReviewV2.empty.noGit.description":
     "Ushbu loyihadagi oʻzgarishlarni kuzating, koʻrib chiqing va bekor qiling",
   "ui.sessionReviewV2.empty.noGit.action": "Git omborini yarating",
-  "ui.sessionReviewV2.empty.noGit.actionLoading": "Git ombori yaratilmoqda...",
+  "ui.sessionReviewV2.empty.noGit.actionLoading": "Git ombori yaratilmoqda…",
   "ui.sessionReviewV2.empty.changes.title": "Hozircha fayl oʻzgarmadi",
   "ui.sessionReviewV2.empty.changes.description": "Loyiha o'zgarishlari shu yerda paydo bo'ladi",
   "ui.sessionReview.openFile": "Faylni ochish",
@@ -39,7 +39,7 @@ export const dict: Record<string, string> = {
   "ui.fileMedia.kind.image": "tasvir",
   "ui.fileMedia.kind.audio": "audio",
   "ui.fileMedia.state.removed": "{{kind}} fayli olib tashlandi.",
-  "ui.fileMedia.state.loading": "{{kind}} yuklanmoqda...",
+  "ui.fileMedia.state.loading": "{{kind}} yuklanmoqda…",
   "ui.fileMedia.state.error": "{{kind}} yuklanmadi.",
   "ui.fileMedia.state.unavailable": "{{kind}} oldindan koʻrish mavjud emas.",
   "ui.fileMedia.binary.title": "Ikkilik fayl",
@@ -117,9 +117,9 @@ export const dict: Record<string, string> = {
   "ui.promptInput.dropFiles": "Biriktirish uchun fayllarni qoldiring",
   "ui.promptInput.removeAttachment": "Qo'shimchani olib tashlang",
   "ui.promptInput.label": "Tezkor",
-  "ui.promptInput.placeholder.shell": "Shell buyrug'ini kiriting...",
+  "ui.promptInput.placeholder.shell": "Shell buyrug'ini kiriting…",
   "ui.promptInput.placeholder.normal":
-    "Har qanday narsani so'rang, buyruqlar uchun {{slash}}, kontekst uchun {{at}}...",
+    "Har qanday narsani so'rang, buyruqlar uchun {{slash}}, kontekst uchun {{at}}…",
   "ui.promptInput.add": "Rasmlar va fayllarni qo'shing",
   "ui.promptInput.attachments": "Rasmlar va fayllar",
   "ui.promptInput.context": "Kontekst",
@@ -194,5 +194,5 @@ export const dict: Record<string, string> = {
   "ui.question.review.notAnswered": "(javob berilmagan)",
   "ui.question.multiHint": "Barcha tegishli javoblarni tanlang",
   "ui.question.singleHint": "Bitta javobni tanlang",
-  "ui.question.custom.placeholder": "Javobingizni yozing...",
+  "ui.question.custom.placeholder": "Javobingizni yozing…",
 }

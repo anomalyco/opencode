@@ -190,7 +190,7 @@ test.each([
       return
     }
     setup.mockInput.pressKey("HOME")
-    await setup.waitForFrame((frame) => frame.includes("Loading session history..."))
+    await setup.waitForFrame((frame) => frame.includes("Loading session history…"))
     setup.mockInput.pressKey("HOME")
     await setup.waitForVisualIdle()
     expect(pages).toEqual([

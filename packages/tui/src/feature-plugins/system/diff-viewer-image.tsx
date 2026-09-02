@@ -37,7 +37,7 @@ export function DiffViewerImage(props: {
             <text fg={theme.text.feedback.error.default}>Could not load image</text>
           </Match>
           <Match when={image.loading}>
-            <text fg={theme.text.subdued}>Loading image...</text>
+            <text fg={theme.text.subdued}>Loading image…</text>
           </Match>
           <Match when={!image.error && image()} keyed>
             {(bytes) => {

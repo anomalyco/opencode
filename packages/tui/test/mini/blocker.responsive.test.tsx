@@ -223,7 +223,7 @@ test("roomy permission prompts retain their header and padded action bar", async
     expect(scroll.x + scroll.width).toBe(109)
     app.mockInput.pressEnter()
     await settle(app)
-    expect(app.captureCharFrame()).toContain("Waiting for permission event...")
+    expect(app.captureCharFrame()).toContain("Waiting for permission event…")
   } finally {
     app.renderer.destroy()
   }

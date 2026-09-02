@@ -688,7 +688,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
       frame.includes("Prepended instructions") &&
       frame.includes("Original answer") &&
       frame.includes("20.0 tok/s") &&
-      !frame.includes("Loading session history..."),
+      !frame.includes("Loading session history…"),
   )
   expect(prepended).toContain("Current input")
   expect(prepended).toContain("Original answer")

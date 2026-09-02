@@ -702,11 +702,11 @@ function HomeSessionRow(
           >
             <Menu.Item onSelect={openEditor}>{props.language.t("common.rename")}</Menu.Item>
             <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
-              {props.language.t("common.export")}...
+              {props.language.t("common.export")}…
             </Menu.Item>
             <Menu.Separator />
             <Menu.Item onSelect={() => props.onDeleteSession(props.server, props.record.session)}>
-              {props.language.t("common.delete")}...
+              {props.language.t("common.delete")}…
             </Menu.Item>
           </Menu.Content>
         </Menu.Portal>

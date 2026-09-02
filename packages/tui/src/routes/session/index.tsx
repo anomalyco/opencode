@@ -1421,7 +1421,7 @@ export function Session(props: {
             </box>
             <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
               <Show when={firstJump()}>
-                <text fg={theme.text.feedback.info.default}>Loading session history...</text>
+                <text fg={theme.text.feedback.info.default}>Loading session history…</text>
               </Show>
               <Show when={!firstJump() && awayFromBottom()}>
                 <box

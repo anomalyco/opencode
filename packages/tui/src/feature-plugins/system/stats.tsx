@@ -171,7 +171,7 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
             <text fg={theme.text.feedback.error.default}>Could not load stats. Reopen /stats to try again.</text>
           }
         >
-          <Show when={result()} fallback={<text fg={theme.text.subdued}>Gathering your stats...</text>}>
+          <Show when={result()} fallback={<text fg={theme.text.subdued}>Gathering your stats…</text>}>
             {(value) => <StatsPoster stats={value()} />}
           </Show>
         </Show>

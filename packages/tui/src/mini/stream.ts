@@ -42,7 +42,7 @@ function summarize(value: unknown): unknown {
     return {
       type: "string",
       length: value.length,
-      preview: `${value.slice(0, 160)}...`,
+      preview: `${value.slice(0, 160)}…`,
     }
   }
 

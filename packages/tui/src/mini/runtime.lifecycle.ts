@@ -175,7 +175,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   const setTitle = (title?: string) => {
     if (input.host.platform !== "linux") return
     if (!title || isFallbackTitle(title)) return renderer.setTerminalTitle("OpenCode")
-    renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
+    renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "…" : title}`)
   }
   setTitle(input.sessionTitle)
   const theme = await resolveRunTheme(renderer, tuiConfig.theme, mono)

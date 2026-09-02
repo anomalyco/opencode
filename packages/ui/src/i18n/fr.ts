@@ -13,7 +13,7 @@ export const dict = {
   "ui.sessionReview.change.added": "Ajout",
   "ui.sessionReview.change.removed": "Suppression",
   "ui.sessionReview.change.modified": "Modification",
-  "ui.sessionReview.image.loading": "Chargement...",
+  "ui.sessionReview.image.loading": "Chargement…",
   "ui.sessionReview.image.placeholder": "Image",
   "ui.sessionReview.largeDiff.title": "Diff trop volumineux pour être affiché",
   "ui.sessionReview.largeDiff.meta":
@@ -32,7 +32,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.noGit.title": "Aucune modification suivie",
   "ui.sessionReviewV2.empty.noGit.description": "Suivre, examiner et annuler les modifications dans ce projet",
   "ui.sessionReviewV2.empty.noGit.action": "Créer un dépôt Git",
-  "ui.sessionReviewV2.empty.noGit.actionLoading": "Création du dépôt Git...",
+  "ui.sessionReviewV2.empty.noGit.actionLoading": "Création du dépôt Git…",
   "ui.sessionReviewV2.empty.changes.title": "Aucune modification de fichier pour l'instant",
   "ui.sessionReviewV2.empty.changes.description": "Les modifications du projet apparaîtront ici",
   "ui.fileMedia.kind.image": "image",
@@ -125,9 +125,9 @@ export const dict = {
   "ui.promptInput.dropFiles": "Déposez des fichiers pour les joindre",
   "ui.promptInput.removeAttachment": "Supprimer la pièce jointe",
   "ui.promptInput.label": "Invite",
-  "ui.promptInput.placeholder.shell": "Entrez une commande shell...",
+  "ui.promptInput.placeholder.shell": "Entrez une commande shell…",
   "ui.promptInput.placeholder.normal":
-    "Demandez n'importe quoi, {{slash}} pour les commandes, {{at}} pour le contexte...",
+    "Demandez n'importe quoi, {{slash}} pour les commandes, {{at}} pour le contexte…",
   "ui.promptInput.add": "Ajouter des images et des fichiers",
   "ui.promptInput.attachments": "Images et fichiers",
   "ui.promptInput.context": "Contexte",
@@ -205,7 +205,7 @@ export const dict = {
   "ui.question.review.notAnswered": "(non répondu)",
   "ui.question.multiHint": "Sélectionnez tout ce qui s'applique",
   "ui.question.singleHint": "Sélectionnez une réponse",
-  "ui.question.custom.placeholder": "Tapez votre réponse...",
+  "ui.question.custom.placeholder": "Tapez votre réponse…",
 
   "ui.fileSearch.placeholder": "Rechercher",
   "ui.fileSearch.previousMatch": "Précédent",

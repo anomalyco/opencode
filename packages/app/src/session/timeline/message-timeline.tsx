@@ -814,12 +814,12 @@ function MessageTimelineView(
                               {language.t("common.rename")}
                             </Menu.Item>
                             <Menu.Item onSelect={() => void props.action.export(id)}>
-                              {language.t("common.export")}...
+                              {language.t("common.export")}…
                             </Menu.Item>
                             {/* TODO: Need a session archive API. */}
                             <Menu.Separator />
                             <Menu.Item onSelect={() => props.action.showDelete(id)}>
-                              {language.t("common.delete")}...
+                              {language.t("common.delete")}…
                             </Menu.Item>
                           </Menu.Content>
                         </Menu.Portal>

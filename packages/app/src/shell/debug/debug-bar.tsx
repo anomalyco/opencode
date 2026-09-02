@@ -185,7 +185,7 @@ export function DebugBar(props: { inline?: boolean } = {}) {
     return `${Math.round(value * 100)}%`
   }
   const longv = () => (state.long.count === undefined ? na() : `${time(state.long.block) ?? na()}/${state.long.count}`)
-  const navv = () => (state.nav.pending ? "..." : (time(state.nav.dur) ?? na()))
+  const navv = () => (state.nav.pending ? "…" : (time(state.nav.dur) ?? na()))
   const toggleFocus = async () => {
     if (!platform.setForceFocus) return
     const enabled = !state.focus

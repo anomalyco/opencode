@@ -152,7 +152,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
   const sourceDetail = () => {
     if (mode() === "working") return "vs HEAD"
     if (diff.error) return "Base or diff unavailable"
-    if (!result()) return "Resolving diff..."
+    if (!result()) return "Resolving diff…"
     const base = result()?.base
     if (!base) return "Base not reported"
     return `vs ${base.name}`
@@ -222,7 +222,7 @@ function DiffBaseDialog(props: {
     <box paddingLeft={4} paddingRight={4}>
       <text fg={branches.error ? theme.text.feedback.error.default : theme.text.subdued}>
         {branches.loading
-          ? "Loading branches..."
+          ? "Loading branches…"
           : branches.error
             ? "Could not load branches. Reopen the picker to try again."
             : "No branches found"}
@@ -737,7 +737,7 @@ export function DiffViewerContent(props: {
                   title: "Base",
                   titleView: "Base".padEnd(11),
                   value: "base" as const,
-                  description: props.sourceBase?.name ?? "Choose...",
+                  description: props.sourceBase?.name ?? "Choose…",
                   onSelect: props.onChooseBase,
                 },
               ]
