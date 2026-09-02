@@ -11,7 +11,7 @@ import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Deferred, Effect, Fiber, Latch, Layer, Option, Schedule, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
-import type { OpenCodeEvent } from "../src/effect"
+import type { OpenCode, OpenCodeEvent } from "../src/effect"
 
 const it = testEffect(Layer.empty)
 type Sdk = typeof import("../src/effect")
@@ -100,13 +100,14 @@ it.live(
     withEmbedded("opencode-embedded-", (fixture) =>
       Effect.gen(function* () {
         const opencode = yield* fixture.sdk.OpenCode.create({ events: { persist: true } })
+        const sessions: OpenCode.SessionClient = opencode.sessions
         const id = sessionID(fixture)
         const model = fixture.sdk.Model.Ref.make({
           id: fixture.sdk.Model.ID.make("embedded"),
           providerID: fixture.sdk.Provider.ID.make("test"),
         })
 
-        const created = yield* opencode.sessions.create({
+        const created = yield* sessions.create({
           id,
           agent: fixture.sdk.Agent.ID.make("build"),
           location: location(fixture),
