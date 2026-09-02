@@ -34,6 +34,24 @@ import { ProviderError } from "./error"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
+// Stream-idle guard default for @ai-sdk/openai-compatible providers. Named providers
+// (openai, anthropic, ...) receive timeout defaults, but custom openai-compatible
+// providers did not, so a backend that stalls mid-stream would hang the session
+// indefinitely (issue #46581). Overridable via provider options.chunkTimeout.
+const OPENAI_COMPATIBLE_CHUNK_TIMEOUT_DEFAULT = 300_000
+
+/**
+ * Apply the defaults @ai-sdk/openai-compatible model options need. Extracted as a
+ * pure, exported function so the defaulting behavior is unit-testable in isolation.
+ * Mutates and returns `options`; a no-op for other providers.
+ */
+export function applyOpenAICompatibleDefaults(npm: string, options: Record<string, any>) {
+  if (!npm.includes("@ai-sdk/openai-compatible")) return options
+  if (options["includeUsage"] !== false) options["includeUsage"] = true
+  if (options["chunkTimeout"] === undefined) options["chunkTimeout"] = OPENAI_COMPATIBLE_CHUNK_TIMEOUT_DEFAULT
+  return options
+}
+
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
@@ -1748,9 +1766,7 @@ const layer = Layer.effect(
           delete options.fetch
         }
 
-        if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
-          options["includeUsage"] = true
-        }
+        applyOpenAICompatibleDefaults(model.api.npm, options)
 
         const baseURL = iife(() => {
           let url =
