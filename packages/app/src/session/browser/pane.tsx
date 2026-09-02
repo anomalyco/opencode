@@ -31,6 +31,13 @@ export function SessionBrowserPane(props: {
   let layout: string | undefined
   let until = 0
 
+  // The native page always paints above the DOM, so hide it while a floating
+  // menu, select, or popover overlaps it. Tooltips are excluded.
+  const covered = (rect: DOMRect) =>
+    Array.from(document.querySelectorAll('[data-popper-positioner]:not(:has([role="tooltip"]))')).some((el) => {
+      const r = el.getBoundingClientRect()
+      return r.width > 0 && r.left < rect.right && r.right > rect.left && r.top < rect.bottom && r.bottom > rect.top
+    })
   const measure = () => {
     frame = undefined
     if (!surface) return
@@ -40,7 +47,7 @@ export function SessionBrowserPane(props: {
     const top = Math.round(rect.top * zoom)
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
-    const visible = props.visible && store.visible && !dialog.active
+    const visible = props.visible && store.visible && !dialog.active && !covered(rect)
     const next = `${visible}:${left}:${top}:${right}:${bottom}`
     if (next !== layout) {
       layout = next
@@ -64,6 +71,11 @@ export function SessionBrowserPane(props: {
   )
   createResizeObserver(() => surface, schedule.bind(null, 0))
   createEventListener(window, "resize", () => schedule(300))
+  // Floating content portals directly into <body>; keep measuring briefly so
+  // the positioner has settled before the overlap check runs.
+  const portals = new MutationObserver(() => schedule(300))
+  portals.observe(document.body, { childList: true })
+  onCleanup(() => portals.disconnect())
   createEventListener(document, "visibilitychange", () => setStore("visible", document.visibilityState === "visible"))
   onCleanup(() => {
     if (frame !== undefined) cancelAnimationFrame(frame)
