@@ -296,6 +296,10 @@ export function MessageTimeline(props: {
     if (!id) return
     return sync().session.get(id)
   })
+  const projectName = createMemo(() => {
+    const project = sync().project
+    return project?.name || getFilename(project?.worktree ?? info()?.directory ?? "")
+  })
   const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = createMemo(() => info()?.share?.url)
@@ -1474,6 +1478,17 @@ export function MessageTimeline(props: {
                       "gap-3": !settings.general.newLayoutDesigns(),
                     }}
                   >
+                    <Show when={projectName()}>
+                      {(name) => (
+                        <div
+                          data-slot="session-project-name"
+                          class="min-w-0 max-w-[180px] shrink-0 truncate text-12-regular text-v2-text-text-faint md:max-w-[240px]"
+                          title={name()}
+                        >
+                          <bdi dir="auto">{name()}</bdi>
+                        </div>
+                      )}
+                    </Show>
                     <SessionContextUsage
                       placement="bottom"
                       buttonAppearance={settings.general.newLayoutDesigns() ? "v2" : "default"}
