@@ -45,15 +45,15 @@ test("workspaces opens without waiting for inventory or sessions", async ({ page
   })
   const settings = page.getByTestId("settings-screen")
   const requested = page.waitForRequest((request) => new URL(request.url()).pathname.startsWith("/api/worktree/"))
-  await settings.getByRole("tab", { name: "Workspaces", exact: true }).click()
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await requested
-  await expect(settings.getByRole("heading", { name: "Workspaces", exact: true })).toBeVisible()
+  await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
   await expect(settings.getByRole("button", { name: "Back to app" })).toBeVisible()
-  await expect(settings.getByText("No workspaces", { exact: true })).toHaveCount(0)
+  await expect(settings.getByText("No worktrees", { exact: true })).toHaveCount(0)
 
   inventory.resolve()
   await expect(settings.getByText(sandboxes[0], { exact: true })).toBeVisible()
-  await expect(settings.getByText("12 workspaces", { exact: true })).toBeVisible()
+  await expect(settings.getByText("12 worktrees", { exact: true })).toBeVisible()
   sessions.resolve()
   await expect(settings.getByText("Workspace 1 session", { exact: true })).toBeVisible()
 
@@ -63,7 +63,7 @@ test("workspaces opens without waiting for inventory or sessions", async ({ page
     await route.fallback()
   })
   await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
-  await settings.getByRole("tab", { name: "Workspaces", exact: true }).click()
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByText("Workspace 1 session", { exact: true })).toBeVisible()
   refresh.resolve()
 })
@@ -89,7 +89,7 @@ test("extensions opens without waiting for MCPs", async ({ page }) => {
 
 test("workspace inventory uses the settings panel scroll area", async ({ page }) => {
   const settings = page.getByTestId("settings-screen")
-  await settings.getByRole("tab", { name: "Workspaces", exact: true }).click()
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByText("Workspace 1 session", { exact: true })).toBeVisible()
   const list = settings.locator('[data-component="settings-list"]')
   await expect(list).toHaveCSS("max-height", "none")
