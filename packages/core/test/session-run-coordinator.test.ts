@@ -306,7 +306,11 @@ describe("SessionRunCoordinator", () => {
       yield* Deferred.await(interrupted)
 
       const exits = yield* Fiber.awaitAll([first, second, idle])
-      expect(exits.slice(0, 2).every((exit) => Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause))).toBeTrue()
+      // Joiners learn how the execution ended; they are not interrupted themselves.
+      expect(exits.slice(0, 2)).toEqual([
+        Exit.succeed({ type: "interrupted", reason: "user" }),
+        Exit.succeed({ type: "interrupted", reason: "user" }),
+      ])
       expect(exits.slice(2).every(Exit.isSuccess)).toBeTrue()
       expect(Array.from(yield* coordinator.active)).toEqual([])
       expect(runs).toBe(1)

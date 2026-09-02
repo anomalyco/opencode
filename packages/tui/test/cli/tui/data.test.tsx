@@ -1984,11 +1984,23 @@ test("keeps shell state scoped to location", async () => {
   const events = createEventStream()
   const other = "/tmp/opencode/other"
   const workspace = "ws_other"
-  let removed: URL | undefined
+  let stopped: URL | undefined
   const calls = createFetch((url, request) => {
-    if (url.pathname === "/api/shell/sh_other" && request.method === "DELETE") {
-      removed = url
-      return new Response(null, { status: 204 })
+    if (url.pathname === "/api/shell/sh_other/stop" && request.method === "POST") {
+      stopped = url
+      return json({
+        location: { directory: other, workspaceID: workspace, project: { id: "proj_test", directory: other } },
+        data: {
+          id: "sh_other",
+          status: "killed",
+          command: "pnpm dev",
+          cwd: other,
+          shell: "/bin/sh",
+          file: "/tmp/opencode-shell",
+          metadata: { sessionID: "ses_shared" },
+          time: { started: 1, completed: 2 },
+        },
+      })
     }
     if (url.pathname !== "/api/shell") return
     const requestDirectory = url.searchParams.get("location[directory]")
@@ -2054,9 +2066,9 @@ test("keeps shell state scoped to location", async () => {
     await app.waitForFrame((frame) => frame.includes("pnpm dev"))
     app.mockInput.pressArrow("down")
     app.mockInput.pressKey("d", { ctrl: true })
-    await wait(() => removed !== undefined)
-    expect(removed?.searchParams.get("location[directory]")).toBe(other)
-    expect(removed?.searchParams.get("location[workspace]")).toBe(workspace)
+    await wait(() => stopped !== undefined)
+    expect(stopped?.searchParams.get("location[directory]")).toBe(other)
+    expect(stopped?.searchParams.get("location[workspace]")).toBe(workspace)
 
     events.emit({
       id: "evt_shell_created",
