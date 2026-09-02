@@ -73,12 +73,14 @@ export type Error =
 
 export interface Interface {
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
+  readonly resolveSmall: (session: SessionSchema.Info) => Effect.Effect<Model | undefined, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
 
 /** Test or embedding seam for supplying a model resolver directly. */
-export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
+export const layerWith = (resolve: Interface["resolve"], resolveSmall?: Interface["resolveSmall"]) =>
+  Layer.succeed(Service, Service.of({ resolve, resolveSmall: resolveSmall ?? (() => Effect.succeed(undefined)) }))
 
 const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   if (credential?.type === "key") return Auth.value(credential.key)
@@ -208,6 +210,31 @@ export const locationLayer = Layer.effect(
         return yield* resolve(
           session,
           selected,
+          connection ? yield* integrations.connection.resolve(connection) : undefined,
+        )
+      }),
+      resolveSmall: Effect.fn("SessionRunnerModel.resolveSmall")(function* (session) {
+        // Resolve the small model for the session's active provider, used for lightweight
+        // steps (title/status/confirmations) when the agent opts in via `small: true`.
+        const defaultModel = session.model ? undefined : yield* catalog.model.default()
+        const selected = session.model
+          ? (yield* catalog.model.available()).find(
+              (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
+            )
+          : defaultModel && supported(defaultModel)
+            ? defaultModel
+            : (yield* catalog.model.available()).find(supported)
+        if (!selected) return undefined
+        const small = yield* catalog.model.small(selected.providerID)
+        if (!small || !supported(small)) return undefined
+        if (small.id === selected.id) return undefined
+        const provider = yield* catalog.provider.get(small.providerID)
+        const connection = yield* integrations.connection.active(
+          provider?.integrationID ?? Integration.ID.make(small.providerID),
+        )
+        return yield* resolve(
+          session,
+          small,
           connection ? yield* integrations.connection.resolve(connection) : undefined,
         )
       }),

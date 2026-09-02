@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LLM } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
-import { DateTime, Effect } from "effect"
+import { DateTime, Effect, Layer } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
@@ -11,7 +11,7 @@ import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { it } from "./lib/effect"
+import { it, testEffect } from "./lib/effect"
 
 type Api =
   | {
@@ -342,6 +342,54 @@ describe("SessionRunnerModel", () => {
         ),
       ).toBe(false)
       expect(SessionRunnerModel.supported(model({ type: "native", settings: {} }))).toBe(false)
+    }),
+  )
+})
+
+describe("SessionRunnerModel.resolveSmall", () => {
+  const session = SessionV2.Info.make({
+    id: SessionV2.ID.make("ses_small"),
+    projectID: ProjectV2.ID.global,
+    title: "test",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+    location: { directory: AbsolutePath.make("/project") },
+  })
+
+  const smallIt = testEffect(
+    Layer.succeed(
+      SessionRunnerModel.Service,
+      SessionRunnerModel.Service.of({
+        resolve: () => Effect.succeed({} as never),
+        resolveSmall: () => Effect.succeed(undefined),
+      }),
+    ),
+  )
+
+  smallIt.effect("returns undefined when no small model is injected", () =>
+    Effect.gen(function* () {
+      const svc = yield* SessionRunnerModel.Service
+      const resolved = yield* svc.resolveSmall(session)
+      expect(resolved).toBeUndefined()
+    }),
+  )
+
+  const withSmall = testEffect(
+    Layer.succeed(
+      SessionRunnerModel.Service,
+      SessionRunnerModel.Service.of({
+        resolve: () => Effect.succeed({} as never),
+        resolveSmall: () => Effect.succeed({ id: "small-model" } as never),
+      }),
+    ),
+  )
+
+  withSmall.effect("returns the injected small model when available", () =>
+    Effect.gen(function* () {
+      const svc = yield* SessionRunnerModel.Service
+      const resolved = yield* svc.resolveSmall(session)
+      expect(resolved).toMatchObject({ id: "small-model" })
     }),
   )
 })
