@@ -329,69 +329,65 @@ describe("Open Responses basic-item lifecycles", () => {
       ])
     }),
   )
-  ;[undefined, "fc_1"].forEach((id) => {
-    it.effect(`opens and closes a done-only tool ${id === undefined ? "without" : "with"} an item id`, () =>
-      Effect.gen(function* () {
-        const item = {
-          type: "function_call",
-          ...(id === undefined ? {} : { id }),
-          call_id: "call_1",
-          name: "lookup",
-          arguments: '{"query":"weather"}',
-        }
-        const events = yield* collect(
-          { type: "response.output_item.done", item },
-          { type: "response.output_item.done", item: { ...item, id: "fc_1" } },
-          { type: "response.output_item.added", item },
-          completed,
-        )
-        const providerMetadata = id === undefined ? undefined : { "openai-compatible": { itemId: id } }
-        expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
-          { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata },
-          { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
-          { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata },
-        ])
-        expect(events.filter(LLMEvent.is.finish)).toEqual([
-          {
-            type: "finish",
-            reason: { normalized: "tool-calls", raw: undefined },
-            providerMetadata: { "openai-compatible": { responseId: "resp_1", serviceTier: undefined } },
-          },
-        ])
-      }),
-    )
+  it.effect("opens and closes a done-only tool with an item id", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "function_call",
+        id: "fc_1",
+        call_id: "call_1",
+        name: "lookup",
+        arguments: '{"query":"weather"}',
+      }
+      const events = yield* collect(
+        { type: "response.output_item.done", item },
+        { type: "response.output_item.done", item },
+        { type: "response.output_item.added", item },
+        completed,
+      )
+      const providerMetadata = { "openai-compatible": { itemId: "fc_1" } }
+      expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
+        { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata },
+      ])
+      expect(events.filter(LLMEvent.is.finish)).toEqual([
+        {
+          type: "finish",
+          reason: { normalized: "tool-calls", raw: undefined },
+          providerMetadata: { "openai-compatible": { responseId: "resp_1", serviceTier: undefined } },
+        },
+      ])
+    }),
+  )
 
-    it.effect(`deduplicates a pending call whose item id is ${id === undefined ? "introduced" : "omitted"} later`, () =>
-      Effect.gen(function* () {
-        const item = { type: "function_call", call_id: "call_1", name: "lookup" }
-        const first = { ...item, ...(id === undefined ? {} : { id }) }
-        const duplicate = { ...item, ...(id === undefined ? { id: "fc_1" } : {}) }
-        const events = yield* collect(
-          { type: "response.output_item.added", item: first },
-          { type: "response.function_call_arguments.delta", item_id: id ?? "call_1", delta: '{"query":"weather"}' },
-          { type: "response.output_item.added", item: duplicate },
-          { type: "response.output_item.done", item: duplicate },
-          { type: "response.output_item.done", item: first },
-          { type: "response.output_item.added", item: duplicate },
-          completed,
-        )
-        // Identity metadata comes from the first admission, not the duplicate.
-        const providerMetadata = id === undefined ? undefined : { "openai-compatible": { itemId: id } }
-        expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
-          { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata },
-          {
-            type: "tool-input-delta",
-            id: "call_1",
-            name: "lookup",
-            text: '{"query":"weather"}',
-            input: { query: "weather" },
-          },
-          { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
-          { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata },
-        ])
-      }),
-    )
-  })
+  it.effect("deduplicates a pending call with a stable item id", () =>
+    Effect.gen(function* () {
+      const item = { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup" }
+      const events = yield* collect(
+        { type: "response.output_item.added", item },
+        { type: "response.function_call_arguments.delta", item_id: "fc_1", delta: '{"query":"weather"}' },
+        { type: "response.output_item.added", item },
+        { type: "response.output_item.done", item },
+        { type: "response.output_item.done", item },
+        { type: "response.output_item.added", item },
+        completed,
+      )
+      // Identity metadata comes from the first admission, not the duplicate.
+      const providerMetadata = { "openai-compatible": { itemId: "fc_1" } }
+      expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
+        { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: '{"query":"weather"}',
+          input: { query: "weather" },
+        },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata },
+      ])
+    }),
+  )
 
   it.effect("recovers pending calls without reconciling terminal reasoning", () =>
     Effect.gen(function* () {
@@ -500,14 +496,25 @@ describe("Open Responses basic-item lifecycles", () => {
         { type: "response.output_text.delta", item_id: "msg_1", delta: "Answer" },
         {
           type: "response.output_item.added",
-          item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: "{}" },
+          item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "{}" },
         },
         completed,
       )
       // Generic terminal closure does not repeat the message's phase metadata.
       expect(events.slice(4, -2)).toEqual([
-        { type: "tool-input-end", id: "call_1", name: "lookup" },
-        { type: "tool-call", id: "call_1", name: "lookup", input: {} },
+        {
+          type: "tool-input-end",
+          id: "call_1",
+          name: "lookup",
+          providerMetadata: { "openai-compatible": { itemId: "fc_1" } },
+        },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: {},
+          providerMetadata: { "openai-compatible": { itemId: "fc_1" } },
+        },
         { type: "text-end", id: "msg_1" },
       ])
     }),

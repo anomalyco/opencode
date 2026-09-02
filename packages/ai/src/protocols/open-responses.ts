@@ -284,7 +284,7 @@ type OpenResponsesUsage = Schema.Schema.Type<typeof OpenResponsesUsage>
 export const StreamItem = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
-    id: Schema.optional(Schema.String),
+    id: Schema.String,
     call_id: Schema.optional(Schema.String),
     name: Schema.optional(Schema.String),
     arguments: Schema.optional(Schema.String),
@@ -1007,10 +1007,10 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
     ]
   }
   if (item?.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
-  const id = item.id ?? item.call_id
+  const id = item.id
   if (Object.values(state.tools).some((tool) => tool?.id === item.call_id) || state.completedTools.has(item.call_id))
     return [state, NO_EVENTS]
-  const metadata = item.id !== undefined ? providerMetadata(state, { itemId: item.id }) : undefined
+  const metadata = providerMetadata(state, { itemId: item.id })
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   return [
@@ -1128,32 +1128,24 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
     const callID = item.call_id
     if (state.completedTools.has(callID)) return [state, NO_EVENTS] satisfies StepResult
-    const metadata = item.id !== undefined ? providerMetadata(state, { itemId: item.id }) : undefined
-    const fallback = item.id ?? callID
-    // Match the pending tool by call id so item events that disagree on
-    // whether `item.id` is present still resolve the same call.
-    const registered =
-      state.tools[fallback] !== undefined
-        ? fallback
-        : Object.keys(state.tools).find((key) => state.tools[key]?.id === callID)
-    const id = registered ?? fallback
-    const tools =
-      registered !== undefined
-        ? state.tools
-        : ToolStream.start(state.tools, id, {
-            id: callID,
-            name: item.name,
-            providerMetadata: metadata,
-          })
+    const metadata = providerMetadata(state, { itemId: item.id })
+    const registered = state.tools[item.id] !== undefined
+    const tools = registered
+      ? state.tools
+      : ToolStream.start(state.tools, item.id, {
+          id: callID,
+          name: item.name,
+          providerMetadata: metadata,
+        })
     const result =
       item.arguments === undefined
-        ? yield* ToolStream.finish(state.id, tools, id)
-        : yield* ToolStream.finishWithInput(state.id, tools, id, item.arguments)
+        ? yield* ToolStream.finish(state.id, tools, item.id)
+        : yield* ToolStream.finishWithInput(state.id, tools, item.id, item.arguments)
     const events: LLMEvent[] = []
     const finished = result.events ?? []
     // A done-only call never streamed a start event, so open its lifecycle here.
     const resultEvents =
-      registered !== undefined || finished.length === 0
+      registered || finished.length === 0
         ? finished
         : [LLMEvent.toolInputStart({ id: callID, name: item.name, providerMetadata: metadata }), ...finished]
     const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
@@ -1257,12 +1249,7 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
   const events: LLMEvent[] = []
   if (event.type === "response.completed") {
     for (const item of event.response?.output ?? []) {
-      if (
-        item.type !== "function_call" ||
-        !item.call_id ||
-        !Object.values(current.tools).some((tool) => tool?.id === item.call_id)
-      )
-        continue
+      if (item.type !== "function_call" || !current.tools[item.id]) continue
       const [next, emitted] = yield* onOutputItemDone(current, item)
       current = next
       events.push(...emitted)
@@ -1373,8 +1360,6 @@ export const step = (state: ParserState, input: Event) => {
       ? Effect.succeed(onReasoningSummaryPartDone(state, event))
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.added") {
-    if (event.item?.type === "message" && event.item.id === undefined)
-      return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
     if (
       event.item &&
       isReasoningItem(event.item) &&
@@ -1382,11 +1367,10 @@ export const step = (state: ParserState, input: Event) => {
       state.lifecycle.reasoning.size > 0
     )
       return ProviderShared.eventError(state.id, `${event.type} started reasoning before the previous item ended`)
-    const id = event.item?.id ?? (event.item?.type === "function_call" ? event.item.call_id : undefined)
     return Effect.succeed(
       onOutputItemAdded(
-        event.output_index !== undefined && id !== undefined
-          ? { ...state, outputItems: { ...state.outputItems, [event.output_index]: id } }
+        event.output_index !== undefined && event.item !== null && event.item !== undefined
+          ? { ...state, outputItems: { ...state.outputItems, [event.output_index]: event.item.id } }
           : state,
         event,
       ),
@@ -1397,8 +1381,6 @@ export const step = (state: ParserState, input: Event) => {
       ? onFunctionCallArgumentsDelta(state, event)
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done") {
-    if (event.item?.type === "message" && event.item.id === undefined)
-      return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
     return onOutputItemDone(state, event.item)
   }
   if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
