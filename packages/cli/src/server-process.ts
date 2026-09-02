@@ -195,8 +195,9 @@ const spawnReplacement = Effect.fnUntraced(function* (handoff: PersistentPty.Han
   const options = yield* ServiceConfig.options()
   const [command, ...args] = options.command
   if (!command) return yield* Effect.fail(new Error("Failed to resolve CLI command for restart"))
-  // We do not monitor the replacement after spawn. A managed TUI recovers with Service.ensure if startup fails;
-  // a future client restart signal could coordinate that recovery instead.
+  // We do not monitor the replacement after spawn. A managed TUI
+  // recovers with Service.ensure if startup fails; a future client
+  // restart signal could coordinate that recovery instead.
   yield* Effect.tryPromise({
     try: () =>
       new Promise<void>((resolve, reject) => {
