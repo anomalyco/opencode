@@ -83,10 +83,7 @@ export function SessionBrowserPane(props: {
   })
 
   return (
-    <aside
-      id="browser-panel"
-      class="relative size-full min-w-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] flex flex-col"
-    >
+    <aside id="browser-panel" class="relative size-full min-w-0 overflow-hidden bg-v2-background-bg-base flex flex-col">
       <div class="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-v2-border-border-muted bg-v2-background-bg-layer-02">
         <For each={["back", "forward"] as const}>
           {(direction) => (
