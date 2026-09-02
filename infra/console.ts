@@ -227,6 +227,7 @@ const migrationDomain =
 const consoleMigration = new sst.Linkable("ConsoleMigration", {
   properties: {
     consoleUrl: migrationDomain ? `https://${migrationDomain}/console` : "",
+    inferenceUrl: migrationDomain ? `https://${migrationDomain}/inference` : "",
   },
 })
 const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
