@@ -36,6 +36,71 @@ const refusingBinder = (input: {
 const answered = (position: string, at: number, detected: unknown = position) =>
   ({ position, at, detected }) satisfies BackgroundJob.Detected
 
+// ---------------------------------------------------------------------------------------------
+// CP-032 T-032-6 core floor matrix (A1-A9) helpers
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * A run shaped like a SCOPED Task sequence: detect, ANNOUNCE the unresolved eligibility decision,
+ * then park on the decision (`task.ts` `eligible` — announce with no await in between, then one
+ * `Scope.result()`).
+ *
+ * `ready` completes AFTER the announcement has landed, so a test never has to guess when the floor
+ * became live; every A-row that depends on an installed floor awaits it rather than sleeping.
+ */
+const announcing = (input: {
+  readonly ready?: Deferred.Deferred<void>
+  readonly body: Effect.Effect<BackgroundJob.SequenceOutcome, unknown>
+}): Effect.Effect<BackgroundJob.SequenceOutcome, unknown, BackgroundJob.Announce> =>
+  Effect.gen(function* () {
+    const announce = yield* BackgroundJob.Announce
+    yield* announce()
+    if (input.ready) yield* Deferred.succeed(input.ready, undefined)
+    return yield* input.body
+  })
+
+/** The same run shape WITHOUT the announcement — the control arm, and R-06's unannounced work. */
+const silent = (input: {
+  readonly ready?: Deferred.Deferred<void>
+  readonly body: Effect.Effect<BackgroundJob.SequenceOutcome, unknown>
+}): Effect.Effect<BackgroundJob.SequenceOutcome, unknown, BackgroundJob.Announce> =>
+  Effect.gen(function* () {
+    if (input.ready) yield* Deferred.succeed(input.ready, undefined)
+    return yield* input.body
+  })
+
+type Observed =
+  | { readonly tag: "delivered"; readonly result: BackgroundJob.WaitAnswerResult }
+  | { readonly tag: "withheld"; readonly result: undefined }
+
+/**
+ * Bounded NEGATIVE observation, the established convention in this file (T-05a, T-42): race the
+ * gate against a real sleep and report which won. Nothing waits ON the sleep — a correct floor
+ * withholds forever, so the window only has to be long enough to expose an escape.
+ *
+ * It returns the winning result rather than a tag alone, because a race that DELIVERS has already
+ * advanced the log's base index; discarding it would lose the answer the row still has to assert.
+ */
+const observation = (self: Effect.Effect<BackgroundJob.WaitAnswerResult>, windowMillis = 150) =>
+  Effect.race(
+    self.pipe(Effect.map((result): Observed => ({ tag: "delivered", result }))),
+    Effect.sleep(windowMillis).pipe(Effect.as({ tag: "withheld", result: undefined } satisfies Observed)),
+  )
+
+/**
+ * Bounded POSITIVE await. Every positive oracle below is on something a floor regression withholds
+ * FOREVER rather than gets wrong, and Bun's per-test timeout fails the test without interrupting
+ * the fiber — an unbounded await would wedge the runner instead of reporting. Far above any honest
+ * path; reaching it is always a defect.
+ */
+const within = <A, E, R>(self: Effect.Effect<A, E, R>, what: string) =>
+  self.pipe(
+    Effect.timeoutOption(10_000),
+    Effect.flatMap((option) =>
+      option._tag === "Some" ? Effect.succeed(option.value) : Effect.die(new Error(`${what} — withheld forever`)),
+    ),
+  )
+
 describe("BackgroundJob.AnswerLog", () => {
   const publish = (state: BackgroundJob.AnswerLog.State, position: string, at: number, sequence = 0) =>
     BackgroundJob.AnswerLog.transition(state, {
@@ -139,7 +204,6 @@ describe("BackgroundJob.AnswerLog", () => {
     if (second._tag !== "answer") return
     expect(second.answer.detected).toBe("m2")
   })
-
 })
 
 describe("BackgroundJob.settleAdmissibility", () => {
@@ -1010,46 +1074,44 @@ describe("BackgroundJob", () => {
     }),
   )
 
-  it.live(
-    "answers an exact-handle mode read for the accepted lifetime across same-id replacement (re-audit M3)",
-    () =>
-      Effect.gen(function* () {
-        const jobs = yield* BackgroundJob.Service
-        // The supplemental receipt is keyed by the ACCEPTED lifetime's delivery mode, read
-        // through its exact invocation handle at receipt time. The public id is reusable:
-        // after the accepted lifetime terminalizes, a same-id replacement can install with
-        // the OPPOSITE mode. The exact-handle read must keep answering for the accepted
-        // lifetime (bindings survive replacement) while an id read describes the
-        // replacement — the deterministic form of the receipt ABA race (task.ts
-        // `supplementReceipt` reads `waitHandle`, never `get(id)`).
-        const id = "job_m3_receipt_aba"
-        const first = yield* jobs.startExact({
-          admission,
-          id,
-          type: "test",
-          run: Effect.succeed(answered("p_first", 1, "first")),
-        })
-        if (!first.lifetime || !first.handle) return yield* Effect.die("first did not arm")
-        expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+  it.live("answers an exact-handle mode read for the accepted lifetime across same-id replacement (re-audit M3)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      // The supplemental receipt is keyed by the ACCEPTED lifetime's delivery mode, read
+      // through its exact invocation handle at receipt time. The public id is reusable:
+      // after the accepted lifetime terminalizes, a same-id replacement can install with
+      // the OPPOSITE mode. The exact-handle read must keep answering for the accepted
+      // lifetime (bindings survive replacement) while an id read describes the
+      // replacement — the deterministic form of the receipt ABA race (task.ts
+      // `supplementReceipt` reads `waitHandle`, never `get(id)`).
+      const id = "job_m3_receipt_aba"
+      const first = yield* jobs.startExact({
+        admission,
+        id,
+        type: "test",
+        run: Effect.succeed(answered("p_first", 1, "first")),
+      })
+      if (!first.lifetime || !first.handle) return yield* Effect.die("first did not arm")
+      expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
 
-        const second = yield* jobs.startExact({
-          admission,
-          id,
-          type: "test",
-          metadata: { background: true },
-          run: Effect.succeed(answered("p_second", 2, "second")),
-        })
-        if (!second.lifetime || !second.handle) return yield* Effect.die("replacement did not arm")
+      const second = yield* jobs.startExact({
+        admission,
+        id,
+        type: "test",
+        metadata: { background: true },
+        run: Effect.succeed(answered("p_second", 2, "second")),
+      })
+      if (!second.lifetime || !second.handle) return yield* Effect.die("replacement did not arm")
 
-        // The exact-handle read answers for the ACCEPTED (foreground) lifetime…
-        const viaHandle = yield* jobs.waitHandle({ handle: first.handle, timeout: 0 })
-        expect(viaHandle.info?.metadata?.background).toBeUndefined()
-        expect(viaHandle.info?.status).toBe("completed")
-        // …while the reusable public id now describes the background replacement. A receipt
-        // built from this read would promise async delivery the accepted sequence never had.
-        const viaId = yield* jobs.get(id)
-        expect(viaId?.metadata?.background).toBe(true)
-      }).pipe(Effect.provide(jobsLayer)),
+      // The exact-handle read answers for the ACCEPTED (foreground) lifetime…
+      const viaHandle = yield* jobs.waitHandle({ handle: first.handle, timeout: 0 })
+      expect(viaHandle.info?.metadata?.background).toBeUndefined()
+      expect(viaHandle.info?.status).toBe("completed")
+      // …while the reusable public id now describes the background replacement. A receipt
+      // built from this read would promise async delivery the accepted sequence never had.
+      const viaId = yield* jobs.get(id)
+      expect(viaId?.metadata?.background).toBe(true)
+    }).pipe(Effect.provide(jobsLayer)),
   )
 
   it.live("buffers foreground filings and publishes nothing before disposition (T-05a)", () =>
@@ -1441,9 +1503,7 @@ describe("BackgroundJob", () => {
         const holdOwner = yield* Deferred.make<void>()
         const extBindEntered = yield* Deferred.make<void>()
         const releaseExtBind = yield* Deferred.make<void>()
-        const jobs = yield* BackgroundJob.makeWith(
-          refusingBinder({ entered: extBindEntered, release: releaseExtBind }),
-        )
+        const jobs = yield* BackgroundJob.makeWith(refusingBinder({ entered: extBindEntered, release: releaseExtBind }))
         const started = yield* jobs.startExact({
           admission,
           id: "job_unreserve_strand",
@@ -1511,9 +1571,7 @@ describe("BackgroundJob", () => {
         const holdOwner = yield* Deferred.make<void>()
         const extBindEntered = yield* Deferred.make<void>()
         const releaseExtBind = yield* Deferred.make<void>()
-        const jobs = yield* BackgroundJob.makeWith(
-          refusingBinder({ entered: extBindEntered, release: releaseExtBind }),
-        )
+        const jobs = yield* BackgroundJob.makeWith(refusingBinder({ entered: extBindEntered, release: releaseExtBind }))
         const started = yield* jobs.startExact({
           admission,
           id: "job_unreserve_observer",
@@ -1620,7 +1678,12 @@ describe("BackgroundJob", () => {
 
       const settled = yield* jobs.wait({ id: input.id, timeout: 1000 })
       const retained = yield* jobs.waitAnswer({ handle: started.handle, after: 0 })
-      return { status: settled.info?.status, output: settled.info?.output, retained: retained.answer?.detected, winners }
+      return {
+        status: settled.info?.status,
+        output: settled.info?.output,
+        retained: retained.answer?.detected,
+        winners,
+      }
     })
 
   it.live("cancels the lifetime when the last extension is refused because cancellation owns it", () =>
@@ -1806,5 +1869,534 @@ describe("BackgroundJob", () => {
       expect(plantedClear.match(/announced\.delete\(sequence\)/g)).toHaveLength(2)
       expect("x.announced.clear()".match(/announced\.clear\(\)/g)).toHaveLength(1)
     }),
+  )
+
+  // -------------------------------------------------------------------------------------------
+  // CP-032 T-032-6 — THE LIVE SEQUENCE FLOOR (A1-A9)
+  //
+  // WHY THESE LIVE HERE AND NOT IN THE TASK SUITE. Two TaskTool runs of one child session share a
+  // single attachment-scope one-shot Deferred, so "a LATER sequence is ready while an EARLIER one
+  // is still announced" cannot be scheduled through the Task surface without a forbidden hook. The
+  // shipped registry IS the deterministic floor surface: real `startExact`/`extendExact`, the real
+  // fork, the real `Announce` capability, real `settle`, real `waitAnswer`. Every row below drives
+  // production code and asserts through the public API only.
+  //
+  // The pure `AnswerLog` cells above fix the TRANSITION. These fix the WIRING around it: who
+  // announces, which clear fires on which exit, and what the observer computes.
+  // -------------------------------------------------------------------------------------------
+
+  it.live("withholds a later sequence while an earlier one is announced, then releases in order (A1)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      // ONE construction, run twice. `announce` is the ONLY difference between the arms, so the
+      // control is what makes the negative causal: with no announcement the identical later filing
+      // must deliver immediately. Without it, "withheld" could just mean "had not filed yet".
+      const arm = (id: string, announce: boolean) =>
+        Effect.gen(function* () {
+          const ready = yield* Deferred.make<void>()
+          const holdOwner = yield* Deferred.make<void>()
+          const shape = announce ? announcing : silent
+          const started = yield* jobs.startExact({
+            admission,
+            id,
+            type: "test",
+            // Observed: a filed position enters the log the moment it files, which is the only
+            // mode in which the delivery floor is reachable at all.
+            metadata: { background: true },
+            run: shape({ ready, body: Deferred.await(holdOwner).pipe(Effect.as(answered("p_owner", 100, "owner"))) }),
+          })
+          if (!started.handle) return yield* Effect.die("owner did not arm")
+          // The floor is live before the later sequence is even admitted — no sleep, no guess.
+          yield* Deferred.await(ready)
+
+          const later = yield* jobs.extendWithHandle({
+            id,
+            admission,
+            // Detects, announces and resolves in one step, so it files while sequence 0 is parked.
+            run: announcing({ body: Effect.succeed(answered("p_later", 200, "later")) }),
+          })
+          expect(later).toBeDefined()
+
+          const early = yield* observation(jobs.waitAnswer({ handle: started.handle, after: 0 }))
+          yield* Deferred.succeed(holdOwner, undefined)
+          const first = yield* within(jobs.waitAnswer({ handle: started.handle, after: 0 }), `${id} first answer`)
+          const second = yield* within(jobs.waitAnswer({ handle: started.handle, after: 1 }), `${id} second answer`)
+          return { early, first, second }
+        })
+
+      const announced = yield* arm("job_a1_announced", true)
+      const control = yield* arm("job_a1_control", false)
+
+      // ANNOUNCED: sequence 1 filed first in TIME and is still withheld, because sequence 0 has an
+      // outstanding eligibility decision. Releasing it produces conversation order with dense
+      // indexes — the owner's older `at` takes index 0 even though it filed second.
+      expect(announced.early.tag).toBe("withheld")
+      expect(announced.first.answer?.detected).toBe("owner")
+      expect(announced.first.answer?.index).toBe(0)
+      expect(announced.second.answer?.detected).toBe("later")
+      expect(announced.second.answer?.index).toBe(1)
+
+      // CONTROL: identical run, no announcement, no floor — R-06's "accepted-but-unannounced work
+      // installs no floor". The same later filing delivers immediately and takes index 0.
+      expect(control.early.tag).toBe("delivered")
+      expect(control.early.result?.answer?.detected).toBe("later")
+      expect(control.early.result?.answer?.index).toBe(0)
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("uses the MINIMUM announced sequence as the floor, not the maximum or a chronology (A2)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_a2_minimum_floor"
+      const ready0 = yield* Deferred.make<void>()
+      const ready2 = yield* Deferred.make<void>()
+      const hold0 = yield* Deferred.make<void>()
+      const hold2 = yield* Deferred.make<void>()
+
+      // Sequence 0 announces and parks.
+      const started = yield* jobs.startExact({
+        admission,
+        id,
+        type: "test",
+        metadata: { background: true },
+        run: announcing({ ready: ready0, body: Deferred.await(hold0).pipe(Effect.as(undefined)) }),
+      })
+      if (!started.handle) return yield* Effect.die("owner did not arm")
+      yield* Deferred.await(ready0)
+
+      // Sequence 1 files. Sequence 2 announces and parks. Sequence 3 files. Registration order is
+      // what fixes the coordinates, so each row below names a real admission sequence.
+      expect(
+        yield* jobs.extendWithHandle({
+          id,
+          admission,
+          run: announcing({ body: Effect.succeed(answered("p_seq1", 100, "seq1")) }),
+        }),
+      ).toBeDefined()
+      expect(
+        yield* jobs.extendWithHandle({
+          id,
+          admission,
+          run: announcing({ ready: ready2, body: Deferred.await(hold2).pipe(Effect.as(undefined)) }),
+        }),
+      ).toBeDefined()
+      yield* Deferred.await(ready2)
+      expect(
+        yield* jobs.extendWithHandle({
+          id,
+          admission,
+          run: announcing({ body: Effect.succeed(answered("p_seq3", 300, "seq3")) }),
+        }),
+      ).toBeDefined()
+
+      // Floor is min(0, 2) = 0. BOTH filed answers are later, so both are withheld. A MAXIMUM floor
+      // would be 2 here and would release sequence 1 immediately.
+      expect((yield* observation(jobs.waitAnswer({ handle: started.handle, after: 0 }))).tag).toBe("withheld")
+
+      // Clearing 0 moves the floor to 2 — the next-lowest OUTSTANDING decision, not "no floor".
+      yield* Deferred.succeed(hold0, undefined)
+      const seq1 = yield* within(jobs.waitAnswer({ handle: started.handle, after: 0 }), "sequence 1's answer")
+      expect(seq1.answer?.detected).toBe("seq1")
+      expect(seq1.answer?.index).toBe(0)
+      // Still running: sequence 0 settled with no filing while other work remains, so this release
+      // is the floor moving rather than the lifetime terminalizing and clearing everything.
+      expect((yield* jobs.wait({ id, timeout: 0 })).info?.status).toBe("running")
+
+      // Sequence 3 is ABOVE the new floor and stays withheld — the direct evidence that sequence 2
+      // is still announced rather than the floor having simply disappeared.
+      expect((yield* observation(jobs.waitAnswer({ handle: started.handle, after: 1 }))).tag).toBe("withheld")
+
+      yield* Deferred.succeed(hold2, undefined)
+      const seq3 = yield* within(jobs.waitAnswer({ handle: started.handle, after: 1 }), "sequence 3's answer")
+      expect(seq3.answer?.detected).toBe("seq3")
+      expect(seq3.answer?.index).toBe(1)
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("clears the exact announcement when an announced sequence files nothing (A3)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_a3_no_file_clear"
+      const ready0 = yield* Deferred.make<void>()
+      const hold0 = yield* Deferred.make<void>()
+      const holdTail = yield* Deferred.make<void>()
+
+      // Sequence 0 announces, then resolves its eligibility decision with NO answer — the
+      // cancelled/no-controlling-assistant disposition, which files nothing at all.
+      const started = yield* jobs.startExact({
+        admission,
+        id,
+        type: "test",
+        metadata: { background: true },
+        run: announcing({ ready: ready0, body: Deferred.await(hold0).pipe(Effect.as(undefined)) }),
+      })
+      if (!started.handle) return yield* Effect.die("owner did not arm")
+      yield* Deferred.await(ready0)
+
+      expect(
+        yield* jobs.extendWithHandle({
+          id,
+          admission,
+          run: announcing({ body: Effect.succeed(answered("p_later", 100, "later")) }),
+        }),
+      ).toBeDefined()
+      // A silent tail sequence keeps the lifetime running, so the release below is the NO-FILE
+      // settle's own exact clear and not the terminal ledger-wide clear doing its work.
+      expect(
+        yield* jobs.extendWithHandle({
+          id,
+          admission,
+          run: silent({ body: Deferred.await(holdTail).pipe(Effect.as(undefined)) }),
+        }),
+      ).toBeDefined()
+
+      expect((yield* observation(jobs.waitAnswer({ handle: started.handle, after: 0 }))).tag).toBe("withheld")
+
+      yield* Deferred.succeed(hold0, undefined)
+      const delivered = yield* within(jobs.waitAnswer({ handle: started.handle, after: 0 }), "the later answer")
+      expect(delivered.answer?.detected).toBe("later")
+      // The lifetime is STILL RUNNING, so no terminal clear was available to release the floor.
+      expect((yield* jobs.wait({ id, timeout: 0 })).info?.status).toBe("running")
+
+      yield* Deferred.succeed(holdTail, undefined)
+      expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("strands no floor when an announced run is interrupted before it can settle (A4)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_a4_interruption_clear"
+      const ready0 = yield* Deferred.make<void>()
+      const hold0 = yield* Deferred.make<void>()
+
+      // Sequence 0 announces and parks INTERRUPTIBLY, so the terminal below tears it down before it
+      // can reach its own settle. Source has two nets for this path — `settle`'s `not_running` arm
+      // and the fork's `ensuring` finalizer — and the property they jointly owe is this one: an
+      // interrupted decision must never keep withholding an answer that has already been filed.
+      const started = yield* jobs.startExact({
+        admission,
+        id,
+        type: "test",
+        metadata: { background: true },
+        run: announcing({ ready: ready0, body: Deferred.await(hold0).pipe(Effect.as(undefined)) }),
+      })
+      if (!started.handle) return yield* Effect.die("owner did not arm")
+      yield* Deferred.await(ready0)
+
+      expect(
+        yield* jobs.extendWithHandle({
+          id,
+          admission,
+          run: announcing({ body: Effect.succeed(answered("p_filed", 100, "filed")) }),
+        }),
+      ).toBeDefined()
+      expect((yield* observation(jobs.waitAnswer({ handle: started.handle, after: 0 }))).tag).toBe("withheld")
+
+      // A sibling failure terminalizes with work still pending, which closes the job scope and
+      // interrupts the parked, announced sequence 0.
+      expect(yield* jobs.extend({ admission, id, run: Effect.fail("sibling boom") })).toBe(true)
+      expect((yield* jobs.wait({ id })).info?.status).toBe("error")
+
+      // An error terminal RETAINS filed answers, so the answer is still there to be withheld — and
+      // it must not be. A stranded floor here would return the terminal Info instead.
+      const delivered = yield* within(jobs.waitAnswer({ handle: started.handle, after: 0 }), "the filed answer")
+      expect(delivered.answer?.detected).toBe("filed")
+      expect(delivered.info).toBeUndefined()
+
+      yield* Deferred.succeed(hold0, undefined)
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("clears only its own ledger when a replaced lifetime's run finally settles (A5)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_a5_foreign_token"
+      const readyOld = yield* Deferred.make<void>()
+      const holdOld = yield* Deferred.make<void>()
+      const readyNew = yield* Deferred.make<void>()
+      const holdNew = yield* Deferred.make<void>()
+
+      // BOTH holds release on EVERY exit. The old sequence parks UNINTERRUPTIBLY, so a failing
+      // assertion below would otherwise strand it and its blocked scope close, turning a clean red
+      // into a teardown timeout that reports nothing.
+      yield* Effect.gen(function* () {
+        // The OLD lifetime announces sequence 0 and parks UNINTERRUPTIBLY, so it survives its own
+        // lifetime's teardown and reaches settle/`ensuring` inside the REPLACEMENT's live window.
+        const old = yield* jobs.startExact({
+          admission,
+          id,
+          type: "test",
+          metadata: { background: true },
+          run: announcing({
+            ready: readyOld,
+            body: Deferred.await(holdOld).pipe(Effect.as(undefined), Effect.uninterruptible),
+          }),
+        })
+        if (!old.lifetime || !old.handle) return yield* Effect.die("old lifetime did not arm")
+        yield* Deferred.await(readyOld)
+        expect(yield* jobs.extend({ admission, id, run: Effect.fail("sibling boom") })).toBe(true)
+        expect((yield* jobs.waitExact({ lifetime: old.lifetime })).info?.status).toBe("error")
+
+        // The replacement takes the same public id with its OWN ledger, and installs its own floor at
+        // the same sequence number — which is what makes an occupant-keyed clear indistinguishable
+        // from a ledger-keyed one unless the old run acts while this floor is live.
+        const replacement = yield* jobs.startExact({
+          admission,
+          id,
+          type: "test",
+          metadata: { background: true },
+          run: announcing({
+            ready: readyNew,
+            body: Deferred.await(holdNew).pipe(Effect.as(answered("p_new_owner", 100, "new owner"))),
+          }),
+        })
+        if (!replacement.lifetime || !replacement.handle) return yield* Effect.die("replacement did not arm")
+        expect(replacement.lifetime.token).not.toBe(old.lifetime.token)
+        yield* Deferred.await(readyNew)
+        expect(
+          yield* jobs.extendWithHandle({
+            id,
+            admission,
+            run: announcing({ body: Effect.succeed(answered("p_new_later", 200, "new later")) }),
+          }),
+        ).toBeDefined()
+        expect((yield* observation(jobs.waitAnswer({ handle: replacement.handle, after: 0 }))).tag).toBe("withheld")
+
+        // Release the old run INTO the replacement's live window. Its settle is `foreign_token` and
+        // touches nothing; its `ensuring` clears the ledger it CLOSED OVER. Neither may reach the
+        // replacement's ledger, whose sequence 0 announcement is still outstanding.
+        yield* Deferred.succeed(holdOld, undefined)
+        yield* Effect.yieldNow
+        yield* Effect.yieldNow
+        yield* Effect.sleep("20 millis")
+
+        expect((yield* observation(jobs.waitAnswer({ handle: replacement.handle, after: 0 }))).tag).toBe("withheld")
+        expect((yield* jobs.wait({ id, timeout: 0 })).info?.status).toBe("running")
+
+        // The replacement is unpolluted: its own floor released on its own terms, in order.
+        yield* Deferred.succeed(holdNew, undefined)
+        const first = yield* within(jobs.waitAnswer({ handle: replacement.handle, after: 0 }), "replacement's first")
+        expect(first.answer?.detected).toBe("new owner")
+        expect(first.answer?.index).toBe(0)
+        const second = yield* within(jobs.waitAnswer({ handle: replacement.handle, after: 1 }), "replacement's second")
+        expect(second.answer?.detected).toBe("new later")
+        expect(second.answer?.index).toBe(1)
+
+        // The old ledger filed nothing and holds no stranded floor: its handle reports its own
+        // terminal truth rather than parking behind an announcement that can never resolve.
+        const oldRead = yield* within(jobs.waitAnswer({ handle: old.handle, after: 0 }), "the old handle's read")
+        expect(oldRead.answer).toBeUndefined()
+        expect(oldRead.info?.status).toBe("error")
+      }).pipe(
+        Effect.ensuring(
+          Deferred.succeed(holdOld, undefined).pipe(
+            Effect.andThen(Deferred.succeed(holdNew, undefined)),
+            Effect.asVoid,
+          ),
+        ),
+      )
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("clears the whole announced set at a terminal disposition (A6)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_a6_terminal_clear"
+      const ready0 = yield* Deferred.make<void>()
+      const hold0 = yield* Deferred.make<void>()
+
+      // The hold releases on EVERY exit, for the reason A5 and A7 give: an uninterruptibly parked
+      // sequence left holding its scope turns a failing assertion into a teardown timeout.
+      yield* Effect.gen(function* () {
+        // UNINTERRUPTIBLE on purpose: the parked sequence survives the scope close, so it can never
+        // reach its own exact clear while the oracle reads. The ledger-wide clear at terminalization
+        // is then the ONLY thing that can release the floor, which is what this row pins.
+        const started = yield* jobs.startExact({
+          admission,
+          id,
+          type: "test",
+          metadata: { background: true },
+          run: announcing({
+            ready: ready0,
+            body: Deferred.await(hold0).pipe(Effect.as(undefined), Effect.uninterruptible),
+          }),
+        })
+        if (!started.handle) return yield* Effect.die("owner did not arm")
+        yield* Deferred.await(ready0)
+
+        expect(
+          yield* jobs.extendWithHandle({
+            id,
+            admission,
+            run: announcing({ body: Effect.succeed(answered("p_retained", 100, "retained")) }),
+          }),
+        ).toBeDefined()
+        expect((yield* observation(jobs.waitAnswer({ handle: started.handle, after: 0 }))).tag).toBe("withheld")
+
+        expect(yield* jobs.extend({ admission, id, run: Effect.fail("sibling boom") })).toBe(true)
+        expect((yield* jobs.wait({ id })).info?.status).toBe("error")
+
+        // Nothing can file past the status guard, so withholding for an outstanding decision would
+        // stall retained delivery forever. The retained answer must come out, then the terminal.
+        const delivered = yield* within(jobs.waitAnswer({ handle: started.handle, after: 0 }), "the retained answer")
+        expect(delivered.answer?.detected).toBe("retained")
+        const terminal = yield* within(
+          jobs.waitAnswer({ handle: started.handle, after: 1 }),
+          "the terminal observation",
+        )
+        expect(terminal.answer).toBeUndefined()
+        expect(terminal.info?.status).toBe("error")
+
+        yield* Deferred.succeed(hold0, undefined)
+      }).pipe(Effect.ensuring(Deferred.succeed(hold0, undefined).pipe(Effect.asVoid)))
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("clears the whole announced set when the lifetime is cancelled (A7)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_a7_cancel_clear"
+      const ready0 = yield* Deferred.make<void>()
+      const hold0 = yield* Deferred.make<void>()
+
+      const started = yield* jobs.startExact({
+        admission,
+        id,
+        type: "test",
+        metadata: { background: true },
+        run: announcing({
+          ready: ready0,
+          body: Deferred.await(hold0).pipe(Effect.as(undefined), Effect.uninterruptible),
+        }),
+      })
+      if (!started.lifetime || !started.handle) return yield* Effect.die("owner did not arm")
+      yield* Deferred.await(ready0)
+
+      // The hold is released on EVERY exit. `cancelOn` awaits a scope close that cannot finish
+      // while this sequence is uninterruptibly parked, so a failing assertion below would
+      // otherwise strand the forked canceller and wedge teardown instead of reporting.
+      yield* Effect.gen(function* () {
+        expect(
+          yield* jobs.extendWithHandle({
+            id,
+            admission,
+            run: announcing({ body: Effect.succeed(answered("p_retained", 100, "retained")) }),
+          }),
+        ).toBeDefined()
+        expect((yield* observation(jobs.waitAnswer({ handle: started.handle, after: 0 }))).tag).toBe("withheld")
+
+        // `cancelOn` AWAITS its scope close, and the parked sequence is uninterruptible — so the
+        // call is forked and the oracle reads in the window after the cancelled winner is published
+        // and before the parked run can ever clear its own announcement.
+        const cancelling = yield* jobs.cancelExact(started.lifetime).pipe(Effect.forkScoped)
+        expect((yield* jobs.waitExact({ lifetime: started.lifetime })).info?.status).toBe("cancelled")
+
+        // A cancellation terminal carries no answer payload; filed answers stay retained and
+        // retrievable, which they cannot be if a cancelled lifetime keeps an outstanding floor.
+        const delivered = yield* within(jobs.waitAnswer({ handle: started.handle, after: 0 }), "the retained answer")
+        expect(delivered.answer?.detected).toBe("retained")
+        const terminal = yield* within(jobs.waitAnswer({ handle: started.handle, after: 1 }), "the cancelled terminal")
+        expect(terminal.info?.status).toBe("cancelled")
+        expect(Object.hasOwn(terminal.info ?? {}, "output")).toBe(false)
+
+        yield* Deferred.succeed(hold0, undefined)
+        yield* within(Fiber.join(cancelling), "the cancellation never completed its scope close")
+      }).pipe(Effect.ensuring(Deferred.succeed(hold0, undefined).pipe(Effect.asVoid)))
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("adds no timeout and no overtaking escape while the earliest decision is unresolved (A8)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_a8_no_timeout"
+      const ready0 = yield* Deferred.make<void>()
+      const hold0 = yield* Deferred.make<void>()
+
+      const started = yield* jobs.startExact({
+        admission,
+        id,
+        type: "test",
+        metadata: { background: true },
+        run: announcing({ ready: ready0, body: Deferred.await(hold0).pipe(Effect.as(undefined)) }),
+      })
+      if (!started.handle) return yield* Effect.die("owner did not arm")
+      yield* Deferred.await(ready0)
+
+      expect(
+        yield* jobs.extendWithHandle({
+          id,
+          admission,
+          run: announcing({ body: Effect.succeed(answered("p_ready", 100, "ready")) }),
+        }),
+      ).toBeDefined()
+
+      // Unbounded retention behind the earliest unresolved announcement is INTENTIONAL ordinary-use
+      // cost (CP §3.3.1). This window is far longer than any escape a timeout or readiness-based
+      // overtaking rule would plausibly use, and the answer has been ready the whole time.
+      expect((yield* observation(jobs.waitAnswer({ handle: started.handle, after: 0 }), 600)).tag).toBe("withheld")
+      // Nor may the wait manufacture a terminal to escape with: the lifetime is still running.
+      expect((yield* jobs.wait({ id, timeout: 0 })).info?.status).toBe("running")
+
+      // Only the decision resolving releases it.
+      yield* Deferred.succeed(hold0, undefined)
+      const delivered = yield* within(jobs.waitAnswer({ handle: started.handle, after: 0 }), "the ready answer")
+      expect(delivered.answer?.detected).toBe("ready")
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("keeps a promoted buffered answer's original sequence, so the floor still withholds it (A9)", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_a9_promotion_sequence"
+      const ready0 = yield* Deferred.make<void>()
+      const hold0 = yield* Deferred.make<void>()
+      const holdTail = yield* Deferred.make<void>()
+
+      // FOREGROUND at first: sequence 1's answer buffers rather than publishing, so promotion is
+      // what republishes it into the log — the only route on which a promoted answer's sequence
+      // has to be carried rather than invented.
+      const started = yield* jobs.startExact({
+        admission,
+        id,
+        type: "test",
+        run: announcing({ ready: ready0, body: Deferred.await(hold0).pipe(Effect.as(undefined)) }),
+      })
+      if (!started.lifetime || !started.handle) return yield* Effect.die("owner did not arm")
+      yield* Deferred.await(ready0)
+
+      expect(
+        yield* jobs.extendWithHandle({
+          id,
+          admission,
+          run: announcing({ body: Effect.succeed(answered("p_promoted", 200, "promoted")) }),
+        }),
+      ).toBeDefined()
+      // A silent tail keeps the lifetime alive, so the release below is sequence 0's own exact
+      // clear rather than a terminal clear.
+      expect(
+        yield* jobs.extendWithHandle({
+          id,
+          admission,
+          run: silent({ body: Deferred.await(holdTail).pipe(Effect.as(undefined)) }),
+        }),
+      ).toBeDefined()
+
+      expect(yield* jobs.promoteExact(started.lifetime)).toMatchObject({ metadata: { background: true } })
+
+      // Republished under its REAL sequence 1, so the outstanding sequence 0 still withholds it. An
+      // invented or zeroed sequence would order the promoted answer against a fiction and release
+      // it here.
+      expect((yield* observation(jobs.waitAnswer({ handle: started.handle, after: 0 }))).tag).toBe("withheld")
+
+      yield* Deferred.succeed(hold0, undefined)
+      const delivered = yield* within(jobs.waitAnswer({ handle: started.handle, after: 0 }), "the promoted answer")
+      expect(delivered.answer?.detected).toBe("promoted")
+      expect(delivered.answer?.index).toBe(0)
+      expect((yield* jobs.wait({ id, timeout: 0 })).info?.status).toBe("running")
+
+      yield* Deferred.succeed(holdTail, undefined)
+      expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+    }).pipe(Effect.provide(jobsLayer)),
   )
 })
