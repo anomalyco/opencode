@@ -219,6 +219,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const service = managed
     ? {
         reconnect: async (signal: AbortSignal) => {
+          await new Promise((resolve) => setTimeout(resolve, 50))
+          if (signal.aborted) throw signal.reason ?? new Error("Server reconnect cancelled")
           const endpoint = await managed.reconnect(signal)
           const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
           return { api: OpenCode.make(next), url: endpoint.url }
