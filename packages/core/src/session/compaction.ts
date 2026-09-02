@@ -27,13 +27,16 @@ const OUTPUT_TOKEN_MAX = 32_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const IMAGE_TOKEN_ESTIMATE = 1_500
 const PDF_TOKEN_ESTIMATE = 2_000
-const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
+const SUMMARY_TEMPLATE = `You MUST use this format for your response (you may omit sections that aren't applicable). Do not include the <template> tags in your response.
 <template>
 ## Objective
 - [one or two brief sentences describing what the user is trying to accomplish]
 
-## Important Details
-- [constraints/preferences, decisions and why, important facts/assumptions, exact context needed to continue, or "(none)"]
+## Requirements
+- [constraints, preferences, requirements, and scope boundaries, or "(none)"]
+
+## Decisions
+- [decisions already made and why, or "(none)"]
 
 ## Work State
 ### Completed
@@ -50,13 +53,18 @@ const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <te
 2. [next action if known, or "(none)"]
 
 ## Relevant Files
-- [file or directory path: why it matters, or "(none)"]
-</template>
+List files and directories that are important to the conversation. Include paths outside the current working directory when relevant. If none are relevant, write "(none)".
+- \`[exact path]\`: [why it matters]
 
-Rules:
-- Keep every section, even when empty.
+## Additional Context
+- [important facts, assumptions, unresolved questions, exact references, or other context needed to continue that does not fit above; when uncertain, preserve it here, or "(none)"]
+</template>`
+
+const SUMMARY_RULES = `Rules:
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
+- Carry forward any unresolved user question or request awaiting a response, preserving its exact wording.
+- Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
 - Do not mention the summary process or that context was compacted.`
 
 const SUMMARY_HEADINGS = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
@@ -284,13 +292,28 @@ const findTailStart = (messages: readonly SessionMessage.Info[], keepTokens: num
   return previousSummary?.recent ? conversation[0].index : messages.length
 }
 
-export const buildPrompt = () =>
-  [
-    "Create an anchored summary of the conversation above. If it contains an earlier checkpoint, preserve still-true details, remove stale details, and merge in the new facts.",
-    "Summarize only the history shown. Retained recent context may follow this summary when the conversation resumes.",
-    "Do not continue the task or call tools. Output only the summary.",
+export const buildPrompt = (update: boolean) => {
+  const shared = [
+    "Summarize only the history shown. More recent context may be retained and presented after this summary.",
     SUMMARY_TEMPLATE,
+    SUMMARY_RULES,
+    "Do not continue the task or call tools.",
+    "Return only the structured summary in the requested format. Do not include a preamble, explanation, or other commentary.",
+  ]
+  if (update) {
+    return [
+      "Update the existing checkpoint in the conversation above into one consolidated summary.",
+      "Newer history always takes precedence over the existing checkpoint. Preserve previous information unless newer history clearly contradicts, supersedes, resolves, or makes it stale. When uncertain and there is no conflict, retain it under Additional Context.",
+      "Incorporate newer requirements, decisions, progress, and context. Reconcile Work State and Next Move: move completed work out of Active, remove resolved blockers and answered questions, and preserve unresolved or pending work.",
+      "Return only the updated Markdown sections. Do not reproduce the `<conversation-checkpoint>`, `<summary>`, or `<recent-context>` wrapper tags from the previous checkpoint.",
+      ...shared,
+    ].join("\n\n")
+  }
+  return [
+    "You MUST summarize the conversation above into a structured summary that will be given to another agent to resume the work.",
+    ...shared,
   ].join("\n\n")
+}
 
 const hasSummarySection = (summary: string) =>
   summary.split("\n").some((line) => SUMMARY_HEADINGS.includes(line.trim()))
@@ -371,7 +394,11 @@ export const layer = Layer.effect(
           messages: [
             ...transcript.messages,
             ...(input.instructionUpdate ? [Message.system(input.instructionUpdate)] : []),
-            Message.user(buildPrompt()),
+            Message.user(
+              buildPrompt(
+                history.messages.some((message) => message.type === "compaction" && message.status === "completed"),
+              ),
+            ),
           ],
         },
       })

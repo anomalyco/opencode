@@ -1430,7 +1430,6 @@ describe("SessionRunnerLLM", () => {
     yield* runner.drain({ sessionID, force: false, continuation: moved.continuation })
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1]).at(-1)).toContain("Create an anchored summary")
     expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Entry summary\n</summary>")
     expect(yield* s.inbox).toEqual([])
   })
@@ -1955,7 +1954,6 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(4)
     expect(userTexts(s.requests[1])).toContain("Steer after compaction")
     expect(userTexts(s.requests[1])).toContain("Completion after compaction")
-    expect(userTexts(s.requests[2]).at(-1)).toContain("Create an anchored summary")
     expect(userTexts(s.requests[3])).toContain("Queue after compaction")
     expect(yield* SessionInbox.find(s.db, first.id)).toBeUndefined()
     expect((yield* s.messages).find((message) => message.id === first.id)).toMatchObject({
@@ -2055,7 +2053,6 @@ describe("SessionRunnerLLM", () => {
     // Steer-delivered compaction runs at the boundary after the active step, ahead of
     // the queued prompt, and consuming it does not trigger an input-free model call.
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1]).at(-1)).toContain("Create an anchored summary")
     expect(userTexts(s.requests[2])).toContain("Queued prompt")
     expect(yield* SessionInbox.find(s.db, compaction.id)).toBeUndefined()
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
@@ -2080,7 +2077,6 @@ describe("SessionRunnerLLM", () => {
 
     // The compaction summary is requested before the tool turn's continuation step.
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1]).at(-1)).toContain("Create an anchored summary")
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
       status: "completed",
@@ -2160,7 +2156,7 @@ describe("SessionRunnerLLM", () => {
         expect(compact.messages.slice(0, normal.messages.length)).toEqual([...normal.messages])
         expect(compact.messages.at(-1)).toMatchObject({
           role: "user",
-          content: [{ type: "text", text: SessionCompaction.buildPrompt() }],
+          content: [{ type: "text", text: SessionCompaction.buildPrompt(false) }],
         })
         expect(userTexts(compact)).not.toContain("Retained recent request")
         for (const field of [
@@ -2347,6 +2343,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[0])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
     expect(userTexts(s.requests[0])[0]).toContain("Recent exact request")
+    expect(userTexts(s.requests[0]).at(-1)).toBe(SessionCompaction.buildPrompt(true))
     expect((yield* store.context(sessionID))[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the updated task",

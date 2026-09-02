@@ -91,7 +91,7 @@ const it = testEffect(
 )
 
 test("compaction prompt preserves detailed work state and relevant files", () => {
-  const prompt = SessionCompaction.buildPrompt()
+  const prompt = SessionCompaction.buildPrompt(false)
 
   expect(prompt).toContain("## Work State\n### Completed")
   expect(prompt).toContain("### Active")
@@ -123,31 +123,24 @@ test("compaction truncation does not split surrogate pairs", () => {
 })
 
 test("compaction prompt requires the checkpoint headings in order", () => {
-  const prompt = SessionCompaction.buildPrompt()
+  const prompt = SessionCompaction.buildPrompt(false)
   expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
     "## Objective",
-    "## Important Details",
+    "## Requirements",
+    "## Decisions",
     "## Work State",
     "### Completed",
     "### Active",
     "### Blocked",
     "## Next Move",
     "## Relevant Files",
+    "## Additional Context",
   ])
-  expect(prompt).toContain("one or two brief sentences")
-  expect(prompt).toContain("constraints/preferences, decisions and why")
-  expect(prompt).toContain("immediate concrete action")
-  expect(prompt).toContain("next action if known")
-  expect(prompt).toContain("Keep every section, even when empty.")
 })
 
-test("compaction summarizes the preceding conversation without continuing it", () => {
-  const prompt = SessionCompaction.buildPrompt()
-
-  expect(prompt).toContain("conversation above")
-  expect(prompt).toContain("earlier checkpoint")
-  expect(prompt).toContain("Retained recent context may follow")
-  expect(prompt).toContain("Do not continue the task or call tools")
+test("compaction prompts prohibit task execution", () => {
+  for (const update of [false, true])
+    expect(SessionCompaction.buildPrompt(update)).toContain("Do not continue the task or call tools")
 })
 
 it.effect("auto compaction estimates current content against the buffered prompt ceiling", () =>
