@@ -4,6 +4,7 @@ import { SessionID } from "./schema"
 import { Effect, Layer, Context } from "effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionStatusEvent } from "@opencode-ai/schema/session-status-event"
+import { ActiveManifest } from "./active-manifest"
 
 export const Info = SessionStatusEvent.Info
 export type Info = SessionStatusEvent.Info
@@ -42,9 +43,11 @@ const layer = Layer.effect(
       if (status.type === "idle") {
         yield* events.publish(Event.Idle, { sessionID })
         data.delete(sessionID)
+        yield* ActiveManifest.remove(sessionID)
         return
       }
       data.set(sessionID, status)
+      yield* ActiveManifest.write({ id: sessionID, timestamp: Date.now() })
     })
 
     return Service.of({ get, list, set })

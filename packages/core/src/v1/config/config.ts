@@ -187,6 +187,14 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  session: Schema.optional(
+    Schema.Struct({
+      auto_resume: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Automatically resume sessions that were active when opencode crashed (default: false)",
+      }),
+    }),
+  ).annotate({ description: "Session crash recovery configuration" }),
 }).annotate({ identifier: "Config" })
 
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
