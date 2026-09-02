@@ -9,7 +9,9 @@ import { useTheme } from "../context/theme"
 import { useBindings } from "../keymap"
 import { filetype } from "../util/filetype"
 
-type PreviewContent = { kind: "text"; text: string } | { kind: "binary" } | { kind: "error" }
+type PreviewContent = { kind: "text"; text: string } | { kind: "binary" } | { kind: "error" } | { kind: "large" }
+
+const MAX_PREVIEW_CHARS = 512 * 1024
 
 export function DialogPreview() {
   const sdk = useSDK()
@@ -61,6 +63,7 @@ export function DialogPreviewFile(props: { path: string }) {
       const result = await sdk.client.file.read({ path: input.path, workspace: input.workspace })
       if (result.error) return { kind: "error" }
       if (result.data.type === "binary") return { kind: "binary" }
+      if (result.data.content.length > MAX_PREVIEW_CHARS) return { kind: "large" }
       return { kind: "text", text: result.data.content }
     },
   )
@@ -112,6 +115,11 @@ export function DialogPreviewFile(props: { path: string }) {
         <Match when={content()?.kind === "binary"}>
           <box paddingLeft={4} paddingTop={1}>
             <text fg={theme.textMuted}>Binary file — text preview not available</text>
+          </box>
+        </Match>
+        <Match when={content()?.kind === "large"}>
+          <box paddingLeft={4} paddingTop={1}>
+            <text fg={theme.textMuted}>File too large to preview</text>
           </box>
         </Match>
         <Match when={text() !== undefined}>

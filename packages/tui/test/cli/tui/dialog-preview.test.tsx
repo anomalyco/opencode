@@ -135,3 +135,15 @@ test("picker opens a preview for the selected file", async () => {
     app.renderer.destroy()
   }
 })
+
+test("shows a notice for oversized files", async () => {
+  const app = await mountPreview({
+    path: "logs/big.log",
+    content: { type: "text", content: "x".repeat(512 * 1024 + 1) },
+  })
+  try {
+    await waitUntilFrame(app, (frame) => frame.includes("File too large to preview"))
+  } finally {
+    app.renderer.destroy()
+  }
+})
