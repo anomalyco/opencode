@@ -78,7 +78,13 @@ function copy<T>(value: T): T {
   if (Array.isArray(value)) return value.map(copy) as T
   if (value !== null && typeof value === "object") {
     const result: Record<string, unknown> = {}
-    for (const key in value) result[key] = copy((value as Record<string, unknown>)[key])
+    for (const key of Object.keys(value)) {
+      const copied = copy((value as Record<string, unknown>)[key])
+      // Assigning this key would set the prototype rather than an own property, unlike structuredClone.
+      if (key === "__proto__")
+        Object.defineProperty(result, key, { value: copied, enumerable: true, writable: true, configurable: true })
+      else result[key] = copied
+    }
     return result as T
   }
   return value
