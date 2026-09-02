@@ -30,7 +30,9 @@ test("new session tab hugs its content", async ({ page }) => {
   const sessionTab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${href}"])`)
   const draftTab = page.locator('[data-titlebar-tab-slot]:has(a[href^="/new-session?draftId="])')
   await expect(draftTab).toContainText("New session")
-  expect((await draftTab.boundingBox())?.width).toBeLessThan((await sessionTab.boundingBox())?.width ?? 0)
+  const width = (await draftTab.boundingBox())?.width ?? 0
+  expect(width).toBeGreaterThan(100)
+  expect(width).toBeLessThan((await sessionTab.boundingBox())?.width ?? 0)
 })
 
 test("pressing mouse down on a tab navigates before mouse up", async ({ page }) => {
