@@ -72,9 +72,15 @@ describe("run footer width", () => {
 
   test("allocation priority is separate from placement", () => {
     expect(footerStatuslinePolicy({ ...screenshot, width: 15 }).groups.map((group) => group.id)).toEqual(["model"])
+    expect(footerStatuslinePolicy({ ...screenshot, width: 60 }).groups.map((group) => group.id)).toEqual([
+      "agent",
+      "model",
+      "context",
+      "cost",
+    ])
     const full = footerStatuslinePolicy({ ...screenshot, width: 112 })
     expect(full.text).toBe(
-      "Build \u00b7 GPT-5.6 Sol (50% Off) [max] \u00b7 14.1K (1%) \u00b7 $0.04 \u00b7 Anomaly / OpenCode \u00b7 ctrl+p menu",
+      "Build \u00b7 GPT-5.6 Sol (50% Off) [max] \u00b7 14.1K (1%) \u00b7 Anomaly / OpenCode \u00b7 $0.04 \u00b7 ctrl+p menu",
     )
   })
 
