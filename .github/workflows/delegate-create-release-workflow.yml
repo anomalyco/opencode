@@ -1,3 +1,41 @@
+name: Delegation — create Windows release workflow (one-shot)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create_windows_workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with token)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name "repo-delegate[bot]"
+          git config user.email "noreply@github.com"
+
+      - name: Create branch and add windows-release workflow
+        run: |
+          set -e
+          BRANCH=ci/windows-release-workflow
+          # create branch if not exists, otherwise switch to it
+          git fetch origin
+          if git show-ref --verify --quiet refs/heads/$BRANCH; then
+            git checkout $BRANCH
+          else
+            git checkout -b $BRANCH
+          fi
+
+          mkdir -p .github/workflows
+
+          cat > .github/workflows/windows-release.yml <<'YML'
 name: Build Windows NSIS installer (manual)
 
 on:
@@ -106,3 +144,21 @@ SectionEnd
           files: ${{ steps.get_version.outputs.installer_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_SYNC }}
+YML
+
+          git add .github/workflows/windows-release.yml
+          git commit -m "ci: add windows release workflow (NSIS)" || echo "no changes to commit"
+          git push --set-upstream origin $BRANCH
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ci/windows-release-workflow
+          base: omo-custom
+          title: "Add Windows NSIS installer workflow"
+          body: |
+            This PR was created by the delegation workflow. It adds a manual workflow to build a Windows NSIS installer and publish it as a Release asset.
+
+      - name: Done
+        run: echo "Branch and PR created (or already existed)."
