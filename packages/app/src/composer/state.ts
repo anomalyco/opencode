@@ -1,4 +1,4 @@
-import { batch, type Accessor } from "solid-js"
+import { batch, untrack, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
@@ -43,19 +43,16 @@ export function isCommentItem(item: ContextItem | (ContextItem & { key: string }
 function createComposerActions(setStore: SetStoreFunction<ComposerStore>) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
-      const next = clonePrompt(prompt)
-      batch(() => {
-        setStore("prompt", next)
-        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
-        setStore("retry", undefined)
-      })
+      batch(() =>
+        setStore({
+          prompt: clonePrompt(prompt),
+          ...(cursorPosition !== undefined ? { cursor: cursorPosition } : {}),
+          retry: undefined,
+        }),
+      )
     },
     reset() {
-      batch(() => {
-        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
-        setStore("cursor", 0)
-        setStore("retry", undefined)
-      })
+      batch(() => setStore({ prompt: clonePrompt(DEFAULT_PROMPT), cursor: 0, retry: undefined }))
     },
   }
 }
@@ -86,7 +83,9 @@ function initialComposerStore(initial?: InitialPrompt): ComposerStore {
 
 function createComposerStateValue(store: ComposerStore, setStore: SetStoreFunction<ComposerStore>) {
   const actions = createComposerActions(setStore)
-  const clearRetry = () => setStore("retry", undefined)
+  const clearRetry = () => {
+    if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
+  }
   const value = {
     store: [() => store, setStore] as [Accessor<ComposerStore>, SetStoreFunction<ComposerStore>],
     current: () => store.prompt,
@@ -101,8 +100,8 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
     mode: {
       current: () => store.mode ?? "normal",
       set: (mode: "normal" | "shell") => {
-        setStore("mode", mode)
-        clearRetry()
+        if (untrack(() => store.mode === mode && store.retry === undefined)) return
+        setStore({ mode, retry: undefined })
       },
     },
     retry: {
