@@ -25,10 +25,9 @@ import { testEffect } from "../lib/effect"
 // Real Location boot with plugin-directory discovery, so local plugin files are loaded and reloaded.
 setDefaultTimeout(15_000)
 
-// Package resolution for the fake npm below: the entrypoint is a fixture file, and resolving the
-// main entry can be held open so overlapping activations become observable.
+// Package resolution can be held open so overlapping activations become observable.
 const npm = {
-  entrypoint: "",
+  directory: "",
   gate: undefined as Deferred.Deferred<void> | undefined,
   inflight: 0,
   peak: 0,
@@ -37,18 +36,17 @@ const npm = {
 const npmLayer = Layer.succeed(
   Npm.Service,
   Npm.Service.of({
-    add: () => Effect.succeed({ directory: "", entrypoint: npm.entrypoint }),
-    resolve: (_, options) =>
+    add: (name) => Effect.succeed({ directory: npm.directory, name }),
+    resolve: (name) =>
       Effect.gen(function* () {
-        if (!options?.subpaths?.includes("")) return { directory: "", entrypoint: undefined }
         npm.inflight++
         npm.peak = Math.max(npm.peak, npm.inflight)
         if (npm.gate) yield* Deferred.await(npm.gate)
         npm.inflight--
-        return { directory: "", entrypoint: npm.entrypoint }
+        return { directory: npm.directory, name }
       }),
     check: () => Effect.succeed(false),
-    update: () => Effect.succeed({ directory: "", entrypoint: npm.entrypoint }),
+    update: (name) => Effect.succeed({ directory: npm.directory, name }),
     which: () => Effect.undefined,
   }),
 )
@@ -149,10 +147,16 @@ describe("PluginSupervisor reload", () => {
   it.effect("serializes the periodic refresh behind an in-flight reload", () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()
-      npm.entrypoint = path.join(directory.path, "fixture-plugin.ts")
+      npm.directory = path.join(directory.path, "fixture-pkg")
       npm.gate = undefined
       npm.peak = 0
-      yield* Effect.promise(() => Bun.write(npm.entrypoint, greeter("greet-pkg")))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(npm.directory, "package.json"),
+          JSON.stringify({ name: "fixture-pkg", exports: { "./server": "./server.ts" } }),
+        ),
+      )
+      yield* Effect.promise(() => Bun.write(path.join(npm.directory, "server.ts"), greeter("greet-pkg")))
       yield* Effect.promise(() =>
         Bun.write(path.join(directory.path, ".opencode/opencode.json"), JSON.stringify({ plugins: ["fixture-pkg"] })),
       )
