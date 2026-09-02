@@ -144,6 +144,7 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabA).toContainText(sessionA.title)
   await expect(tabB).toContainText(sessionB.title)
   await expect(tabB.locator('[data-slot="tab-project"]')).toHaveText("tab-project")
+  await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toHaveText("Home")
   await expect(sidebar.getByRole("button", { name: "New session" })).toBeVisible()
   await expect
     .poll(async () => {

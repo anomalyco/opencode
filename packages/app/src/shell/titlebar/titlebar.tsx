@@ -438,7 +438,7 @@ export function Titlebar(props: {
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
-                <Show when={!mobile() && !macVerticalTabs()}>{homeButton()}</Show>
+                <Show when={!mobile() && !props.verticalTabs}>{homeButton()}</Show>
 
                 <Show
                   when={!mobile()}
@@ -632,8 +632,8 @@ export function Titlebar(props: {
                                   <TitlebarRightMount />
                                 </div>
                               </div>
-                              {homeButton(true)}
                             </Show>
+                            {homeButton(true)}
                             <button
                               type="button"
                               data-action="vertical-tabs-new-session"
