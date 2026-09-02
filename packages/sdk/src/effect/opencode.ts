@@ -8,7 +8,9 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { EmbeddedHost } from "../internal/host"
 
 export type { LogEntry, LogLevel, LogOptions, LogWriter } from "../logging"
-export type SessionClient = OpenCodeClient["session"]
+export type SessionClient = OpenCodeClient["session"] & {
+  readonly background: OpenCodeClient["session"]["background"]
+}
 
 export type CreateOptions = EmbeddedHost.CreateOptions
 export type EmbedOptions = EmbeddedHost.EmbedOptions

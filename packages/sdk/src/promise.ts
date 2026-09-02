@@ -5,7 +5,9 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { Effect } from "effect"
 import { EmbeddedHost } from "./internal/host"
 
-export type SessionClient = OpenCodeClient["session"]
+export type SessionClient = OpenCodeClient["session"] & {
+  readonly background: OpenCodeClient["session"]["background"]
+}
 
 export interface CreateOptions extends Omit<EmbeddedHost.CreateOptions, "workspaceProviders"> {
   readonly plugins?: ReadonlyArray<Plugin.Plugin>
