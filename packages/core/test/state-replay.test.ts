@@ -48,7 +48,7 @@ describe("State replay properties", () => {
               State.create({
                 initial: (): Value => ({ value: sources[index], order: [] }),
                 draft: (draft) => draft,
-                notify: Effect.sync(() => void notifications[index]++),
+                notify: () => Effect.sync(() => void notifications[index]++),
               }),
             )
             const callbacks = operations.map((operation, index) => (draft: Value) => {

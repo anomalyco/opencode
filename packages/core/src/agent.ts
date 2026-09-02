@@ -87,7 +87,7 @@ const layer = Layer.effect(
           draft.agents.delete(id)
         },
       }),
-      notify: bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid),
     })
     const selectable = (agent: Info | undefined) =>
       agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined

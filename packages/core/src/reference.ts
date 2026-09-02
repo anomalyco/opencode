@@ -99,10 +99,11 @@ const layer = Layer.effect(
         remove: (name) => draft.sources.delete(name),
         list: () => Array.from(draft.sources),
       }),
-      notify: Effect.gen(function* () {
-        yield* refresh().pipe(Effect.forkIn(scope))
-        yield* bus.publish(Reference.Event.Updated, {})
-      }),
+      notify: () =>
+        Effect.gen(function* () {
+          yield* refresh().pipe(Effect.forkIn(scope))
+          yield* bus.publish(Reference.Event.Updated, {})
+        }),
     })
 
     // Check independently of session activity; the shared cache throttles Git work daily.

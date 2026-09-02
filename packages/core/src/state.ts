@@ -73,7 +73,7 @@ function run<A, E, R>(effect: Effect.Effect<A, E, R>, shutdown: boolean) {
 }
 
 /**
- * A `notify` that runs resource reconciliation in the owning layer's FiberSet and awaits it, so work
+ * A `notify` body that runs resource reconciliation in the owning layer's FiberSet and awaits it, so work
  * queued behind the layer's locks is interrupted with the layer. That interruption is not a failure.
  */
 export function reconcile(
@@ -100,11 +100,11 @@ export interface Options<State, DraftApi> {
   /** Wraps mutable state in a domain-specific draft API. */
   readonly draft: MakeDraft<State, DraftApi>
   /**
-   * Observes current state outside the read path. Batched changes notify at
-   * batch completion; reloads debounce notifications. Resource reconciliation
-   * owns its execution scope and coordination.
+   * Observes the freshly rebuilt value outside the read path. Batched changes
+   * notify at batch completion; reloads debounce notifications. Resource
+   * reconciliation owns its execution scope and coordination.
    */
-  readonly notify?: Effect.Effect<void>
+  readonly notify?: (state: State) => Effect.Effect<void>
 }
 
 export interface Interface<State, DraftApi> extends Transformable<DraftApi> {
@@ -137,8 +137,8 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
   // One stable value per State, so a batch's notification Set holds it at most once.
   const notify: Effect.Effect<void> = Effect.gen(function* () {
     if (closed) return
-    get()
-    if (options.notify) yield* options.notify
+    const value = get()
+    if (options.notify) yield* options.notify(value)
   }).pipe(Effect.withSpan("State.notify"))
 
   const changed = (debounce: boolean) =>

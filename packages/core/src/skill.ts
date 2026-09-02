@@ -109,7 +109,7 @@ const layer = Layer.effect(
           draft.skills.delete(ID.make(id))
         },
       }),
-      notify: bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     return Service.of({

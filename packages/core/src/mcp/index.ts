@@ -703,7 +703,7 @@ export const layer = (options?: Options) =>
           },
           remove: (server) => draft.servers.delete(ServerName.make(server)),
         }),
-        notify: State.reconcile(root, fork, () => reconcileLock.withPermit(reconcile())),
+        notify: () => State.reconcile(root, fork, () => reconcileLock.withPermit(reconcile())),
       })
 
       // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.

@@ -149,7 +149,7 @@ const layer = Layer.effect(
       }
     })
 
-    const state: State.Interface<Data, Draft> = State.create<Data, Draft>({
+    const state = State.create<Data, Draft>({
       name: "tool",
       initial: () => ({
         tools: new Map(),
@@ -196,10 +196,9 @@ const layer = Layer.effect(
           draft.tools.delete(id)
         },
       }),
-      // Read errors when the notification runs, not when the State is created.
-      notify: Effect.suspend(() =>
+      notify: (value) =>
         Effect.forEach(
-          state.get().errors,
+          value.errors,
           ({ kind, name, namespace, error }) =>
             Effect.logError(`Skipping invalid ${kind} registration`, {
               name,
@@ -208,7 +207,6 @@ const layer = Layer.effect(
             }),
           { discard: true },
         ),
-      ),
     })
 
     return Service.of({

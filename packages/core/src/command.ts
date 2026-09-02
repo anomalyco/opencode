@@ -60,7 +60,7 @@ export const layer = Layer.effect(
       draft: (draft) => ({
         add: (definition) => draft.set(definition.name, definition),
       }),
-      notify: bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
     })
     const info = (definition: Definition) =>
       Info.make({

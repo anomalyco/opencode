@@ -328,7 +328,7 @@ const layer = Layer.effect(
           },
         },
       }),
-      notify: bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {

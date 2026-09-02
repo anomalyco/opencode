@@ -33,7 +33,8 @@ const layer = Layer.effect(
         add: (ignore) => draft.ignore.push(...ignore),
         list: () => draft.ignore,
       }),
-      notify: Effect.forEach(listeners, (listener) => listener(current()), { discard: true }),
+      // Read per listener: a reentrant transform inside an earlier listener must reach later ones.
+      notify: () => Effect.forEach(listeners, (listener) => listener(current()), { discard: true }),
     })
     // Annotated to break the inference cycle through notify: notify reads current, current reads state.
     const current = (): readonly string[] => state.get().ignore

@@ -13,9 +13,8 @@ describe("State", () => {
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
         draft: (draft) => ({ add: (value: string) => draft.values.push(value) }),
-        notify: block
-          ? Deferred.succeed(rebuilding, undefined).pipe(Effect.andThen(Deferred.await(release)))
-          : Effect.void,
+        notify: () =>
+          block ? Deferred.succeed(rebuilding, undefined).pipe(Effect.andThen(Deferred.await(release))) : Effect.void,
       })
       const scope = yield* Scope.make()
       const fiber = yield* state
@@ -41,7 +40,7 @@ describe("State", () => {
       const state: State.Interface<{ values: string[] }, { add: (item: string) => void }> = State.create({
         initial: () => ({ values: [] as string[] }),
         draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
-        notify: Effect.sync(() => observed.push([...state.get().values])),
+        notify: () => Effect.sync(() => observed.push([...state.get().values])),
       })
 
       yield* state.transform((draft) => {
@@ -103,12 +102,12 @@ describe("State", () => {
       const first = State.create({
         initial: () => ({ values: [] as string[] }),
         draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
-        notify: Effect.sync(() => finalized++),
+        notify: () => Effect.sync(() => finalized++),
       })
       const second = State.create({
         initial: () => ({ values: [] as string[] }),
         draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
-        notify: Effect.sync(() => finalized++),
+        notify: () => Effect.sync(() => finalized++),
       })
 
       yield* State.batch(
@@ -139,7 +138,7 @@ describe("State", () => {
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
         draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
-        notify: Effect.sync(() => finalized++),
+        notify: () => Effect.sync(() => finalized++),
       })
       const scope = yield* Scope.make()
       yield* Scope.addFinalizer(
@@ -169,12 +168,12 @@ describe("State", () => {
       const closing = State.create({
         initial: () => ({}),
         draft: (draft) => draft,
-        notify: Effect.sync(() => finalized.push("closing")),
+        notify: () => Effect.sync(() => finalized.push("closing")),
       })
       const live = State.create({
         initial: () => ({}),
         draft: (draft) => draft,
-        notify: Effect.sync(() => finalized.push("live")),
+        notify: () => Effect.sync(() => finalized.push("live")),
       })
       const scope = yield* Scope.make()
       yield* closing.transform(() => {}).pipe(Scope.provide(scope))
@@ -196,7 +195,7 @@ describe("State", () => {
       const state = State.create({
         initial: () => ({ values: [] as string[] }),
         draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
-        notify: Effect.sync(() => finalized++),
+        notify: () => Effect.sync(() => finalized++),
       })
       yield* state.transform((draft) => {
         draft.add("value")
@@ -278,10 +277,10 @@ describe("State rebuild", () => {
     Effect.gen(function* () {
       const calls: string[] = []
       const notifications: string[][] = []
-      const state: State.Interface<{ values: string[] }, { values: string[] }> = State.create({
+      const state = State.create({
         initial: () => ({ values: new Array<string>() }),
         draft: (data) => data,
-        notify: Effect.sync(() => notifications.push([...state.get().values])),
+        notify: (value) => Effect.sync(() => notifications.push([...value.values])),
       })
       expect(state.get().values).toEqual([])
       yield* State.batch(Effect.void)
@@ -421,7 +420,7 @@ describe("State rebuild", () => {
       const state = State.create({
         initial: () => ({ value: 0 }),
         draft: (data) => data,
-        notify: Effect.sync(() => notifications++),
+        notify: () => Effect.sync(() => notifications++),
       })
       yield* state.transform((draft) => {
         calls++
@@ -540,17 +539,18 @@ describe("State notification boundaries", () => {
           const first = State.create({
             initial: () => ({ value: 0 }),
             draft: (data) => data,
-            notify: Effect.gen(function* () {
-              observed.push("first")
-              if (phase !== "observer" || !block) return
-              yield* Deferred.succeed(entered, undefined)
-              yield* Effect.never
-            }),
+            notify: () =>
+              Effect.gen(function* () {
+                observed.push("first")
+                if (phase !== "observer" || !block) return
+                yield* Deferred.succeed(entered, undefined)
+                yield* Effect.never
+              }),
           })
           const second = State.create({
             initial: () => ({ value: 0 }),
             draft: (data) => data,
-            notify: Effect.sync(() => observed.push("second")),
+            notify: () => Effect.sync(() => observed.push("second")),
           })
           const writer = yield* State.batch(
             Effect.gen(function* () {
@@ -577,7 +577,7 @@ describe("State notification boundaries", () => {
       const state = State.create({
         initial: () => ({ value: 0 }),
         draft: (data) => data,
-        notify: Effect.sync(() => notifications++),
+        notify: () => Effect.sync(() => notifications++),
       })
       const inherit = yield* State.batch(
         Effect.gen(function* () {
@@ -604,12 +604,13 @@ describe("State notification boundaries", () => {
       const state: State.Interface<object, object> = State.create({
         initial: () => ({}),
         draft: (data) => data,
-        notify: Effect.gen(function* () {
-          observed.push(other.get().value)
-          if (added) return
-          added = true
-          yield* state.transform(() => {}).pipe(Scope.provide(scope))
-        }),
+        notify: () =>
+          Effect.gen(function* () {
+            observed.push(other.get().value)
+            if (added) return
+            added = true
+            yield* state.transform(() => {}).pipe(Scope.provide(scope))
+          }),
       })
       yield* State.batch(
         Effect.gen(function* () {
@@ -629,13 +630,14 @@ describe("State notification boundaries", () => {
       const state: State.Interface<{ value: number }, { value: number }> = State.create({
         initial: () => ({ value: 0 }),
         draft: (data) => data,
-        notify: Effect.gen(function* () {
-          observed.push(state.get().value)
-          if (!reloadAgain) return
-          reloadAgain = false
-          source = 3
-          yield* state.reload()
-        }),
+        notify: () =>
+          Effect.gen(function* () {
+            observed.push(state.get().value)
+            if (!reloadAgain) return
+            reloadAgain = false
+            source = 3
+            yield* state.reload()
+          }),
       })
       yield* state.transform((draft) => (draft.value = source))
       source = 2
@@ -654,12 +656,12 @@ describe("State notification boundaries", () => {
       const first = State.create({
         initial: () => ({}),
         draft: (data) => data,
-        notify: Effect.suspend(() => (fail ? Effect.die("observer failed") : Effect.void)),
+        notify: () => (fail ? Effect.die("observer failed") : Effect.void),
       })
       const second = State.create({
         initial: () => ({}),
         draft: (data) => data,
-        notify: Effect.sync(() => observed.push("second")),
+        notify: () => Effect.sync(() => observed.push("second")),
       })
       const exit = yield* State.batch(
         Effect.gen(function* () {
@@ -685,10 +687,11 @@ describe("State notification boundaries", () => {
       const state = State.create({
         initial: () => ({}),
         draft: (data) => data,
-        notify: Effect.sync(() => {
-          notifications++
-          if (fail) throw new Error("notification failed")
-        }),
+        notify: () =>
+          Effect.sync(() => {
+            notifications++
+            if (fail) throw new Error("notification failed")
+          }),
       })
       yield* state.transform(() => {})
       notifications = 0

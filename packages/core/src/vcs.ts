@@ -81,7 +81,7 @@ const layer = Layer.effect(
           set: (selection) => (draft.selection = selection),
         },
       }),
-      notify: State.reconcile(root, fork, () => refresh()),
+      notify: () => State.reconcile(root, fork, () => refresh()),
     })
     const selected = () => {
       const value = state.get()

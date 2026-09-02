@@ -88,7 +88,7 @@ const layer = Layer.effect(
           set: (selection) => (draft.selection = selection),
         },
       }),
-      notify: bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const requireProvider = (providers: Map<ID, ProviderImplementation>, providerID: ID) => {
