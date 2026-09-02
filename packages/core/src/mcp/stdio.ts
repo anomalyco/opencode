@@ -1,8 +1,6 @@
 export * as McpStdio from "./stdio.js"
 
-import { ReadBuffer, serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js"
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
-import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js"
+import { ReadBuffer, serializeMessage, type Transport, type JSONRPCMessage } from "@modelcontextprotocol/client"
 import { Cause, Duration, Effect, Queue, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
@@ -47,7 +45,8 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   // Outgoing frames are queued rather than written to `handle.stdin` directly: the sink closes the
   // stream it is run with, and stdin must stay open across the whole session.
   const outgoing = yield* Queue.bounded<string, Cause.Done>(OUTGOING_CAPACITY)
-  const buffer = new ReadBuffer()
+  // The per-frame limit below also allows a chunk containing several complete frames.
+  const buffer = new ReadBuffer({ maxBufferSize: Infinity })
   const state: { phase: "ready" | "starting" | "open" | "closed"; handle?: ChildProcessHandle } = { phase: "ready" }
   let startup: Promise<void> | undefined
   let closing: Promise<void> | undefined
@@ -74,6 +73,8 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     ))
 
   const transport: Transport = {
+    // Stdio has one shared stream; cancellation uses a notification, not an HTTP stream abort.
+    hasPerRequestStream: false,
     start: () => {
       if (state.phase !== "ready") return Promise.reject(new Error("Stdio transport already started"))
       state.phase = "starting"

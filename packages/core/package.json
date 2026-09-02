@@ -80,6 +80,7 @@
     }
   },
   "devDependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@tsconfig/bun": "catalog:",
@@ -113,7 +114,8 @@
     "@ai-sdk/vercel": "2.0.39",
     "@aws-sdk/credential-providers": "3.1057.0",
     "@lydell/node-pty": "catalog:",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0",
     "@ff-labs/fff-bun": "0.10.5",
     "@ff-labs/fff-node": "0.10.5",
     "@opencode-ai/codemode": "workspace:*",

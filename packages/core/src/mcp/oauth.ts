@@ -1,21 +1,28 @@
 export * as McpOAuth from "./oauth.js"
 
-import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
-import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
+import {
+  auth,
+  type OAuthClientProvider,
+  type OAuthDiscoveryState,
+  type StoredOAuthClientInformation,
+  type StoredOAuthTokens,
+} from "@modelcontextprotocol/client"
 import { Deferred, Effect } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
 
-/** Persists the OAuth artifacts for one MCP server session: DCR client info, PKCE verifier, and tokens. */
+/** Persists the OAuth artifacts for one MCP server session. Discovery state must live as long as PKCE. */
 export interface Store {
-  readonly tokens: () => Promise<OAuthTokens | undefined>
-  readonly saveTokens: (tokens: OAuthTokens) => Promise<void>
-  readonly clientInformation: () => Promise<OAuthClientInformationMixed | undefined>
-  readonly saveClientInformation: (info: OAuthClientInformationMixed) => Promise<void>
+  readonly tokens: () => Promise<StoredOAuthTokens | undefined>
+  readonly saveTokens: (tokens: StoredOAuthTokens) => Promise<void>
+  readonly clientInformation: () => Promise<StoredOAuthClientInformation | undefined>
+  readonly saveClientInformation: (info: StoredOAuthClientInformation) => Promise<void>
   readonly codeVerifier: () => Promise<string | undefined>
   readonly saveCodeVerifier: (verifier: string) => Promise<void>
+  readonly discoveryState?: () => Promise<OAuthDiscoveryState | undefined>
+  readonly saveDiscoveryState?: (state: OAuthDiscoveryState) => Promise<void>
 }
 
 export interface Options {
@@ -57,11 +64,16 @@ export const provider = (options: Options): OAuthClientProvider => {
     // provider has no redirect to validate, so it omits it.
     ...(state !== undefined ? { state: () => state } : {}),
     // Static client config short-circuits dynamic registration; otherwise the SDK registers and we persist.
-    clientInformation: () =>
-      client ? { client_id: client.id, client_secret: client.secret } : options.store.clientInformation(),
+    clientInformation: async () => {
+      const stored = await options.store.clientInformation()
+      if (!client || (stored?.client_id === client.id && stored.client_secret === client.secret)) return stored
+      return { client_id: client.id, client_secret: client.secret }
+    },
     saveClientInformation: (info) => options.store.saveClientInformation(info),
     tokens: () => options.store.tokens(),
     saveTokens: (tokens) => options.store.saveTokens(tokens),
+    discoveryState: options.store.discoveryState,
+    saveDiscoveryState: options.store.saveDiscoveryState,
     redirectToAuthorization: (url) => options.onRedirect(url),
     ...(options.invalidate ? { invalidateCredentials: options.invalidate } : {}),
     saveCodeVerifier: (verifier) => options.store.saveCodeVerifier(verifier),
@@ -77,9 +89,10 @@ export const provider = (options: Options): OAuthClientProvider => {
 
 /** A Store that keeps OAuth artifacts in memory for the duration of one interactive login attempt. */
 export const memoryStore = (): Store => {
-  let tokens: OAuthTokens | undefined
-  let client: OAuthClientInformationMixed | undefined
+  let tokens: StoredOAuthTokens | undefined
+  let client: StoredOAuthClientInformation | undefined
   let verifier: string | undefined
+  let discovery: OAuthDiscoveryState | undefined
   return {
     tokens: async () => tokens,
     saveTokens: async (value) => {
@@ -93,19 +106,23 @@ export const memoryStore = (): Store => {
     saveCodeVerifier: async (value) => {
       verifier = value
     },
+    discoveryState: async () => discovery,
+    saveDiscoveryState: async (value) => {
+      discovery = value
+    },
   }
 }
 
 /** Reads the dynamically-registered client info we stash in a credential's metadata, for token refresh. */
 export const clientFromCredential = (credential: Credential.OAuth) =>
-  credential.metadata?.client as OAuthClientInformationMixed | undefined
+  credential.metadata?.client as StoredOAuthClientInformation | undefined
 
 /** Folds SDK tokens (plus DCR client info and the server URL) into a storable credential. */
 export const toCredential = (input: {
   readonly methodID: Integration.MethodID
   readonly serverUrl: string
-  readonly tokens: OAuthTokens
-  readonly client: OAuthClientInformationMixed | undefined
+  readonly tokens: StoredOAuthTokens
+  readonly client: StoredOAuthClientInformation | undefined
 }) =>
   Credential.OAuth.make({
     type: "oauth",
@@ -117,17 +134,19 @@ export const toCredential = (input: {
     metadata: {
       serverUrl: input.serverUrl,
       tokenType: input.tokens.token_type,
+      ...(input.tokens.issuer !== undefined ? { issuer: input.tokens.issuer } : {}),
       ...(input.tokens.scope ? { scope: input.tokens.scope } : {}),
       ...(input.client ? { client: input.client } : {}),
     },
   })
 
 /** Reconstructs SDK tokens from a stored credential so the connect-time provider can present them. */
-export const toTokens = (credential: Credential.OAuth): OAuthTokens => {
+export const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   const metadata = credential.metadata ?? {}
   return {
     access_token: credential.access,
     token_type: typeof metadata.tokenType === "string" ? metadata.tokenType : "Bearer",
+    ...(typeof metadata.issuer === "string" ? { issuer: metadata.issuer } : {}),
     ...(credential.refresh ? { refresh_token: credential.refresh } : {}),
     ...(credential.expires ? { expires_in: Math.max(0, Math.floor((credential.expires - Date.now()) / 1000)) } : {}),
     ...(typeof metadata.scope === "string" ? { scope: metadata.scope } : {}),
@@ -147,7 +166,7 @@ export const authorize = (input: {
   Effect.gen(function* () {
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
-    const code = yield* Deferred.make<string, Error>()
+    const code = yield* Deferred.make<{ code: string; iss: string | undefined }, Error>()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
@@ -173,7 +192,7 @@ export const authorize = (input: {
       if (url.searchParams.get("state") !== state) return fail("OAuth state mismatch")
       const value = url.searchParams.get("code")
       if (!value) return fail("Missing authorization code")
-      Effect.runFork(Deferred.succeed(code, value))
+      Effect.runFork(Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined }))
       response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: input.name }))
     })
 
@@ -229,7 +248,12 @@ export const authorize = (input: {
         Effect.flatMap((value) =>
           Effect.tryPromise({
             try: () =>
-              auth(oauthProvider, { serverUrl: input.config.url, authorizationCode: value, scope: oauth?.scope }),
+              auth(oauthProvider, {
+                serverUrl: input.config.url,
+                authorizationCode: value.code,
+                iss: value.iss,
+                scope: oauth?.scope,
+              }),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }),
         ),
