@@ -16,6 +16,7 @@ export function SessionTabAvatar(props: {
   const state = useSessionTabAvatarState(
     () => props.server,
     () => props.sessionId,
+    () => true,
   )
   return (
     <SessionTabAvatarView
