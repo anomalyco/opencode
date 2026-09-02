@@ -88,6 +88,8 @@ export function createBrowserPage(win: BrowserWindow, publish: (error?: string) 
     if (!closed) fail()
   })
   view.setVisible(false)
+  // Match the review pane card so the page does not leak past its rounded bottom corners.
+  view.setBorderRadius(10)
   win.contentView.addChildView(view)
   return {
     view,
