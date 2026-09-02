@@ -49,8 +49,7 @@ const SUMMARY_TEMPLATE = `You MUST use this format for your response (you may om
 - [blockers, failing commands, or unknowns; otherwise "(none)"]
 
 ## Next Move
-1. [immediate concrete action, or "(none)"]
-2. [next action if known, or "(none)"]
+1. [ordered list of next actions, or "(none)"]
 
 ## Relevant Files
 List files and directories that are important to the conversation. Include paths outside the current working directory when relevant. If none are relevant, write "(none)".
@@ -63,8 +62,9 @@ List files and directories that are important to the conversation. Include paths
 const SUMMARY_RULES = `Rules:
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
-- Carry forward any unresolved user question or request awaiting a response, preserving its exact wording.
+- Carry forward only user questions or requests that remain unanswered or require further action. Do not repeat ones that newer history has answered or resolved. Preserve exact wording when carrying one forward.
 - Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
+- Do not include ambient environment metadata such as the session ID, current working directory, repository root, current branch, or worktree path. The next agent receives current environment information separately. Include these details only when they directly affect the task.
 - Do not mention the summary process or that context was compacted.`
 
 const SUMMARY_HEADINGS = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
