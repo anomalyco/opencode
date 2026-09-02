@@ -4,6 +4,7 @@ import { Global } from "@opencode-ai/util/global"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { expect, test } from "bun:test"
 import { parse } from "jsonc-parser"
+import { lstat, mkdir, symlink } from "node:fs/promises"
 import path from "path"
 import { Config } from "../src/config"
 import { tmpdir } from "./fixture/tmpdir"
@@ -508,6 +509,119 @@ test("updates a config draft while preserving JSONC comments", async () => {
     },
   })
   expect(await Bun.file(path.join(directory.path, "cli.json")).text()).toContain("// Keep this comment")
+})
+
+test.each(["relative", "absolute"])("updates a %s symlinked cli config without replacing it", async (kind) => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  const target = path.join(directory, "dotfiles", "cli.json")
+  await Bun.write(target, '{\n  // Keep this comment\n  "animations": true\n}\n')
+  await symlink(kind === "relative" ? path.relative(directory, target) : target, file)
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.update((draft) => {
+          draft.mouse = false
+        })
+      }),
+    )
+
+    expect(config).toEqual({ animations: true, mouse: false })
+    expect((await lstat(file)).isSymbolicLink()).toBe(true)
+    expect(parse(await Bun.file(target).text())).toEqual({ animations: true, mouse: false })
+    expect(await Bun.file(target).text()).toContain("// Keep this comment")
+    expect(await Array.fromAsync(new Bun.Glob("*.tmp").scan(path.dirname(target)))).toEqual([])
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
+test.each(["relative", "absolute"])("migrates a %s symlinked cli config without replacing it", async (kind) => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  const target = path.join(directory, "dotfiles", "cli.json")
+  await Bun.write(target, '{\n  // Keep this comment\n  "keybinds": {"session_delete": "ctrl+d"}\n}\n')
+  await symlink(kind === "relative" ? path.relative(directory, target) : target, file)
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }),
+    )
+
+    expect(config.keybinds).toEqual({ "session.delete": "ctrl+d" })
+    expect((await lstat(file)).isSymbolicLink()).toBe(true)
+    expect(parse(await Bun.file(target).text()).keybinds).toEqual({ "session.delete": "ctrl+d" })
+    expect(await Bun.file(target).text()).toContain("// Keep this comment")
+    expect(await Array.fromAsync(new Bun.Glob("*.tmp").scan(path.dirname(target)))).toEqual([])
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
+test("fails to update a broken cli config symlink without replacing it", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await mkdir(directory, { recursive: true })
+  await symlink("missing.json", file, "file")
+
+  try {
+    await expect(
+      run(
+        directory,
+        Effect.gen(function* () {
+          const service = yield* Config.Service
+          return yield* service.update((draft) => {
+            draft.mouse = false
+          })
+        }),
+      ),
+    ).rejects.toThrow("Failed to update CLI config")
+    expect((await lstat(file)).isSymbolicLink()).toBe(true)
+    expect(await Bun.file(path.join(directory, "missing.json")).exists()).toBe(false)
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
+test("fails to migrate through a broken cli config symlink without replacing it", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(path.join(directory, "tui.json"), JSON.stringify({ theme: "legacy" }))
+  await symlink("missing.json", file, "file")
+  const node = await Effect.runPromise(FileSystem.FileSystem.pipe(Effect.provide(NodeFileSystem.layer)))
+  const fs = new Proxy(node, {
+    get(target, property, receiver) {
+      if (property === "exists")
+        return (target: string) => (target === file ? Effect.succeed(true) : node.exists(target))
+      return Reflect.get(target, property, receiver)
+    },
+  })
+
+  try {
+    const config = await Effect.runPromise(
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }).pipe(
+        Effect.provide(Config.layer),
+        Effect.provide(Global.layerWith({ config: directory, state: directory })),
+        Effect.provideService(FileSystem.FileSystem, fs),
+      ),
+    )
+
+    expect(config.theme).toEqual({ name: "legacy" })
+    expect((await lstat(file)).isSymbolicLink()).toBe(true)
+    expect(await Bun.file(path.join(directory, "missing.json")).exists()).toBe(false)
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
 })
 
 async function waitForFile(file: string, exited: Promise<number>) {

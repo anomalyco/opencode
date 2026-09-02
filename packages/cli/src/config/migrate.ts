@@ -4,9 +4,9 @@ import { TuiConfigV1 } from "@opencode-ai/tui/config/v1"
 import { TuiKeybind } from "@opencode-ai/tui/config/v1/keybind"
 import { Definitions } from "@opencode-ai/tui/config/keybind"
 import { Effect, FileSystem, Option, Schema } from "effect"
-import { randomUUID } from "crypto"
 import { applyEdits, createScanner, modify, parse, parseTree, type Node, type ParseError } from "jsonc-parser"
 import path from "path"
+import { ConfigPersistence } from "./persist"
 import { Info, SchemaURL } from "./schema"
 
 const decodeV1 = Schema.decodeUnknownOption(TuiConfigV1.Info)
@@ -21,20 +21,20 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
 }) {
   const fs = yield* FileSystem.FileSystem
   const persist = Effect.fnUntraced(function* (text: string, info: Info) {
-    const temp = `${input.file}.${process.pid}.${randomUUID()}.tmp`
-    const cause = yield* Effect.gen(function* () {
-      yield* fs.makeDirectory(path.dirname(input.file), { recursive: true })
-      yield* fs.writeFileString(temp, text, { mode: 0o600 })
-      yield* fs.rename(temp, input.file)
-    }).pipe(
+    const cause = yield* ConfigPersistence.write(input.file, text).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
       Effect.as(undefined),
       Effect.catchCause((cause) => Effect.succeed(cause)),
-      Effect.ensuring(fs.remove(temp).pipe(Effect.ignore)),
     )
     return cause === undefined ? { info } : { info, cause }
   })
 
-  if (yield* fs.exists(input.file).pipe(Effect.orElseSucceed(() => false))) {
+  if (
+    yield* fs.realPath(input.file).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    )
+  ) {
     const text = yield* fs.readFileString(input.file)
     const errors: ParseError[] = []
     const value: any = parse(text, errors, { allowTrailingComma: true })
