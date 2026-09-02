@@ -1172,12 +1172,15 @@ export default function Page() {
       return
     }
     showAllFiles()
-    const tab = file.tab(path)
-    const normalized = file.pathFromTab(tab) ?? path
-    tabs().previewTab(tab)
-    void file.load(normalized)
-    view().reviewPanel.open()
-    queueMicrotask(() => tabs().setActive(tab))
+    const maybePromise = file.load(path)
+    const open = () => {
+      const tab = file.tab(path)
+      tabs().open(tab)
+      view().reviewPanel.open()
+      tabs().setActive(tab)
+    }
+    if (maybePromise instanceof Promise) void maybePromise.then(open)
+    else open()
   }
 
   const changesLabel = (option: ChangeMode) => {
