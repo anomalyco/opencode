@@ -37,6 +37,7 @@ const windowsTitlebarHeight = 44 // Includes the content inset; matches the nati
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
 const macTrafficLightsBaseWidth = 84
+const macTrafficLightsTopClearance = 28
 
 export type TitlebarUpdate = {
   version: string | undefined
@@ -63,6 +64,7 @@ export function Titlebar(props: {
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
   const macTrafficLights = createMemo(() => mac() && !platform.windowFullscreen?.())
+  const macVerticalTabs = createMemo(() => mac() && !!props.verticalTabs)
   const zoom = () => platform.webviewZoom?.() ?? 1
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const minHeight = () => {
@@ -105,6 +107,7 @@ export function Titlebar(props: {
   const rightState = createMemo<TitlebarRightState>(() => ({
     update: updateState(),
   }))
+  const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
 
   const back = () => {
     const next = backPath(history)
@@ -140,6 +143,7 @@ export function Titlebar(props: {
   return (
     <header
       data-slot="titlebar-v2"
+      hidden={hideVerticalTitlebar()}
       classList={{
         "shrink-0 relative flex flex-row h-9 bg-v2-background-bg-deep overflow-visible": true,
         "order-last": bottom(),
@@ -311,6 +315,48 @@ export function Titlebar(props: {
               }
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+            const homeButton = (vertical = false) => (
+              <Show
+                when={vertical}
+                fallback={
+                  <Tooltip
+                    placement="bottom"
+                    value={
+                      <>
+                        {language.t("home.title")}
+                        <Keybind keys={command.keybindParts("home.toggle")} variant="neutral" />
+                      </>
+                    }
+                    class="shrink-0"
+                  >
+                    <IconButton
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="!w-9 shrink-0"
+                      icon={<Icon name="grid-plus" />}
+                      state={layout.route().type === "home" ? "pressed" : undefined}
+                      onClick={toggleHome}
+                      aria-label={language.t("home.title")}
+                      aria-pressed={layout.route().type === "home"}
+                    />
+                  </Tooltip>
+                }
+              >
+                <button
+                  type="button"
+                  data-action="vertical-tabs-home"
+                  data-state={layout.route().type === "home" ? "pressed" : undefined}
+                  class="mb-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base"
+                  onClick={toggleHome}
+                  aria-label={language.t("home.title")}
+                  aria-pressed={layout.route().type === "home"}
+                >
+                  <Icon name="grid-plus" />
+                  {language.t("home.title")}
+                </button>
+              </Show>
+            )
 
             command.register("titlebar-home", () => [
               {
@@ -386,36 +432,13 @@ export function Titlebar(props: {
                   "md:pl-4": !macTrafficLights(),
                 }}
               >
-                <Show when={!mobile()}>
+                <Show when={!mobile() && !props.verticalTabs}>
                   <ChannelIndicator debugTools={props.debugTools} />
                 </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
-                <Show when={!mobile()}>
-                  <Tooltip
-                    placement="bottom"
-                    value={
-                      <>
-                        {language.t("home.title")}
-                        <Keybind keys={command.keybindParts("home.toggle")} variant="neutral" />
-                      </>
-                    }
-                    class="shrink-0"
-                  >
-                    <IconButton
-                      type="button"
-                      variant="ghost-muted"
-                      size="large"
-                      class="!w-9 shrink-0"
-                      icon={<Icon name="grid-plus" />}
-                      state={layout.route().type === "home" ? "pressed" : undefined}
-                      onClick={toggleHome}
-                      aria-label={language.t("home.title")}
-                      aria-pressed={layout.route().type === "home"}
-                    />
-                  </Tooltip>
-                </Show>
+                <Show when={!mobile() && !props.verticalTabs}>{homeButton()}</Show>
 
                 <Show
                   when={!mobile()}
@@ -595,31 +618,53 @@ export function Titlebar(props: {
                     {(vertical) => (
                       <Show when={vertical().mount} keyed>
                         {(mount) => (
-                          <Portal mount={mount}>
-                            <TitlebarTabStrip
-                              orientation="vertical"
-                              tabs={tabsStore}
-                              currentTab={currentTab()}
-                              onNavigate={(tab, el) => {
-                                tabs.select(tab)
-                                el?.scrollIntoView({ behavior: "instant", block: "nearest" })
-                              }}
-                              onClose={(tab) => {
-                                const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-                                if (index !== -1) tabsStoreActions.closeTab(index)
-                              }}
-                              onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                            />
+                          <Portal
+                            mount={mount}
+                            ref={(element) => (element.className = "flex size-full min-h-0 flex-col")}
+                          >
+                            <Show when={macVerticalTabs()}>
+                              <div
+                                class="relative w-full shrink-0"
+                                style={{ height: `${macTrafficLightsTopClearance / zoom()}px` }}
+                                data-tauri-drag-region
+                              ></div>
+                            </Show>
+                            {homeButton(true)}
                             <button
                               type="button"
                               data-action="vertical-tabs-new-session"
-                              class="mt-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
+                              class="flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
                               onClick={openNewTab}
                               aria-label={language.t("command.session.new")}
                             >
                               <Icon name="plus" />
                               {language.t("command.session.new")}
                             </button>
+                            <div class="my-1 h-px w-full shrink-0 bg-v2-border-border-muted" aria-hidden="true" />
+                            <div class="flex min-h-0 flex-1 flex-col gap-1">
+                              <TitlebarTabStrip
+                                orientation="vertical"
+                                tabs={tabsStore}
+                                currentTab={currentTab()}
+                                onNavigate={(tab, el) => {
+                                  tabs.select(tab)
+                                  el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                                }}
+                                onClose={(tab) => {
+                                  const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                                  if (index !== -1) tabsStoreActions.closeTab(index)
+                                }}
+                                onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                              />
+                            </div>
+                            <div data-slot="vertical-tabs-footer" class="relative mt-auto h-9 w-full shrink-0">
+                              <div class="absolute bottom-0 left-0 flex h-9 items-center">
+                                <ChannelIndicator debugTools={props.debugTools} />
+                              </div>
+                              <div class="absolute bottom-0 right-0 flex h-9 items-center">
+                                <TitlebarRightMount />
+                              </div>
+                            </div>
                           </Portal>
                         )}
                       </Show>
@@ -629,7 +674,7 @@ export function Titlebar(props: {
                 <Show when={!mobile()}>
                   <div class="flex-1" />
                 </Show>
-                <TitlebarRight state={rightState()} />
+                <TitlebarRight state={rightState()} mount={!props.verticalTabs} />
               </div>
             )
           }}
@@ -652,13 +697,15 @@ type TitlebarRightState = {
   update: TitlebarUpdatePillState
 }
 
-function TitlebarRight(props: { state: TitlebarRightState }) {
+function TitlebarRight(props: { state: TitlebarRightState; mount?: boolean }) {
   return (
     <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
       <Show when={props.state.update.visible}>
         <TitlebarUpdateIconButton state={props.state.update} />
       </Show>
-      <TitlebarRightMount />
+      <Show when={props.mount !== false}>
+        <TitlebarRightMount />
+      </Show>
     </div>
   )
 }

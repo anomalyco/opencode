@@ -1088,7 +1088,10 @@ await ctx.session.hook("context", (event) => {
 
 Context changes affect only the outgoing model call, not persisted history or
 configuration. The hook runs again for subsequent calls such as tool-driven
-continuations, but not for title or compaction requests.
+continuations, transient session generation, and compaction, but not for title requests.
+
+Compaction context hooks receive the selected session agent. Its model-request
+and HTTP hooks retain the `compaction` agent identity for provider-specific handling.
 
 Request overrides follow these rules:
 

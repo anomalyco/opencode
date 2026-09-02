@@ -86,6 +86,10 @@
   gap: 2px;
 }
 
+[data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-list][data-orientation="vertical"] {
+  gap: 4px;
+}
+
 [data-titlebar-tab-slot] {
   --tab-separator: var(--v2-background-bg-layer-03);
   position: relative;

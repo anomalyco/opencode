@@ -77,10 +77,19 @@ preserves more recent detail but leaves less room for future work. Larger
 
 ## Checkpoint contents
 
-V2 uses the session's selected or default model to generate the summary, with
-tools disabled and at most 4096 output tokens. The summary records the
-objective, important details, completed and active work, blockers, next moves,
-and relevant files.
+V2 uses the session's selected agent, model, and variant to generate the summary.
+The request reuses the normal instructions, tool definitions, and structured
+history prefix, then appends a user message requesting a checkpoint. Context
+hooks run as they do for normal session requests.
+
+Compaction does not dispatch local tool calls or override tool choice. The
+summary must contain at least one heading from the requested template, such as
+`## Objective`. If it does not, V2 makes one additional request asking the model
+to fill in the template correctly. A second invalid response fails compaction.
+Provider-hosted tools remain subject to the selected provider's behavior.
+
+The summary records the objective, requirements, decisions, completed and active
+work, blockers, next moves, relevant files, and additional context.
 
 The newest serialized context up to `keep.tokens` is retained separately. This
 is not a byte-for-byte transcript: tool output is limited to 2000 characters,

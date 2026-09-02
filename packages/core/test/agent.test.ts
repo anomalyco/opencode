@@ -190,6 +190,13 @@ describe("Agent", () => {
       ])
       expect((yield* agent.get(Agent.defaultID))?.system).toBeUndefined()
       const permissions = (yield* agent.get(Agent.defaultID))?.permissions ?? []
+      const compaction = yield* agent.get(Agent.ID.make("compaction"))
+      expect(compaction?.mode).toBe("primary")
+      expect(compaction?.hidden).toBe(true)
+      expect(compaction?.system).toBeUndefined()
+      expect(compaction?.model).toBeUndefined()
+      expect(compaction?.request).toEqual(Agent.Info.default(Agent.ID.make("compaction")).request)
+      expect(compaction?.permissions).toEqual(permissions.filter((rule) => rule.action !== "question"))
       expect(
         Permission.evaluate("external_directory", path.join(global.data, "shell", "*", "*"), permissions).effect,
       ).toBe("allow")

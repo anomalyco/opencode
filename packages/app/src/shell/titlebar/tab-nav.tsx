@@ -393,8 +393,11 @@ export function DraftTabItem(props: {
       data-active={props.active}
       data-dragging={props.dragging}
       data-state={props.active || props.pressed ? "pressed" : undefined}
-      class="group relative flex h-7 w-full min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] px-1.5 [container-type:inline-size] whitespace-nowrap"
-      classList={{ invisible: props.hidden }}
+      class="group relative flex h-7 min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] px-1.5 whitespace-nowrap"
+      classList={{
+        invisible: props.hidden,
+        "w-full [container-type:inline-size]": props.orientation === "vertical",
+      }}
       onMouseDown={(event) => {
         if (event.button !== MIDDLE_MOUSE_BUTTON) return
         event.preventDefault()
@@ -427,14 +430,16 @@ export function DraftTabItem(props: {
           if (props.suppressNavigation) return
           props.onNavigate()
         }}
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
+        class="flex h-full min-w-0 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
+        classList={{ "flex-1": props.orientation === "vertical", "flex-none pe-10": props.orientation !== "vertical" }}
       >
         <span class="flex size-4 shrink-0 items-center justify-center">
           <Icon name="edit" />
         </span>
         <span
           data-titlebar-tab-title
-          class="min-w-0 flex-1 overflow-hidden text-clip whitespace-nowrap outline-none leading-4"
+          class="min-w-0 overflow-hidden text-clip whitespace-nowrap outline-none leading-4"
+          classList={{ "flex-1": props.orientation === "vertical", "flex-none": props.orientation !== "vertical" }}
         >
           {props.title}
         </span>

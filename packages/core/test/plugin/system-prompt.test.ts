@@ -63,16 +63,21 @@ describe("SystemPromptPlugin", () => {
 
   it.effect("selects model-lab prompts through session context hooks", () =>
     Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
+      yield* catalog.transform((draft) => {
+        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex"])
+          draft.model.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
+      })
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
         discard: true,
       })
       const cases = [
-        ["gpt-5", "You are OpenCode, You and the user share the same workspace"],
-        ["gpt-4.1", "You are OpenCode, You and the user share the same workspace"],
-        ["o3", "You are OpenCode, You and the user share the same workspace"],
-        ["gpt-5-codex", "## Editing constraints"],
+        ["gpt-5", "# Response channels"],
+        ["gpt-4.1", "# Response channels"],
+        ["o3", fallback],
+        ["gpt-5-codex", "# Response channels"],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", "# Professional objectivity"],
         ["kimi-k2", "# Prompt and Tool Use"],
@@ -87,10 +92,31 @@ describe("SystemPromptPlugin", () => {
           const event = context(id)
           return hooks
             .trigger("session", "context", event)
-            .pipe(Effect.tap(() => Effect.sync(() => expect(event.system[0]?.text).toContain(expected))))
+            .pipe(
+              Effect.tap(() =>
+                Effect.sync(() => expect(event.system.map((part) => part.text).join("\n\n")).toContain(expected)),
+              ),
+            )
         },
         { discard: true },
       )
+    }),
+  )
+
+  it.effect("appends the OpenAI extension after the baseline", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
+      yield* catalog.transform((draft) =>
+        draft.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5"), () => {}),
+      )
+      yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
+      const event = context("gpt-5")
+
+      yield* hooks.trigger("session", "context", event)
+
+      expect(event.system.map((part) => part.text)).toEqual([fallback, expect.stringContaining("# Delegation")])
     }),
   )
 
@@ -156,7 +182,7 @@ describe("SystemPromptPlugin", () => {
 
       yield* hooks.trigger("session", "context", event)
 
-      expect(event.system[0]?.text).toBe(fallback)
+      expect(event.system.map((part) => part.text)).toEqual([fallback])
     }),
   )
 
@@ -202,9 +228,12 @@ describe("SystemPromptPlugin", () => {
       yield* hooks.trigger("session", "context", physicalCustom)
       yield* hooks.trigger("session", "context", familyOpenAI)
 
-      expect(physicalOpenAI.system[0]?.text).toContain("You are OpenCode, You and the user share the same workspace")
-      expect(physicalCustom.system[0]?.text).toBe(fallback)
-      expect(familyOpenAI.system[0]?.text).toContain("## Editing constraints")
+      expect(physicalOpenAI.system.map((part) => part.text)).toEqual([
+        fallback,
+        expect.stringContaining("# Delegation"),
+      ])
+      expect(physicalCustom.system.map((part) => part.text)).toEqual([fallback])
+      expect(familyOpenAI.system.map((part) => part.text)).toEqual([fallback, expect.stringContaining("# Delegation")])
     }),
   )
 })
