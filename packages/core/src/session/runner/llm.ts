@@ -201,9 +201,13 @@ const layer = Layer.effect(
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
+      // Agent opted into a fast model for lightweight steps. Prefer the small model when one is
+      // available; fall back to the session model otherwise (never fail a turn for a missing small model).
+      const resolvedSmall = agent.info?.small ? yield* models.resolveSmall(session) : undefined
+      const modelForStep = resolvedSmall ?? model
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
-        model,
+        model: modelForStep,
         http: {
           headers: {
             "x-session-affinity": session.id,
