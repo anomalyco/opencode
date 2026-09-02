@@ -1279,10 +1279,7 @@ export function createData(config: CreateDataInput) {
     load: (location: ReturnType<typeof locationQuery>) => Promise<{ location: LocationRef; data: LocationData[Field] }>,
     options?: { alias?: boolean },
   ) {
-    const publish = (key: string, value: LocationData[Field]) => {
-      if (!store.location[key]) setStore("location", key, {})
-      setStore("location", key, field, value)
-    }
+    const publish = (key: string, value: LocationData[Field]) => setStore("location", key, { [field]: value })
     return {
       list: (ref?: LocationRef) => store.location[locationKey(ref ?? defaultLocation())]?.[field],
       sync: (ref?: LocationRef) => {
