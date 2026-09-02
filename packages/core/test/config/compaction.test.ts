@@ -42,7 +42,7 @@ const it = testEffect(
     AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, SessionModelRequest.node, Config.node, Bus.node]), [
       llmClient.replace(
         Layer.mock(LLMClient.Service)({
-          stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "summary" })),
+          stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "## Objective\n- summary" })),
         }),
       ),
       Config.node.replace(config),
@@ -77,25 +77,26 @@ describe("ConfigCompactionPlugin.Plugin", () => {
       const started = yield* bus
         .subscribe(SessionEvent.Compaction.Started)
         .pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+      const messages = [
+        SessionMessage.User.make({
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text: "Older context",
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+        SessionMessage.User.make({
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text: "Recent context",
+          time: { created: DateTime.makeUnsafe(1) },
+        }),
+      ]
       expect(
         yield* compaction.compactManual({
           session,
-          resolveModel: () => Effect.succeed(resolved),
+          resolveContext: () => Effect.succeed({ ...nearInput.context, messages, instructionUpdate: "" }),
           prepare: modelRequests.prepare,
-          messages: [
-            {
-              id: SessionMessage.ID.create(),
-              type: "user",
-              text: "Older context",
-              time: { created: DateTime.makeUnsafe(0) },
-            },
-            {
-              id: SessionMessage.ID.create(),
-              type: "user",
-              text: "Recent context",
-              time: { created: DateTime.makeUnsafe(1) },
-            },
-          ],
+          messages,
           inputID: SessionMessage.ID.make("msg_compaction_manual"),
         }),
       ).toEqual({ status: "completed" })

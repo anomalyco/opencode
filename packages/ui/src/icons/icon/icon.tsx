@@ -134,7 +134,7 @@ const icons = {
   },
   "window-analytics": {
     viewBox: "0 0 16 16",
-    body: `<g transform="translate(1 2)"><path d="M7 4H11M7 8H11M0.5 0.5V11.5H13.5V0.5H0.5ZM3.5 3.5H4.5V4.5H3.5V3.5ZM3.5 7.5H4.5V8.5H3.5V7.5Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/></g>`,
+    body: `<path d="M14.5 9.8333V13.5H1.5V2.5H7.1667M9.5 2.5V7.5H14.5V2.5H9.5Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>`,
   },
   trash: {
     viewBox: "0 0 20 20",

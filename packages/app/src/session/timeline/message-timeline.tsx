@@ -32,6 +32,7 @@ import { parseCommentNote, readPromptPresentation } from "@/composer/comment-not
 import { useCommand } from "@/shell/commands/command"
 import { useSettings } from "@/settings/model"
 import { SessionTitleHeader } from "../session-identity-header"
+import { SessionHeader } from "@/session/header/session-header"
 
 type BackgroundTask = {
   id: string
@@ -732,6 +733,58 @@ function MessageTimelineView(
                       />
                     </Show>
                   </Show>
+                  <Show when={sessionID()} keyed>
+                    {(id) => (
+                      <Menu
+                        gutter={6}
+                        placement="bottom-end"
+                        open={title.menuOpen}
+                        onOpenChange={(open) => setTitle("menuOpen", open)}
+                      >
+                        <Menu.Trigger
+                          as={IconButton}
+                          icon={<Icon name="outline-dots" />}
+                          variant="ghost-muted"
+                          size="large"
+                          class="shrink-0"
+                          aria-label={language.t("common.moreOptions")}
+                          aria-expanded={title.menuOpen}
+                        />
+                        <Menu.Portal>
+                          <Menu.Content
+                            style={{ "min-width": "160px" }}
+                            onCloseAutoFocus={(event) => {
+                              if (!title.pendingRename) return
+                              event.preventDefault()
+                              setTitle("pendingRename", false)
+                              openTitleEditor()
+                            }}
+                          >
+                            <Show when={!parentID()}>
+                              <Menu.Item
+                                onSelect={() => {
+                                  setTitle("pendingRename", true)
+                                  setTitle("menuOpen", false)
+                                }}
+                              >
+                                {language.t("common.rename")}
+                              </Menu.Item>
+                              <Menu.Item onSelect={() => void props.action.export(id)}>
+                                {language.t("common.export")}...
+                              </Menu.Item>
+                            </Show>
+                            <Show when={!parentID()}>
+                              {/* TODO: Need a session archive API. */}
+                              <Menu.Separator />
+                              <Menu.Item onSelect={() => props.action.showDelete(id)}>
+                                {language.t("common.delete")}...
+                              </Menu.Item>
+                            </Show>
+                          </Menu.Content>
+                        </Menu.Portal>
+                      </Menu>
+                    )}
+                  </Show>
                 </div>
               </div>
               <Show when={sessionID()} keyed>
@@ -775,56 +828,7 @@ function MessageTimelineView(
                         </Popover>
                       )}
                     </Show>
-                    <Show when={!parentID()}>
-                      <Menu
-                        gutter={6}
-                        placement="bottom-end"
-                        open={title.menuOpen}
-                        onOpenChange={(open) => {
-                          setTitle("menuOpen", open)
-                          if (open) return
-                        }}
-                      >
-                        <Menu.Trigger
-                          as={IconButton}
-                          icon={<Icon name="outline-dots" />}
-                          variant="ghost-muted"
-                          size="large"
-                          aria-label={language.t("common.moreOptions")}
-                          aria-expanded={title.menuOpen}
-                        />
-                        <Menu.Portal>
-                          <Menu.Content
-                            style={{ width: "120px", "min-width": "120px" }}
-                            onCloseAutoFocus={(event) => {
-                              if (title.pendingRename) {
-                                event.preventDefault()
-                                setTitle("pendingRename", false)
-                                openTitleEditor()
-                                return
-                              }
-                            }}
-                          >
-                            <Menu.Item
-                              onSelect={() => {
-                                setTitle("pendingRename", true)
-                                setTitle("menuOpen", false)
-                              }}
-                            >
-                              {language.t("common.rename")}
-                            </Menu.Item>
-                            <Menu.Item onSelect={() => void props.action.export(id)}>
-                              {language.t("common.export")}...
-                            </Menu.Item>
-                            {/* TODO: Need a session archive API. */}
-                            <Menu.Separator />
-                            <Menu.Item onSelect={() => props.action.showDelete(id)}>
-                              {language.t("common.delete")}...
-                            </Menu.Item>
-                          </Menu.Content>
-                        </Menu.Portal>
-                      </Menu>
-                    </Show>
+                    <SessionHeader />
                   </div>
                 )}
               </Show>

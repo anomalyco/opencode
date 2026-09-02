@@ -103,7 +103,7 @@
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
-[data-slot="line-comment-v2-overflow"]:is(:active, [data-state="pressed"]) {
+[data-slot="line-comment-v2-overflow"]:is(:active, [data-state="pressed"], [data-expanded]) {
   background-color: var(--v2-overlay-simple-overlay-pressed);
 }
 

@@ -7,6 +7,8 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { hasNonBlockingServiceIssue, hasServiceNeedingAttention, serverStatusDotClass } from "./indicator"
 import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { useSettings } from "@/settings/model"
+import { createMediaQuery } from "@solid-primitives/media"
 
 const Body = lazy(() => import("./body").then((x) => ({ default: x.StatusPopoverBody })))
 
@@ -16,6 +18,8 @@ export function StatusPopover() {
   const global = useGlobal()
   const data = useData()
   const sdk = useWorkspaceLocation()
+  const settings = useSettings()
+  const desktop = createMediaQuery("(min-width: 768px)")
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => global.servers.health[server.key]?.healthy
   const mcp = () => data.location.mcp.server.list({ directory: sdk().directory })
@@ -37,6 +41,8 @@ export function StatusPopover() {
     serverHealth: serverHealth(),
     attention: attention(),
     issue: issue(),
+    placement: desktop() && settings.appearance.tabLayout() === "vertical" ? "top-start" : "bottom-end",
+    shift: desktop() && settings.appearance.tabLayout() === "vertical" ? 0 : -168,
     label: language.t("status.popover.trigger"),
     onOpenChange: setShown,
     body: () => (
@@ -55,6 +61,8 @@ type StatusPopoverState = {
   serverHealth: boolean | undefined
   attention: boolean
   issue: boolean
+  placement: "top-start" | "bottom-end"
+  shift: number
   label: string
   onOpenChange: (value: boolean) => void
   body: () => JSX.Element
@@ -77,8 +85,8 @@ function StatusPopoverView(props: { state: StatusPopoverState }) {
     class:
       "[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl",
     gutter: 4,
-    placement: "bottom-end" as const,
-    shift: -168,
+    placement: props.state.placement,
+    shift: props.state.shift,
   }
 
   return (
