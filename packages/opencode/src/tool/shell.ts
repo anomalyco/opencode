@@ -1,6 +1,6 @@
 import { Effect, Stream } from "effect"
 import os from "os"
-import { createWriteStream } from "node:fs"
+import { createWriteStream, realpathSync } from "node:fs"
 import * as Tool from "./tool"
 import path from "path"
 import { containsPath, type InstanceContext } from "../project/instance-context"
@@ -125,11 +125,10 @@ function commands(node: Node) {
 }
 
 function unquote(text: string) {
-  if (text.length < 2) return text
-  const first = text[0]
-  const last = text[text.length - 1]
-  if ((first === '"' || first === "'") && first === last) return text.slice(1, -1)
-  return text
+  // Shell words may concatenate quoted and unquoted segments, e.g.
+  // `"$HOME"/.ssh/config`. Remove only quote delimiters while preserving
+  // characters inside each quoted segment.
+  return text.replace(/("[^"]*"|'[^']*')/g, (segment) => segment.slice(1, -1))
 }
 
 function home(text: string) {
@@ -155,6 +154,8 @@ function expand(text: string, cwd: string, shell: string) {
   const out = unquote(text)
     .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => envValue(key) || "")
     .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => envValue(key) || "")
+    .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, key: string) => envValue(key) || "")
+    .replace(/\$([A-Za-z_][A-Za-z0-9_]*)(?=$|[\\/])/g, (_, key: string) => envValue(key) || "")
     .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => auto(key, cwd, shell) || "")
   return home(out)
 }
@@ -215,6 +216,58 @@ function pathArgs(list: Part[], ps: boolean, cmd = false) {
     out.push(item.text)
   }
   return out
+}
+
+function redirectionArgs(node: Node, ps: boolean) {
+  const out: string[] = []
+  const owner = node.parent?.type === "redirected_statement" ? node.parent : node
+  if (ps) {
+    for (const item of owner.descendantsOfType("redirection").filter((item): item is Node => Boolean(item))) {
+      const value = item.text.replace(/^\s*\d*>{1,2}\s*/, "").trim()
+      if (value && !value.startsWith("&")) out.push(value)
+    }
+    return out
+  }
+
+  // The bash grammar exposes the destination separately, so quoted strings
+  // containing `>` are not mistaken for redirects.
+  for (const item of owner.descendantsOfType("file_redirect").filter((item): item is Node => Boolean(item))) {
+    const value = item.childForFieldName("destination")?.text
+    if (value && !value.startsWith("&")) out.push(value)
+  }
+  return out
+}
+
+function embeddedPathArgs(text: string) {
+  const out: string[] = []
+  // A shell command can hand an entire script to another interpreter (for
+  // example `python -c 'open("/etc/hosts")'`). Such paths are not separate
+  // shell arguments, so also inspect path literals embedded in arguments.
+  const absolute = /(?<![\w:>/])\/(?:[A-Za-z0-9._~@+%-]+\/)*[A-Za-z0-9._~@+%-]+/g
+  for (const match of text.matchAll(absolute)) {
+    // The AST-based redirect scan handles this case; avoid rediscovering its
+    // destination when the redirect operator is separated by whitespace.
+    if (text.slice(0, match.index).trimEnd().endsWith(">")) continue
+    out.push(match[0])
+  }
+  return out
+}
+
+function resolveThroughSymlinks(target: string) {
+  let current = target
+  const missing: string[] = []
+  while (true) {
+    try {
+      const resolved = realpathSync.native(current)
+      return path.join(resolved, ...missing.reverse())
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") return target
+      const parent = path.dirname(current)
+      if (parent === current) return target
+      missing.unshift(path.basename(current))
+      current = parent
+    }
+  }
 }
 
 function preview(text: string) {
@@ -367,7 +420,7 @@ export const ShellTool = Tool.define(
     })
 
     const argPath = Effect.fn("ShellTool.argPath")(function* (arg: string, cwd: string, ps: boolean, shell: string) {
-      const text = ps ? expand(arg, cwd, shell) : home(unquote(arg))
+      const text = expand(arg, cwd, shell)
       const file = text && prefix(text)
       if (!file || dynamic(file, ps)) return
       const next = ps ? provider(file) : file
@@ -394,11 +447,27 @@ export const ShellTool = Tool.define(
         const tokens = command.map((item) => item.text)
         const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
 
+        const pathCandidates = new Set<string>()
+        // Keep the command-specific parsing for options such as PowerShell's
+        // -Path/-LiteralPath, but also inspect every non-option argument. A
+        // filesystem path can be consumed by any executable (for example
+        // `head`, `ls`, `tee`, or a user script), so a command allowlist cannot
+        // be a security boundary.
         if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
-          for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
+          for (const arg of pathArgs(command, ps, shellKind === "cmd")) pathCandidates.add(arg)
+        }
+        for (const arg of command.slice(1)) {
+          if (!arg.text.startsWith("-")) pathCandidates.add(arg.text)
+        }
+        for (const arg of redirectionArgs(node, ps)) pathCandidates.add(arg)
+        for (const arg of embeddedPathArgs(source(node))) pathCandidates.add(arg)
+
+        if (pathCandidates.size > 0) {
+          for (const arg of pathCandidates) {
             const resolved = yield* argPath(arg, cwd, ps, shell)
             yield* Effect.logInfo("resolved path", { arg, resolved })
-            if (!resolved || containsPath(resolved, instance)) continue
+            const boundary = resolved && resolveThroughSymlinks(resolved)
+            if (!resolved || !boundary || containsPath(boundary, instance)) continue
             const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
             scan.dirs.add(dir)
           }

@@ -1,5 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
+import { symlink } from "node:fs/promises"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
@@ -339,6 +340,71 @@ describe("tool.shell permissions", () => {
         expect(extDirReq!.patterns).toContain(want)
       }),
     ),
+  )
+
+  each("does not let unlisted commands bypass external_directory", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const commands = [
+          "head -1 /etc/hosts",
+          "ls /etc",
+          "printf secret >/etc/opencode-permission-test",
+          "cat </etc/hosts",
+          "printf secret 2>>/etc/opencode-permission-test",
+          "command ls /etc",
+          "head -1 $HOME/.ssh/config",
+          "head -1 ${HOME}/.ssh/config",
+          'head -1 "$HOME"/.ssh/config',
+          "printf secret >|/etc/opencode-permission-test",
+          "cat <(head -1 /etc/hosts)",
+          "cat {/etc,/var}/hosts",
+          `python3 -c 'open("/etc/hosts").read()'`,
+          `sh -c 'cat /etc/hosts'`,
+        ]
+
+        for (const command of commands) {
+          const err = new Error(`stop after permission: ${command}`)
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(yield* fail({ command }, capture(requests, err))).toMatchObject({ message: err.message })
+          if (!requests.find((request) => request.permission === "external_directory")) {
+            throw new Error(`external_directory was not requested for: ${command}`)
+          }
+        }
+      }),
+    ),
+  )
+
+  each("does not treat a quoted redirection-looking argument as a path", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+        yield* run({ command: 'echo "> /etc/hosts"' }, capture(requests))
+        expect(requests.find((request) => request.permission === "external_directory")).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.live("does not treat a workspace symlink to an external directory as internal", () =>
+    Effect.gen(function* () {
+      const project = yield* tmpdirScoped()
+      const outside = yield* tmpdirScoped()
+      const linked = path.join(project, "linked")
+      yield* Effect.promise(() => symlink(outside, linked))
+
+      const err = new Error("stop after permission")
+      const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+      yield* runIn(
+        project,
+        Effect.gen(function* () {
+          expect(
+            yield* fail({ command: `cat ${path.join(linked, "secret.txt")}` }, capture(requests, err)),
+          ).toMatchObject({ message: err.message })
+        }),
+      )
+      expect(requests.find((request) => request.permission === "external_directory")).toBeDefined()
+    }),
   )
 
   if (process.platform === "win32") {
