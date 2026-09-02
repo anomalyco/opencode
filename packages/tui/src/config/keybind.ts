@@ -272,6 +272,7 @@ export const Definitions = {
   "dialog.mcp.toggle": keybind("space", "Toggle MCP server"),
   "dialog.plugins.install": keybind("shift+i", "Install plugin from plugin dialog"),
   "dialog.plugins.update": keybind("ctrl+u", "Update plugin from plugin dialog"),
+  "dialog.plugins.check": keybind("ctrl+r", "Check for plugin updates from plugin dialog"),
 
   "terminal.suspend": keybind("ctrl+z", "Suspend terminal"),
   "terminal.title.toggle": keybind("none", "Toggle terminal title"),
