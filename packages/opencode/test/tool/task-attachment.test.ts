@@ -1095,6 +1095,136 @@ describe("task attachment integration", () => {
     }),
   )
 
+  it.instance("an unpromoted synchronous cancellation finalizes its owner scope as cancelled", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const jobs = yield* BackgroundJob.Service
+      const runState = yield* SessionRunState.Service
+      const coordinator = yield* AttachmentCoordinator.make
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const resultEntered = yield* Deferred.make<void>()
+      const firstResultDone = yield* Deferred.make<void>()
+      const laterOwned = yield* Deferred.make<void>()
+      const owner: { scope?: AttachmentCoordinator.Scope; earlier?: SessionV1.WithParts } = {}
+      const finalizers = { cancellations: 0, closes: 0 }
+      const wrapped = new Map<SessionID, AttachmentCoordinator.Scope>()
+      let resultCalls = 0
+
+      const wrap = (scope: AttachmentCoordinator.Scope) => {
+        const instrumented: AttachmentCoordinator.Scope = {
+          ...scope,
+          claimCancellation: (status) =>
+            Effect.sync(() => void finalizers.cancellations++).pipe(Effect.andThen(scope.claimCancellation(status))),
+          close: () => Effect.sync(() => void finalizers.closes++).pipe(Effect.andThen(scope.close())),
+          result: (fallback) => {
+            resultCalls++
+            if (resultCalls !== 1) return scope.result(fallback)
+            owner.earlier = fallback
+            return Effect.gen(function* () {
+              const pending = yield* scope
+                .result(fallback)
+                .pipe(Effect.ensuring(Deferred.succeed(firstResultDone, undefined)), Effect.forkChild)
+              yield* Effect.yieldNow
+              yield* Deferred.succeed(resultEntered, undefined)
+              return yield* Fiber.join(pending)
+            })
+          },
+        }
+        owner.scope = instrumented
+        wrapped.set(scope.sessionID, instrumented)
+        return instrumented
+      }
+      const attachments: AttachmentCoordinator.Interface = {
+        ...coordinator,
+        open: (sessionID) => coordinator.open(sessionID).pipe(Effect.map(wrap)),
+        locate: (sessionID) =>
+          coordinator
+            .locate(sessionID)
+            .pipe(Effect.map((scope) => (scope ? (wrapped.get(sessionID) ?? scope) : scope))),
+        locateBorrowable: (sessionID) =>
+          coordinator
+            .locateBorrowable(sessionID)
+            .pipe(Effect.map((scope) => (scope ? (wrapped.get(sessionID) ?? scope) : scope))),
+      }
+
+      const staleText = "SYNC K14 earlier successful Assistant"
+      let childPrompts = 0
+      const promptOps = basicOps({
+        attachments,
+        prompt: (input) =>
+          Effect.gen(function* () {
+            if (input.sessionID === chat.id) return yield* Effect.die("unpromoted sync cancellation injected parent")
+            childPrompts++
+            if (childPrompts === 1) {
+              if (!input.attachmentScope) return yield* Effect.die("sync owner run had no attachment scope")
+              yield* input.attachmentScope.reserve(SessionID.create())
+              return yield* admit(input, staleText)
+            }
+            if (childPrompts !== 2) return yield* Effect.die("unexpected sync cancellation child run")
+            yield* persist(input)
+            yield* Deferred.succeed(laterOwned, undefined)
+            return yield* Effect.never
+          }),
+      })
+
+      const foreground = yield* def
+        .execute(
+          { description: "sync cancellation owner", prompt: "first", subagent_type: "general" },
+          context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(resultEntered)
+
+      const child = (yield* sessions.children(chat.id))[0]
+      const scope = owner.scope
+      const earlier = owner.earlier
+      if (!child || !scope || !earlier) return yield* Effect.die("sync cancellation owner did not park")
+      expect(scope.current()).toMatchObject({ attached: 1, candidate: true, failed: false, cancelled: false })
+      expect(yield* Deferred.isDone(firstResultDone)).toBe(false)
+
+      const supplement = yield* def.execute(
+        {
+          description: "sync cancellation later",
+          prompt: "later",
+          subagent_type: "general",
+          task_id: child.id,
+        },
+        context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      expect(supplement.output).toContain("task updated")
+      yield* Deferred.await(laterOwned)
+      expect(scope.current().candidate).toBe(false)
+
+      // The product Session cancellation path exact-cancels the Task BackgroundJob. No fixture calls
+      // the coordinator finalizer; the foreground Task cancellation branch must project the terminal.
+      yield* runState.cancel(child.id)
+      const terminal = yield* jobs.wait({ id: child.id, timeout: 5_000 })
+      expect(terminal.timedOut).toBe(false)
+      expect(terminal.info?.status).toBe("cancelled")
+
+      const returned = yield* Fiber.join(foreground)
+      expect(returned.output).toContain('state="cancelled"')
+      expect(returned.output).toContain("status: cancelled")
+      expect(returned.output).not.toContain(staleText)
+      expect(returned.output).not.toContain(earlier.info.id)
+
+      // SAME earlier ID: a fresh probe would legitimately bypass the published evidence under
+      // Admission Freshness and would not discriminate cancellation from degraded stale replay.
+      const selected = yield* scope.result(earlier)
+      expect(selected).toMatchObject({ type: "cancelled", status: "cancelled" })
+      expect("fallback" in selected).toBe(false)
+      expect(JSON.stringify(selected)).not.toContain(staleText)
+      expect(JSON.stringify(selected)).not.toContain(earlier.info.id)
+
+      // The explicit cancellation finalizer wins exactly once. acquire-release later observes a
+      // successful Tool return, but the holder makes that success-shaped backstop a no-op.
+      expect(finalizers).toEqual({ cancellations: 1, closes: 1 })
+      expect(yield* Deferred.isDone(firstResultDone)).toBe(true)
+    }),
+  )
+
   it.instance("adjacent invocations keep one observer and one parent prompt", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service

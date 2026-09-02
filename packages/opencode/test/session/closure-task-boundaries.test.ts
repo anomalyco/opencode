@@ -4,7 +4,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Cause, Config, Deferred, Effect, Exit, Layer, Schema } from "effect"
+import { Cause, Config, Deferred, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import path from "node:path"
@@ -16,6 +16,7 @@ import { SessionClosureModel as Model } from "@/session/closure/model"
 import type { SessionAdmission } from "@/session/closure/admission"
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID } from "@/session/schema"
+import { SessionRunState } from "@/session/run-state"
 import { HttpApiApp } from "@/server/routes/instance/httpapi/server"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { ToolRegistry } from "@/tool/registry"
@@ -101,6 +102,11 @@ let task: Tool.InferDef<typeof TaskTool> | undefined
 let sessions: Session.Interface | undefined
 let jobs: BackgroundJob.Interface | undefined
 let attachments: AttachmentCoordinator.Interface | undefined
+let runState: SessionRunState.Interface | undefined
+let waitHandleHook: (
+  input: Parameters<BackgroundJob.Interface["waitHandle"]>[0],
+  status: BackgroundJob.Info["status"] | undefined,
+) => void = () => {}
 
 const CaptureParameters = Schema.Struct({})
 const captureTool: Tool.Def<typeof CaptureParameters> = {
@@ -120,9 +126,17 @@ const registry = Layer.effect(
   ToolRegistry.Service,
   Effect.gen(function* () {
     sessions = yield* Session.Service
-    jobs = yield* BackgroundJob.Service
+    const background = yield* BackgroundJob.Service
+    jobs = {
+      ...background,
+      waitHandle: (input) =>
+        background
+          .waitHandle(input)
+          .pipe(Effect.tap((waited) => Effect.sync(() => waitHandleHook(input, waited.info?.status)))),
+    }
     attachments = yield* AttachmentCoordinator.Service
-    const info = yield* TaskTool
+    runState = yield* SessionRunState.Service
+    const info = yield* TaskTool.pipe(Effect.provideService(BackgroundJob.Service, jobs))
     const def = yield* info.init()
     task = { id: info.id, ...def }
     return ToolRegistry.Service.of({
@@ -212,6 +226,7 @@ const bootstrap = Effect.gen(function* () {
   expect(sessions).toBeDefined()
   expect(jobs).toBeDefined()
   expect(attachments).toBeDefined()
+  expect(runState).toBeDefined()
   return {
     test,
     llm,
@@ -221,6 +236,7 @@ const bootstrap = Effect.gen(function* () {
     sessions: sessions!,
     jobs: jobs!,
     attachments: attachments!,
+    runState: runState!,
   }
 })
 
@@ -288,6 +304,8 @@ afterEach(async () => {
   sessions = undefined
   jobs = undefined
   attachments = undefined
+  runState = undefined
+  waitHandleHook = () => {}
   refuse = () => false
   acquired.length = 0
   settled.length = 0
@@ -1089,6 +1107,254 @@ describe("Task closure boundaries (CP-023 K82 and K9)", () => {
           expect(deliveries[0]).toContain("A1 final")
           expect(deliveries[1]).toContain("A2 final")
         }),
+      instance,
+    )
+
+    const terminalProjection = (terminal: "cancelled" | "error") =>
+      Effect.gen(function* () {
+        const boot = yield* bootstrap
+        yield* boot.llm.reset
+        acquired.length = 0
+
+        const earlierText = `K14 earlier successful Assistant (${terminal})`
+        const parent = yield* boot.attachments.open(boot.caller.id)
+        const resultEntered = yield* Deferred.make<void>()
+        const firstResultDone = yield* Deferred.make<void>()
+        const laterOwned = yield* Deferred.make<void>()
+        const releaseAdmission = yield* Deferred.make<void>()
+        const delivered = yield* Deferred.make<void>()
+        const owner: {
+          scope?: AttachmentCoordinator.Scope
+          earlier?: SessionV1.WithParts
+        } = {}
+        const activity = { active: 0, wakes: 0 }
+        const wrapped = new Map<SessionID, AttachmentCoordinator.Scope>()
+        let resultCalls = 0
+
+        const wrap = (scope: AttachmentCoordinator.Scope) => {
+          const instrumented: AttachmentCoordinator.Scope = {
+            ...scope,
+            claimObserver: (reservation) =>
+              scope.claimObserver(reservation).pipe(
+                Effect.tap((claim) =>
+                  Effect.sync(() => {
+                    if (claim.type === "owner") activity.active++
+                  }),
+                ),
+              ),
+            finishContinuation: () =>
+              scope.finishContinuation().pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    if (activity.active > 0) activity.active--
+                  }),
+                ),
+              ),
+            beginWake: () =>
+              scope.beginWake().pipe(
+                Effect.tap((started) =>
+                  Effect.sync(() => {
+                    if (started) activity.wakes++
+                  }),
+                ),
+              ),
+            endWake: () =>
+              scope.endWake().pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    if (activity.wakes > 0) activity.wakes--
+                  }),
+                ),
+              ),
+            result: (fallback) => {
+              resultCalls++
+              if (resultCalls !== 1) return scope.result(fallback)
+              owner.earlier = fallback
+              return Effect.gen(function* () {
+                const pending = yield* scope
+                  .result(fallback)
+                  .pipe(Effect.ensuring(Deferred.succeed(firstResultDone, undefined)), Effect.forkChild)
+                // The child fiber runs the real synchronous `Scope.result` transition before it
+                // parks. One scheduler handoff therefore establishes the first-fallback latch
+                // without exposing coordinator internals or sampling resolution from Task.
+                yield* Effect.yieldNow
+                yield* Deferred.succeed(resultEntered, undefined)
+                return yield* Fiber.join(pending)
+              })
+            },
+          }
+          owner.scope = instrumented
+          wrapped.set(scope.sessionID, instrumented)
+          return instrumented
+        }
+
+        const instrumentedAttachments: AttachmentCoordinator.Interface = {
+          ...boot.attachments,
+          open: (sessionID) => boot.attachments.open(sessionID).pipe(Effect.map(wrap)),
+          locate: (sessionID) =>
+            boot.attachments
+              .locate(sessionID)
+              .pipe(Effect.map((scope) => (scope ? (wrapped.get(sessionID) ?? scope) : scope))),
+          locateBorrowable: (sessionID) =>
+            boot.attachments
+              .locateBorrowable(sessionID)
+              .pipe(Effect.map((scope) => (scope ? (wrapped.get(sessionID) ?? scope) : scope))),
+        }
+
+        const exactWaits: Array<{
+          readonly blocking: boolean
+          readonly handle: BackgroundJob.InvocationHandle
+          readonly status: BackgroundJob.Info["status"] | undefined
+        }> = []
+        waitHandleHook = (input, status) => {
+          exactWaits.push({ blocking: input.timeout === undefined, handle: input.handle, status })
+        }
+
+        const deliveries: string[] = []
+        let childRuns = 0
+        const ops: TaskPromptOps = {
+          ...boot.capture.ops,
+          attachments: instrumentedAttachments,
+          prompt: (input) =>
+            Effect.gen(function* () {
+              if (input.sessionID === boot.caller.id) {
+                deliveries.push(injectedText(input.parts))
+                yield* Deferred.succeed(delivered, undefined)
+                return acknowledged(boot.caller.id)
+              }
+
+              childRuns++
+              if (childRuns === 1) {
+                if (!input.attachmentScope) return yield* Effect.die("K14 owner run had no attachment scope")
+                // Registered attachment with no observer/wake: it keeps the first result parked while
+                // leaving the cancellation/degradation discriminator at active=0, wakes=0.
+                yield* input.attachmentScope.reserve(SessionID.create())
+                return yield* boot.capture.ops.prompt(input)
+              }
+              if (childRuns !== 2) return yield* Effect.die("unexpected K14 child run")
+              // Production `promptAdmitted` owns the later User BEFORE invoking this callback. Hold
+              // here so the scope slots are invalidated but no later Assistant can hide the retained
+              // fallback or change the low-level last-Assistant result.
+              return yield* boot.capture.ops.prompt({
+                ...input,
+                onAdmitted: (input.onAdmitted ?? Effect.void).pipe(
+                  Effect.andThen(Deferred.succeed(laterOwned, undefined)),
+                  Effect.andThen(
+                    terminal === "error"
+                      ? Effect.die(new Error("K14 confusable terminal error"))
+                      : Deferred.await(releaseAdmission),
+                  ),
+                ),
+              })
+            }),
+        }
+
+        yield* boot.llm.text(earlierText)
+
+        const base = withOps(boot.capture.context, ops)
+        const caller: Tool.Context = {
+          ...base,
+          extra: { ...base.extra, promptOps: ops, attachment: parent },
+        }
+        const receipt = yield* boot.task.execute(
+          { description: `K14 ${terminal}`, prompt: "first", subagent_type: "general", async: true },
+          caller,
+        )
+        const child = SessionID.make(receipt.metadata.sessionId)
+        yield* Deferred.await(resultEntered)
+
+        const scope = owner.scope
+        const earlier = owner.earlier
+        if (!scope || !earlier) return yield* Effect.die("K14 owner scope did not enter its first result")
+        expect(earlier.parts.findLast((part) => part.type === "text")?.text).toBe(earlierText)
+        expect(scope.current()).toMatchObject({ attached: 1, candidate: true, failed: false, cancelled: false })
+        expect(activity).toEqual({ active: 0, wakes: 0 })
+        expect(yield* Deferred.isDone(firstResultDone)).toBe(false)
+
+        const supplement = yield* boot.task.execute(
+          { description: `K14 ${terminal} later`, prompt: "later", subagent_type: "general", task_id: child },
+          caller,
+        )
+        expect(supplement.output).toContain("task updated")
+        yield* Deferred.await(laterOwned)
+
+        // The later production ownership invalidated candidate/observed. Only the first clean turn
+        // ever observed evidence, so observed is empty by construction; no observer or wake touched
+        // this owner scope, making the gate precondition explicit in both repaired and mutant runs.
+        expect(scope.current().candidate).toBe(false)
+        expect(activity).toEqual({ active: 0, wakes: 0 })
+
+        if (terminal === "cancelled") {
+          const lookup = boot.sessions
+            .findMessage(child, (message) => message.info.role !== "user")
+            .pipe(Effect.orDie, Effect.map(Option.getOrThrow))
+          const before = acquired.filter(
+            (item) => item.session === child && item.source === "SessionRunState.ensureRunning",
+          ).length
+          // A real Runner in the same production SessionRunState store uses the exact lookup from
+          // SessionPrompt.lastAssistant. The later Task prompt is held after own/before Runner, so
+          // cancellation must return the earlier successful Assistant, not a fixture-created value.
+          const runner = yield* boot.runState.ensureRunning(child, lookup, Effect.never).pipe(Effect.forkChild)
+          yield* Effect.yieldNow
+          expect(
+            acquired.filter((item) => item.session === child && item.source === "SessionRunState.ensureRunning"),
+          ).toHaveLength(before + 1)
+          expect(yield* boot.runState.listActive()).toContainEqual({ session: child, running: true, shell: false })
+
+          yield* boot.runState.cancel(child)
+          const lowLevel = yield* Fiber.join(runner)
+          expect(lowLevel.info.id).toBe(earlier.info.id)
+          expect(lowLevel.parts.findLast((part) => part.type === "text")?.text).toBe(earlierText)
+        }
+
+        const waited = yield* boot.jobs.wait({ id: child, timeout: 10_000 })
+        expect(waited.timedOut).toBe(false)
+        expect(waited.info?.status).toBe(terminal)
+        expect(waited.info?.output).toBeUndefined()
+
+        // SAME Assistant ID, deliberately. A fresh probe would be uncovered Admission Freshness and
+        // could hide the Exit.void bug by returning its own clean evidence.
+        const selected = yield* scope.result(earlier)
+        const selectedBytes = JSON.stringify(selected)
+        if (terminal === "cancelled") {
+          expect(selected).toMatchObject({ type: "cancelled" })
+          expect("fallback" in selected).toBe(false)
+          expect(selectedBytes).not.toContain(earlierText)
+          expect(selectedBytes).not.toContain(earlier.info.id)
+        } else {
+          expect(selected).toMatchObject({ type: "evidence", degraded: true })
+          if (selected.type !== "evidence") return yield* Effect.die("error terminal collapsed into cancellation")
+          expect(selected.fallback.info.id).toBe(earlier.info.id)
+          expect(selected.fallback.parts.findLast((part) => part.type === "text")?.text).toBe(earlierText)
+        }
+
+        yield* Deferred.await(delivered)
+        expect(deliveries).toHaveLength(1)
+        const envelope = deliveries[0] ?? ""
+        expect(envelope).toContain(`state="${terminal}"`)
+        expect(envelope).not.toContain(earlierText)
+        expect(envelope).not.toContain(earlier.info.id)
+        if (terminal === "cancelled") expect(envelope).toContain("task_evidence")
+        if (terminal === "error") expect(envelope).toContain("K14 confusable terminal error")
+
+        const blocking = exactWaits.filter((item) => item.blocking)
+        expect(blocking).toHaveLength(2)
+        expect(blocking.every((item) => item.status === terminal)).toBe(true)
+        expect(blocking[1]?.handle).toEqual(blocking[0]?.handle)
+        expect(yield* Deferred.isDone(firstResultDone)).toBe(true)
+        yield* Deferred.succeed(releaseAdmission, undefined)
+        yield* parent.close()
+      })
+
+    background.instance(
+      "K14: exact cancelled terminal clears the retained fallback at the production Runner seam",
+      () => terminalProjection("cancelled"),
+      instance,
+    )
+
+    background.instance(
+      "K14 control: exact error terminal degrades and retains truthful fallback evidence",
+      () => terminalProjection("error"),
       instance,
     )
   })

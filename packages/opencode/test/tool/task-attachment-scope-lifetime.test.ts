@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Deferred, Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
@@ -651,6 +651,223 @@ describe("task attachment owner-scope lifetime", () => {
     // This case is about what happens to an attached grandchild's delivery, so the nesting it
     // exercises has to be permitted: at the default depth of 1 the grandchild is refused before any
     // attachment forms, and the test would pass on a scenario it never built.
+    { config: { subagent_depth: 2 } },
+  )
+
+  const cancelledOwnerSuppresses = (descendant: "answer" | "cancelled") =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const sessions = yield* Session.Service
+      const coordinator = yield* AttachmentCoordinator.make
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const resultEntered = yield* Deferred.make<void>()
+      const firstResultDone = yield* Deferred.make<void>()
+      const descendantStarted = yield* Deferred.make<void>()
+      const descendantElected = yield* Deferred.make<void>()
+      const descendantFinished = yield* Deferred.make<void>()
+      const descendantRelease = yield* Deferred.make<void>()
+      const ownerCancelled = yield* Deferred.make<void>()
+      const owner: {
+        scope?: AttachmentCoordinator.Scope
+        earlier?: SessionV1.WithParts
+      } = {}
+      const IDs: { child?: SessionID; descendant?: SessionID } = {}
+      const activity = { active: 0, wakes: 0 }
+      const deliveriesIntoCancelledOwner: string[] = []
+      let opens = 0
+
+      const wrapOwner = (scope: AttachmentCoordinator.Scope) => {
+        const instrumented: AttachmentCoordinator.Scope = {
+          ...scope,
+          claimObserver: (reservation) =>
+            scope.claimObserver(reservation).pipe(
+              Effect.tap((claim) =>
+                Effect.gen(function* () {
+                  if (claim.type !== "owner") return
+                  activity.active++
+                  yield* Deferred.succeed(descendantElected, undefined)
+                }),
+              ),
+            ),
+          claimCancellation: (status) =>
+            scope.claimCancellation(status).pipe(Effect.tap(() => Deferred.succeed(ownerCancelled, undefined))),
+          finishContinuation: () =>
+            scope.finishContinuation().pipe(
+              Effect.tap(() =>
+                Effect.gen(function* () {
+                  if (activity.active > 0) activity.active--
+                  if (activity.active === 0) yield* Deferred.succeed(descendantFinished, undefined)
+                }),
+              ),
+            ),
+          beginWake: () =>
+            scope.beginWake().pipe(
+              Effect.tap((started) =>
+                Effect.sync(() => {
+                  if (started) activity.wakes++
+                }),
+              ),
+            ),
+          endWake: () =>
+            scope.endWake().pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  if (activity.wakes > 0) activity.wakes--
+                }),
+              ),
+            ),
+          result: (fallback) => {
+            if (owner.earlier) return scope.result(fallback)
+            owner.earlier = fallback
+            return Effect.gen(function* () {
+              const pending = yield* scope
+                .result(fallback)
+                .pipe(Effect.ensuring(Deferred.succeed(firstResultDone, undefined)), Effect.forkChild)
+              yield* Effect.yieldNow
+              yield* Deferred.succeed(resultEntered, undefined)
+              return yield* Fiber.join(pending)
+            })
+          },
+        }
+        owner.scope = instrumented
+        return instrumented
+      }
+
+      const attachments: AttachmentCoordinator.Interface = {
+        ...coordinator,
+        open: (sessionID) =>
+          coordinator.open(sessionID).pipe(
+            Effect.map((scope) => {
+              opens++
+              return opens === 1 ? wrapOwner(scope) : scope
+            }),
+          ),
+        locate: (sessionID) =>
+          coordinator
+            .locate(sessionID)
+            .pipe(Effect.map((scope) => (scope && owner.scope?.sessionID === sessionID ? owner.scope : scope))),
+        locateBorrowable: (sessionID) =>
+          coordinator
+            .locateBorrowable(sessionID)
+            .pipe(Effect.map((scope) => (scope && owner.scope?.sessionID === sessionID ? owner.scope : scope))),
+      }
+
+      const holder: { value?: TaskPromptOps } = {}
+      const promptOps = basicOps({
+        attachments,
+        prompt: (input) =>
+          Effect.gen(function* () {
+            const text = promptText(input)
+            if (text === "cancelled-owner-work") {
+              IDs.child = input.sessionID
+              if (!input.attachmentScope) return yield* Effect.die("cancelled owner had no attachment scope")
+              yield* input.attachmentScope.own(input.messageID ?? MessageID.ascending())
+              const anchor = yield* seedAssistant(input.sessionID, "general").pipe(
+                Effect.provideService(Session.Service, sessions),
+              )
+              const nested = yield* def.execute(
+                {
+                  description: `descendant ${descendant}`,
+                  prompt: "descendant-work",
+                  subagent_type: "general",
+                  async: true,
+                },
+                context({
+                  sessionID: input.sessionID,
+                  messageID: anchor.id,
+                  promptOps: holder.value!,
+                  attachment: input.attachmentScope,
+                }),
+              )
+              IDs.descendant = nested.metadata.sessionId
+              yield* Deferred.await(descendantElected)
+              const response = reply(input, "cancelled owner yield")
+              yield* input.attachmentScope.observeTurn({ assistant: response, clean: true })
+              return response
+            }
+            if (text === "descendant-work") {
+              yield* Deferred.succeed(descendantStarted, undefined)
+              if (descendant === "cancelled") return yield* Effect.never
+              yield* Deferred.await(descendantRelease)
+              const response = reply(input, "descendant answer after owner cancellation")
+              if (input.attachmentScope) {
+                yield* input.attachmentScope.own(input.messageID ?? MessageID.ascending())
+                yield* input.attachmentScope.observeTurn({ assistant: response, clean: true })
+              }
+              return response
+            }
+            if (IDs.child && input.sessionID === IDs.child) {
+              deliveriesIntoCancelledOwner.push(text)
+              return reply(input, "must not enter cancelled owner")
+            }
+            return reply(input, "unrelated delivery")
+          }),
+      })
+      holder.value = promptOps
+
+      const started = yield* def.execute(
+        { description: "cancelled owner", prompt: "cancelled-owner-work", subagent_type: "general", async: true },
+        context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      yield* Deferred.await(descendantStarted)
+      yield* Deferred.await(descendantElected)
+      yield* Deferred.await(resultEntered)
+
+      const child = IDs.child
+      const nested = IDs.descendant
+      const scope = owner.scope
+      const earlier = owner.earlier
+      if (!child || !nested || !scope || !earlier)
+        return yield* Effect.die("descendant suppression topology incomplete")
+      expect(child).toBe(started.metadata.sessionId)
+      expect(scope.current()).toMatchObject({ attached: 1, everAttached: true, cancelled: false })
+      expect(activity).toEqual({ active: 1, wakes: 0 })
+      expect(yield* Deferred.isDone(firstResultDone)).toBe(false)
+
+      const exact = yield* jobs.listExact()
+      const childJob = exact.find((entry) => entry.info.id === child)
+      const descendantJob = exact.find((entry) => entry.info.id === nested)
+      if (!childJob || !descendantJob) return yield* Effect.die("missing exact descendant lifetimes")
+
+      // Cancel only B's exact Task lifetime. C has already won observer election on B's owner scope
+      // and remains independently live so the answer and cancelled-envelope variants can exercise
+      // their real observer paths after B becomes cancelled.
+      const childTerminal = yield* jobs.cancelExact(childJob.lifetime)
+      expect(childTerminal?.status).toBe("cancelled")
+      // `cancelExact` publishes the BackgroundJob terminal; B-3 projection runs on the distinct
+      // lifetime-waiter fiber. Await that exact claim rather than assuming scheduler order.
+      yield* Deferred.await(ownerCancelled)
+      expect(scope.current().cancelled).toBe(true)
+      expect(activity).toEqual({ active: 1, wakes: 0 })
+
+      if (descendant === "answer") yield* Deferred.succeed(descendantRelease, undefined)
+      if (descendant === "cancelled") yield* jobs.cancelExact(descendantJob.lifetime)
+      const descendantTerminal = yield* jobs.waitExact({ lifetime: descendantJob.lifetime })
+      expect(descendantTerminal.info?.status).toBe(descendant === "answer" ? "completed" : "cancelled")
+      yield* Deferred.await(descendantFinished)
+
+      // No poll or timeout stands in for suppression: the elected continuation itself settled and
+      // drove active to zero. Only then may B's global cancellation resolution publish.
+      expect(activity).toEqual({ active: 0, wakes: 0 })
+      expect(deliveriesIntoCancelledOwner).toEqual([])
+      const selected = yield* scope.result(earlier)
+      expect(selected).toMatchObject({ type: "cancelled" })
+      expect("fallback" in selected).toBe(false)
+      expect(JSON.stringify(selected)).not.toContain("cancelled owner yield")
+      expect(yield* Deferred.isDone(firstResultDone)).toBe(true)
+    })
+
+  it.instance(
+    "an elected descendant answer never injects into its cancelled owner",
+    () => cancelledOwnerSuppresses("answer"),
+    { config: { subagent_depth: 2 } },
+  )
+
+  it.instance(
+    "an elected descendant cancellation envelope never injects into its cancelled owner",
+    () => cancelledOwnerSuppresses("cancelled"),
     { config: { subagent_depth: 2 } },
   )
 })

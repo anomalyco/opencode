@@ -1209,6 +1209,7 @@ export const TaskTool = Tool.define(
             // is still addressable, and the caller needs to be able to tell "the child was stopped"
             // from "the task tool could not run".
             if (result?.status === "cancelled") {
+              yield* finalizeOwnerScope(Exit.failCause(Cause.interrupt()))
               return {
                 title: params.description,
                 metadata,
