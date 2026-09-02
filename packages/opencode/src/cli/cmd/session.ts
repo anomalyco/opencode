@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import { Effect } from "effect"
 import { cmd } from "./cmd"
 import { effectCmd, fail } from "../effect-cmd"
+import { writeStdout } from "../stdout"
 import { Session } from "@/session/session"
 import { SessionID } from "../../session/schema"
 import { UI } from "../ui"
@@ -110,7 +111,7 @@ export const SessionListCommand = effectCmd({
         await proc.exited
       })
     } else {
-      console.log(output)
+      yield* writeStdout(output + "\n")
     }
   }),
 })
