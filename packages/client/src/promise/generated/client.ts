@@ -489,7 +489,7 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/plugin/update`,
             query: { location: input["location"] },
-            body: { target: input["target"] },
+            body: { targets: input["targets"] },
             successStatus: 204,
             declaredStatuses: [400, 503, 401],
             empty: true,

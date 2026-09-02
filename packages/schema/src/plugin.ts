@@ -14,6 +14,7 @@ export const Source = Schema.Union([
     target: Schema.String,
     version: Schema.String.pipe(optional),
     outdated: Schema.Literal(true).pipe(optional),
+    updating: Schema.Literal(true).pipe(optional),
   }),
   Schema.Struct({ type: Schema.Literal("local"), path: Schema.String }),
   Schema.Struct({ type: Schema.Literal("sdk") }),

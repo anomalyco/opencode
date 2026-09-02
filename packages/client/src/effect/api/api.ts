@@ -97,7 +97,7 @@ export type PluginCheckOperation<E = never> = (input?: PluginCheckInput) => Effe
 
 export type PluginUpdateInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  readonly target: string
+  readonly targets: ReadonlyArray<string>
 }
 export type PluginUpdateOutput = void
 export type PluginUpdateOperation<E = never> = (input: PluginUpdateInput) => Effect.Effect<PluginUpdateOutput, E>

@@ -701,19 +701,22 @@
             }
           }
         },
-        "description": "Update one package plugin and notify active locations to reload it.",
-        "summary": "Update plugin",
+        "description": "Update package plugins concurrently and notify active locations to reload them. Responds once every update has finished; fails when any update fails.",
+        "summary": "Update plugins",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "target": {
-                    "type": "string"
+                  "targets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
-                "required": ["target"],
+                "required": ["targets"],
                 "additionalProperties": false
               }
             }
@@ -16842,6 +16845,10 @@
                 "type": "string"
               },
               "outdated": {
+                "type": "boolean",
+                "enum": [true]
+              },
+              "updating": {
                 "type": "boolean",
                 "enum": [true]
               }

@@ -12,7 +12,7 @@ export type PermissionEffect = "allow" | "deny" | "ask"
 
 export type PluginSource =
   | { type: "builtin" }
-  | { type: "package"; target: string; version?: string; outdated?: true }
+  | { type: "package"; target: string; version?: string; outdated?: true; updating?: true }
   | { type: "local"; path: string }
   | { type: "sdk" }
 
@@ -2601,7 +2601,7 @@ export type PluginUpdateInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
-  readonly target: { readonly target: string }["target"]
+  readonly targets: { readonly targets: ReadonlyArray<string> }["targets"]
 }
 
 export type PluginUpdateOutput = void

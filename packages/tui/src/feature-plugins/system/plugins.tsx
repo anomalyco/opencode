@@ -1,6 +1,6 @@
 import type { PluginInfo } from "@opencode-ai/client"
 import { Plugin } from "@opencode-ai/plugin/tui"
-import { createEffect, createMemo, createResource, createSignal, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { DialogErrorDetails } from "../../component/dialog-error-details"
 import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
@@ -30,11 +30,12 @@ export function PluginsDialog(props: {
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<Entry>()
   const [showInternal, setShowInternal] = createSignal(false)
-  const [server] = createResource(
+  const [server, { refetch }] = createResource(
     () => (props.server ? undefined : (props.context.location ?? props.context.data.location.default())),
     (location) => props.context.client.plugin.list({ location }).then((result) => result.data),
   )
   onMount(() => dialog.setSize("medium"))
+  onCleanup(props.context.data.on("plugin.updated", () => void refetch()))
   const entries = createMemo<Entry[]>(() => {
     const builtins: Entry[] = props.plugins
       .registered()
@@ -127,6 +128,23 @@ export function PluginsDialog(props: {
       })
       .finally(() => setLocked(false))
   }
+  const update = (entry: Entry | undefined) => {
+    if (entry?.runtime !== "server" || entry.plugin.source.type !== "package" || !updatable(entry)) return
+    props.context.client.plugin
+      .update({
+        location: props.context.location ?? props.context.data.location.default(),
+        targets: [entry.plugin.source.target],
+      })
+      .then(() =>
+        props.context.ui.toast.show({ variant: "success", message: `Updated plugin ${label(entry, props.context)}` }),
+      )
+      .catch((cause) => {
+        props.context.ui.toast.show({
+          variant: "error",
+          message: cause instanceof Error ? cause.message : String(cause),
+        })
+      })
+  }
 
   return (
     <box>
@@ -160,17 +178,20 @@ export function PluginsDialog(props: {
                 return toggle(entry)
               if (pluginError(entry)) setDetail(entry)
             }}
-            actions={
-              focusedTui()
-                ? [
-                    {
-                      title: toggleTitle(),
-                      command: "plugins.toggle",
-                      onTrigger: (option) => toggle(entries().find((entry) => entry.key === option.value)),
-                    },
-                  ]
-                : []
-            }
+            actions={[
+              {
+                title: toggleTitle(),
+                command: "plugins.toggle",
+                hidden: !focusedTui(),
+                onTrigger: (option) => toggle(entries().find((entry) => entry.key === option.value)),
+              },
+              {
+                title: "update",
+                command: "dialog.plugins.update",
+                hidden: !updatable(focusedEntry()),
+                onTrigger: (option) => update(entries().find((entry) => entry.key === option.value)),
+              },
+            ]}
             footer={
               <Show when={pluginError(focusedEntry())}>
                 <text>
@@ -227,13 +248,21 @@ function outdated(entry: Entry) {
   return entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.outdated === true
 }
 
+function updating(entry: Entry) {
+  return entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.updating === true
+}
+
+function updatable(entry: Entry | undefined) {
+  return entry !== undefined && outdated(entry) && !updating(entry)
+}
+
 function footer(entry: Entry) {
   const details = [
     ...(status(entry) === "active" ? [] : [status(entry)]),
     ...(entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.version
       ? [displayVersion(entry.plugin.source.version)]
       : []),
-    ...(outdated(entry) ? ["update available"] : []),
+    ...(updating(entry) ? ["updating"] : outdated(entry) ? ["update available"] : []),
   ]
   return details.length ? details.join(", ") : undefined
 }

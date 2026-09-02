@@ -106,6 +106,7 @@ export const layer = Layer.effectDiscard(
     yield* Effect.addFinalizer(registry.close)
     let packages = new Set<string>()
     let outdated = new Set<string>()
+    const updating = new Set<string>()
     let generation = 0
     let observed = 0
 
@@ -128,7 +129,13 @@ export const layer = Layer.effectDiscard(
       // Activate everything available locally before waiting on missing package installs.
       const immediate = yield* resolve(pre, post, operations, false)
       const source = (source: Plugin.Source) =>
-        source.type === "package" && outdated.has(source.target) ? { ...source, outdated: true as const } : source
+        source.type === "package"
+          ? {
+              ...source,
+              ...(outdated.has(source.target) ? { outdated: true as const } : {}),
+              ...(updating.has(source.target) ? { updating: true as const } : {}),
+            }
+          : source
       const apply = (resolved: typeof immediate) =>
         registry.activate(
           resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
@@ -163,7 +170,10 @@ export const layer = Layer.effectDiscard(
       updates.changes().pipe(
         Stream.filter((update) => packages.has(update.target)),
         Stream.tap((update) =>
-          Effect.sync(() => (update.outdated ? outdated.add(update.target) : outdated.delete(update.target))),
+          Effect.sync(() => {
+            update.outdated ? outdated.add(update.target) : outdated.delete(update.target)
+            update.updating ? updating.add(update.target) : updating.delete(update.target)
+          }),
         ),
         Stream.map(() => undefined),
       ),

@@ -335,7 +335,7 @@ const EndpointPluginCheck = (raw: RawClient["server.plugin"]) => (input?: Plugin
 
 const EndpointPluginUpdate = (raw: RawClient["server.plugin"]) => (input: PluginUpdateInput) =>
   preserveEffect<PluginUpdateOutput>()(
-    raw["plugin.update"]({ query: { location: input["location"] }, payload: { target: input["target"] } }).pipe(
+    raw["plugin.update"]({ query: { location: input["location"] }, payload: { targets: input["targets"] } }).pipe(
       Effect.mapError(mapClientError),
     ),
   )

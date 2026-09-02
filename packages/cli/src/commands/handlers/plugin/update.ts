@@ -25,9 +25,12 @@ export default Runtime.handler(
       selected,
       (item) =>
         (item.runtime === "Server"
-          ? Effect.promise(() => result.client.plugin.update({ location: result.location, target: item.target }))
+          ? Effect.promise(() => result.client.plugin.update({ location: result.location, targets: [item.target] }))
           : npm.update(item.target, { subpaths: ["tui"] }).pipe(Effect.asVoid)
-        ).pipe(Effect.exit, Effect.map((result) => ({ item, result }))),
+        ).pipe(
+          Effect.exit,
+          Effect.map((result) => ({ item, result })),
+        ),
       { concurrency: "unbounded" },
     )
     for (const item of updated) {

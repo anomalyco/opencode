@@ -1,7 +1,7 @@
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginUpdate } from "@opencode-ai/core/plugin/update"
 import { InvalidRequestError, ServiceUnavailableError } from "@opencode-ai/protocol/errors"
-import { Cause, Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
@@ -45,6 +45,7 @@ export const PluginHandler = HttpApiBuilder.group(Api, "server.plugin", (handler
                   target: plugin.source.target,
                   ...(plugin.source.version ? { version: plugin.source.version } : {}),
                   ...(outdated.get(plugin.source.target) ? { outdated: true as const } : {}),
+                  ...(plugin.source.updating ? { updating: true as const } : {}),
                 },
               }
             }),
@@ -56,26 +57,31 @@ export const PluginHandler = HttpApiBuilder.group(Api, "server.plugin", (handler
       Effect.gen(function* () {
         const plugins = yield* Plugin.Service
         yield* plugins.awaitActivation
-        if (
-          !(yield* plugins.list()).some(
-            (plugin) => plugin.source.type === "package" && plugin.source.target === ctx.payload.target,
-          )
+        const inventory = new Set(
+          (yield* plugins.list()).flatMap((plugin) => (plugin.source.type === "package" ? [plugin.source.target] : [])),
         )
+        const unknown = ctx.payload.targets.filter((target) => !inventory.has(target))
+        if (unknown.length)
           return yield* new InvalidRequestError({
-            message: `Plugin package is not in the current server inventory: ${ctx.payload.target}`,
-            field: "target",
+            message: `Plugin packages are not in the current server inventory: ${unknown.join(", ")}`,
+            field: "targets",
           })
         const updates = yield* PluginUpdate.Service
-        yield* updates.update(ctx.payload.target).pipe(
-          Effect.catchCause((cause) =>
-            Effect.fail(
-              new ServiceUnavailableError({
-                message: `Failed to update plugin package ${ctx.payload.target}: ${Cause.pretty(cause)}`,
-                service: "plugin",
-              }),
+        // Let every update run to completion instead of interrupting the rest on the first failure.
+        const failures = yield* Effect.forEach(
+          ctx.payload.targets,
+          (target) =>
+            updates.update(target).pipe(
+              Effect.exit,
+              Effect.map((exit) => (Exit.isFailure(exit) ? [`${target}: ${Cause.pretty(exit.cause)}`] : [])),
             ),
-          ),
-        )
+          { concurrency: "unbounded" },
+        ).pipe(Effect.map((results) => results.flat()))
+        if (failures.length)
+          return yield* new ServiceUnavailableError({
+            message: `Failed to update plugin packages: ${failures.join("; ")}`,
+            service: "plugin",
+          })
       }),
     ),
 )
