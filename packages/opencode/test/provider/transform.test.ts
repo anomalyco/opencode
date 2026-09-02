@@ -1048,6 +1048,43 @@ describe("ProviderTransform.providerOptions", () => {
       })
     })
 
+    test("omits blockBinding when config opts out with false", () => {
+      const model = claude("@ai-sdk/anthropic", "claude-opus-5")
+      expect(
+        ProviderTransform.providerOptions(model, { thinking: { type: "adaptive", blockBinding: false } }),
+      ).toEqual({
+        anthropic: { thinking: { type: "adaptive" } },
+      })
+    })
+
+    test("opt-out also works for models that think by default", () => {
+      const model = claude("@ai-sdk/anthropic", "claude-sonnet-5")
+      expect(
+        ProviderTransform.providerOptions(model, { thinking: { type: "enabled", budgetTokens: 4000, blockBinding: false } }),
+      ).toEqual({
+        anthropic: { thinking: { type: "enabled", budgetTokens: 4000 } },
+      })
+    })
+
+    test("preserves an explicit blockBinding instead of overwriting it", () => {
+      const model = claude("@ai-sdk/anthropic", "claude-opus-5")
+      const custom = { prefixMismatchBehavior: "error" }
+      expect(
+        ProviderTransform.providerOptions(model, { thinking: { type: "adaptive", blockBinding: custom } }),
+      ).toEqual({
+        anthropic: { thinking: { type: "adaptive", blockBinding: custom } },
+      })
+    })
+
+    test("bedrock reasoningConfig honours the opt-out", () => {
+      const model = claude("@ai-sdk/amazon-bedrock", "us.anthropic.claude-opus-5-v1:0")
+      expect(
+        ProviderTransform.providerOptions(model, { reasoningConfig: { type: "adaptive", blockBinding: false } }),
+      ).toEqual({
+        bedrock: { reasoningConfig: { type: "adaptive" } },
+      })
+    })
+
     test("does not touch bedrock non-anthropic models", () => {
       const model = claude("@ai-sdk/amazon-bedrock", "amazon.nova-pro-v1:0")
       expect(ProviderTransform.providerOptions(model, { reasoningConfig: { type: "enabled" } })).toEqual({

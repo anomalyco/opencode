@@ -705,6 +705,19 @@ function anthropicBindsThinking(apiId: string) {
 // The patched AI SDK adds the thinking-binding-controls beta whenever it is set.
 const ANTHROPIC_BLOCK_BINDING = { prefixMismatchBehavior: "drop_block" }
 
+// Not every Claude deployment accepts the field after all. Bedrock, Vertex and
+// Anthropic-compatible proxy endpoints have each been observed rejecting it with
+//   thinking.adaptive.block_binding: Extra inputs are not permitted
+// (#46729), and sending the thinking-binding-controls beta does not change that.
+// Honour an explicit `blockBinding` in config so those deployments can opt out with
+// `blockBinding: false` (or pin their own value) instead of being stuck on 1.18.25.
+function applyBlockBinding(config: { [x: string]: any }) {
+  if (!("blockBinding" in config)) return { ...config, blockBinding: ANTHROPIC_BLOCK_BINDING }
+  if (config.blockBinding) return config
+  const { blockBinding: _disabled, ...rest } = config
+  return rest
+}
+
 function anthropicBlockBinding(model: Provider.Model, options: { [x: string]: any }) {
   if (!anthropicBindsThinking(model.api.id)) return options
   switch (model.api.npm) {
@@ -712,12 +725,12 @@ function anthropicBlockBinding(model: Provider.Model, options: { [x: string]: an
     case "@ai-sdk/google-vertex/anthropic": {
       const thinking = options.thinking ?? { type: "adaptive" }
       if (thinking.type !== "adaptive" && thinking.type !== "enabled") return options
-      return { ...options, thinking: { ...thinking, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+      return { ...options, thinking: applyBlockBinding(thinking) }
     }
     case "@ai-sdk/amazon-bedrock": {
       const reasoningConfig = options.reasoningConfig ?? { type: "adaptive" }
       if (reasoningConfig.type !== "adaptive" && reasoningConfig.type !== "enabled") return options
-      return { ...options, reasoningConfig: { ...reasoningConfig, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+      return { ...options, reasoningConfig: applyBlockBinding(reasoningConfig) }
     }
   }
   return options
