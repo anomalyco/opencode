@@ -12,7 +12,7 @@ import { PluginHost } from "./plugin/host.js"
 import { type Failure, type Generation, Service } from "./plugin/service.js"
 import { State } from "./state.js"
 
-export { awaitActivation, type Failure, type Generation, type Interface, Service } from "./plugin/service.js"
+export { awaitActivation, type Generation, type Interface, Service } from "./plugin/service.js"
 
 const layer = Layer.effect(
   Service,

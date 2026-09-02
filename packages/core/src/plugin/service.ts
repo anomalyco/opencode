@@ -31,4 +31,4 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pl
  * and the model catalog. A cold Location activates its plugins asynchronously, so without the wait an
  * early request observes an empty registry and admits or fails work the plugins would have shaped.
  */
-export const awaitActivation: Effect.Effect<void, never, Service> = Service.use((plugins) => plugins.awaitActivation)
+export const awaitActivation = Service.use((plugins) => plugins.awaitActivation)
