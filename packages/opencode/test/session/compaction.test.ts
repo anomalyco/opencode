@@ -1830,7 +1830,7 @@ describe("SessionNs.getUsage", () => {
     expect(result.cost).toBe(0.04473525)
   })
 
-  test("uses matching context cost tier before over-200k fallback", () => {
+  test("uses the matching context cost tier", () => {
     const model = createModel({
       context: 1_000_000,
       output: 32_000,
@@ -1852,11 +1852,6 @@ describe("SessionNs.getUsage", () => {
             tier: { type: "context", size: 500_000 },
           },
         ],
-        experimentalOver200K: {
-          input: 100,
-          output: 100,
-          cache: { read: 100, write: 100 },
-        },
       },
     })
     const result = SessionNs.getUsage({
@@ -1873,7 +1868,7 @@ describe("SessionNs.getUsage", () => {
     expect(result.cost).toBe(2.75 + 0.6 + 0.05)
   })
 
-  test("falls back to over-200k pricing when no cost tier matches", () => {
+  test("uses base pricing when no context cost tier matches", () => {
     const model = createModel({
       context: 1_000_000,
       output: 32_000,
@@ -1889,11 +1884,6 @@ describe("SessionNs.getUsage", () => {
             tier: { type: "context", size: 500_000 },
           },
         ],
-        experimentalOver200K: {
-          input: 3,
-          output: 4,
-          cache: { read: 0.3, write: 1.5 },
-        },
       },
     })
     const result = SessionNs.getUsage({
@@ -1901,7 +1891,7 @@ describe("SessionNs.getUsage", () => {
       usage: usage({ inputTokens: 300_000, outputTokens: 100_000, totalTokens: 400_000 }),
     })
 
-    expect(result.cost).toBe(0.9 + 0.4)
+    expect(result.cost).toBe(0.3 + 0.2)
   })
 
   test.each(["@ai-sdk/anthropic", "@ai-sdk/amazon-bedrock", "@ai-sdk/google-vertex/anthropic"])(

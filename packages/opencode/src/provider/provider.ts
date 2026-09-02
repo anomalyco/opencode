@@ -1115,6 +1115,21 @@ export const ConfigProvidersResult = Schema.Struct({
 export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
 
 export function toPublicInfo(provider: Info): Info {
+  const result = cloneInfo(provider)
+  for (const model of Object.values(result.models)) {
+    if (model.cost.experimentalOver200K) continue
+    if (model.cost.tiers?.length !== 1) continue
+    const [tier] = model.cost.tiers
+    model.cost.experimentalOver200K = {
+      input: tier.input,
+      output: tier.output,
+      cache: { ...tier.cache },
+    }
+  }
+  return result
+}
+
+function cloneInfo(provider: Info): Info {
   return JSON.parse(
     JSON.stringify(
       {
@@ -1223,8 +1238,8 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
       write: c?.cache_write ?? 0,
     },
   }
-  if (c?.tiers) {
-    result.tiers = c.tiers.map((item) => ({
+  const tiers =
+    c?.tiers?.map((item) => ({
       input: item.input,
       output: item.output,
       cache: {
@@ -1232,18 +1247,19 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
         write: item.cache_write ?? 0,
       },
       tier: item.tier,
-    }))
-  }
-  if (c?.context_over_200k) {
-    result.experimentalOver200K = {
+    })) ?? []
+  const legacy = c?.context_over_200k
+  if (legacy && tiers.length === 0)
+    tiers.push({
+      input: legacy.input,
+      output: legacy.output,
       cache: {
-        read: c.context_over_200k.cache_read ?? 0,
-        write: c.context_over_200k.cache_write ?? 0,
+        read: legacy.cache_read ?? 0,
+        write: legacy.cache_write ?? 0,
       },
-      input: c.context_over_200k.input,
-      output: c.context_over_200k.output,
-    }
-  }
+      tier: { type: "context", size: 200_000 },
+    })
+  if (tiers.length > 0) result.tiers = tiers
   return result
 }
 
@@ -1399,7 +1415,7 @@ const layer = Layer.effect(
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
-        const database = mapValues(catalog, toPublicInfo)
+        const database = mapValues(catalog, cloneInfo)
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const languages = new Map<string, LanguageModelV3>()
@@ -1503,6 +1519,20 @@ const layer = Layer.effect(
               if (model.id && model.id !== modelID) return modelID
               return existingModel?.name ?? modelID
             })
+            const legacy = existingModel?.cost.tiers?.length ? undefined : model.cost?.context_over_200k
+            const tiers = legacy
+              ? [
+                  ...(existingModel?.cost.tiers?.filter(
+                    (item) => item.tier.type !== "context" || item.tier.size !== 200_000,
+                  ) ?? []),
+                  {
+                    input: legacy.input,
+                    output: legacy.output,
+                    cache: { read: legacy.cache_read ?? 0, write: legacy.cache_write ?? 0 },
+                    tier: { type: "context" as const, size: 200_000 },
+                  },
+                ]
+              : existingModel?.cost.tiers
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {
@@ -1549,6 +1579,7 @@ const layer = Layer.effect(
                   read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
                   write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
                 },
+                tiers,
               },
               options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
               limit: {
