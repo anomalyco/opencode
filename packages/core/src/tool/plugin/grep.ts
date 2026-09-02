@@ -76,7 +76,7 @@ export const Plugin = {
           name,
           options: { codemode: false },
           description:
-            "Search file contents with ripgrep regular expressions. For exact text, set `literal` to true. Use it to locate specific code, symbols, or text patterns, and narrow searches with `path` or `include`. Returns matching file paths, line numbers, and line previews.",
+            "Search file contents using ripgrep's regular expression syntax or literal text matching. Use it to locate specific code, symbols, or text patterns, and narrow searches with `path` or `include`. Returns matching file paths, line numbers, and line previews.",
           input: Input,
           output: Output,
           execute: (input, context) =>
