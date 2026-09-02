@@ -3,6 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
 import { effectCmd, fail } from "../effect-cmd"
+import { writeStdout } from "../stdout"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
@@ -280,13 +281,12 @@ const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; 
 
   // Match legacy try/catch — catches both typed failures and defects
   // (Session.Service.get throws NotFoundError as a defect, not a typed E).
-  return yield* Effect.gen(function* () {
+  const exportData = yield* Effect.gen(function* () {
     const sessionInfo = yield* svc.get(sessionID!)
     const messages = yield* svc.messages({ sessionID: sessionInfo.id })
 
-    const exportData = { info: sessionInfo, messages }
-
-    process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
-    process.stdout.write(EOL)
+    return { info: sessionInfo, messages }
   }).pipe(Effect.catchCause(() => fail(`Session not found: ${sessionID!}`)))
+
+  yield* writeStdout(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2) + EOL)
 })
