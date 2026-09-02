@@ -24,6 +24,7 @@ describe("webSearchProviderLabel", () => {
     expect(webSearchProviderLabel("parallel")).toBe("Web Search via Parallel")
     expect(webSearchProviderLabel("exa")).toBe("Web Search via Exa")
     expect(webSearchProviderLabel("firecrawl")).toBe("Web Search via Firecrawl")
+    expect(webSearchProviderLabel("firecrawl-developer")).toBe("Web Search via Firecrawl Developer")
     expect(webSearchProviderLabel("tavily")).toBe("Web Search via Tavily")
   })
 
