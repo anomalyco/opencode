@@ -88,7 +88,7 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { newSessionLocation } from "./config/new-session-location"
-import { PluginProvider, usePlugin, type PackageResolver } from "./plugin/context"
+import { PluginProvider, usePlugin, type PackageSource } from "./plugin/context"
 import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
 import { CommandPaletteDialog } from "./component/command-palette"
@@ -188,7 +188,7 @@ export type TuiInput = {
   updater?: {
     apply: (version: string) => Promise<void>
   }
-  packages: PackageResolver
+  packages: PackageSource
   environment?: Readonly<Record<string, string>>
   terminalHandoff?: () => Promise<
     | {

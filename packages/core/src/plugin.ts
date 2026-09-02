@@ -2,7 +2,6 @@ export * as Plugin from "./plugin.js"
 export { Event, ID, Info, Source, State } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
-import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { Node } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import type { PersistentPty } from "./persistent-pty.js"
@@ -10,27 +9,10 @@ import { Cause, Context, Effect, Exit, Latch, Layer, Logger, References, Scope, 
 import { Bus } from "./bus.js"
 import { KV } from "./kv.js"
 import { PluginHost } from "./plugin/host.js"
+import { type Failure, type Generation, Service } from "./plugin/service.js"
 import { State } from "./state.js"
 
-export interface Interface {
-  readonly activate: (plugins: readonly Generation[], failures?: readonly Failure[]) => Effect.Effect<void>
-  readonly list: () => Effect.Effect<Plugin.Info[]>
-  readonly close: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
-  /** Wait for announced updates and activation to settle; failures remain in the inventory. */
-  readonly awaitActivation: Effect.Effect<void>
-  /** Keep readiness pending while preparing an update. Run the returned Effect to release it. */
-  readonly hold: () => Effect.Effect<Effect.Effect<void>>
-}
-
-type Failure = Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
-
-export type Generation = PluginDefinition & {
-  readonly revision: string
-  readonly source?: Plugin.Source
-  readonly features?: Plugin.Features
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
+export { awaitActivation, type Generation, type Interface, Service } from "./plugin/service.js"
 
 const layer = Layer.effect(
   Service,

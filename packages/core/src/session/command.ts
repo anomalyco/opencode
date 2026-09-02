@@ -6,6 +6,7 @@ import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { Effect } from "effect"
 import { Command } from "../command.js"
 import { Instance } from "../instance/service.js"
+import { Plugin } from "../plugin/service.js"
 
 export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
   session: Session.Info
@@ -17,7 +18,7 @@ export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
   delivery?: SessionInbox.Delivery
 }) {
   const instances = yield* Instance.Service
-  const commands = yield* Command.Service.pipe(instances.provide(input.session))
+  const commands = yield* Plugin.awaitActivation.pipe(Effect.andThen(Command.Service), instances.provide(input.session))
   yield* commands.execute({
     name: input.command,
     invocation: {

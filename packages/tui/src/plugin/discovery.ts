@@ -3,8 +3,6 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { isMissingPath, localProjectDirectory, projectConfigDirectories } from "../util/config-directories"
 
-const extensions = [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"]
-
 export async function localPluginDirectories(cwd: string, configDirectory: string) {
   const projectDirectory = await localProjectDirectory(cwd)
   const projectConfig = path.join(projectDirectory, ".opencode")
@@ -21,7 +19,7 @@ export async function localPluginDirectories(cwd: string, configDirectory: strin
   return directories.filter((_, index) => exists[index]).map((directory) => path.join(directory, "plugins"))
 }
 
-export async function discoverTuiPlugins(directories: string[]) {
+export async function discoverPluginTargets(directories: string[]) {
   return (
     await Promise.all(
       directories.map(async (directory) => {
@@ -43,21 +41,13 @@ export async function discoverTuiPlugins(directories: string[]) {
                     (error) => (isMissingPath(error) ? false : Promise.reject(error)),
                   ))
                 if (!isDirectory) return undefined
-                return tuiEntrypoint(plugin)
+                return plugin
               }),
           )
         ).filter((entry): entry is string => entry !== undefined)
       }),
     )
   ).flat()
-}
-
-export async function tuiEntrypoint(directory: string) {
-  const files = await readdir(directory, { withFileTypes: true })
-  const names = new Set(files.filter((file) => file.isFile() || file.isSymbolicLink()).map((file) => file.name))
-  if (!extensions.some((extension) => names.has("index" + extension))) return undefined
-  const tui = extensions.find((extension) => names.has("tui" + extension))
-  return tui ? path.join(directory, "tui" + tui) : undefined
 }
 
 export function localSource(spec: string, directory: string) {

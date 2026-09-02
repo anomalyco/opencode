@@ -37,6 +37,7 @@ import {
 } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Tool } from "@opencode-ai/core/tool"
 import { asc, eq } from "drizzle-orm"
@@ -227,7 +228,13 @@ const setup = Effect.gen(function* () {
     instructions: yield* instructionBuiltIns.load(sessionID),
     instances: Instance.Service.of({
       // Generation only exercises the Location's model context.
-      provide: () => Effect.provide(Layer.succeed(SessionContext.Service, context) as Layer.Layer<Instance.Services>),
+      provide: () =>
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(SessionContext.Service, context),
+            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
+          ) as Layer.Layer<Instance.Services>,
+        ),
     }),
   }
 })
