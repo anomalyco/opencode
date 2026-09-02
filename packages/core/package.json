@@ -120,6 +120,7 @@
     "@opencode-ai/pty": "0.1.13",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/plugin-browser": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@standard-schema/spec": "catalog:",
     "@parcel/watcher": "2.5.1",

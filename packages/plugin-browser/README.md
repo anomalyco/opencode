@@ -1,8 +1,9 @@
 # Experimental Browser Plugin
 
-The server-side browser tool lives alongside the other built-in plugins. Its
-implementation uses only the public plugin API, public schemas, and Effect. The
-shared RPC contract is `@opencode-ai/schema/browser`; desktop clients do not import Core.
+`@opencode-ai/plugin-browser` implements the server-side browser tool using only
+the public plugin API, public schemas, and Effect. Core registers it as a built-in
+plugin; the package does not depend on Core or Server. The shared RPC contract is
+`@opencode-ai/schema/browser`; desktop clients do not import Core.
 
 Disable it through normal plugin configuration:
 

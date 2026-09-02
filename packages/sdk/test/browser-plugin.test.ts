@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import plugin from "@opencode-ai/core/plugin/browser/index"
+import plugin from "@opencode-ai/plugin-browser"
 import { Browser } from "@opencode-ai/schema/browser"
 import { Agent, Rpc } from "@opencode-ai/plugin/effect"
 import { Tool } from "@opencode-ai/schema/tool"

@@ -15,6 +15,7 @@ const names = [
   "protocol",
   "client",
   "plugin",
+  "plugin-browser",
   "core",
   "simulation",
   "server",
