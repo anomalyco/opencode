@@ -103,7 +103,11 @@ export const Plugin = define({
         (effect, ..._args: [file?: string]) => lock.withPermit(effect),
       )
 
-      yield* Stream.fromPubSub(changes).pipe(
+      // Editor saves arrive as bursts of watcher events; settle before rescanning once. Subscribe
+      // before debouncing so no update slips through while the debounce starts its pull.
+      const updates = yield* PubSub.subscribe(changes)
+      yield* Stream.fromSubscription(updates).pipe(
+        Stream.debounce("100 millis"),
         Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(discovery.reload()))),
         Effect.forkScoped({ startImmediately: true }),
       )

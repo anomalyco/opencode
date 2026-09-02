@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, Scope } from "effect"
-import { TestClock } from "effect/testing"
+import { Effect, Exit, Scope } from "effect"
 import { KV } from "@opencode-ai/core/kv"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { testEffect } from "./lib/effect"
@@ -108,9 +107,7 @@ describe("WebSearch", () => {
 
       expect((yield* websearch.default())?.id).toBe(exa.providerID)
       source.providerID = parallel.providerID
-      const reload = yield* websearch.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(reload)
+      yield* websearch.reload()
       expect((yield* websearch.default())?.id).toBe(parallel.providerID)
     }),
   )

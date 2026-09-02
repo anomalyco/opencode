@@ -296,10 +296,7 @@ describe("Vcs", () => {
       const release = yield* Deferred.make<void>()
       const root = yield* Scope.make()
       yield* Effect.addFinalizer(() =>
-        Deferred.succeed(release, undefined).pipe(
-          Effect.andThen(State.shutdown(Scope.close(root, Exit.void))),
-          Effect.andThen(TestClock.adjust("500 millis")),
-        ),
+        Deferred.succeed(release, undefined).pipe(Effect.andThen(State.shutdown(Scope.close(root, Exit.void)))),
       )
       const context = yield* Layer.buildWithScope(
         LayerNode.compile(Vcs.node, { replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus)), here] }),
@@ -343,11 +340,9 @@ describe("Vcs", () => {
 
       block = true
       const first = yield* vcs.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
       yield* Deferred.await(entered)
       branch = "late"
       const second = yield* vcs.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
       expect(reads).toEqual(["initial", "initial"])
       expect(first.pollUnsafe()).toBeUndefined()
       expect(second.pollUnsafe()).toBeUndefined()

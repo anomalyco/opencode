@@ -1,6 +1,6 @@
 export * as State from "./state.js"
 
-import { Cause, Clock, Context, Deferred, Effect, Exit, Fiber, Scope } from "effect"
+import { Cause, Context, Effect, Exit, Fiber, Scope } from "effect"
 
 /**
  * A synchronous, replayable edit to the current domain state.
@@ -23,7 +23,7 @@ export type Transform<DraftApi> = (
   transform: TransformCallback<DraftApi>,
 ) => Effect.Effect<Registration, never, Scope.Scope>
 
-/** Invalidates the current value after captured inputs change and coalesces notifications. */
+/** Invalidates the current value after captured inputs change and notifies like a registration would. */
 export type Reload = () => Effect.Effect<void>
 
 export interface Transformable<DraftApi> {
@@ -40,17 +40,12 @@ type Batch = {
 const CurrentBatch = Context.Reference<Batch | undefined>("@opencode/State/CurrentBatch", {
   defaultValue: () => undefined,
 })
-const reloadDebounce = 500
-
 /** Coalesces notifications until the effect completes. Reads inside stay fresh; nothing is rolled back. */
 export function batch<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return run(effect, false)
 }
 
-/**
- * Runs the effect as shutdown: States changed inside it close permanently and never notify again,
- * including debounced reloads already waiting.
- */
+/** Runs the effect as shutdown: States changed inside it close permanently and never notify again. */
 export function shutdown<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return run(effect, true)
 }
@@ -100,9 +95,9 @@ export interface Options<State, DraftApi> {
   /** Wraps mutable state in a domain-specific draft API. */
   readonly draft: MakeDraft<State, DraftApi>
   /**
-   * Observes the freshly rebuilt value outside the read path. Batched changes
-   * notify at batch completion; reloads debounce notifications. Resource
-   * reconciliation owns its execution scope and coordination.
+   * Observes the freshly rebuilt value outside the read path. Every registration, disposal, or
+   * reload notifies once it is applied; a batch coalesces them into one notification at its end.
+   * Resource reconciliation owns its execution scope and coordination.
    */
   readonly notify?: (state: State) => Effect.Effect<void>
 }
@@ -119,9 +114,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
   let state = options.initial()
   const transforms: { run: TransformCallback<DraftApi> }[] = []
   let dirty = false
-  let requestedAt = 0
   let closed = false
-  let pending: Deferred.Deferred<void> | undefined
 
   const get = () => {
     if (closed || !dirty) return state
@@ -141,42 +134,22 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
     if (options.notify) yield* options.notify(value)
   }).pipe(Effect.withSpan("State.notify"))
 
-  const changed = (debounce: boolean) =>
-    Effect.uninterruptibleMask((restore) =>
-      Effect.gen(function* () {
-        if (closed) return
-        dirty = true
-        const batch = yield* CurrentBatch
-        if (batch?.active) {
-          if (batch.shutdown) {
-            closed = true
-            return
-          }
-          batch.notifications.add(notify)
+  const changed = Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      if (closed) return
+      dirty = true
+      const batch = yield* CurrentBatch
+      if (batch?.active) {
+        if (batch.shutdown) {
+          closed = true
           return
         }
-        if (!debounce) {
-          yield* restore(notify)
-          return
-        }
-
-        const clock = yield* Clock.Clock
-        requestedAt = clock.currentTimeMillisUnsafe()
-        if (pending) return yield* restore(Deferred.await(pending))
-        const done = Deferred.makeUnsafe<void>()
-        pending = done
-        yield* Effect.gen(function* () {
-          do {
-            const remaining = requestedAt + reloadDebounce - clock.currentTimeMillisUnsafe()
-            if (remaining > 0) yield* Effect.sleep(remaining)
-          } while (clock.currentTimeMillisUnsafe() < requestedAt + reloadDebounce)
-          // Observers can request and await another reload without joining their own notification.
-          pending = undefined
-          yield* notify.pipe(Deferred.into(done))
-        }).pipe(Effect.forkDetach)
-        yield* restore(Deferred.await(done))
-      }),
-    )
+        batch.notifications.add(notify)
+        return
+      }
+      yield* restore(notify)
+    }),
+  )
 
   return {
     get,
@@ -191,16 +164,16 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
               const index = transforms.indexOf(transform)
               if (index < 0) return Effect.void
               transforms.splice(index, 1)
-              return changed(false)
+              return changed
             }),
           )
           transforms.push(transform)
           yield* Scope.addFinalizer(scope, dispose)
-          yield* changed(false)
+          yield* changed
           return { dispose }
         }),
       )
     }),
-    reload: () => changed(true),
+    reload: () => changed,
   }
 }

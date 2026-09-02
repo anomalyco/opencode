@@ -10,7 +10,6 @@ import { Tool } from "@opencode-ai/core/tool"
 import type { Info } from "@opencode-ai/schema/tool"
 import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
-import { TestClock } from "effect/testing"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
 
@@ -116,9 +115,7 @@ describe("Tool", () => {
       expect((yield* executeTool(service, call("acme_echo"))).output).toEqual({ text: "original updated" })
 
       text = "refreshed"
-      const reload = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(reload)
+      yield* service.reload()
       const refreshed = yield* service.snapshot()
       expect(refreshed.definitions[0]?.description).toBe("Updated")
       expect(refreshed.codeModeCatalog?.tools).toEqual([])
@@ -204,24 +201,18 @@ describe("Tool", () => {
 
       const tool = { ...constant("first"), name: "echo", options: { codemode: false } }
       source = [tool]
-      const first = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(first)
+      yield* service.reload()
       const advertised = yield* service.snapshot()
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
 
       tool.execute = constant("second").execute
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
-      const second = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(second)
+      yield* service.reload()
       expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "second" })
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
 
       source = []
-      const removed = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(removed)
+      yield* service.reload()
       expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
     }),
@@ -292,9 +283,7 @@ describe("Tool", () => {
       expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "overlay" })
 
       source = [...source, { ...constant("collision"), name: "echo_tool", options: { codemode: false } }]
-      const collision = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(collision)
+      yield* service.reload()
       expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "collision" })
 
       yield* registration.dispose
@@ -302,9 +291,7 @@ describe("Tool", () => {
       yield* service.transform((draft) => source.forEach((tool) => draft.add(tool)))
 
       source = [{ ...constant("invalid"), name: "", options: { codemode: false } }]
-      const invalid = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(invalid)
+      yield* service.reload()
       expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "base" })
     }),
   )

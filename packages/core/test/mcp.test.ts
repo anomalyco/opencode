@@ -56,6 +56,7 @@ import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
 import { Image } from "@opencode-ai/core/image"
+import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
@@ -1635,10 +1636,7 @@ shutdownIt.effect("discards in-flight and queued MCP notifications after its lay
     const release = yield* Deferred.make<void>()
     const root = yield* Scope.make()
     yield* Effect.addFinalizer(() =>
-      Deferred.succeed(release, undefined).pipe(
-        Effect.andThen(State.shutdown(Scope.close(root, Exit.void))),
-        Effect.andThen(TestClock.adjust("500 millis")),
-      ),
+      Deferred.succeed(release, undefined).pipe(Effect.andThen(State.shutdown(Scope.close(root, Exit.void)))),
     )
     const context = yield* Layer.buildWithScope(Mcp.layer(), root)
     const service = Context.get(context, Mcp.Service)
@@ -1669,11 +1667,9 @@ shutdownIt.effect("discards in-flight and queued MCP notifications after its lay
     source.url = "https://example.com/first"
     source.added = true
     const first = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-    yield* TestClock.adjust("500 millis")
     yield* Deferred.await(entered)
     source.url = "https://example.com/second"
     const second = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-    yield* TestClock.adjust("500 millis")
 
     const shutdown = yield* State.shutdown(Scope.close(root, Exit.void)).pipe(
       Effect.forkChild({ startImmediately: true }),
@@ -1899,9 +1895,11 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
     expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_1", "execute"])
 
     yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
-    yield* TestClock.adjust("250 millis")
+    yield* advance(() => reads >= 2)
+    expect(reads).toBe(2)
     yield* Effect.forEach(Array.from({ length: 20 }), () => bus.publish(McpEvent.ToolsChanged, { server: "demo" }))
-    yield* TestClock.adjust("2 seconds")
+    yield* advance(() => reads >= 3)
+    yield* drain
     expect(reads).toBe(3)
     expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_3", "execute"])
   }).pipe(

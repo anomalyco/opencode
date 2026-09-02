@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { State } from "@opencode-ai/core/state"
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
-import { TestClock } from "effect/testing"
 import { it } from "./lib/effect"
 
 describe("State", () => {
@@ -67,9 +66,7 @@ describe("State", () => {
       expect(state.get().values).toEqual(["first"])
 
       value = "second"
-      const reload = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(reload)
+      yield* state.reload()
       expect(state.get().values).toEqual(["second"])
     }),
   )
@@ -131,7 +128,7 @@ describe("State", () => {
     }),
   )
 
-  it.effect("discards teardown rebuilds and pending reloads while still running cleanup", () =>
+  it.effect("discards reloads and disposals after shutdown while still running cleanup", () =>
     Effect.gen(function* () {
       let finalized = 0
       let disposed = 0
@@ -148,14 +145,10 @@ describe("State", () => {
       const registration = yield* state.transform((draft) => draft.add("value")).pipe(Scope.provide(scope))
       expect(finalized).toBe(1)
 
-      const pending = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("250 millis")
       yield* State.shutdown(Scope.close(scope, Exit.void))
       expect(disposed).toBe(1)
       expect(finalized).toBe(1)
 
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(pending)
       yield* registration.dispose
       yield* state.reload()
       expect(finalized).toBe(1)
@@ -189,7 +182,7 @@ describe("State", () => {
     }),
   )
 
-  it.effect("debounces reload bursts", () =>
+  it.effect("notifies once per reload without waiting", () =>
     Effect.gen(function* () {
       let finalized = 0
       const state = State.create({
@@ -202,16 +195,11 @@ describe("State", () => {
       })
       finalized = 0
 
-      const first = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("250 millis")
-      const second = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("499 millis")
-      expect(finalized).toBe(0)
-      yield* TestClock.adjust("1 millis")
-      yield* Fiber.join(first)
-      yield* Fiber.join(second)
-
+      // Under TestClock nothing time-based can complete, so returning proves no debounce is involved.
+      yield* state.reload()
       expect(finalized).toBe(1)
+      yield* state.reload()
+      expect(finalized).toBe(2)
     }),
   )
 })
@@ -412,7 +400,7 @@ describe("State rebuild", () => {
     }),
   )
 
-  it.effect("invalidates on reload and reads new inputs before notification", () =>
+  it.effect("invalidates on reload and reads new inputs", () =>
     Effect.gen(function* () {
       let source = 1
       let calls = 0
@@ -428,12 +416,8 @@ describe("State rebuild", () => {
       })
       notifications = 0
       source = 2
-      const reload = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* state.reload()
       expect(state.get().value).toBe(2)
-      expect(calls).toBe(2)
-      expect(notifications).toBe(0)
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(reload)
       expect(calls).toBe(2)
       expect(notifications).toBe(1)
 
@@ -622,7 +606,7 @@ describe("State notification boundaries", () => {
     }),
   )
 
-  it.effect("allows a debounced observer to await another reload", () =>
+  it.effect("allows an observer to await a nested reload", () =>
     Effect.gen(function* () {
       let source = 1
       let reloadAgain = false
@@ -642,9 +626,7 @@ describe("State notification boundaries", () => {
       yield* state.transform((draft) => (draft.value = source))
       source = 2
       reloadAgain = true
-      const reload = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("1 second")
-      yield* Fiber.join(reload)
+      yield* state.reload()
       expect(observed).toEqual([1, 2, 3])
     }),
   )
@@ -680,7 +662,7 @@ describe("State notification boundaries", () => {
     }),
   )
 
-  it.effect("keeps cancelled reload callers independent and shares notification results", () =>
+  it.effect("surfaces a failed reload notification to its caller and recovers on the next reload", () =>
     Effect.gen(function* () {
       let fail = false
       let notifications = 0
@@ -696,18 +678,10 @@ describe("State notification boundaries", () => {
       yield* state.transform(() => {})
       notifications = 0
       fail = true
-      const cancelled = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      const first = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      const second = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* Fiber.interrupt(cancelled)
-      yield* TestClock.adjust("500 millis")
-      const exits = yield* Fiber.awaitAll([first, second])
-      fail = false
-      expect(exits.every(Exit.isFailure)).toBe(true)
+      expect(Exit.isFailure(yield* state.reload().pipe(Effect.exit))).toBe(true)
       expect(notifications).toBe(1)
-      const recovered = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(recovered)
+      fail = false
+      yield* state.reload()
       expect(notifications).toBe(2)
     }),
   )
