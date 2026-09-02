@@ -41,7 +41,7 @@ export const Plugin = {
               })
               return {
                 output: { sessionID, directory: input.directory },
-                content: `Moving session ${sessionID} to ${input.directory}.`,
+                content: `Moved session ${sessionID} to ${input.directory}.`,
               }
             }).pipe(
               Effect.mapError(
