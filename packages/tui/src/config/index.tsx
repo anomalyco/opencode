@@ -299,7 +299,8 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
-      terminal: input.session?.terminal ?? true,
+      // Persistent terminal panes need the opencode-pty daemon, which does not ship Windows binaries.
+      terminal: input.session?.terminal ?? process.platform !== "win32",
       tps: input.session?.tps ?? true,
     },
     tabs: {
