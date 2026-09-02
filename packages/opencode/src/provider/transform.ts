@@ -208,11 +208,10 @@ function normalizeMessages(
             return part.text !== ""
           }
           if (part.type === "reasoning") {
-            return (
-              part.text.trim().length > 0 ||
-              part.providerOptions?.bedrock?.signature != null ||
-              part.providerOptions?.bedrock?.redactedData != null
-            )
+            // Match what the SDK can replay before assigning cache points. Otherwise
+            // unsigned reasoning can leave an empty or cache-point-only message.
+            const metadata = part.providerOptions?.[model.providerID] ?? part.providerOptions?.bedrock
+            return metadata?.signature != null || metadata?.redactedContent != null || metadata?.redactedData != null
           }
           return true
         })
@@ -683,6 +682,41 @@ function anthropicAdaptiveEfforts(apiId: string): string[] | null {
 
 function anthropicOmitsThinking(apiId: string) {
   return anthropicUsesModernAdaptiveThinking(apiId)
+}
+
+// Opus 5, Sonnet 5, Fable 5.x, and Mythos 5.x think without a `thinking` parameter.
+function anthropicThinksByDefault(apiId: string) {
+  const version = /claude-(?:[a-z]+-)?(\d+)(?:[.-](\d{1,2}))?(?:[.@-]|$)/i.exec(apiId)
+  if (!version) return false
+  return Number(version[1]) >= 5
+}
+
+// Fable 5.1 binds each thinking signature to the system prompt, tool list, and
+// messages above it, and rejects the request when any of that changes. opencode
+// re-renders parts of that prefix between turns (system prompt, tools, compaction),
+// so ask the API to drop the affected blocks instead of failing the request.
+// Models that do not run the check accept the field, so it is safe on every Claude.
+// The patched AI SDK adds the thinking-binding-controls beta whenever it is set.
+const ANTHROPIC_BLOCK_BINDING = { prefixMismatchBehavior: "drop_block" }
+
+function anthropicBlockBinding(model: Provider.Model, options: { [x: string]: any }) {
+  if (!model.api.id.toLowerCase().includes("claude")) return options
+  const byDefault = anthropicThinksByDefault(model.api.id)
+  switch (model.api.npm) {
+    case "@ai-sdk/anthropic":
+    case "@ai-sdk/google-vertex/anthropic": {
+      const thinking = options.thinking ?? (byDefault ? { type: "adaptive" } : undefined)
+      if (!thinking || (thinking.type !== "adaptive" && thinking.type !== "enabled")) return options
+      return { ...options, thinking: { ...thinking, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+    }
+    case "@ai-sdk/amazon-bedrock": {
+      const reasoningConfig = options.reasoningConfig ?? (byDefault ? { type: "adaptive" } : undefined)
+      if (!reasoningConfig || (reasoningConfig.type !== "adaptive" && reasoningConfig.type !== "enabled"))
+        return options
+      return { ...options, reasoningConfig: { ...reasoningConfig, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+    }
+  }
+  return options
 }
 
 function googleThinkingLevelEfforts(apiId: string) {
@@ -1303,13 +1337,13 @@ export function options(input: {
       }
     }
 
-    // Only set textVerbosity for non-chat gpt-5.x models
-    // Chat models (e.g. gpt-5.2-chat-latest) only support "medium" verbosity
+    // Generic OpenAI-compatible APIs do not necessarily support OpenAI's verbosity parameter.
+    // Only enable the default for integrations known to implement it.
     if (
       input.model.api.id.includes("gpt-5.") &&
       !input.model.api.id.includes("codex") &&
       !input.model.api.id.includes("-chat") &&
-      input.model.providerID !== "azure"
+      (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle")
     ) {
       result["textVerbosity"] = "low"
     }
@@ -1364,7 +1398,7 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     usesOpenAIReasoningGate &&
     (model.capabilities.reasoning || options.reasoningEffort !== undefined || options.reasoningSummary !== undefined)
       ? { ...options, forceReasoning: true }
-      : options
+      : anthropicBlockBinding(model, options)
 
   if (model.api.npm === "@ai-sdk/gateway") {
     // Gateway providerOptions are split across two namespaces:
