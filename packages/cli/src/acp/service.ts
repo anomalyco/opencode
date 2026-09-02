@@ -57,7 +57,7 @@ import { ACPError } from "./error"
 export const AuthMethodID = "opencode-login"
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
-  Partial<Pick<AgentSideConnection, "writeTextFile" | "extNotification" | "signal">>
+  Partial<Pick<AgentSideConnection, "writeTextFile" | "extMethod" | "extNotification" | "signal">>
 
 type Catalog = {
   readonly providers: ConfigOptionProvider[]
@@ -109,7 +109,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
   const catalogs = new Map<string, Promise<Catalog>>()
   const registeredMcp = new Map<string, Set<string>>()
   const active = new Map<string, TurnControl>()
-  const capabilities = { writeTextFile: false, childSessionUpdates: false }
+  const capabilities = { writeTextFile: false, childSessionUpdates: false, elicitation: false }
 
   const catalog = (cwd: string) => {
     const cached = catalogs.get(cwd)
@@ -179,6 +179,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     initialize: async (params) => {
       capabilities.writeTextFile = params.clientCapabilities?.fs?.writeTextFile === true
       capabilities.childSessionUpdates = params.clientCapabilities?._meta?.[ChildSessionUpdatesCapability] === true
+      capabilities.elicitation = params.clientCapabilities?._meta?.["opencode/elicitation"] === true
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
         name: "Login with opencode",
@@ -327,6 +328,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         start: prepared.start,
         writeTextFile: capabilities.writeTextFile,
         action: prepared.command !== undefined,
+        elicitation: capabilities.elicitation,
         control,
         connectionSignal: input.connection.signal,
         sessionSignal: state.abort.signal,

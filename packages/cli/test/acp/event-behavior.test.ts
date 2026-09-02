@@ -6,7 +6,8 @@ import { replayMessages, streamTurn, type ChildSessionUpdate, type TurnControl }
 import { createSseFixture, durableEvent, ephemeralEvent, withTimeout } from "./sse-fixture"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
-type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
+type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
+  Partial<Pick<AgentSideConnection, "extMethod">>
 type Fixture = ReturnType<typeof createSseFixture>
 
 describe("acp event behavior", () => {
@@ -678,6 +679,73 @@ describe("acp event behavior", () => {
     }
   })
 
+  test("passes question forms through ACP elicitation", async () => {
+    const elicitations: Array<{ method: string; params: Record<string, unknown> }> = []
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_question", inboxID: id }))
+        send(
+          ephemeralEvent("form.created", {
+            form: {
+              id: "frm_question",
+              sessionID: "ses_question",
+              title: "Questions",
+              metadata: { kind: "question" },
+              fields: [
+                {
+                  key: "q0",
+                  title: "Choice",
+                  description: "Choose one",
+                  type: "string",
+                  options: [
+                    { value: "Alpha", label: "Alpha" },
+                    { value: "Beta", label: "Beta" },
+                  ],
+                },
+              ],
+            },
+          }),
+        )
+      },
+      onFormReply({ sessionID, formID, send }) {
+        send(ephemeralEvent("form.replied", { sessionID, id: formID, answer: { q0: "Alpha" } }))
+        send(durableEvent("session.execution.succeeded", { sessionID }))
+      },
+    })
+    const connection = {
+      ...recordingConnection([]),
+      extMethod: async (method: string, params: Record<string, unknown>) => {
+        elicitations.push({ method, params })
+        return { action: { action: "accept", content: { q0: "Alpha" } } }
+      },
+    } satisfies Connection
+
+    try {
+      const response = await turn({
+        fixture,
+        connection,
+        sessionID: "ses_question",
+        inboxID: "input_question",
+        elicitation: true,
+      })
+
+      expect(response.stopReason).toBe("end_turn")
+      expect(elicitations).toMatchObject([
+        {
+          method: "session/elicitation",
+          params: { requestedSchema: { properties: { q0: { type: "string", title: "Choice" } } } },
+        },
+      ])
+      expect(fixture.requests).toContainEqual({
+        method: "POST",
+        path: "/api/session/ses_question/form/frm_question/reply",
+        body: { answer: { q0: "Alpha" } },
+      })
+    } finally {
+      await fixture.stop()
+    }
+  })
+
   test("cancels unsupported session forms so execution can continue", async () => {
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
@@ -732,6 +800,7 @@ function turn(input: {
   readonly connection: Connection
   readonly sessionID: string
   readonly inboxID: string
+  readonly elicitation?: boolean
   readonly childSessionUpdate?: (update: ChildSessionUpdate) => Promise<void>
 }) {
   return streamTurn({
@@ -741,6 +810,7 @@ function turn(input: {
     cwd: "/workspace",
     start: { type: "input", id: input.inboxID },
     writeTextFile: false,
+    elicitation: input.elicitation,
     control: { cancelled: false, admission: new AbortController() },
     childSessionUpdate: input.childSessionUpdate,
     submit: (signal) =>

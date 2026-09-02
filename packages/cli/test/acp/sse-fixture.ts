@@ -33,6 +33,12 @@ type FixtureOptions = {
     readonly formID: string
     readonly send: (event: unknown) => void
   }) => void | Promise<void>
+  readonly onFormReply?: (input: {
+    readonly sessionID: string
+    readonly formID: string
+    readonly body: unknown
+    readonly send: (event: unknown) => void
+  }) => void | Promise<void>
 }
 
 const ids = { next: 0 }
@@ -145,6 +151,17 @@ export function createSseFixture(options: FixtureOptions = {}) {
         await options.onFormCancel?.({
           sessionID: decodeURIComponent(form[1]),
           formID: decodeURIComponent(form[2]),
+          send,
+        })
+        return new Response(null, { status: 204 })
+      }
+
+      const formReply = /^\/api\/session\/([^/]+)\/form\/([^/]+)\/reply$/.exec(url.pathname)
+      if (formReply?.[1] && formReply[2]) {
+        await options.onFormReply?.({
+          sessionID: decodeURIComponent(formReply[1]),
+          formID: decodeURIComponent(formReply[2]),
+          body,
           send,
         })
         return new Response(null, { status: 204 })

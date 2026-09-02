@@ -8,6 +8,7 @@ import type {
 import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
 import { replyPermission, syncEditedFiles } from "./permission"
+import { replyQuestion } from "./question"
 import {
   completedToolUpdate,
   errorToolUpdate,
@@ -18,7 +19,7 @@ import {
 } from "./tool"
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
-  Partial<Pick<AgentSideConnection, "writeTextFile">>
+  Partial<Pick<AgentSideConnection, "extMethod" | "writeTextFile">>
 
 export type TurnControl = {
   cancelled: boolean
@@ -77,6 +78,7 @@ export async function streamTurn(input: {
   readonly start: TurnStart
   readonly writeTextFile: boolean
   readonly action?: boolean
+  readonly elicitation?: boolean
   readonly submit: (signal: AbortSignal) => Promise<unknown>
   readonly control: TurnControl
   readonly childSessionUpdate?: (update: ChildSessionUpdate) => Promise<void>
@@ -165,6 +167,16 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "form.created" && (event.data.form.sessionID === input.sessionID || child)) {
+        if (event.data.form.metadata?.kind === "question") {
+          await replyQuestion({
+            client: input.client,
+            connection: input.connection.extMethod ? input.connection : undefined,
+            event,
+            clientSessionID: input.sessionID,
+            supported: input.elicitation === true,
+          })
+          continue
+        }
         await input.client.form
           .cancel({ sessionID: event.data.form.sessionID, formID: event.data.form.id })
           .catch(() => input.client.session.interrupt({ sessionID: event.data.form.sessionID }).catch(() => {}))
