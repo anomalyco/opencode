@@ -112,6 +112,7 @@ it.live(
           agent: fixture.sdk.Agent.ID.make("build"),
           location: location(fixture),
         })
+        yield* sessions.background({ sessionID: id })
         yield* opencode.sessions.switchModel({ sessionID: id, model })
         const selected = yield* opencode.sessions.get({ sessionID: id })
         const page = yield* opencode.sessions.list({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })

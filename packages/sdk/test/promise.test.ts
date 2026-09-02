@@ -17,6 +17,7 @@ test("Promise host uses the embedded router", async () => {
     const location = { directory: directory.path }
     const sessions: OpenCode.SessionClient = opencode.sessions
     const session = await sessions.create({ location })
+    await sessions.background({ sessionID: session.id })
     const selected = await opencode.sessions.get({ sessionID: session.id })
     const page = await opencode.sessions.list({ directory: directory.path })
     const events = Array.fromAsync(opencode.sessions.log({ sessionID: session.id }))
