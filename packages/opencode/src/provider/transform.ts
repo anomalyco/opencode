@@ -706,17 +706,10 @@ function anthropicBindsThinking(apiId: string) {
 const ANTHROPIC_BLOCK_BINDING = { prefixMismatchBehavior: "drop_block" }
 
 function anthropicBlockBinding(model: Provider.Model, options: { [x: string]: any }) {
-  const key =
-    model.api.npm === "@ai-sdk/amazon-bedrock"
-      ? "reasoningConfig"
-      : ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)
-        ? "thinking"
-        : undefined
-  if (!key) return options
-
-  // `false` is an OpenCode-only opt-out, not a valid SDK value. Remove it even
-  // on models outside the default scope, and omit opt-out-only thinking objects.
-  if (options[key]?.blockBinding === false) {
+  const sdk = sdkKey(model.api.npm)
+  const key = sdk === "bedrock" ? "reasoningConfig" : sdk === "anthropic" ? "thinking" : undefined
+  // Consume the OpenCode-only opt-out even on models outside the default scope.
+  if (key && options[key]?.blockBinding === false) {
     const result = { ...options, [key]: { ...options[key] } }
     delete result[key].blockBinding
     if (Object.keys(result[key]).length === 0) delete result[key]
@@ -724,10 +717,22 @@ function anthropicBlockBinding(model: Provider.Model, options: { [x: string]: an
   }
 
   if (!anthropicBindsThinking(model.api.id)) return options
-  const thinking = options[key] ?? { type: "adaptive" }
-  if (thinking.type !== "adaptive" && thinking.type !== "enabled") return options
-  if (thinking.blockBinding !== undefined) return options
-  return { ...options, [key]: { ...thinking, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+  switch (model.api.npm) {
+    case "@ai-sdk/anthropic":
+    case "@ai-sdk/google-vertex/anthropic": {
+      const thinking = options.thinking ?? { type: "adaptive" }
+      if (thinking.type !== "adaptive" && thinking.type !== "enabled") return options
+      if (thinking.blockBinding !== undefined) return options
+      return { ...options, thinking: { ...thinking, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+    }
+    case "@ai-sdk/amazon-bedrock": {
+      const reasoningConfig = options.reasoningConfig ?? { type: "adaptive" }
+      if (reasoningConfig.type !== "adaptive" && reasoningConfig.type !== "enabled") return options
+      if (reasoningConfig.blockBinding !== undefined) return options
+      return { ...options, reasoningConfig: { ...reasoningConfig, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+    }
+  }
+  return options
 }
 
 function googleThinkingLevelEfforts(apiId: string) {
