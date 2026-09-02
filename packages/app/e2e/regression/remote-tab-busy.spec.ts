@@ -31,8 +31,8 @@ test("tab busy indicator reflects activity in the tab session family", async ({ 
 
   // The parent is idle, but its tab remains active while the background child runs.
   const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefB}"])`)
-  await tabB.screenshot({ path: info.outputPath("subagent-tab-activity.png") })
   await expect(tabB.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+  await tabB.screenshot({ path: info.outputPath("subagent-tab-activity.png") })
 
   const tabA = page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefA}"])`)
   await expect(tabA.locator("[data-titlebar-tab-title]")).toHaveText(sessionA.title)
