@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { createEffect, createMemo, createRoot } from "solid-js"
+import { createEffect, createMemo, createRoot, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { pathKey } from "@/utils/path-key"
@@ -109,6 +109,20 @@ function createServerCtx(
   })
   const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
+
+  // The server knows every project that has sessions (TUI, CLI, or another browser).
+  // Adopt any server-known project missing from the persisted list so Home shows it
+  // without a manual add. The persisted list remains the UI source of truth for
+  // ordering and dismissal (recentlyClosed). The global project is skipped: its
+  // worktree is the filesystem root, not a project a user can open. untrack keeps
+  // this from re-running on every persisted-list change: worktree normalization
+  // removes entries this must not re-add until the server project list changes.
+  createEffect(() => {
+    const serverProjects = sync.data.project
+    untrack(() =>
+      projects.hydrate(serverProjects.flatMap((project) => (project.id === "global" ? [] : [project.worktree]))),
+    )
+  })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })

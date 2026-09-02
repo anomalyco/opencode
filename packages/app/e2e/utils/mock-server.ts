@@ -11,6 +11,7 @@ export interface MockServerConfig {
   onInstanceDispose?: () => void
   directory: string
   project: unknown
+  projects?: unknown[]
   sessions: ({ id: string } & Record<string, unknown>)[]
   pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
   vcsDiff?: unknown[]
@@ -41,7 +42,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       directory: config.directory,
       home: "C:/OpenCode",
     },
-    "/project": [config.project],
+    "/project": config.projects ?? [config.project],
     "/project/current": config.project,
     "/agent": [{ name: "build", mode: "primary" }],
     "/vcs": { branch: "main", default_branch: "main" },
@@ -149,7 +150,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       config.onConnectKey?.({ integrationID: integrationConnect, body: route.request().postDataJSON() })
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
-    if (path === "/api/project") return json(route, [config.project])
+    if (path === "/api/project") return json(route, config.projects ?? [config.project])
     if (path === "/api/project/current")
       return json(route, { id: (config.project as { id?: string }).id, directory: config.directory })
     if (path.startsWith("/api/project/") && route.request().method() === "PATCH") return json(route, config.project)

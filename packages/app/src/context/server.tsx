@@ -120,6 +120,25 @@ export function createServerProjects<T extends ServerProjectState>(input: {
       )
       setStore("recentlyClosed", input.scope(), closed)
     },
+    // Adopt server-known projects (GET /project) that this browser never opened, so
+    // sessions created in the TUI/CLI still appear on Home. Appends instead of
+    // prepending: the persisted list keeps user ordering first. Entries the user
+    // closed stay closed — recentlyClosed is the explicit dismissal set.
+    hydrate(worktrees: string[]) {
+      const existing = new Set(current().map((project) => pathKey(project.worktree)))
+      const closed = new Set(currentClosed().map(pathKey))
+      const missing = worktrees.filter((worktree) => {
+        const key = pathKey(worktree)
+        if (!key || existing.has(key) || closed.has(key)) return false
+        existing.add(key)
+        return true
+      })
+      if (missing.length === 0) return
+      setStore("projects", input.scope(), [
+        ...current(),
+        ...missing.map((worktree) => ({ worktree, expanded: true })),
+      ])
+    },
     expand(directory: string) {
       const index = current().findIndex((project) => project.worktree === directory)
       if (index !== -1) setStore("projects", input.scope(), index, "expanded", true)

@@ -197,6 +197,52 @@ describe("createServerProjects", () => {
       dispose()
     })
   })
+
+  test("hydrate appends missing server projects after persisted entries", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/opened")
+      projects.hydrate(["/server-a", "/opened", "/server-b"])
+      expect(projects.list()).toEqual([
+        { worktree: "/opened", expanded: true },
+        { worktree: "/server-a", expanded: true },
+        { worktree: "/server-b", expanded: true },
+      ])
+      dispose()
+    })
+  })
+
+  test("hydrate keeps explicitly closed projects closed", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/a")
+      projects.close("/a")
+      projects.hydrate(["/a", "/b"])
+      expect(projects.list()).toEqual([{ worktree: "/b", expanded: true }])
+      expect(projects.recentlyClosed()).toEqual(["/a"])
+      dispose()
+    })
+  })
+
+  test("hydrate ignores empty worktrees and dedupes by normalized path", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.hydrate(["", "/repo", "/repo/"])
+      expect(projects.list()).toEqual([{ worktree: "/repo", expanded: true }])
+      projects.hydrate(["/repo"])
+      expect(projects.list()).toEqual([{ worktree: "/repo", expanded: true }])
+      dispose()
+    })
+  })
 })
 
 describe("migrateCanonicalLocalServerState", () => {
