@@ -298,6 +298,7 @@ test("Promise instance plugin ID collisions reject admission and reconstruct on 
   await using directory = await tmpdir("opencode-promise-instance-collision-")
   const configured: string[] = []
   const setups: string[] = []
+  const cleanups: string[] = []
   await using opencode = await OpenCode.create({
     ...hostOptions(directory.path),
     plugins: [
@@ -305,6 +306,9 @@ test("Promise instance plugin ID collisions reject admission and reconstruct on 
         id: "account-prompts",
         setup() {
           setups.push("host")
+          return () => {
+            cleanups.push("host")
+          }
         },
       },
     ],
@@ -342,12 +346,17 @@ test("Promise instance plugin ID collisions reject admission and reconstruct on 
   expect(await opencode.sessions.inbox.list({ sessionID: session.id })).toEqual([])
   expect((await opencode.message.list({ sessionID: session.id })).data).toEqual([])
   expect(configured).toEqual(["alpha"])
-  expect(setups).toEqual([])
+  // The host plugin wins the ID and activates inside the instance before the colliding instance plugin
+  // is reported failed; rejecting the instance tears that generation down again.
+  expect(setups).toEqual(["host"])
+  expect(cleanups).toEqual(["host"])
 
   const admitted = await opencode.sessions.prompt(input)
   expect(admitted.id).toBe(input.id)
   expect(admitted.payload.text).toBe("alpha: Retry this input")
   expect(await opencode.sessions.inbox.list({ sessionID: session.id })).toEqual([admitted])
   expect(configured).toEqual(["alpha", "alpha"])
-  expect(setups).toEqual(["host", "alpha"])
+  // The reconstructed instance runs a fresh generation: host plugin again, then the renamed instance plugin.
+  expect(setups).toEqual(["host", "host", "alpha"])
+  expect(cleanups).toEqual(["host"])
 }, 20_000)

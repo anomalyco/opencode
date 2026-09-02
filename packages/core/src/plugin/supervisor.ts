@@ -80,13 +80,26 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     enabled.add(plugin.id)
   }
 
+  const ordered = [
+    ...pre.filter((plugin) => enabled.has(plugin.id)),
+    ...[...packages.values()].filter((plugin) => enabled.has(plugin.id)),
+    ...post.filter((plugin) => enabled.has(plugin.id)),
+  ]
+  // Registry activation dies on a duplicate ID, which would drop the whole generation including builtins.
+  // Keep the first occurrence in boot order and report later ones like any other plugin setup failure.
+  const duplicate = (plugin: Plugin.Generation, index: number) =>
+    ordered.findIndex((other) => other.id === plugin.id) !== index
   return {
-    plugins: [
-      ...pre.filter((plugin) => enabled.has(plugin.id)),
-      ...[...packages.values()].filter((plugin) => enabled.has(plugin.id)),
-      ...post.filter((plugin) => enabled.has(plugin.id)),
+    plugins: ordered.filter((plugin, index) => !duplicate(plugin, index)),
+    failures: [
+      ...failures.values(),
+      ...ordered.filter(duplicate).map((plugin) => ({
+        id: Plugin.ID.make(plugin.id),
+        source: plugin.source ?? { type: "builtin" as const },
+        state: { status: "failed" as const, error: `Duplicate plugin ID: ${plugin.id}` },
+        features: { server: true as const, ...plugin.features },
+      })),
     ],
-    failures: [...failures.values()],
     pending: [...pending],
   }
 })
