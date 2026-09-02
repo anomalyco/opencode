@@ -138,6 +138,33 @@ body:
 }
 ```
 
+## Timeouts
+
+Provider requests wait up to five minutes for response headers and up to five minutes between streamed response chunks.
+Set `settings.headerTimeout` or `settings.chunkTimeout` to a number of milliseconds to change a limit, or to `false` to
+disable it:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "headerTimeout": 600000,
+        "chunkTimeout": false,
+      },
+    },
+  },
+}
+```
+
+| Setting         | Default  | Purpose                                                                      |
+| --------------- | -------- | ---------------------------------------------------------------------------- |
+| `headerTimeout` | `300000` | Time to wait for response headers. Stops once headers arrive.                |
+| `chunkTimeout`  | `300000` | Time allowed between streamed response chunks. Resets whenever data arrives. |
+
+A request that times out fails with a transport error and follows the normal retry policy.
+
 ## Package
 
 The `package` field selects the runtime used to communicate with a provider. For an OpenAI-compatible API, use the

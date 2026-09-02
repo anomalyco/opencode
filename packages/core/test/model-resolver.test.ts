@@ -247,6 +247,22 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("lifts timeout settings onto native route HTTP defaults", () =>
+    Effect.gen(function* () {
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/anthropic"), {
+          settings: { baseURL: "https://anthropic.example/v1", headerTimeout: false, chunkTimeout: 60_000 },
+        }),
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+
+      expect(resolved.defaults?.http).toMatchObject({ headerTimeout: false, chunkTimeout: 60_000 })
+      expect(resolved.defaults?.providerOptions).toBeUndefined()
+      expect(JSON.stringify(prepared.body)).not.toContain("Timeout")
+    }),
+  )
+
   it.effect("keeps catalog apiKey credentials out of provider JSON", () =>
     Effect.gen(function* () {
       const resolved = yield* ModelResolver.fromCatalogModel(

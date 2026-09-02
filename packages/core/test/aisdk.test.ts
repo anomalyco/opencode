@@ -701,6 +701,68 @@ it.effect("does not treat SSE comment heartbeats as model progress", () =>
   }),
 )
 
+it.effect("fails with a retryable transport error when response headers time out", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const customFetch = Object.assign(
+      (_input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
+        }),
+      { preconnect: fetch.preconnect },
+    )
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = createOpenAICompatible({
+        ...event.options,
+        name: String(event.options.name),
+        baseURL: String(event.options.baseURL),
+      })
+    })
+    const resolved = yield* aisdk.model(
+      model("@ai-sdk/openai-compatible", {
+        apiKey: "test",
+        baseURL: "https://example.test/v1",
+        headerTimeout: 25,
+        fetch: customFetch,
+      }),
+    )
+    const error = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+      Effect.flip,
+    )
+
+    expect(error.reason).toMatchObject({
+      _tag: "Transport",
+      operation: "request",
+      message: "Response headers timed out",
+    })
+    expect(SessionRunnerRetry.isRetryable(error)).toBe(true)
+  }),
+)
+
+it.effect("strips timeout settings from provider options", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let options: Record<string, unknown> | undefined
+    yield* aisdk.hook.sdk((event) => {
+      options = event.options
+      event.sdk = { languageModel: () => streamModel([]) }
+    })
+    yield* aisdk.model(
+      model("@ai-sdk/openai-compatible", {
+        apiKey: "test",
+        baseURL: "https://example.test/v1",
+        headerTimeout: false,
+        chunkTimeout: 60_000,
+      }),
+    )
+
+    expect(options).toBeDefined()
+    expect(options).not.toHaveProperty("headerTimeout")
+    expect(options).not.toHaveProperty("chunkTimeout")
+  }),
+)
+
 it.effect("emits malformed AI SDK tool input without executing it", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
