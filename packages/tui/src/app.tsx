@@ -64,6 +64,7 @@ import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair, type DialogPairCredentials } from "./component/dialog-pair"
+import { DialogUpdate } from "./component/dialog-update"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -1223,22 +1224,18 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
     void markUpdateNotification((draft) => {
       draft.versions = [...draft.versions, version].slice(-100)
     }).catch(toast.error)
-    toast.show({
-      variant: "info",
-      message: "An update is ready. Active sessions will be restarted.",
-      duration: 30_000,
-      action: {
-        label: "Install",
-        run: () => {
+    dialog.replace(() => (
+      <DialogUpdate
+        onInstall={() => {
           toast.show({ variant: "info", message: `Updating to ${version}...`, duration: 30_000 })
           void updater
             .apply(version)
             .then(restart)
             .then(() => toast.show({ variant: "success", message: "Update complete" }))
             .catch(toast.error)
-        },
-      },
-    })
+        }}
+      />
+    ))
   })
 
   event.on("tui.session.select", (evt, { workspace }) => {
