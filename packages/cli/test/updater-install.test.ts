@@ -18,17 +18,26 @@ function fixture(
     error?: AppProcess.AppProcessError
   } = () => ({}),
   name = "@opencode-ai/cli",
+  owner: Updater.Method | false = "npm",
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
-    const executable = path.join(root, "package", "bin", "opencode")
+    const directory = path.join(root, "inventory", "node_modules", name)
+    const executable = path.join(directory, "bin", "opencode")
     yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
+    yield* fs.writeFileString(executable, "")
     yield* fs.writeFileString(
-      path.join(root, "package", "package.json"),
+      path.join(directory, "package.json"),
       JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
     )
+    yield* fs.writeFileString(
+      path.join(root, "inventory", "package.json"),
+      JSON.stringify({ dependencies: { [name]: "1.0.0" } }),
+    )
+    yield* fs.makeDirectory(path.join(root, "bin"))
+    yield* fs.symlink(executable, path.join(root, "bin", "opencode"))
     // The updater uses global fetch; scope this replacement to each install test.
     yield* Effect.acquireRelease(
       Effect.sync(() =>
@@ -52,6 +61,7 @@ function fixture(
       repos: path.join(root, "repos"),
     })
     const commands: string[][] = []
+    const queries: string[][] = []
     const updater = yield* Updater.Service.pipe(
       Effect.provide(Updater.layer),
       Effect.provideService(Global.Service, global),
@@ -66,8 +76,24 @@ function fixture(
           run: (command) =>
             Effect.suspend(() => {
               if (command._tag !== "StandardCommand") return Effect.die("Unexpected piped install command")
-              commands.push([command.command, ...command.args])
-              const result = respond(command)
+              const query =
+                command.args[0] === "list" ||
+                (command.command === "bun" && command.args[0] === "pm") ||
+                (command.command === "yarn" && command.args[1] === "dir")
+              ;(query ? queries : commands).push([command.command, ...command.args])
+              const inventory = { dependencies: { [name]: { path: directory } } }
+              const result = query
+                ? {
+                    exitCode: command.command === owner ? 0 : 1,
+                    stdout: Buffer.from(
+                      command.command === "npm"
+                        ? JSON.stringify(inventory)
+                        : command.command === "pnpm"
+                          ? JSON.stringify([inventory])
+                          : path.join(root, command.command === "bun" ? "bin" : "inventory"),
+                    ),
+                  }
+                : respond(command)
               if (result.error) return Effect.fail(result.error)
               return Effect.succeed({
                 command: command.command,
@@ -83,7 +109,7 @@ function fixture(
         }),
       ),
     )
-    return { updater, commands, global, fs }
+    return { updater, commands, queries, global, fs }
   })
 }
 
@@ -183,15 +209,13 @@ it.live("install failures expose stderr and process errors do not report success
 ;(["npm", "pnpm", "bun", "yarn", undefined] as const).forEach((method) => {
   it.live(`method detection identifies ${method ?? "an unknown installation"} using the V2 package`, () =>
     Effect.gen(function* () {
-      const test = yield* fixture((command) => ({
-        stdout: Buffer.from(command.command === method ? "@opencode-ai/cli@2.3.4" : "opencode-ai@1.0.0"),
-      }))
+      const test = yield* fixture(undefined, "@opencode-ai/cli", method ?? false)
       expect(yield* test.updater.method()).toBe(method)
-      expect(test.commands).toEqual([
-        ["npm", "list", "-g", "--depth=0", "@opencode-ai/cli"],
-        ["pnpm", "list", "-g", "--depth=0", "@opencode-ai/cli"],
-        ["bun", "pm", "ls", "-g"],
-        ["yarn", "global", "list"],
+      expect(test.queries).toEqual([
+        ["npm", "list", "--global", "--depth=0", "--json", "--long"],
+        ["pnpm", "list", "--global", "--depth=0", "--json", "--long"],
+        ["bun", "pm", "bin", "--global"],
+        ["yarn", "global", "dir", "--silent"],
       ])
     }),
   )
@@ -199,13 +223,9 @@ it.live("install failures expose stderr and process errors do not report success
 
 it.live("method detection tolerates unavailable package managers", () =>
   Effect.gen(function* () {
-    const test = yield* fixture((command) =>
-      command.command === "yarn"
-        ? { stdout: Buffer.from("@opencode-ai/cli@2.3.4") }
-        : { error: new AppProcess.AppProcessError({ command: command.command }) },
-    )
+    const test = yield* fixture(undefined, "@opencode-ai/cli", "yarn")
     expect(yield* test.updater.method()).toBe("yarn")
-    expect(test.commands).toHaveLength(4)
+    expect(test.queries).toHaveLength(4)
   }),
 )
 
@@ -236,20 +256,11 @@ test("Node distribution honors the compile-time CLI name", async () => {
 if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-node") {
   it.live("Node distribution resolves the published npm package", () =>
     Effect.gen(function* () {
-      const test = yield* fixture(
-        (command) => ({
-          stdout: Buffer.from(command.command === "npm" ? "opencode-node@2.3.4" : ""),
-        }),
-        "opencode-node",
-      )
+      const test = yield* fixture(undefined, "opencode-node")
       expect(yield* test.updater.method()).toBe("npm")
       yield* test.updater.upgrade("npm", "v2.3.4")
       yield* test.updater.upgrade("pnpm", "v2.3.4")
       expect(test.commands).toEqual([
-        ["npm", "list", "-g", "--depth=0", "opencode-node"],
-        ["pnpm", "list", "-g", "--depth=0", "opencode-node"],
-        ["bun", "pm", "ls", "-g"],
-        ["yarn", "global", "list"],
         ["npm", "install", "--global", "opencode-node@2.3.4"],
         ["pnpm", "add", "--global", "--allow-build=opencode-node", "opencode-node@2.3.4"],
       ])

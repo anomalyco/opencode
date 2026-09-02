@@ -34,7 +34,12 @@ Builds set `OPENCODE_ARTIFACT` to `cli` (native) or `cli-node` (Node). Each uses
 The publisher advertises each artifact after its npm package is published. Package
 resolution stays inside the updater; callers still pass versions. Explicit-version
 installs also read the endpoint's package. Missing package metadata is an error,
-not a fallback to a hardcoded name. Installed-package detection reads the local manifest.
+not a fallback to a hardcoded name.
+
+Installation detection matches the running executable's real path against local
+npm/pnpm inventories, Bun's global executable links (`bun pm bin -g`), and Yarn's
+global packages. It needs no package name upfront and makes no update-server request.
+If multiple managers own the same executable, specify `--method` instead of guessing.
 
 npm migrations retain the old package to avoid unlinking the replacement command.
 pnpm/Yarn package renames require a manual reinstall. The curl method still uses

@@ -8,6 +8,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
 import { action, parseReleaseVersion, type Action, type Policy } from "./updater-action"
+import { detectInstallation } from "./updater-installation"
 
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
 export type Method = (typeof methods)[number]
@@ -175,15 +176,12 @@ const make = Effect.gen(function* () {
   const global = yield* Global.Service
   const appProcess = yield* AppProcess.Service
   const channel = OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
-  const installedPackage = yield* Effect.gen(function* () {
-    const executable = yield* fs.realPath(process.execPath)
-    const directory = path.dirname(path.dirname(executable))
-    const manifest: { name: string; bin?: Record<string, string> } = yield* fs
-      .readFileString(path.join(directory, "package.json"))
-      .pipe(Effect.flatMap((text) => Effect.try(() => JSON.parse(text))))
-    if (Object.values(manifest.bin ?? {}).some((bin) => path.resolve(directory, bin) === executable))
-      return manifest.name
-  }).pipe(Effect.orElseSucceed(() => undefined))
+  const installation = yield* detectInstallation(process.execPath).pipe(
+    Effect.provideService(FileSystem.FileSystem, fs),
+    Effect.provideService(Global.Service, global),
+    Effect.provideService(AppProcess.Service, appProcess),
+    Effect.cached,
+  )
 
   const readPolicy = Effect.fnUntraced(function* () {
     const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -212,29 +210,7 @@ const make = Effect.gen(function* () {
       )
   })
 
-  const method = Effect.fnUntraced(function* () {
-    const binary = path.join(
-      global.home,
-      ".opencode",
-      "bin",
-      process.platform === "win32" ? "opencode2.exe" : "opencode2",
-    )
-    if (path.resolve(process.execPath) === path.resolve(binary)) return "curl"
-    if (!installedPackage) return
-
-    const checks: ReadonlyArray<{ method: Method; command: string[] }> = [
-      { method: "npm", command: ["npm", "list", "-g", "--depth=0", installedPackage] },
-      { method: "pnpm", command: ["pnpm", "list", "-g", "--depth=0", installedPackage] },
-      { method: "bun", command: ["bun", "pm", "ls", "-g"] },
-      { method: "yarn", command: ["yarn", "global", "list"] },
-    ]
-    const results = yield* Effect.forEach(
-      checks,
-      (check) => run(check.command).pipe(Effect.map((result) => ({ check, result }))),
-      { concurrency: "unbounded" },
-    )
-    return results.find((result) => result.result.stdout.includes(installedPackage))?.check.method
-  })
+  const method = () => installation.pipe(Effect.map((owners) => (owners.length === 1 ? owners[0].method : undefined)))
 
   const release = Effect.fnUntraced(function* () {
     const response = yield* Effect.tryPromise({
@@ -262,6 +238,7 @@ const make = Effect.gen(function* () {
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
+    const installedPackage = (yield* installation).find((owner) => owner.method === method)?.package
     const packageName = (yield* release()).package
     const target = `${packageName}@${version}`
     if (installedPackage && packageName !== installedPackage && (method === "pnpm" || method === "yarn")) {
