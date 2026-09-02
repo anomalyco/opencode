@@ -63,6 +63,7 @@ import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useSessionArchive } from "@/pages/session/session-archive"
 import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
@@ -70,7 +71,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { sessionRemovalIDs } from "@/utils/session-delete"
-import { publishSession, unpublishSession } from "@/utils/session-share"
+import { createSessionMutation } from "@/utils/session-mutation"
 import { sessionTitle } from "@/utils/session-title"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
@@ -260,6 +261,7 @@ export function MessageTimeline(props: {
 
   const navigate = useNavigate()
   const serverSDK = useServerSDK()
+  const serverSync = useServerSync()
   const sdk = useSDK()
   const sync = useSync()
   const settings = useSettings()
@@ -659,29 +661,25 @@ export function MessageTimeline(props: {
   }
 
   const shareMutation = useMutation(() => ({
-    mutationFn: (id: string) => publishSession(serverSDK().client, id),
+    mutationFn: (session: NonNullable<ReturnType<typeof info>>) =>
+      createSessionMutation({ client: sdk().client, serverSync: serverSync() }).publish(session),
     onError: (err) => {
       console.error("Failed to share session", err)
     },
   }))
 
   const unshareMutation = useMutation(() => ({
-    mutationFn: (id: string) => unpublishSession(serverSDK().client, id),
+    mutationFn: (session: NonNullable<ReturnType<typeof info>>) =>
+      createSessionMutation({ client: sdk().client, serverSync: serverSync() }).unpublish(session),
     onError: (err) => {
       console.error("Failed to unshare session", err)
     },
   }))
 
   const titleMutation = useMutation(() => ({
-    mutationFn: (input: { id: string; title: string }) =>
-      sdk().api.session.rename({ sessionID: input.id, title: input.title }),
-    onSuccess: (_, input) => {
-      sync().set(
-        produce((draft) => {
-          const index = draft.session.findIndex((s) => s.id === input.id)
-          if (index !== -1) draft.session[index].title = input.title
-        }),
-      )
+    mutationFn: (input: { session: NonNullable<ReturnType<typeof info>>; title: string }) =>
+      createSessionMutation({ client: sdk().client, serverSync: serverSync() }).rename(input.session, input.title),
+    onSuccess: () => {
       setTitle("editing", false)
     },
     onError: (err) => {
@@ -693,17 +691,17 @@ export function MessageTimeline(props: {
   }))
 
   const shareSession = () => {
-    const id = sessionID()
-    if (!id || shareMutation.isPending) return
+    const session = info()
+    if (!session || shareMutation.isPending) return
     if (!shareEnabled()) return
-    shareMutation.mutate(id)
+    shareMutation.mutate(session)
   }
 
   const unshareSession = () => {
-    const id = sessionID()
-    if (!id || unshareMutation.isPending) return
+    const session = info()
+    if (!session || unshareMutation.isPending) return
     if (!shareEnabled()) return
-    unshareMutation.mutate(id)
+    unshareMutation.mutate(session)
   }
   const copyShareUrl = () => {
     const url = shareUrl()
@@ -779,7 +777,9 @@ export function MessageTimeline(props: {
       return
     }
 
-    titleMutation.mutate({ id, title: next })
+    const session = info()
+    if (!session) return
+    titleMutation.mutate({ session, title: next })
   }
 
   const exportSession = async (sessionID: string) => {
@@ -813,32 +813,19 @@ export function MessageTimeline(props: {
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
-    const result = await sdk()
-      .api.session.remove({ sessionID })
-      .then(() => true)
+    const removed = await createSessionMutation({ client: sdk().client, serverSync: serverSync() })
+      .delete(session)
       .catch((err) => {
         showToast({
           title: language.t("session.delete.failed.title"),
           description: errorMessage(err),
         })
-        return false
+        return undefined
       })
 
-    if (!result) return false
-
-    const removed = sessionRemovalIDs(sync().data.session, sessionID)
+    if (!removed) return false
 
     sessionArchive.navigateAfterRemoval(sessionID, session.parentID, nextSession?.id)
-
-    sync().set(
-      produce((draft) => {
-        draft.session = draft.session.filter((s) => !removed.has(s.id))
-      }),
-    )
-
-    for (const id of removed) {
-      sync().session.evict(id)
-    }
     notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [...removed] })
     return true
   }

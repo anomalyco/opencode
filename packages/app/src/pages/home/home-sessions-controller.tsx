@@ -5,7 +5,6 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useQuery } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, createRoot, type JSX, startTransition } from "solid-js"
-import { produce } from "solid-js/store"
 import { useCommand } from "@/context/command"
 import {
   loadHomeSessionIndex,
@@ -13,22 +12,21 @@ import {
   type HomeSessionEvents,
 } from "@/context/global-sync/home-session-index"
 import type { LocalProject } from "@/context/layout"
+import { useNavigate } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { compareSessionTime, displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { pathKey } from "@/utils/path-key"
-import { sessionRemovalIDs } from "@/utils/session-delete"
-import { publishSession, unpublishSession } from "@/utils/session-share"
+import { createSessionMutation } from "@/utils/session-mutation"
 import { showToast } from "@/utils/toast"
-import { Binary } from "@opencode-ai/core/util/binary"
-import { archiveHomeSession } from "../home-session-archive"
 import {
   fetchSessionExport,
   downloadSessionExport,
   sessionExportFilename,
 } from "@/utils/session-export"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import type { HomeController } from "./home-controller"
 
 const HOME_SESSION_LIMIT = 64
@@ -47,6 +45,7 @@ export type HomeSessionGroup = {
 export type OpenSessionOptions = { background?: boolean }
 
 export function createHomeSessionsController(home: HomeController) {
+  const navigate = useNavigate()
   const tabs = useTabs()
   const command = useCommand()
   const dialog = useDialog()
@@ -80,6 +79,7 @@ export function createHomeSessionsController(home: HomeController) {
         signal,
       )
       cache.complete(eventSequence)
+      cache.setInitial(index.sessions)
       return index
     },
     retry: false,
@@ -87,13 +87,11 @@ export function createHomeSessionsController(home: HomeController) {
     refetchOnMount: true,
     refetchOnReconnect: true,
   }))
-  const indexedSessions = createMemo(() =>
-    retainHomeSessions(
-      homeSessions().sessions(sessionLoad.data, sessionEventLoad.data),
-      HOME_SESSION_LIMIT,
-      Date.now(),
-    ),
-  )
+  const indexedSessions = createMemo(() => {
+    const cache = homeSessions()
+    const raw = cache.state.ready ? cache.state.sessions : cache.sessions(sessionLoad.data, sessionEventLoad.data)
+    return retainHomeSessions(raw, HOME_SESSION_LIMIT, Date.now())
+  })
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
       sessions: indexedSessions,
@@ -217,41 +215,32 @@ export function createHomeSessionsController(home: HomeController) {
         const conn = home.server.focused()
         const ctx = home.server.focusedContext()
         if (!conn || !ctx) return
-        const [, setStore] = ctx.sync.child(session.directory)
-        await archiveHomeSession({
-          server: ServerConnection.key(conn),
-          session,
-          archive: (sessionID) =>
-            ctx.sdk.ensureDirSdkContext(session.directory).client.session.update({
-              sessionID,
-              directory: session.directory,
-              time: { archived: Date.now() },
-            }),
-          remove: () => {
-            setStore(
-              produce((draft) => {
-                const match = Binary.search(draft.session, session.id, (item) => item.id)
-                if (match.found) draft.session.splice(match.index, 1)
-              }),
-            )
-            homeSessions().remove(session.id)
-          },
-          onError: (cause) =>
-            showToast({
-              title: language.t("common.requestFailed"),
-              description: errorMessage(cause, language.t("common.requestFailed")),
-            }),
-        })
+        try {
+          await createSessionMutation({
+            client: ctx.sdk.ensureDirSdkContext(session.directory).client,
+            serverSync: ctx.sync,
+          }).archive(session)
+          notifySessionTabsRemoved({
+            server: ServerConnection.key(conn),
+            directory: session.directory,
+            sessionIDs: [session.id],
+          })
+        } catch (cause) {
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: errorMessage(cause, language.t("common.requestFailed")),
+          })
+        }
       },
       rename: async (session: Session, title: string) => {
         if (!title || title === session.title) return
         const ctx = home.server.focusedContext()
         if (!ctx) return
         try {
-          await ctx.sdk.ensureDirSdkContext(session.directory).client.session.update({
-            sessionID: session.id,
-            title,
-          })
+          await createSessionMutation({
+            client: ctx.sdk.ensureDirSdkContext(session.directory).client,
+            serverSync: ctx.sync,
+          }).rename(session, title)
         } catch (cause) {
           showToast({
             title: language.t("common.requestFailed"),
@@ -263,7 +252,10 @@ export function createHomeSessionsController(home: HomeController) {
         const ctx = home.server.focusedContext()
         if (!ctx) return
         try {
-          return await publishSession(ctx.sdk.ensureDirSdkContext(session.directory).client, session.id)
+          return await createSessionMutation({
+            client: ctx.sdk.ensureDirSdkContext(session.directory).client,
+            serverSync: ctx.sync,
+          }).publish(session)
         } catch (cause) {
           showToast({
             title: language.t("toast.session.share.failed.title"),
@@ -275,7 +267,10 @@ export function createHomeSessionsController(home: HomeController) {
         const ctx = home.server.focusedContext()
         if (!ctx) return false
         try {
-          await unpublishSession(ctx.sdk.ensureDirSdkContext(session.directory).client, session.id)
+          await createSessionMutation({
+            client: ctx.sdk.ensureDirSdkContext(session.directory).client,
+            serverSync: ctx.sync,
+          }).unpublish(session)
           return true
         } catch (cause) {
           showToast({
@@ -310,21 +305,10 @@ export function createHomeSessionsController(home: HomeController) {
         const ctx = home.server.focusedContext()
         if (!ctx) return false
         try {
-          await ctx.sdk.ensureDirSdkContext(session.directory).client.session.delete({
-            sessionID: session.id,
-            directory: session.directory,
-          })
-          const [store, setStore] = ctx.sync.child(session.directory)
-          const removed = sessionRemovalIDs(store.session, session.id)
-          setStore(
-            produce((draft) => {
-              draft.session = draft.session.filter((item) => !removed.has(item.id))
-            }),
-          )
-          removed.forEach((id) => {
-            ctx.sync.session.evict(id)
-            homeSessions().remove(id)
-          })
+          const removed = await createSessionMutation({
+            client: ctx.sdk.ensureDirSdkContext(session.directory).client,
+            serverSync: ctx.sync,
+          }).delete(session)
           notifySessionTabsRemoved({
             server: home.selection.value().server,
             directory: session.directory,
@@ -396,6 +380,7 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
     todaySessions.length === 0 && yesterdaySessions.length === 0
       ? language.t("sidebar.project.recentSessions")
       : language.t("home.sessions.group.older")
+
   return [
     { id: "today" as const, title: language.t("home.sessions.group.today"), sessions: todaySessions },
     { id: "yesterday" as const, title: language.t("home.sessions.group.yesterday"), sessions: yesterdaySessions },

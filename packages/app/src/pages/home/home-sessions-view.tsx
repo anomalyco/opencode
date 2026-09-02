@@ -427,8 +427,7 @@ function HomeSessionGroupHeader(props: {
 function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord }) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const showProjectName = () => props.showProjectName() && props.record.projectName
-  const [localShareUrl, setLocalShareUrl] = createSignal<string | undefined>(props.record.session.share?.url)
-  const shareUrl = createMemo(() => localShareUrl() ?? props.record.session.share?.url)
+  const shareUrl = createMemo(() => props.record.session.share?.url)
   const [state, setState] = createStore({
     menuOpen: false,
     editing: false,
@@ -531,7 +530,7 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
           hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1
           group-hover/session:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100
         `}
-        data-menu={state.menuOpen}
+        data-menu={state.menuOpen || state.shareOpen}
       >
         <SessionActionMenu
           trigger={
@@ -596,9 +595,6 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
             setState("sharing", true)
             void props
               .onShareSession(props.record.session)
-              .then((url) => {
-                if (url) setLocalShareUrl(url)
-              })
               .catch(() => {})
               .finally(() => {
                 setState("sharing", false)
@@ -608,9 +604,6 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
             setState("unsharing", true)
             void props
               .onUnshareSession(props.record.session)
-              .then(() => {
-                setLocalShareUrl(undefined)
-              })
               .catch(() => {})
               .finally(() => {
                 setState("unsharing", false)
