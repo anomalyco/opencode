@@ -96,6 +96,32 @@ it.live("configured chunkTimeout raises a retryable response stream error when S
   }),
 )
 
+it.live("chunkTimeout can be disabled with false", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.promise(() => delayedBodyServer(250)),
+      (server) => Effect.sync(() => server.server.close()),
+    )
+
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const configured = yield* provider.getProvider(ProviderV2.ID.make("test"))
+          expect(configured.options.chunkTimeout).toBe(false)
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
+          const result = streamText({
+            model: yield* provider.getLanguage(model),
+            messages: [{ role: "user", content: "hello" }],
+          })
+
+          expect(yield* Effect.promise(() => result.text)).toBe("late")
+        }),
+      { config: providerConfig(server.url, { chunkTimeout: false }) },
+    )
+  }),
+)
+
 it.live("headerTimeout aborts when response headers do not arrive", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
@@ -152,7 +178,7 @@ it.live("headerTimeout is opt-in for non-OpenAI providers", () =>
   }),
 )
 
-it.live("OpenAI Codex headerTimeout default can be disabled by config", () =>
+it.live("OpenAI Codex header and chunk timeout defaults can be disabled by config", () =>
   Effect.gen(function* () {
     yield* withAuthContent(
       Effect.gen(function* () {
@@ -162,8 +188,9 @@ it.live("OpenAI Codex headerTimeout default can be disabled by config", () =>
               const provider = yield* Provider.Service
               const openai = yield* provider.getProvider(ProviderV2.ID.openai)
               expect(openai.options.headerTimeout).toBe(false)
+              expect(openai.options.chunkTimeout).toBe(false)
             }),
-          { config: { provider: { openai: { options: { headerTimeout: false } } } } },
+          { config: { provider: { openai: { options: { headerTimeout: false, chunkTimeout: false } } } } },
         )
       }),
     )
