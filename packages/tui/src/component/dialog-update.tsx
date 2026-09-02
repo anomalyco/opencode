@@ -12,7 +12,6 @@ type State =
   | { type: "ready"; active: "install" | "ignore" }
   | { type: "installing" }
   | { type: "restarting" }
-  | { type: "complete" }
   | { type: "failed"; message: string }
 
 export function DialogUpdate(props: { version: string; install: () => Promise<void>; restart: () => Promise<void> }) {
@@ -25,7 +24,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
     await props.install()
     setState({ type: "restarting" })
     await props.restart()
-    setState({ type: "complete" })
+    dialog.clear()
   }
 
   const beginInstall = () => {
@@ -46,7 +45,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
         bind: "return",
         title: "Confirm update action",
         group: "Dialog",
-        run: () => (state.type === "complete" || state.type === "failed" ? dialog.clear() : run()),
+        run: () => (state.type === "failed" ? dialog.clear() : run()),
       },
       {
         bind: "left",
@@ -71,13 +70,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-          <Switch>
-            <Match when={state.type === "ready"}>Update ready</Match>
-            <Match when={state.type === "installing"}>Installing update</Match>
-            <Match when={state.type === "restarting"}>Restarting service</Match>
-            <Match when={state.type === "complete"}>Update complete</Match>
-            <Match when={state.type === "failed"}>Update failed</Match>
-          </Switch>
+          Update
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
@@ -94,9 +87,6 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
           <Match when={state.type === "restarting"}>
             <Spinner>Restarting the background service...</Spinner>
           </Match>
-          <Match when={state.type === "complete"}>
-            <text fg={theme.text.feedback.success.default}>OpenCode is up to date.</text>
-          </Match>
           <Match when={state.type === "failed"}>
             <text fg={theme.text.feedback.error.default}>{state.type === "failed" ? state.message : ""}</text>
           </Match>
@@ -105,7 +95,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
       <Show
         when={state.type === "ready"}
         fallback={
-          <Show when={state.type === "complete" || state.type === "failed"}>
+          <Show when={state.type === "failed"}>
             <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
               <box
                 paddingLeft={3}
