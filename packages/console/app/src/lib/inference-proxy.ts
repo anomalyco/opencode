@@ -51,5 +51,5 @@ export async function proxyInference(request: Request, clientIP?: string): Promi
   const requestID = request.headers.get("x-opencode-request-id") ?? request.headers.get("x-opencode-request")
   if (requestID) forwarded.headers.set("x-opencode-request-id", requestID)
 
-  return fetch(forwarded, { redirect: "error" })
+  return fetch(forwarded, { redirect: "manual" })
 }
