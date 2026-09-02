@@ -56,7 +56,7 @@ List files and directories that are important to the conversation. Include paths
 - \`[exact path]\`: [why it matters]
 
 ## Additional Context
-- [important facts, assumptions, unresolved questions, exact references, or other context needed to continue that does not fit above; when uncertain, preserve it here, or "(none)"]
+- [facts or references needed to continue the work that are not captured above; omit this section if none]
 </template>`
 
 const SUMMARY_RULES = `Rules:
