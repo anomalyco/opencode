@@ -155,6 +155,7 @@ function use() {
 }
 
 export function Session(props: {
+  scrollRef?: (scroll: ScrollBoxRenderable | undefined) => void
   verticalTabsWidth: number
   promptMuted?: boolean
   sidebarVisible: boolean
@@ -377,6 +378,7 @@ export function Session(props: {
   let awayTimer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => {
     if (awayTimer) clearTimeout(awayTimer)
+    props.scrollRef?.(undefined)
     prependHistory.cancel()
     firstJump()?.()
     if (!scroll || scroll.isDestroyed) return
@@ -1371,6 +1373,7 @@ export function Session(props: {
               <scrollbox
                 ref={(r) => {
                   scroll = r
+                  props.scrollRef?.(r)
                   scroll.verticalScrollBar.on("change", updateAwayFromBottom)
                 }}
                 viewportOptions={{
