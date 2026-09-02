@@ -50,9 +50,10 @@ async function prepareServer(source: ServerSource) {
 }
 
 async function startDesktop(args: string[]) {
+  // Bun's implicit spawn environment omits values set during preparation.
   process.exitCode = await Bun.spawn(
     ["node", fileURLToPath(new URL("../bin/electron-vite.js", import.meta.resolve("electron-vite"))), "dev", ...args],
-    { stdio: ["inherit", "inherit", "inherit"] },
+    { env: process.env, stdio: ["inherit", "inherit", "inherit"] },
   ).exited
 }
 
