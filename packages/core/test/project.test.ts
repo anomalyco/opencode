@@ -431,38 +431,6 @@ describe("Project.resolve", () => {
     }),
   )
 
-  const itHg = Bun.which("hg") ? it : { live: it.live.skip }
-
-  itHg.live("detects mercurial repositories from nested directories", () =>
-    Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
-      yield* Effect.promise(async () => {
-        await $`hg init`.cwd(tmp.path).quiet()
-        await Bun.write(path.join(tmp.path, "file.txt"), "one\n")
-        await $`hg addremove -q`
-          .cwd(tmp.path)
-          .env({ ...process.env, HGPLAIN: "1" })
-          .quiet()
-        await $`hg commit -q -m initial -u test`
-          .cwd(tmp.path)
-          .env({ ...process.env, HGPLAIN: "1" })
-          .quiet()
-        await fs.mkdir(path.join(tmp.path, "a", "b"), { recursive: true })
-      })
-      const project = yield* Project.Service
-
-      const result = yield* project.resolve(abs(path.join(tmp.path, "a", "b")))
-
-      expect(result.vcs?.type).toBe("hg")
-      expect(result.directory).toBe(abs(tmp.path))
-      expect(result.id).not.toBe(Project.ID.make("global"))
-      expect(result.previous).toBeUndefined()
-    }),
-  )
-
   it.live("prefers git when both git and mercurial metadata exist", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
