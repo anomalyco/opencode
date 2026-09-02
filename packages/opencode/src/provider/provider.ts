@@ -1671,8 +1671,6 @@ const layer = Layer.effect(
             continue
           }
 
-          provider.options.chunkTimeout ??= 300_000
-
           const configProvider = cfg.provider?.[providerID]
 
           for (const [modelID, model] of Object.entries(provider.models)) {
@@ -1794,7 +1792,7 @@ const layer = Layer.effect(
         if (existing) return existing
 
         const customFetch = options["fetch"]
-        const chunkTimeout = options["chunkTimeout"]
+        const chunkTimeout = options["chunkTimeout"] ?? 300_000
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
         delete options["headerTimeout"]

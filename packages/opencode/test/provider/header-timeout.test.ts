@@ -48,15 +48,39 @@ it.live("headerTimeout does not abort delayed SSE body after headers arrive", ()
   }),
 )
 
-it.instance(
-  "chunkTimeout defaults to five minutes for custom providers",
-  () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider.Service
-      const configured = yield* provider.getProvider(ProviderV2.ID.make("test"))
-      expect(configured.options.chunkTimeout).toBe(300_000)
-    }),
-  { config: providerConfig("http://localhost:1234") },
+it.live("default chunkTimeout is applied at fetch without changing provider options", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.promise(() => delayedBodyServer(250)),
+      (server) => Effect.sync(() => server.server.close()),
+    )
+
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const configured = yield* provider.getProvider(ProviderV2.ID.make("test"))
+          const signals: (AbortSignal | null | undefined)[] = []
+          configured.options.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+            signals.push(init?.signal)
+            return fetch(input, init)
+          }
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
+          const language = yield* provider.getLanguage(model)
+          yield* Effect.acquireRelease(
+            Effect.promise(() =>
+              language.doStream({ prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }),
+            ),
+            (result) => Effect.promise(() => result.stream.cancel()),
+          )
+
+          expect(signals).toHaveLength(1)
+          expect(signals[0]).toBeInstanceOf(AbortSignal)
+          expect(configured.options.chunkTimeout).toBeUndefined()
+        }),
+      { config: providerConfig(server.url) },
+    )
+  }),
 )
 
 it.live("configured chunkTimeout raises a retryable response stream error when SSE body stalls", () =>
@@ -197,7 +221,7 @@ it.live("OpenAI Codex header and chunk timeout defaults can be disabled by confi
   }),
 )
 
-it.live("OpenAI API auth gets default header and chunk timeouts", () =>
+it.live("OpenAI API auth gets default headerTimeout", () =>
   Effect.gen(function* () {
     yield* withAuthContent(
       Effect.gen(function* () {
@@ -206,7 +230,6 @@ it.live("OpenAI API auth gets default header and chunk timeouts", () =>
             const provider = yield* Provider.Service
             const openai = yield* provider.getProvider(ProviderV2.ID.openai)
             expect(openai.options.headerTimeout).toBe(300_000)
-            expect(openai.options.chunkTimeout).toBe(300_000)
           }),
         )
       }),
