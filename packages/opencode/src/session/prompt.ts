@@ -429,6 +429,10 @@ const layer = Layer.effect(
 
       if (!task.command) return
 
+      // Synthetic user message required: reasoning models like gemini error on a
+      // mid-loop assistant message with no user message after it (#5650).
+      // Keep the wording non-imperative — an open-ended "continue" reads as user
+      // permission to act beyond the command's scope (#41866).
       const summaryUserMsg: SessionV1.User = {
         id: MessageID.ascending(),
         sessionID,
@@ -443,7 +447,7 @@ const layer = Layer.effect(
         messageID: summaryUserMsg.id,
         sessionID,
         type: "text",
-        text: "Summarize the task tool output above and continue with your task.",
+        text: `The /${task.command} command ran as a subtask and its output is shown above. Summarize that output for the user. The command's work is complete: do not take further actions or make changes unless the user explicitly requests them.`,
         synthetic: true,
       } satisfies SessionV1.TextPart)
     })
