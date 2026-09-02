@@ -66,7 +66,6 @@ export const dict = {
   "command.terminal.toggle": "Toggle terminal",
   "command.fileTree.toggle": "Toggle file tree",
   "command.review.toggle": "Toggle review",
-  "command.browser.toggle": "Toggle browser",
   "command.terminal.new": "New terminal",
   "command.terminal.new.description": "Create a new terminal tab",
   "command.steps.toggle": "Toggle steps",
@@ -667,9 +666,11 @@ export const dict = {
   "session.tab.usage": "Usage",
   "session.view.select": "Session view",
   "session.tab.review": "Review",
+  "session.tab.browser": "Browser",
+  "session.tab.add": "Add tab",
   "session.tab.context": "Context",
   "session.tab.unknown": "Unknown Session",
-  "session.panel.reviewAndFiles": "Review and files",
+  "session.panel.reviewAndFiles": "Review, files, and browser",
   "session.error.notFound": "This session cannot be found",
   "session.error.notFound.description": "This tab points to a session that no longer exists on this server.",
   "session.error.notFound.closeTab": "Close Tab",
@@ -823,7 +824,6 @@ export const dict = {
 
   "session.browser.address": "Browser address",
   "session.browser.address.placeholder": "Enter a URL",
-  "session.browser.close": "Close browser",
 
   "titlebar.update": "Update",
   "titlebar.tabs": "Tabs",

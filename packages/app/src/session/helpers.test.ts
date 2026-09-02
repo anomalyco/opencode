@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  SESSION_BROWSER_TAB,
   SESSION_OPEN_FILE_TAB,
   createOpenReviewFile,
   createOpenSessionFileTab,
@@ -230,6 +231,24 @@ describe("createSessionTabs", () => {
       expect(result.openFileOpen()).toBe(false)
       expect(result.panelTabs()).toEqual(["file://src/a.ts"])
       expect(result.activeTab()).toBe("file://src/a.ts")
+      dispose()
+    })
+  })
+
+  test("exposes one browser tab without treating it as a file tab", () => {
+    createRoot((dispose) => {
+      const tabs = createMemo(() => ({ active: () => SESSION_BROWSER_TAB, all: () => [SESSION_BROWSER_TAB] }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: () => undefined,
+        normalizeTab: (tab) => tab,
+        browser: () => true,
+      })
+
+      expect(result.panelTabs()).toEqual([])
+      expect(result.activeTab()).toBe(SESSION_BROWSER_TAB)
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.closableTab()).toBe(SESSION_BROWSER_TAB)
       dispose()
     })
   })
