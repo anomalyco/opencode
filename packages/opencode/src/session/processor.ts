@@ -645,6 +645,7 @@ const layer = Layer.effect(
         })
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        let emitted = false
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
@@ -654,7 +655,11 @@ const layer = Layer.effect(
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
+              Stream.tap((event) =>
+                Effect.sync(() => {
+                  emitted = true
+                }).pipe(Effect.andThen(handleEvent(event))),
+              ),
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
@@ -675,6 +680,9 @@ const layer = Layer.effect(
               SessionRetry.policy({
                 provider: input.model.providerID,
                 parse,
+                // Once any provider output has been persisted, replaying the
+                // request can duplicate text or execute the same tool twice.
+                canRetry: () => !emitted,
                 set: (info) => {
                   return status.set(ctx.sessionID, {
                     type: "retry",

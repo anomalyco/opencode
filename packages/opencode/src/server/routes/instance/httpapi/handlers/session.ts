@@ -32,6 +32,7 @@ import {
   PermissionResponsePayload,
   PromptPayload,
   RevertPayload,
+  RetryPayload,
   ShellPayload,
   SummarizePayload,
   UpdatePayload,
@@ -328,6 +329,45 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return HttpApiSchema.NoContent.make()
     })
 
+    const retry = Effect.fn("SessionHttpApi.retry")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof RetryPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      const match = yield* session
+        .findMessage(ctx.params.sessionID, (message) => message.info.role === "user")
+        .pipe(Effect.orDie)
+      if (Option.isNone(match) || match.value.info.role !== "user") return yield* new HttpApiError.BadRequest({})
+      const user = match.value.info
+      yield* session.updateMessage({
+        ...user,
+        model: { providerID: ctx.payload.providerID, modelID: ctx.payload.modelID },
+      })
+      yield* session.setAgentModel({
+        sessionID: ctx.params.sessionID,
+        agent: user.agent,
+        model: {
+          id: ctx.payload.modelID,
+          providerID: ctx.payload.providerID,
+          variant: "default",
+        },
+        time: Date.now(),
+      })
+      yield* promptSvc.loop({ sessionID: ctx.params.sessionID }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            yield* Effect.logError("session retry failed", { sessionID: ctx.params.sessionID, cause })
+            yield* events.publish(Session.Event.Error, {
+              sessionID: ctx.params.sessionID,
+              error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
+            })
+          }),
+        ),
+        Effect.forkIn(scope, { startImmediately: true }),
+      )
+      return HttpApiSchema.NoContent.make()
+    })
+
     const command = Effect.fn("SessionHttpApi.command")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof CommandPayload.Type
@@ -430,6 +470,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("summarize", summarize)
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
+      .handle("retry", retry)
       .handle("command", command)
       .handle("shell", shell)
       .handle("revert", revert)

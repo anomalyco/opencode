@@ -460,6 +460,30 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+it.instance("loop retries a completed provider error without adding another user message", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const seeded = yield* seed(chat.id, { finish: "stop" })
+    yield* sessions.updateMessage({
+      ...seeded.assistant,
+      error: MessageV2.fromError(new Error("provider unavailable"), { providerID: ref.providerID }),
+      time: { ...seeded.assistant.time, completed: Date.now() },
+    })
+    yield* llm.text("recovered")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+
+    expect(result.info.id).not.toBe(seeded.assistant.id)
+    expect(messages.filter((message) => message.info.role === "user")).toHaveLength(1)
+    expect(yield* llm.calls).toBe(1)
+  }),
+  20_000,
+)
+
 noLLMServer.instance(
   "loop exits for a completed parent turn with nonmonotonic message IDs",
   () =>

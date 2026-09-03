@@ -225,14 +225,20 @@ export function ModelSelectorPopover(props: {
 export function ModelSelectorPopoverV2(props: {
   provider?: string
   model?: ModelState
+  exclude?: { modelID: string; providerID: string }
   trigger: ModelSelectorTrigger
   onClose?: () => void
+  onSelect?: (model: { modelID: string; providerID: string }) => void
 }) {
   const dialog = useDialog()
   const controller = createModelSelectorController({
     model: props.model,
     provider: () => props.provider,
-    onSelect: () => props.onClose?.(),
+    exclude: () => props.exclude,
+    onSelect: (item) => {
+      props.onSelect?.({ modelID: item.id, providerID: item.provider.id })
+      props.onClose?.()
+    },
   })
 
   return (
@@ -254,15 +260,19 @@ export function ModelSelectorPopoverV2(props: {
 
 function createModelSelectorController(input: {
   provider: () => string | undefined
+  exclude?: () => { modelID: string; providerID: string } | undefined
   model?: ModelState
-  onSelect: () => void
+  onSelect: (item: ModelItem) => void
 }) {
   const model = input.model ?? useLocal().model
   const allModels = createMemo(() =>
     model
       .list()
       .filter((item) => model.visible({ modelID: item.id, providerID: item.provider.id }))
-      .filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
+      .filter((item) => (input.provider() ? item.provider.id === input.provider() : true))
+      .filter(
+        (item) => item.id !== input.exclude?.()?.modelID || item.provider.id !== input.exclude?.()?.providerID,
+      ),
   )
 
   return {
@@ -286,7 +296,7 @@ function createModelSelectorController(input: {
     },
     select: (item: ModelItem) => {
       model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
-      input.onSelect()
+      input.onSelect(item)
     },
   }
 }

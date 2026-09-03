@@ -36,8 +36,12 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         interruptCalls.push(sessionID)
       }),
-    wake: (sessionID) =>
+    wake: (sessionID, options) =>
       Effect.sync(() => {
+        if (options?.force) {
+          executionCalls.push(sessionID)
+          return
+        }
         wakeCalls.push(sessionID)
       }),
   }),
@@ -286,6 +290,27 @@ describe("SessionV2.prompt", () => {
 
       expect(retried).toEqual(first)
       expect(wakeCalls).toEqual([sessionID])
+    }),
+  )
+
+  it.effect("resumes execution when an explicit retry targets a promoted prompt", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const prompt = Prompt.make({ text: "Recover failed provider turn" })
+      yield* session.prompt({ id: messageID, sessionID, prompt, delivery: "queue", resume: false })
+      yield* SessionInput.promoteNextQueued(db, events, sessionID)
+      executionCalls.length = 0
+      wakeCalls.length = 0
+
+      const retried = yield* session.prompt({ id: messageID, sessionID, prompt, resume: true })
+
+      expect(retried).toMatchObject({ id: messageID, delivery: "queue" })
+      expect(executionCalls).toEqual([sessionID])
+      expect(wakeCalls).toEqual([])
+      expect(yield* admittedCount).toBe(1)
     }),
   )
 
