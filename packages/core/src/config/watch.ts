@@ -13,6 +13,8 @@ export function plan(sources: ConfigDiscovery.Sources) {
   const files = [
     ...sources.direct,
     ...sources.project.map((root) => root.path),
+    ...sources.claude,
+    ...sources.agents,
     ...(sources.explicit ? [sources.explicit] : []),
   ]
   // Keep a parent watch for each root so deletion/recreation is observable.

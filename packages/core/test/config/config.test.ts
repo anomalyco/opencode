@@ -105,6 +105,10 @@ describe("Config", () => {
             Effect.gen(function* () {
               const config = yield* Config.Service
               expect(ambient(yield* config.entries())).toEqual([])
+              const watcher = yield* Watcher.Test
+              expect(
+                (yield* watcher.subscriptions()).filter((watch) => watch.type === "entries" && watch.path === home),
+              ).toEqual([])
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, undefined, undefined, { global: false }),
@@ -912,7 +916,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("does not watch ecosystem config roots", () =>
+  it.live("does not recursively watch ecosystem config roots", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
@@ -933,7 +937,11 @@ describe("Config", () => {
                 path: AbsolutePath.make(path.join(tmp.path, "global")),
                 ignore: ["**/{node_modules,.git}/**", ".git", "node_modules"],
               },
-              { type: "entries", path: tmp.path, names: [".opencode", "opencode.json", "opencode.jsonc"] },
+              {
+                type: "entries",
+                path: tmp.path,
+                names: [".agents", ".claude", ".opencode", "opencode.json", "opencode.jsonc"],
+              },
             ])
           }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, Watcher.testLayer)))
         }),
@@ -1491,7 +1499,7 @@ describe("Config", () => {
             expect(yield* watcher.subscriptions()).toContainEqual({
               path: tmp.path,
               type: "entries",
-              names: [".opencode", "opencode.json", "opencode.jsonc"],
+              names: [".agents", ".claude", ".opencode", "opencode.json", "opencode.jsonc"],
             })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),

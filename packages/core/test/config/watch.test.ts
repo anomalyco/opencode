@@ -17,7 +17,7 @@ describe("ConfigWatch.plan", () => {
   test("groups missing candidates and keeps parent watches when roots appear", () => {
     const missing = ConfigWatch.plan(sources)
     expect(Array.from(missing.values())).toEqual([
-      { path: project, type: "entries", names: [".opencode", "opencode.json", "opencode.jsonc"] },
+      { path: project, type: "entries", names: [".agents", ".claude", ".opencode", "opencode.json", "opencode.jsonc"] },
     ])
     const present = ConfigWatch.plan({ ...sources, project: [{ path: root, present: true }] })
     expect(Array.from(present.values())).toEqual([

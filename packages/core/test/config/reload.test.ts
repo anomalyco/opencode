@@ -43,6 +43,54 @@ const decode = Schema.decodeUnknownSync(Info)
 const document = path.join(import.meta.dir, "opencode.json")
 
 describe("config plugin reloads", () => {
+  for (const input of [
+    { root: ".agents", global: false },
+    { root: "../.claude", global: false },
+    { root: "home/.agents", global: true },
+    { root: "home/.claude", global: true },
+  ]) {
+    it.live(`loads skills when ${input.root} appears after startup`, () =>
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const project = path.join(tmp.path, "project")
+            const root = path.resolve(project, input.root)
+            const file = path.join(project, "opencode.json")
+            yield* Effect.promise(async () => {
+              await fs.mkdir(path.join(project, "home"), { recursive: true })
+              await fs.mkdir(path.join(project, "global"))
+              await Bun.write(file, JSON.stringify({ shell: "initial" }))
+            })
+            return yield* Effect.gen(function* () {
+              const config = yield* Config.Service
+              const plugins = yield* Plugin.Service
+              const skills = yield* Skill.Service
+              const host = yield* PluginHost.make(plugins)
+              yield* ConfigSkillPlugin.Plugin.effect(host)
+              expect(yield* skills.list()).toEqual([])
+
+              // Finish startup by observing an ordinary config reload before creating the root.
+              yield* Effect.promise(() => Bun.write(file, JSON.stringify({ shell: "ready" })))
+              yield* waitUntil(
+                config.entries().pipe(Effect.map((entries) => Config.latest(entries, "shell") === "ready")),
+              )
+              const skill = path.join(root, "skills", "probe", "SKILL.md")
+              yield* Effect.promise(() =>
+                Bun.write(skill, "---\nname: probe\ndescription: Hot reload\n---\nTest skill"),
+              )
+              yield* waitUntil(skills.list().pipe(Effect.map((items) => items.some((item) => item.id === "probe"))))
+              expect((yield* skills.list())[0]?.location).toBe(AbsolutePath.make(skill))
+              yield* Effect.promise(() => fs.rm(root, { recursive: true }))
+              yield* waitUntil(skills.list().pipe(Effect.map((items) => items.length === 0)))
+              yield* Effect.promise(() => Bun.write(skill, "---\nname: probe\ndescription: Recreated\n---\nTest skill"))
+              yield* waitUntil(skills.list().pipe(Effect.map((items) => items[0]?.description === "Recreated")))
+            }).pipe(Effect.provide(liveConfig(project, undefined, { global: input.global })))
+          }),
+        ),
+      ),
+    )
+  }
+
   it.live("retains readiness signalled synchronously during initial config startup", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
@@ -270,9 +318,9 @@ describe("config plugin reloads", () => {
   )
 })
 
-function liveConfig(directory: string, native?: Watcher.NativeInterface) {
+function liveConfig(directory: string, native?: Watcher.NativeInterface, options: Config.Options = { global: false }) {
   return AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node, Reference.node, Global.node, Location.node]), [
-    Config.node.replace(Config.configured({ global: false })),
+    Config.node.replace(Config.configured(options)),
     Location.node.replace(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
     ),

@@ -184,6 +184,8 @@ export const layer = (options?: Options) =>
       })
 
       const load = Effect.fn("Config.load")(function* (sources: ConfigDiscovery.Sources) {
+        const claude = yield* Effect.filter(sources.claude, (path) => fs.isDir(path))
+        const agents = yield* Effect.filter(sources.agents, (path) => fs.isDir(path))
         const direct = yield* Effect.forEach(sources.direct, (filepath) => loadFile(filepath)).pipe(
           Effect.orDie,
           Effect.map((entries) => entries.filter((entry): entry is Document => entry !== undefined)),
@@ -221,8 +223,8 @@ export const layer = (options?: Options) =>
         )
         return [
           ...(yield* loadWellknown().pipe(Effect.orDie)),
-          ...sources.claude.map((path) => new ClaudeDirectory({ type: "claude", path })),
-          ...sources.agents.map((path) => new AgentsDirectory({ type: "agents", path })),
+          ...claude.map((path) => new ClaudeDirectory({ type: "claude", path })),
+          ...agents.map((path) => new AgentsDirectory({ type: "agents", path })),
           ...globalSupplementary,
           ...explicit,
           ...direct,

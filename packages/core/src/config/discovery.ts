@@ -38,8 +38,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     Effect.gen(function* () {
       // Resolve the parent too: missing children must honor symlinked global roots.
       const parent = yield* fs.resolve(directory)
-      const ecosystem = yield* Effect.filter([".claude", ".agents"], (name) => fs.exists(path.join(directory, name)))
-      return yield* Effect.forEach([...ecosystem, ".opencode", ...names.toReversed()], (name) =>
+      return yield* Effect.forEach([".claude", ".agents", ".opencode", ...names.toReversed()], (name) =>
         fs
           .resolve(path.join(parent, name))
           .pipe(Effect.map((resolved) => ({ item: AbsolutePath.make(path.join(directory, name)), resolved }))),
@@ -71,13 +70,13 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     ),
     claude: [
       ...new Set([
-        ...(globalEnabled && (yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
+        ...(globalEnabled ? [globalClaudeDirectory] : []),
         ...visible.filter((item) => path.basename(item) === ".claude").toReversed(),
       ]),
     ],
     agents: [
       ...new Set([
-        ...(globalEnabled && (yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
+        ...(globalEnabled ? [globalAgentsDirectory] : []),
         ...visible.filter((item) => path.basename(item) === ".agents").toReversed(),
       ]),
     ],
