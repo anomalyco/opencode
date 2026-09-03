@@ -32,6 +32,24 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByTestId("settings-screen").getByRole("tab", { name: "Preferences" })).toBeVisible()
 })
 
+test("settings has its own route and returns through app history", async ({ page }) => {
+  const settings = page.getByTestId("settings-screen")
+  const home = page.getByRole("button", { name: "Home", exact: true })
+  await expect(page).toHaveURL("/settings")
+  await expect(home).toHaveAttribute("aria-pressed", "false")
+  await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+  await expect(page).toHaveURL("/")
+  await expect(home).toHaveAttribute("aria-pressed", "true")
+  await page.keyboard.press("Control+]")
+  await expect(page).toHaveURL("/settings")
+  await expect(settings.getByRole("tab", { name: "Preferences", exact: true })).toBeVisible()
+  await expect(home).toHaveAttribute("aria-pressed", "false")
+  await home.click()
+  await expect(page).toHaveURL("/")
+  await expect(settings).toBeHidden()
+  await expect(home).toHaveAttribute("aria-pressed", "true")
+})
+
 test("workspaces opens without waiting for inventory or sessions", async ({ page }) => {
   const inventory = Promise.withResolvers<void>()
   const sessions = Promise.withResolvers<void>()

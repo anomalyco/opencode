@@ -141,7 +141,12 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       target: target.replace(binary, "bun") as Bun.Build.CompileTarget,
       ...(executablePath ? { executablePath } : {}),
       outfile: path.join(outdir, name, "bin", binary),
-      execArgv: [`--user-agent=${binary}/${Script.version}`, "--use-system-ca", "--no-warnings", "--"],
+      execArgv: [
+        `--user-agent=opencode/${Script.channel}/${Script.version}/cli`,
+        "--use-system-ca",
+        "--no-warnings",
+        "--",
+      ],
       windows: {},
     },
     define: {

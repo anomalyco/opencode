@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "ሳይክል ቋንቋ",
   "command.language.set": "ቋንቋን ተጠቀም፡ {{language}}",
   "command.session.new": "አዲስ ክፍለ ጊዜ",
+  "command.session.import": "ክፍለ ጊዜ ማስመጣት",
   "command.file.open": "ክፍት ፋይል",
   "command.tab.close": "ትርፉን ዝጋ",
   "command.tab.reopenClosed": "የተዘጋውን ትር እንደገና ክፈት",

@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "Súkklumál",
   "command.language.set": "Brúka mál: {{language}}",
   "command.session.new": "Nýggj setan",
+  "command.session.import": "Innflyt setan",
   "command.file.open": "Opna fíluna",
   "command.tab.close": "Lat flipan aftur",
   "command.tab.reopenClosed": "Opna aftur stongdan flipan",

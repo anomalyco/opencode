@@ -271,9 +271,7 @@ export namespace Timeline {
             detail,
             new Set(
               messages
-                .filter(
-                  (message) => timelineNoticeRequired(message) || (message.type === "shell" && shellFailed(message)),
-                )
+                .filter((message) => message.type === "compaction" && timelineNoticeRequired(message))
                 .map((message) => message.id),
             ),
           )
@@ -321,7 +319,8 @@ export namespace Timeline {
       const refs = messages.flatMap((message, messageIndex) =>
         contentEntries(message)
           .filter(
-            (entry) => isRenderable(entry.content, showReasoning, detail) && !(thinking && entry.content === lastContent),
+            (entry) =>
+              isRenderable(entry.content, showReasoning, detail) && !(thinking && entry.content === lastContent),
           )
           .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
       )
@@ -662,9 +661,10 @@ function toolGroupType(
   detail?: TimelineDetail,
 ) {
   if (detail) {
-    if (currentToolFailed(content) || content.name === "question") return undefined
+    if (content.name === "question" && !currentToolFailed(content)) return undefined
     const category = timelineCategory(content)!
     if (detail[category].placement === "grouped") return "context"
+    if (currentToolFailed(content)) return undefined
     if (content.name === "patch") return "patch"
     if (content.name === "edit") return "edit"
     return undefined

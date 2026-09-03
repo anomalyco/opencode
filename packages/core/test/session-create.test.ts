@@ -3,6 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { Money } from "@opencode-ai/schema/money"
 import { Shell } from "@opencode-ai/schema/shell"
 import { Skill } from "@opencode-ai/schema/skill"
@@ -1242,6 +1243,7 @@ describe("SessionTransfer", () => {
       const runningCompactionID = SessionMessage.ID.create()
       const completedCompactionID = SessionMessage.ID.create()
       const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+      const providerState = { responseId: "summary-response" }
 
       yield* transfer.import({
         data: {
@@ -1296,6 +1298,8 @@ describe("SessionTransfer", () => {
               type: "compaction",
               status: "completed",
               reason: "manual",
+              model,
+              providerState,
               summary: "summary",
               recent: "recent",
               time: { created: DateTime.makeUnsafe(9) },
@@ -1312,6 +1316,11 @@ describe("SessionTransfer", () => {
         completedCompactionID,
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
+      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ model, providerState })
+      expect((yield* transfer.export({ sessionID, sanitize: true })).messages.at(-1)).toMatchObject({
+        model,
+        providerState: { redacted: `compaction-provider-state:${completedCompactionID}` },
+      })
     }),
   )
 
@@ -1325,6 +1334,7 @@ describe("SessionTransfer", () => {
       const sessionID = Session.ID.create()
       const sourceMessageID = SessionMessage.ID.create()
       const errorMessageID = SessionMessage.ID.create()
+      yield* TestClock.setTime(1_000)
 
       const imported = yield* transfer.import({
         data: {
@@ -1333,6 +1343,7 @@ describe("SessionTransfer", () => {
             id: sessionID,
             time: {
               ...template.time,
+              updated: DateTime.makeUnsafe(100),
               idle: DateTime.makeUnsafe(200),
               viewed: DateTime.makeUnsafe(150),
             },
@@ -1366,7 +1377,11 @@ describe("SessionTransfer", () => {
       const messages = yield* session.messages({ sessionID, order: "asc" })
 
       expect(imported).toMatchObject({ id: sessionID, title: "Exported", location, metadata: { channel: "C123" } })
-      expect(imported.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
+      expect(imported.time).toMatchObject({
+        updated: DateTime.makeUnsafe(1_000),
+        idle: DateTime.makeUnsafe(200),
+        viewed: DateTime.makeUnsafe(150),
+      })
       expect(messages).toMatchObject([
         { id: sourceMessageID, ...Expected.user("Imported message") },
         { id: errorMessageID, type: "compaction", error: { type: "test_error", message: "Original error" } },

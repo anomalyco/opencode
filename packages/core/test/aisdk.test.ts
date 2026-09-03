@@ -90,8 +90,9 @@ it.effect("rejects native provider compaction rather than silently dropping repl
         ],
       }),
     ).pipe(Effect.flip)
-    expect(error.reason._tag).toBe("InvalidRequest")
+    expect(error.reason._tag).toBe("UnsupportedOperation")
     expect(error.message).toContain("cannot replay")
+    if (error.reason._tag === "UnsupportedOperation") expect(error.reason.operation).toBe("compaction-replay")
   }),
 )
 

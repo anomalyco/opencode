@@ -529,13 +529,11 @@ export function CurrentContextToolGroup(props: {
   )
   const label = createMemo(() => {
     const notices = props.parts.filter((part) => part.type === "notice").length
-    if (!names() && !notices) {
-      const title = i18n.t("ui.messagePart.context.reasoning")
-      return { text: title, title, before: "", after: "" }
-    }
-    const title = [names(), notices ? i18n.plural("ui.messagePart.context.notice", notices) : undefined]
-      .filter(Boolean)
-      .join(", ")
+    const title =
+      [names(), notices ? i18n.plural("ui.messagePart.context.notice", notices) : undefined]
+        .filter(Boolean)
+        .join(", ") ||
+      i18n.plural("ui.messagePart.context.thought", props.parts.filter((part) => part.type === "reasoning").length)
     const text = i18n.t("ui.messagePart.tools.used", { tools: title })
     const index = text.indexOf(title)
     return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
@@ -1443,7 +1441,7 @@ ToolRegistry.register({
             </div>
             <Show when={clickable()}>
               <div data-component="task-tool-action">
-                <Icon name="chevron-right" size="small" />
+                <Icon name="chevron-right" size="normal" />
               </div>
             </Show>
           </div>
@@ -1470,7 +1468,7 @@ ToolRegistry.register({
       >
         <div
           data-component="task-tool-delegating"
-          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-01 p-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px]"
+          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-02 p-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px]"
         >
           <Icon name="subagent" size="small" class="shrink-0 text-v2-icon-icon-faint" />
           <TextShimmer text={i18n.t("ui.tool.agent.delegating")} class="min-w-0 truncate" />

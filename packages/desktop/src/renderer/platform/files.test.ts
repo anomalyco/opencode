@@ -19,7 +19,7 @@ function fileApi(events: string[]) {
       events.push(`release:${token}`)
     },
     getPathForFile: () => "fallback",
-    saveFilePicker: async () => null,
+    saveFile: async () => false,
     openExternal: () => {},
     openLocalFile: () => {},
     resolveAppPath: async () => null,

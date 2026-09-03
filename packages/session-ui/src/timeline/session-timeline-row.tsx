@@ -4,7 +4,6 @@ import type {
   SessionMessageUser,
   SessionStatus,
 } from "@opencode-ai/client/promise"
-import { Card } from "@opencode-ai/ui/card"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
@@ -22,6 +21,7 @@ import {
 import { AssistantReasoningContent, SessionCompactionMessage } from "../message/message-content"
 import type { ContextGroupPart } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
+import { SessionError } from "../components/session-error"
 import { timelineCategory, type TimelineDetail } from "./detail"
 import { currentToolFailed } from "../message/current-tool-state"
 import {
@@ -71,6 +71,8 @@ export function createSessionTimelineRowRenderer(input: {
     input.projection.rows().forEach((row) => {
       if (row._tag !== "AssistantPart" || row.group.type !== "context") return
       row.group.refs.forEach((ref) => {
+        const content = Timeline.resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
+        if (content?.type !== "tool" || content.name !== "patch" || content.state.status === "error") return
         const part = `${ref.messageID}:${ref.partID}`
         const key = patchGroupKeys.get(part)
         if (key && !owners.has(key)) owners.set(key, part)
@@ -273,8 +275,14 @@ export function createSessionTimelineRowRenderer(input: {
 
   function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
     if (input.timelineDetail) {
-      if (item.type === "tool" && currentToolFailed(item)) return true
       const category = timelineCategory(item)
+      if (
+        category &&
+        input.timelineDetail()[category].placement === "hidden" &&
+        item.type === "tool" &&
+        currentToolFailed(item)
+      )
+        return true
       if (category === "shell" || category === "edit" || category === "thinking")
         return input.timelineDetail()[category].details === "expanded"
     }
@@ -285,8 +293,10 @@ export function createSessionTimelineRowRenderer(input: {
   const notice = (message: SessionMessageInfo) => {
     if (message.type === "agent-switched")
       return {
-        label: i18n.t("ui.tool.agent.default"),
-        data: message.previous ? `${message.previous} → ${message.agent}` : message.agent,
+        label: i18n.t("ui.sessionTimeline.notice.agentChanged"),
+        data: message.previous
+          ? `${capitalizeAgent(message.previous)} → ${capitalizeAgent(message.agent)}`
+          : capitalizeAgent(message.agent),
       }
     if (message.type === "model-switched") return undefined
     if (message.type === "skill") return { label: i18n.t("ui.tool.skill"), data: message.name }
@@ -404,14 +414,18 @@ export function createSessionTimelineRowRenderer(input: {
                           data-slot="session-timeline-notice"
                           class={`w-full truncate ${props.grouped ? "py-1" : "pt-3 pb-1"} text-13-regular leading-text-compact text-text-weak ${inset()}`}
                         >
-                          <bdi dir="auto" class="text-13-medium">
+                          <bdi
+                            dir="auto"
+                            class="font-[530]"
+                            classList={{ "text-v2-text-text-faint": message()?.type === "agent-switched" }}
+                          >
                             {content().label}
                           </bdi>
                           <Show when={content().data}>
                             {(data) => (
-                              <span>
-                                {" "}
-                                · <bdi dir="auto">{data()}</bdi>
+                              <span classList={{ "ms-2": message()?.type === "agent-switched" }}>
+                                <Show when={message()?.type !== "agent-switched"}>{" · "}</Show>
+                                <bdi dir="auto">{data()}</bdi>
                               </span>
                             )}
                           </Show>
@@ -488,8 +502,8 @@ export function createSessionTimelineRowRenderer(input: {
       const value = message()
       return (
         input.timelineDetail().shell.details === "expanded" ||
-        value?.status === "timeout" ||
-        (value?.status === "exited" && value.exit !== undefined && value.exit !== 0)
+        (input.timelineDetail().shell.placement === "hidden" &&
+          (value?.status === "timeout" || (value?.status === "exited" && value.exit !== undefined && value.exit !== 0)))
       )
     })
     return (
@@ -675,9 +689,7 @@ export function createSessionTimelineRowRenderer(input: {
     return (
       <Frame row={current()}>
         <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-          <Card variant="error" class="error-card">
-            {current().text}
-          </Card>
+          <SessionError message={current().text} />
         </div>
       </Frame>
     )
@@ -692,4 +704,8 @@ export function createSessionTimelineRowRenderer(input: {
   }
 
   return { Row }
+}
+
+function capitalizeAgent(agent: string) {
+  return agent.slice(0, 1).toUpperCase() + agent.slice(1)
 }

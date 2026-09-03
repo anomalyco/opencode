@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
@@ -335,6 +336,61 @@ test("restores the draft after closing and revisiting a pending session that fai
   expect(mock.prompts).toEqual([])
 })
 
+test("executes a selected slash command after creating its worktree", async ({ page }, testInfo) => {
+  const events: OpenCodeEvent[] = []
+  const mock = await openDraft(page, { command: true, events: () => events.splice(0) })
+  const commands: { sessionID: string; body: Record<string, unknown> }[] = []
+  const expanded =
+    "Review the latest commit for correctness and regressions. Check the relevant tests and report actionable findings."
+  await page.route("**/api/session/*/command", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    const sessionID = new URL(route.request().url()).pathname.split("/")[3]
+    commands.push({ sessionID, body: route.request().postDataJSON() })
+    // The server owns command expansion; the client receives the expanded inbox item.
+    events.push({
+      id: "evt_workspace_review",
+      type: "session.inbox.enqueued",
+      created: Date.now(),
+      durable: { aggregateID: sessionID, seq: 1, version: 1 },
+      data: {
+        sessionID,
+        inboxID: "msg_workspace_review",
+        item: { type: "user", payload: { text: expanded }, delivery: "steer" },
+      },
+    })
+    await route.fulfill({ status: 204, headers })
+  })
+  const editor = page.locator('[data-component="composer-editor"]')
+  await editor.fill("/review")
+  const suggestion = page.getByRole("button", { name: "/review Review changes", exact: true })
+  await expect(suggestion).toBeVisible()
+  await suggestion.click()
+  await expect(editor).toHaveText("/review")
+  const pending = await submitPending(page, mock, "/review latest commit")
+  await draftFollowUp(page)
+
+  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+
+  await expect
+    .poll(() => commands)
+    .toEqual([
+      {
+        sessionID: pending.sessionID,
+        body: { command: "review", text: "latest commit", files: [], agents: [], skills: [], delivery: "steer" },
+      },
+    ])
+  await expect(pending.shimmer).toHaveCount(0)
+  await expect(page.locator('[data-slot="user-message-text"]')).toHaveText(expanded)
+  await expect(editor).toHaveText(followUp)
+  await expect(page.locator('[data-action="composer-submit"]')).toBeEnabled()
+  expect(mock.creates).toEqual([expect.objectContaining({ id: pending.sessionID, location: { directory: workspace } })])
+  expect(mock.prompts).toEqual([])
+  await testInfo.attach("expanded-worktree-command", {
+    body: await page.screenshot({ path: testInfo.outputPath("expanded-worktree-command.png") }),
+    contentType: "image/png",
+  })
+})
+
 async function draftFollowUp(page: Page) {
   const editor = page.locator('[data-component="composer-editor"]')
   await editor.pressSequentially("!")
@@ -346,7 +402,10 @@ async function draftFollowUp(page: Page) {
   await expect(editor).toHaveText(followUp)
 }
 
-async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) {
+async function openDraft(
+  page: Page,
+  options?: { failSessionCreate?: boolean; command?: boolean; events?: () => OpenCodeEvent[] },
+) {
   const worktree = Promise.withResolvers<{ status: number; json: { directory?: string; message?: string } }>()
   const calls: string[] = []
   const worktreeRequests: Record<string, unknown>[] = []
@@ -378,6 +437,7 @@ async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) 
     sessions,
     pageMessages: () => ({ items: [] }),
     onPrompt: (input) => prompts.push(input),
+    events: options?.events,
   })
   page.on("request", (request) => {
     if (request.method() !== "POST") return
@@ -436,6 +496,17 @@ async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) 
       headers,
     }),
   )
+  if (options?.command) {
+    await page.route("**/api/command?**", (route) =>
+      route.fulfill({
+        json: {
+          location: { directory: new URL(route.request().url()).searchParams.get("location[directory]") ?? directory },
+          data: [{ name: "review", description: "Review changes" }],
+        },
+        headers,
+      }),
+    )
+  }
   await page.addInitScript(
     ({ directory, draftID, otherID, server }) => {
       localStorage.setItem(
@@ -464,8 +535,8 @@ async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) 
   return { worktree, worktreeRequests, calls, creates, prompts }
 }
 
-async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDraft>>) {
-  await page.locator('[data-component="composer-editor"]').fill(text)
+async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDraft>>, prompt = text) {
+  await page.locator('[data-component="composer-editor"]').fill(prompt)
   await expect(page.locator('[data-action="composer-submit"]')).toBeEnabled()
   await page.locator('[data-action="composer-submit"]').click()
   await expect(page).toHaveURL((url) => url.pathname.startsWith(sessionPath) && /\/ses_[^/]+$/.test(url.pathname))
@@ -481,7 +552,7 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDra
   await expect(page.locator('[data-action="composer-submit"]')).toBeDisabled()
   await expect(preparing.locator('[data-component="user-message"]')).toHaveCount(1)
   await expect(message).toHaveCount(1)
-  await expect(message.locator('[data-slot="user-message-text"]')).toHaveText(text)
+  await expect(message.locator('[data-slot="user-message-text"]')).toHaveText(prompt)
   await expect(message).toHaveAttribute("data-timeline-part-id", /^.+:text:0$/)
   const messageID = (await message.getAttribute("data-timeline-part-id"))!.replace(/:text:0$/, "")
   await expect(shimmer).toBeVisible()

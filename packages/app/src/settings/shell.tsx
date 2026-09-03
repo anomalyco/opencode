@@ -1,14 +1,4 @@
-import {
-  Component,
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Show,
-  onCleanup,
-  onMount,
-  startTransition,
-} from "solid-js"
+import { Component, createEffect, createMemo, For, Show, onCleanup, onMount, startTransition } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Menu } from "@opencode-ai/ui/menu"
@@ -17,6 +7,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsGeneral } from "./general/general"
 import { SettingsAppearance } from "./appearance/appearance"
+import { SettingsExperimental } from "./experimental/experimental"
 import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
 import { SettingsProviders } from "./providers/providers"
@@ -52,11 +43,10 @@ const sections = [
     { value: "models", icon: "models", label: "settings.models.title" },
     { value: "extensions", icon: "extensions", label: "settings.tab.extensions" },
   ],
+  [{ value: "experimental", icon: "flask", label: "settings.tab.experimental" }],
 ] as const
 
-export const SettingsScreen: Component<{
-  defaultValue?: string
-}> = (props) => {
+export const SettingsScreen: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -66,7 +56,6 @@ export const SettingsScreen: Component<{
   const servers = useServers()
   const tabs = useTabs()
   const global = useGlobal()
-  const [tab, setTab] = createSignal(props.defaultValue ?? "general")
   let root: HTMLDivElement | undefined
 
   onMount(() => {
@@ -75,10 +64,8 @@ export const SettingsScreen: Component<{
   })
   onCleanup(() => command.keybinds(true))
 
-  createEffect(() => setTab(props.defaultValue ?? "general"))
-
   const server = createMemo(() => {
-    const route = layout.route()
+    const route = surface.route()
     switch (route.type) {
       case "draft": {
         const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
@@ -101,7 +88,7 @@ export const SettingsScreen: Component<{
     const selected = global.settings.server.selected()
     const current = server()
     if (!selected || !current || ServerConnection.key(selected) !== ServerConnection.key(current)) return
-    const route = layout.route()
+    const route = surface.route()
     if (route.type === "draft") {
       const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
       return draft?.type === "draft" ? draft.directory : undefined
@@ -112,7 +99,7 @@ export const SettingsScreen: Component<{
 
   const showProviders = () => {
     dialog.close()
-    setTab("providers")
+    surface.open("providers")
   }
 
   return (
@@ -130,8 +117,8 @@ export const SettingsScreen: Component<{
       <Tabs
         orientation="vertical"
         variant="settings"
-        value={tab()}
-        onChange={(value) => void startTransition(() => setTab(value))}
+        value={surface.tab()}
+        onChange={(value) => void startTransition(() => surface.open(value))}
         class="settings"
       >
         <div class="settings-mobile-nav">
@@ -143,14 +130,18 @@ export const SettingsScreen: Component<{
             <Menu.Trigger as={Button} size="normal" variant="outline" class="settings-mobile-menu-trigger">
               <span>
                 {language.t(
-                  sections.flat().find((section) => section.value === tab())?.label ?? "settings.tab.preferences",
+                  sections.flat().find((section) => section.value === surface.tab())?.label ??
+                    "settings.tab.preferences",
                 )}
               </span>
               <Icon name="chevron-down" size="small" />
             </Menu.Trigger>
             <Menu.Portal>
               <Menu.Content class="settings-mobile-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
-                <Menu.RadioGroup value={tab()} onChange={(value) => void startTransition(() => setTab(value))}>
+                <Menu.RadioGroup
+                  value={surface.tab()}
+                  onChange={(value) => void startTransition(() => surface.open(value))}
+                >
                   <For each={sections}>
                     {(group, index) => (
                       <>
@@ -215,6 +206,9 @@ export const SettingsScreen: Component<{
         </Tabs.Content>
         <Tabs.Content value="shortcuts" class="settings-panel">
           <SettingsKeybinds />
+        </Tabs.Content>
+        <Tabs.Content value="experimental" class="settings-panel">
+          <SettingsExperimental />
         </Tabs.Content>
         <Tabs.Content value="servers" class="settings-panel">
           <SettingsServers />

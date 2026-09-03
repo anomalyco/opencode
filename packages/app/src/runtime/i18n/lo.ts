@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "ພາສາຮອບວຽນ",
   "command.language.set": "ໃຊ້ພາສາ: {{language}}",
   "command.session.new": "ເຊດຊັນໃໝ່",
+  "command.session.import": "ນຳເຂົ້າເຊດຊັນ",
   "command.file.open": "ເປີດໄຟລ໌",
   "command.tab.close": "ປິດແຖບ",
   "command.tab.reopenClosed": "ເປີດແຖບປິດຄືນໃໝ່",

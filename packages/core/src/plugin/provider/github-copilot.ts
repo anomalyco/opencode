@@ -13,7 +13,7 @@ import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
 
 const clientID = "Ov23li8tweQw6odWQebz"
-const apiVersion = "2026-06-01"
+const apiVersion = "2026-08-01"
 const userApiVersion = "2025-04-01"
 const pollingSafetyMargin = 3000
 const methodID = Integration.MethodID.make("device")
@@ -30,6 +30,8 @@ const Token = Schema.Struct({
   interval: Schema.optional(Schema.Number),
 })
 const User = Schema.Struct({
+  chat_enabled: Schema.optional(Schema.Boolean),
+  can_signup_for_limited: Schema.optional(Schema.Boolean),
   endpoints: Schema.optional(
     Schema.Struct({
       api: Schema.optional(Schema.String),
@@ -107,23 +109,30 @@ const oauth = (app: App.Info) =>
                     },
                   },
                 ).pipe(
-                  Effect.map((user) => Option.getOrUndefined(decodeUser(user))?.endpoints?.api?.replace(/\/+$/, "")),
+                  Effect.map((user) => Option.getOrUndefined(decodeUser(user))),
+                  // Only an explicit entitlement answer blocks login; a failed
+                  // or malformed lookup must not turn a GitHub hiccup into a denial.
                   Effect.orElseSucceed(() => undefined),
-                  Effect.map((apiEndpoint) =>
-                    Credential.OAuth.make({
-                      type: "oauth",
-                      methodID,
-                      refresh: access,
-                      access,
-                      expires: 0,
-                      ...((enterprise || apiEndpoint) && {
-                        metadata: {
-                          ...(enterprise ? { enterpriseUrl: domain } : {}),
-                          ...(apiEndpoint ? { apiEndpoint } : {}),
-                        },
+                  Effect.flatMap((user) => {
+                    const denied = user && copilotEntitlementError(user)
+                    if (denied) return Effect.fail(new Error(denied))
+                    const apiEndpoint = user?.endpoints?.api?.replace(/\/+$/, "")
+                    return Effect.succeed(
+                      Credential.OAuth.make({
+                        type: "oauth",
+                        methodID,
+                        refresh: access,
+                        access,
+                        expires: 0,
+                        ...((enterprise || apiEndpoint) && {
+                          metadata: {
+                            ...(enterprise ? { enterpriseUrl: domain } : {}),
+                            ...(apiEndpoint ? { apiEndpoint } : {}),
+                          },
+                        }),
                       }),
-                    }),
-                  ),
+                    )
+                  }),
                 )
               }
               if (token.error === "authorization_pending")
@@ -296,6 +305,15 @@ function oauthURLs(domain: string) {
 
 function baseURL(enterprise?: string) {
   return enterprise ? `https://copilot-api.${normalizeDomain(enterprise)}` : "https://api.githubcopilot.com"
+}
+
+// GitHub reports Copilot access on /copilot_internal/user; OAuth itself succeeds
+// for any GitHub account, so this is the only signal that the account can chat.
+export function copilotEntitlementError(user: { chat_enabled?: boolean; can_signup_for_limited?: boolean }) {
+  if (user.chat_enabled !== false) return
+  if (user.can_signup_for_limited)
+    return "This GitHub account is not signed up for GitHub Copilot. Sign up for Copilot Free at https://github.com/features/copilot/plans and connect again."
+  return "This GitHub account does not have GitHub Copilot access. It needs an active Copilot subscription or a seat assigned by an organization."
 }
 
 export function copilotBaseURL(metadata?: Readonly<Record<string, unknown>>) {

@@ -137,3 +137,12 @@ export function normalizeProjectInfo(project: Project | CurrentProject): Project
     worktrees: "worktrees" in project ? project.worktrees : [{ directory: worktree }],
   }
 }
+
+export function updateProjectInfo(project: Project, update: CurrentProject): Project {
+  return {
+    ...project,
+    ...update,
+    worktree: update.canonical,
+    worktrees: project.worktrees,
+  }
+}

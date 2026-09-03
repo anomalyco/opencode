@@ -37,6 +37,7 @@ export const dict = {
   "command.language.cycle": "언어 순환",
   "command.language.set": "언어 사용: {{language}}",
   "command.session.new": "새 세션",
+  "command.session.import": "세션 가져오기",
   "command.file.open": "파일 열기",
   "command.tab.close": "탭 닫기",
   "command.context.addSelection": "선택 영역을 컨텍스트에 추가",

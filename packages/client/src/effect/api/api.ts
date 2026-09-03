@@ -965,6 +965,8 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
+            readonly model?: Model.Ref | undefined
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly text: string
             readonly recent: string
           }
@@ -1559,7 +1561,7 @@ export interface PermissionApi<E = never> {
 
 export type FileListInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  readonly path?: RelativePath | undefined
+  readonly path?: string | undefined
 }
 export type FileListOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<FileSystem.Entry> }
 export type FileListOperation<E = never> = (input?: FileListInput) => Effect.Effect<FileListOutput, E>
