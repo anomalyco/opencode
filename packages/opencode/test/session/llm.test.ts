@@ -185,6 +185,20 @@ describe("session.llm.ai-sdk adapter", () => {
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- tests defensive adapter branches outside AI SDK's current typed surface
   const uncheckedAdapterEvent = (input: unknown) => input as AISDKAdapterEvent
 
+  test("maps AI SDK type validation errors to provider errors", async () => {
+    const error = new Error('Value: {"tool":"skill_view","status":"running"}. Invalid input')
+    error.name = "AI_TypeValidationError"
+
+    const events = await adapt([uncheckedAdapterEvent({ type: "error", error })])
+
+    expect(events).toEqual([
+      {
+        type: "provider-error",
+        message: expect.stringContaining("Provider returned an invalid response format"),
+      },
+    ])
+  })
+
   test("maps AI SDK stream chunks without losing session-visible fields", async () => {
     const metadata = { openai: { itemID: "item-1" } }
     const events = await adapt([
