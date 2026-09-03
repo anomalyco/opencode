@@ -1634,7 +1634,7 @@ export function make(options: ClientOptions) {
             path: `/api/skill`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 500],
             empty: false,
           },
           requestOptions,

@@ -33,6 +33,7 @@ import { WebSearch } from "../websearch.js"
 import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
+import { PluginCallback } from "./callback.js"
 import type { Interface } from "../plugin.js"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 
@@ -517,6 +518,25 @@ export const requirements = LayerNode.group([
   PersistentPty.node,
   LocationServiceMap.node,
 ])
+
+export function forPlugin(host: Plugin.Context, kv: KV.Interface, pluginID: string): Plugin.Context {
+  return {
+    ...host,
+    storage: storage(kv, pluginID),
+    skill: {
+      ...host.skill,
+      transform: (callback) =>
+        host.skill.transform((editor) => {
+          try {
+            callback(editor)
+          } catch (cause) {
+            // Replay happens after setup, potentially in a different consumer's Effect context.
+            throw new PluginCallback.Error({ pluginID, operation: "skill.transform", cause })
+          }
+        }),
+    },
+  }
+}
 
 export function storage(kv: KV.Interface, pluginID: string): Plugin.Context["storage"] {
   const namespace = `plugin:${pluginID

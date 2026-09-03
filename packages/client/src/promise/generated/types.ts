@@ -2488,6 +2488,15 @@ export type PermissionNotFoundError = {
 export const isPermissionNotFoundError = (value: unknown): value is PermissionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PermissionNotFoundError"
 
+export type PluginCallbackError = {
+  readonly _tag: "PluginCallbackError"
+  readonly pluginID: string
+  readonly operation: "skill.transform"
+  readonly message: string
+}
+export const isPluginCallbackError = (value: unknown): value is PluginCallbackError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PluginCallbackError"
+
 export type RpcError = {
   readonly _tag: "RpcError"
   readonly type: string
