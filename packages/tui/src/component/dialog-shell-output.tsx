@@ -1,7 +1,7 @@
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { isShellNotFoundError, type LocationRef, type ShellInfo } from "@opencode-ai/client"
-import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import stripAnsi from "strip-ansi"
 import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
@@ -16,11 +16,10 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
   const theme = useTheme("elevated")
   const dimensions = useTerminalDimensions()
   const [info, setInfo] = createSignal(props.shell)
-  const [output, setOutput] = createSignal("")
-  const [loaded, setLoaded] = createSignal(false)
+  const [output, setOutput] = createSignal<string>()
   const [omitted, setOmitted] = createSignal(false)
   const [error, setError] = createSignal("")
-  const text = createMemo(() => stripAnsi(output()).replace(/\r\n?/g, "\n"))
+  const text = createMemo(() => stripAnsi(output() ?? "").replace(/\r\n?/g, "\n"))
   const height = () => Math.max(3, Math.floor(dimensions().height * 0.6) - 6)
   let scroll: ScrollBoxRenderable | undefined
 
@@ -38,9 +37,11 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
     let timer: ReturnType<typeof setTimeout> | undefined
 
     const load = async () => {
-      const current = await client.api.shell.get({ id, location })
-      if (disposed) return false
-      setInfo(current.data)
+      if (untrack(info).status === "running") {
+        const current = await client.api.shell.get({ id, location })
+        if (disposed) return false
+        setInfo(current.data)
+      }
       if (cursor === undefined) {
         const head = await client.api.shell.output({ id, location, cursor: Number.MAX_SAFE_INTEGER })
         if (disposed) return false
@@ -51,11 +52,10 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
       if (disposed) return false
       cursor = page.data.cursor
       setOutput((previous) => {
-        const next = previous + page.data.output
+        const next = (previous ?? "") + page.data.output
         if (next.length > PAGE_BYTES) setOmitted(true)
         return next.slice(-PAGE_BYTES)
       })
-      setLoaded(true)
       setError("")
       return cursor < page.data.size
     }
@@ -126,7 +126,9 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
       >
         <text fg={theme.text.default} wrapMode="word">
           {text() ||
-            (loaded() ? "No captured output. Output redirected to files is not shown here." : "Loading output…")}
+            (output() === undefined
+              ? "Loading output…"
+              : "No captured output. Output redirected to files is not shown here.")}
         </text>
       </scrollbox>
       <Show when={error()}>

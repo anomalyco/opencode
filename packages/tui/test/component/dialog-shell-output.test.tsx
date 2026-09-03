@@ -126,7 +126,6 @@ test.each([40, 100])("shell output opens, follows, scrolls, and survives exit at
   expect(scroll.scrollTop).toBe(0)
   app.mockInput.pressKey("END")
   await app.waitForFrame((frame) => frame.includes("Frame 51"))
-  app.state.output += "\u001b[32mRender complete\u001b[0m\r\n"
   app.shell.status = "exited"
   app.shell.exit = 0
   app.events.emit({
@@ -136,7 +135,14 @@ test.each([40, 100])("shell output opens, follows, scrolls, and survives exit at
     location: app.location,
     data: { id: app.shell.id, exit: 0, status: "exited" },
   })
+  await app.waitForFrame((frame) => frame.includes("code 0"), { maxPasses: 100 })
+  const metadataReads = app.requests.filter((request) => request.url.pathname === `/api/shell/${app.shell.id}`).length
+  // Terminal metadata can arrive before the capture's final flush.
+  app.state.output += "\u001b[32mRender complete\u001b[0m\r\n"
   await app.waitForFrame((frame) => frame.includes("Render complete") && frame.includes("code 0"), { maxPasses: 100 })
+  expect(app.requests.filter((request) => request.url.pathname === `/api/shell/${app.shell.id}`)).toHaveLength(
+    metadataReads,
+  )
   expect(app.captureCharFrame()).not.toContain("[32m")
   expect(app.requests.every((request) => request.method === "GET")).toBe(true)
   const reads = app.requests.filter((request) => request.url.pathname !== "/api/shell")
@@ -171,6 +177,33 @@ test("empty output explains redirection, retries errors, and preserves output af
   const count = app.requests.length
   await Bun.sleep(1100)
   expect(app.requests).toHaveLength(count)
+})
+
+test.each([40, 100])("mouse-wheel scrolling pauses and resumes output following at %s columns", async (width) => {
+  await using app = await setup(width, Array.from({ length: 50 }, (_, i) => `Frame ${i + 1}\n`).join(""))
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Shell output") && frame.includes("Frame 50"))
+  const scroll = app.renderer.root.findDescendantById("shell-output-scroll")
+  if (!(scroll instanceof ScrollBoxRenderable)) throw new Error("Output scrollbox missing")
+  const bottom = scroll.scrollTop
+  await app.mockMouse.scroll(scroll.viewport.x + 2, scroll.viewport.y + 2, "up")
+  await app.waitFor(() => scroll.scrollTop < bottom)
+  const paused = scroll.scrollTop
+  const height = scroll.scrollHeight
+
+  app.state.output += "Frame 51\n"
+  await app.waitFor(() => scroll.scrollHeight > height, { maxPasses: 100 })
+  expect(scroll.scrollTop).toBe(paused)
+  expect(app.captureCharFrame()).toContain("Shell output")
+
+  await app.mockMouse.scroll(scroll.viewport.x + 2, scroll.viewport.y + 2, "down")
+  await app.mockMouse.scroll(scroll.viewport.x + 2, scroll.viewport.y + 2, "down")
+  await app.waitFor(() => scroll.scrollTop === scroll.scrollHeight - scroll.viewport.height)
+  const followed = scroll.scrollTop
+  app.state.output += "Frame 52\n"
+  await app.waitForFrame((frame) => frame.includes("Frame 52"), { maxPasses: 100 })
+  expect(scroll.scrollTop).toBeGreaterThan(followed)
+  expect(scroll.scrollTop).toBe(scroll.scrollHeight - scroll.viewport.height)
 })
 
 test("large captures open at a bounded tail and clicking a shell opens the viewer", async () => {
