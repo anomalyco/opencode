@@ -2861,7 +2861,6 @@ describe("OpenAI Responses route", () => {
               { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
               { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "Think" },
               { type: "response.output_item.done", item: { type: "reasoning", id: "rs_1" } },
-              { type: "response.output_item.done", item: { type: "reasoning", id: "rs_1" } },
               {
                 type: "response.output_item.added",
                 item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "" },

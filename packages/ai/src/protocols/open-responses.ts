@@ -433,7 +433,6 @@ export interface ParserState {
 type ReasoningSummaryStatus = "active" | "can-conclude" | "concluded"
 
 interface ReasoningStreamItem {
-  readonly open: boolean
   readonly encryptedContent: string | null | undefined
   // Keyed by the wire protocol's numeric `summary_index`. JS object keys coerce to
   // strings, but typing the map as `Record<number, ...>` documents intent
@@ -950,7 +949,7 @@ export const normalize = (state: ParserState, input: Event): NormalizedEvent => 
 
 const startReasoningSummaryPart = (state: ParserState, itemID: string, index: number): StepResult => {
   const item = state.reasoningItems[itemID]
-  if (!item?.open || index === 0 || item.summaryParts[index] !== undefined) return [state, NO_EVENTS]
+  if (!item || index === 0 || item.summaryParts[index] !== undefined) return [state, NO_EVENTS]
 
   const events: LLMEvent[] = []
   const lifecycle = Object.entries(item.summaryParts)
@@ -990,7 +989,7 @@ const startReasoningSummaryPart = (state: ParserState, itemID: string, index: nu
 
 export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
-  if (!event.delta || !item?.open) return [state, NO_EVENTS]
+  if (!event.delta || !item) return [state, NO_EVENTS]
   const index = event.summary_index ?? 0
   if (item.summaryParts[index] === "concluded") return [state, NO_EVENTS]
   const [started, emitted] = startReasoningSummaryPart(state, itemID, index)
@@ -1015,7 +1014,7 @@ export const onReasoningDelta = (state: ParserState, event: Event, itemID: strin
 // as a single delta unless that summary index already streamed one.
 export const onReasoningDone = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
-  if (!item?.open || typeof event.text !== "string") return [state, NO_EVENTS]
+  if (!item || typeof event.text !== "string") return [state, NO_EVENTS]
   const index = event.summary_index ?? 0
   if (item.deltaIndexes.has(index)) return [state, NO_EVENTS]
   return onReasoningDelta(state, { ...event, delta: event.text }, itemID)
@@ -1074,7 +1073,6 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
         reasoningItems: {
           ...state.reasoningItems,
           [item.id]: {
-            open: true,
             encryptedContent: item.encrypted_content,
             summaryParts: { 0: "active" },
             deltaIndexes: new Set(),
@@ -1112,7 +1110,7 @@ const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResu
 const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResult => {
   if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
   const item = state.reasoningItems[event.item_id]
-  if (!item?.open) return [state, NO_EVENTS]
+  if (!item) return [state, NO_EVENTS]
   if (item.summaryParts[event.summary_index] !== "active") return [state, NO_EVENTS]
   return [
     {
@@ -1247,7 +1245,6 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   }
 
   if (item.type === "reasoning") {
-    if (state.reasoningItems[item.id]?.open === false) return [state, NO_EVENTS] satisfies StepResult
     const metadata = reasoningMetadata(state, item)
     const summaryParts: ReadonlyArray<unknown> = Array.isArray(item.summary) ? item.summary : []
     const summary: Array<string | undefined> = []
@@ -1274,53 +1271,14 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
         const finalText = fragments.length === 1 ? itemText : summary[Number(index)]
         lifecycle = Lifecycle.reasoningEnd(lifecycle, events, `${item.id}:${index}`, metadata, finalText || undefined)
       }
-      return [
-        {
-          ...state,
-          lifecycle,
-          reasoningItems: {
-            ...state.reasoningItems,
-            [item.id]: {
-              ...reasoningItem,
-              open: false,
-              encryptedContent: item.encrypted_content ?? reasoningItem.encryptedContent,
-            },
-          },
-        },
-        events,
-      ] satisfies StepResult
+      const reasoningItems = { ...state.reasoningItems }
+      delete reasoningItems[item.id]
+      return [{ ...state, lifecycle, reasoningItems }, events] satisfies StepResult
     }
-    if (!state.lifecycle.reasoning.has(item.id)) {
-      const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
-      events.push(LLMEvent.reasoningStart({ id: item.id, providerMetadata: metadata }))
-      events.push(
-        LLMEvent.reasoningEnd({
-          id: item.id,
-          providerMetadata: metadata,
-          text: itemText,
-        }),
-      )
-      return [
-        {
-          ...state,
-          lifecycle,
-          reasoningItems: {
-            ...state.reasoningItems,
-            [item.id]: {
-              open: false,
-              encryptedContent: item.encrypted_content,
-              summaryParts: { 0: "concluded" },
-              deltaIndexes: new Set(),
-            },
-          },
-        },
-        events,
-      ] satisfies StepResult
-    }
-    return [
-      { ...state, lifecycle: Lifecycle.reasoningEnd(state.lifecycle, events, item.id, metadata) },
-      events,
-    ] satisfies StepResult
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    events.push(LLMEvent.reasoningStart({ id: item.id, providerMetadata: metadata }))
+    events.push(LLMEvent.reasoningEnd({ id: item.id, providerMetadata: metadata, text: itemText }))
+    return [{ ...state, lifecycle }, events] satisfies StepResult
   }
 
   return [state, NO_EVENTS] satisfies StepResult
