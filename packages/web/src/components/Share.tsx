@@ -76,7 +76,11 @@ export default function Share(props: {
     messages: {},
   })
   const messages = createMemo(() =>
-    Object.values(store.messages).toSorted((a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id)),
+    // Raw id comparison rather than localeCompare, matching the BINARY collation storage
+    // orders by. See the note on compareMessage in packages/tui/src/context/sync.tsx.
+    Object.values(store.messages).toSorted(
+      (a, b) => a.time.created - b.time.created || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    ),
   )
   const [connectionStatus, setConnectionStatus] = createSignal<[Status, string?]>(["disconnected"])
 
