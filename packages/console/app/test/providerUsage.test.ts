@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ZenData } from "@opencode-ai/console-core/model.js"
-import type { ProviderHelper } from "../src/routes/zen/util/provider/provider"
+import { createBodyConverter, type ProviderHelper } from "../src/routes/zen/util/provider/provider"
 import { anthropicHelper } from "../src/routes/zen/util/provider/anthropic"
 import { googleHelper } from "../src/routes/zen/util/provider/google"
 import { oaCompatHelper } from "../src/routes/zen/util/provider/openai-compatible"
@@ -80,5 +80,31 @@ describe("provider usage extraction", () => {
       cacheWrite5mTokens: 3,
       cacheWrite1hTokens: undefined,
     })
+  })
+})
+
+describe("provider body conversion", () => {
+  test("preserves Anthropic tool names when targeting OpenAI-compatible providers", () => {
+    const convert = createBodyConverter("anthropic", "oa-compat")
+    const body = convert({
+      model: "kimi-k3",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: "hello" }],
+      tools: [
+        {
+          name: "Bash",
+          description: "run",
+          input_schema: {
+            type: "object",
+            properties: {
+              command: { type: "string" },
+            },
+          },
+        },
+      ],
+    })
+
+    expect(body.tools?.[0]?.function.name).toBe("Bash")
+    expect(body.tools?.[0]?.function.parameters?.properties.command.type).toBe("string")
   })
 })

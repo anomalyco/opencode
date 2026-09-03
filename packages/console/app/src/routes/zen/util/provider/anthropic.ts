@@ -281,12 +281,9 @@ export function fromAnthropicRequest(body: any): CommonRequest {
     ? body.tools
         .filter((t: any) => t && typeof t === "object" && "input_schema" in t)
         .map((t: any) => ({
-          type: "function",
-          function: {
-            name: (t as any).name,
-            description: (t as any).description,
-            parameters: (t as any).input_schema,
-          },
+          name: (t as any).name,
+          description: (t as any).description,
+          parameters: (t as any).input_schema,
         }))
     : undefined
 
