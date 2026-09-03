@@ -10,6 +10,7 @@ import {
   setupTimeline,
   status,
   stepStarted,
+  textPart,
   toolPart,
   userMessage,
 } from "../performance/timeline-stability/fixture"
@@ -188,6 +189,54 @@ for (const grouped of [false, true]) {
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
     await expect(working).toBeVisible()
   })
+}
+
+for (const name of ["shell", "subagent"] as const) {
+  for (const placement of ["grouped", "hidden"] as const) {
+    test(`shows no idle indicator for ${placement} background ${name}`, async ({ page }, testInfo) => {
+      const timeline = await setupTimeline(page, {
+        reducedMotion: true,
+        viewport: { width: name === "shell" ? 1400 : 390, height: 900 },
+        settings: {
+          timelineDetail: {
+            ...timelinePresets[2].value,
+            shell: { placement, details: "collapsed" },
+            subagents: { placement },
+          },
+        },
+        messages: [
+          userMessage(),
+          assistantMessage([
+            toolPart(
+              "prt_idle_background",
+              name,
+              "completed",
+              name === "shell"
+                ? { command: "sleep 10" }
+                : { agent: "general", description: "Inspect the timeline", prompt: "Inspect it." },
+              { metadata: { [name === "shell" ? "shellID" : "sessionID"]: "background_task", status: "running" } },
+            ),
+            textPart("prt_idle_answer", "The task is running in the background."),
+          ]),
+        ],
+      })
+      const working = page.locator('[data-component="session-working"]')
+      const running = page.getByRole("status").filter({ hasText: /^Running$/ })
+      await expect(page.getByText("The task is running in the background.", { exact: true })).toBeVisible()
+      await expect(working).toHaveCount(0)
+      await expect(running).toHaveCount(0)
+      await page.screenshot({ path: testInfo.outputPath(`idle-background-${name}-${placement}.png`) })
+
+      await timeline.send(status("busy"))
+      await expect(working).toHaveCount(1)
+      await expect(working.locator('[data-component="text-shimmer"]')).toHaveAttribute("aria-label", "Working")
+      await expect(running).toHaveCount(0)
+
+      await timeline.send(status("idle"))
+      await expect(working).toHaveCount(0)
+      await expect(running).toHaveCount(0)
+    })
+  }
 }
 
 test("replaces Working with Retry and restores it on recovery", async ({ page }) => {

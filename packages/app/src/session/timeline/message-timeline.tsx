@@ -33,7 +33,6 @@ import { useCommand } from "@/shell/commands/command"
 import { useSettings } from "@/settings/model"
 import { SessionTitleHeader } from "../session-identity-header"
 import { SessionHeader } from "@/session/header/session-header"
-import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 
 type BackgroundTask = {
   id: string
@@ -633,28 +632,6 @@ function MessageTimelineView(
               >
                 <BackgroundMoveHint />
               </div>
-            </div>
-          </Show>
-          <Show
-            when={
-              !showWorking() &&
-              !backgroundHintPresence.present() &&
-              props.background
-                .tasks()
-                .some(
-                  (task) =>
-                    props.data.timelineDetail()[task.type === "subagent" ? "subagents" : "shell"].placement !==
-                    "separate",
-                )
-            }
-          >
-            <div
-              role="status"
-              class={`flex h-9 w-full min-w-0 items-center gap-2 pt-3 text-13-regular text-v2-text-text-muted ${turnPadding()}`}
-              classList={{ "md:max-w-[1000px] md:mx-auto": props.centered }}
-            >
-              <SessionProgressIndicatorV2 />
-              <span>{language.t("settings.timeline.running")}</span>
             </div>
           </Show>
         </>

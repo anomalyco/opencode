@@ -984,7 +984,6 @@ export const dict = {
   "settings.timeline.expansion.title": "Details",
   "settings.timeline.expansion.collapsed": "Collapsed",
   "settings.timeline.expansion.expanded": "Expanded",
-  "settings.timeline.running": "Running",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",
