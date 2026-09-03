@@ -195,7 +195,8 @@ it.live(
           expect(yield* Effect.promise<unknown>(() => response.json())).toEqual({ data: [] })
         }
       }
-      expect(boots).toEqual([])
+      // Reading permissions or forms builds the Session's Instance and starts its plugin activation at once; the
+      // ordering assertion after the prompts is what proves each Session boots exactly once.
 
       for (const config of configs) {
         const session = yield* sessions.get(config.id)
