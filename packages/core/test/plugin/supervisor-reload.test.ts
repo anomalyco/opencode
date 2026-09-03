@@ -20,6 +20,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tempGlobalLayer } from "../fixture/global"
+import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { advance } from "../lib/clock"
 import { testEffect } from "../lib/effect"
@@ -62,6 +63,7 @@ const instances = Layer.effect(
     })
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
+      offlineModels,
       Npm.node.replace(npmLayer),
       Watcher.node.replace(Layer.succeed(Watcher.Service, watcher)),
       LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
@@ -78,6 +80,7 @@ const instances = Layer.effect(
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
+    offlineModels,
     LocationServiceMap.node.replace(instances),
   ]).pipe(Layer.provideMerge(Watcher.testLayer)),
 )
