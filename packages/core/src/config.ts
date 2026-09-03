@@ -53,6 +53,10 @@ export class Info extends Schema.Class<Info>("Config.Info")({
       description:
         "Run lightweight projection before the model acts to catch wrong approaches early. Adds one LLM call per turn but can save tokens by preventing wasted tool execution.",
     }),
+    reflectionTimeoutMs: Schema.Number.pipe(Schema.optional).annotate({
+      description:
+        "Timeout in milliseconds for each reflection stream call (why/then/pre-action loops). Bounds a stalled provider so the drain cannot hang forever. Defaults to 120000.",
+    }),
   }).pipe(Schema.optional).annotate({
     description: "Reflective reasoning and stabilization configuration",
   }),

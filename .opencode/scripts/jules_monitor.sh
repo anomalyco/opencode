@@ -33,10 +33,10 @@ status_for() {
     local id="$1"
     printf '%s\n' "$LISTING" \
       | awk -v id="$id" 'index($0, id) && $1 ~ id {
-          n = split($0, a, / {2,}/)
-          while (n > 0 && a[n] == "") n--
-          gsub(/^ +| +$/, "", a[n])
-          print a[n]
+          split($0, a, / {2,}/)
+          s = a[5]
+          gsub(/^ +| +$/, "", s)
+          print s
           exit
         }'
 }
@@ -107,7 +107,7 @@ awk 'NR==FNR { keep[$1]=1; next } keep[$1]' "$TRACKED" "$STATE" > "$STATE.tmp" \
 while read -r id _ws; do
     [ -z "$id" ] && continue
     raw="$(status_for "$id")"
-    [ -z "$raw" ] && continue
+    [ -z "$raw" ] && raw="UNKNOWN"
     status="$(normalize "$raw")"
     repo="$(repo_for "$id")"
     ctx="${repo:+ ($repo)}"

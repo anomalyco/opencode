@@ -8,7 +8,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Duration, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -116,6 +116,7 @@ const layer = Layer.effect(
     const maxReflectionBudget = Math.max(0, reflectiveReasoning?.maxReflectionBudget ?? 1)
     const approxTcaTolerance = Math.max(0, reflectiveReasoning?.approxTcaTolerance ?? 0)
     const preActionProjection = reflectiveReasoning?.preActionProjection ?? true
+    const reflectionTimeout = Duration.millis(reflectiveReasoning?.reflectionTimeoutMs ?? 120_000)
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -187,7 +188,9 @@ const layer = Layer.effect(
       return ""
     }
 
-    const readLastAssistantText = Effect.fn("SessionRunner.readLastAssistantText")(function* (sessionID: SessionSchema.ID) {
+    const readLastAssistantText = Effect.fn("SessionRunner.readLastAssistantText")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
       const session = yield* getSession(sessionID).pipe(Effect.option)
       if (Option.isNone(session)) return ""
       const agent = yield* agents.select(session.value.agent)
@@ -298,18 +301,21 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
 
-      if (preActionProjection && step === 1 && promotion === undefined && !ReflectionState.get(session.id).directionConfirmed) {
+      if (
+        preActionProjection &&
+        step === 1 &&
+        promotion === undefined &&
+        !ReflectionState.get(session.id).directionConfirmed
+      ) {
         const recentMsgs = entries.slice(-6).map((e) => e.message)
-        const hasDecision = recentMsgs.some(
-          (m) => m.type === "assistant" && m.content.some((p) => p.type === "text"),
-        )
+        const hasDecision = recentMsgs.some((m) => m.type === "assistant" && m.content.some((p) => p.type === "text"))
         if (hasDecision && entries.length >= 2) {
           const projectionModel = yield* models.resolveReflection(session).pipe(Effect.option)
           if (Option.isSome(projectionModel)) {
             const projectionMsgs = [
               ...toLLMMessages(recentMsgs, projectionModel.value),
               Message.user(
-                "You are about to act. Given the current state, identify any risks or contradictions in the planned approach in 1-2 sentences. If the approach is sound, output exactly 'Proceed.'",
+                "You are about to act. Given the current state, identify any risks, contradictions, or missing context in the planned approach in 1-2 sentences. Consider if you have thoroughly researched the necessary files. If the approach is sound and safe, output exactly 'Proceed.'",
               ),
             ]
             const preReq = LLM.request({
@@ -326,6 +332,7 @@ const layer = Layer.effect(
                 if (LLMEvent.is.textDelta(event)) preChunks.push(event.text)
                 return Effect.void
               }),
+              Effect.timeout(reflectionTimeout),
               Effect.option,
             )
             if (!preFailed && preChunks.length > 0) {
@@ -536,9 +543,10 @@ const layer = Layer.effect(
         steered,
         iterates,
         converged: !steered,
-        certificate: approximationGap === undefined
-          ? { epsilon: approxTcaTolerance }
-          : { epsilon: approxTcaTolerance, approximationGap },
+        certificate:
+          approximationGap === undefined
+            ? { epsilon: approxTcaTolerance }
+            : { epsilon: approxTcaTolerance, approximationGap },
         text,
         extensionsDetected,
       })
@@ -568,27 +576,30 @@ const layer = Layer.effect(
       let currentBaselineSeq = startBaselineSeq
       while (iterates < maxReflectionBudget) {
         iterates++
-        const nextSystem = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
-          Effect.option,
-        )
+        const nextSystem = yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          loadSystemContext(agent),
+          session.value.id,
+        ).pipe(Effect.option)
         if (Option.isNone(nextSystem)) break
         if (nextSystem.value.baselineSeq !== currentBaselineSeq) {
           extensionsDetected++
           currentBaselineSeq = nextSystem.value.baselineSeq
         }
-        const currentEntries = yield* SessionHistory.entriesForRunner(db, session.value.id, nextSystem.value.baselineSeq).pipe(
-          Effect.option,
-        )
+        const currentEntries = yield* SessionHistory.entriesForRunner(
+          db,
+          session.value.id,
+          nextSystem.value.baselineSeq,
+        ).pipe(Effect.option)
         if (Option.isNone(currentEntries)) break
         const lastMsgs = currentEntries.value.slice(-6).map((e) => e.message)
-        const hasDecision = lastMsgs.some(
-          (m) => m.type === "assistant" && m.content.some((p) => p.type === "text"),
-        )
+        const hasDecision = lastMsgs.some((m) => m.type === "assistant" && m.content.some((p) => p.type === "text"))
         if (!hasDecision || currentEntries.value.length < 2) break
         const projectionMsgs = [
           ...toLLMMessages(lastMsgs, model.value),
           Message.user(
-            `Forward-project 3-5 steps from the reasoning above. Identify negative consequences, contradictions, or risks. If none, output exactly "No issues projected."`,
+            `Forward-project 3-5 steps from the reasoning above. Identify negative consequences, contradictions, or risks. Specifically consider if previous commands failed or threw errors that are being ignored. If none, output exactly "No issues projected."`,
           ),
         ]
         const req = LLM.request({
@@ -605,6 +616,7 @@ const layer = Layer.effect(
             if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
             return Effect.void
           }),
+          Effect.timeout(reflectionTimeout),
           Effect.option,
         )
         if (failed || chunks.length === 0) break
@@ -631,14 +643,7 @@ const layer = Layer.effect(
         lastMessageID = messageID
         steered = true
       }
-      yield* publishCycle(
-        "then",
-        sessionID,
-        false,
-        true,
-        lastMessageID,
-        { iterates, epsilon: approxTcaTolerance },
-      )
+      yield* publishCycle("then", sessionID, false, true, lastMessageID, { iterates, epsilon: approxTcaTolerance })
       return converge(steered, iterates, projection, extensionsDetected)
     })
 
@@ -656,9 +661,10 @@ const layer = Layer.effect(
         steered,
         iterates,
         converged: !steered,
-        certificate: approximationGap === undefined
-          ? { epsilon: approxTcaTolerance }
-          : { epsilon: approxTcaTolerance, approximationGap },
+        certificate:
+          approximationGap === undefined
+            ? { epsilon: approxTcaTolerance }
+            : { epsilon: approxTcaTolerance, approximationGap },
         text,
         extensionsDetected,
       })
@@ -676,10 +682,9 @@ const layer = Layer.effect(
         Effect.option,
       )
       if (Option.isNone(entries)) return converge(false, 0, "", 0)
-      const initialHasDecision = entries.value.slice(-6).some((e) =>
-        e.message.type === "assistant" &&
-        e.message.content.some((p) => p.type === "text"),
-      )
+      const initialHasDecision = entries.value
+        .slice(-6)
+        .some((e) => e.message.type === "assistant" && e.message.content.some((p) => p.type === "text"))
       if (!initialHasDecision || entries.value.length < 2) return converge(false, 0, "", 0)
       let iterates = 0
       let steered = false
@@ -689,23 +694,28 @@ const layer = Layer.effect(
       let currentBaselineSeq = startBaselineSeq
       while (iterates < maxReflectionBudget) {
         iterates++
-        const nextSystem = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
-          Effect.option,
-        )
+        const nextSystem = yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          loadSystemContext(agent),
+          session.value.id,
+        ).pipe(Effect.option)
         if (Option.isNone(nextSystem)) break
         if (nextSystem.value.baselineSeq !== currentBaselineSeq) {
           extensionsDetected++
           currentBaselineSeq = nextSystem.value.baselineSeq
         }
-        const currentEntries = yield* SessionHistory.entriesForRunner(db, session.value.id, nextSystem.value.baselineSeq).pipe(
-          Effect.option,
-        )
+        const currentEntries = yield* SessionHistory.entriesForRunner(
+          db,
+          session.value.id,
+          nextSystem.value.baselineSeq,
+        ).pipe(Effect.option)
         if (Option.isNone(currentEntries)) break
         const lastMsgs = currentEntries.value.slice(-6).map((e) => e.message)
         const reflectionMsgs = [
           ...toLLMMessages(lastMsgs, model.value),
           Message.user(
-            `Reflect on whether the most recent tool result changes your goal. If so, state the new goal in one sentence. Otherwise output exactly "Goal unchanged."`,
+            `Reflect on whether the most recent tool result changes your goal. Check specifically if the last command returned an error code or stack trace that requires shifting focus to debugging. If the goal changes, state the new goal in one sentence. Otherwise output exactly "Goal unchanged."`,
           ),
         ]
         const req = LLM.request({
@@ -722,6 +732,7 @@ const layer = Layer.effect(
             if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
             return Effect.void
           }),
+          Effect.timeout(reflectionTimeout),
           Effect.option,
         )
         if (failed || chunks.length === 0) break
@@ -748,14 +759,7 @@ const layer = Layer.effect(
         lastMessageID = messageID
         steered = true
       }
-      yield* publishCycle(
-        "why",
-        sessionID,
-        false,
-        true,
-        lastMessageID,
-        { iterates, epsilon: approxTcaTolerance },
-      )
+      yield* publishCycle("why", sessionID, false, true, lastMessageID, { iterates, epsilon: approxTcaTolerance })
       return converge(steered, iterates, reflection, extensionsDetected)
     })
 
