@@ -1455,8 +1455,18 @@ const layer = Layer.effect(
           const providerID = ProviderV2.ID.make(p.id)
           if (disabled.has(providerID)) continue
 
-          const provider = database[providerID]
-          if (!provider) continue
+          let provider = database[providerID]
+          if (!provider) {
+            provider = {
+              id: providerID,
+              name: p.id,
+              source: "config",
+              env: [],
+              options: {},
+              models: {},
+            }
+            database[providerID] = provider
+          }
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
