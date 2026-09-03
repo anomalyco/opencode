@@ -585,9 +585,12 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
         Effect.suspend(() => {
           const operation = request.model.route.compact
           if (!operation)
-            return ProviderShared.invalidRequest(
-              `${request.model.provider}/${request.model.route.id} does not support explicit compaction`,
-            )
+            return ProviderShared.unsupportedOperation({
+              operation: "compact",
+              provider: request.model.provider,
+              route: request.model.route.id,
+              message: `${request.model.provider}/${request.model.route.id} does not support explicit compaction`,
+            })
           return operation(prepareRequest(request), executor, options)
         }),
     })

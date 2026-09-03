@@ -423,14 +423,10 @@ export interface ParserState {
   readonly name: string
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<string>
-  // Item ids are response-scoped identities. Keep completed ids tombstoned so
-  // reconnect replay cannot reopen fragments already emitted downstream.
-  readonly completedTools: ReadonlySet<string>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly outputItems: Readonly<Record<number, string>>
   readonly message: { readonly id: string; readonly phase: MessagePhase | null | undefined } | undefined
-  readonly completedMessages: ReadonlySet<string>
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
 }
 
@@ -1042,16 +1038,12 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
   const item = event.item
   if (!item) return [state, NO_EVENTS]
   if (item.type === "message") {
-    if (state.completedMessages.has(item.id)) return [state, NO_EVENTS]
     const phase = messagePhase(item.phase)
-    const completedMessages = new Set(state.completedMessages)
-    if (state.message !== undefined && state.message.id !== item.id) completedMessages.add(state.message.id)
     // A new message closes earlier messages, including ones that never streamed.
     const events: LLMEvent[] = []
     const lifecycle = [...state.lifecycle.text]
       .filter((id) => id !== item.id)
       .reduce((lifecycle, id) => {
-        completedMessages.add(id)
         const openPhase = state.message?.id === id ? state.message.phase : undefined
         return Lifecycle.textEnd(
           lifecycle,
@@ -1064,7 +1056,6 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
       {
         ...state,
         lifecycle,
-        completedMessages,
         message: {
           id: item.id,
           phase: phase === undefined && state.message?.id === item.id ? state.message.phase : phase,
@@ -1094,7 +1085,7 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
     ]
   }
   if (item.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
-  if (state.tools[item.id] !== undefined || state.completedTools.has(item.id)) return [state, NO_EVENTS]
+  if (state.tools[item.id] !== undefined) return [state, NO_EVENTS]
   const metadata = providerMetadata(state, { itemId: item.id })
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
@@ -1198,14 +1189,9 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   }
 
   if (item.type === "message") {
-    if (state.completedMessages.has(item.id)) return [state, NO_EVENTS] satisfies StepResult
-    const completedMessages = new Set(state.completedMessages)
-    completedMessages.add(item.id)
-    if (state.message !== undefined && state.message.id !== item.id)
-      return [{ ...state, completedMessages }, NO_EVENTS] satisfies StepResult
-    const message = state.message
+    const active = state.message?.id === item.id
     const itemPhase = messagePhase(item.phase)
-    const phase = itemPhase === undefined ? message?.phase : itemPhase
+    const phase = itemPhase === undefined && active ? state.message?.phase : itemPhase
     const parts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
     const content: string[] = []
     for (const part of parts) {
@@ -1221,8 +1207,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
       {
         ...state,
         lifecycle: Lifecycle.textEnd(lifecycle, events, item.id, metadata, text),
-        completedMessages,
-        message: undefined,
+        message: active ? undefined : state.message,
       },
       events,
     ] satisfies StepResult
@@ -1230,7 +1215,6 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
 
   if (item.type === "function_call") {
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
-    if (state.completedTools.has(item.id)) return [state, NO_EVENTS] satisfies StepResult
     const metadata = providerMetadata(state, { itemId: item.id })
     const registered = state.tools[item.id] !== undefined
     const tools = registered
@@ -1257,7 +1241,6 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
           resultEvents.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
           state.hasFunctionCall,
         tools: result.tools,
-        completedTools: new Set([...state.completedTools, item.id]),
       },
       events,
     ] satisfies StepResult
@@ -1518,11 +1501,9 @@ export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADA
   providerMetadataKey: metadataKey(request.model),
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
-  completedTools: new Set<string>(),
   lifecycle: Lifecycle.initial(),
   outputItems: {},
   message: undefined,
-  completedMessages: new Set<string>(),
   reasoningItems: {},
 })
 

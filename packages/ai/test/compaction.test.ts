@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { CompactionPart, CompactionResponse, LLMEvent, LLMResponse, Message, ProviderID } from "../src/schema/index.js"
 import { LLM, LLMClient, LLMRequest, LanguageModel } from "../src/index.js"
 import { OpenAI, Anthropic } from "../src/providers.js"
+import { testEffect } from "./lib/effect.js"
+import { fixedResponse } from "./lib/http.js"
 
 test("runtime capability checks follow model and route updates", () => {
   const supported = OpenAI.configure({ apiKey: "test" }).responses("fixture")
@@ -75,3 +77,25 @@ test("tagged content and event guards accept both checkpoint representations", (
     expect(Schema.decodeSync(codec)(Schema.encodeSync(codec)(message))).toEqual(message)
   }
 })
+
+testEffect(fixedResponse("")).effect(
+  "explicit compaction on a route without a compact endpoint fails with UnsupportedOperation",
+  () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: Anthropic.configure({ apiKey: "test" }).model("fixture"),
+        prompt: "hello",
+      })
+      expect(LLMClient.canCompact(request)).toBe(false)
+      const error = yield* LLMClient.compact(
+        request as unknown as Parameters<typeof LLMClient.compact>[0],
+      ).pipe(Effect.flip)
+      expect(error.reason._tag).toBe("UnsupportedOperation")
+      expect(error.message).toContain("does not support explicit compaction")
+      if (error.reason._tag === "UnsupportedOperation") {
+        expect(error.reason.operation).toBe("compact")
+        expect(error.reason.provider).toBe("anthropic")
+        expect(error.reason.route).toBe("anthropic-messages")
+      }
+    }),
+)
