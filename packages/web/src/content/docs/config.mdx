@@ -400,6 +400,21 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 ---
 
+### Session titles
+
+You can cap the length of generated session titles with the `title_max_words` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "title_max_words": 3
+}
+```
+
+When unset, titles target 50 characters rather than a word count. Setting it switches the title agent to a prompt that caps titles at that many words, which helps when a narrow session list would otherwise truncate them mid-phrase.
+
+---
+
 ### Policies
 
 Use the `experimental.policies` option to allow or deny OpenCode actions on configured resources. Currently, policies can control which providers OpenCode may use.
