@@ -46,7 +46,7 @@ test("long page errors retain the operation context without classifying script t
 })
 
 test("files distinguish pending, failed, unknown and missing desktop copies", async () => {
-  const files = createBrowserFiles()
+  const files = createBrowserFiles(() => ["https://example.com"])
   await files.ready
   try {
     const pending = files.add("download.txt", "text/plain")

@@ -9,6 +9,7 @@ import { Effect, Fiber, Schema, Stream } from "effect"
 import { createBrowserPane } from "../../src/main/browser-pane"
 import { bindIpcEvents, ipcEventStream } from "../../src/main/ipc-events"
 import { Smoke } from "./contract"
+import { verifyTargets } from "./targets"
 
 type Output<Name extends Browser.Method> = Schema.Schema.Type<Extract<Browser.Operation, { name: Name }>["output"]>
 
@@ -76,6 +77,7 @@ async function main() {
     "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))))",
   )
   const ipcErrors: string[] = []
+  const replaced: string[] = []
   const inventories = new Map<string, Browser.State | null>()
   const unbind = await Effect.runPromise(bindIpcEvents(win.webContents.id))
   const events = Effect.runFork(
@@ -84,6 +86,7 @@ async function main() {
         Effect.sync(() => {
           if (event._tag !== "BrowserPaneEvent") return
           if (event.event.type === "state") {
+            if (event.event.error === "browser.pane.replaced") replaced.push(event.bindingID)
             inventories.set(event.bindingID, event.event.state)
             return
           }
@@ -123,6 +126,7 @@ async function main() {
     assert.match(result.output, expected)
   }
   try {
+    await verifyTargets(win, fixture)
     await pane.register(win, "suite", {
       sessionID: session.id,
       endpoint: { url: process.env.SMOKE_URL!, password: process.env.SMOKE_PASSWORD },
@@ -337,11 +341,15 @@ async function main() {
       [],
     )
     assert.deepEqual(ipcErrors, [])
+    await pane.register(win, "replacement", {
+      sessionID: session.id,
+      endpoint: { url: process.env.SMOKE_URL!, password: process.env.SMOKE_PASSWORD },
+    })
+    await until(async () => replaced.includes("suite"))
     console.log(
       `PASS ${visited.size} browser operations over physical authenticated HTTP, including file bytes in both directions`,
     )
   } finally {
-    await pane.close(win, "suite")
     await pane.dispose()
     await Effect.runPromise(Fiber.interrupt(events))
     await Effect.runPromise(unbind)

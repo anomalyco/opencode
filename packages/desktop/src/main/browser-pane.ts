@@ -48,7 +48,7 @@ export function createBrowserPane() {
         partition: `opencode-browser-${crypto.randomUUID()}`,
       }
       // "unsupported" means the server has no browser plugin; the renderer stops retrying.
-      let reason: "browser.pane.unsupported" | undefined
+      let reason: "browser.pane.unsupported" | "browser.pane.replaced" | undefined
       const stop = () => close(entry, reason)
       const navigate = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
         if (event.isMainFrame && !event.isSameDocument) stop()
@@ -160,7 +160,14 @@ export function createBrowserPane() {
             yield* Effect.raceAllFirst([
               receive,
               Stream.fromQueue(outbound).pipe(Stream.runForEach((send) => send)),
-              Deferred.await(connected).pipe(Effect.andThen(rpc.attach({ ...attachment, version: 2 }, options))),
+              Deferred.await(connected).pipe(
+                Effect.andThen(rpc.attach({ ...attachment, version: 3 }, options)),
+                Effect.tap((result) =>
+                  Effect.sync(() => {
+                    if (result === "replaced") reason = "browser.pane.replaced"
+                  }),
+                ),
+              ),
             ])
           }).pipe(
             Effect.scoped,

@@ -16,16 +16,24 @@ let recording:
     }
   | undefined
 
-export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserFiles) {
+export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserFiles, source: () => readonly string[]) {
   let trace: Promise<{ id: Browser.FileID; durationMs: number; incomplete: boolean }> | undefined
+  let traceResources = new Set<string>()
+  let traceID = ""
   let cpu:
     | {
         started: number
+        id: string
+        resources: Set<string>
         timer?: ReturnType<typeof setTimeout>
         result?: Promise<{ id: Browser.FileID; durationMs: number }>
       }
     | undefined
   let takingHeap = false
+  cdp.on("Page.frameNavigated", ({ frame }) => {
+    if (recording?.owner === contents) traceResources.add(frame.url)
+    if (cpu && !cpu.result) cpu.resources.add(frame.url)
+  })
   const json = async (id: Browser.FileID) => {
     const file = await files.transfer(id)
     try {
@@ -50,12 +58,20 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
     if (cpu.result) return cpu.result
     clearTimeout(cpu.timer)
     cpu.result = cdp.send("Profiler.stop").then(async ({ profile }) => ({
-      id: await files.save("profile.cpuprofile", "application/json", Buffer.from(JSON.stringify(profile))),
+      id: await files.save("profile.cpuprofile", "application/json", Buffer.from(JSON.stringify(profile)), [
+        ...(cpu?.resources ?? []),
+      ]),
       durationMs: (profile.endTime - profile.startTime) / 1000,
     }))
     return cpu.result
   }
   return {
+    target(type: "trace" | "cpu"): Browser.Target {
+      return {
+        resources: (type === "trace" ? [...traceResources] : [...(cpu?.resources ?? [])]).sort(),
+        key: type === "trace" ? traceID : (cpu?.id ?? ""),
+      }
+    },
     async startTrace(durationMs = 10_000) {
       if (recording)
         throw new Error(
@@ -128,6 +144,7 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
                     metadata: { source: "opencode", scope: "renderer-process", processId: owner.pid },
                   }),
                 ),
+                [...traceResources],
               )
               return {
                 id,
@@ -146,6 +163,8 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
       }
       recording = owner
       trace = undefined
+      traceResources = new Set(source())
+      traceID = crypto.randomUUID()
       try {
         await cdp.send("Tracing.start", {
           transferMode: "ReturnAsStream",
@@ -188,7 +207,7 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
         )
       await cdp.send("Profiler.enable")
       await cdp.send("Profiler.start")
-      cpu = { started: Date.now() }
+      cpu = { started: Date.now(), id: crypto.randomUUID(), resources: new Set(source()) }
       cpu.timer = setTimeout(() => {
         void stopCpu().catch(() => undefined)
       }, 30_000)
@@ -200,6 +219,7 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
           "A heap snapshot is already being captured in this tab. Await that call before taking another; do not capture the same tab's heaps in parallel.",
         )
       takingHeap = true
+      const resources = source()
       const chunks: string[] = []
       let size = 0
       let overflow = false
@@ -219,7 +239,10 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
         throw new Error(
           "Heap snapshot exceeded the 128 MiB desktop capture limit. Use a smaller page/test case or ask the user to inspect the heap with desktop developer tools; this tool has no size override.",
         )
-      return files.save("heap.heapsnapshot.gz", "application/gzip", gzipSync(chunks.join("")))
+      return files.save("heap.heapsnapshot.gz", "application/gzip", gzipSync(chunks.join("")), [
+        ...resources,
+        ...source(),
+      ])
     },
     async analyze(
       action: Extract<

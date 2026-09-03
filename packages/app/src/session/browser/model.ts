@@ -21,16 +21,16 @@ export function createSessionBrowser(session: SessionModel) {
     // The connected server has no browser plugin.
     unsupported: false,
   })
-  const available = createMemo(
+  const eligible = createMemo(
     () =>
       !!platform.browserPane &&
       settings.ready() &&
       settings.general.experimentalBrowser() &&
-      session.isDesktop() &&
       !!session.identity.sessionID() &&
       !server.health?.incompatible &&
       !state.unsupported,
   )
+  const available = createMemo(() => eligible() && session.isDesktop())
   const browserTabs = createMemo(
     () => state.browser?.tabs.filter((tab) => session.layout.tabs().all().includes(sessionBrowserTab(tab.id))) ?? [],
   )
@@ -76,7 +76,7 @@ export function createSessionBrowser(session: SessionModel) {
     const sessionID = session.identity.sessionID()
     const pane = platform.browserPane
     setState({ registration: undefined, browser: null, error: undefined })
-    if (!available() || !sessionID || !pane) return
+    if (!eligible() || !sessionID || !pane) return
     const owner = session.ownership.capture()
     const target = { sessionID, endpoint: server.conn.http }
     let registration: BrowserPaneRegistration | undefined
@@ -88,6 +88,12 @@ export function createSessionBrowser(session: SessionModel) {
         owner.run(() => {
           if (event.type === "focus") return focus(event.tabID)
           if (event.error === "browser.pane.unsupported") return setState("unsupported", true)
+          if (event.error === "browser.pane.replaced") {
+            registration?.close()
+            registration = undefined
+            setState({ registration: undefined, browser: null, error: language.t("session.browser.replaced") })
+            return
+          }
           // The desktop dropped the attachment (server restart, attach race).
           // Re-register so the agent's browser tool comes back without a reload.
           if (event.error === "browser.pane.registration.closed") {

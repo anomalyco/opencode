@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events"
 import type { BrowserFiles } from "./files"
 import type { Cdp } from "./cdp"
 
-export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp) {
+export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp, resources: readonly string[]) {
   const { snapshot, generateReport } = await import("lighthouse")
   const info = (await contents.debugger.sendCommand("Target.getTargetInfo")) as { targetInfo: { targetId: string } }
   const sessions = new Map<string, ReturnType<typeof session>>()
@@ -72,8 +72,14 @@ export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp
         .map((audit) => ({ id: audit.id, title: audit.title, description: audit.description }))
         .slice(0, 100),
       files: await Promise.all([
-        files.save("lighthouse.json", "application/json", Buffer.from(generateReport(result.lhr, "json"))),
-        files.save("lighthouse.html", "text/html", Buffer.from(generateReport(result.lhr, "html"))),
+        files.save("lighthouse.json", "application/json", Buffer.from(generateReport(result.lhr, "json")), [
+          ...resources,
+          contents.getURL(),
+        ]),
+        files.save("lighthouse.html", "text/html", Buffer.from(generateReport(result.lhr, "html")), [
+          ...resources,
+          contents.getURL(),
+        ]),
       ]),
     }
   } finally {

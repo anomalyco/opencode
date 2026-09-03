@@ -185,6 +185,14 @@ export function createDiagnostics(cdp: Cdp) {
       const result = bounded(matching, input.limit ?? 100)
       return { requests: result, truncated: matching.length > result.length, dropped: droppedRequests }
     },
+    info(id: string) {
+      const request = requests.get(id)
+      if (!request)
+        throw new Error(
+          "Request is no longer retained. Call browser.network.list({tabID}) and use a current request id. Do not reload or resend it just to inspect it.",
+        )
+      return request.info
+    },
     async get(input: Extract<Browser.Action, { type: "network.get" }>) {
       const request = requests.get(input.id)
       if (!request)

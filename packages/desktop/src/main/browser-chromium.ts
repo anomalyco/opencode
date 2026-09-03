@@ -63,9 +63,11 @@ export function createBrowserPage(
     contents.setZoomLevel(input.key === "0" ? 0 : contents.getZoomLevel() + step)
   })
   const cdp = createCdp(contents)
-  const files = createBrowserFiles()
+  const documents = new Map<string, string>()
+  const sourceURLs = () => [...new Set([contents.getURL(), ...documents.values()])].sort()
+  const files = createBrowserFiles(sourceURLs)
   const diagnostics = createDiagnostics(cdp)
-  const profiling = createProfiling(contents, cdp, files)
+  const profiling = createProfiling(contents, cdp, files, sourceURLs)
   const refs = new Map<string, Element>()
   const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
@@ -73,6 +75,15 @@ export function createBrowserPage(
   const dialogs = new Set<() => void>()
   let dialog: { type: string; message: string; defaultValue: string } | null = null
   let generation = 0
+  let revision = 0
+  cdp.on("Page.frameNavigated", ({ frame }) => {
+    documents.set(frame.id, frame.url)
+    revision++
+  })
+  cdp.on("Page.frameDetached", ({ frameId }) => {
+    documents.delete(frameId)
+    revision++
+  })
   let closed = false
   const state = (): Browser.Tab => ({
     id: options.id,
@@ -89,6 +100,7 @@ export function createBrowserPage(
   const reset = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
     if (!event.isMainFrame || event.isSameDocument) return
     generation++
+    documents.clear()
     refs.clear()
     diagnostics.clear()
     publish()
@@ -138,7 +150,10 @@ export function createBrowserPage(
   const download = (_event: Electron.Event, item: Electron.DownloadItem, source: WebContents) => {
     if (source !== contents) return
     try {
-      const file = files.add(item.getFilename(), item.getMimeType() || "application/octet-stream")
+      const file = files.add(item.getFilename(), item.getMimeType() || "application/octet-stream", [
+        ...sourceURLs(),
+        ...item.getURLChain(),
+      ])
       item.setSavePath(file.path)
       item.on("updated", () => {
         file.bytes = item.getReceivedBytes()
@@ -234,6 +249,11 @@ export function createBrowserPage(
         throw new Error(
           "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
         )
+      if (command.inspect) return { value: await inspect(command.action), files: [] }
+      if (command.target && JSON.stringify(await inspect(command.action)) !== JSON.stringify(command.target))
+        throw new Error(
+          "Browser target changed while permission was pending. Take a fresh snapshot or listing and request the action again; it was not executed.",
+        )
       if (
         command.generation !== undefined &&
         command.generation !== generation &&
@@ -263,7 +283,11 @@ export function createBrowserPage(
         )
       if (command.action.type !== "dialog") dialogs.add(reject)
       try {
-        return await Promise.race([execute(command.action, command.files, signal), modal.promise, cancelled.promise])
+        return await Promise.race([
+          execute(command.action, command.files, signal, command.target),
+          modal.promise,
+          cancelled.promise,
+        ])
       } finally {
         signal.removeEventListener("abort", cancel)
         dialogs.delete(reject)
@@ -286,7 +310,10 @@ export function createBrowserPage(
     action: Browser.Action,
     transfers: readonly Browser.File[],
     signal: AbortSignal,
+    approved?: Browser.Target,
   ): Promise<Browser.Result> {
+    const captureSources = sourceURLs()
+    const transfer = (id: Browser.FileID) => files.transfer(id, approved?.resources)
     const result = (value: unknown, attached: Browser.File[] = []): Browser.Result => {
       const json = Schema.decodeUnknownSync(Schema.Json)(value)
       if (JSON.stringify(json).length > 512_000)
@@ -508,8 +535,11 @@ export function createBrowserPage(
           captureBeyondViewport: true,
           clip: { ...bounds, scale },
         })
-        const id = await files.save(`screenshot.${format}`, `image/${format}`, Buffer.from(capture.data, "base64"))
-        return result({ tab: state() }, [await files.transfer(id)])
+        const id = await files.save(`screenshot.${format}`, `image/${format}`, Buffer.from(capture.data, "base64"), [
+          ...captureSources,
+          ...sourceURLs(),
+        ])
+        return result({ tab: state() }, [await transfer(id)])
       }
       case "dialog": {
         if (action.action !== "get") {
@@ -551,7 +581,7 @@ export function createBrowserPage(
       case "files.list":
         return result({ tab: state(), files: files.list() })
       case "files.get":
-        return result({ tab: state() }, [await files.transfer(action.fileID)])
+        return result({ tab: state() }, [await transfer(action.fileID)])
       case "console":
         return result({ tab: state(), ...diagnostics.console(action) })
       case "network.list":
@@ -564,7 +594,7 @@ export function createBrowserPage(
       case "trace.stop": {
         const value = await profiling.stopTrace()
         return result({ tab: state(), durationMs: value.durationMs, incomplete: value.incomplete }, [
-          await files.transfer(value.id),
+          await transfer(value.id),
         ])
       }
       case "cpu.start":
@@ -572,10 +602,10 @@ export function createBrowserPage(
         return result({ tab: state(), recording: true })
       case "cpu.stop": {
         const value = await profiling.stopCpu()
-        return result({ tab: state(), durationMs: value.durationMs }, [await files.transfer(value.id)])
+        return result({ tab: state(), durationMs: value.durationMs }, [await transfer(value.id)])
       }
       case "heap.snapshot":
-        return result({ tab: state() }, [await files.transfer(await profiling.heap())])
+        return result({ tab: state() }, [await transfer(await profiling.heap())])
       case "trace.analyze":
       case "cpu.analyze":
       case "heap.summary":
@@ -585,10 +615,10 @@ export function createBrowserPage(
         return result({ tab: state(), ...(await profiling.analyze(action)) })
       case "lighthouse": {
         const { audit } = await import("./browser/lighthouse")
-        const report = await audit(contents, files, cdp)
+        const report = await audit(contents, files, cdp, captureSources)
         return result(
           { tab: state(), scores: report.scores, failures: report.failures },
-          await Promise.all(report.files.map((id) => files.transfer(id))),
+          await Promise.all(report.files.map(transfer)),
         )
       }
       default:
@@ -598,6 +628,55 @@ export function createBrowserPage(
     }
     abortError(signal)
     return result(state())
+  }
+
+  async function inspect(action: Browser.Action): Promise<Browser.Target> {
+    const fileIDs =
+      action.type === "heap.compare" ? [action.before, action.after] : "fileID" in action ? [action.fileID] : []
+    if (fileIDs.length)
+      return {
+        resources: [...new Set(fileIDs.flatMap((id) => files.get(id).resources))].sort(),
+        key: JSON.stringify(fileIDs),
+      }
+    if (action.type === "network.get") return { resources: [diagnostics.info(action.id).url], key: action.id }
+    if (action.type === "trace.stop" || action.type === "cpu.stop")
+      return profiling.target(action.type === "trace.stop" ? "trace" : "cpu")
+    const tree = await frames()
+    tree.forEach((frame) => documents.set(frame.id, frame.url))
+    const refs =
+      action.type === "drag"
+        ? [action.from, action.to]
+        : action.type === "fill_form"
+          ? action.fields.map((field) => field.ref)
+          : "ref" in action && action.ref
+            ? [action.ref]
+            : []
+    const selected = refs.map(target)
+    const frameIDs = selected.length
+      ? selected.map((element) => element.frameID)
+      : "frameID" in action && action.frameID
+        ? [action.frameID]
+        : []
+    const urls = frameIDs.map((id) => {
+      const frame = tree.find((frame) => frame.id === id)
+      if (!frame) throw new Error("Frame is unavailable. Call browser.frames({tabID}) and use a current frameID.")
+      return frame.url
+    })
+    const capture = ["screenshot", "lighthouse", "trace.start", "cpu.start", "heap.snapshot"].includes(action.type)
+    return {
+      resources: [
+        ...new Set(
+          action.type === "navigate"
+            ? [new URL(normalizeURL(action.url)).href]
+            : capture
+              ? sourceURLs()
+              : urls.length
+                ? urls
+                : [contents.getURL()],
+        ),
+      ].sort(),
+      key: JSON.stringify([generation, revision, selected]),
+    }
   }
 
   function target(ref: Browser.Ref): Element {
