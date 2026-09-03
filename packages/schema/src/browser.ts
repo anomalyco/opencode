@@ -127,7 +127,7 @@ export const ConsoleEntry = Schema.Struct({
   textTruncated: Schema.Boolean,
   source: optional(Schema.Struct({ url: text, line: count, column: count })),
 }).annotate({ identifier: "Browser.ConsoleEntry" })
-export type ConsoleEntry = typeof ConsoleEntry.Type
+export interface ConsoleEntry extends Schema.Schema.Type<typeof ConsoleEntry> {}
 const snapshot = Schema.Struct({ ...page, content: text, truncated: Schema.Boolean })
 const entry = Schema.Struct({ name: short, count, bytes: Schema.Finite })
 const node = Schema.Struct({ id: Schema.Finite, name: text, type: short, selfBytes: count, edgeCount: count })
@@ -481,11 +481,11 @@ export const Command = Schema.Struct({
   generation: optional(count),
   files: Schema.Array(File),
 }).annotate({ identifier: "Browser.Command" })
-export type Command = typeof Command.Type
+export interface Command extends Schema.Schema.Type<typeof Command> {}
 export const Result = Schema.Struct({ value: Schema.Json, files: Schema.Array(File) }).annotate({
   identifier: "Browser.Result",
 })
-export type Result = typeof Result.Type
+export interface Result extends Schema.Schema.Type<typeof Result> {}
 export const Outcome = Schema.Union([
   Schema.Struct({ type: Schema.Literal("success"), result: Result }),
   Schema.Struct({ type: Schema.Literal("failure"), code: short, message: short }),
