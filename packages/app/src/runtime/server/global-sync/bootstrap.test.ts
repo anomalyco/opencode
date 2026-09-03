@@ -40,7 +40,7 @@ test("bootstraps projects through the native store setter and preserves subseque
 
   try {
     await bootstrapGlobal({ serverAPI: api, scope: ServerScope.local, setGlobalStore: setStore, queryClient })
-    expect(store.project).toMatchObject([{ id: "project", worktree: "/repo" }])
+    expect(store.project.map((project) => [project.id, project.worktree])).toEqual([["project", "/repo"]])
 
     setStore("project", (projects) => projects.map((project) => ({ ...project, name: "Renamed" })))
     expect(store.project[0]?.name).toBe("Renamed")
@@ -48,7 +48,7 @@ test("bootstraps projects through the native store setter and preserves subseque
     expect(store.project).toEqual([])
 
     await bootstrapGlobal({ serverAPI: api, scope: ServerScope.local, setGlobalStore: setStore, queryClient })
-    expect(store.project).toMatchObject([{ id: "project", worktree: "/repo" }])
+    expect(store.project.map((project) => [project.id, project.worktree])).toEqual([["project", "/repo"]])
     expect(store.config).toEqual({})
   } finally {
     queryClient.clear()
