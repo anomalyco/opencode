@@ -33,6 +33,7 @@ import { useCommand } from "@/shell/commands/command"
 import { useSettings } from "@/settings/model"
 import { SessionTitleHeader } from "../session-identity-header"
 import { SessionHeader } from "@/session/header/session-header"
+import { TitlebarNavigationMount } from "@/shell/titlebar/navigation-slot"
 
 type BackgroundTask = {
   id: string
@@ -644,8 +645,8 @@ function MessageTimelineView(
       renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
       header={
         <Show when={!props.hideHeader}>
-          <SessionTitleHeader>
-            <div class="h-12 w-full flex items-center justify-between gap-2">
+          <SessionTitleHeader navigationEnd={false}>
+            <div class="h-[var(--shell-header-height,48px)] w-full flex items-center justify-between gap-2">
               <div class="flex items-center gap-1 min-w-0 flex-1">
                 <div class="flex items-center min-w-0 flex-1 w-full">
                   <Show
@@ -795,6 +796,8 @@ function MessageTimelineView(
               <Show when={sessionID()} keyed>
                 {(id) => (
                   <div class="shrink-0 flex items-center gap-2">
+                    {/* Auxiliary chrome precedes the actions so the review toggle stays at the panel edge. */}
+                    <TitlebarNavigationMount side="end" />
                     <SessionContextUsage placement="bottom" />
                     <Show when={!parentID() && project()}>
                       {(project) => (

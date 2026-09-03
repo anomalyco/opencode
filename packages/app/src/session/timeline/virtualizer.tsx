@@ -540,7 +540,7 @@ export function createTimelineVirtualizer(input: Input) {
           onScroll={handleListScroll}
           onClick={input.onSelectionInteraction}
           class="relative min-w-0 w-full h-full"
-          style={{ "--sticky-accordion-top": input.showHeader() ? "48px" : "0px" }}
+          style={{ "--sticky-accordion-top": input.showHeader() ? "var(--shell-header-height,48px)" : "0px" }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
             {props.header}

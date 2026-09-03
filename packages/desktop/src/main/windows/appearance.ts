@@ -32,7 +32,8 @@ export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) 
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
-          trafficLightPosition: { x: 14, y: 14 },
+          // Native buttons are 16px tall; center them on the header controls at y=28.
+          trafficLightPosition: { x: 18, y: 20 },
         }
       : {}),
     ...(process.platform === "win32"

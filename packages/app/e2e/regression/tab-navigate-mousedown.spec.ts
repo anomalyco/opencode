@@ -231,6 +231,127 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabB).toBeVisible()
 })
 
+for (const direction of ["ltr", "rtl"] as const) {
+  test(`vertical tabs toggle stays anchored and exposes header navigation (${direction})`, async ({
+    page,
+  }, testInfo) => {
+    await mockServer(page)
+    await page.addInitScript(
+      ({ server, sessionID }) => {
+        localStorage.setItem(
+          "settings.v3",
+          JSON.stringify({ appearance: { tabLayout: "vertical" }, general: { showStatus: true } }),
+        )
+        localStorage.setItem(
+          "opencode.window.browser.dat:tabs",
+          JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
+        )
+      },
+      { server, sessionID: sessionA.id },
+    )
+    const href = `/server/${base64Encode(server)}/session/${sessionA.id}`
+    await page.goto(href)
+    const header = page.locator("[data-session-title]")
+    await expect(header.getByRole("heading", { name: sessionA.title, exact: true })).toBeVisible()
+    await page.locator("html").evaluate((element, dir) => element.setAttribute("dir", dir), direction)
+    const toggle = page.getByRole("button", { name: "Toggle vertical tabs", exact: true })
+    const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+    await expect(sidebar.locator(toggle)).toHaveAttribute("aria-expanded", "true")
+    const badge = page.locator('[data-slot="channel-indicator"]')
+    await expect(badge).toHaveCount(1)
+    await expect(badge).toHaveText((process.env.OPENCODE_CHANNEL ?? "dev").toUpperCase())
+    await expect(sidebar.locator('[data-slot="vertical-tabs-controls"]').locator(badge)).toBeVisible()
+    await expect(sidebar.locator('[data-slot="vertical-tabs-footer"]').locator(badge)).toHaveCount(0)
+    const badgeBounds = await badge.boundingBox()
+    const bounds = await toggle.boundingBox()
+    expect(bounds).not.toBeNull()
+    if (!badgeBounds || !bounds) throw new Error("tab controls have no bounding box")
+    expect(
+      direction === "ltr" ? bounds.x - badgeBounds.x - badgeBounds.width : badgeBounds.x - bounds.x - bounds.width,
+    ).toBe(12)
+    expect(badgeBounds.y + badgeBounds.height / 2).toBe(bounds.y + bounds.height / 2)
+
+    await toggle.click()
+    await expect(sidebar).toHaveCount(0)
+    await expect(header.locator(toggle)).toHaveAttribute("aria-expanded", "false")
+    await expect(header.locator('[data-slot="vertical-tabs-controls"]').locator(badge)).toBeVisible()
+    await expect.poll(() => badge.boundingBox()).toEqual(badgeBounds)
+    await expect(toggle).toBeFocused()
+    await expect.poll(() => toggle.boundingBox()).toEqual(bounds)
+    await expect(header.getByRole("button", { name: "Home", exact: true })).toBeVisible()
+    await expect(header.getByRole("button", { name: "New session", exact: true })).toBeVisible()
+    await expect(header.getByRole("button", { name: "Status", exact: true })).toBeVisible()
+    await expect(header.locator('[data-slot="titlebar-navigation-start"] button')).toHaveCount(3)
+    expect(
+      await header
+        .locator('[data-slot="titlebar-navigation-start"] button')
+        .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))),
+    ).toEqual(["Toggle vertical tabs", "Home", "New session"])
+    await testInfo.attach(`collapsed-${direction}`, { body: await page.screenshot(), contentType: "image/png" })
+
+    await toggle.press("Enter")
+    await expect(sidebar.locator(toggle)).toHaveAttribute("aria-expanded", "true")
+    await expect(toggle).toBeFocused()
+    await expect.poll(() => toggle.boundingBox()).toEqual(bounds)
+    await expect(sidebar).toHaveCSS("width", "260px")
+    await expect(header.getByRole("button", { name: "Home", exact: true })).toHaveCount(0)
+
+    await page.setViewportSize({ width: 800, height: 720 })
+    const narrow = await toggle.boundingBox()
+    await toggle.click()
+    await expect(header.locator(toggle)).toHaveAttribute("aria-expanded", "false")
+    await expect.poll(() => toggle.boundingBox()).toEqual(narrow)
+    await expect(header.getByRole("button", { name: "New session", exact: true })).toBeInViewport()
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await header.getByRole("button", { name: "Home", exact: true }).click()
+    await expect(page).toHaveURL(/\/$/)
+    const toolbar = page.locator('[data-slot="collapsed-tabs-toolbar"]')
+    const home = page.locator('[data-slot="home-panel"]')
+    await expect(home.locator(toggle)).toBeVisible()
+    await expect(toolbar).toBeHidden()
+    await expect.poll(() => toggle.boundingBox()).toEqual(bounds)
+    await expect
+      .poll(() =>
+        home.evaluate((panel) => {
+          const shell = panel.closest('[data-slot="shell-layout"]')!.getBoundingClientRect()
+          const bounds = panel.getBoundingClientRect()
+          return {
+            top: bounds.top - shell.top,
+            bottom: shell.bottom - bounds.bottom,
+            left: bounds.left - shell.left,
+            right: shell.right - bounds.right,
+          }
+        }),
+      )
+      .toEqual({ top: 8, bottom: 8, left: 8, right: 8 })
+    await home.getByRole("button", { name: "Home", exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`${href}$`))
+    await expect(header.locator(toggle)).toBeVisible()
+    await header.getByRole("button", { name: "New session", exact: true }).click()
+    await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
+    const draft = page.locator('[data-component="new-session"]')
+    await expect(draft.locator(toggle)).toBeVisible()
+    await expect(toolbar).toBeHidden()
+    await expect.poll(() => toggle.boundingBox()).toEqual(bounds)
+    await expect
+      .poll(() =>
+        draft.evaluate((panel) => {
+          const shell = panel.closest('[data-slot="shell-layout"]')!.getBoundingClientRect()
+          const bounds = panel.getBoundingClientRect()
+          return {
+            top: bounds.top - shell.top,
+            bottom: shell.bottom - bounds.bottom,
+            left: bounds.left - shell.left,
+            right: shell.right - bounds.right,
+          }
+        }),
+      )
+      .toEqual({ top: 8, bottom: 8, left: 8, right: 8 })
+    await toggle.click()
+    await expect(sidebar.getByRole("button", { name: "New session", exact: true })).toBeVisible()
+  })
+}
+
 test("appearance experimental settings control vertical tab details", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
@@ -314,6 +435,239 @@ test("appearance experimental settings control vertical tab details", async ({ p
   await expect(layout).toContainText("Vertical")
 })
 
+for (const direction of ["ltr", "rtl"] as const) {
+  test(`collapsed tabs toggle previews every open tab on hover (${direction})`, async ({ page }, testInfo) => {
+    await mockServer(page)
+    await page.route(`${server}/api/session/active*`, (route) =>
+      json(route, { data: { [sessionC.id]: { type: "running" } } }),
+    )
+    await page.route(`${server}/api/event*`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: 'data: {"id":"evt_connected","type":"server.connected","data":{}}\n\n',
+      }),
+    )
+    await page.addInitScript(
+      ({ server, sessionA, sessionB, sessionC, directory }) => {
+        localStorage.setItem("settings.v3", JSON.stringify({ appearance: { tabLayout: "vertical" } }))
+        localStorage.setItem(
+          "opencode.window.browser.dat:tabs",
+          JSON.stringify([
+            { type: "session", server, sessionId: sessionA },
+            { type: "draft", server, directory, draftID: "hover-draft" },
+            { type: "session", server, sessionId: sessionB },
+            { type: "session", server, sessionId: sessionC },
+          ]),
+        )
+        localStorage.setItem(
+          "opencode.global.dat:notification",
+          JSON.stringify({
+            list: [{ type: "turn-complete", session: sessionB, directory, time: Date.now(), viewed: false }],
+          }),
+        )
+      },
+      { server, sessionA: sessionA.id, sessionB: sessionB.id, sessionC: sessionC.id, directory: sessionA.directory },
+    )
+    const hrefA = `/server/${base64Encode(server)}/session/${sessionA.id}`
+    const hrefB = `/server/${base64Encode(server)}/session/${sessionB.id}`
+    const hrefC = `/server/${base64Encode(server)}/session/${sessionC.id}`
+    await page.goto(hrefA)
+    await expect(page.locator("[data-session-title] h1")).toHaveText(sessionA.title)
+    await page.locator("html").evaluate((element, direction) => element.setAttribute("dir", direction), direction)
+    const toggle = page.getByRole("button", { name: "Toggle vertical tabs", exact: true })
+    const popup = page.getByRole("navigation", { name: "Open tabs", exact: true })
+    const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+    await expect(sidebar.locator("[data-titlebar-tab-title]")).toHaveText([
+      sessionA.title,
+      "Session",
+      sessionB.title,
+      sessionC.title,
+    ])
+    const appearance = await sidebar.locator("[data-titlebar-tab]").evaluateAll((rows) =>
+      rows.map((row) => {
+        const style = getComputedStyle(row)
+        return { height: style.height, radius: style.borderRadius, background: style.backgroundImage }
+      }),
+    )
+    await page.clock.install()
+    await toggle.click()
+    await expect(toggle).toHaveAttribute("aria-expanded", "false")
+    await expect(toggle).toHaveAttribute("data-hover-blocked", "true")
+    await toggle.hover()
+    await page.clock.runFor(1000)
+    await expect(popup).toHaveCount(0)
+    await page.locator("[data-session-title] h1").hover()
+    await expect(toggle).toHaveAttribute("data-hover-blocked", "false")
+    await toggle.hover()
+    await expect(popup.locator("[data-titlebar-tab-title]")).toHaveText([
+      sessionA.title,
+      "Session",
+      sessionB.title,
+      sessionC.title,
+    ])
+    await expect(popup.getByRole("button", { name: "New session", exact: true })).toHaveCount(0)
+    await expect(popup.getByRole("button", { name: "Close tab", exact: true })).toHaveCount(4)
+    await expect(popup.locator("[data-titlebar-tab-list]")).toHaveCSS("gap", "4px")
+    await expect(popup.locator('[data-slot="project-avatar-slot"]')).toHaveCount(3)
+    await expect(popup).toHaveCSS("padding", "4px")
+    await expect
+      .poll(async () => {
+        const button = await toggle.boundingBox()
+        if (!button) return Infinity
+        const centers = await popup.locator('[data-slot="project-avatar-slot"]').evaluateAll((icons) =>
+          icons.map((icon) => {
+            const bounds = icon.getBoundingClientRect()
+            return bounds.x + bounds.width / 2
+          }),
+        )
+        return Math.max(...centers.map((center) => Math.abs(center - button.x - button.width / 2)))
+      })
+      .toBeLessThanOrEqual(1)
+    await expect(
+      popup.locator(`[data-titlebar-tab-link][href="${hrefB}"] [data-slot="project-avatar-unread-dot"]`),
+    ).toBeVisible()
+    await expect(
+      popup.locator(`[data-titlebar-tab-link][href="${hrefC}"] [data-component="session-progress-indicator-v2"]`),
+    ).toBeVisible()
+    expect(
+      await popup.locator("[data-titlebar-tab]").evaluateAll((rows) =>
+        rows.map((row) => {
+          const style = getComputedStyle(row)
+          return { height: style.height, radius: style.borderRadius, background: style.backgroundImage }
+        }),
+      ),
+    ).toEqual(appearance)
+    await popup.screenshot({ path: testInfo.outputPath("open-tabs.png") })
+    await expect(popup.locator('[data-titlebar-tab-slot][data-active="true"] [data-titlebar-tab-title]')).toHaveText(
+      sessionA.title,
+    )
+    await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toHaveCount(0)
+    const bounds = await toggle.boundingBox()
+
+    await popup.locator(`[data-titlebar-tab-link][href="${hrefB}"]`).hover()
+    await expect(popup).toBeVisible()
+    await expect(toggle).toHaveAttribute("data-state", "hover")
+    await popup.locator(`[data-titlebar-tab-link][href="${hrefB}"]`).click()
+    await expect(page).toHaveURL(new RegExp(`${hrefB}$`))
+    await expect(page.locator("[data-session-title] h1")).toHaveText(sessionB.title)
+    await expect(popup).toBeVisible()
+    await expect(toggle).toHaveAttribute("aria-expanded", "false")
+    await expect.poll(() => toggle.boundingBox()).toEqual(bounds)
+
+    await expect(popup.locator('[data-titlebar-tab-slot][data-active="true"] [data-titlebar-tab-title]')).toHaveText(
+      sessionB.title,
+    )
+    const closing = popup
+      .locator("[data-titlebar-tab-slot]")
+      .filter({ has: page.locator(`[data-titlebar-tab-link][href="${hrefC}"]`) })
+    await closing.hover()
+    await closing.getByRole("button", { name: "Close tab", exact: true }).click()
+    await expect(popup.locator("[data-titlebar-tab-title]")).toHaveText([sessionA.title, "Session", sessionB.title])
+    await expect(page).toHaveURL(new RegExp(`${hrefB}$`))
+    await page.keyboard.press("Escape")
+    await expect(popup).toBeVisible()
+    await page.locator("[data-session-title] h1").hover()
+    await expect(popup).toBeHidden()
+    await expect(toggle).not.toHaveAttribute("data-state", "hover")
+
+    await toggle.click()
+    await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toBeVisible()
+    await page.locator("[data-session-title] h1").hover()
+    await toggle.hover()
+    await expect(toggle).toHaveAttribute("aria-expanded", "true")
+    await expect(popup).toHaveCount(0)
+  })
+}
+
+test("closing the active and final dropdown tabs keeps it open", async ({ page }) => {
+  await mockServer(page)
+  await page.addInitScript(
+    ({ server, sessionA, sessionB }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ appearance: { tabLayout: "vertical" } }))
+      localStorage.setItem(
+        "opencode.window.browser.dat:tabs",
+        JSON.stringify([
+          { type: "session", server, sessionId: sessionA },
+          { type: "session", server, sessionId: sessionB },
+        ]),
+      )
+    },
+    { server, sessionA: sessionA.id, sessionB: sessionB.id },
+  )
+  const hrefA = `/server/${base64Encode(server)}/session/${sessionA.id}`
+  const hrefB = `/server/${base64Encode(server)}/session/${sessionB.id}`
+  await page.goto(hrefA)
+  await expect(page.locator("[data-session-title] h1")).toHaveText(sessionA.title)
+  const toggle = page.getByRole("button", { name: "Toggle vertical tabs", exact: true })
+  await toggle.click()
+  await page.locator("[data-session-title] h1").hover()
+  await toggle.hover()
+  const popup = page.getByRole("navigation", { name: "Open tabs", exact: true })
+  const active = popup.locator('[data-titlebar-tab-slot][data-active="true"]')
+  await expect(active.locator("[data-titlebar-tab-title]")).toHaveText(sessionA.title)
+  await active.getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`${hrefB}$`))
+  await expect(popup.locator("[data-titlebar-tab-title]")).toHaveText([sessionB.title])
+  await expect(active.locator("[data-titlebar-tab-title]")).toHaveText(sessionB.title)
+  await active.getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(page).toHaveURL(/\/$/)
+  await expect(popup).toHaveText("No open tabs")
+  await expect(toggle).toHaveAttribute("data-state", "hover")
+  await page.locator('[data-slot="home-panel"]').getByRole("button", { name: "Home", exact: true }).hover()
+  await expect(popup).toBeHidden()
+})
+
+test("collapsed tabs hover list handles an empty tab list", async ({ page }) => {
+  await mockServer(page)
+  await page.addInitScript(() => {
+    localStorage.setItem("settings.v3", JSON.stringify({ appearance: { tabLayout: "vertical" } }))
+  })
+  await page.goto("/")
+  const toggle = page.getByRole("button", { name: "Toggle vertical tabs", exact: true })
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await page.locator('[data-slot="home-panel"]').getByRole("button", { name: "Home", exact: true }).hover()
+  await toggle.hover()
+  const popup = page.getByRole("navigation", { name: "Open tabs", exact: true })
+  await expect(popup).toHaveText("No open tabs")
+  await expect(popup.getByRole("button")).toHaveCount(0)
+})
+
+test("collapsed tabs dropdown scrolls the sidebar rows", async ({ page }) => {
+  await mockServer(page)
+  await page.addInitScript(
+    ({ server, directory }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ appearance: { tabLayout: "vertical" } }))
+      localStorage.setItem(
+        "opencode.window.browser.dat:tabs",
+        JSON.stringify(
+          Array.from({ length: 20 }, (_, index) => ({
+            type: "draft",
+            server,
+            directory,
+            draftID: `hover-${index}`,
+          })),
+        ),
+      )
+    },
+    { server, directory: sessionA.directory },
+  )
+  await page.goto("/")
+  const toggle = page.getByRole("button", { name: "Toggle vertical tabs", exact: true })
+  await toggle.click()
+  await page.locator('[data-slot="home-panel"]').getByRole("button", { name: "Home", exact: true }).hover()
+  await toggle.hover()
+  const popup = page.getByRole("navigation", { name: "Open tabs", exact: true })
+  await expect(popup.locator("[data-titlebar-tab-slot]")).toHaveCount(20)
+  const scroll = popup.locator('[data-slot="vertical-tabs-scroll"]')
+  await expect.poll(() => scroll.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  const tab = popup.locator('[data-tab-key="draft:hover-19"] [data-titlebar-tab-link]')
+  await tab.scrollIntoViewIfNeeded()
+  await expect(tab).toBeInViewport()
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+})
+
 test("vertical tab preference uses the drawer on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 720 })
   await mockServer(page)
@@ -392,7 +746,11 @@ async function mockServer(page: Page) {
         url.pathname === "/api/project" ? [project] : { id: project.id, directory: sessionA.directory },
       )
     }
-    if (url.pathname === "/api/location") return json(route, { directory: sessionA.directory })
+    if (url.pathname === "/api/location")
+      return json(route, {
+        directory: sessionA.directory,
+        project: { id: sessionA.projectID, directory: sessionA.directory, canonical: sessionA.directory },
+      })
     if (url.pathname === "/api/vcs")
       return json(route, {
         location: { directory: sessionA.directory },

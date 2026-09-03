@@ -86,7 +86,8 @@
   gap: 2px;
 }
 
-[data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-list][data-orientation="vertical"] {
+:is([data-slot="vertical-tabs-sidebar"], [data-slot="open-tabs-popover"])
+  [data-titlebar-tab-list][data-orientation="vertical"] {
   gap: 4px;
 }
 

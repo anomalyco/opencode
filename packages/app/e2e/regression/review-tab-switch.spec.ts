@@ -93,6 +93,71 @@ test("keeps review visibility per tab and the pane mounted across tab switches",
   await expect(page.getByRole("button", { name: "generated-2739.ts" })).toBeVisible()
 })
 
+test("compact shell headers preserve equal outer gaps and aligned controls", async ({ page }) => {
+  await setup(page)
+  await page.addInitScript(() => {
+    localStorage.setItem("settings.v3", JSON.stringify({ appearance: { tabLayout: "vertical" } }))
+  })
+  await page.goto(sessionHref(sessionA))
+  await expectSessionTitle(page, titleA)
+  // Exercise the desktop's compact header metric with the real shell and panel components.
+  await page.locator('[data-slot="shell-layout"]').evaluate((element) => {
+    element.style.setProperty("--shell-header-height", "40px")
+  })
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
+
+  const toggle = page.getByRole("button", { name: "Toggle vertical tabs", exact: true })
+  const review = page.getByRole("button", { name: "Toggle review", exact: true })
+  const file = page.locator('#review-panel button[aria-label="Open file"]')
+  await expect(file).toBeVisible()
+  const frame = await page.locator('[data-slot="shell-layout"]').boundingBox()
+  if (!frame) throw new Error("shell has no bounding box")
+  const bounds = await toggle.boundingBox()
+  expect(bounds).toMatchObject({ y: frame.y + 14, height: 28 })
+
+  for (const opened of [true, false]) {
+    if (!opened) await toggle.click()
+    await expect(toggle).toHaveAttribute("aria-expanded", String(opened))
+    await expect.poll(() => toggle.boundingBox()).toEqual(bounds)
+    await expect
+      .poll(async () => {
+        const panel = await page.locator('[data-slot="session-chat-panel"]').boundingBox()
+        const button = await review.boundingBox()
+        if (!panel || !button) return undefined
+        return { top: button.y - panel.y, right: panel.x + panel.width - button.x - button.width }
+      })
+      .toEqual({ top: 6, right: 6 })
+    await expect
+      .poll(async () => {
+        const button = await review.boundingBox()
+        return button ? button.y + button.height / 2 : undefined
+      })
+      .toBe(frame.y + 28)
+    await expect
+      .poll(async () => {
+        const button = await file.boundingBox()
+        return button ? button.y + button.height / 2 : undefined
+      })
+      .toBe(frame.y + 28)
+    await expect
+      .poll(() =>
+        page.locator('[data-slot="session-chat-panel"], #review-panel').evaluateAll(
+          (panels, frame) =>
+            panels.map((panel) => {
+              const bounds = panel.getBoundingClientRect()
+              return { top: bounds.top - frame.y, bottom: frame.y + frame.height - bounds.bottom }
+            }),
+          frame,
+        ),
+      )
+      .toEqual([
+        { top: 8, bottom: 8 },
+        { top: 8, bottom: 8 },
+      ])
+  }
+})
+
 type Probed = HTMLElement & { __e2eProbe?: string }
 
 async function switchTab(page: Page, title: string) {

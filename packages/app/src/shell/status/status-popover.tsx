@@ -9,6 +9,7 @@ import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useSettings } from "@/settings/model"
 import { createMediaQuery } from "@solid-primitives/media"
+import { useTitlebarNavigationSlot } from "@/shell/titlebar/navigation-slot"
 
 const Body = lazy(() => import("./body").then((x) => ({ default: x.StatusPopoverBody })))
 
@@ -20,6 +21,8 @@ export function StatusPopover() {
   const sdk = useWorkspaceLocation()
   const settings = useSettings()
   const desktop = createMediaQuery("(min-width: 768px)")
+  const navigation = useTitlebarNavigationSlot()
+  const footer = () => desktop() && settings.appearance.tabLayout() === "vertical" && !navigation?.collapsed()
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => global.servers.health[server.key]?.healthy
   const mcp = () => data.location.mcp.server.list({ directory: sdk().directory })
@@ -41,8 +44,8 @@ export function StatusPopover() {
     serverHealth: serverHealth(),
     attention: attention(),
     issue: issue(),
-    placement: desktop() && settings.appearance.tabLayout() === "vertical" ? "top-start" : "bottom-end",
-    shift: desktop() && settings.appearance.tabLayout() === "vertical" ? 0 : -168,
+    placement: footer() ? "top-start" : "bottom-end",
+    shift: footer() ? 0 : -168,
     label: language.t("status.popover.trigger"),
     onOpenChange: setShown,
     body: () => (
@@ -85,8 +88,12 @@ function StatusPopoverView(props: { state: StatusPopoverState }) {
     class:
       "[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl",
     gutter: 4,
-    placement: props.state.placement,
-    shift: props.state.shift,
+    get placement() {
+      return props.state.placement
+    },
+    get shift() {
+      return props.state.shift
+    },
   }
 
   return (

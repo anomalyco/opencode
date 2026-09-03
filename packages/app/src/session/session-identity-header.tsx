@@ -13,14 +13,23 @@ import { pathKey } from "@/workspaces/path-key"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { sessionHref } from "@/shell/routes/session"
 import { sessionTitle } from "./title"
+import { TitlebarNavigationMount } from "@/shell/titlebar/navigation-slot"
 
-export function SessionTitleHeader(props: ParentProps) {
+export function SessionTitleHeader(props: ParentProps<{ navigationEnd?: boolean }>) {
   return (
     <div
       data-session-title
-      class="sticky top-0 z-30 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_48px,transparent)] pb-4 pe-3 ps-2.5"
+      class="sticky top-0 z-30 flex w-full items-start bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_var(--shell-header-height,48px),transparent)] pb-4 ps-2.5"
+      style={{
+        // Match the 28px action buttons' top inset, retaining physical macOS control clearance in RTL.
+        "padding-inline-end": "calc((var(--shell-header-height, 48px) - 28px) / 2 + var(--tabs-trailing-inset, 0px))",
+      }}
     >
-      {props.children}
+      <TitlebarNavigationMount side="start" />
+      <div class="min-w-0 flex-1">{props.children}</div>
+      <Show when={props.navigationEnd !== false}>
+        <TitlebarNavigationMount side="end" />
+      </Show>
     </div>
   )
 }
@@ -93,7 +102,7 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   return (
     <Show when={title() || parentTitle() || showProjectIcon()}>
       <SessionTitleHeader>
-        <div class="flex h-12 w-full items-center justify-between gap-2">
+        <div class="flex h-[var(--shell-header-height,48px)] w-full items-center justify-between gap-2">
           <div class="flex min-w-0 flex-1 items-center gap-1">
             <div class="flex min-w-0 w-full flex-1 items-center">
               <span

@@ -31,13 +31,14 @@ import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 import { projectForSession } from "@/shell/layout/helpers"
 import { useSettingsDialog } from "@/settings/command"
+import { OpenTabsPopover } from "./open-tabs-popover"
 
-const titlebarHeight = 36
+// The horizontal macOS bar includes 8px top padding: its controls center at y=28.
+const titlebarHeight = 48
 const windowsTitlebarHeight = 44 // Includes the content inset; matches the native Windows overlay.
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
-const macTrafficLightsBaseWidth = 84
-const macTrafficLightsTopClearance = 28
+const macTrafficLightsBaseWidth = 88
 
 export type TitlebarUpdate = {
   version: string | undefined
@@ -48,7 +49,7 @@ export type TitlebarUpdate = {
 export function Titlebar(props: {
   update?: TitlebarUpdate
   debugTools?: { visible: boolean; toggle: () => void }
-  verticalTabs?: { mount?: HTMLElement }
+  verticalTabs?: { opened: boolean; toggle: () => void; mount?: HTMLElement; start?: HTMLElement; end?: HTMLElement }
 }) {
   const platform = usePlatform()
   const command = useCommand()
@@ -64,7 +65,6 @@ export function Titlebar(props: {
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
   const macTrafficLights = createMemo(() => mac() && !platform.windowFullscreen?.())
-  const macVerticalTabs = createMemo(() => mac() && !!props.verticalTabs)
   const zoom = () => platform.webviewZoom?.() ?? 1
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const minHeight = () => {
@@ -316,6 +316,62 @@ export function Titlebar(props: {
               }
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+            // Keep the dropdown open across session changes that replace its header/portal host.
+            const [tabsPreview, setTabsPreview] = createStore({ blocked: false, open: false })
+            let tabsToggle: HTMLButtonElement | undefined
+            const toggleIcon = (hover?: () => boolean) => (
+              <IconButton
+                ref={(element) => (tabsToggle = element)}
+                type="button"
+                data-action="toggle-vertical-tabs"
+                data-hover-blocked={tabsPreview.blocked}
+                variant="ghost-muted"
+                size="large"
+                state={hover?.() ? "hover" : undefined}
+                class="shrink-0 [app-region:no-drag]"
+                icon={<Icon name="sidebar-right" class="-scale-x-100 rtl:scale-x-100" />}
+                aria-label={language.t("titlebar.tabs.toggle")}
+                aria-expanded={props.verticalTabs?.opened}
+                aria-controls="vertical-tabs-sidebar"
+                onClick={() => {
+                  setTabsPreview({ blocked: props.verticalTabs?.opened === true, open: false })
+                  props.verticalTabs?.toggle()
+                  // The control moves between portal hosts; retain keyboard focus.
+                  queueMicrotask(() => tabsToggle?.focus({ preventScroll: true }))
+                }}
+              />
+            )
+            const toggleButton = (preview = false) => (
+              <div data-slot="vertical-tabs-controls" class="flex shrink-0 items-center gap-3">
+                <Show when={!windows()}>
+                  <ChannelIndicator debugTools={props.debugTools} />
+                </Show>
+                <Show
+                  when={preview}
+                  fallback={
+                    <Tooltip placement="bottom" value={language.t("titlebar.tabs.toggle")}>
+                      {toggleIcon()}
+                    </Tooltip>
+                  }
+                >
+                  <OpenTabsPopover
+                    trigger={toggleIcon}
+                    tabs={tabsStore}
+                    currentTab={currentTab()}
+                    open={tabsPreview.open}
+                    onOpenChange={(open) => setTabsPreview("open", open)}
+                    blocked={tabsPreview.blocked}
+                    onHoverExit={() => setTabsPreview("blocked", false)}
+                    onSelect={(tab) => tabs.select(tab)}
+                    onClose={(tab) => {
+                      const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                      if (index !== -1) tabsStoreActions.closeTab(index)
+                    }}
+                    onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                  />
+                </Show>
+              </div>
+            )
             const homeButton = (vertical = false) => (
               <Show
                 when={vertical}
@@ -334,7 +390,7 @@ export function Titlebar(props: {
                       type="button"
                       variant="ghost-muted"
                       size="large"
-                      class="!w-9 shrink-0"
+                      class={props.verticalTabs ? "shrink-0" : "!w-9 shrink-0"}
                       icon={<Icon name="grid-plus" />}
                       state={layout.route().type === "home" ? "pressed" : undefined}
                       onClick={toggleHome}
@@ -617,78 +673,107 @@ export function Titlebar(props: {
                     }
                   >
                     {(vertical) => (
-                      <Show when={vertical().mount} keyed>
-                        {(mount) => (
-                          <Portal
-                            mount={mount}
-                            ref={(element) => (element.className = "flex size-full min-h-0 flex-col")}
-                          >
-                            <Show when={macVerticalTabs()}>
-                              <div
-                                class="relative mb-2 w-full shrink-0"
-                                style={{ height: `${macTrafficLightsTopClearance / zoom()}px` }}
-                                data-tauri-drag-region
+                      <>
+                        <Show when={!vertical().opened && vertical().start} keyed>
+                          {(mount) => (
+                            <Portal mount={mount}>
+                              <div class="flex shrink-0 items-center gap-1 pe-6 [app-region:no-drag]">
+                                {toggleButton(true)}
+                                {homeButton()}
+                                <Tooltip
+                                  placement="bottom"
+                                  value={
+                                    <>
+                                      {language.t("command.session.new")}
+                                      <Keybind keys={newTabTooltipKeybind(command)} variant="neutral" />
+                                    </>
+                                  }
+                                >
+                                  <IconButton
+                                    type="button"
+                                    variant="ghost-muted"
+                                    size="large"
+                                    icon={<Icon name="edit" />}
+                                    onClick={openNewTab}
+                                    aria-label={language.t("command.session.new")}
+                                  />
+                                </Tooltip>
+                              </div>
+                            </Portal>
+                          )}
+                        </Show>
+                        <Show when={!vertical().opened && vertical().end} keyed>
+                          {(mount) => (
+                            <Portal mount={mount}>
+                              <div class="flex items-center gap-1.5 ps-2">
+                                <TitlebarRight state={rightState()} />
+                              </div>
+                            </Portal>
+                          )}
+                        </Show>
+                        <Show when={vertical().opened}>
+                          <Show when={vertical().mount} keyed>
+                            {(mount) => (
+                              <Portal
+                                mount={mount}
+                                ref={(element) => (element.className = "flex size-full min-h-0 flex-col")}
                               >
                                 <div
-                                  class="absolute -top-0.5 bottom-0.5 flex items-center"
-                                  style={{
-                                    // Native traffic lights stay on the physical left; subtract the sidebar padding.
-                                    left: macTrafficLights()
-                                      ? `calc(${macTrafficLightsBaseWidth / zoom()}px - 0.625rem)`
-                                      : "0px",
-                                  }}
+                                  data-slot="vertical-tabs-toolbar"
+                                  class="mb-3 flex h-[var(--shell-header-height,48px)] shrink-0 items-center ms-2"
+                                  style={{ "padding-inline-start": "var(--tabs-control-inset)" }}
+                                  data-tauri-drag-region
                                 >
-                                  <ChannelIndicator debugTools={props.debugTools} />
+                                  {toggleButton()}
                                 </div>
-                              </div>
-                            </Show>
-                            {homeButton(true)}
-                            <button
-                              type="button"
-                              data-action="vertical-tabs-new-session"
-                              class="flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
-                              onClick={openNewTab}
-                              aria-label={language.t("command.session.new")}
-                            >
-                              <Icon name="edit" />
-                              {language.t("command.session.new")}
-                            </button>
-                            <div class="h-4 w-full shrink-0" aria-hidden="true" />
-                            <div class="flex min-h-0 flex-1 flex-col gap-1">
-                              <TitlebarTabStrip
-                                orientation="vertical"
-                                tabs={tabsStore}
-                                currentTab={currentTab()}
-                                onNavigate={(tab, el) => {
-                                  tabs.select(tab)
-                                  el?.scrollIntoView({ behavior: "instant", block: "nearest" })
-                                }}
-                                onClose={(tab) => {
-                                  const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-                                  if (index !== -1) tabsStoreActions.closeTab(index)
-                                }}
-                                onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                              />
-                            </div>
-                            <div
-                              data-slot="vertical-tabs-footer"
-                              class="mt-auto flex h-9 w-full shrink-0 items-center gap-1.5"
-                            >
-                              <TitlebarRightMount />
-                              <Show when={!macVerticalTabs() && !windows()}>
-                                <ChannelIndicator debugTools={props.debugTools} />
-                              </Show>
-                            </div>
-                          </Portal>
-                        )}
-                      </Show>
+                                {homeButton(true)}
+                                <button
+                                  type="button"
+                                  data-action="vertical-tabs-new-session"
+                                  class="flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
+                                  onClick={openNewTab}
+                                  aria-label={language.t("command.session.new")}
+                                >
+                                  <Icon name="edit" />
+                                  {language.t("command.session.new")}
+                                </button>
+                                <div class="h-4 w-full shrink-0" aria-hidden="true" />
+                                <div class="flex min-h-0 flex-1 flex-col gap-1">
+                                  <TitlebarTabStrip
+                                    orientation="vertical"
+                                    tabs={tabsStore}
+                                    currentTab={currentTab()}
+                                    onNavigate={(tab, el) => {
+                                      tabs.select(tab)
+                                      el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                                    }}
+                                    onClose={(tab) => {
+                                      const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                                      if (index !== -1) tabsStoreActions.closeTab(index)
+                                    }}
+                                    onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                                  />
+                                </div>
+                                <div
+                                  data-slot="vertical-tabs-footer"
+                                  class="mt-auto flex h-9 w-full shrink-0 items-center gap-1.5"
+                                >
+                                  <TitlebarRightMount />
+                                </div>
+                              </Portal>
+                            )}
+                          </Show>
+                        </Show>
+                      </>
                     )}
                   </Show>
                 </Show>
                 <Show when={!mobile()}>
                   <div class="flex-1" />
                 </Show>
-                <TitlebarRight state={rightState()} mount={!props.verticalTabs} />
+                <Show when={!props.verticalTabs || props.verticalTabs.opened}>
+                  <TitlebarRight state={rightState()} mount={!props.verticalTabs} />
+                </Show>
               </div>
             )
           }}
@@ -764,6 +849,7 @@ function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () =
     return (
       <button
         type="button"
+        data-slot="channel-indicator"
         class="inline-flex h-4 shrink-0 items-center bg-icon-interactive-base text-[#FFF] leading-4 font-medium px-1.5 rounded-full uppercase font-mono cursor-pointer [app-region:no-drag]"
         style={style()}
         onClick={props.debugTools.toggle}
@@ -780,6 +866,7 @@ function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () =
     <Show when={label}>
       {(value) => (
         <div
+          data-slot="channel-indicator"
           class="inline-flex h-4 shrink-0 items-center bg-icon-interactive-base text-[#FFF] leading-4 font-medium px-1.5 rounded-full uppercase font-mono"
           style={style()}
         >

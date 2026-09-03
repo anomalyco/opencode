@@ -289,9 +289,14 @@ export function SessionSidePanel(props: {
                       tabs().move(source.id.toString(), source.index)
                     }}
                   >
-                    <Tabs value={activeTab()} onChange={activateTab}>
+                    <Tabs
+                      value={activeTab()}
+                      onChange={activateTab}
+                      style={{ "--tabs-bar-height": "var(--shell-header-height,48px)" }}
+                    >
                       <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
                         <Tabs.List
+                          style={{ height: "var(--shell-header-height,52px)" }}
                           ref={(el: HTMLDivElement) => {
                             tabList = el
                             const stop = createFileTabListSync({ el, contextOpen })

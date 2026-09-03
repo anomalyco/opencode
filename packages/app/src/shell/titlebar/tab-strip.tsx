@@ -279,14 +279,14 @@ export function TitlebarTabStrip(props: {
       data-slot={vertical() ? "vertical-tabs" : "titlebar-tabs"}
       data-orientation={vertical() ? "vertical" : "horizontal"}
       class="relative min-w-0"
-      classList={{ "min-h-0 overflow-hidden": vertical() }}
+      classList={{ "flex min-h-0 flex-col overflow-hidden": vertical() }}
     >
       <div
         data-slot={vertical() ? "vertical-tabs-scroll" : "titlebar-tabs-scroll"}
         class="flex min-w-0 no-scrollbar [app-region:no-drag]"
         classList={{
           "flex-row items-center gap-1.5 overflow-x-auto": !vertical(),
-          "max-h-full flex-col overflow-y-auto overflow-x-hidden": vertical(),
+          "min-h-0 flex-col overflow-y-auto overflow-x-hidden": vertical(),
         }}
       >
         <DragDropProvider

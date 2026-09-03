@@ -9,6 +9,7 @@ import { createHomeScrollController } from "./scroll"
 import { createHomeSessionSearchController } from "./sessions/search"
 import { createHomeSessionsController } from "./sessions/controller"
 import { HomeSessions } from "./sessions/region"
+import { TitlebarNavigationHeader } from "@/shell/titlebar/navigation-slot"
 
 export function Home() {
   const mobile = createMediaQuery("(max-width: 767px)")
@@ -19,11 +20,13 @@ export function Home() {
   const scroll = createHomeScrollController(sessions.data.groups)
   return (
     <div
+      data-slot="home-panel"
       class={`
         mx-2 mb-[var(--shell-bottom-inset,8px)] mt-[var(--shell-top-inset,8px)] flex min-h-0 flex-1 flex-col self-stretch overflow-hidden rounded-[10px]
         bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]
       `}
     >
+      <TitlebarNavigationHeader />
       <Show when={mobile()}>
         <div class="relative z-40 -mb-3 shrink-0 px-3 pt-3">
           <HomeProjects projects={projects} scroll={scroll} dropdown />

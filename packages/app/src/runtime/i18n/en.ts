@@ -808,6 +808,9 @@ export const dict = {
 
   "titlebar.update": "Update",
   "titlebar.tabs": "Tabs",
+  "titlebar.tabs.toggle": "Toggle vertical tabs",
+  "titlebar.tabs.open": "Open tabs",
+  "titlebar.tabs.empty": "No open tabs",
   "titlebar.updateVersion": "Update {{version}}",
 
   "common.closeTab": "Close tab",

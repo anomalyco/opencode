@@ -1,3 +1,13 @@
+[data-slot="shell-layout"] {
+  --tabs-control-inset: var(--tabs-native-inset, 0px);
+  --tabs-trailing-inset: 0px;
+}
+
+[data-slot="shell-layout"]:dir(rtl) {
+  --tabs-control-inset: 0px;
+  --tabs-trailing-inset: var(--tabs-native-inset, 0px);
+}
+
 [data-slot="titlebar-tab-item"] {
   user-select: none;
 }
