@@ -27,6 +27,12 @@ test.beforeEach(async ({ page }) => {
     })),
     pageMessages: () => ({ items: [] }),
   })
+  await page.addInitScript((directory) => {
+    localStorage.setItem(
+      "opencode.global.dat:server",
+      JSON.stringify({ projects: { local: [{ worktree: directory, expanded: true }] } }),
+    )
+  }, directory)
   await page.goto("/")
   await page.getByRole("button", { name: "Settings", exact: true }).click()
   await expect(page.getByTestId("settings-screen").getByRole("tab", { name: "Preferences" })).toBeVisible()
@@ -48,6 +54,34 @@ test("settings has its own route and returns through app history", async ({ page
   await expect(page).toHaveURL("/")
   await expect(settings).toBeHidden()
   await expect(home).toHaveAttribute("aria-pressed", "true")
+})
+
+test("new session shortcut leaves settings and opens a new session screen", async ({ page }) => {
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings).toBeFocused()
+  await page.keyboard.press("Control+t")
+
+  await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
+  await expect(settings).toBeHidden()
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toHaveCount(1)
+})
+
+test("recording a new session shortcut stays in settings until recording finishes", async ({ page }) => {
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+  const binding = settings.locator('[data-keybind-id="tab.new"]')
+  await binding.click()
+  await expect(binding).toHaveText("Press keys")
+  await page.keyboard.press("Control+t")
+
+  await expect(binding).toHaveText("Ctrl+T")
+  await expect(page).toHaveURL("/settings")
+  await expect(page.locator("[data-titlebar-tab]")).toHaveCount(0)
+  await page.keyboard.press("Control+t")
+  await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
+  await expect(settings).toBeHidden()
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
 })
 
 test("workspaces opens without waiting for inventory or sessions", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { Component, createEffect, createMemo, For, Show, onCleanup, onMount, startTransition } from "solid-js"
+import { Component, createEffect, createMemo, For, Show, onMount, startTransition } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Menu } from "@opencode-ai/ui/menu"
@@ -21,7 +21,6 @@ import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { useCommand } from "@/shell/commands/command"
 import { useSettingsSurface } from "./surface"
 import "@/settings/settings.css"
 
@@ -48,7 +47,6 @@ export const SettingsScreen: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
-  const command = useCommand()
   const surface = useSettingsSurface()
   const layout = useLayout()
   const servers = useServers()
@@ -57,10 +55,8 @@ export const SettingsScreen: Component = () => {
   let root: HTMLDivElement | undefined
 
   onMount(() => {
-    command.keybinds(false)
     root?.focus({ preventScroll: true })
   })
-  onCleanup(() => command.keybinds(true))
 
   const server = createMemo(() => {
     const route = surface.route()
