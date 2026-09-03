@@ -5,7 +5,6 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { providerAuthUrl } from "./url"
 
 export type ProviderConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
 type Authorization = IntegrationOauthConnectOutput["data"]
@@ -187,13 +186,14 @@ export function createProviderConnectionController(options: {
         ...(answer ? { answer } : {}),
         location: location(),
       })
-      .then((response) => ({
-        ok: true as const,
-        authorization: {
-          ...response.data,
-          url: providerAuthUrl(response.data.url, options.provider(), platform.platform),
-        },
-      }))
+      .then((response) => {
+        if (options.provider() === "opencode" && platform.platform === "desktop") {
+          const url = new URL(response.data.url)
+          url.searchParams.set("client_id", "opencode-desktop")
+          response.data.url = url.href
+        }
+        return { ok: true as const, authorization: response.data }
+      })
       .catch((error) => ({ ok: false as const, error }))
     if (polling.disposed || generation !== polling.generation) return
     if (!result.ok) {
