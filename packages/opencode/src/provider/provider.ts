@@ -1521,7 +1521,10 @@ const layer = Layer.effect(
                 input: {
                   text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
                   audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
-                  image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
+                  image:
+                    model.modalities?.input?.includes("image") ??
+                    existingModel?.capabilities.input.image ??
+                    model.attachment === true,
                   video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
                   pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
                 },
