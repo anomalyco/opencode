@@ -1074,7 +1074,7 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
-      if (composer.blocked() || isChildSession()) return
+      if (composer.blocked()) return
       const input = inputRef
       if (!input) return
       input.focus()
@@ -1132,7 +1132,6 @@ export default function Page() {
   }
 
   const focusInput = () => {
-    if (isChildSession()) return
     inputRef?.focus()
   }
 
