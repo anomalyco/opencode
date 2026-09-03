@@ -1,4 +1,4 @@
-import { Component, createMemo, createSignal, startTransition } from "solid-js"
+import { Component, createMemo, createSignal, startTransition, Show } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -8,6 +8,7 @@ import { SettingsGeneralV2 } from "./general"
 import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
+import { SettingsPluginsV2 } from "./plugins"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -65,6 +66,12 @@ export const DialogSettings: Component<{
                       <Icon name="keyboard" />
                       {language.t("settings.tab.shortcuts")}
                     </TabsV2.Trigger>
+                    <Show when={platform.platform === "desktop" && platform.plugins}>
+                      <TabsV2.Trigger value="plugins">
+                        <Icon name="mcp" />
+                        {language.t("settings.tab.plugins")}
+                      </TabsV2.Trigger>
+                    </Show>
                   </div>
                 </div>
 
@@ -108,6 +115,11 @@ export const DialogSettings: Component<{
         <TabsV2.Content value="models" class="settings-v2-panel">
           <SettingsModelsV2 />
         </TabsV2.Content>
+        <Show when={platform.platform === "desktop" && platform.plugins}>
+          <TabsV2.Content value="plugins" class="settings-v2-panel">
+            <SettingsPluginsV2 sessionID={props.sessionID} />
+          </TabsV2.Content>
+        </Show>
       </TabsV2>
     </Dialog>
   )
