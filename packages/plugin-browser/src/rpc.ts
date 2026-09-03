@@ -1,9 +1,9 @@
-export * as Browser from "./browser.js"
+export * as Browser from "./rpc.js"
 
 import { Schema } from "effect"
-import { Rpc } from "./rpc.js"
-import { Session } from "./session.js"
-import { optional } from "./schema.js"
+import { Rpc } from "@opencode-ai/schema/rpc"
+import { Session } from "@opencode-ai/schema/session"
+import { optional } from "@opencode-ai/schema/schema"
 
 export const MAX_FILE_BYTES = 5 * 1024 * 1024
 export const MAX_TEXT = 100_000

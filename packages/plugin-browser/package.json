@@ -17,11 +17,13 @@
     "dist"
   ],
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+    "test": "bun test"
   },
   "dependencies": {
     "@opencode-ai/plugin": "workspace:*",
