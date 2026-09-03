@@ -270,7 +270,7 @@ export function SessionSummaryPanel(props: {
             when={props.branch}
             fallback={
               <span class="flex min-w-0 items-center gap-1.5">
-                <span>{language.t("session.summary.noBranch")}</span>
+                <span class="shrink-0 whitespace-nowrap">{language.t("session.summary.noBranch")}</span>
                 <Show when={props.baseBranch}>
                   {(base) => (
                     <>
