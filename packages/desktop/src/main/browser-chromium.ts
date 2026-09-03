@@ -74,6 +74,8 @@ export function createBrowserPage(
   const contexts = new Map<string, { id: number; sessionID?: string }>()
   const dialogs = new Set<() => void>()
   let dialog: { type: string; message: string; defaultValue: string } | null = null
+  let dialogURL = ""
+  let dialogRevision = 0
   let generation = 0
   let revision = 0
   cdp.on("Page.frameNavigated", ({ frame }) => {
@@ -207,6 +209,8 @@ export function createBrowserPage(
     })
   })
   cdp.on("Page.javascriptDialogOpening", (event) => {
+    dialogURL = event.url
+    dialogRevision++
     dialog = {
       type: event.type,
       message: event.message.slice(0, Browser.MAX_TEXT),
@@ -216,6 +220,7 @@ export function createBrowserPage(
     publish()
   })
   cdp.on("Page.javascriptDialogClosed", () => {
+    dialogRevision++
     dialog = null
     publish()
   })
@@ -249,6 +254,10 @@ export function createBrowserPage(
         throw new Error(
           "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
         )
+      if (dialog && command.action.type !== "dialog")
+        throw new Error(
+          'A JavaScript dialog is open. Inspect it with browser.dialog({tabID,action:"get"}), then explicitly accept or dismiss it before continuing.',
+        )
       if (command.inspect) return { value: await inspect(command.action), files: [] }
       if (command.target && JSON.stringify(await inspect(command.action)) !== JSON.stringify(command.target))
         throw new Error(
@@ -261,10 +270,6 @@ export function createBrowserPage(
       )
         throw new Error(
           "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
-        )
-      if (dialog && command.action.type !== "dialog")
-        throw new Error(
-          'A JavaScript dialog is open. Inspect it with browser.dialog({tabID,action:"get"}), then explicitly accept or dismiss it before continuing.',
         )
       const modal = Promise.withResolvers<never>()
       const cancelled = Promise.withResolvers<never>()
@@ -631,6 +636,8 @@ export function createBrowserPage(
   }
 
   async function inspect(action: Browser.Action): Promise<Browser.Target> {
+    // Most CDP queries cannot run while a JavaScript dialog blocks the renderer.
+    if (action.type === "dialog") return { resources: [dialog ? dialogURL : contents.getURL()], key: `${generation}:${dialogRevision}:${Boolean(dialog)}` }
     const fileIDs =
       action.type === "heap.compare" ? [action.before, action.after] : "fileID" in action ? [action.fileID] : []
     if (fileIDs.length)
