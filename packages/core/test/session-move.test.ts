@@ -17,6 +17,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionMove } from "@opencode-ai/core/session/move"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -138,6 +139,52 @@ const sourceProbe = (options: { execution?: boolean } = {}) =>
   })
 
 describe("Session.move", () => {
+  itWithInstance.live("binds move preparation dependencies in the service implementation", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const directory = AbsolutePath.make(tmp.path)
+      const context = yield* Layer.build(
+        AppNodeBuilder.build(LayerNode.group([Session.node, SessionMove.node]), [
+          Global.node.replace(tempGlobalLayer),
+          Project.node.replace(globalProjectNode),
+          SessionExecution.node.replace(SessionExecution.noopLayer),
+          offlineModels,
+        ]),
+      )
+      const sessions = Context.get(context, Session.Service)
+      const moves = Context.get(context, SessionMove.Service)
+      const session = yield* sessions.create({ location: Location.Ref.make({ directory }) })
+
+      // Call the bound service outside its construction context: no leaf services are provided here.
+      expect(yield* moves.prepare({ session, directory })).toMatchObject({
+        location: { directory },
+        projectID: Project.ID.global,
+      })
+    }),
+  )
+
+  itWithInstance.live("uses the provided move preparation service", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const directory = AbsolutePath.make(tmp.path)
+      const rejection = new Session.DestinationUnavailableError({ directory })
+      const context = yield* Layer.build(
+        AppNodeBuilder.build(Session.node, [
+          Global.node.replace(tempGlobalLayer),
+          Project.node.replace(globalProjectNode),
+          SessionExecution.node.replace(SessionExecution.noopLayer),
+          SessionMove.node.replace(Layer.succeed(SessionMove.Service, { prepare: () => Effect.fail(rejection) })),
+          offlineModels,
+        ]),
+      )
+      const sessions = Context.get(context, Session.Service)
+      const created = yield* sessions.create({ location: Location.Ref.make({ directory }) })
+
+      expect(yield* sessions.move({ sessionID: created.id, directory }).pipe(Effect.flip)).toBe(rejection)
+      expect(yield* sessions.inbox(created.id)).toEqual([])
+    }),
+  )
+
   for (const broken of [false, true]) {
     itWithExecution.live(
       `moves an idle session from ${broken ? "broken" : "healthy"} source configuration`,

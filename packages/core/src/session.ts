@@ -42,7 +42,6 @@ import {
 } from "./session/error.js"
 import { Node } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
@@ -62,7 +61,6 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { Job } from "./job.js"
 import type { Command } from "./command.js"
-import { Global } from "@opencode-ai/util/global"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 
@@ -232,13 +230,12 @@ const layer = Layer.effect(
     const db = database.db
     const bus = yield* Bus.Service
     const projects = yield* Project.Service
-    const global = yield* Global.Service
     const execution = yield* SessionExecution.Service
     const llm = yield* LLMClient.Service
     const transport = yield* SessionModelTransport.Service
     const store = yield* SessionStore.Service
     const instances = yield* Instance.Service
-    const locations = yield* LocationServiceMap.Service
+    const moves = yield* SessionMove.Service
     const fs = yield* FSUtil.Service
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
@@ -412,12 +409,7 @@ const layer = Layer.effect(
       rename: (input) => sessions.forSession(input.sessionID).rename(input),
       move: Effect.fn("Session.move")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const payload = yield* SessionMove.prepare({ ...input, session }).pipe(
-          Effect.provideService(FSUtil.Service, fs),
-          Effect.provideService(Global.Service, global),
-          Effect.provideService(Project.Service, projects),
-          Effect.provideService(LocationServiceMap.Service, locations),
-        )
+        const payload = yield* moves.prepare({ ...input, session })
         // Probe the same instance execution would use, without holding up inbox cancellation.
         const unavailable =
           !(yield* execution.isActive(input.sessionID)) &&
@@ -514,10 +506,9 @@ export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.gl
     SessionStore.node,
     Instance.node,
     SessionInbox.node,
-    LocationServiceMap.node,
+    SessionMove.node,
     SessionProjector.node,
     FSUtil.node,
-    Global.node,
     App.node,
   ],
 })
