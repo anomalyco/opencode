@@ -347,6 +347,15 @@ export type AssistantMessage = {
     | ContextOverflowError
     | ContentFilterError
     | ApiError
+  warning?:
+    | ProviderAuthError
+    | UnknownError
+    | MessageOutputLengthError
+    | MessageAbortedError
+    | StructuredOutputError
+    | ContextOverflowError
+    | ContentFilterError
+    | ApiError
   parentID: string
   modelID: string
   providerID: string

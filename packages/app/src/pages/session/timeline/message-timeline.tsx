@@ -1223,6 +1223,18 @@ export function MessageTimeline(props: {
           </TimelineRowFrame>
         )
       }
+      case "Warning": {
+        const warningRow = row as Accessor<TimelineRowByTag<"Warning">>
+        return (
+          <TimelineRowFrame row={warningRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <Card variant="warning" class="error-card">
+                {warningRow().text}
+              </Card>
+            </div>
+          </TimelineRowFrame>
+        )
+      }
     }
   }
 
