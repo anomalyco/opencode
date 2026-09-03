@@ -1,5 +1,6 @@
 import type { PluginInfo } from "@opencode-ai/client"
 import { Plugin } from "@opencode-ai/plugin/tui"
+import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { DialogErrorDetails } from "../../component/dialog-error-details"
 import { Spinner } from "../../component/spinner"
@@ -37,7 +38,7 @@ export function PluginsDialog(props: {
     () => (props.server ? undefined : (props.context.location ?? props.context.data.location.default())),
     (location) => props.context.client.plugin.list({ location }).then((result) => result.data),
   )
-  onMount(() => dialog.setSize("medium"))
+  onMount(() => dialog.setSize("large"))
   onCleanup(props.context.data.on("plugin.updated", () => void refetch()))
   const updating = (entry: Entry) =>
     pending().includes(entry.key) ||
@@ -78,7 +79,9 @@ export function PluginsDialog(props: {
       ...serverEntries.sort((a, b) => label(a, props.context).localeCompare(label(b, props.context))),
     ]
   })
-  const visibleEntries = createMemo(() => entries().filter((entry) => showInternal() || !entry.internal))
+  const visibleEntries = createMemo(() =>
+    entries().filter((entry) => showInternal() || !entry.internal || status(entry) === "failed"),
+  )
   createEffect(() => {
     if (visibleEntries().some((entry) => entry.key === focused())) return
     const first = visibleEntries().find((entry) => entry.runtime === "tui") ?? visibleEntries()[0]
@@ -167,13 +170,6 @@ export function PluginsDialog(props: {
       .check({ location: props.context.location ?? props.context.data.location.default() })
       .then((result) => {
         mutate(result.data)
-        const count = result.data.filter(
-          (plugin) => plugin.source.type === "package" && plugin.source.outdated === true,
-        ).length
-        props.context.ui.toast.show({
-          variant: count ? "info" : "success",
-          message: count ? `${count} plugin update${count === 1 ? "" : "s"} available` : "All plugins are up to date",
-        })
       })
       .catch((cause) => {
         props.context.ui.toast.show({
@@ -218,19 +214,7 @@ export function PluginsDialog(props: {
             }}
             actions={[
               {
-                title: toggleTitle(),
-                command: "plugins.toggle",
-                hidden: !focusedTui(),
-                onTrigger: (option) => toggle(entries().find((entry) => entry.key === option.value)),
-              },
-              {
-                title: "update",
-                command: "dialog.plugins.update",
-                hidden: !updatable(focusedEntry()),
-                onTrigger: (option) => update(entries().find((entry) => entry.key === option.value)),
-              },
-              {
-                title: checking() ? "checking" : "check",
+                title: checking() ? "checking for updates" : "check for updates",
                 command: "dialog.plugins.check",
                 selection: "none",
                 hidden: !entries().some(
@@ -238,6 +222,20 @@ export function PluginsDialog(props: {
                 ),
                 disabled: checking(),
                 onTrigger: check,
+              },
+              {
+                title: toggleTitle(),
+                command: "plugins.toggle",
+                side: "right",
+                hidden: !focusedTui(),
+                onTrigger: (option) => toggle(entries().find((entry) => entry.key === option.value)),
+              },
+              {
+                title: "update",
+                command: "dialog.plugins.update",
+                side: "right",
+                hidden: !updatable(focusedEntry()),
+                onTrigger: (option) => update(entries().find((entry) => entry.key === option.value)),
               },
             ]}
             footer={
@@ -262,7 +260,7 @@ export function PluginsDialog(props: {
             context={`Plugin: ${label(entry(), props.context)}\nStatus: failed\nRuntime: ${entry().runtime}\nSource: ${pluginSource(entry(), props.context)}`}
             onBack={() => {
               setDetail()
-              dialog.setSize("medium")
+              dialog.setSize("large")
             }}
           />
         )}
@@ -287,6 +285,12 @@ function source(plugin: PluginInfo, context: Plugin.Context) {
   return plugin.source.type
 }
 
+function isLocal(entry: Entry) {
+  if (entry.runtime === "server") return entry.plugin.source.type === "local"
+  const target = entry.target
+  return target.startsWith("file://") || target.startsWith("./") || target.startsWith("../") || path.isAbsolute(target)
+}
+
 function status(entry: Entry) {
   if (entry.runtime === "server") return entry.plugin.state.status
   return entry.status
@@ -299,6 +303,7 @@ function outdated(entry: Entry) {
 function footer(entry: Entry) {
   const details = [
     ...(status(entry) === "active" ? [] : [status(entry)]),
+    ...(isLocal(entry) ? ["local"] : []),
     ...(entry.runtime === "server" && entry.plugin.source.type === "package" && entry.plugin.source.version
       ? [displayVersion(entry.plugin.source.version)]
       : []),

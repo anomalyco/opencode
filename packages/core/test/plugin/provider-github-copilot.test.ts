@@ -10,7 +10,12 @@ import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { copilotBaseURL, copilotFetch, GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
+import {
+  copilotBaseURL,
+  copilotEntitlementError,
+  copilotFetch,
+  GithubCopilotPlugin,
+} from "@opencode-ai/core/plugin/provider/github-copilot"
 import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
 import { fakeSelectorSdk } from "../fixture/selector"
@@ -38,6 +43,20 @@ describe("GithubCopilotPlugin", () => {
         apiEndpoint: "https://api.business.githubcopilot.com",
       }),
     ).toBe("https://api.business.githubcopilot.com")
+  })
+
+  test("rejects accounts without Copilot chat access", () => {
+    expect(copilotEntitlementError({ chat_enabled: false, can_signup_for_limited: true })).toContain("Copilot Free")
+    expect(copilotEntitlementError({ chat_enabled: false, can_signup_for_limited: false })).toContain(
+      "subscription or a seat",
+    )
+    expect(copilotEntitlementError({ chat_enabled: false })).toContain("subscription or a seat")
+  })
+
+  test("only blocks on an explicit entitlement denial", () => {
+    expect(copilotEntitlementError({ chat_enabled: true })).toBeUndefined()
+    expect(copilotEntitlementError({ chat_enabled: true, can_signup_for_limited: true })).toBeUndefined()
+    expect(copilotEntitlementError({})).toBeUndefined()
   })
 
   it.effect("registers GitHub Copilot device OAuth", () =>

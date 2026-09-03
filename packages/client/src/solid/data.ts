@@ -574,7 +574,7 @@ export function createData(config: CreateDataInput) {
           .location.get({ location: locationQuery(defaultLocation()) })
           .then((location) => {
             const key = locationKey(location)
-            setStore("location", key, { ...store.location[key], info: location })
+            setStore("location", key, { info: location })
           })
           .catch((error) => console.error("Failed to preload location", error))
         void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))
@@ -1038,6 +1038,8 @@ export function createData(config: CreateDataInput) {
             Object.assign(current, {
               status: "completed",
               reason: event.data.reason,
+              model: event.data.model,
+              providerState: event.data.providerState,
               summary: event.data.text,
               recent: event.data.recent,
             })
@@ -1048,6 +1050,8 @@ export function createData(config: CreateDataInput) {
             type: "compaction",
             status: "completed",
             reason: event.data.reason,
+            model: event.data.model,
+            providerState: event.data.providerState,
             summary: event.data.text,
             recent: event.data.recent,
             time: { created: event.created },
@@ -1105,7 +1109,6 @@ export function createData(config: CreateDataInput) {
           return
         }
         setStore("location", key, (data) => ({
-          ...data,
           integration: data?.integration?.map((integration) => {
             if (integration.id !== event.data.integrationID) return integration
             const active = integration.connections.find(
@@ -1147,7 +1150,6 @@ export function createData(config: CreateDataInput) {
         break
       case "vcs.branch.updated":
         setStore("location", locationKey(location), (data) => ({
-          ...data,
           vcs: {
             branch: {
               ...data?.vcs?.branch,
@@ -1165,7 +1167,6 @@ export function createData(config: CreateDataInput) {
         break
       case "shell.created":
         setStore("location", locationKey(location), (data) => ({
-          ...data,
           shell: {
             ...data?.shell,
             [event.data.info.id]: { ...event.data.info, location },
@@ -1175,7 +1176,6 @@ export function createData(config: CreateDataInput) {
       case "shell.exited":
       case "shell.deleted":
         setStore("location", locationKey(location), (data) => ({
-          ...data,
           shell: Object.fromEntries(Object.entries(data?.shell ?? {}).filter(([id]) => id !== event.data.id)),
         }))
         break
@@ -1801,10 +1801,7 @@ export function createData(config: CreateDataInput) {
           const input = { location: locationQuery(ref ?? defaultLocation()) }
           const providers = await api().websearch.providers(input)
           const key = locationKey(providers.location)
-          setStore("location", key, {
-            ...store.location[key],
-            websearch: providers.data,
-          })
+          setStore("location", key, { websearch: providers.data })
         },
       },
       skill: locationResource("skill", (location) => api().skill.list({ location })),

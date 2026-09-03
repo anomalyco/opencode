@@ -1,7 +1,30 @@
 import type { KeymapCommand } from "@opencode-ai/plugin/tui/context"
+import type { OpenCodeClient } from "@opencode-ai/client"
 import path from "path"
 import { displaySlice, promptOffsetWidth } from "./display"
 import { parseSlashHead } from "./parse"
+
+export async function directoryAutocomplete(
+  file: Pick<OpenCodeClient["file"], "list">,
+  location: { directory: string; workspace?: string },
+  query: string,
+  home: string,
+) {
+  const search = directoryAutocompleteSearch(query, location.directory, home)
+  const result = await file.list({ location, path: search.directory })
+  const exact = directoryAutocompleteExactValue(query, search)
+  return [
+    ...(exact ? [{ value: exact, absolute: search.directory }] : []),
+    ...result.data
+      .filter((item) => item.type === "directory")
+      .map((item) => path.resolve(result.location.directory, item.path))
+      .filter((absolute) => directoryAutocompleteMatches(path.basename(absolute), search.query))
+      .map((absolute) => ({
+        value: directoryAutocompleteResultValue(path.basename(absolute) + "/", search),
+        absolute,
+      })),
+  ]
+}
 
 export function slashArgumentAutocomplete(
   value: string,

@@ -4,7 +4,8 @@ import { NodeServices } from "@effect/platform-node"
 import { Service, type DiscoverOptions } from "@opencode-ai/client/effect/service"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
-import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
+import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import { Effect, Option, Redacted, Schedule, Schema } from "effect"
 import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
@@ -27,7 +28,7 @@ export type Options = {
 export const run = Effect.fnUntraced(function* (options: Options) {
   return yield* processEffect(options).pipe(
     Effect.provide(
-      LayerNode.compile(LayerNode.group([Global.node]), {
+      LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {
         replacements: [
           Global.node.replace(
             Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
@@ -81,7 +82,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const server = yield* start(
         {
           app: {
-            name: process.env.OPENCODE_CLIENT ?? "cli",
+            name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
             version: OPENCODE_VERSION,
             channel: OPENCODE_CHANNEL,
           },

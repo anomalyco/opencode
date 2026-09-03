@@ -2141,7 +2141,13 @@ describe("SessionRunnerLLM", () => {
         yield* s.llm.push(
           TestLLM.tool("call-prefix", "echo", { text: "x".repeat(4_000) }),
           TestLLM.textWithUsage("Earlier answer", "prefix-answer", 185_000),
-          TestLLM.text("## Objective\n- Checkpoint summary", "prefix-summary"),
+          TestLLM.complete(
+            {
+              reason: { normalized: "stop" },
+              providerMetadata: { [s.currentModel.provider]: { responseId: "summary" } },
+            },
+            LLMEvent.textDelta({ id: "prefix-summary", text: "## Objective\n- Checkpoint summary" }),
+          ),
         )
         yield* s.runPrompt("Review these changes")
         if (reason === "manual") {
@@ -2177,6 +2183,10 @@ describe("SessionRunnerLLM", () => {
         expect(compact.system.map((part) => part.text)).toContain("Review the project carefully.")
         expect(requestAgents[2]).toBe(Agent.ID.make("compaction"))
         expect(s.executions).toEqual(["x".repeat(4_000)])
+        expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
+          model: { id: s.currentModel.id, providerID: s.currentModel.provider, variant },
+          providerState: { responseId: "summary" },
+        })
 
         // Compare wire content without the cache breakpoints that move to the new final message.
         const before = yield* compileRequest(LLMRequest.update(normal, { cache: "none" }))
@@ -2209,8 +2219,14 @@ describe("SessionRunnerLLM", () => {
                   )
                 : TestLLM.text("Let me search the codebase. I will fill in ## Objective later.", "invalid-summary")
           yield* s.llm.push(
-            invalid,
-            summary ? TestLLM.text("### Active\n- Recovered summary", "summary-recovered") : invalid,
+            invalid.map((event) =>
+              LLMEvent.is.stepFinish(event)
+                ? { ...event, providerMetadata: { openai: { responseId: "rejected-summary-state" } } }
+                : event,
+            ),
+            summary
+              ? [LLMEvent.textDelta({ id: "summary-recovered", text: "### Active\n- Recovered summary" })]
+              : invalid,
           )
           const compact = yield* s.session.compact({ sessionID })
           yield* s.resume
@@ -2220,6 +2236,7 @@ describe("SessionRunnerLLM", () => {
           expect(userTexts(s.requests[1]).at(-1)).toContain("did not fill in the required summary template")
           expect(s.requests.every((request) => request.toolChoice === undefined)).toBe(true)
           expect(s.executions).toEqual([])
+          expect(JSON.stringify(yield* s.messages)).not.toContain("rejected-summary-state")
           expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject(
             summary
               ? { status: "completed", summary: "### Active\n- Recovered summary" }

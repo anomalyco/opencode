@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import type { KeymapCommand } from "@opencode-ai/plugin/tui/context"
 import {
+  directoryAutocomplete,
   directoryAutocompleteExactValue,
   directoryAutocompleteMatches,
   directoryAutocompleteResultValue,
@@ -9,6 +10,64 @@ import {
   directoryRecentValue,
   slashArgumentAutocomplete,
 } from "../../src/prompt/directory-completion"
+
+describe("directoryAutocomplete", () => {
+  test("lists parents and siblings through the current workspace without changing location", async () => {
+    const location = { directory: "/project/current", workspace: "workspace_1" }
+    const calls: unknown[] = []
+    const file = {
+      list: async (input: unknown) => {
+        calls.push(input)
+        return {
+          location: { directory: location.directory, workspaceID: location.workspace },
+          data: [
+            { path: "./", type: "directory" },
+            { path: "../sibling/", type: "directory" },
+            { path: "../.hidden/", type: "directory" },
+            { path: "../README.md", type: "file" },
+          ],
+        }
+      },
+    } as Parameters<typeof directoryAutocomplete>[0]
+    expect(await directoryAutocomplete(file, location, "..", "/home/user")).toEqual([
+      { value: "..", absolute: path.resolve("/project") },
+      { value: "../current/", absolute: path.resolve("/project/current") },
+      { value: "../sibling/", absolute: path.resolve("/project/sibling") },
+    ])
+    expect(await directoryAutocomplete(file, location, "../sib", "/home/user")).toEqual([
+      { value: "../sibling/", absolute: path.resolve("/project/sibling") },
+    ])
+    expect(calls).toEqual([
+      { location, path: path.resolve("/project") },
+      { location, path: path.resolve("/project") },
+    ])
+  })
+
+  test("resolves home and nested sibling completions against the current location", async () => {
+    const location = { directory: "/project/current", workspace: "workspace_1" }
+    const calls: unknown[] = []
+    const file = {
+      list: async (input: unknown) => {
+        calls.push(input)
+        return {
+          location: { directory: location.directory },
+          data: [{ path: "../sibling/src/", type: "directory" }],
+        }
+      },
+    } as Parameters<typeof directoryAutocomplete>[0]
+    expect(await directoryAutocomplete(file, location, "../sibling/s", "/project/sibling")).toEqual([
+      { value: "../sibling/src/", absolute: path.resolve("/project/sibling/src") },
+    ])
+    expect(await directoryAutocomplete(file, location, "~", "/project/sibling")).toEqual([
+      { value: "~", absolute: "/project/sibling" },
+      { value: "~/src/", absolute: path.resolve("/project/sibling/src") },
+    ])
+    expect(calls).toEqual([
+      { location, path: path.resolve("/project/sibling") },
+      { location, path: "/project/sibling" },
+    ])
+  })
+})
 
 const commands = [
   {

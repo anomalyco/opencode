@@ -4,7 +4,7 @@ import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/effect"
 import type { Workspace } from "@opencode-ai/core/workspace"
 import { Context, Effect, Layer } from "effect"
 import type { Config, Scope } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { EmbeddedHost } from "../internal/host"
 import type { SdkInstances } from "../internal/instances"
 
@@ -35,9 +35,12 @@ export const create: <R = never>(
   R = never,
 >(options: CreateOptions<R> = {}, embed: EmbedOptions = {}) {
   const host = yield* Effect.acquireRelease(EmbeddedHost.create(options, embed), (host) => Effect.promise(host.close))
+  const httpClient = yield* HttpClient.HttpClient.pipe(Effect.provide(FetchHttpClient.layer))
   const client = yield* OpenCode.make({ baseUrl: "http://opencode.local" }).pipe(
-    Effect.provide(
-      FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, host.fetch)), Layer.fresh),
+    Effect.provideService(
+      HttpClient.HttpClient,
+      // FetchHttpClient reads Fetch at request time; callers must not replace this host's in-process transport.
+      HttpClient.transformResponse(httpClient, Effect.provideService(FetchHttpClient.Fetch, host.fetch)),
     ),
   )
 

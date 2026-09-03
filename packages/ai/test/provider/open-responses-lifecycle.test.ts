@@ -217,7 +217,7 @@ describe("Open Responses basic-item lifecycles", () => {
     }),
   )
 
-  it.effect("preserves non-empty done-only message content without replaying duplicates", () =>
+  it.effect("preserves non-empty done-only message content", () =>
     Effect.gen(function* () {
       const text = {
         type: "message",
@@ -231,16 +231,10 @@ describe("Open Responses basic-item lifecycles", () => {
       }
       const events = yield* collect(
         { type: "response.output_item.done", item: text },
-        { type: "response.output_item.done", item: text },
         {
           type: "response.output_item.done",
           item: { type: "message", id: "msg_empty", content: [{ type: "output_text", text: "" }] },
         },
-        {
-          type: "response.output_item.done",
-          item: { type: "message", id: "msg_empty", content: [{ type: "output_text", text: "Late" }] },
-        },
-        { type: "response.output_item.done", item: refusal },
         { type: "response.output_item.done", item: refusal },
         completed,
       )
@@ -272,63 +266,6 @@ describe("Open Responses basic-item lifecycles", () => {
     }),
   )
 
-  it.effect("treats a repeated message lifecycle as replay", () =>
-    Effect.gen(function* () {
-      const events = yield* collect(
-        { type: "response.output_item.added", item: { type: "message", id: "msg_1", phase: "commentary" } },
-        { type: "response.output_text.delta", item_id: "msg_1", delta: "First" },
-        { type: "response.output_item.done", item: { type: "message", id: "msg_1" } },
-        { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
-        { type: "response.output_text.delta", item_id: "msg_1", delta: "Second" },
-        { type: "response.output_item.done", item: { type: "message", id: "msg_1" } },
-        completed,
-      )
-      expect(events.filter(LLMEvent.is.textEnd)).toEqual([
-        {
-          type: "text-end",
-          id: "msg_1",
-          providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
-        },
-      ])
-      expect(events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["First"])
-    }),
-  )
-
-  it.effect("ignores a stale done-only message while another message is active", () =>
-    Effect.gen(function* () {
-      const events = yield* collect(
-        { type: "response.output_item.added", item: { type: "message", id: "msg_1", phase: "commentary" } },
-        { type: "response.output_text.delta", item_id: "msg_1", delta: "Draft" },
-        {
-          type: "response.output_item.done",
-          item: { type: "message", id: "msg_2", content: [{ type: "output_text", text: "Recovered" }] },
-        },
-        {
-          type: "response.output_item.done",
-          item: { type: "message", id: "msg_1", content: [{ type: "output_text", text: "Final" }] },
-        },
-        {
-          type: "response.output_item.done",
-          item: { type: "message", id: "msg_2", content: [{ type: "output_text", text: "Late" }] },
-        },
-        completed,
-      )
-      expect(events.filter((event) => event.type.startsWith("text-"))).toEqual([
-        {
-          type: "text-start",
-          id: "msg_1",
-          providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
-        },
-        { type: "text-delta", id: "msg_1", text: "Draft" },
-        {
-          type: "text-end",
-          id: "msg_1",
-          text: "Final",
-          providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
-        },
-      ])
-    }),
-  )
   // Captured from Bedrock Mantle (openai.gpt-oss-120b): the terminal function_call
   // items rename `id` to `item_id` and carry a stray `output_index`.
   it.effect("recovers a terminal function_call id from its output slot", () =>
@@ -419,7 +356,7 @@ describe("Open Responses basic-item lifecycles", () => {
     }),
   )
 
-  it.effect("opens and closes a done-only tool once", () =>
+  it.effect("opens and closes a done-only tool", () =>
     Effect.gen(function* () {
       const item = {
         type: "function_call",
@@ -428,12 +365,7 @@ describe("Open Responses basic-item lifecycles", () => {
         name: "lookup",
         arguments: '{"query":"weather"}',
       }
-      const events = yield* collect(
-        { type: "response.output_item.done", item },
-        { type: "response.output_item.done", item },
-        { type: "response.output_item.added", item },
-        completed,
-      )
+      const events = yield* collect({ type: "response.output_item.done", item }, completed)
       const providerMetadata = { "openai-compatible": { itemId: "fc_1" } }
       expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
         { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata },

@@ -52,7 +52,7 @@ export type ElectronAPI = {
   readPickedFile(token: string, path: string): Promise<ArrayBuffer>
   releasePickedFiles(token: string): Promise<void>
   getPathForFile(file: File): string
-  saveFilePicker(opts?: SaveFilePickerOptions): Promise<string | null>
+  saveFile(opts: SaveFilePickerOptions, content: string): Promise<boolean>
   openExternal(url: string): void
   openLocalFile(url: string): void
   openPath(path: string, app?: string): Promise<string | undefined>

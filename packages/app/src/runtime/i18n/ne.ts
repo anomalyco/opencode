@@ -134,6 +134,7 @@ export const dict: Record<string, string> = {
   "command.language.cycle": "साइकल भाषा",
   "command.language.set": "भाषा प्रयोग गर्नुहोस्: {{language}}",
   "command.session.new": "नयाँ सत्र",
+  "command.session.import": "सत्र आयात गर्नुहोस्",
   "command.file.open": "फाइल खोल्नुहोस्",
   "command.tab.close": "ट्याब बन्द गर्नुहोस्",
   "command.tab.reopenClosed": "बन्द ट्याब पुन: खोल्नुहोस्",

@@ -136,6 +136,7 @@ export const dict: Record<string, string> = {
   "command.language.cycle": "འཁོར་བའི་སྐད་ཡིག།",
   "command.language.set": "སྐད་ཡིག་ལག་ལེན་འཐབ།: {{language}}",
   "command.session.new": "ལཱ་ཡུན་གསརཔ།",
+  "command.session.import": "ལཱ་ཡུན་ནང་འདྲེན།",
   "command.file.open": "ཡིག་སྣོད་ཁ་ཕྱེ།",
   "command.tab.close": "མཆོང་ལྡེ་ཁ་བསྡམས།",
   "command.tab.reopenClosed": "ཁ་བསྡམས་ཡོད་པའི་མཆོང་ལྡེ་ལོག་ཁ་ཕྱེ།",
