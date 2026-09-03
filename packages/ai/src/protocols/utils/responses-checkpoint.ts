@@ -1,13 +1,13 @@
 import { Effect, Schema, Stream } from "effect"
 import { Route, type RouteBody, type TriggerCompactOperation } from "../../route/client.js"
 import { Protocol } from "../../route/protocol.js"
-import { CompactionCheckpointResponse, CompactionPart, HttpOptions, LLMEvent, LLMRequest } from "../../schema/index.js"
+import { CompactionCheckpointResponse, HttpOptions, LLMEvent, LLMRequest } from "../../schema/index.js"
 import { OpenResponses } from "../open-responses.js"
 import { ProviderShared } from "../shared.js"
 
 interface State {
   readonly parser: Pick<OpenResponses.ParserState, "id" | "provider" | "outputItems">
-  readonly checkpoints: Readonly<Record<string, CompactionPart>>
+  readonly checkpoints: Readonly<Record<string, CompactionCheckpointResponse["checkpoint"]>>
   readonly responseID?: string
 }
 
@@ -19,10 +19,11 @@ const onOutputItem = Effect.fn("ResponsesCheckpoint.onOutputItem")(function* (
   const item = event.item
   if (!item) return state
   const parser =
-    event.output_index === undefined
+    event.output_index === undefined || state.parser.outputItems[event.output_index] === item.id
       ? state.parser
       : { ...state.parser, outputItems: { ...state.parser.outputItems, [event.output_index]: item.id } }
-  if (event.type === "response.output_item.added" || item.type !== "compaction") return { ...state, parser }
+  const next = parser === state.parser ? state : { ...state, parser }
+  if (event.type === "response.output_item.added" || item.type !== "compaction") return next
   if (
     event.output_index !== undefined &&
     Object.entries(state.parser.outputItems).some(
@@ -35,14 +36,14 @@ const onOutputItem = Effect.fn("ResponsesCheckpoint.onOutputItem")(function* (
   const previous = state.checkpoints[item.id]
   if (previous && previous.encrypted !== item.encrypted_content)
     return yield* ProviderShared.eventError(parser.id, "Compaction output changed after completion")
+  if (previous) return next
   return {
-    ...state,
-    parser,
+    ...next,
     checkpoints: {
       ...state.checkpoints,
-      [item.id]: CompactionPart.make({ provider: parser.provider, id: item.id, encrypted: item.encrypted_content }),
+      [item.id]: { type: "compaction", provider: parser.provider, id: item.id, encrypted: item.encrypted_content },
     },
-  }
+  } satisfies State
 })
 
 /** Collect a trigger response before acknowledging transport completion. No generation output escapes. */
@@ -84,13 +85,13 @@ export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
           }
           const checkpoints = Object.values(next.checkpoints)
           const checkpoint = checkpoints[0]
-          if (checkpoints.length !== 1 || !checkpoint?.encrypted)
+          if (checkpoints.length !== 1 || !checkpoint)
             return yield* ProviderShared.eventError(
               source.id,
               "Compaction response must contain exactly one checkpoint",
             )
           result = new CompactionCheckpointResponse({
-            checkpoint: { ...checkpoint, encrypted: checkpoint.encrypted, text: undefined },
+            checkpoint,
             responseID,
             usage: OpenResponses.mapUsage(event.response?.usage, OpenResponses.metadataKey(request.model)),
           })
@@ -107,9 +108,7 @@ export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
       auth: source.auth,
       transport: source.transport,
     })
-    const native = yield* body
-      .from(request)
-      .pipe(Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(body.schema))))
+    const native = yield* body.from(request)
     // The body builder already applied and validated overlays. Do not let transport reapply them.
     const preparedRequest = LLMRequest.update(request, {
       http: request.http === undefined ? undefined : new HttpOptions({ ...request.http, body: undefined }),
