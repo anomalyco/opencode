@@ -101,23 +101,28 @@ export default Plugin.define({
             try: () => normalizeAction(input),
             catch: (error) =>
               new Tool.Error({
-                message: "Invalid browser URL. Use HTTP, HTTPS, or about:blank without credentials.",
+                message:
+                  "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths such as /tmp/page.html are not browser URLs. The desktop must be able to reach the address; localhost refers to the desktop, not the server.",
                 error,
               }),
           })
           const browser = browsers.get(tool.sessionID)
           if (!browser)
-            return yield* new Tool.Error({ message: "[browser.disconnected] No desktop browser is connected." })
+            return yield* new Tool.Error({
+              message:
+                "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app, enable Browser pane, and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
+            })
           const tab = "tabID" in action ? browser.state.tabs.find((tab) => tab.id === action.tabID) : undefined
           if ("tabID" in action && !tab)
             return yield* new Tool.Error({
-              message: "[browser.tab_unavailable] Call browser.tabs.list and use an ID from this session.",
+              message:
+                "[browser.tab_unavailable] This tab is closed or does not belong to the connected session. Call browser.tabs.list({}) and use an exact returned tabID. If no tabs exist, use browser.tabs.open({}). Never substitute a request ID, file ID, or element ref for tabID.",
             })
           const files =
             action.type === "files.upload" || action.type === "files.drop"
               ? yield* Effect.tryPromise({
                   try: () => BrowserFiles.read(action.paths, ctx.location.directory),
-                  catch: (error) => new Tool.Error({ message: "Cannot read upload files on the server.", error }),
+                  catch: (error) => BrowserFiles.failure("read", error),
                 })
               : []
           const requestID = crypto.randomUUID()
@@ -133,14 +138,20 @@ export default Plugin.define({
           const result = yield* rpc.events
             .emit("control", { type: "command", connectionID: browser.connectionID, requestID })
             .pipe(
-              Effect.mapError((error) => new Tool.Error({ message: "Browser command failed.", error })),
+              Effect.mapError(
+                (error) =>
+                  new Tool.Error({
+                    message: `Could not dispatch browser.${operation.name}. Check the desktop connection and call browser.tabs.list({}) before deciding whether to retry.`,
+                    error,
+                  }),
+              ),
               Effect.andThen(Deferred.await(pending)),
               Effect.raceFirst(
                 Deferred.await(browser.closed).pipe(
                   Effect.andThen(
                     new Tool.Error({
                       message:
-                        "[browser.disconnected] Browser connection closed; the action may already have run. Do not blindly repeat it.",
+                        "[browser.disconnected] Browser connection closed; the action may already have run. Reconnect this session in the desktop app, call browser.tabs.list({}), and inspect the target tab with browser.snapshot({tabID}). Do not repeat clicks, submissions, uploads, or evaluations until their outcome is known.",
                     }),
                   ),
                 ),
@@ -154,7 +165,7 @@ export default Plugin.define({
                 duration: "60 seconds",
                 orElse: () =>
                   new Tool.Error({
-                    message: "[browser.timeout] Browser request timed out; the action may already have run.",
+                    message: `[browser.timeout] browser.${operation.name} did not finish within 60 seconds; its outcome is unknown. Check the desktop connection, call browser.tabs.list({}), and inspect the tab or browser.files.list({tabID}) for completed work. Do not blindly repeat a mutating action or start another recording.`,
                   }),
               }),
               Effect.ensuring(Effect.sync(() => browser.pending.delete(requestID))),
@@ -173,11 +184,17 @@ export default Plugin.define({
             : result.value
           // Select the expected method's schema, not an unrelated successful browser result.
           const output = yield* Schema.decodeUnknownEffect(operation.output)(value).pipe(
-            Effect.mapError((error) => new Tool.Error({ message: "Browser returned an invalid result.", error })),
+            Effect.mapError(
+              (error) =>
+                new Tool.Error({
+                  message: `Browser returned an invalid result for browser.${operation.name}. Check that the desktop and server plugin use compatible versions. Do not retry the same action to repair a protocol error; it may already have run. Report the mismatch if versions match.`,
+                  error,
+                }),
+            ),
           )
           const saved = yield* Effect.tryPromise({
             try: () => BrowserFiles.save(result.files),
-            catch: (error) => new Tool.Error({ message: "Cannot save browser files on the server.", error }),
+            catch: (error) => BrowserFiles.failure("save", error),
           })
           return {
             output: saved.length ? { ...output, files: saved } : output,
@@ -230,7 +247,10 @@ export default Plugin.define({
 
 function requireObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("Browser file output must be an object.")
+    throw new Tool.Error({
+      message:
+        "Browser returned malformed file output. Check desktop/server plugin compatibility and report the invalid response; do not repeat the capture to repair a protocol error.",
+    })
   return value as Record<string, unknown>
 }
 
