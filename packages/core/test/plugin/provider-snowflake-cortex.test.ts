@@ -1,10 +1,17 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { SnowflakeCortexPlugin, cortexFetch } from "@opencode-ai/core/plugin/provider/snowflake-cortex"
+import {
+  SnowflakeCortexPlugin,
+  cortexFetch,
+  normalizeAccount,
+  oauthScope,
+} from "@opencode-ai/core/plugin/provider/snowflake-cortex"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
@@ -169,9 +176,70 @@ describe("SnowflakeCortexPlugin", () => {
       }),
     ),
   )
+
+  it.effect("registers browser OAuth method with account and role prompts", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const integrations = yield* Integration.Service
+      const integration = yield* integrations.get(Integration.ID.make("snowflake-cortex"))
+      const methods = integration?.methods ?? []
+      expect(methods.length).toBe(1)
+      const method = methods[0]
+      expect(method?.type).toBe("oauth")
+      if (!method || method.type !== "oauth") return
+      expect(method.id).toEqual(Integration.MethodID.make("browser"))
+      expect(method.label).toBe("Login with Snowflake (External Browser)")
+      expect((method.form ?? []).map((field) => field.key)).toEqual(["account", "role"])
+    }),
+  )
+
+  it.effect("creates SDK using stored OAuth credential when env is absent", () =>
+    withEnv({ SNOWFLAKE_CORTEX_TOKEN: undefined, SNOWFLAKE_CORTEX_PAT: undefined }, () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        yield* credentials.create({
+          integrationID: Integration.ID.make("snowflake-cortex"),
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("browser"),
+            access: "oauth-access",
+            refresh: "oauth-refresh",
+            expires: Date.now() + 3_600_000,
+            metadata: { account: "test" },
+          }),
+        })
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: Model.Info.make({
+            ...Model.Info.default(Provider.ID.make("snowflake-cortex"), Model.ID.make("claude-sonnet-4-6")),
+            modelID: Model.ID.make("claude-sonnet-4-6"),
+            package: "aisdk:test-provider",
+          }),
+          package: "@ai-sdk/openai-compatible",
+          options: { name: "snowflake-cortex", baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1" },
+        })
+        expect(result.sdk).toBeDefined()
+      }),
+    ),
+  )
 })
 
 type FetchLike = (url: string | URL | Request, init?: RequestInit) => Promise<Response>
+
+describe("snowflake account helpers", () => {
+  test("normalizeAccount strips URL scheme and domain suffix", () => {
+    expect(normalizeAccount("https://myorg-myaccount.snowflakecomputing.com/")).toBe("myorg-myaccount")
+    expect(normalizeAccount("myorg-myaccount")).toBe("myorg-myaccount")
+    expect(normalizeAccount("  myorg-myaccount/ ")).toBe("myorg-myaccount")
+  })
+
+  test("oauthScope always requests refresh_token and encodes roles", () => {
+    expect(oauthScope(undefined)).toBe("refresh_token")
+    expect(oauthScope("PUBLIC")).toBe("refresh_token session:role:PUBLIC")
+    expect(oauthScope("my role")).toBe("refresh_token session:role-encoded:my%20role")
+  })
+})
 
 describe("cortexFetch", () => {
   test("rewrites max_tokens to max_completion_tokens", async () => {
