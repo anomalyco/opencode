@@ -1,12 +1,72 @@
 import { expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { Bus } from "@opencode-ai/core/bus"
 import { Command } from "@opencode-ai/core/command"
 import { Plugin } from "@opencode-ai/core/plugin"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { Rpc } from "@opencode-ai/core/rpc"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
+
+it.live("removes a failed plugin's hooks and RPC handlers without affecting healthy plugins", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const hooks = yield* PluginHooks.Service
+    const rpc = yield* Rpc.Service
+    const cleaned = yield* Deferred.make<void>()
+    const invoked: string[] = []
+    let fail = false
+    yield* plugins.activate(
+      ["broken", "healthy"].map((id) => ({
+        id,
+        revision: "1",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            // Finalizers run in reverse order, so this signals after registration cleanup.
+            if (id === "broken") yield* Effect.addFinalizer(() => Deferred.succeed(cleaned, undefined))
+            yield* ctx.command.transform((editor) => {
+              editor.add({ name: id, execute: () => Effect.void })
+              if (id === "broken" && fail) throw new Error("transform failed")
+            })
+            yield* ctx.shell.hook("create.before", () => Effect.sync(() => void invoked.push(id)))
+            yield* ctx.rpc
+              .register(
+                Rpc.define({ id, methods: { check: { input: Schema.Struct({}), output: Schema.String } }, events: {} }),
+                { check: () => Effect.succeed(id) },
+              )
+              .pipe(Effect.orDie)
+            if (id === "broken") yield* Effect.addFinalizer(() => plugins.awaitActivation)
+          }),
+      })),
+    )
+    const trigger = hooks.trigger("shell", "create.before", {
+      command: "echo fixture",
+      cwd: ".",
+      timeout: 1_000,
+      shell: "sh",
+      env: {},
+    })
+    yield* trigger
+    expect(invoked).toEqual(["broken", "healthy"])
+    expect(yield* rpc.call("broken", "check", {})).toBe("broken")
+    expect(yield* rpc.call("healthy", "check", {})).toBe("healthy")
+    expect((yield* commands.list()).map((command) => command.name)).toEqual(["broken", "healthy"])
+
+    fail = true
+    yield* commands.reload()
+    yield* Deferred.await(cleaned).pipe(Effect.timeout("1 second"))
+    invoked.length = 0
+    yield* trigger
+    expect(invoked).toEqual(["healthy"])
+    expect(yield* rpc.call("broken", "check", {}).pipe(Effect.flip)).toMatchObject({ type: "rpc.unavailable" })
+    expect(yield* rpc.call("healthy", "check", {})).toBe("healthy")
+    expect((yield* commands.list()).map((command) => command.name)).toEqual(["healthy"])
+    expect((yield* plugins.list()).map((plugin) => plugin.state.status)).toEqual(["failed", "active"])
+  }),
+)
 
 Array.of("reload", "teardown").forEach((boundary) =>
   it.live(`does not join queued failed-plugin cleanup during ${boundary}`, () =>
