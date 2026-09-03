@@ -17,7 +17,7 @@ import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/shell/s
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useSettings } from "@/settings/model"
 import { pathKey } from "@/workspaces/path-key"
-import { isWorkspaceDirectory } from "@/workspaces/paths"
+import { isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { sessionHref } from "@/shell/routes/session"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionTitle } from "./title"
@@ -35,7 +35,7 @@ export function SessionTitleHeader(props: ParentProps) {
 }
 
 export function SessionProjectMenu(props: {
-  project?: LocalProject
+  project?: Omit<LocalProject, "expanded">
   directory?: string
   workspace: boolean
   showProjectIcon: boolean
@@ -46,7 +46,12 @@ export function SessionProjectMenu(props: {
   const platform = usePlatform()
   const layout = useLayout()
   const navigate = useNavigate()
-  const [state, setState] = createStore({ projectTruncated: false, pathTruncated: false })
+  const [state, setState] = createStore({
+    open: false,
+    projectTruncated: false,
+    pathTruncated: false,
+    pathFocused: false,
+  })
   const projectName = createMemo(() => displayName(props.project ?? { worktree: props.directory ?? "" }))
   const canOpenPath = () =>
     platform.platform === "desktop" && !!platform.openPath && server.isLocal && !!props.directory
@@ -63,11 +68,18 @@ export function SessionProjectMenu(props: {
     const current = props.project
     if (!current) return
     const { DialogEditProject } = await import("@/settings/workspaces/project-dialog")
-    dialog.push(() => <DialogEditProject project={current} server={server.conn} />)
+    dialog.push(() => <DialogEditProject project={{ expanded: false, ...current }} server={server.conn} />)
   }
 
   return (
-    <Menu placement="bottom-start" gutter={4} shift={-10} modal={false}>
+    <Menu
+      placement="bottom-start"
+      gutter={4}
+      shift={-10}
+      modal={false}
+      open={state.open}
+      onOpenChange={(open) => setState({ open, pathFocused: false })}
+    >
       <Tooltip placement="bottom" value={<bdi>{projectName()}</bdi>} class="flex shrink-0">
         <Menu.Trigger
           as={IconButton}
@@ -106,8 +118,10 @@ export function SessionProjectMenu(props: {
               class="min-w-0 w-full"
               disabled={!props.project}
               onSelect={() => {
-                if (!props.project) return
-                layout.home.setSelection({ server: server.key, directory: props.project.worktree })
+                const project = props.project
+                if (!project) return
+                server.ctx.projects.open(project.worktree)
+                layout.home.setSelection({ server: server.key, directory: project.worktree })
                 navigate("/")
               }}
             >
@@ -136,14 +150,26 @@ export function SessionProjectMenu(props: {
             placement="top"
             gutter={2}
             disabled={!state.pathTruncated}
+            forceOpen={state.pathFocused && state.pathTruncated ? true : undefined}
             class="min-w-0 cursor-default"
             contentClass="session-project-info-tooltip max-w-[min(480px,calc(100vw-16px))] whitespace-normal break-all"
             value={<bdi dir="ltr">{props.directory}</bdi>}
           >
+            {/* Read-only paths stay in keyboard navigation so their full tooltip remains accessible. */}
             <Menu.Item
               class="session-project-link min-w-0 w-full cursor-default"
-              disabled={!canOpenPath()}
+              disabled={!props.directory}
+              aria-disabled={!canOpenPath()}
+              closeOnSelect={canOpenPath()}
               onSelect={openPath}
+              onFocus={() => setState("pathFocused", true)}
+              onBlur={() => setState("pathFocused", false)}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape") return
+                event.preventDefault()
+                event.stopPropagation()
+                setState({ open: false, pathFocused: false })
+              }}
             >
               <span class="session-project-link-content">
                 <Icon name="folder" class="shrink-0 text-v2-icon-icon-muted" />
@@ -221,12 +247,17 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   )
   const project = createMemo(() => {
     const projects = server.ctx.projects.list()
-    if (props.session) return projectForSession(props.session, projects)
+    if (props.session)
+      return (
+        projectForSession(props.session, projects) ?? projectForSession(props.session, server.ctx.sync.data.project)
+      )
     const value = directory()
     if (!value) return undefined
     const key = pathKey(value)
-    return projects.find(
-      (item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
+    return (
+      projects.find(
+        (item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
+      ) ?? server.ctx.sync.data.project.find((item) => isProjectDirectory(item, value))
     )
   })
   const showProjectIcon = () =>

@@ -177,7 +177,26 @@ for (const direction of ["ltr", "rtl"] as const) {
       await trigger.press("ArrowDown")
       await expect(projectItem).toBeFocused()
       await page.keyboard.press("ArrowDown")
+      const pathItem = menu.getByRole("menuitem", { name: directory, exact: true })
+      await expect(pathItem).toBeFocused()
+      if (workspace) await expect(page.getByRole("tooltip")).toHaveText(directory)
+      await page.keyboard.press("Enter")
+      await expect(menu).toBeVisible()
+      await expect(pathItem).toBeFocused()
+      await page.keyboard.press("Space")
+      await expect(menu).toBeVisible()
+      await expect(pathItem).toBeFocused()
+      await page.keyboard.press("Escape")
+      await expect(menu).toBeHidden()
+      await expect(trigger).toBeFocused()
+      await trigger.press("ArrowDown")
+      await expect(projectItem).toBeFocused()
+      await page.keyboard.press("ArrowDown")
+      await expect(pathItem).toBeFocused()
+      if (workspace) await expect(page.getByRole("tooltip")).toHaveText(directory)
+      await page.keyboard.press("ArrowDown")
       await expect(settings).toBeFocused()
+      await expect(page.getByRole("tooltip")).toBeHidden()
       await page.keyboard.press("Enter")
       const dialog = page.getByRole("dialog")
       await expect(dialog.getByRole("heading", { name: copy["dialog.project.edit.title"], exact: true })).toBeVisible()
@@ -212,6 +231,64 @@ for (const direction of ["ltr", "rtl"] as const) {
       }
     })
   }
+}
+
+for (const state of ["closed", "unopened"] as const) {
+  test(`session project menu restores ${state} projects before and after messages load`, async ({ page }) => {
+    const directory = "C:/OpenCode/Worktrees/project-menu-recovery"
+    const messages = Promise.withResolvers<void>()
+    await mockOpenCodeServer(page, {
+      directory,
+      project: { ...fixture.project, sandboxes: [directory] },
+      sessions: fixture.sessions.map((session) => ({ ...session, directory })),
+      provider: fixture.provider,
+      pageMessages,
+      beforeMessagesResponse: (input) => (input.sessionID === fixture.targetID ? messages.promise : Promise.resolve()),
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    if (state === "closed") {
+      await installStressSessionTabs(page)
+      await page.goto("/")
+      const projectRow = page.locator('[data-component="home-project-row"]').filter({ hasText: fixture.project.name })
+      await expect(projectRow).toBeEnabled()
+      await projectRow.locator("..").getByRole("button", { name: "More options", exact: true }).click()
+      await page.getByRole("menuitem", { name: "Close", exact: true }).click()
+      await expect(projectRow).toHaveCount(0)
+      await page.locator(`[data-titlebar-tab-link][href="${stressSessionHref(fixture.targetID)}"]`).click()
+    }
+    if (state === "unopened") await page.goto(stressSessionHref(fixture.targetID))
+
+    const header = page.locator("[data-session-title]")
+    const trigger = header.getByRole("button", { name: fixture.project.name, exact: true })
+    const menu = page.getByRole("menu", { name: fixture.project.name, exact: true })
+    await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
+    for (const loaded of [false, true]) {
+      if (loaded) {
+        messages.resolve()
+        await expect(header.getByRole("button", { name: "More options", exact: true })).toBeVisible()
+      }
+      await expect(trigger.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-workspace-isolated")
+      await trigger.click()
+      await expect(menu.getByRole("menuitem", { name: fixture.project.name, exact: true })).toBeEnabled()
+      await expect(menu.getByRole("menuitem", { name: directory, exact: true })).toBeDisabled()
+      await menu.getByRole("menuitem", { name: "Edit project", exact: true }).click()
+      const dialog = page.getByRole("dialog")
+      await expect(dialog.getByRole("textbox", { name: en["dialog.project.edit.name"], exact: true })).toHaveValue(
+        fixture.project.name,
+      )
+      await dialog.getByRole("button", { name: en["common.cancel"], exact: true }).click()
+      await expect(dialog).toBeHidden()
+    }
+    await trigger.click()
+    await menu.getByRole("menuitem", { name: fixture.project.name, exact: true }).click()
+    await expect(page).toHaveURL(new URL("/", page.url()).href)
+    const projectRow = page.locator('[data-component="home-project-row"]').filter({ hasText: fixture.project.name })
+    await expect(projectRow).toBeVisible()
+    await expect(projectRow).toHaveAttribute("data-selected", "")
+    await expect(
+      page.locator(`[data-component="home-session-row-container"][data-session-id="${fixture.targetID}"]`),
+    ).toBeVisible()
+  })
 }
 
 test("path arrow has a glyph when the page has an older icon sprite", async ({ page }) => {

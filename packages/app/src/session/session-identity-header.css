@@ -15,6 +15,10 @@
   &:dir(rtl) {
     --session-project-fade-direction: to left;
   }
+
+  &[aria-disabled="true"] {
+    opacity: 0.5;
+  }
 }
 
 .session-project-link-content {
@@ -36,7 +40,7 @@
   opacity: 0;
 }
 
-.session-project-link:is(:hover, [data-highlighted]):not([data-disabled]) {
+.session-project-link:is(:hover, [data-highlighted]):not([aria-disabled="true"]) {
   .session-project-link-content {
     mask-image: linear-gradient(
       var(--session-project-fade-direction),

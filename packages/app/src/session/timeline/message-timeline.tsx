@@ -386,7 +386,7 @@ function MessageTimelineView(
   const avatarProject = createMemo(() => {
     const session = props.session.data.info()
     if (!session) return
-    return projectForSession(session, server.ctx.projects.list())
+    return projectForSession(session, server.ctx.projects.list()) ?? project()
   })
   const projectAvatar = () => (
     <ProjectAvatar
