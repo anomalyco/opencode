@@ -89,6 +89,11 @@ async function main() {
           }
           if (!inventories.get(event.bindingID)?.tabs.some((tab) => tab.id === event.event.tabID))
             ipcErrors.push("Focus arrived before its tab inventory")
+          pane.layout(win, event.bindingID, {
+            tabID: event.event.tabID,
+            visible: true,
+            bounds: { x: 0, y: 0, width: 1000, height: 700 },
+          })
         }),
       ),
     ),
@@ -197,6 +202,7 @@ async function main() {
     )
     const found = await call("find", { tabID, text: "Apply" })
     assert(found.content.includes("Apply"))
+    await call("tabs.focus", { tabID })
     const screenshot = await call("screenshot", { tabID, fullPage: true, maxWidth: 1000 })
     const screenshotBytes = await rpc.read({ path: screenshot.files[0].path }, { location })
     assert(
