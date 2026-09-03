@@ -186,6 +186,7 @@ const layer = Layer.effect(
               defaults,
               Permission.fromConfig({
                 todowrite: "deny",
+                task: "allow",
               }),
               user,
             ),
