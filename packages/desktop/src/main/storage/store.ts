@@ -4,6 +4,7 @@ import { Effect } from "effect"
 
 import { deleteStoreFileIfEmpty } from "./cleanup"
 import { SETTINGS_STORE } from "./keys"
+import { isStoreName } from "./name"
 
 const cache = new Map<string, Store>()
 
@@ -12,6 +13,7 @@ const cache = new Map<string, Store>()
 // in index.ts has executed, which would result in files being written to the default directory
 // (e.g. bad: %APPDATA%\@opencode-ai\desktop\opencode.settings vs good: %APPDATA%\ai.opencode.desktop.dev\opencode.settings).
 export function getStore(name = SETTINGS_STORE) {
+  if (!isStoreName(name)) throw new Error("Invalid store name")
   const cached = cache.get(name)
   if (cached) return cached
   const next = new Store({
