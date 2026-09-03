@@ -36,7 +36,8 @@ import { useSettings } from "@/settings/model"
 import { createFileTabListSync } from "@/session/files/file-tab-scroll"
 import {
   SESSION_OPEN_FILE_TAB,
-  SESSION_BROWSER_TAB,
+  isSessionBrowserTab,
+  sessionBrowserTab,
   createOpenSessionFileTab,
   createSessionTabs,
   shouldShowFileTree,
@@ -224,7 +225,7 @@ export function SessionSidePanel(props: {
   })
   const fileBrowserVisible = createMemo(() => {
     const active = activeTab()
-    return active !== "review" && active !== "context" && active !== "empty" && active !== SESSION_BROWSER_TAB
+    return active !== "review" && active !== "context" && active !== "empty" && !isSessionBrowserTab(active)
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
   const closeTabKeybind = createMemo(() => command.keybindParts("file.close"))
@@ -411,28 +412,34 @@ export function SessionSidePanel(props: {
                               </Show>
                             )}
                           </For>
-                          <Show when={props.browser.opened()}>
-                            <Tabs.Trigger
-                              value={SESSION_BROWSER_TAB}
-                              id={browserTabID}
-                              aria-controls={activeTab() === SESSION_BROWSER_TAB ? browserTabPanelID : undefined}
-                              onMiddleClick={props.browser.close}
-                              closeButton={
-                                <Tooltip value={language.t("common.closeTab")} placement="bottom" gutter={10}>
-                                  <Tabs.CloseButton
-                                    onClick={props.browser.close}
-                                    aria-label={language.t("common.closeTab")}
-                                  />
-                                </Tooltip>
-                              }
-                              hideCloseButton
-                            >
-                              <div class="flex items-center gap-1.5">
-                                <Icon name="window-cursor" size="small" />
-                                <span>{language.t("session.tab.browser")}</span>
-                              </div>
-                            </Tabs.Trigger>
-                          </Show>
+                          <For each={props.browser.tabs()}>
+                            {(tab) => (
+                              <Tabs.Trigger
+                                value={sessionBrowserTab(tab.id)}
+                                id={`${browserTabID}-${tab.id}`}
+                                aria-controls={
+                                  activeTab() === sessionBrowserTab(tab.id) ? browserTabPanelID : undefined
+                                }
+                                onMiddleClick={() => props.browser.close(tab.id)}
+                                closeButton={
+                                  <Tooltip value={language.t("common.closeTab")} placement="bottom" gutter={10}>
+                                    <Tabs.CloseButton
+                                      onClick={() => props.browser.close(tab.id)}
+                                      aria-label={language.t("common.closeTab")}
+                                    />
+                                  </Tooltip>
+                                }
+                                hideCloseButton
+                              >
+                                <div class="flex items-center gap-1.5">
+                                  <Icon name="window-cursor" size="small" />
+                                  <span class="max-w-40 truncate">
+                                    {tab.title || language.t("session.tab.browser")}
+                                  </span>
+                                </div>
+                              </Tabs.Trigger>
+                            )}
+                          </For>
                           <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
                             <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
                               <Menu appearance="standard" modal={false} placement="bottom-end" gutter={4}>
@@ -527,18 +534,20 @@ export function SessionSidePanel(props: {
                         <div
                           id={browserTabPanelID}
                           role="tabpanel"
-                          aria-labelledby={browserTabID}
+                          aria-labelledby={
+                            props.browser.active() ? `${browserTabID}-${props.browser.active()?.id}` : undefined
+                          }
                           data-slot="tabs-content"
                           class="h-full min-h-0 overflow-hidden"
-                          classList={{ hidden: activeTab() !== SESSION_BROWSER_TAB }}
-                          inert={activeTab() !== SESSION_BROWSER_TAB || undefined}
+                          classList={{ hidden: !isSessionBrowserTab(activeTab()) }}
+                          inert={!isSessionBrowserTab(activeTab()) || undefined}
                         >
                           <Show when={props.browser.registration()} keyed>
                             {(registration) => (
                               <SessionBrowserPane
                                 registration={registration}
                                 browser={props.browser}
-                                visible={activeTab() === SESSION_BROWSER_TAB}
+                                visible={isSessionBrowserTab(activeTab())}
                               />
                             )}
                           </Show>
