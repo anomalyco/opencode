@@ -934,15 +934,15 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
   compaction: "cmp",
 }
 
-// Mirror Codex: an item that arrives without an id adopts the id of the item
-// already open in its output slot, otherwise it gets a locally minted one.
-const hasID = (item: StreamItem): item is OutputItem => item.id !== undefined
-
-const resolveItem = (state: ParserState, item: StreamItem, index: number | undefined): OutputItem => {
-  if (hasID(item)) return item
-  const slot = index === undefined ? undefined : state.outputItems[index]
-  return { ...item, id: slot ?? `${ITEM_ID_PREFIX[item.type] ?? "item"}_${crypto.randomUUID().replaceAll("-", "")}` }
-}
+// An item without an id adopts the id already open in its output slot,
+// otherwise it gets a locally minted one.
+const resolveItem = (state: ParserState, item: StreamItem, index: number | undefined): OutputItem => ({
+  ...item,
+  id:
+    item.id ??
+    (index === undefined ? undefined : state.outputItems[index]) ??
+    `${ITEM_ID_PREFIX[item.type] ?? "item"}_${crypto.randomUUID().replaceAll("-", "")}`,
+})
 
 // Registered output slots are authoritative for `item_id` routing, and items
 // are resolved here so everything downstream can rely on `item.id`.
