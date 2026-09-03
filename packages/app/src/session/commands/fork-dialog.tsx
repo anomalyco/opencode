@@ -14,11 +14,11 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServer } from "@/runtime/server/current"
 import { sessionHref } from "@/shell/routes/session"
 
-interface ForkableMessage {
-  id: string
-  text: string
-  time: string
-}
+const fullSessionID = "__full__"
+
+type ForkOption =
+  | { kind: "full"; id: typeof fullSessionID; text: string }
+  | { kind: "message"; id: string; text: string; time: string }
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString(undefined, { timeStyle: "short" })
@@ -35,31 +35,48 @@ export const DialogFork: Component = () => {
   const language = useLanguage()
   const server = useServer()
 
-  const messages = createMemo((): ForkableMessage[] => {
+  const items = createMemo((): ForkOption[] => {
     const sessionID = params.id
-    if (!sessionID) return []
+    const full: ForkOption = { kind: "full", id: fullSessionID, text: language.t("dialog.fork.full") }
+    if (!sessionID) return [full]
 
-    const msgs = data.session.message.list(sessionID)
-    const result: ForkableMessage[] = []
-
-    for (const message of msgs) {
+    const messages: ForkOption[] = []
+    for (const message of data.session.message.list(sessionID)) {
       if (message.type !== "user" || !message.text) continue
-
-      result.push({
+      messages.push({
+        kind: "message",
         id: message.id,
         text: message.text.replace(/\n/g, " ").slice(0, 200),
         time: formatTime(new Date(message.time.created)),
       })
     }
-
-    return result.reverse()
+    return [full, ...messages.toReversed()]
   })
 
-  const handleSelect = (item: ForkableMessage | undefined) => {
-    if (!item) return
+  const openForked = (forked: { id: string }) => {
+    data.session.remember(forked)
+    dialog.close()
+    navigate(sessionHref(server.key, forked.id))
+  }
 
+  const fail = (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err)
+    showToast({ title: language.t("common.requestFailed"), description: message })
+  }
+
+  const handleSelect = (item: ForkOption | undefined) => {
+    if (!item) return
     const sessionID = params.id
     if (!sessionID) return
+
+    if (item.kind === "full") {
+      serverSDK.api.session
+        .fork({ sessionID, boundary: { type: "through" } })
+        .then(openForked)
+        .catch(fail)
+      return
+    }
+
     const message = data.session.message.get(sessionID, item.id)
     if (message?.type !== "user") return
     const restored = extractPromptFromMessage(message, {
@@ -71,8 +88,6 @@ export const DialogFork: Component = () => {
     serverSDK.api.session
       .fork({ sessionID, boundary: { type: "before", messageID: item.id } })
       .then((forked) => {
-        data.session.remember(forked)
-        dialog.close()
         const target = prompt.capture({ dir, id: forked.id })
         target.set(restored)
         target.context.replaceComments(
@@ -85,12 +100,9 @@ export const DialogFork: Component = () => {
             commentOrigin: comment.origin,
           })),
         )
-        navigate(sessionHref(server.key, forked.id))
+        openForked(forked)
       })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
+      .catch(fail)
   }
 
   return (
@@ -104,16 +116,22 @@ export const DialogFork: Component = () => {
           search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
           emptyMessage={language.t("dialog.fork.empty")}
           key={(x) => x.id}
-          items={messages}
+          items={items}
           filterKeys={["text"]}
+          skipFilter={(x) => x.kind === "full"}
+          sortBy={(a, b) => Number(b.kind === "full") - Number(a.kind === "full")}
           onSelect={handleSelect}
         >
-          {(item) => (
-            <div class="w-full flex items-center gap-2">
+          {(item) =>
+            item.kind === "full" ? (
               <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
-              <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
-            </div>
-          )}
+            ) : (
+              <div class="w-full flex items-center gap-2">
+                <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
+                <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
+              </div>
+            )
+          }
         </List>
       </DialogBody>
     </Dialog>

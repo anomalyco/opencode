@@ -338,6 +338,7 @@ export const dict = {
   "mcp.auth.clickToAuthenticate": "Click to authenticate",
 
   "dialog.fork.empty": "No messages to fork from",
+  "dialog.fork.full": "Full session",
 
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",
