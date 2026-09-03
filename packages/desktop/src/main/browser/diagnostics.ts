@@ -1,4 +1,4 @@
-import { Browser } from "@opencode-ai/schema/browser"
+import { Browser } from "@opencode-ai/plugin-browser/rpc"
 import type { Protocol } from "devtools-protocol"
 import type { Cdp } from "./cdp"
 

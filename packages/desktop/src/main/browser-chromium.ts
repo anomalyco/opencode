@@ -1,4 +1,4 @@
-import { Browser } from "@opencode-ai/schema/browser"
+import { Browser } from "@opencode-ai/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"

@@ -1,5 +1,5 @@
 import type { WebContents } from "electron"
-import { Browser } from "@opencode-ai/schema/browser"
+import { Browser } from "@opencode-ai/plugin-browser/rpc"
 import { gzipSync, gunzipSync } from "node:zlib"
 import { readFile } from "node:fs/promises"
 import { Schema } from "effect"
