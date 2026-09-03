@@ -417,7 +417,7 @@ export function SessionSidePanel(props: {
                               class="flex items-center"
                             >
                               <IconButton
-                                icon={<Icon name="plus-small" />}
+                                icon={<Icon name="plus" />}
                                 variant="ghost-muted"
                                 size="large"
                                 onClick={() => openFileBrowser()}

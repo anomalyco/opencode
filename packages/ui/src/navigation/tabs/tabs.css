@@ -553,8 +553,10 @@
     }
 
     &[data-value="open-file"],
-    &[data-value^="file://"] {
+    &[data-value^="file://"]
+    {
       gap: 4px;
+      padding-inline-end: 4px;
 
       [data-slot="tabs-trigger-close-button"] {
         margin-inline-start: 0;
