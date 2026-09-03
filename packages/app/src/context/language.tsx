@@ -6,6 +6,7 @@ import { pluralCategory, type UiI18nPluralKey } from "@opencode-ai/ui/context/i1
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
+import { desktopSettingsDict } from "@/i18n/desktop-settings"
 import {
   createDesktopNativeBundle,
   detectDesktopNativeLocale,
@@ -26,7 +27,7 @@ function localeDirection(locale: Locale): Direction {
   return RTL_LOCALES.has(locale) ? "rtl" : "ltr"
 }
 
-type RawDictionary = typeof en & typeof uiEn
+type RawDictionary = typeof en & typeof uiEn & ReturnType<typeof desktopSettingsDict>
 type Dictionary = i18n.Flatten<RawDictionary>
 type PluralKey =
   | UiI18nPluralKey
@@ -43,7 +44,7 @@ const LOCALES: readonly Locale[] = DESKTOP_NATIVE_LOCALES
 
 const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
-const base = i18n.flatten({ ...en, ...uiEn })
+const base = i18n.flatten({ ...en, ...uiEn, ...desktopSettingsDict("en") })
 const dicts = new Map<Locale, Dictionary>([["en", base]])
 
 const merge = (app: Promise<Source>, ui: Promise<Source>) =>
@@ -119,8 +120,9 @@ function loadDict(locale: Locale) {
   if (locale === "en") return Promise.resolve(base)
   const load = loaders[locale]
   return load().then((next: Dictionary) => {
-    dicts.set(locale, next)
-    return next
+    const localized = { ...next, ...i18n.flatten(desktopSettingsDict(locale)) } as Dictionary
+    dicts.set(locale, localized)
+    return localized
   })
 }
 

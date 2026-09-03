@@ -92,6 +92,12 @@ type PlatformBase = {
   /** Set the preferred display backend (desktop only) */
   setDisplayBackend?(backend: DisplayBackend): Promise<void>
 
+  /** Get whether the desktop should keep the computer and display awake (desktop only) */
+  getKeepAwakeEnabled?(): Promise<boolean> | boolean
+
+  /** Keep the computer and display awake while the desktop app is running (desktop only) */
+  setKeepAwakeEnabled?(enabled: boolean): Promise<void> | void
+
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
 
