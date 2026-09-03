@@ -552,6 +552,15 @@
       }
     }
 
+    &[data-value="open-file"],
+    &[data-value^="file://"] {
+      gap: 4px;
+
+      [data-slot="tabs-trigger-close-button"] {
+        margin-inline-start: 0;
+      }
+    }
+
     &:has([data-selected]) {
       background-color: var(--v2-background-bg-layer-02);
       box-shadow: none;
@@ -569,19 +578,19 @@
     font-variation-settings: "slnt" 0;
     font-variant-numeric: tabular-nums;
 
-    &[data-selected] {
+    &[data-selected]:not([data-value="open-file"]) {
       color: var(--v2-text-text-base);
     }
 
     .tab-fileicon-color,
-    .tab-fileicon-mono,
-    [data-slot="icon-svg"] {
+    .tab-fileicon-mono {
       margin-inline-start: -2px;
     }
 
     .italic {
       font-style: italic !important;
       font-variation-settings: "slnt" -10 !important;
+      padding-inline-end: 2px;
     }
   }
 }
