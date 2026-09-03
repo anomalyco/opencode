@@ -1,90 +1,311 @@
-import { Effect } from "effect"
+import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Form } from "@opencode-ai/schema/form"
+import { Clock, Deferred, Effect, Option, Schema, Stream } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { App } from "../../app.js"
+import { Bus } from "../../bus.js"
+import { Credential } from "../../credential.js"
+import { Integration } from "../../integration.js"
+import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
+import { configuredSettings } from "./configured.js"
 
-type FetchLike = (url: string | URL | Request, init?: RequestInit) => Promise<Response>
-
-// Exported for testing: intercepts Cortex-specific request/response quirks.
-export function cortexFetch(upstream: FetchLike = fetch) {
-  return async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    if (init?.body && typeof init.body === "string") {
-      try {
-        const body = JSON.parse(init.body)
-        if ("max_tokens" in body) {
-          body.max_completion_tokens = body.max_tokens
-          delete body.max_tokens
-          init = { ...init, body: JSON.stringify(body) }
-        }
-      } catch {}
-    }
-
-    const response = await upstream(url, init)
-
-    // Cortex returns 400 "conversation complete" as a normal stop condition
-    if (response.status === 400) {
-      try {
-        const errorData = (await response.clone().json()) as Record<string, unknown>
-        if (
-          String(errorData.message || errorData.error || "")
-            .toLowerCase()
-            .includes("conversation complete")
-        ) {
-          return new Response(
-            JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }] }),
-            { status: 200, headers: new Headers({ "content-type": "application/json" }) },
-          )
-        }
-      } catch {}
-    }
-
-    // Cortex returns role:"" in streaming deltas; the AI SDK schema requires "assistant"
-    if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
-      const reader = response.body.getReader()
-      const encoder = new TextEncoder()
-      const decoder = new TextDecoder()
-      const stream = new ReadableStream({
-        async pull(ctrl) {
-          const { done, value } = await reader.read()
-          if (done) {
-            ctrl.close()
-            return
-          }
-          ctrl.enqueue(
-            encoder.encode(decoder.decode(value, { stream: true }).replace(/"role"\s*:\s*""/g, '"role":"assistant"')),
-          )
-        },
-        cancel() {
-          reader.cancel()
-        },
-      })
-      return new Response(stream, { headers: response.headers, status: response.status })
-    }
-
-    return response
-  }
-}
+const providerID = Provider.ID.make("snowflake-cortex")
+const integrationID = Integration.ID.make("snowflake-cortex")
+const methodID = Integration.MethodID.make("browser")
+const clientID = "LOCAL_APPLICATION"
+const accountPlaceholder = "${SNOWFLAKE_ACCOUNT}"
+const accountForm = Form.Fields.make([
+  {
+    type: "string",
+    key: "account",
+    title: "Snowflake account identifier",
+    placeholder: "myorg-myaccount",
+    required: true,
+    pattern: "^\\s*(?:https?://)?[\\w-]+(?:\\.[\\w-]+)*/*\\s*$",
+  },
+])
+const Token = Schema.Struct({
+  access_token: Schema.NonEmptyString,
+  refresh_token: Schema.optional(Schema.NonEmptyString),
+  expires_in: Schema.optional(Schema.Number),
+})
+const decodeError = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({ message: Schema.optional(Schema.String), error: Schema.optional(Schema.String) }),
+  ),
+)
 
 export const SnowflakeCortexPlugin = define({
   id: "opencode.provider.snowflake.cortex",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.make("snowflake-cortex")) return
-        const token =
-          process.env.SNOWFLAKE_CORTEX_TOKEN ??
-          process.env.SNOWFLAKE_CORTEX_PAT ??
-          (typeof evt.options.token === "string" ? evt.options.token : undefined) ??
-          (typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined)
-        const upstream = typeof evt.options.fetch === "function" ? (evt.options.fetch as FetchLike) : undefined
-        if (evt.options.includeUsage !== false) evt.options.includeUsage = true
-        const mod = yield* Effect.promise(() => import("@ai-sdk/openai-compatible"))
-        evt.sdk = mod.createOpenAICompatible({
-          ...evt.options,
-          ...(token ? { apiKey: token } : {}),
-          fetch: cortexFetch(upstream) as typeof fetch,
-        } as any)
+    const http = yield* HttpClient.HttpClient
+    const credentials = yield* Credential.Service
+    const bus = yield* Bus.Service
+    const configured = yield* configuredSettings(providerID)
+    const oauth = browser(http, ctx.app)
+    const account = { value: "" }
+
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update(oauth)
+      editor.method.update({
+        integrationID,
+        method: { type: "key", label: "Paste PAT or bearer token manually", form: accountForm },
+      })
+      // The catalog also lists SNOWFLAKE_ACCOUNT, but an account name is not a credential.
+      editor.method.update({
+        integrationID,
+        method: { type: "env", names: ["SNOWFLAKE_CORTEX_TOKEN", "SNOWFLAKE_CORTEX_PAT"] },
+      })
+    })
+
+    const load = Effect.fn(function* () {
+      const connection = yield* ctx.integration.connection.active(integrationID)
+      const saved =
+        connection?.type === "credential" ? yield* credentials.get(Credential.ID.make(connection.id)) : undefined
+      const value = saved?.value
+      account.value = normalizeAccount(
+        process.env.SNOWFLAKE_ACCOUNT ??
+          (value?.type === "key"
+            ? (value.configuration?.account ?? value.metadata?.account)
+            : value?.metadata?.account) ??
+          configured?.account,
+      )
+    })
+    yield* load()
+    yield* ctx.catalog.transform((catalog) => {
+      const item = catalog.provider.get(providerID)
+      if (!item) return
+      catalog.provider.update(providerID, (provider) => {
+        const settings = { ...provider.settings, ...configured }
+        provider.package = "@opencode-ai/ai/providers/openai-compatible"
+        provider.settings = {
+          ...settings,
+          provider: providerID,
+          baseURL: endpoint(settings.baseURL, account.value),
+          ...(typeof settings.token === "string" ? { apiKey: settings.token } : {}),
+        }
+      })
+      for (const model of item.models.values()) {
+        catalog.model.update(providerID, model.id, (draft) => {
+          draft.package = "@opencode-ai/ai/providers/openai-compatible"
+          draft.compatibility = { maxTokensField: "max_completion_tokens", ...draft.compatibility }
+          if (draft.settings?.baseURL !== undefined)
+            draft.settings.baseURL = endpoint(draft.settings.baseURL, account.value)
+        })
+      }
+    })
+    yield* bus.subscribe(Credential.Event.Switched).pipe(
+      Stream.filter((event) => event.data.integrationID === integrationID),
+      Stream.runForEach(() => load().pipe(Effect.andThen(ctx.catalog.reload()))),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+
+    yield* ctx.session.hook(
+      "http.request",
+      Effect.fn(function* (event) {
+        const override = envToken()
+        const connection = override ? undefined : yield* ctx.integration.connection.active(integrationID)
+        const value = connection ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orDie) : undefined
+        const token = override ?? (value?.type === "oauth" ? value.access : value?.key)
+        if (token) event.request.headers.set("authorization", `Bearer ${token}`)
+        event.request.headers.set("user-agent", App.useragent(ctx.app))
       }),
+      { providerID },
+    )
+    yield* ctx.session.hook(
+      "http.response",
+      Effect.fn(function* (event) {
+        if (event.response.status !== 400) return
+        const error = Option.getOrUndefined(decodeError(yield* Effect.promise(() => event.response.clone().text())))
+        if (!(error?.message || error?.error)?.toLowerCase().includes("conversation complete")) return
+        // Native Chat consumes SSE, not the SDK's non-streaming JSON response shape.
+        event.response = new Response(
+          'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      }),
+      { providerID },
+    )
+    yield* ctx.session.hook(
+      "retry",
+      Effect.fn(function* (event) {
+        if (event.error.status !== 401 || event.attempt !== 2 || envToken()) return
+        const connection = yield* ctx.integration.connection.active(integrationID)
+        if (connection?.type !== "credential") return
+        const saved = yield* credentials.get(Credential.ID.make(connection.id))
+        if (saved?.value.type !== "oauth" || saved.value.methodID !== methodID) return
+        const value = yield* oauth.refresh(saved.value).pipe(Effect.orDie)
+        yield* credentials.update(saved.id, { value })
+        // Let the runner own the next Physical Attempt rather than issuing a hidden HTTP retry.
+        event.decision = { retry: true, delay: 0 }
+      }),
+      { providerID },
     )
   }),
 })
+
+function browser(http: HttpClient.HttpClient, app: App.Info) {
+  return {
+    integrationID,
+    method: {
+      id: methodID,
+      type: "oauth",
+      label: "Login with Snowflake (External Browser)",
+      form: [
+        ...accountForm,
+        { type: "string", key: "role", title: "Snowflake role (optional)", placeholder: "PUBLIC" },
+      ],
+    },
+    authorize: (answer) =>
+      Effect.gen(function* () {
+        const account = normalizeAccount(answer.account)
+        if (!account) return yield* Effect.fail(new Error("A valid Snowflake account identifier is required"))
+        const role = typeof answer.role === "string" ? answer.role.trim() : ""
+        const scope = !role
+          ? "refresh_token"
+          : /^[-_A-Za-z0-9]+$/.test(role)
+            ? `refresh_token session:role:${role}`
+            : `refresh_token session:role-encoded:${encodeURIComponent(role)}`
+        const verifier = Buffer.from(crypto.getRandomValues(new Uint8Array(48))).toString("base64url")
+        const challenge = Buffer.from(
+          yield* Effect.promise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))),
+        ).toString("base64url")
+        const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
+        const code = yield* Deferred.make<string, Error>()
+        const { createServer } = yield* Effect.promise(() => import("node:http"))
+        const server = createServer((request, response) => {
+          const url = new URL(request.url ?? "/", "http://127.0.0.1")
+          if (url.pathname !== "/") {
+            response.writeHead(404).end("Not found")
+            return
+          }
+          const value = url.searchParams.get("code")
+          const error =
+            url.searchParams.get("state") !== state
+              ? "Invalid OAuth state"
+              : url.searchParams.get("error_description") ||
+                url.searchParams.get("error") ||
+                (!value ? "Missing authorization code" : undefined)
+          if (error) {
+            Effect.runFork(Deferred.fail(code, new Error(error)))
+            response
+              .writeHead(400, { "Content-Type": "text/html" })
+              .end(OauthCallbackPage.error(error, { provider: "Snowflake" }))
+            return
+          }
+          if (value) Effect.runFork(Deferred.succeed(code, value))
+          response
+            .writeHead(200, { "Content-Type": "text/html" })
+            .end(OauthCallbackPage.success({ provider: "Snowflake" }))
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
+        const port = yield* Effect.callback<number, Error>((resume) => {
+          server.once("error", (error) => resume(Effect.fail(error)))
+          server.listen(0, "127.0.0.1", () => {
+            const address = server.address()
+            resume(
+              address && typeof address === "object"
+                ? Effect.succeed(address.port)
+                : Effect.fail(new Error("Unable to resolve Snowflake callback port")),
+            )
+          })
+        })
+        const redirect = `http://127.0.0.1:${port}/`
+        return {
+          mode: "auto" as const,
+          url: `${issuer(account)}/oauth/authorize?${new URLSearchParams({
+            client_id: clientID,
+            response_type: "code",
+            redirect_uri: redirect,
+            scope,
+            state,
+            code_challenge: challenge,
+            code_challenge_method: "S256",
+          }).toString()}`,
+          instructions: "Complete Snowflake sign-in in your browser. OpenCode will capture the callback automatically.",
+          callback: Deferred.await(code).pipe(
+            Effect.flatMap((value) =>
+              token(http, app, account, {
+                grant_type: "authorization_code",
+                code: value,
+                redirect_uri: redirect,
+                code_verifier: verifier,
+              }),
+            ),
+          ),
+        }
+      }),
+    refresh: (value) =>
+      token(
+        http,
+        app,
+        normalizeAccount(value.metadata?.account),
+        { grant_type: "refresh_token", refresh_token: value.refresh },
+        value.refresh,
+      ),
+    label: (value) => normalizeAccount(value.metadata?.account),
+  } satisfies IntegrationOAuthMethodRegistration
+}
+
+function token(
+  http: HttpClient.HttpClient,
+  app: App.Info,
+  account: string,
+  form: Record<string, string>,
+  current?: string,
+) {
+  return Effect.gen(function* () {
+    if (!account) return yield* Effect.fail(new Error("Snowflake OAuth credential is missing its account"))
+    const response = yield* http.execute(
+      HttpClientRequest.post(`${issuer(account)}/oauth/token-request`).pipe(
+        HttpClientRequest.setHeaders({
+          Accept: "application/json",
+          "User-Agent": App.useragent(app),
+          // Snowflake's public local-app client uses the client ID as both Basic credentials.
+          Authorization: `Basic ${Buffer.from(`${clientID}:${clientID}`).toString("base64")}`,
+        }),
+        HttpClientRequest.bodyUrlParams({ ...form, client_id: clientID }),
+      ),
+    )
+    if (response.status < 200 || response.status >= 300)
+      return yield* Effect.fail(
+        new Error(`Snowflake token request failed (${response.status}): ${yield* response.text}`),
+      )
+    const tokens = yield* HttpClientResponse.schemaBodyJson(Token)(response)
+    const refresh = tokens.refresh_token ?? current
+    if (!refresh) return yield* Effect.fail(new Error("Snowflake token response did not include refresh_token"))
+    return Credential.OAuth.make({
+      type: "oauth",
+      methodID,
+      access: tokens.access_token,
+      refresh,
+      expires: (yield* Clock.currentTimeMillis) + (tokens.expires_in ?? 600) * 1000,
+      metadata: { account },
+    })
+  })
+}
+
+function normalizeAccount(value: unknown) {
+  if (typeof value !== "string") return ""
+  const account = value
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .replace(/\.snowflakecomputing\.com$/i, "")
+  return /^[\w-]+(?:\.[\w-]+)*$/.test(account) && account.toLowerCase() !== "snowflakecomputing.com" ? account : ""
+}
+
+function issuer(account: string) {
+  return `https://${account}.snowflakecomputing.com`
+}
+
+function endpoint(value: unknown, account: string) {
+  const baseURL = typeof value === "string" ? value : `${issuer(accountPlaceholder)}/api/v2/cortex/v1`
+  return account ? baseURL.replaceAll(accountPlaceholder, account) : baseURL
+}
+
+function envToken() {
+  return process.env.SNOWFLAKE_CORTEX_TOKEN ?? process.env.SNOWFLAKE_CORTEX_PAT
+}
