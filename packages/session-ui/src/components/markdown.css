@@ -227,6 +227,23 @@
     display: inline-flex;
   }
 
+  [data-component="mermaid"] {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+    margin-bottom: 24px;
+    padding: 12px;
+    overflow-x: auto;
+    background: var(--color-background-stronger);
+    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: 6px;
+
+    svg {
+      max-width: 100%;
+      height: auto;
+    }
+  }
+
   pre {
     margin-top: 12px;
     margin-bottom: 24px;

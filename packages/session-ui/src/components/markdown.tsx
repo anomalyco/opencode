@@ -32,6 +32,7 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { isMermaidLanguage, renderMermaid } from "./mermaid"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -45,6 +46,14 @@ type RenderedBlock =
       generation: number
       stable: MarkdownToken[]
       unstable: MarkdownToken[]
+    }
+  | {
+      key: string
+      mode: "diagram"
+      raw: string
+      src: string
+      hash: string
+      complete: boolean
     }
 
 type RenderResult = {
@@ -433,6 +442,17 @@ export function Markdown(
           const key = base ? `${base}:${index}:${block.mode}` : undefined
           const blockKey = markdownBlockKey(owner, src.key, index, block.mode)
 
+          if (block.mode === "code" && isMermaidLanguage(block.language)) {
+            return {
+              key: blockKey,
+              mode: "diagram" as const,
+              raw: block.raw,
+              src: block.src,
+              hash: String(block.raw.length),
+              complete: !!block.complete,
+            }
+          }
+
           if (block.mode === "code") {
             const cached = completedCode.get(blockKey)
             if (block.complete && cached?.raw === block.raw) return cached
@@ -516,6 +536,7 @@ export function Markdown(
     activeCodeKeys.clear()
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
     content.forEach((block, index) => updateBlock(container, index, block, labels))
+    hydrateMermaid(container)
     while (container.children.length > content.length) {
       const child = container.lastElementChild
       if (!child) break
@@ -566,6 +587,15 @@ function pendingBlocks(
     const current = initial ? undefined : result.blocks[index]
     if (current && canReusePendingBlock(current, block)) return current
     const key = markdownBlockKey(owner, cacheKey, index, block.mode)
+    if (block.mode === "code" && isMermaidLanguage(block.language))
+      return {
+        key,
+        mode: "diagram" as const,
+        raw: block.raw,
+        src: block.src,
+        hash: String(block.raw.length),
+        complete: !!block.complete,
+      }
     if (block.mode !== "code")
       return { key, mode: block.mode, raw: block.raw, hash: String(block.raw.length), html: fallback(block.src) }
     return {
@@ -590,6 +620,10 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   const current = container.children[index]
   if (block.mode === "code") {
     updateCodeBlock(container, current, block, labels)
+    return
+  }
+  if (block.mode === "diagram") {
+    updateDiagramBlock(container, current, block)
     return
   }
   if (
@@ -703,6 +737,63 @@ function updateCodeBlock(
     return
   }
   container.appendChild(next)
+}
+
+function updateDiagramBlock(
+  container: HTMLDivElement,
+  current: Element | undefined,
+  block: Extract<RenderedBlock, { mode: "diagram" }>,
+) {
+  const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+  if (existing && existing.dataset.markdownHash === block.hash) return
+
+  const next = document.createElement("div")
+  next.dataset.markdownBlock = ""
+  next.dataset.markdownKey = block.key
+  next.dataset.markdownHash = block.hash
+  next.dataset.markdownComplete = block.complete ? "true" : "false"
+  next.style.display = "contents"
+
+  if (block.complete) {
+    const diagram = document.createElement("div")
+    diagram.setAttribute("data-component", "mermaid")
+    next.appendChild(diagram)
+    void renderMermaid(diagram, block.src)
+  } else {
+    const wrapper = document.createElement("div")
+    wrapper.setAttribute("data-component", "markdown-code")
+    const pre = document.createElement("pre")
+    pre.className = "shiki OpenCode"
+    const codeElement = document.createElement("code")
+    codeElement.className = "language-mermaid"
+    codeElement.textContent = block.src
+    pre.appendChild(codeElement)
+    wrapper.appendChild(pre)
+    next.appendChild(wrapper)
+  }
+
+  if (current) {
+    disposeCopyButtons(current)
+    current.replaceWith(next)
+    return
+  }
+  container.appendChild(next)
+}
+
+function hydrateMermaid(root: HTMLDivElement) {
+  const markers = Array.from(root.querySelectorAll("pre.mermaid-diagram")).filter(
+    (el): el is HTMLElement => el instanceof HTMLElement,
+  )
+  for (const marker of markers) {
+    const source = marker.querySelector("code")?.textContent ?? ""
+    const wrapper = marker.closest('[data-component="markdown-code"]')
+    const host = wrapper instanceof HTMLElement ? wrapper : marker
+    if (wrapper instanceof HTMLElement) disposeCopyButtons(wrapper)
+    const diagram = document.createElement("div")
+    diagram.setAttribute("data-component", "mermaid")
+    host.replaceWith(diagram)
+    void renderMermaid(diagram, source)
+  }
 }
 
 function sameToken(left: MarkdownToken, right: MarkdownToken | undefined) {

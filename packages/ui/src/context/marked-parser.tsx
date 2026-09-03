@@ -3,6 +3,8 @@ import { Marked, type MarkedExtension, type Tokens } from "marked"
 import markedShiki from "marked-shiki"
 
 export function createMarkdownParser(highlight: (code: string, language: string) => string | Promise<string>) {
+  const highlightCode = (code: string, language: string) =>
+    isMermaidLanguage(language) ? mermaidPlaceholder(code) : highlight(code, language)
   return new Marked(
     {
       renderer: {
@@ -13,8 +15,25 @@ export function createMarkdownParser(highlight: (code: string, language: string)
       },
     },
     katexExtension,
-    markedShiki({ highlight }),
+    markedShiki({ highlight: highlightCode }),
   )
+}
+
+function isMermaidLanguage(language: string | undefined) {
+  return language?.toLowerCase() === "mermaid"
+}
+
+function mermaidPlaceholder(code: string) {
+  return `<pre class="mermaid-diagram"><code class="language-mermaid">${escapeHtml(code)}</code></pre>`
+}
+
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 }
 
 const inlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
