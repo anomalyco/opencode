@@ -84,6 +84,7 @@ export const Definitions = {
   "diff.single_patch": keybind("s", "Toggle single patch view"),
   "diff.switch_source": keybind("d", "Switch diff viewer source"),
   "diff.toggle_view": keybind("v", "Toggle diff viewer split or unified view"),
+  "diff.toggle_fullscreen": keybind("f", "Toggle diff viewer full screen"),
   "diff.mark_reviewed": keybind("m", "Toggle selected diff file reviewed"),
   "diff.help": keybind("?,shift+?,shift+/", "Show more diff viewer shortcuts"),
 
@@ -93,7 +94,7 @@ export const Definitions = {
   "theme.mode.lock": keybind("none", "Lock or unlock theme mode"),
   "session.sidebar.toggle": keybind("<leader>b", "Toggle sidebar"),
   "pane.focus.left": keybind("<leader>left", "Focus session pane"),
-  "pane.focus.right": keybind("<leader>right", "Focus terminal pane"),
+  "pane.focus.right": keybind("<leader>right", "Focus right pane"),
   "terminal.select": keybind("<leader>down", "Select terminal"),
   "terminal.toggle": keybind("<leader>t", "Toggle terminal pane"),
   "terminal.close": keybind("<leader>up", "Close terminal pane"),

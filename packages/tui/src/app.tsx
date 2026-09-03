@@ -100,6 +100,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
+import { SessionPanelProvider } from "./context/session-panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
@@ -397,22 +398,24 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                     <PromptRefProvider>
                                                                       <EditorContextProvider>
                                                                         <AttentionProvider>
-                                                                          <PluginProvider
-                                                                            packages={input.packages}
-                                                                            directories={pluginDirectories}
-                                                                          >
-                                                                            <App
-                                                                              updater={input.updater}
-                                                                              pair={
-                                                                                input.server.endpoint.auth
-                                                                                  ? input.server.endpoint.auth
-                                                                                  : {
-                                                                                      username: "opencode",
-                                                                                      password: "",
-                                                                                    }
-                                                                              }
-                                                                            />
-                                                                          </PluginProvider>
+                                                                          <SessionPanelProvider>
+                                                                            <PluginProvider
+                                                                              packages={input.packages}
+                                                                              directories={pluginDirectories}
+                                                                            >
+                                                                              <App
+                                                                                updater={input.updater}
+                                                                                pair={
+                                                                                  input.server.endpoint.auth
+                                                                                    ? input.server.endpoint.auth
+                                                                                    : {
+                                                                                        username: "opencode",
+                                                                                        password: "",
+                                                                                      }
+                                                                                }
+                                                                              />
+                                                                            </PluginProvider>
+                                                                          </SessionPanelProvider>
                                                                         </AttentionProvider>
                                                                       </EditorContextProvider>
                                                                     </PromptRefProvider>

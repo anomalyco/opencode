@@ -1507,7 +1507,7 @@ export function Session(props: {
                   <Prompt
                     visible={true}
                     ref={bind}
-                    disabled={false}
+                    disabled={props.promptMuted}
                     muted={props.promptMuted}
                     onSubmit={() => {
                       toBottom()

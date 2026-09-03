@@ -37,6 +37,7 @@ import { createApi, createEventStream, createFetch, json } from "../../fixture/t
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { createDialogApi } from "../../../src/plugin/api"
 import { ToastProvider } from "../../../src/ui/toast"
+import { SessionPanelProvider } from "../../../src/context/session-panel"
 import { createSignal, Show } from "solid-js"
 import { diffImageFixture } from "../../fixture/diff-image"
 
@@ -66,6 +67,43 @@ test("closing the diff viewer returns to the route it opened from", async () => 
     expect(viewer.current()).toEqual(startRoute)
   } finally {
     viewer.app.renderer.destroy()
+  }
+})
+
+test("full-screen diff only returns to split view when opened from an eligible panel", async () => {
+  const narrow = await renderDiffViewer([], {
+    width: 80,
+    initialRoute: {
+      type: "plugin",
+      id: "opencode.diffs",
+      name: "diff",
+      data: { sessionID: "session-1", returnRoute: startRoute },
+    },
+  })
+  try {
+    const command = narrow.commands.get("diff.toggle_fullscreen")
+    expect(typeof command?.enabled === "function" ? command.enabled() : command?.enabled).toBe(false)
+  } finally {
+    narrow.app.renderer.destroy()
+  }
+
+  const eligible = await renderDiffViewer([], {
+    width: 160,
+    initialRoute: {
+      type: "plugin",
+      id: "opencode.diffs",
+      name: "diff",
+      data: { sessionID: "session-1", returnRoute: startRoute, split: true },
+    },
+  })
+  try {
+    const command = eligible.commands.get("diff.toggle_fullscreen")
+    expect(typeof command?.enabled === "function" ? command.enabled() : command?.enabled).toBe(true)
+    command?.run()
+    await eligible.app.flush()
+    expect(eligible.current()).toEqual(startRoute)
+  } finally {
+    eligible.app.renderer.destroy()
   }
 })
 
@@ -1972,7 +2010,9 @@ async function renderDiffViewer(
                 <ToastProvider>
                   <ThemeProvider mode={options.mode ?? "dark"} source={emptyThemeSource}>
                     <DialogProvider>
-                      <Content />
+                      <SessionPanelProvider>
+                        <Content />
+                      </SessionPanelProvider>
                     </DialogProvider>
                   </ThemeProvider>
                 </ToastProvider>
