@@ -913,7 +913,6 @@ export const dict = {
   "settings.plugins.installed.disable": "Disable",
   "settings.plugins.installed.enable": "Enable",
   "settings.plugins.installed.uninstall": "Uninstall",
-  "settings.plugins.installed.uninstallConfirm": "Remove {{name}} from {{scope}} config?",
   "settings.plugins.installed.recentlyRemoved": "Recently removed",
   "settings.plugins.installed.openConfig": "Open config",
   "settings.plugins.errors.parseFailed": "Cannot read {{path}} — fix or remove it to manage plugins there.",

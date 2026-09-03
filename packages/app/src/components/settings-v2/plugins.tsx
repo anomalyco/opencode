@@ -7,7 +7,6 @@ import {
   DialogBody,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
   DialogTitleGroup,
 } from "@opencode-ai/ui/v2/dialog-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -165,7 +164,7 @@ export const SettingsPluginsV2: Component<{ sessionID?: string }> = () => {
   return (
     <>
       <div
-        class="settings-v2-tab-header"
+        class="settings-v2-tab-header settings-v2-plugins-header"
         classList={{ "settings-v2-tab-header--stacked": view() === "browse" }}
       >
         <div class="settings-v2-tab-header-row">

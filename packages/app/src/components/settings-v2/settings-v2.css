@@ -745,3 +745,15 @@
   line-height: 1;
   color: var(--v2-state-fg-danger);
 }
+
+.settings-v2-plugins-header .settings-v2-tab-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-v2-plugins-header.settings-v2-tab-header--stacked {
+  gap: 24px;
+  padding-bottom: 24px;
+}
