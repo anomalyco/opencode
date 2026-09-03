@@ -36,6 +36,7 @@ import { SubagentTool } from "@opencode-ai/core/tool/plugin/subagent"
 import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
@@ -120,6 +121,7 @@ const nodes = LayerNode.group([
 const replacements = [
   SessionExecution.node.replace(executionNode),
   Global.node.replace(tempGlobalLayer),
+  offlineModels,
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
@@ -128,6 +130,7 @@ const it = testEffect(
 const completionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
     Global.node.replace(tempGlobalLayer),
+    offlineModels,
     PluginSupervisor.node.replace(subagentPluginSupervisor),
     LayerNodePlatform.llmClient.replace(TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })),
     SessionRunnerModel.node.replace(

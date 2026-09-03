@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 import {
   compactionDelta,
   compactionEnded,
@@ -49,6 +50,9 @@ test("renders current protocol notices in CLI order", async ({ page }) => {
       ownerWarnings.push(message.text())
   })
   await setupTimeline(page, {
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, notices: { placement: "separate" } },
+    },
     sessionMessages: [
       user,
       { id: "msg_agent", type: "agent-switched", agent: "explore", time: { created: 2 } },
@@ -84,7 +88,12 @@ test("renders current protocol notices in CLI order", async ({ page }) => {
 })
 
 test("renders a compaction summary while it streams and after completion", async ({ page }) => {
-  const timeline = await setupTimeline(page, { sessionMessages: [user, assistant(true)] })
+  const timeline = await setupTimeline(page, {
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, notices: { placement: "separate" } },
+    },
+    sessionMessages: [user, assistant(true)],
+  })
 
   await timeline.send(
     compactionStarted({
@@ -161,7 +170,12 @@ test("updates running compactions to failed and cancelled boundaries", async ({ 
 })
 
 test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
-  await setupTimeline(page, { sessionMessages: [user, assistant(false, true)] })
+  await setupTimeline(page, {
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, subagents: { placement: "separate" } },
+    },
+    sessionMessages: [user, assistant(false, true)],
+  })
   const card = page.locator('[data-component="task-tool-card"]')
   await expect(card).toBeVisible()
   await expect(card).toContainText("Inspect code")
@@ -198,6 +212,9 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
 test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
   const childID = "ses_running_child"
   await setupTimeline(page, {
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, subagents: { placement: "separate" } },
+    },
     sessionMessages: [user, assistant(false, true, childID)],
     sessions: [session(), session({ id: childID, parentID: sessionID, title: "Sleep for 5 minutes" })],
     sessionStatus: { [sessionID]: { type: "busy" }, [childID]: { type: "busy" } },
@@ -213,6 +230,7 @@ for (const name of ["shell", "subagent"] as const) {
   test(`keeps the background shortcut available for a grouped running ${name}`, async ({ page }) => {
     const message = assistant(false, true)
     await setupTimeline(page, {
+      settings: { timelineDetail: timelinePresets[2].value },
       sessionMessages: [
         user,
         {
@@ -281,6 +299,7 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
   const backgroundID = "ses_background_existing"
   const blockingID = "ses_background_blocking"
   const timeline = await setupTimeline(page, {
+    settings: { timelineDetail: timelinePresets[2].value },
     sessionMessages: [
       user,
       {
@@ -369,6 +388,13 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
   })
   const backgroundCard = page.locator('[data-timeline-part-id="call_backgrounded"]')
   await expect(page.getByText(/move running work to the background/i)).toBeVisible()
+  const used = page
+    .locator('[data-timeline-part-ids="call_backgrounded,call_shell_backgrounded,call_blocking"]')
+    .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+  await expect(used).toHaveText(/^Used\s*2 Agent, 1 Shell$/)
+  await expect(used).toHaveAttribute("aria-expanded", "false")
+  await used.click()
+  await expect(used).toHaveAttribute("aria-expanded", "true")
   await page.getByRole("button", { name: "Session details" }).click()
   const summary = page.getByRole("button", { name: "2 items running in background" })
   await expect(summary).toContainText("2")
@@ -376,6 +402,7 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
   const list = page.locator('[data-component="session-background-list"]')
   await expect(list).toContainText("Background task")
   await expect(list).toContainText("sleep 120")
+  await expect(list).not.toContainText("Foreground task")
   await expect(backgroundCard).toContainText("Background task (background)")
   await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
   await expect(

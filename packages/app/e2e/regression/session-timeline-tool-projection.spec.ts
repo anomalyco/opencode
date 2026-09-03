@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 import {
   assistantMessage,
   partUpdated,
@@ -11,7 +12,9 @@ test("transitions shell and question through running error outcomes", async ({ p
   const shellID = "prt_transition_error_shell"
   const questionID = "prt_transition_error_question"
   const timeline = await setupTimeline(page, {
-    settings: { shellToolPartsExpanded: true },
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, shell: { placement: "separate", details: "expanded" } },
+    },
     messages: [
       userMessage(),
       assistantMessage(
@@ -24,18 +27,17 @@ test("transitions shell and question through running error outcomes", async ({ p
     ],
   })
   await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
-  await timeline.send(partUpdated(toolPart(shellID, "shell", "running", { command: "exit 1" })), 120)
-  await timeline.send(partUpdated(toolPart(questionID, "question", "running", questionInput())), 180)
+  await timeline.send(partUpdated(toolPart(shellID, "shell", "running", { command: "exit 1" })))
+  await expect(page.locator(`[data-timeline-part-id="${shellID}"]`)).toContainText("exit 1")
+  await timeline.send(partUpdated(toolPart(questionID, "question", "running", questionInput())))
   await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
   await timeline.send(
     partUpdated(toolPart(shellID, "shell", "error", { command: "exit 1" }, { error: "Command exited 1" })),
-    180,
   )
   await timeline.send(
     partUpdated(
       toolPart(questionID, "question", "error", questionInput(), { error: "The user dismissed this question" }),
     ),
-    250,
   )
 
   await expect(page.locator(`[data-timeline-part-id="${shellID}"] [data-kind="tool-error-card"]`)).toBeVisible()
@@ -46,7 +48,9 @@ test("preserves surviving grouped patch state when its first patch fails", async
   const failed = "prt_grouped_patch_failed"
   const surviving = "prt_grouped_patch_surviving"
   const timeline = await setupTimeline(page, {
-    settings: { editToolPartsExpanded: true },
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+    },
     messages: [
       userMessage(),
       assistantMessage(
@@ -80,6 +84,7 @@ test("preserves surviving grouped patch state when its first patch fails", async
   const group = page.locator(`[data-timeline-part-ids="${failed},${surviving}"]`)
   const file = group.locator('[data-scope="apply-patch"] button')
   await expect(file).toBeVisible()
+  await expect(file).toHaveAttribute("aria-expanded", "false")
   await file.click()
   await expect(file).toHaveAttribute("aria-expanded", "true")
   await group.evaluate((element) => {
@@ -116,6 +121,7 @@ test("preserves surviving grouped patch state when its first patch fails", async
 test("groups instruction files loaded by the same read", async ({ page }) => {
   const id = "prt_read_instructions"
   await setupTimeline(page, {
+    settings: { timelineDetail: { ...timelinePresets[2].value, tools: { placement: "separate" } } },
     messages: [
       userMessage(),
       assistantMessage([
@@ -148,7 +154,10 @@ test("groups only consecutive successful skill tools", async ({ page }) => {
     toolPart("prt_skill_break", "read", "completed", { path: "src/a.ts" }),
     toolPart("prt_skill_last", "skill", "completed", { id: "opencode" }),
   ]
-  await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
+  await setupTimeline(page, {
+    settings: { timelineDetail: timelinePresets[2].value },
+    messages: [userMessage(), assistantMessage(parts)],
+  })
 
   const group = page.locator(`[data-timeline-part-ids="${parts.map((part) => part.id).join(",")}"]`)
   await group.getByRole("button").click()

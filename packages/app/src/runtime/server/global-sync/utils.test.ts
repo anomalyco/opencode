@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentListOutput, ModelListOutput, ProviderListOutput } from "@opencode-ai/client/promise"
-import { directoryKey, normalizeAgentList, normalizeProviderList } from "./utils"
+import type { AgentListOutput, ModelListOutput, Project, ProviderListOutput } from "@opencode-ai/client/promise"
+import { directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
 
 describe("normalizeAgentList", () => {
   test("adapts current agents to the app agent shape", () => {
@@ -82,6 +82,15 @@ describe("normalizeProviderList", () => {
       cost: { input: 1, output: 2 },
       variants: { high: {} },
     })
+  })
+})
+
+describe("normalizeProjectInfo", () => {
+  test("keeps the project VCS backend", () => {
+    const project = { id: "prj", canonical: "/repo", time: { created: 1, updated: 1 }, sandboxes: [] }
+    expect(normalizeProjectInfo({ ...project, vcs: "git" } as Project).vcs).toBe("git")
+    expect(normalizeProjectInfo({ ...project, vcs: "hg" } as Project).vcs).toBe("hg")
+    expect(normalizeProjectInfo(project as Project).vcs).toBeUndefined()
   })
 })
 

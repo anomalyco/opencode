@@ -18,7 +18,6 @@ import { KV } from "./kv.js"
 
 const Refresh = Schema.Struct({
   attemptedAt: Schema.Number,
-  refreshedAt: Schema.optionalKey(Schema.Number),
 })
 const refreshInterval = Duration.toMillis(Duration.days(1))
 
@@ -161,7 +160,7 @@ const layer = Layer.effect(
 
               if (status !== "cached") {
                 // Record attempts before network work so failures obey the same refresh interval.
-                yield* kv.set(key, { ...previous, attemptedAt: now })
+                yield* kv.set(key, { attemptedAt: now })
 
                 if (status === "cloned") {
                   yield* git.repo
@@ -205,8 +204,6 @@ const layer = Layer.effect(
                     .resetHard(existing, target ? `origin/${target}` : "HEAD")
                     .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })))
                 }
-
-                yield* kv.set(key, { attemptedAt: now, refreshedAt: yield* Clock.currentTimeMillis })
               }
 
               const checkout = yield* git.repo.discover(AbsolutePath.make(localPath))

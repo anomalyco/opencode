@@ -252,13 +252,25 @@
     justify-content: center;
     flex-shrink: 0;
     color: var(--v2-text-text-faint);
-    margin-left: auto;
+    margin-inline-start: auto;
+    opacity: 0;
+    transform: translateX(-4px);
     transition:
       opacity 0.15s ease,
-      color 0.15s ease;
+      color 0.15s ease,
+      transform 0.15s ease;
 
-    @media (hover: hover) {
-      opacity: 0;
+    :dir(rtl) & {
+      transform: translateX(4px);
+    }
+
+    @media (hover: none) {
+      opacity: 1;
+      transform: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
     }
   }
 
@@ -285,6 +297,7 @@
 
     [data-component="task-tool-action"] {
       opacity: 1;
+      transform: none;
     }
   }
 }

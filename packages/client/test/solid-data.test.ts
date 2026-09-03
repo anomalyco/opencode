@@ -409,6 +409,66 @@ test("refreshes global credential events across every loaded location and worksp
   }
 })
 
+test("refreshes references for the location an update names", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const requests: URL[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      requests.push(url)
+      const directory = url.searchParams.get("location[directory]") ?? "/project"
+      return Response.json({
+        location: {
+          directory,
+          workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
+          project: { id: "project", directory, canonical: directory },
+        },
+        data: [],
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  const other = { directory: "/other", workspaceID: "workspace-other" }
+
+  try {
+    await Promise.all([setup.data.location.reference.sync(), setup.data.location.reference.sync(other)])
+    requests.length = 0
+
+    const updated: OpenCodeEvent = {
+      id: "evt_reference.updated",
+      created: 1,
+      type: "reference.updated",
+      location: other,
+      data: {},
+    }
+    listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
+    await wait(() => requests.length === 1)
+    expect([
+      requests[0]!.pathname,
+      requests[0]!.searchParams.get("location[directory]"),
+      requests[0]!.searchParams.get("location[workspace]"),
+    ]).toEqual(["/api/reference", "/other", "workspace-other"])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("reports optimistic sessions as creating until the request settles", async () => {
   const release = Promise.withResolvers<void>()
   const api = OpenCode.make({

@@ -13,6 +13,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -24,6 +25,7 @@ const it = testEffect(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, Session.node, LocationServiceMap.node]),
     [
       Global.node.replace(tempGlobalLayer),
+      offlineModels,
       Watcher.node.replace(Watcher.configured({ enabled: false })),
       SessionExecution.node.replace(SessionExecution.noopLayer),
     ],

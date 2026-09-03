@@ -42,6 +42,11 @@ export interface Interface extends State.Transformable<Editor> {
   readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
 }
 
+/** A local execution result after hooks and content normalization. */
+export interface NormalizedResult extends Tool.Result {
+  readonly content: ReadonlyArray<Tool.Content>
+}
+
 export interface Snapshot {
   readonly definitions: ReadonlyArray<ToolDefinition>
   readonly codeModeCatalog?: CodeModeCatalog.Inventory
@@ -53,7 +58,7 @@ export interface Snapshot {
     readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
-  }) => Effect.Effect<Tool.Result & { readonly content: ReadonlyArray<Tool.Content> }, Tool.Error>
+  }) => Effect.Effect<NormalizedResult, Tool.Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Tool") {}

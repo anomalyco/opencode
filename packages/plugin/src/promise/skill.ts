@@ -5,6 +5,7 @@ import type { DeepMutable } from "./types.js"
 
 export interface SkillEditor {
   list(): readonly DeepMutable<Skill.Info>[]
+  get(id: string): DeepMutable<Skill.Info> | undefined
   add(skill: Skill.Info): void
   update(id: string, update: (skill: DeepMutable<Skill.Info>) => void): void
   remove(id: string): void

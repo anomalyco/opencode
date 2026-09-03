@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 import {
   assistantID,
   assistantMessage,
@@ -19,6 +20,9 @@ for (const width of [1400, 390]) {
       messages: [userMessage()],
       sessionStatus: { [sessionID]: { type: "busy" } },
       viewport: { width, height: 900 },
+      settings: {
+        timelineDetail: { ...timelinePresets[2].value, thinking: { placement: "separate", details: "collapsed" } },
+      },
     })
     const working = page.locator('[data-component="session-working"]')
     await expect(working).toHaveCount(1)
@@ -51,7 +55,9 @@ for (const name of ["shell", "patch", "subagent"] as const) {
   test(`hides Working during ${name} input and execution, then restores it on completion`, async ({ page }) => {
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistantMessage([], { completed: false })],
-      settings: { editToolPartsExpanded: true },
+      settings: {
+        timelineDetail: { ...timelinePresets[0].value, shell: { placement: "separate", details: "collapsed" } },
+      },
     })
     const working = page.locator('[data-component="session-working"]')
     await expect(working).toBeVisible()
@@ -89,13 +95,8 @@ for (const name of ["shell", "patch", "subagent"] as const) {
     await expect(working).toHaveCount(0)
 
     await timeline.send(partUpdated(toolPart(id, name, "completed", input, { metadata })))
-    if (name === "shell") {
-      const group = page.locator('[data-component="collapsed-tool-group"]')
-      await expect(
-        group.getByRole("button", { name: "Used 1 Shell", exact: true, includeHidden: true }),
-      ).toHaveAttribute("aria-expanded", "false")
-      await expect(group).toBeVisible()
-    }
+    await expect(tool).toBeVisible()
+    await expect(page.locator('[data-component="collapsed-tool-group"]')).toHaveCount(0)
     await expect(working.locator('[data-component="text-shimmer"]')).toHaveAttribute("aria-label", "Working")
     await expect(working).toBeVisible()
     await expect(working.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
@@ -259,6 +260,7 @@ for (const failed of [false, true]) {
     const editor = page.locator('[data-component="composer"]').getByRole("textbox")
     await expect(editor).toBeEditable()
     await editor.fill("Check the working indicator immediately.")
+    await expect(page.locator('[data-action="composer-submit"]')).toBeEnabled()
     const requested = page.waitForRequest(
       (request) =>
         request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/prompt`,

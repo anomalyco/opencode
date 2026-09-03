@@ -32,6 +32,7 @@ type Editor = {
   add(name: string, source: Source): void
   remove(name: string): void
   list(): readonly [string, Source][]
+  get(name: string): Source | undefined
 }
 
 export interface Interface extends State.Transformable<Editor> {
@@ -98,6 +99,7 @@ const layer = Layer.effect(
         add: (name, source) => editor.sources.set(name, source),
         remove: (name) => editor.sources.delete(name),
         list: () => Array.from(editor.sources),
+        get: (name) => editor.sources.get(name),
       }),
       notify: () =>
         Effect.gen(function* () {

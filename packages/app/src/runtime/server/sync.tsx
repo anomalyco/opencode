@@ -230,8 +230,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     children.mark(key)
     if (event.type === "config.updated" || event.type === "agent.updated") queue.push(key)
     if (event.type === "worktree.updated") void bootstrap.refetch()
-    if (event.type === "reference.updated" && children.active(key))
-      void data.location.reference.sync({ directory: key }).catch(() => undefined)
   })
 
   onCleanup(unsub)

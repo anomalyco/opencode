@@ -69,7 +69,8 @@ const HOSTED_TOOLS = {
 
 // Grok speaks the standard Responses reasoning dialect (`reasoning_summary_text.*`,
 // handled by the baseline); only its hosted tool vocabulary differs.
-const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
+const step = (state: OpenResponses.ParserState, input: OpenResponses.Event) => {
+  const event = OpenResponses.normalize(state, input)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
   return OpenResponses.step(state, event)

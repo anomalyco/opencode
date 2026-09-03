@@ -14,6 +14,7 @@ import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator
 import { Shell } from "@opencode-ai/core/shell"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { location } from "./fixture/location"
+import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -59,6 +60,7 @@ const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Bus.node, Session.node, SessionExecution.node, LocationServiceMap.node]), [
     Bus.node.replace(Bus.configured({ persist: true })),
     SessionExecution.node.replace(executionLayer.pipe(Layer.provide(controlLayer))),
+    offlineModels,
   ]).pipe(Layer.provideMerge(controlLayer)),
 )
 

@@ -8,8 +8,9 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Option, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
-import { currentContentDefaultOpen } from "../message/current-tool-state"
+import { currentContentDefaultOpen, currentToolFailed, currentToolHasLoadedFiles } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
+import { timelineCategory, timelineNoticeRequired, type TimelineDetail } from "./detail"
 
 export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
 
@@ -29,6 +30,7 @@ export type TimelineProjectionInput = {
   reasoningMode: ReasoningMode
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
+  timelineDetail?: TimelineDetail
   pendingUserMessageIDs?: ReadonlySet<string>
   previousRows?: TimelineRow.TimelineRow[]
 }
@@ -42,6 +44,8 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.pendingUserMessageIDs,
     input.shellToolDefaultOpen ?? false,
     input.editToolDefaultOpen ?? false,
+    undefined,
+    input.timelineDetail,
   )
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
   const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row] as const))
@@ -75,6 +79,7 @@ export function createReactiveTimelineProjection(input: {
   reasoningMode: Accessor<ReasoningMode>
   shellToolDefaultOpen?: Accessor<boolean>
   editToolDefaultOpen?: Accessor<boolean>
+  timelineDetail?: Accessor<TimelineDetail>
   pendingUserMessageIDs?: Accessor<ReadonlySet<string>>
 }) {
   const sessionMessageByID = createMemo(
@@ -102,10 +107,12 @@ export function createReactiveTimelineProjection(input: {
       input.pendingUserMessageIDs?.(),
       input.shellToolDefaultOpen?.() ?? false,
       input.editToolDefaultOpen?.() ?? false,
-      (content, showReasoning) =>
+      (content, showReasoning, detail) =>
         content.type === "tool"
-          ? renderable(content, showReasoning)
-          : (content.type === "text" || showReasoning) && textVisible().get(content)!(),
+          ? renderable(content, showReasoning, detail)
+          : (content.type === "text" || (detail ? detail.thinking.placement !== "hidden" : showReasoning)) &&
+            textVisible().get(content)!(),
+      input.timelineDetail?.(),
     ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
@@ -157,6 +164,7 @@ export namespace Timeline {
     shellToolDefaultOpen = false,
     editToolDefaultOpen = false,
     isRenderable = renderable,
+    detail?: TimelineDetail,
   ) {
     type Turn = {
       id: string
@@ -208,37 +216,68 @@ export namespace Timeline {
     })
 
     const activeMessageID = turns.findLast((turn) => !pendingUserMessageIDs?.has(turn.id))?.id ?? turns.at(-1)?.id
+    const visibleNotice = (message: Notice) =>
+      !detail || detail.notices.placement !== "hidden" || timelineNoticeRequired(message)
+    const visibleTurns = detail
+      ? turns.filter((turn) => {
+          if (turn.user) return true
+          if (turn.shell && (detail.shell.placement !== "hidden" || shellFailed(turn.shell))) return true
+          return turn.entries.some((entry) =>
+            entry.type === "notice"
+              ? visibleNotice(entry.message)
+              : !!entry.message.error ||
+                !!entry.message.retry ||
+                entry.message.content.some((content) => isRenderable(content, showReasoning, detail)),
+          )
+        })
+      : turns
+    const rows: TimelineRow.TimelineRow[] = [
+      ...leading
+        .filter(visibleNotice)
+        .map((message) => new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id })),
+      ...visibleTurns.flatMap((turn, index) => {
+        if (turn.shell)
+          return [
+            ...(index > 0 ? [new TimelineRow.TurnGap({ userMessageID: turn.id })] : []),
+            ...(!detail || detail.shell.placement !== "hidden" || shellFailed(turn.shell)
+              ? [new TimelineRow.Shell({ userMessageID: turn.id, messageID: turn.shell.id })]
+              : []),
+            ...turn.entries.flatMap((entry) =>
+              entry.type === "notice" && visibleNotice(entry.message)
+                ? [new TimelineRow.Notice({ userMessageID: turn.id, messageID: entry.message.id })]
+                : [],
+            ),
+          ]
+        return constructMessageRows(
+          turn.user,
+          turn.id,
+          turn.entries,
+          index,
+          showReasoning,
+          status,
+          turn.id === activeMessageID,
+          shellToolDefaultOpen,
+          editToolDefaultOpen,
+          isRenderable,
+          detail,
+        )
+      }),
+    ]
     return {
       activeMessageID,
-      rows: [
-        ...leading.map(
-          (message) => new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id }),
-        ),
-        ...turns.flatMap((turn, index) => {
-          if (turn.shell)
-            return [
-              ...(index > 0 ? [new TimelineRow.TurnGap({ userMessageID: turn.id })] : []),
-              new TimelineRow.Shell({ userMessageID: turn.id, messageID: turn.shell.id }),
-              ...turn.entries.flatMap((entry) =>
-                entry.type === "notice"
-                  ? [new TimelineRow.Notice({ userMessageID: turn.id, messageID: entry.message.id })]
-                  : [],
-              ),
-            ]
-          return constructMessageRows(
-            turn.user,
-            turn.id,
-            turn.entries,
-            index,
-            showReasoning,
-            status,
-            turn.id === activeMessageID,
-            shellToolDefaultOpen,
-            editToolDefaultOpen,
-            isRenderable,
+      rows: detail
+        ? groupMessages(
+            rows,
+            detail,
+            new Set(
+              messages
+                .filter(
+                  (message) => timelineNoticeRequired(message) || (message.type === "shell" && shellFailed(message)),
+                )
+                .map((message) => message.id),
+            ),
           )
-        }),
-      ],
+        : rows,
     }
   }
 
@@ -253,6 +292,7 @@ export namespace Timeline {
     shellToolDefaultOpen = false,
     editToolDefaultOpen = false,
     isRenderable = renderable,
+    detail?: TimelineDetail,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -261,7 +301,7 @@ export namespace Timeline {
     const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
     const lastContent = lastAssistant?.content.at(-1)
     const thinking =
-      showReasoning &&
+      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
       isActive &&
       status.type === "busy" &&
       lastAssistant?.time.completed === undefined &&
@@ -280,7 +320,9 @@ export namespace Timeline {
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
       const refs = messages.flatMap((message, messageIndex) =>
         contentEntries(message)
-          .filter((entry) => isRenderable(entry.content, showReasoning) && !(thinking && entry.content === lastContent))
+          .filter(
+            (entry) => isRenderable(entry.content, showReasoning, detail) && !(thinking && entry.content === lastContent),
+          )
           .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
       )
       const interruptedAt = messages.findIndex((message) => isInterrupted(message.error))
@@ -288,7 +330,7 @@ export namespace Timeline {
       const after = interruptedAt < 0 ? [] : refs.filter((ref) => ref.messageIndex > interruptedAt)
       const appendGroups = (items: typeof refs) => {
         let offset = 0
-        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen).forEach((group) => {
+        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, detail).forEach((group) => {
           const tool = group.type !== "part" || items[offset]?.content.type !== "text"
           offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
@@ -306,7 +348,8 @@ export namespace Timeline {
 
       appendGroups(before)
       if (interruptedAt >= 0) {
-        if (!compaction) rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
+        if (!compaction && detail?.notices.placement !== "hidden")
+          rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
         appendGroups(after)
       }
 
@@ -325,6 +368,7 @@ export namespace Timeline {
           assistantSegment.push(entry.message)
           return
         case "notice":
+          if (detail?.notices.placement === "hidden" && !timelineNoticeRequired(entry.message)) return
           appendAssistantSegment(assistantSegment)
           assistantSegment = []
           rows.push(new TimelineRow.Notice({ userMessageID: turnID, messageID: entry.message.id }))
@@ -364,6 +408,48 @@ export namespace Timeline {
 
 function isInterrupted(error: SessionMessageAssistant["error"]) {
   return error?.type.toLowerCase().includes("abort") || error?.type.toLowerCase().includes("interrupt")
+}
+
+function shellFailed(message: SessionMessageShell) {
+  return (
+    message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
+  )
+}
+
+function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, required: ReadonlySet<string>) {
+  return rows.reduce<TimelineRow.TimelineRow[]>((result, row) => {
+    const previous = result.at(-1)
+    const current =
+      ((row._tag === "Notice" && detail.notices.placement === "grouped") ||
+        (row._tag === "Shell" && detail.shell.placement === "grouped")) &&
+      !required.has(row.messageID)
+        ? new TimelineRow.AssistantPart({
+            userMessageID: row.userMessageID,
+            previousAssistantPart: previous?._tag === "AssistantPart",
+            spacing: previous?._tag === "AssistantPart" ? "tool" : undefined,
+            group: {
+              type: "context",
+              key: `message:${row.messageID}`,
+              refs: [{ messageID: row.messageID, partID: row.messageID }],
+            },
+          })
+        : row
+    if (
+      previous?._tag === "AssistantPart" &&
+      previous.group.type === "context" &&
+      current._tag === "AssistantPart" &&
+      current.group.type === "context" &&
+      previous.userMessageID === current.userMessageID
+    ) {
+      result[result.length - 1] = new TimelineRow.AssistantPart({
+        ...previous,
+        group: { ...previous.group, refs: [...previous.group.refs, ...current.group.refs] },
+      })
+      return result
+    }
+    result.push(current)
+    return result
+  }, [])
 }
 
 export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
@@ -494,11 +580,14 @@ function groupPartKey(ref: PartRef) {
   return `${ref.messageID}:${ref.partID}`
 }
 
-function renderable(content: Content, showReasoning: boolean) {
+function renderable(content: Content, showReasoning: boolean, detail?: TimelineDetail) {
   if (content.type === "text") return !!content.text.trim()
-  if (content.type === "reasoning") return showReasoning && !!content.text.trim()
+  if (content.type === "reasoning")
+    return (detail ? detail.thinking.placement !== "hidden" : showReasoning) && !!content.text.trim()
+  if (detail && currentToolFailed(content)) return true
   if (content.name === "todowrite") return false
   if (content.name === "question") return content.state.status !== "streaming" && content.state.status !== "running"
+  if (detail && detail[timelineCategory(content)!].placement === "hidden") return false
   return true
 }
 
@@ -506,6 +595,7 @@ function groupContent(
   items: { messageID: string; partID: string; content: Content }[],
   shellToolDefaultOpen: boolean,
   editToolDefaultOpen: boolean,
+  detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
   let adjacent: { type: "context" | "patch" | "edit"; refs: PartRef[]; tools: boolean } | undefined
@@ -513,7 +603,7 @@ function groupContent(
     const current = adjacent
     const first = current?.refs[0]
     if (!first) return
-    if (!current.tools) {
+    if (!current.tools && !detail) {
       groups.push(
         ...current.refs.map((ref) => ({ type: "part" as const, key: `part:${ref.messageID}:${ref.partID}`, ref })),
       )
@@ -539,9 +629,12 @@ function groupContent(
             shellToolDefaultOpen,
             editToolDefaultOpen,
             adjacent?.type === "context" && adjacent.tools,
+            detail,
           )
         : item.content.type === "reasoning"
-          ? "context"
+          ? detail && detail.thinking.placement !== "grouped"
+            ? undefined
+            : "context"
           : undefined
     if (type) {
       if (adjacent?.type !== type) flush()
@@ -566,8 +659,17 @@ function toolGroupType(
   shellExpanded: boolean,
   editExpanded: boolean,
   hasContextGroup: boolean,
+  detail?: TimelineDetail,
 ) {
-  if (content.name === "question" || hasLoadedFiles(content)) return undefined
+  if (detail) {
+    if (currentToolFailed(content) || content.name === "question") return undefined
+    const category = timelineCategory(content)!
+    if (detail[category].placement === "grouped") return "context"
+    if (content.name === "patch") return "patch"
+    if (content.name === "edit") return "edit"
+    return undefined
+  }
+  if (content.name === "question" || currentToolHasLoadedFiles(content)) return undefined
   if (content.state.status === "error") {
     if ((content.name === "shell" || content.name === "execute") && shellExpanded) return undefined
     if ((content.name === "edit" || content.name === "write" || content.name === "patch") && editExpanded)
@@ -585,12 +687,6 @@ function toolGroupType(
   if (content.name === "patch") return "patch"
   if (content.name === "edit") return "edit"
   return undefined
-}
-
-function hasLoadedFiles(content: Extract<Content, { type: "tool" }>) {
-  if (content.name !== "read" || content.state.status !== "completed") return false
-  const loaded = content.state.metadata?.loaded
-  return Array.isArray(loaded) && loaded.some((path) => typeof path === "string")
 }
 
 export function reasoningHeading(text: string): string | undefined {
@@ -671,5 +767,5 @@ function record(value: unknown): value is Record<string, unknown> {
 function isNotice(message: SessionMessageInfo): message is Notice {
   if (message.type === "user" || message.type === "assistant" || message.type === "shell") return false
   if (message.type !== "synthetic") return true
-  return !!message.description?.trim()
+  return !!message.description?.trim() || timelineNoticeRequired(message)
 }

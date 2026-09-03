@@ -31,16 +31,25 @@ export namespace UpdateArtifact {
     if (!isRecord(token) || typeof token.value !== "string")
       throw new Error("GitHub OIDC response did not include a token")
 
-    const response = await fetch("https://update.opencode.ai/api/publish", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token.value}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(artifact),
-    })
-    if (response.ok) return
-    throw new Error(`Failed to publish update artifact: ${response.status} ${await response.text()}`)
+    for (const attempt of [0, 1, 2]) {
+      const response = await fetch("https://update.opencode.ai/api/publish", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token.value}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(artifact),
+      })
+      if (response.ok) return
+      // D1 can commit the upsert and still time out. Replaying the same artifact is safe.
+      if (response.status >= 500 && attempt < 2) {
+        await response.arrayBuffer()
+        console.warn(`Update artifact publication returned ${response.status}; retrying`)
+        await Bun.sleep((attempt + 1) * 1_000)
+        continue
+      }
+      throw new Error(`Failed to publish update artifact: ${response.status} ${await response.text()}`)
+    }
   }
 
   export async function desktopMetadata(version: string, repo: string) {

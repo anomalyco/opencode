@@ -100,6 +100,7 @@ const layer = Layer.effect(
                 editor.providers.set(providerID, current)
               }
               fn(current.provider)
+              current.provider.id = providerID
             },
             remove: (providerID) => {
               editor.providers.delete(providerID)

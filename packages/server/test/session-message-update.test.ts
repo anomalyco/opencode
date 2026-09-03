@@ -55,7 +55,12 @@ it.live("updates completed assistant message content through the session HTTP AP
       }),
     )
     const handler = yield* ServerFetch.make(
-      { app: { version: "test-version" }, database: { path: ":memory:" }, fs: { filewatcher: false } },
+      {
+        app: { version: "test-version" },
+        database: { path: ":memory:" },
+        fs: { filewatcher: false },
+        models: { fetch: false },
+      },
       {
         overrides: [
           SessionExecution.node.replace(

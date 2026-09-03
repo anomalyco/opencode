@@ -107,7 +107,6 @@ type Store = {
     messageCursor: Record<string, string | undefined>
     messageLoading: Record<string, boolean>
     pending: Record<string, SessionInboxInfo[]>
-    input: Record<string, string[]>
     permission: Record<string, PermissionRequest[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormWithLocation[]>
@@ -198,7 +197,6 @@ export function createData(config: CreateDataInput) {
       messageCursor: {},
       messageLoading: {},
       pending: {},
-      input: {},
       permission: {},
       form: {},
     },
@@ -230,13 +228,6 @@ export function createData(config: CreateDataInput) {
         "pending",
         sessionID,
         (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inboxID),
-      )
-    if (store.session.input[sessionID]?.includes(inboxID))
-      setStore(
-        "session",
-        "input",
-        sessionID,
-        (store.session.input[sessionID] ?? []).filter((id) => id !== inboxID),
       )
   }
 
@@ -335,8 +326,8 @@ export function createData(config: CreateDataInput) {
     return request
   }
 
-  // Upsert an admitted inbox item into pending, input, and (for user and
-  // synthetic items) the visible transcript. Used by the inbox.enqueued
+  // Upsert an admitted inbox item into pending and (for user and synthetic
+  // items) the visible transcript. Used by the inbox.enqueued
   // handler and by optimistic admission; the upsert is what reconciles
   // the durable echo with an optimistic placeholder — the durable payload and
   // times replace the client's guess.
@@ -351,8 +342,6 @@ export function createData(config: CreateDataInput) {
         at < 0 ? [...pending, item] : pending.map((entry, index) => (index === at ? item : entry)),
       )
       if (item.type === "compaction") return
-      const input = store.session.input[item.sessionID] ?? []
-      if (!input.includes(item.id)) setStore("session", "input", item.sessionID, [...input, item.id])
       materializeInboxMessage(item)
     })
   }
@@ -401,13 +390,42 @@ export function createData(config: CreateDataInput) {
       index.set(item.id, messages.length)
       messages.push(item)
     },
+    insert(sessionID: string, item: SessionMessageInfo) {
+      message.update(sessionID, (draft, index) => message.append(draft, index, item))
+    },
+    // Streaming events target one assistant message and, within it, the latest part of a kind.
+    // A missing target means the row was never loaded or was evicted; the event is dropped.
+    editAssistant(sessionID: string, messageID: string, fn: (assistant: SessionMessageAssistant) => void) {
+      message.update(sessionID, (draft, index) => {
+        const position = index.get(messageID)
+        const item = position === undefined ? undefined : draft[position]
+        if (item?.type === "assistant") fn(item)
+      })
+    },
+    editTool(sessionID: string, messageID: string, toolID: string, fn: (tool: SessionMessageAssistantTool) => void) {
+      message.editAssistant(sessionID, messageID, (assistant) => {
+        const tool = assistant.content.findLast(
+          (item): item is SessionMessageAssistantTool => item.type === "tool" && item.id === toolID,
+        )
+        if (tool) fn(tool)
+      })
+    },
+    editText(sessionID: string, messageID: string, fn: (text: SessionMessageAssistantText) => void) {
+      message.editAssistant(sessionID, messageID, (assistant) => {
+        const text = assistant.content.findLast((item): item is SessionMessageAssistantText => item.type === "text")
+        if (text) fn(text)
+      })
+    },
+    editReasoning(sessionID: string, messageID: string, fn: (reasoning: SessionMessageAssistantReasoning) => void) {
+      message.editAssistant(sessionID, messageID, (assistant) => {
+        const reasoning = assistant.content.findLast(
+          (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
+        )
+        if (reasoning) fn(reasoning)
+      })
+    },
     activeAssistant(messages: SessionMessageInfo[]) {
       const item = messages.findLast((item) => item.type === "assistant" && !item.time.completed)
-      return item?.type === "assistant" ? item : undefined
-    },
-    assistant(messages: SessionMessageInfo[], index: Map<string, number>, messageID: string) {
-      const position = index.get(messageID)
-      const item = position === undefined ? undefined : messages[position]
       return item?.type === "assistant" ? item : undefined
     },
     shell(messages: SessionMessageInfo[], shellID: string) {
@@ -417,19 +435,6 @@ export function createData(config: CreateDataInput) {
     compaction(messages: SessionMessageInfo[]) {
       const item = messages.findLast((item) => item.type === "compaction" && item.status === "running")
       return item?.type === "compaction" ? item : undefined
-    },
-    latestTool(assistant: SessionMessageAssistant | undefined, id?: string) {
-      return assistant?.content.findLast(
-        (item): item is SessionMessageAssistantTool => item.type === "tool" && (id === undefined || item.id === id),
-      )
-    },
-    latestText(assistant: SessionMessageAssistant | undefined) {
-      return assistant?.content.findLast((item): item is SessionMessageAssistantText => item.type === "text")
-    },
-    latestReasoning(assistant: SessionMessageAssistant | undefined) {
-      return assistant?.content.findLast(
-        (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
-      )
     },
     reindex(messages: SessionMessageInfo[], index: Map<string, number>, start: number) {
       for (let position = start; position < messages.length; position++) {
@@ -508,12 +513,8 @@ export function createData(config: CreateDataInput) {
         delete draft.messageCursor[sessionID]
         delete draft.messageLoading[sessionID]
         delete draft.pending[sessionID]
-        delete draft.input[sessionID]
         if (messages.length) draft.message[sessionID] = messages
-        if (pending.length) {
-          draft.pending[sessionID] = pending
-          draft.input[sessionID] = pending.filter((item) => item.type !== "compaction").map((item) => item.id)
-        }
+        if (pending.length) draft.pending[sessionID] = pending
       }),
     )
   }
@@ -537,7 +538,6 @@ export function createData(config: CreateDataInput) {
         delete draft.messageCursor[sessionID]
         delete draft.messageLoading[sessionID]
         delete draft.pending[sessionID]
-        delete draft.input[sessionID]
         delete draft.permission[sessionID]
         delete draft.form[sessionID]
         for (const [rootID, family] of Object.entries(draft.family)) {
@@ -609,14 +609,12 @@ export function createData(config: CreateDataInput) {
         const previous = store.session.info[event.data.sessionID]?.agent
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "agent", event.data.agent)
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "agent-switched",
-            agent: event.data.agent,
-            previous,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "agent-switched",
+          agent: event.data.agent,
+          previous,
+          time: { created: event.created },
         })
         return
       }
@@ -624,13 +622,11 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "model", event.data.model)
         if (!store.session.message[event.data.sessionID]) return
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "model-switched",
-            model: event.data.model,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "model-switched",
+          model: event.data.model,
+          time: { created: event.created },
         })
         void api()
           .session.message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
@@ -665,16 +661,14 @@ export function createData(config: CreateDataInput) {
           setStore("session", "info", event.data.sessionID, "location", event.data.location)
           if (event.data.projectID) setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
           setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
-          message.update(event.data.sessionID, (draft, index) => {
-            message.append(draft, index, {
-              id: messageIDFromEvent(event.id),
-              type: "location-switched",
-              location: event.data.location,
-              projectID: event.data.projectID,
-              subpath: event.data.subpath,
-              previous,
-              time: { created: event.created },
-            })
+          message.insert(event.data.sessionID, {
+            id: messageIDFromEvent(event.id),
+            type: "location-switched",
+            location: event.data.location,
+            projectID: event.data.projectID,
+            subpath: event.data.subpath,
+            previous,
+            time: { created: event.created },
           })
         }
         return
@@ -704,7 +698,7 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.inbox.delivered": {
-        const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inboxID) ?? false
+        const admitted = result.session.input.has(event.data.sessionID, event.data.inboxID)
         removePending(event.data.sessionID, event.data.inboxID)
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.inboxID)
@@ -748,42 +742,36 @@ export function createData(config: CreateDataInput) {
         // and produce no transcript message.
         const updateText = event.data.text
         if (updateText === undefined) return
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "system",
-            text: updateText,
-            description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
-            metadata: event.metadata,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "system",
+          text: updateText,
+          description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
+          metadata: event.metadata,
+          time: { created: event.created },
         })
         return
       case "session.synthetic":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "synthetic",
-            text: event.data.text,
-            description: event.data.description,
-            metadata: event.data.metadata,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "synthetic",
+          text: event.data.text,
+          description: event.data.description,
+          metadata: event.data.metadata,
+          time: { created: event.created },
         })
         return
       case "session.shell.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "shell",
-            shellID: event.data.shell.id,
-            command: event.data.shell.command,
-            status: event.data.shell.status,
-            exit: event.data.shell.exit,
-            metadata:
-              event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "shell",
+          shellID: event.data.shell.id,
+          command: event.data.shell.command,
+          status: event.data.shell.status,
+          exit: event.data.shell.exit,
+          metadata:
+            event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
+          time: { created: event.created },
         })
         return
       case "session.shell.ended":
@@ -798,9 +786,8 @@ export function createData(config: CreateDataInput) {
         return
       case "session.message.content.updated": {
         if (store.session.message[event.data.sessionID])
-          message.update(event.data.sessionID, (draft, index) => {
-            const assistant = message.assistant(draft, index, event.data.messageID)
-            if (assistant) assistant.content = [...event.data.content]
+          message.editAssistant(event.data.sessionID, event.data.messageID, (assistant) => {
+            assistant.content = [...event.data.content]
           })
         if (!sync.pending(`session.message:${event.data.sessionID}`)) return
         result.session.message.invalidate(event.data.sessionID)
@@ -842,65 +829,54 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.step.streamed":
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (currentAssistant) currentAssistant.time.streamed = event.created
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.streamed = event.created
         })
         return
       case "session.step.ended": {
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!currentAssistant) return
-          currentAssistant.time.completed = event.created
-          currentAssistant.finish = event.data.finish
-          currentAssistant.rawFinish = event.data.rawFinish
-          currentAssistant.providerState = event.data.providerState
-          currentAssistant.cost = event.data.cost
-          currentAssistant.tokens = event.data.tokens
-          if (event.data.snapshot)
-            currentAssistant.snapshot = { ...currentAssistant.snapshot, end: event.data.snapshot }
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.completed = event.created
+          assistant.finish = event.data.finish
+          assistant.rawFinish = event.data.rawFinish
+          assistant.providerState = event.data.providerState
+          assistant.cost = event.data.cost
+          assistant.tokens = event.data.tokens
+          if (event.data.snapshot) assistant.snapshot = { ...assistant.snapshot, end: event.data.snapshot }
         })
         return
       }
       case "session.step.failed":
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!currentAssistant) return
-          currentAssistant.time.completed = event.created
-          currentAssistant.finish = event.data.finish ?? "error"
-          currentAssistant.rawFinish = event.data.rawFinish
-          currentAssistant.providerState = event.data.providerState
-          currentAssistant.error = event.data.error
-          currentAssistant.retry = undefined
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.completed = event.created
+          assistant.finish = event.data.finish ?? "error"
+          assistant.rawFinish = event.data.rawFinish
+          assistant.providerState = event.data.providerState
+          assistant.error = event.data.error
+          assistant.retry = undefined
           if (event.data.cost !== undefined && event.data.tokens !== undefined) {
-            currentAssistant.cost = event.data.cost
-            currentAssistant.tokens = event.data.tokens
+            assistant.cost = event.data.cost
+            assistant.tokens = event.data.tokens
           }
         })
         return
       case "session.text.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
-            type: "text",
-            text: "",
-          })
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.content.push({ type: "text", text: "" })
         })
         return
       case "session.text.delta":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) match.text += event.data.delta
+        message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
+          text.text += event.data.delta
         })
         return
       case "session.text.ended":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) match.text = event.data.text
+        message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
+          text.text = event.data.text
         })
         return
       case "session.tool.input.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.content.push({
             type: "tool",
             id: event.data.id,
             name: event.data.name,
@@ -910,86 +886,60 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.tool.input.delta":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status === "streaming") match.state.input += event.data.delta
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status === "streaming") tool.state.input += event.data.delta
         })
         return
       case "session.tool.input.ended":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status === "streaming") match.state.input = event.data.text
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status === "streaming") tool.state.input = event.data.text
         })
         return
       case "session.tool.called":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (!match) return
-          match.time.ran = event.created
-          match.executed = event.data.executed
-          match.providerState = event.data.state
-          match.state = { status: "running", input: event.data.input, metadata: {} }
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          tool.time.ran = event.created
+          tool.executed = event.data.executed
+          tool.providerState = event.data.state
+          tool.state = { status: "running", input: event.data.input, metadata: {} }
         })
         return
       case "session.tool.progress":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status !== "running") return
-          match.state.metadata = event.data.metadata
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status === "running") tool.state.metadata = event.data.metadata
         })
         return
       case "session.tool.success":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status !== "running") return
-          match.state = {
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status !== "running") return
+          tool.state = {
             status: "completed",
-            input: match.state.input,
+            input: tool.state.input,
             metadata: event.data.metadata,
             content: [...event.data.content],
           }
-          match.executed = event.data.executed || match.executed === true
-          match.providerResultState = event.data.resultState
-          match.time.completed = event.created
+          tool.executed = event.data.executed || tool.executed === true
+          tool.providerResultState = event.data.resultState
+          tool.time.completed = event.created
         })
         return
       case "session.tool.failed":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (!match || (match.state.status !== "streaming" && match.state.status !== "running")) return
-          match.state = {
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status !== "streaming" && tool.state.status !== "running") return
+          tool.state = {
             status: "error",
             error: event.data.error,
-            input: typeof match.state.input === "string" ? {} : match.state.input,
+            input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
             content: event.data.content,
           }
-          match.executed = event.data.executed || match.executed === true
-          match.providerResultState = event.data.resultState
-          match.time.completed = event.created
+          tool.executed = event.data.executed || tool.executed === true
+          tool.providerResultState = event.data.resultState
+          tool.time.completed = event.created
         })
         return
       case "session.reasoning.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.content.push({
             type: "reasoning",
             text: "",
             state: event.data.state,
@@ -998,30 +948,20 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.reasoning.delta":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) match.text += event.data.delta
+        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
+          reasoning.text += event.data.delta
         })
         return
       case "session.reasoning.ended":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) {
-            match.text = event.data.text
-            match.time = { created: match.time?.created ?? event.created, completed: event.created }
-            if (event.data.state !== undefined) match.state = event.data.state
-          }
+        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
+          reasoning.text = event.data.text
+          reasoning.time = { created: reasoning.time?.created ?? event.created, completed: event.created }
+          if (event.data.state !== undefined) reasoning.state = event.data.state
         })
         return
       case "session.retry.scheduled":
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!currentAssistant) return
-          currentAssistant.retry = {
-            attempt: event.data.attempt,
-            at: event.data.at,
-            error: event.data.error,
-          }
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.retry = { attempt: event.data.attempt, at: event.data.at, error: event.data.error }
         })
         return
       case "session.execution.started":
@@ -1029,16 +969,14 @@ export function createData(config: CreateDataInput) {
         return
       case "session.compaction.started":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: event.data.inputID ?? messageIDFromEvent(event.id),
-            type: "compaction",
-            status: "running",
-            reason: event.data.reason,
-            summary: "",
-            recent: event.data.recent ?? "",
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: event.data.inputID ?? messageIDFromEvent(event.id),
+          type: "compaction",
+          status: "running",
+          reason: event.data.reason,
+          summary: "",
+          recent: event.data.recent ?? "",
+          time: { created: event.created },
         })
         if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
@@ -1073,11 +1011,12 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID]) {
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         }
+        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
         setStore(
           "session",
-          "input",
+          "pending",
           event.data.sessionID,
-          (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.to),
+          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
         )
         message.update(event.data.sessionID, (draft, index) => {
           const position = draft.findIndex((item) => item.id >= event.data.to)
@@ -1241,8 +1180,8 @@ export function createData(config: CreateDataInput) {
         }))
         break
       case "reference.updated":
-        result.location.reference.invalidate()
-        void result.location.reference.sync()
+        result.location.reference.invalidate(location)
+        void result.location.reference.sync(location)
         break
       case "integration.updated":
         result.location.integration.invalidate(location)
@@ -1354,12 +1293,17 @@ export function createData(config: CreateDataInput) {
       status(sessionID: string) {
         return store.session.active[sessionID] ?? "idle"
       },
+      // Inputs are the pending user and synthetic items; compactions are control items.
       input: {
         list(sessionID: string) {
-          return store.session.input[sessionID] ?? []
+          return (store.session.pending[sessionID] ?? []).flatMap((item) =>
+            item.type === "compaction" ? [] : [item.id],
+          )
         },
         has(sessionID: string, inboxID: string) {
-          return store.session.input[sessionID]?.includes(inboxID) ?? false
+          return (
+            store.session.pending[sessionID]?.some((item) => item.id === inboxID && item.type !== "compaction") ?? false
+          )
         },
       },
       pending: {
@@ -1383,12 +1327,6 @@ export function createData(config: CreateDataInput) {
             const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
             batch(() => {
               setStore("session", "pending", sessionID, reconcile(merged))
-              setStore(
-                "session",
-                "input",
-                sessionID,
-                reconcile(merged.filter((item) => item.type !== "compaction").map((item) => item.id)),
-              )
               merged.forEach(materializeInboxMessage)
             })
           })

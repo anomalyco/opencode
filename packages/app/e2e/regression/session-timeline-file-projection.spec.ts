@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 import { createTwoFilesPatch } from "diff"
 import {
   assistantMessage,
@@ -36,7 +37,9 @@ test("renders a completed single-file patch", async ({ page }) => {
         ),
       ]),
     ],
-    settings: { editToolPartsExpanded: true },
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+    },
   })
 
   const wrapper = page.locator(`[data-timeline-part-id="${id}"]`)
@@ -68,7 +71,9 @@ test("keeps an expanded file diff header at the same viewport position", async (
   const before = Array.from({ length: 80 }, (_, index) => `export const value${index} = ${index}\n`).join("")
   const after = before.replaceAll(" = ", " = compute(").replaceAll("\n", ")\n")
   await setupTimeline(page, {
-    settings: { editToolPartsExpanded: true },
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+    },
     messages: [
       userMessage([userText("Preceding context ".repeat(120))]),
       assistantMessage([
@@ -100,6 +105,7 @@ test("keeps an expanded file diff header at the same viewport position", async (
   const wrapper = page.locator(`[data-timeline-part-id="${id}"]`)
   const row = page.locator("[data-timeline-key]", { has: wrapper })
   const trigger = wrapper.getByRole("button")
+  await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await expect
     .poll(() =>
       row.evaluate((element) => {

@@ -19,6 +19,26 @@ const referenceLayer = AppNodeBuilder.build(LayerNode.group([Reference.node, Bus
 ])
 
 describe("Reference", () => {
+  it.effect("reads the current editor source by name", () =>
+    Effect.gen(function* () {
+      const references = yield* Reference.Service
+      const source = Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/docs") })
+      yield* references.transform((editor) => editor.add("docs", source))
+      yield* references.transform((editor) => {
+        expect(editor.get("docs")).toBe(editor.list()[0]?.[1])
+        expect(editor.get("docs")).toEqual(source)
+        expect(editor.get("missing")).toBeUndefined()
+        const replacement = Reference.GitSource.make({ type: "git", repository: "owner/repo" })
+        editor.add("docs", replacement)
+        expect(editor.get("docs")).toBe(replacement)
+        editor.remove("docs")
+        expect(editor.get("docs")).toBeUndefined()
+      })
+
+      expect(yield* references.list()).toEqual([])
+    }).pipe(Effect.provide(referenceLayer)),
+  )
+
   it.effect("reads batched references before cache work and update events", () => {
     const operations: RepositoryCache.EnsureInput[] = []
     const started = Deferred.makeUnsafe<void>()

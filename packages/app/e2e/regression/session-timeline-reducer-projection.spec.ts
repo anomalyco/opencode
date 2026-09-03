@@ -18,10 +18,10 @@ test("reducer-hardening: converges when idle arrives before final part and messa
   const textID = "prt_event_order_text"
   const assistant = assistantMessage([textPart(textID, "Partial")], { completed: false })
   const timeline = await setupTimeline(page, { messages: [userMessage(), assistant] })
-  await timeline.send(status("busy"), 100)
-  await timeline.send(status("idle"), 100)
-  await timeline.send(partUpdated(textPart(textID, "Final after early idle")), 120)
-  await timeline.send(messageUpdated(completedAssistantInfo(assistant)), 250)
+  await timeline.send(status("busy"))
+  await timeline.send(status("idle"))
+  await timeline.send(partUpdated(textPart(textID, "Final after early idle")))
+  await timeline.send(messageUpdated(completedAssistantInfo(assistant)))
 
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
   await expect(page.locator(`[data-timeline-part-id="${renderedPartID(textID)}"]`)).toContainText(
@@ -138,7 +138,7 @@ test("combines follow-up patches into one three-file stack inside Used", async (
   await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts", "c.ts"])
 })
 
-test("keeps failed search calls and their error cards inside the collapsed stack", async ({ page }) => {
+test("keeps failed search calls and their error cards outside the collapsed stack", async ({ page }) => {
   const parts = [
     toolPart(
       "prt_error_glob",
@@ -161,12 +161,9 @@ test("keeps failed search calls and their error cards inside the collapsed stack
   ]
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
-  const group = page.locator('[data-timeline-part-ids="prt_error_glob,prt_error_grep"]')
-  const summary = group.getByRole("button", { name: "Used 1 Glob, 1 Grep", exact: true })
-  await expect(summary.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("1 Glob, 1 Grep")
-  await summary.click()
-  await expect(group.locator('[data-kind="tool-error-card"]')).toHaveCount(2)
-  const glob = group.locator('[data-timeline-part-id="prt_error_glob"]')
+  await expect(page.locator('[data-component="collapsed-tool-group"]')).toHaveCount(0)
+  await expect(page.locator('[data-kind="tool-error-card"]')).toHaveCount(2)
+  const glob = page.locator('[data-timeline-part-id="prt_error_glob"]')
   await expect(glob).toContainText("Invalid tool input")
   await expect(glob.locator('[data-component="tool-error-card-icon"]')).toBeVisible()
   await expect(glob.locator('[data-component="tool-error-card-icon"] use')).toHaveAttribute(
@@ -180,7 +177,7 @@ test("keeps failed search calls and their error cards inside the collapsed stack
         .evaluate((element) => getComputedStyle(element, "::before").display),
     )
     .toBe("none")
-  await expect(group.locator('[data-timeline-part-id="prt_error_grep"]')).toContainText(
+  await expect(page.locator('[data-timeline-part-id="prt_error_grep"]')).toContainText(
     "Search timed out after 30 seconds",
   )
 })

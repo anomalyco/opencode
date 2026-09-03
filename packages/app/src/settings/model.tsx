@@ -1,8 +1,8 @@
-import { reconcile } from "solid-js/store"
+import { reconcile, unwrap } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
 import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { ReasoningMode } from "@opencode-ai/session-ui/timeline/projection"
+import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode-ai/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
@@ -68,7 +68,10 @@ export function terminalFontFamily(font: string | undefined) {
   return stack(font, terminalBase)
 }
 
-const reasoningModeSchema = Schema.Literals(["hidden", "compact", "full"])
+const placementSchema = Schema.Literals(["separate", "grouped", "hidden"])
+const detailsSchema = Schema.Literals(["collapsed", "expanded"])
+const activitySchema = Persistence.struct({ placement: placementSchema, details: detailsSchema })
+const placementOnlySchema = Persistence.struct({ placement: placementSchema })
 
 const generalSchema = Persistence.struct({
   autoSave: Schema.Boolean,
@@ -79,9 +82,14 @@ const generalSchema = Persistence.struct({
   showStatus: Schema.Boolean,
   showProjectIcon: Schema.Boolean,
   showTerminal: Schema.Boolean,
-  reasoningMode: reasoningModeSchema,
-  shellToolPartsExpanded: Schema.Boolean,
-  editToolPartsExpanded: Schema.Boolean,
+  timelineDetail: Persistence.struct({
+    shell: activitySchema,
+    edit: activitySchema,
+    thinking: activitySchema,
+    subagents: placementOnlySchema,
+    notices: placementOnlySchema,
+    tools: placementOnlySchema,
+  }),
   showCustomAgents: Schema.Boolean,
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   mobileDiffWrap: Schema.Boolean,
@@ -134,25 +142,91 @@ export const settingsSchema = Persistence.struct({
   sounds: soundsSchema,
 })
 
+function storedTimelineCategory(category: TimelineCategory) {
+  return Persistence.optional(
+    Schema.Union([
+      Schema.Struct({
+        placement: Persistence.optional(placementSchema),
+        details: Persistence.optional(detailsSchema),
+      }),
+      Schema.Literals(["expanded", "collapsed", "hidden", "visible"]),
+    ]).pipe(
+      Schema.decode({
+        decode: SchemaGetter.transform((value) => {
+          if (typeof value !== "string") return value
+          return {
+            placement:
+              value === "hidden"
+                ? "hidden"
+                : category === "subagents"
+                  ? "separate"
+                  : category === "tools"
+                    ? "grouped"
+                    : value === "expanded"
+                      ? "separate"
+                      : value === "collapsed"
+                        ? "grouped"
+                        : undefined,
+            details: value === "expanded" ? "expanded" : "collapsed",
+          }
+        }),
+        encode: SchemaGetter.passthrough(),
+      }),
+    ),
+  )
+}
+
+function legacyTimelineActivity(value: boolean | "hidden" | "compact" | "full" | null | undefined) {
+  if (value === undefined || value === null) return
+  const expanded = value === true || value === "full"
+  return {
+    placement: value === "hidden" ? "hidden" : expanded ? "separate" : "grouped",
+    details: expanded ? "expanded" : "collapsed",
+  } as const
+}
+
 export const settingsPersistence = Persistence.migrate(
   settingsSchema,
   Schema.Struct({
     general: Persistence.optional(
       Schema.Struct({
-        reasoningMode: Schema.optional(Schema.Unknown),
+        // Keep invalid explicit values distinct from absent values so legacy preferences cannot replace them.
+        timelineDetail: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              shell: storedTimelineCategory("shell"),
+              edit: storedTimelineCategory("edit"),
+              thinking: storedTimelineCategory("thinking"),
+              subagents: storedTimelineCategory("subagents"),
+              notices: storedTimelineCategory("notices"),
+              tools: storedTimelineCategory("tools"),
+            }),
+          ),
+        ).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(null)))),
+        reasoningMode: Schema.optional(Schema.NullOr(Schema.Literals(["hidden", "compact", "full"]))).pipe(
+          Schema.catchDecoding(() => Effect.succeed(Option.some(null))),
+        ),
         showReasoningSummaries: Persistence.optional(Schema.Boolean),
+        shellToolPartsExpanded: Persistence.optional(Schema.Boolean),
+        editToolPartsExpanded: Persistence.optional(Schema.Boolean),
       }),
     ),
   }).pipe(
     Schema.decode({
       decode: SchemaGetter.transform((value) => {
-        if (value.general?.reasoningMode !== undefined || value.general?.showReasoningSummaries === undefined)
-          return value
+        const general = value.general
+        if (!general || general.timelineDetail !== undefined) return value
         return {
           ...value,
           general: {
-            ...value.general,
-            reasoningMode: value.general.showReasoningSummaries ? "full" : "compact",
+            ...general,
+            timelineDetail: {
+              shell: legacyTimelineActivity(general.shellToolPartsExpanded),
+              edit: legacyTimelineActivity(general.editToolPartsExpanded),
+              thinking: legacyTimelineActivity(
+                general.reasoningMode === undefined ? general.showReasoningSummaries : general.reasoningMode,
+              ),
+            },
           },
         }
       }),
@@ -171,9 +245,7 @@ export const defaultSettings: Settings = {
     showStatus: false,
     showProjectIcon: false,
     showTerminal: false,
-    reasoningMode: "compact",
-    shellToolPartsExpanded: false,
-    editToolPartsExpanded: false,
+    timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
     mobileDiffWrap: true,
@@ -256,23 +328,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
         },
-        reasoningMode: withFallback(() => store.general?.reasoningMode, defaultSettings.general.reasoningMode),
-        setReasoningMode(value: ReasoningMode) {
-          setStore("general", "reasoningMode", value)
-        },
-        shellToolPartsExpanded: withFallback(
-          () => store.general?.shellToolPartsExpanded,
-          defaultSettings.general.shellToolPartsExpanded,
-        ),
-        setShellToolPartsExpanded(value: boolean) {
-          setStore("general", "shellToolPartsExpanded", value)
-        },
-        editToolPartsExpanded: withFallback(
-          () => store.general?.editToolPartsExpanded,
-          defaultSettings.general.editToolPartsExpanded,
-        ),
-        setEditToolPartsExpanded(value: boolean) {
-          setStore("general", "editToolPartsExpanded", value)
+        timelineDetail: withFallback(() => store.general?.timelineDetail, defaultSettings.general.timelineDetail),
+        setTimelineDetail(value: TimelineDetail) {
+          setStore("general", "timelineDetail", structuredClone(unwrap(value)))
         },
         showCustomAgents,
         setShowCustomAgents(value: boolean) {

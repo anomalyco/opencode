@@ -23,6 +23,7 @@ import { Money } from "@opencode-ai/schema/money"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -33,6 +34,7 @@ const it = testEffect(
       Bus.node.replace(Bus.configured({ persist: true })),
       Global.node.replace(tempGlobalLayer),
       SessionExecution.node.replace(SessionExecution.noopLayer),
+      offlineModels,
     ],
   ),
 )
