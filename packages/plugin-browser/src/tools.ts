@@ -23,11 +23,14 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     const target = yield* connection.target(tool.sessionID, action)
     const authorize = permissionCheck(ctx.permission, action, target.tab, tool)
     const url = action.type === "navigate" || action.type === "tabs.open" ? action.url : target.tab?.url
-    if (url && !(action.type === "tabs.open" && url === "about:blank")) yield* authorize("browser", [url])
+    const inspected = target.tab && !action.type.startsWith("tabs.") ? yield* target.inspect() : undefined
+    const resources = inspected?.resources ?? (url ? [url] : [])
+    if (resources.length && !(action.type === "tabs.open" && url === "about:blank"))
+      yield* authorize("browser", resources)
     const uploads = yield* prepareUploads(action, ctx.location.directory, authorize)
-    const response = yield* target.request(uploads)
+    const response = yield* target.request(uploads, inspected)
     const output = yield* Effect.fromResult(decodeResult(operation, response))
-    if (action.type === "network.get" && "request" in output && output.request.url !== url)
+    if (action.type === "network.get" && "request" in output && !resources.includes(output.request.url))
       yield* authorize("browser", [output.request.url])
     if (response.files.length && !("files" in output))
       return yield* new Tool.Error({
