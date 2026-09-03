@@ -43,9 +43,7 @@ const layer = Layer.effect(
     const load = Effect.fnUntraced(function* (plugin: Generation) {
       const child = yield* Scope.fork(scope)
       const inherit = yield* State.inherit()
-      const loaded = yield* Effect.suspend(() =>
-        plugin.effect({ ...host, storage: PluginHost.storage(kv, plugin.id) }),
-      ).pipe(
+      const loaded = yield* Effect.suspend(() => plugin.effect(PluginHost.forPlugin(host, kv, plugin.id))).pipe(
         inherit,
         Effect.updateContext((context: Context.Context<never>) =>
           Context.make(Scope.Scope, child).pipe(

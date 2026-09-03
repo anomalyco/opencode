@@ -1,5 +1,16 @@
 import { Schema } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
+import { Plugin } from "@opencode-ai/schema/plugin"
+
+export class PluginCallbackError extends Schema.TaggedError<PluginCallbackError>()(
+  "PluginCallbackError",
+  {
+    pluginID: Plugin.ID,
+    operation: Schema.Literal("skill.transform"),
+    message: Schema.String,
+  },
+  { httpApiStatus: 500 },
+) {}
 
 export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()(
   "InvalidRequestError",

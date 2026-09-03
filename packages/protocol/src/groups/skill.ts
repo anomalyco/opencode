@@ -3,12 +3,14 @@ import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
+import { PluginCallbackError } from "../errors.js"
 
 export const SkillGroup = HttpApiGroup.make("server.skill")
   .add(
     HttpApiEndpoint.get("skill.list", "/api/skill", {
       query: LocationQuery,
       success: Location.response(Schema.Array(Skill.Info)),
+      error: PluginCallbackError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(

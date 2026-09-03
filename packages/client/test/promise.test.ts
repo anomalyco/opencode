@@ -1,5 +1,20 @@
 import { expect, test } from "bun:test"
-import { isSessionNotFoundError, isUnauthorizedError, OpenCode } from "../src/promise/index"
+import { isPluginCallbackError, isSessionNotFoundError, isUnauthorizedError, OpenCode } from "../src/promise/index"
+
+test("skill.list preserves a declared plugin callback failure", async () => {
+  const failure = {
+    _tag: "PluginCallbackError",
+    pluginID: "broken-skills",
+    operation: "skill.transform",
+    message: 'Plugin "broken-skills" failed during skill.transform. Check server logs for details.',
+  }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () => Response.json(failure, { status: 500 }),
+  })
+  await expect(client.skill.list()).rejects.toEqual(failure)
+  expect(isPluginCallbackError(failure)).toBe(true)
+})
 
 test("exposes every standard HTTP API group", () => {
   const client = OpenCode.make({ baseUrl: "http://localhost:3000" })

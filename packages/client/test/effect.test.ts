@@ -15,6 +15,23 @@ import {
 
 const synced = { type: "log.synced" as const, aggregateID: "ses_test", seq: Event.Seq.make(1) }
 
+test("skill.list decodes a declared plugin callback failure", async () => {
+  const failure = {
+    _tag: "PluginCallbackError",
+    pluginID: "broken-skills",
+    operation: "skill.transform",
+    message: 'Plugin "broken-skills" failed during skill.transform. Check server logs for details.',
+  }
+  const httpClient = HttpClient.make((request) =>
+    Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(failure, { status: 500 }))),
+  )
+  const error = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    return yield* client.skill.list().pipe(Effect.flip)
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+  expect(error).toMatchObject(failure)
+})
+
 test("health.get decodes the readiness response", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ healthy: true, version: "old", pid: 123 }))),

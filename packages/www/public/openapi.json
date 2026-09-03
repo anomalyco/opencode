@@ -9259,6 +9259,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "PluginCallbackError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginCallbackErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Retrieve currently registered skills.",
@@ -16983,6 +16993,27 @@
             "additionalProperties": false
           }
         ]
+      },
+      "PluginCallbackErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PluginCallbackError"]
+          },
+          "pluginID": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "enum": ["skill.transform"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "pluginID", "operation", "message"],
+        "additionalProperties": false
       },
       "Project": {
         "type": "object",
