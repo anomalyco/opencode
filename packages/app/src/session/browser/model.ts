@@ -1,12 +1,13 @@
-import { createEffect, createMemo, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { batch, createEffect, createMemo, on, onCleanup } from "solid-js"
+import type { Browser } from "@opencode-ai/schema/browser"
+import { createStore, reconcile } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { BrowserPaneCommand, BrowserPaneRegistration, BrowserPaneState } from "@/runtime/platform/browser-pane"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServer } from "@/runtime/server/current"
 import { useSettings } from "@/settings/model"
 import type { SessionModel } from "../model"
-import { SESSION_BROWSER_TAB } from "../helpers"
+import { isSessionBrowserTab, sessionBrowserTab } from "../helpers"
 
 export function createSessionBrowser(session: SessionModel) {
   const platform = usePlatform()
@@ -30,12 +31,44 @@ export function createSessionBrowser(session: SessionModel) {
       !server.health?.incompatible &&
       !state.unsupported,
   )
-  const opened = () => state.registration !== undefined && session.layout.tabs().all().includes(SESSION_BROWSER_TAB)
-  const open = () => {
+  const browserTabs = createMemo(() => state.browser?.tabs.filter((tab) => session.layout.tabs().all().includes(sessionBrowserTab(tab.id))) ?? [])
+  const opened = () => state.registration !== undefined && browserTabs().length > 0
+  const focus = (tabID: Browser.TabID) => {
     session.layout.view().reviewPanel.open()
-    void session.layout.tabs().open(SESSION_BROWSER_TAB)
-    session.layout.tabs().setActive(SESSION_BROWSER_TAB)
+    const tabs = session.layout.tabs()
+    const key = sessionBrowserTab(tabID)
+    if (!tabs.all().includes(key)) tabs.setAll([...tabs.all(), key])
+    tabs.setActive(key)
   }
+  const command = (command: BrowserPaneCommand) => {
+    setState("error", undefined)
+    const owner = session.ownership.capture()
+    void state.registration?.command(command).catch(() => {
+      if (owner.current()) setState("error", language.t("common.requestFailed"))
+    })
+  }
+  createEffect(
+    on(
+      () => session.layout.tabs().active(),
+      (active) => {
+        const tab = state.browser?.tabs.find((tab) => sessionBrowserTab(tab.id) === active)
+        if (tab && tab.id !== state.browser?.focusedTabID) command({ type: "tabs.focus", tabID: tab.id })
+      },
+    ),
+  )
+  createEffect(
+    on(
+      () => session.layout.tabs().all(),
+      (current, previous) => {
+        previous
+          ?.filter((key) => isSessionBrowserTab(key) && !current.includes(key))
+          .forEach((key) => {
+            const tab = state.browser?.tabs.find((tab) => sessionBrowserTab(tab.id) === key)
+            if (tab) command({ type: "tabs.close", tabID: tab.id })
+          })
+      },
+    ),
+  )
 
   createEffect(() => {
     const sessionID = session.identity.sessionID()
@@ -51,7 +84,7 @@ export function createSessionBrowser(session: SessionModel) {
       if (registration) return
       registration = pane.register(target, (event) =>
         owner.run(() => {
-          if (event.type === "open") return open()
+          if (event.type === "focus") return focus(event.tabID)
           if (event.error === "browser.pane.unsupported") return setState("unsupported", true)
           // The desktop dropped the attachment (server restart, attach race).
           // Re-register so the agent's browser tool comes back without a reload.
@@ -63,7 +96,20 @@ export function createSessionBrowser(session: SessionModel) {
             return
           }
           if (event.state) attempts = 0
-          setState({ browser: event.state, error: event.error })
+          batch(() => {
+            const known = new Set(state.browser?.tabs.map((tab) => sessionBrowserTab(tab.id)) ?? [])
+            setState("browser", reconcile(event.state))
+            setState("error", event.error ? language.t("common.requestFailed") : undefined)
+            const tabs = session.layout.tabs()
+            const ids = event.state?.tabs.map((tab) => sessionBrowserTab(tab.id)) ?? []
+            tabs
+              .all()
+              .filter((key) => isSessionBrowserTab(key) && !ids.includes(key))
+              .forEach(tabs.close)
+            const current = tabs.all()
+            const added = ids.filter((key) => !known.has(key) && !current.includes(key))
+            if (added.length) tabs.setAll([...current, ...added])
+          })
         }),
       )
       setState({ registration, browser: null, error: undefined })
@@ -84,17 +130,14 @@ export function createSessionBrowser(session: SessionModel) {
     available,
     opened,
     state: () => state.browser,
+    tabs: browserTabs,
+    active: () =>
+      browserTabs().find((tab) => sessionBrowserTab(tab.id) === session.layout.tabs().active()) ??
+      browserTabs().find((tab) => tab.id === state.browser?.focusedTabID) ?? browserTabs()[0],
     error: () => state.error,
     registration: () => state.registration,
-    close: () => session.layout.tabs().close(SESSION_BROWSER_TAB),
-    open,
-    command(command: BrowserPaneCommand) {
-      setState("error", undefined)
-      const owner = session.ownership.capture()
-      void state.registration?.command(command).catch((error: unknown) => {
-        if (!owner.current()) return
-        setState("error", error instanceof Error ? error.message : language.t("common.requestFailed"))
-      })
-    },
+    close: (tabID: Browser.TabID) => session.layout.tabs().close(sessionBrowserTab(tabID)),
+    open: () => command({ type: "tabs.open" }),
+    command,
   }
 }

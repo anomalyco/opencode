@@ -19,7 +19,7 @@ export function SessionBrowserPane(props: {
   const platform = usePlatform()
   const language = useLanguage()
   const dialog = useDialog()
-  const state = props.browser.state
+  const state = props.browser.active
   const button = { variant: "ghost", size: "large" } as const
   const [store, setStore] = createStore({
     address: "",
@@ -41,6 +41,11 @@ export function SessionBrowserPane(props: {
   const measure = () => {
     frame = undefined
     if (!surface) return
+    const tab = state()
+    if (!tab) {
+      props.registration.setLayout()
+      return
+    }
     const rect = surface.getBoundingClientRect()
     const zoom = platform.webviewZoom?.() ?? 1
     const left = Math.round(rect.left * zoom)
@@ -48,10 +53,11 @@ export function SessionBrowserPane(props: {
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
     const visible = props.visible && store.visible && !dialog.active && !covered(rect)
-    const next = `${visible}:${left}:${top}:${right}:${bottom}`
+    const next = `${tab.id}:${visible}:${left}:${top}:${right}:${bottom}`
     if (next !== layout) {
       layout = next
       props.registration.setLayout({
+        tabID: tab.id,
         visible,
         bounds: { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) },
       })
@@ -65,8 +71,15 @@ export function SessionBrowserPane(props: {
 
   createEffect(() => !store.editing && setStore("address", state()?.url ?? ""))
   createEffect(
-    on([() => platform.webviewZoom?.(), () => dialog.active, () => store.visible, () => props.visible], () =>
-      schedule(300),
+    on(
+      [
+        () => platform.webviewZoom?.(),
+        () => dialog.active,
+        () => store.visible,
+        () => props.visible,
+        () => state()?.id,
+      ],
+      () => schedule(300),
     ),
   )
   createResizeObserver(() => surface, schedule.bind(null, 0))
@@ -91,7 +104,10 @@ export function SessionBrowserPane(props: {
               {...button}
               disabled={!state()?.[direction === "back" ? "canGoBack" : "canGoForward"]}
               aria-label={language.t(direction === "back" ? "common.goBack" : "common.goForward")}
-              onClick={() => props.browser.command({ type: direction })}
+              onClick={() => {
+                const tab = state()
+                if (tab) props.browser.command({ type: direction, tabID: tab.id })
+              }}
               icon={<Icon name={direction === "back" ? "chevron-left" : "chevron-right"} size="small" />}
             />
           )}
@@ -100,7 +116,10 @@ export function SessionBrowserPane(props: {
           {...button}
           disabled={!state()}
           aria-label={language.t(state()?.loading ? "prompt.action.stop" : "error.page.action.reload")}
-          onClick={() => props.browser.command(state()?.loading ? { type: "stop" } : { type: "reload" })}
+          onClick={() => {
+            const tab = state()
+            if (tab) props.browser.command({ type: tab.loading ? "stop" : "reload", tabID: tab.id })
+          }}
           icon={
             <Show when={state()?.loading} fallback={<Icon name="reset" size="small" />}>
               <Loader />
@@ -111,7 +130,9 @@ export function SessionBrowserPane(props: {
           class="min-w-0 flex-1"
           onSubmit={(event) => {
             event.preventDefault()
-            if (store.address.trim()) props.browser.command({ type: "navigate", url: store.address })
+            const tab = state()
+            if (tab && store.address.trim())
+              props.browser.command({ type: "navigate", tabID: tab.id, url: store.address })
           }}
         >
           <input

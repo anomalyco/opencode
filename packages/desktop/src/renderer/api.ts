@@ -28,7 +28,7 @@ export const api: ElectronAPI = {
   browserPane: {
     request: (request) => invoke("BrowserPane", { request }),
     send: (request) => send("BrowserPane", { request }),
-    onEvent: (callback) => listen("BrowserPaneEvent", (value) => callback(mutable(value))),
+    onEvent: (callback) => listen("BrowserPaneEvent", (value) => callback(value)),
   },
   wslServers: {
     getState: () => invoke("WslGetState").then(mutable),
