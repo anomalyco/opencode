@@ -9,7 +9,191 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Job.node, KV.node])))
 
+const finishJobs = Effect.fn(function* (count: number) {
+  const jobs = yield* Job.Service
+  const ids: string[] = []
+  for (let index = 0; index < count; index++) {
+    const job = yield* jobs.start({ type: "test", run: Effect.succeed(`output-${index}`) })
+    expect((yield* jobs.wait({ id: job.id })).info?.output).toBe(`output-${index}`)
+    ids.push(job.id)
+  }
+  return ids
+})
+
 describe("Job", () => {
+  it.live("bounds consumed terminal results instead of retaining every completed job", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const ids = yield* finishJobs(100)
+      const retained = yield* Effect.forEach(ids, jobs.get)
+      expect(retained.filter((info) => info !== undefined).map((info) => info.id)).toEqual(ids.slice(-25))
+      expect(yield* jobs.wait({ id: ids[0] })).toEqual({ timedOut: false })
+    }),
+  )
+
+  it.live("preserves running and unconsumed results until a caller receives them", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const running = yield* jobs.start({ type: "test", run: Effect.never })
+      const unread = yield* jobs.start({ type: "test", run: Effect.succeed("not received yet") })
+      expect(yield* jobs.wait({ id: running.id, timeout: 0 })).toMatchObject({ timedOut: true })
+      yield* finishJobs(100)
+      expect(yield* jobs.get(running.id)).toMatchObject({ status: "running" })
+      expect(yield* jobs.get(unread.id)).toMatchObject({ status: "completed", output: "not received yet" })
+      expect(yield* jobs.block({ id: unread.id, sessionID: SessionSchema.ID.make("ses_late_waiter") })).toMatchObject({
+        type: "finished",
+        info: { output: "not received yet" },
+      })
+      yield* finishJobs(25)
+      expect(yield* jobs.get(unread.id)).toBeUndefined()
+      yield* jobs.cancel(running.id)
+    }),
+  )
+
+  it.live("bounds results received by foreground blocking callers", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const sessionID = SessionSchema.ID.make("ses_foreground_churn")
+      const ids: string[] = []
+      for (let index = 0; index < 100; index++) {
+        const latch = yield* Deferred.make<void>()
+        const job = yield* jobs.start({ type: "shell", run: Deferred.await(latch).pipe(Effect.as("done")) })
+        const waiter = yield* jobs
+          .block({ id: job.id, sessionID })
+          .pipe(Effect.forkIn(yield* Scope.Scope, { startImmediately: true }))
+        yield* Deferred.succeed(latch, undefined)
+        expect(yield* Fiber.join(waiter)).toMatchObject({ type: "finished", info: { output: "done" } })
+        ids.push(job.id)
+      }
+      const retained = yield* Effect.forEach(ids, jobs.get)
+      expect(retained.filter((info) => info !== undefined).map((info) => info.id)).toEqual(ids.slice(-25))
+    }),
+  )
+
+  it.live("evicts consumed errors and cancellations along with successful results", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const failed = yield* jobs.start({ type: "test", run: Effect.fail(new Error("failed")) })
+      const cancelled = yield* jobs.start({ type: "test", run: Effect.never })
+      yield* jobs.cancel(cancelled.id)
+      expect((yield* jobs.wait({ id: failed.id })).info?.status).toBe("error")
+      expect((yield* jobs.wait({ id: cancelled.id })).info?.status).toBe("cancelled")
+      yield* finishJobs(25)
+      expect(yield* jobs.get(failed.id)).toBeUndefined()
+      expect(yield* jobs.get(cancelled.id)).toBeUndefined()
+    }),
+  )
+
+  it.live("bounds explicitly cancelled jobs even without a subsequent wait", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const ids: string[] = []
+      for (let index = 0; index < 50; index++) {
+        const job = yield* jobs.start({ type: "test", run: Effect.never })
+        expect((yield* jobs.cancel(job.id))?.status).toBe("cancelled")
+        ids.push(job.id)
+      }
+      const retained = yield* Effect.forEach(ids, jobs.get)
+      expect(retained.filter((info) => info !== undefined).map((info) => info.id)).toEqual(ids.slice(-25))
+    }),
+  )
+
+  it.live("preserves the recoverable wait-to-background handoff across consumed history eviction", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const job = yield* jobs.start({
+        type: "shell",
+        recovery: {
+          kind: "shell",
+          sessionID: SessionSchema.ID.make("ses_late_background"),
+          shellID: "sh_late_background",
+          command: "exit 1",
+        },
+        run: Effect.fail(new Error("immediate failure")),
+      })
+      expect((yield* jobs.wait({ id: job.id })).info?.error).toBe("immediate failure")
+      yield* finishJobs(100)
+      const background = yield* jobs.background(job.id)
+      expect(background?.notificationID).toStartWith("msg_")
+      expect((yield* jobs.pendingBackground).find((item) => item.id === job.id)).toMatchObject({
+        status: "error",
+        error: "immediate failure",
+      })
+    }),
+  )
+
+  it.live("keeps previously registered observers' results valid after cache eviction", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const scope = yield* Scope.Scope
+      const latch = yield* Deferred.make<void>()
+      const job = yield* jobs.start({ type: "test", run: Deferred.await(latch).pipe(Effect.as("shared output")) })
+      const waiters = yield* Effect.forEach([0, 1, 2], () =>
+        jobs.wait({ id: job.id }).pipe(Effect.forkIn(scope, { startImmediately: true })),
+      )
+      yield* Deferred.succeed(latch, undefined)
+      yield* finishJobs(100)
+      expect(yield* jobs.get(job.id)).toBeUndefined()
+      for (const waiter of waiters) {
+        expect(yield* Fiber.join(waiter)).toMatchObject({ info: { status: "completed", output: "shared output" } })
+      }
+    }),
+  )
+
+  it.live("protects pending background notifications from churn and releases them on acknowledgment", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const job = yield* jobs.start({
+        type: "shell",
+        recovery: {
+          kind: "shell",
+          sessionID: SessionSchema.ID.make("ses_pending_notification"),
+          shellID: "sh_pending_notification",
+          command: "echo done",
+        },
+        run: Effect.succeed("background output"),
+      })
+      const background = yield* jobs.background(job.id)
+      if (!background?.notificationID) return yield* Effect.die("background marker missing")
+      yield* jobs.wait({ id: job.id })
+      yield* finishJobs(100)
+      expect(yield* jobs.get(job.id)).toMatchObject({ status: "completed", output: "background output" })
+      expect((yield* jobs.pendingBackground).find((item) => item.id === job.id)).toMatchObject({
+        output: "background output",
+      })
+      yield* jobs.completeBackground(background.notificationID)
+      yield* jobs.completeBackground(background.notificationID)
+      expect(yield* jobs.get(job.id)).toBeUndefined()
+      expect((yield* jobs.pendingBackground).find((item) => item.id === job.id)).toBeUndefined()
+    }),
+  )
+
+  it.live("does not remove a newer generation when an older notification is acknowledged", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const id = "job_reused_notification"
+      yield* jobs.start({
+        id,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: SessionSchema.ID.make("ses_generation_parent"),
+          childSessionID: SessionSchema.ID.make("ses_generation_child"),
+          agent: "explore",
+          description: "first generation",
+        },
+        run: Effect.succeed("old output"),
+      })
+      const background = yield* jobs.background(id)
+      if (!background?.notificationID) return yield* Effect.die("background marker missing")
+      yield* jobs.wait({ id })
+      yield* jobs.start({ id, type: "subagent", run: Effect.succeed("new output") })
+      yield* jobs.completeBackground(background.notificationID)
+      yield* finishJobs(100)
+      expect((yield* jobs.wait({ id })).info?.output).toBe("new output")
+    }),
+  )
+
   it.live("tracks process-local work through explicit observation", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
