@@ -5,13 +5,11 @@ import { Job } from "../job.js"
 import { Session } from "../session.js"
 import { SubagentCompletion } from "./subagent-completion.js"
 
-export const NO_TEXT = "Subagent completed without a text response."
-
 type Recovery = Extract<Job.Recovery, { kind: "subagent" }>
 
 interface Runner {
   start: (recovery: Recovery) => Effect.Effect<Job.Info>
-  background: (recovery: Recovery, startedAt: number) => Effect.Effect<void>
+  background: (recovery: Recovery) => Effect.Effect<void>
   notify: (recovery: Recovery, startedAt: number) => Effect.Effect<void>
 }
 
@@ -50,17 +48,12 @@ export const make: Effect.Effect<Runner, never, Session.Service | Job.Service | 
             (message) =>
               message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
           )
-          if (assistant === undefined || assistant.type !== "assistant") return NO_TEXT
-          const text = assistant.content
-            .filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text")
-            .map((part) => part.text)
-            .join("")
-          return text.length > 0 ? text : NO_TEXT
+          return SubagentCompletion.text(assistant)
         }),
       }),
-    background: Effect.fn("SubagentJob.background")(function* (recovery: Recovery, startedAt: number) {
-      yield* jobs.background(recovery.childSessionID)
-      yield* notify(recovery, startedAt)
+    background: Effect.fn("SubagentJob.background")(function* (recovery: Recovery) {
+      const info = yield* jobs.background(recovery.childSessionID)
+      if (info) yield* notify(recovery, info.started_at)
     }),
     notify,
   }

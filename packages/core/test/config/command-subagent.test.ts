@@ -207,7 +207,10 @@ describe("command subagents", () => {
   )
 })
 
-function project(command: { agent?: string; model?: string; subagent?: boolean; subtask?: boolean }, format: string) {
+function project(
+  command: { agent?: string; model?: string; subagent?: boolean; subtask?: boolean },
+  format: "json" | "v1" | "markdown",
+) {
   return Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
     const definition = { description: "Review code", template: "Review $ARGUMENTS: !`printf ready`", ...command }

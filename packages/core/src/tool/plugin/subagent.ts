@@ -9,6 +9,7 @@ import { Job } from "../../job.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
+import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentJob } from "../../session/subagent-job.js"
 
 export const name = "subagent"
@@ -189,10 +190,10 @@ export const Plugin = {
                 agent: agent.name,
                 description: input.description,
               }
-              const info = yield* subagents.start(recovery)
+              yield* subagents.start(recovery)
 
               if (background) {
-                yield* subagents.background(recovery, info.started_at)
+                yield* subagents.background(recovery)
                 return backgroundResult(child.id)
               }
 
@@ -217,7 +218,7 @@ export const Plugin = {
               return {
                 sessionID: child.id,
                 status: "completed" as const,
-                output: result?.info.output ?? SubagentJob.NO_TEXT,
+                output: result?.info.output ?? SubagentCompletion.NO_TEXT,
               }
             }).pipe(
               Effect.map((output) => ({
