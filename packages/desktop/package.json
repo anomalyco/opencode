@@ -56,12 +56,12 @@
     "vite": "8.2.2"
   },
   "optionalDependencies": {
-    "@lydell/node-pty-darwin-arm64": "1.2.0-beta.12",
-    "@lydell/node-pty-darwin-x64": "1.2.0-beta.12",
-    "@lydell/node-pty-linux-arm64": "1.2.0-beta.12",
-    "@lydell/node-pty-linux-x64": "1.2.0-beta.12",
-    "@lydell/node-pty-win32-arm64": "1.2.0-beta.12",
-    "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
+    "@lydell/node-pty-darwin-arm64": "1.2.0-beta.15",
+    "@lydell/node-pty-darwin-x64": "1.2.0-beta.15",
+    "@lydell/node-pty-linux-arm64": "1.2.0-beta.15",
+    "@lydell/node-pty-linux-x64": "1.2.0-beta.15",
+    "@lydell/node-pty-win32-arm64": "1.2.0-beta.15",
+    "@lydell/node-pty-win32-x64": "1.2.0-beta.15",
     "msgpackr-extract": "3.0.4"
   }
 }

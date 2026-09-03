@@ -106,7 +106,7 @@
       "solid-js": "1.9.15",
       "solid-sonner": "0.3.1",
       "vite-plugin-solid": "2.11.10",
-      "@lydell/node-pty": "1.2.0-beta.12"
+      "@lydell/node-pty": "1.2.0-beta.15"
     }
   },
   "devDependencies": {

@@ -144,12 +144,12 @@
         "@ff-labs/fff-bin-linux-x64-gnu": "0.10.5",
         "@ff-labs/fff-bin-win32-arm64": "0.10.5",
         "@ff-labs/fff-bin-win32-x64": "0.10.5",
-        "@lydell/node-pty-darwin-arm64": "1.2.0-beta.12",
-        "@lydell/node-pty-darwin-x64": "1.2.0-beta.12",
-        "@lydell/node-pty-linux-arm64": "1.2.0-beta.12",
-        "@lydell/node-pty-linux-x64": "1.2.0-beta.12",
-        "@lydell/node-pty-win32-arm64": "1.2.0-beta.12",
-        "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
+        "@lydell/node-pty-darwin-arm64": "1.2.0-beta.15",
+        "@lydell/node-pty-darwin-x64": "1.2.0-beta.15",
+        "@lydell/node-pty-linux-arm64": "1.2.0-beta.15",
+        "@lydell/node-pty-linux-x64": "1.2.0-beta.15",
+        "@lydell/node-pty-win32-arm64": "1.2.0-beta.15",
+        "@lydell/node-pty-win32-x64": "1.2.0-beta.15",
         "@opencode-ai/protocol": "workspace:*",
         "@opencode-ai/script": "workspace:*",
         "@parcel/watcher-darwin-arm64": "2.5.1",
@@ -443,12 +443,12 @@
         "vite": "8.2.2",
       },
       "optionalDependencies": {
-        "@lydell/node-pty-darwin-arm64": "1.2.0-beta.12",
-        "@lydell/node-pty-darwin-x64": "1.2.0-beta.12",
-        "@lydell/node-pty-linux-arm64": "1.2.0-beta.12",
-        "@lydell/node-pty-linux-x64": "1.2.0-beta.12",
-        "@lydell/node-pty-win32-arm64": "1.2.0-beta.12",
-        "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
+        "@lydell/node-pty-darwin-arm64": "1.2.0-beta.15",
+        "@lydell/node-pty-darwin-x64": "1.2.0-beta.15",
+        "@lydell/node-pty-linux-arm64": "1.2.0-beta.15",
+        "@lydell/node-pty-linux-x64": "1.2.0-beta.15",
+        "@lydell/node-pty-win32-arm64": "1.2.0-beta.15",
+        "@lydell/node-pty-win32-x64": "1.2.0-beta.15",
         "msgpackr-extract": "3.0.4",
       },
     },
@@ -1078,7 +1078,7 @@
     "@hono/standard-validator": "0.2.0",
     "@hono/zod-validator": "0.4.2",
     "@kobalte/core": "0.13.13",
-    "@lydell/node-pty": "1.2.0-beta.12",
+    "@lydell/node-pty": "1.2.0-beta.15",
     "@npmcli/arborist": "9.4.0",
     "@octokit/rest": "22.0.0",
     "@openauthjs/openauth": "0.0.0-20250322224806",
@@ -1966,19 +1966,19 @@
 
     "@kurkle/color": ["@kurkle/color@0.3.4", "", {}, "sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w=="],
 
-    "@lydell/node-pty": ["@lydell/node-pty@1.2.0-beta.12", "", { "optionalDependencies": { "@lydell/node-pty-darwin-arm64": "1.2.0-beta.12", "@lydell/node-pty-darwin-x64": "1.2.0-beta.12", "@lydell/node-pty-linux-arm64": "1.2.0-beta.12", "@lydell/node-pty-linux-x64": "1.2.0-beta.12", "@lydell/node-pty-win32-arm64": "1.2.0-beta.12", "@lydell/node-pty-win32-x64": "1.2.0-beta.12" } }, "sha512-qIK890UwPupoj07osVvgOIa++1mxeHbcGry4PKRHhNVNs81V2SCG34eJr46GybiOmBtc8Sj5PB1/GGM5PL549g=="],
+    "@lydell/node-pty": ["@lydell/node-pty@1.2.0-beta.15", "", { "optionalDependencies": { "@lydell/node-pty-darwin-arm64": "1.2.0-beta.15", "@lydell/node-pty-darwin-x64": "1.2.0-beta.15", "@lydell/node-pty-linux-arm64": "1.2.0-beta.15", "@lydell/node-pty-linux-x64": "1.2.0-beta.15", "@lydell/node-pty-win32-arm64": "1.2.0-beta.15", "@lydell/node-pty-win32-x64": "1.2.0-beta.15" } }, "sha512-Br8wBxzbxFwdWgk9uQ+rdzE0xfoxOK4QuGH54swhRwc5IxP6H9Y1/bcyazRGvNUs6XkB5qNVkezuKSRxUwZe7A=="],
 
-    "@lydell/node-pty-darwin-arm64": ["@lydell/node-pty-darwin-arm64@1.2.0-beta.12", "", { "os": "darwin", "cpu": "arm64" }, "sha512-tqaifcY9Cr41SblO1+FLzh8oxxtkNhuW9Dhl22lKme9BreYvKvxEZcdPIXTuqkJc5tagOEC4QHShKmJjLyLXLQ=="],
+    "@lydell/node-pty-darwin-arm64": ["@lydell/node-pty-darwin-arm64@1.2.0-beta.15", "", { "os": "darwin", "cpu": "arm64" }, "sha512-6TSBbzdcLiNTHl1mTuzflqXrkmcC36USVGvERoDgvHk2ItEDaMaFZuAJ1CqPmwYj0DyhCS16TVS8OGK9xZnjyQ=="],
 
-    "@lydell/node-pty-darwin-x64": ["@lydell/node-pty-darwin-x64@1.2.0-beta.12", "", { "os": "darwin", "cpu": "x64" }, "sha512-4LrS5pCJwqHKDVf1zS2gyNV0m4hKAXch+XZNhbZ6LY8uwVL8BhchzQBO40Os5anuRxRCWzHpw4Sp64Ie8q7E4Q=="],
+    "@lydell/node-pty-darwin-x64": ["@lydell/node-pty-darwin-x64@1.2.0-beta.15", "", { "os": "darwin", "cpu": "x64" }, "sha512-yDT2oqPqYMBScyuk1U9Rg5VKcrbMOD9o9jWYYamDADA3NSbUISroPChrqYRQ74Y7BQtNH4gqYAiWOZRi5uQZ0Q=="],
 
-    "@lydell/node-pty-linux-arm64": ["@lydell/node-pty-linux-arm64@1.2.0-beta.12", "", { "os": "linux", "cpu": "arm64" }, "sha512-Sx+A71x5BDGHt9ansfrtGxwq2VFVDWvJUAdlUL0Hv0qeiJUfts+hgopx+CgT4PSwahKjdEgtu0+FAfY9rICKRw=="],
+    "@lydell/node-pty-linux-arm64": ["@lydell/node-pty-linux-arm64@1.2.0-beta.15", "", { "os": "linux", "cpu": "arm64" }, "sha512-wkbNF7dYAmtJv+o2+iztVlNwnUB4B0uX0wh/UD+mwMcmE2gNMnW9GChXO7fEE5XJokD0vB5idiHpGegaN+G/sg=="],
 
-    "@lydell/node-pty-linux-x64": ["@lydell/node-pty-linux-x64@1.2.0-beta.12", "", { "os": "linux", "cpu": "x64" }, "sha512-bJzs94njofYhGg/UDqW1nj0dtvvu+2OvxMY+RlLS1T17VgcktKoIR6PuenTwE5HJ/D6StCPADmXcT0nNsCKmIQ=="],
+    "@lydell/node-pty-linux-x64": ["@lydell/node-pty-linux-x64@1.2.0-beta.15", "", { "os": "linux", "cpu": "x64" }, "sha512-+U/5AVvHT6W+8OCYcnJgN0Qgc0ycO3TfD6aaFJHK+WHij797f8gsi5dV1HEO9l6YQmWCD+VL5gaLDhx3mxHwCA=="],
 
-    "@lydell/node-pty-win32-arm64": ["@lydell/node-pty-win32-arm64@1.2.0-beta.12", "", { "os": "win32", "cpu": "arm64" }, "sha512-p7POgjVEiFaBC3/y+AKuV1FzePCsJ6HmZDv2XK+jBZSfwP8+uBAw181ZiKYN1YuRa/XpmBGaWezcI8hZkbW++g=="],
+    "@lydell/node-pty-win32-arm64": ["@lydell/node-pty-win32-arm64@1.2.0-beta.15", "", { "os": "win32", "cpu": "arm64" }, "sha512-pyAk91w7wnnKrD4mrHXtIXRfmzSWV5bEzvRhurXcMCtCc2TJ424ciUskIgWMhAPP6y3KyUnqElj+U6kY3iOt0A=="],
 
-    "@lydell/node-pty-win32-x64": ["@lydell/node-pty-win32-x64@1.2.0-beta.12", "", { "os": "win32", "cpu": "x64" }, "sha512-IDFa00g7qUDGUYgByrUBJtC+mOjYVt/8KYyWivCg5JjGOHbBUACUQZLl0jTWmnr+tld/UyTpX90a2PY6oTVtRw=="],
+    "@lydell/node-pty-win32-x64": ["@lydell/node-pty-win32-x64@1.2.0-beta.15", "", { "os": "win32", "cpu": "x64" }, "sha512-2f8twEmDVxZ7drchAXjtevpmSPhFok0avAnzXro4t5gmz0xsPNKkoZvymwtuIS3xo7PzQqZOPQ/YzwEMb7oIzQ=="],
 
     "@malept/cross-spawn-promise": ["@malept/cross-spawn-promise@2.0.0", "", { "dependencies": { "cross-spawn": "^7.0.1" } }, "sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg=="],
 

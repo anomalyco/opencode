@@ -1,4 +1,5 @@
 import { defineConfig } from "electron-vite"
+import { getCurrentCli } from "./scripts/target"
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -7,7 +8,9 @@ const channel = (() => {
   return "dev"
 })()
 
-const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+// Windows ARM64 releases are bundled on x64 hosts.
+const target = getCurrentCli()
+const nodePtyPkg = `@lydell/node-pty-${target.os}-${target.cpu}`
 
 const appPlugin = (await import("@opencode-ai/app/vite")).default
 const picker = (await import("@brendonovich/vite-plugin-opencode")).default()

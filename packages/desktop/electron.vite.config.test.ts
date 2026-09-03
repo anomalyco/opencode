@@ -1,7 +1,17 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 import { loadConfigFromFile, MainConfigFactory } from "electron-vite"
 import { build } from "vite"
 import pkg from "./package.json"
+import { getCurrentCli } from "./scripts/target"
+
+const originalTarget = process.env.OPENCODE_CLI_TARGET
+afterEach(() => {
+  if (originalTarget === undefined) {
+    delete process.env.OPENCODE_CLI_TARGET
+    return
+  }
+  process.env.OPENCODE_CLI_TARGET = originalTarget
+})
 
 test.each(["build", "serve"] as const)("configures minification for %s", async (command) => {
   const result = await loadConfigFromFile(
@@ -43,37 +53,55 @@ test("keeps PTY binaries without stale native packaging", () => {
   ])
 })
 
-test("bundles one Effect runtime and Drizzle while keeping native dependencies external", async () => {
-  const result = await loadConfigFromFile(
-    { command: "build", mode: "production" },
-    `${import.meta.dirname}/electron.vite.config.ts`,
-  )
-  if (!result.config.main) throw new Error("Missing main-process build configuration")
-  const config = await new MainConfigFactory(
-    result.config.main,
-    { configFile: false, mode: "production" },
-    { root: import.meta.dirname },
-  ).build()
-  config.build = { ...config.build, write: false }
-  config.logLevel = "silent"
-  const output = await build(config)
-  const chunks = (Array.isArray(output) ? output : [output]).flatMap((result) =>
-    "output" in result ? result.output.filter((item) => item.type === "chunk") : [],
-  )
-  expect(chunks.length).toBeGreaterThan(0)
-  const imports = chunks.flatMap((chunk) => [...chunk.imports, ...chunk.dynamicImports])
-  const modules = chunks.flatMap((chunk) => Object.keys(chunk.modules))
-  for (const name of ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"]) {
-    expect(imports.filter((id) => id === name || id.startsWith(`${name}/`))).toEqual([])
-    expect(modules.some((id) => id.includes(`/node_modules/${name}/`))).toBe(true)
-  }
-  const effect = modules.filter((id) => id.includes("/node_modules/effect/"))
-  expect(new Set(effect.map((id) => id.split("/node_modules/effect/")[0])).size).toBe(1)
-  expect(new Set(effect).size).toBe(effect.length)
-  expect(imports).toContain("electron")
-  expect(imports).toContain("node:sqlite")
-  expect(chunks.some((chunk) => chunk.dynamicImports.includes("@zip.js/zip.js"))).toBe(true)
-  expect(imports).toContain(`@lydell/node-pty-${process.platform}-${process.arch}`)
-  expect(modules.some((id) => id.includes("/node_modules/msgpackr-extract/"))).toBe(false)
-  expect(chunks.some((chunk) => chunk.code.includes("msgpackr-extract"))).toBe(true)
-}, 30_000)
+test("rejects unsupported packaging targets", () => {
+  expect(() => getCurrentCli("unsupported-target")).toThrow("CLI configuration not available")
+})
+
+test.each([
+  [undefined, `${process.platform}-${process.arch}`],
+  ["aarch64-apple-darwin", "darwin-arm64"],
+  ["x86_64-apple-darwin", "darwin-x64"],
+  ["aarch64-pc-windows-msvc", "win32-arm64"],
+  ["x86_64-pc-windows-msvc", "win32-x64"],
+  ["aarch64-unknown-linux-gnu", "linux-arm64"],
+  ["x86_64-unknown-linux-gnu", "linux-x64"],
+])(
+  "bundles shared runtimes and external PTY bindings for %s (%s)",
+  async (target, binding) => {
+    process.env.OPENCODE_CLI_TARGET = target
+    if (target === undefined) delete process.env.OPENCODE_CLI_TARGET
+    const result = await loadConfigFromFile(
+      { command: "build", mode: "production" },
+      `${import.meta.dirname}/electron.vite.config.ts`,
+    )
+    if (!result.config.main) throw new Error("Missing main-process build configuration")
+    const config = await new MainConfigFactory(
+      result.config.main,
+      { configFile: false, mode: "production" },
+      { root: import.meta.dirname },
+    ).build()
+    config.build = { ...config.build, write: false }
+    config.logLevel = "silent"
+    const output = await build(config)
+    const chunks = (Array.isArray(output) ? output : [output]).flatMap((result) =>
+      "output" in result ? result.output.filter((item) => item.type === "chunk") : [],
+    )
+    expect(chunks.length).toBeGreaterThan(0)
+    const imports = chunks.flatMap((chunk) => [...chunk.imports, ...chunk.dynamicImports])
+    const modules = chunks.flatMap((chunk) => Object.keys(chunk.modules))
+    for (const name of ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"]) {
+      expect(imports.filter((id) => id === name || id.startsWith(`${name}/`))).toEqual([])
+      expect(modules.some((id) => id.includes(`/node_modules/${name}/`))).toBe(true)
+    }
+    const effect = modules.filter((id) => id.includes("/node_modules/effect/"))
+    expect(new Set(effect.map((id) => id.split("/node_modules/effect/")[0])).size).toBe(1)
+    expect(new Set(effect).size).toBe(effect.length)
+    expect(imports).toContain("electron")
+    expect(imports).toContain("node:sqlite")
+    expect(chunks.some((chunk) => chunk.dynamicImports.includes("@zip.js/zip.js"))).toBe(true)
+    expect(imports.filter((id) => id.startsWith("@lydell/node-pty"))).toEqual([`@lydell/node-pty-${binding}`])
+    expect(modules.some((id) => id.includes("/node_modules/msgpackr-extract/"))).toBe(false)
+    expect(chunks.some((chunk) => chunk.code.includes("msgpackr-extract"))).toBe(true)
+  },
+  30_000,
+)
