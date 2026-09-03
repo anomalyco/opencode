@@ -101,7 +101,10 @@ export function DialogUpdate(props: {
         <Switch>
           <Match when={state().type === "ready"}>
             <text fg={theme.text.subdued}>
-              An update is available. Applying will restart the server and active sessions will be resumed.
+              An update is available. Applying will
+              {props.restart
+                ? " restart the server and active sessions will be resumed."
+                : " install the update but you will need to manually restart."}
             </text>
           </Match>
           <Match when={state().type === "installing"}>

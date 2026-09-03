@@ -28,7 +28,7 @@ export const monitorUpdates = Effect.fnUntraced(function* (input: {
     const version = yield* input.inspect()
     if (version !== undefined) yield* input.notify(version)
   }).pipe(Effect.catch((error) => Effect.logWarning("update check failed", { error })))
-  return yield* check.pipe(Effect.delay(interval), Effect.repeat(Schedule.spaced(interval)))
+  return yield* check.pipe(Effect.repeat(Schedule.spaced(interval)), Effect.delay(interval))
 })
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
