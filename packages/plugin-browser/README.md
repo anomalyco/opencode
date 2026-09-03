@@ -5,6 +5,20 @@ the public plugin API, public schemas, and Effect. Core registers it as a built-
 plugin; the package does not depend on Core or Server. The shared RPC contract is
 `@opencode-ai/schema/browser`; desktop clients do not import Core.
 
+The agent calls the browser through Code Mode's `execute` tool, not a separate
+raw tool. Discover its signature with `search({ query: "browser" })`, then call:
+
+```js
+await tools.browser({ type: "open" })
+await tools.browser({ type: "navigate", url: "https://example.com" })
+return await tools.browser({ type: "snapshot" })
+```
+
+Results retain their untrusted-content wrapper. Screenshots are attached to the
+`execute` result as images. The tool remains discoverable without a desktop
+attachment; calls fail with `No desktop browser is connected.` until one connects.
+Await actions on the same page in order.
+
 Disable it through normal plugin configuration:
 
 ```jsonc
