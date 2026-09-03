@@ -432,6 +432,14 @@ export function createBrowserPage(
       }
       case "screenshot": {
         if (action.ref && action.fullPage) throw new Error("Choose an element ref or fullPage, not both.")
+        await waitFor(() => view.getVisible() && win.isVisible() && !win.isMinimized(), signal, 3_000).catch(
+          (error) => {
+            if (signal.aborted) throw error
+            throw new Error(
+              "Screenshot needs a visible tab. Call browser.tabs.focus and keep its desktop window visible.",
+            )
+          },
+        )
         const element = action.ref ? await rect(target(action.ref), true) : undefined
         const metrics = await cdp.send("Page.getLayoutMetrics")
         const bounds = element

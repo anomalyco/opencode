@@ -12,7 +12,7 @@ await Effect.gen(function* () {
     hostname: "127.0.0.1",
     port: 0,
     password: process.env.SMOKE_PASSWORD,
-    app: { name: "browser-suite-test", version: "test", channel: "test" },
+    app: { name: "browser-suite-test", version: process.env.SMOKE_VERSION ?? "test", channel: "test" },
     database: { path: ":memory:" },
     models: { fetch: false },
     fs: { filewatcher: false, fff: false },

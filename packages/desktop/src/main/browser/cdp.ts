@@ -26,15 +26,7 @@ export function createCdp(contents: WebContents) {
       if (contents.isDestroyed()) throw new Error("Browser tab was closed.")
       if (!contents.debugger.isAttached()) contents.debugger.attach("1.3")
       // Electron is the CDP boundary. Its native response follows the selected protocol method.
-      const result = contents.debugger.sendCommand(method, params, sessionID)
-      if (method !== "Page.captureScreenshot") return result
-      // Keep a hidden view's compositor awake for CDP (including Lighthouse's
-      // screenshot gatherer) without changing the selected Review tab.
-      const [capture] = await Promise.all([
-        result,
-        contents.capturePage(undefined, { stayHidden: false, stayAwake: true }),
-      ])
-      return capture
+      return contents.debugger.sendCommand(method, params, sessionID)
     },
     on<Method extends keyof ProtocolMapping.Events>(
       method: Method,
