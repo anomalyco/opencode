@@ -13,7 +13,7 @@ import { displayName, projectForSession } from "@/shell/layout/helpers"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode-ai/client/promise"
-import { sessionLabel } from "@/session/title"
+import { sessionTabTitle } from "./tab-title"
 import { useSettings } from "@/settings/model"
 import { canOpenTabRename, forwardTabRef } from "./tab-gesture"
 import { TabPreviewPopover } from "./tab-popover"
@@ -63,7 +63,7 @@ export function TabNavItem(props: {
   })
   const title = createMemo(() => {
     const session = props.session
-    return session ? sessionLabel(session) : props.fallbackTitle
+    return sessionTabTitle(session ? session.title : props.fallbackTitle, language.t("session.tab.session"))
   })
 
   const projectName = createMemo(() => {

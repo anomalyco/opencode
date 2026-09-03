@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/util/encode"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
 
@@ -25,6 +26,53 @@ for (const viewport of [
   { name: "desktop", width: 1280, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
+  test(`keeps Session in the tab until the generated title arrives on ${viewport.name}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport)
+    const mock = await openDraft(page, { untitled: true })
+    const label = page.locator(
+      viewport.name === "mobile"
+        ? '[data-slot="mobile-tab-title"]'
+        : '[data-titlebar-tab-slot][data-active="true"] [data-titlebar-tab-title]',
+    )
+    await expect(label).toHaveText("Session")
+    const pending = await submitPending(page, mock)
+    const spinner = page.locator(
+      viewport.name === "mobile"
+        ? '[data-slot="mobile-tabs-trigger"] [data-component="session-progress-indicator-v2"]'
+        : `[data-titlebar-tab-link][href="${sessionPath}${pending.sessionID}"] [data-component="session-progress-indicator-v2"]`,
+    )
+    await expect(spinner).toBeVisible()
+    await testInfo.attach("pending-tab-title", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    })
+    await expect(label).toHaveText("Session")
+
+    mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+    await expect(pending.shimmer).toHaveCount(0)
+    await expect(page.locator('[data-action="composer-submit"]')).toBeEnabled()
+    await expect(label).toHaveText("Session")
+
+    if (viewport.name === "mobile") {
+      await label.click()
+      const drawer = page.locator('[data-slot="mobile-tabs-drawer"]')
+      const tab = drawer.locator(`[data-titlebar-tab-link][href="${sessionPath}${pending.sessionID}"]`)
+      await expect(tab.locator('[data-titlebar-tab-title]')).toHaveText("Session")
+      await tab.click()
+      await expect(drawer).toBeHidden()
+    }
+
+    mock.events.push({
+      id: "evt_generated_title",
+      type: "session.renamed",
+      created: Date.now(),
+      location: { directory: workspace },
+      durable: { aggregateID: pending.sessionID, seq: 1, version: 1 },
+      data: { sessionID: pending.sessionID, title: "Generated session title" },
+    })
+    await expect(label).toHaveText("Generated session title")
+  })
+
   test(`shows a pending workspace session immediately on ${viewport.name}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport)
     const mock = await openDraft(page)
@@ -346,12 +394,13 @@ async function draftFollowUp(page: Page) {
   await expect(editor).toHaveText(followUp)
 }
 
-async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) {
+async function openDraft(page: Page, options?: { failSessionCreate?: boolean; untitled?: boolean }) {
   const worktree = Promise.withResolvers<{ status: number; json: { directory?: string; message?: string } }>()
   const calls: string[] = []
   const worktreeRequests: Record<string, unknown>[] = []
   const creates: Record<string, unknown>[] = []
   const prompts: { sessionID: string; body: Record<string, unknown> }[] = []
+  const events: OpenCodeEvent[] = []
   const project = {
     id: projectID,
     worktree: directory,
@@ -378,6 +427,7 @@ async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) 
     sessions,
     pageMessages: () => ({ items: [] }),
     onPrompt: (input) => prompts.push(input),
+    events: () => events.splice(0),
   })
   page.on("request", (request) => {
     if (request.method() !== "POST") return
@@ -404,7 +454,10 @@ async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) 
       return route.fulfill({ status: 500, json: { message: "Session creation failed in the fixture" }, headers })
     }
     if (typeof body.id !== "string") throw new Error("Session creation must use the client-reserved ID")
-    const session = currentSession({ ...body, id: body.id, projectID, title: "Created workspace session" }, workspace)
+    const session = currentSession(
+      { ...body, id: body.id, projectID, title: options?.untitled ? "" : "Created workspace session" },
+      workspace,
+    )
     sessions.push(session)
     return route.fulfill({ json: { data: session }, headers })
   })
@@ -461,7 +514,7 @@ async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) 
   await page.getByRole("menuitem", { name: "New worktree", exact: true }).click()
   await expect(page.getByRole("button", { name: "New worktree", exact: true })).toBeVisible()
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
-  return { worktree, worktreeRequests, calls, creates, prompts }
+  return { worktree, worktreeRequests, calls, creates, prompts, events }
 }
 
 async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDraft>>) {

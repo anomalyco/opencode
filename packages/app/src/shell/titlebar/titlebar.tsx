@@ -26,7 +26,7 @@ import "./titlebar.css"
 import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
 import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
 import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
-import { sessionLabel } from "@/session/title"
+import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 import { projectForSession } from "@/shell/layout/helpers"
@@ -413,9 +413,12 @@ export function Titlebar(props: {
             const currentTitle = () => {
               const tab = currentTab()
               if (!tab) return language.t("home.title")
-              if (tab.type === "draft") return language.t("command.session.new")
+              if (tab.type === "draft") return language.t("session.tab.session")
               const value = session()
-              return value ? sessionLabel(value) : (tabs.info[tabKey(tab)]?.title ?? language.t("command.session.new"))
+              return sessionTabTitle(
+                value ? value.title : tabs.info[tabKey(tab)]?.title,
+                language.t("session.tab.session"),
+              )
             }
             createEffect(() => {
               path()
@@ -497,7 +500,7 @@ export function Titlebar(props: {
                             </span>
                           )}
                         </Show>
-                        <span dir="auto" class="min-w-0 flex-1 truncate text-start">
+                        <span data-slot="mobile-tab-title" dir="auto" class="min-w-0 flex-1 truncate text-start">
                           {currentTitle()}
                         </span>
                         <span class="shrink-0 text-v2-text-text-muted">{tabsStore.length}</span>

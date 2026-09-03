@@ -171,7 +171,7 @@ function SessionTabEntry(props: {
         preparing={!!pending()}
         fallbackTitle={
           pending()
-            ? language.t("command.session.new")
+            ? language.t("session.tab.session")
             : (persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined))
         }
         onRename={rename}
