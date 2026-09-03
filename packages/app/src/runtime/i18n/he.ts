@@ -134,6 +134,7 @@ export const dict = {
   "command.language.cycle": "מעבר לשפה הבאה",
   "command.language.set": "השתמש בשפה: {{language}}",
   "command.session.new": "הפעלה חדשה",
+  "command.session.import": "ייבוא הפעלה",
   "command.file.open": "פתח את הקובץ",
   "command.tab.close": "סגור כרטיסייה",
   "command.tab.reopenClosed": "פתח מחדש את הכרטיסייה הסגורה",

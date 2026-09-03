@@ -33,7 +33,7 @@ export const Plugin = define({
     const changes = yield* PubSub.sliding<string>(1)
     const lock = Semaphore.makeUnsafe(1)
 
-    const watch = Effect.fn("ConfigSkillPlugin.watch")(function* (directory: string, type: Watcher.WatchInput["type"]) {
+    const watch = Effect.fn("ConfigSkillPlugin.watch")(function* (directory: string, type: "file" | "directory") {
       const target = path.resolve(directory)
       const updates = yield* watcher.subscribe({ path: target, type })
       yield* FiberMap.run(

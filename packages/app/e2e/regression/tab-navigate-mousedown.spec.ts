@@ -29,7 +29,7 @@ test("new session tab matches neighboring session widths", async ({ page }, test
   await page.goto(href)
 
   const tabs = page.locator("[data-titlebar-tab-slot]")
-  await expect(tabs.locator("[data-titlebar-tab-title]")).toHaveText([sessionA.title, "New session", sessionB.title])
+  await expect(tabs.locator("[data-titlebar-tab-title]")).toHaveText([sessionA.title, "Session", sessionB.title])
   await testInfo.attach("new-session-between-tabs", {
     body: await page.locator('[data-slot="titlebar-v2"]').screenshot(),
     contentType: "image/png",
@@ -194,7 +194,7 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
     .poll(async () => {
       const bounds = await sidebar.boundingBox()
       const button = await status.boundingBox()
-      return !!bounds && !!button && bounds.x + bounds.width - button.x - button.width <= 12
+      return !!bounds && !!button && button.x >= bounds.x && button.x - bounds.x <= 12
     })
     .toBe(true)
   await expect(page.locator('[data-slot="titlebar-v2"]')).toBeHidden()

@@ -1368,6 +1368,58 @@ test.each(["manual", "select"] as const)(
   },
 )
 
+test.each([100, 44])(
+  "execution failure keeps the empty session composer and draft usable at width %s",
+  async (width) => {
+    await using state = await tmpdir()
+    const session = {
+      id: "ses_failure",
+      projectID: "proj_test",
+      location: { directory },
+      title: "Failure fixture",
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1, updated: 1 },
+    }
+    await using setup = await createAppFixture({
+      width,
+      state: state.path,
+      args: { sessionID: session.id },
+      config: { animations: false, tabs: { enabled: false } },
+      fetch: (url) => {
+        if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+        if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+        if (url.pathname === `/api/session/${session.id}/message`) return json({ data: [], cursor: {} })
+        if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+          return json({ data: [] })
+        return undefined
+      },
+    })
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    setup.mockInput.pressKey("u", { ctrl: true })
+    await setup.mockInput.typeText("Keep this draft")
+    await setup.waitForFrame((frame) => frame.includes("Keep this draft"))
+    setup.events.emit({
+      id: "evt_execution_failed",
+      created: 2,
+      type: "session.execution.failed",
+      durable: { aggregateID: session.id, seq: 1, version: 1 },
+      data: {
+        sessionID: session.id,
+        error: { type: "unknown", message: 'Plugin "broken-skills" failed during skill.transform.' },
+      },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Session failed"))
+    expect(setup.captureCharFrame()).toContain("broken-skills")
+    expect(setup.captureCharFrame()).toContain("skill.transform")
+    expect(setup.captureCharFrame()).toContain("Keep this draft")
+    expect(setup.captureCharFrame()).not.toContain("Select directory")
+    await setup.mockInput.typeText(" intact")
+    await setup.waitForFrame((frame) => frame.includes("Keep this draft intact"))
+  },
+)
+
 async function createAppFixture(
   input: {
     width?: number

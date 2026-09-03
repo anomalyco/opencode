@@ -98,13 +98,15 @@ test.each(["started", "cancelled", "failed"])(
     expect(fixture.data.session.pending.list(sessionID)).toEqual([])
     if (kind === "started") {
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([{ type: "compaction", status: "running" }])
+      const model = { providerID: "demo", id: "model" }
+      const providerState = { responseId: "summary-response" }
       fixture.emit({
         ...event,
         type: "session.compaction.ended",
-        data: { sessionID, reason: "manual", text: "Summary", recent: "Recent" },
+        data: { sessionID, reason: "manual", model, providerState, text: "Summary", recent: "Recent" },
       })
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([
-        { type: "compaction", status: "completed", summary: "Summary" },
+        { type: "compaction", status: "completed", summary: "Summary", model, providerState },
       ])
     }
   },

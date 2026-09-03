@@ -22,7 +22,7 @@ export type Info<
   ) => Promise<Tool.Result<Output>>
 }
 
-interface ToolEditor {
+export interface ToolEditor {
   list(): readonly (Info & { readonly id: string })[]
   get(id: string): (Info & { readonly id: string }) | undefined
   namespace(namespace: Tool.Namespace): void

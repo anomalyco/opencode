@@ -1,8 +1,9 @@
 import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Duration, Effect, Layer, LayerMap, Schedule } from "effect"
+import { Deferred, Duration, Effect, Fiber, Layer, LayerMap, Schedule } from "effect"
 import { TestClock } from "effect/testing"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -19,7 +20,9 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tempGlobalLayer } from "../fixture/global"
+import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
+import { advance } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 
 // Real Location boot with plugin-directory discovery, so local plugin files are loaded and reloaded.
@@ -54,13 +57,15 @@ const npmLayer = Layer.succeed(
 const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
+    const watcher = yield* Watcher.Test
     const map = yield* LayerMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements: bindings }), {
       idleTimeToLive: Duration.infinity,
     })
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
+      offlineModels,
       Npm.node.replace(npmLayer),
-      Watcher.node.replace(Watcher.configured({ enabled: false })),
+      Watcher.node.replace(Layer.succeed(Watcher.Service, watcher)),
       LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
       Instance.node.replace(
         Layer.succeed(Instance.Service, {
@@ -70,13 +75,14 @@ const instances = Layer.effect(
     ]
     return map
   }),
-)
+).pipe(Layer.provide(Watcher.testLayer))
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
+    offlineModels,
     LocationServiceMap.node.replace(instances),
-  ]),
+  ]).pipe(Layer.provideMerge(Watcher.testLayer)),
 )
 
 const greeter = (command: string) => `export default {
@@ -104,6 +110,61 @@ const failed = (plugins: Plugin.Interface) =>
   )
 
 describe("PluginSupervisor reload", () => {
+  ;(["discovered", "configured"] as const).forEach((mode) => {
+    it.effect(`retains a ${mode} plugin change during initial activation`, () =>
+      Effect.gen(function* () {
+        const directory = yield* tmpdirScoped()
+        const file = path.join(
+          directory.path,
+          mode === "discovered" ? ".opencode/plugins/greeter.ts" : "external/greeter/index.ts",
+        )
+        yield* Effect.promise(async () => {
+          await Bun.write(file, greeter("greet-v1"))
+          await fs.utimes(file, new Date(0), new Date(0))
+          if (mode === "configured") {
+            await Bun.write(
+              path.join(directory.path, ".opencode/opencode.json"),
+              JSON.stringify({ plugins: [path.dirname(file)] }),
+            )
+          }
+        })
+        const entered = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const sdk = yield* SdkPlugins.Service
+        yield* sdk.register(
+          define({
+            id: "gated",
+            effect: () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(gate))),
+          }),
+        )
+        const watcher = yield* Watcher.Test
+        const locations = yield* LocationServiceMap.Service
+        yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          const commands = yield* Command.Service
+          yield* Deferred.await(entered)
+          // The real ConfigPluginSource merges config-root changes and configured-path watches.
+          // Emit while setup is blocked, without a bus event that could mask a lost source trigger.
+          yield* Effect.promise(async () => {
+            await Bun.write(file, greeter("greet-v2"))
+            await fs.utimes(file, new Date(), new Date())
+          })
+          yield* watcher.emit({ path: file, type: "update" })
+          const ready = yield* plugins.awaitActivation.pipe(Effect.forkScoped({ startImmediately: true }))
+          yield* Deferred.succeed(gate, undefined)
+          yield* advance(() => ready.pollUnsafe() !== undefined)
+          yield* Fiber.join(ready)
+
+          expect(yield* commands.get("greet-v1")).toBeUndefined()
+          expect(yield* commands.get("greet-v2")).toBeDefined()
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }),
+    )
+  })
+
   it.live("keeps the running generation when an updated local plugin fails to import", () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()

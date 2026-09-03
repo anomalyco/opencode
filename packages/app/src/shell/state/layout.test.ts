@@ -3,8 +3,12 @@ import { createRoot, createSignal } from "solid-js"
 import { Schema } from "effect"
 import { ServerConnection } from "@/runtime/server/registry"
 import { Persistence } from "@/runtime/persistence/schema"
-import { initialLayout, layoutPersistence, layoutSchema } from "./layout"
+import { currentRoute, initialLayout, layoutPersistence, layoutSchema } from "./layout"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
+
+test("settings has its own layout route", () => {
+  expect(currentRoute("/settings", "")).toEqual({ type: "settings" })
+})
 
 describe("layout persistence", () => {
   const schema = Persistence.withInitial(layoutPersistence, initialLayout(ServerConnection.Key.make("local")))

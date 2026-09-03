@@ -50,16 +50,14 @@ const layer = Layer.effect(
       ),
     )
     const lock = Semaphore.makeUnsafe(1)
-    let requested = 0
     let stopped = false
     let active: { path: string; scope: Scope.Closeable } | undefined
-    const reconcile = (ignore: readonly string[]) => {
-      const request = ++requested
-      return lock.withPermit(
+    const reconcile = () =>
+      lock.withPermit(
         Effect.gen(function* () {
-          if (stopped || request !== requested) return
+          if (stopped) return
           const resolved = yield* target
-          if (stopped || request !== requested) return
+          const ignore = policy.current()
           const next = resolved && !resolved.aliases.some((alias) => ignore.includes(alias)) ? resolved.path : undefined
           if (active?.path === next) return
           if (active) yield* Scope.close(active.scope, Exit.void)
@@ -79,12 +77,10 @@ const layer = Layer.effect(
           )
         }).pipe(Effect.withSpan("LocationWatcher.reconcile", { attributes: { directory: location.directory } })),
       )
-    }
     yield* Effect.addFinalizer(() =>
       lock.withPermit(
         Effect.gen(function* () {
           stopped = true
-          requested++
           if (active) yield* Scope.close(active.scope, Exit.void)
           active = undefined
         }),
@@ -93,7 +89,7 @@ const layer = Layer.effect(
     yield* policy.observe(reconcile)
     yield* Effect.gen(function* () {
       yield* Plugin.awaitActivation
-      yield* reconcile(policy.current())
+      yield* reconcile()
     }).pipe(
       Effect.catchCauseIf(
         (cause) => !Cause.hasInterrupts(cause),

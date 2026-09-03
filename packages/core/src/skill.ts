@@ -74,6 +74,7 @@ export type Data = {
 
 export type Editor = {
   list: () => readonly Types.DeepMutable<Info>[]
+  get: (id: string) => Types.DeepMutable<Info> | undefined
   add: (skill: Info) => void
   update: (id: string, update: (skill: Types.DeepMutable<Info>) => void) => void
   remove: (id: string) => void
@@ -96,6 +97,7 @@ const layer = Layer.effect(
       initial: () => ({ skills: new Map() }),
       editor: (editor) => ({
         list: () => Array.from(editor.skills.values()),
+        get: (id) => editor.skills.get(ID.make(id)),
         add: (skill) => {
           editor.skills.set(skill.id, { ...skill } as Types.DeepMutable<Info>)
         },

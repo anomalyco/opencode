@@ -53,9 +53,8 @@ test("creates a session in a new project and selects its model", async ({ page }
     }),
     sessions: [],
     pageMessages: () => ({ items: [] }),
-    fileList: (path) =>
-      path ? [] : [{ name: "NewProject", path: "NewProject", absolute: directory, type: "directory", ignored: false }],
-    findFiles: () => ["NewProject"],
+    // Listings are requested by absolute path and returned relative to the stable Location.
+    fileList: (path) => (path === "C:/OpenCode" ? [{ path: "./", type: "directory", ignored: false }] : []),
   })
   await page.addInitScript(() => {
     localStorage.setItem("opencode.global.dat:server", JSON.stringify({ projects: { local: [] } }))
@@ -76,12 +75,23 @@ test("creates a session in a new project and selects its model", async ({ page }
   const addProject = page.locator('[data-action="home-add-project-row"]')
   await expectAppVisible(addProject)
   await addProject.click()
-  const directoryItem = page.getByRole("treeitem", { name: "NewProject" })
+  const picker = page.getByRole("dialog", { name: "Open project", exact: true })
+  await expect(picker.getByRole("combobox")).toHaveValue("C:\\OpenCode\\NewProject")
+  const listing = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname === "/api/fs/list" && url.searchParams.get("path") === "C:/OpenCode"
+  })
+  await picker.getByRole("button", { name: "Parent", exact: true }).click()
+  expect(new URL((await listing).url()).searchParams.get("location[directory]")).toBe(directory)
+  const directoryItem = picker.getByRole("treeitem", { name: "NewProject", exact: true })
   await expect(directoryItem).toBeVisible()
   await directoryItem.click()
-  const selectFolder = page.getByRole("button", { name: "Select folder" })
+  await expect(directoryItem).toHaveAttribute("aria-selected", "true")
+  await expect(picker.getByText("C:\\OpenCode\\NewProject", { exact: true })).toBeVisible()
+  const selectFolder = picker.getByRole("button", { name: "Select folder", exact: true })
   await expect(selectFolder).toBeEnabled()
   await selectFolder.click()
+  await expect(picker).toBeHidden()
 
   await page.locator('[data-action="home-new-session"]').click()
   await expectAppVisible(page.locator('[data-component="composer"]'))

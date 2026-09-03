@@ -93,6 +93,32 @@ describe("Catalog", () => {
     }),
   )
 
+  it.effect("preserves provider identity when updating new and existing providers", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("original")
+      const renamed = Provider.ID.make("renamed")
+      yield* catalog.transform((editor) => {
+        editor.provider.update(providerID, (provider) => {
+          provider.id = renamed
+          provider.name = "Created"
+        })
+        expect(editor.provider.get(providerID)?.provider.id).toBe(providerID)
+        editor.provider.update(providerID, (provider) => {
+          provider.id = renamed
+          provider.name = "Updated"
+        })
+      })
+
+      expect(yield* catalog.provider.get(providerID)).toMatchObject({ id: providerID, name: "Updated" })
+      expect(yield* catalog.provider.get(renamed)).toBeUndefined()
+      expect((yield* catalog.provider.all()).map((provider) => provider.id)).toEqual([providerID])
+
+      yield* catalog.reload()
+      expect(yield* catalog.provider.get(providerID)).toMatchObject({ id: providerID, name: "Updated" })
+    }),
+  )
+
   it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
     const localCatalogLayer = Layer.fresh(

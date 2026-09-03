@@ -134,6 +134,7 @@ export const dict = {
   "command.language.cycle": "زبان چرخه",
   "command.language.set": "استفاده از زبان: {{language}}",
   "command.session.new": "جلسه جدید",
+  "command.session.import": "وارد کردن جلسه",
   "command.file.open": "باز کردن فایل",
   "command.tab.close": "بستن برگه",
   "command.tab.reopenClosed": "برگه بسته را دوباره باز کنید",

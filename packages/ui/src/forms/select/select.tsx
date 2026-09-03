@@ -181,6 +181,8 @@ export function Select<T>(props: SelectProps<T>) {
     >
       <Trigger
         as="div"
+        aria-label={props["aria-label"]}
+        aria-labelledby={props["aria-labelledby"]}
         data-component="select-v2"
         data-appearance="inline"
         data-invalid={local.invalid ? "" : undefined}

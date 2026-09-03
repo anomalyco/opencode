@@ -522,7 +522,11 @@ function userPart(part: ContentPart): UserContent {
 function assistantPart(part: ContentPart): AssistantContent {
   switch (part.type) {
     case "compaction":
-      throw ProviderShared.invalidRequest("AI SDK routes cannot replay native provider compaction state")
+      throw ProviderShared.unsupportedOperation({
+        operation: "compaction-replay",
+        provider: part.provider,
+        message: "AI SDK routes cannot replay native provider compaction state",
+      })
     case "text":
       return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":

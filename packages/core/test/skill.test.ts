@@ -20,6 +20,25 @@ const info = (id: string, description: string) =>
   })
 
 describe("Skill", () => {
+  it.effect("reads the current editor entry by ID", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      yield* skill.transform((editor) => editor.add(info("review", "Initial")))
+      yield* skill.transform((editor) => {
+        expect(editor.get("review")).toBe(editor.list()[0])
+        expect(editor.get("missing")).toBeUndefined()
+        editor.update("review", (value) => {
+          value.description = "Updated"
+        })
+        expect(editor.get("review")?.description).toBe("Updated")
+        editor.remove("review")
+        expect(editor.get("review")).toBeUndefined()
+      })
+
+      expect(yield* skill.list()).toEqual([])
+    }),
+  )
+
   it.effect("registers values with last-write-wins precedence", () =>
     Effect.gen(function* () {
       const skill = yield* Skill.Service
