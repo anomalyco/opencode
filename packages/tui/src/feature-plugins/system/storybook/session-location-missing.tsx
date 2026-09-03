@@ -12,7 +12,7 @@ const directory = "/Users/kit/code/open-source/opencode-workerd-profile"
 function SessionLocationMissingStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const theme = props.context.theme.contextual.elevated
-  const [message, setMessage] = createSignal("Choose another directory to continue")
+  const [message, setMessage] = createSignal("Retry or choose another directory")
   const open = () =>
     props.context.ui.dialog.show(() => (
       <DialogMoveSession
@@ -50,15 +50,20 @@ function SessionLocationMissingStory(props: { context: Plugin.Context }) {
         <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
           Workerd Modal workspace driver
         </text>
-        <text fg={theme.text.subdued}>build · GPT-5.6 Sol (high)</text>
+        <text fg={theme.text.subdued}>build · Demo Model</text>
         <box height={1} />
         <text fg={theme.text.default}>You</text>
         <text fg={theme.text.subdued}>Test the mounted workspace and verify the deployment.</text>
         <box height={1} />
-        <text fg={theme.text.default}>Build · GPT-5.6 Sol (high)</text>
+        <text fg={theme.text.default}>Build · Demo Model</text>
         <text fg={theme.text.subdued}>The deployment is verified and the worktree is clean.</text>
         <box flexGrow={1} />
-        <SessionLocationUnavailable directory={directory} onMove={open} />
+        <SessionLocationUnavailable
+          directory={directory}
+          message="Could not initialize this location"
+          onRetry={() => setMessage("Retried location sync")}
+          onMove={open}
+        />
       </box>
       <StoryFooter
         context={props.context}
