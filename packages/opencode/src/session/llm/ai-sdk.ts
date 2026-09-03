@@ -19,13 +19,19 @@ export function adapterState() {
   }
 }
 
+// Compile the schema validators ONCE. `Schema.is(schema)` rebuilds the refinement
+// function on every call, and these run per streamed token (providerMetadata is
+// called on every delta) — recompiling per token was a chunk of streaming CPU.
+const isFinishReason = Schema.is(FinishReason)
+const isProviderMetadata = Schema.is(ProviderMetadata)
+
 function finishReason(value: string | undefined): FinishReason {
-  return Schema.is(FinishReason)(value) ? value : "unknown"
+  return isFinishReason(value) ? value : "unknown"
 }
 
 function providerMetadata(value: unknown): ProviderMetadata | undefined {
   if (value == null) return undefined
-  return Schema.is(ProviderMetadata)(value) ? value : undefined
+  return isProviderMetadata(value) ? value : undefined
 }
 
 // Temporary AI SDK bridge: Copilot billing survives only in raw provider chunks here.
@@ -137,13 +143,19 @@ export function toLLMEvents(
         ]
       })
 
+    // Hot path: text-delta / reasoning-delta / tool-input-delta fire per streamed
+    // token. Returning a plain typed literal skips the Effect Schema validation the
+    // LLMEvent.*Delta() constructors run inside `.make()` on every call. The
+    // explicit type arg keeps the literal checked structurally against the LLMEvent
+    // union, so a shape drift is a typecheck error, not a runtime surprise.
     case "text-delta":
-      return Effect.succeed([
-        LLMEvent.textDelta({
+      return Effect.succeed<ReadonlyArray<LLMEvent>>([
+        {
+          type: "text-delta",
           id: currentTextID(state, event.id),
           text: event.text,
           providerMetadata: providerMetadata(event.providerMetadata),
-        }),
+        },
       ])
 
     case "text-end":
@@ -170,12 +182,13 @@ export function toLLMEvents(
       })
 
     case "reasoning-delta":
-      return Effect.succeed([
-        LLMEvent.reasoningDelta({
+      return Effect.succeed<ReadonlyArray<LLMEvent>>([
+        {
+          type: "reasoning-delta",
           id: currentReasoningID(state, event.id),
           text: event.text,
           providerMetadata: providerMetadata(event.providerMetadata),
-        }),
+        },
       ])
 
     case "reasoning-end":
@@ -203,12 +216,13 @@ export function toLLMEvents(
       })
 
     case "tool-input-delta":
-      return Effect.succeed([
-        LLMEvent.toolInputDelta({
+      return Effect.succeed<ReadonlyArray<LLMEvent>>([
+        {
+          type: "tool-input-delta",
           id: event.id,
           name: state.toolNames[event.id] ?? "unknown",
           text: event.delta ?? "",
-        }),
+        },
       ])
 
     case "tool-input-end":
