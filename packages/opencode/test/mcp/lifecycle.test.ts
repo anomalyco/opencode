@@ -14,7 +14,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Logger } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { MCP } from "../../src/mcp/index"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
@@ -233,6 +233,96 @@ it.instance("tools() reuses cached definitions until a protocol notification", (
       "tool cache did not refresh",
     )
     expect(Object.keys(yield* mcp.tools())).toEqual(["cache-server_next_tool"])
+  }),
+)
+
+// Issue #3523: when `<server>_<tool>` exceeds 64 chars OpenAI rejects the
+// request and the error never reaches the TUI. These two tool names share
+// their first 55 chars after the server prefix, so blind truncation would
+// collapse them into one key — the hash suffix must keep them distinct.
+it.instance("tools() caps provider-facing names at 64 chars without collapsing collisions", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    server.state.tools = [
+      {
+        name: "perform_extremely_specific_workflow_step_alpha",
+        description: "first long-named tool",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
+        name: "perform_extremely_specific_workflow_step_beta",
+        description: "second long-named tool",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]
+    yield* mcp.add("chrome-devtools-aaaaaaaaaaaaaaaaaaa", remote(server.url))
+
+    const keys = Object.keys(yield* mcp.tools())
+    expect(keys.length).toBe(2)
+    expect(new Set(keys).size).toBe(2)
+    for (const key of keys) {
+      expect(key.length).toBeLessThanOrEqual(64)
+      expect(key).toMatch(/_[0-9a-f]{8}$/)
+    }
+  }),
+)
+
+// `sanitize` maps every character outside [a-zA-Z0-9_-] to `_`, so two
+// distinct tool names can land on one registry key: `read.file` and
+// `read_file` both become `dup-server_read_file`. The write then drops one
+// tool and the provider gets a key that resolves to the wrong one, with no
+// signal anywhere. Truncated names add a second, rarer path to the same
+// collapse. Either way the overwrite must be logged, not swallowed.
+it.instance("tools() warns when two tool names collapse to the same registry key", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    server.state.tools = [
+      { name: "read.file", description: "dot form", inputSchema: { type: "object", properties: {} } },
+      { name: "read_file", description: "underscore form", inputSchema: { type: "object", properties: {} } },
+    ]
+    yield* mcp.add("dup-server", remote(server.url))
+
+    const lines: string[] = []
+    const capture = Logger.make<unknown, void>((options) => {
+      lines.push(JSON.stringify(options.message))
+    })
+
+    const keys = Object.keys(yield* mcp.tools().pipe(Effect.provide(Logger.layer([capture]))))
+
+    expect(keys).toEqual(["dup-server_read_file"])
+    // `read.file` only ever appears in the collision warning; the surviving
+    // key spells it `read_file`.
+    const warned = lines.filter((line) => line.includes("dup-server_read_file") && line.includes("read.file"))
+    expect(warned.length).toBe(1)
+  }),
+)
+
+// `instructions()` runs on every system-prompt build and `tools()` runs on
+// every request, so warning about the same truncation in both places doubles
+// a line that repeats for the life of the session. `tools()` owns the warning;
+// `instructions()` stays quiet and only has to produce the same names.
+it.instance("instructions() reports truncated names without re-warning", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer({ instructions: "Use lookup before mutate." })
+    const mcp = yield* MCP.Service
+    const longTool = "perform_extremely_specific_workflow_step_alpha"
+    server.state.tools = [{ name: longTool, description: "long", inputSchema: { type: "object", properties: {} } }]
+    yield* mcp.add("chrome-devtools-aaaaaaaaaaaaaaaaaaa", remote(server.url))
+
+    const lines: string[] = []
+    const capture = Logger.make<unknown, void>((options) => {
+      lines.push(JSON.stringify(options.message))
+    })
+
+    const result = yield* mcp.instructions().pipe(Effect.provide(Logger.layer([capture])))
+
+    expect(result.length).toBe(1)
+    expect(result[0].tools.length).toBe(1)
+    expect(result[0].tools[0].length).toBeLessThanOrEqual(64)
+    expect(result[0].tools[0]).toMatch(/_[0-9a-f]{8}$/)
+    expect(lines.filter((line) => line.includes(longTool))).toEqual([])
   }),
 )
 

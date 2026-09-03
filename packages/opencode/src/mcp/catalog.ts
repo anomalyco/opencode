@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { dynamicTool, jsonSchema, type JSONSchema7, type Tool } from "ai"
 import { Effect } from "effect"
+import { Hash } from "@opencode-ai/core/util/hash"
 
 const DEFAULT_TIMEOUT = 30_000
 const MAX_LIST_PAGES = 1_000
@@ -116,7 +117,40 @@ export function fetch<T extends { name: string }>(
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
 
+// WARNING: no length cap. Provider-facing tool names must go through
+// buildToolName below — OpenAI's tool-use API rejects function.name strings
+// over 64 chars (issue #3523). toolName is only safe for internal registry
+// keys (prompts/resources), which have no provider limit.
 export const toolName = (clientName: string, name: string) => sanitize(clientName) + "_" + sanitize(name)
+
+// OpenAI's tool-use API rejects `tools[].function.name` strings longer than
+// 64 chars. When `<server>_<tool>` exceeds the limit, opencode silently
+// dies because the provider returns 400 and the error never reaches the
+// TUI. Truncate to 64 with a content-derived suffix so colliding prefixes
+// stay distinct (issue #3523).
+const MAX_TOOL_NAME_LENGTH = 64
+const TOOL_NAME_PREFIX_LENGTH = 55
+const TOOL_NAME_HASH_LENGTH = 8
+
+export type BuiltToolName = {
+  name: string
+  truncated: boolean
+  combined: string
+}
+
+export function buildToolName(clientName: string, tool: string): BuiltToolName {
+  const combined = toolName(clientName, tool)
+  if (combined.length <= MAX_TOOL_NAME_LENGTH) {
+    return { name: combined, truncated: false, combined }
+  }
+  const hash = Hash.fast(combined).slice(0, TOOL_NAME_HASH_LENGTH)
+  const prefix = combined.slice(0, TOOL_NAME_PREFIX_LENGTH)
+  return {
+    name: prefix + "_" + hash,
+    truncated: true,
+    combined,
+  }
+}
 
 export function prompts(client: Client, timeout?: number) {
   if (!client.getServerCapabilities()?.prompts) return Promise.resolve([])
