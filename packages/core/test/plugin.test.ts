@@ -1,12 +1,14 @@
 import { expect } from "bun:test"
 import path from "path"
-import { Clock, Effect } from "effect"
+import { Clock, Deferred, Effect } from "effect"
 import { TestClock } from "effect/testing"
 import { Command } from "@opencode-ai/core/command"
+import { Bus } from "@opencode-ai/core/bus"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginModule } from "@opencode-ai/core/plugin/module"
+import { fromPromise } from "@opencode-ai/plugin/promise/adapter"
 import { Session } from "@opencode-ai/schema/session"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
@@ -154,6 +156,57 @@ it.effect("reports a failed plugin without blocking a healthy plugin", () =>
   }),
 )
 
+it.effect("quarantines a plugin whose transform fails after setup without publishing its partial edits", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const integrations = yield* Integration.Service
+    let cleaned = false
+    yield* plugins.activate([
+      {
+        id: "before",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.command
+            .transform((editor) => editor.add({ name: "shared", description: "original", execute: () => Effect.void }))
+            .pipe(Effect.asVoid),
+      },
+      {
+        id: "broken",
+        revision: "1",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* Effect.addFinalizer(() => Effect.sync(() => void (cleaned = true)))
+            yield* ctx.integration.transform((editor) => editor.update("broken", (entry) => (entry.name = "Broken")))
+            yield* ctx.command.transform((editor) => {
+              editor.add({ name: "shared", description: "partial", execute: () => Effect.void })
+              throw new Error("replay failed")
+            })
+          }),
+      },
+      {
+        id: "after",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.command
+            .transform((editor) => editor.add({ name: "healthy", execute: () => Effect.void }))
+            .pipe(Effect.asVoid),
+      },
+    ])
+
+    yield* plugins.awaitActivation
+    expect(cleaned).toBe(true)
+    expect((yield* plugins.list()).find((plugin) => plugin.id === "broken")?.state).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("command.transform failed"),
+      ref: expect.stringMatching(/^err_/),
+    })
+    expect(yield* commands.get("shared")).toMatchObject({ description: "original" })
+    expect(yield* commands.get("healthy")).toBeDefined()
+    expect(yield* integrations.get(Integration.ID.make("broken"))).toBeUndefined()
+  }),
+)
+
 it.effect("keeps the suffix after a failed plugin alive across identical activations", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
@@ -193,6 +246,204 @@ it.effect("keeps the suffix after a failed plugin alive across identical activat
     yield* plugins.activate([good("good1"), broken("2"), good("good2")])
     expect(setups).toEqual({ good1: 1, broken: 2, good2: 2 })
     expect(yield* failed()).toMatchObject({ status: "failed" })
+  }),
+)
+
+it.effect("attributes replay failure to its owner rather than a later plugin reading the registry", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    yield* plugins.activate([
+      {
+        id: "broken-owner",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.command
+            .transform(() => {
+              throw new Error("owner failed")
+            })
+            .pipe(Effect.asVoid),
+      },
+      {
+        id: "reader",
+        revision: "1",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* ctx.command.list().pipe(Effect.orDie)
+            yield* ctx.command.transform((editor) => editor.add({ name: "reader", execute: () => Effect.void }))
+          }),
+      },
+    ])
+    yield* plugins.awaitActivation
+    expect((yield* plugins.list()).map((entry) => `${entry.id}:${entry.state.status}`)).toEqual([
+      "broken-owner:failed",
+      "reader:active",
+    ])
+    expect(yield* commands.get("reader")).toBeDefined()
+  }),
+)
+
+it.effect("quarantines runtime reload failures without retrying an unchanged generation", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const bus = yield* Bus.Service
+    const reported: string[] = []
+    yield* Effect.acquireRelease(
+      bus.listen((event) =>
+        event.type === Plugin.Event.Updated.type
+          ? plugins.list().pipe(
+              Effect.tap((items) => Effect.sync(() => void reported.push(items[0]?.state.status ?? "empty"))),
+              Effect.asVoid,
+            )
+          : Effect.void,
+      ),
+      (unsubscribe) => unsubscribe,
+    )
+    let fail = false
+    let loads = 0
+    let reload = () => Effect.void
+    const generation = (revision: string): Plugin.Generation => ({
+      id: "runtime",
+      revision,
+      effect: (ctx) =>
+        Effect.gen(function* () {
+          loads++
+          reload = ctx.command.reload
+          yield* ctx.command.transform((editor) => {
+            editor.add({ name: "runtime", execute: () => Effect.void })
+            if (fail) throw new Error("private failure detail")
+          })
+        }),
+    })
+    const discovery = {
+      source: { type: "local" as const, path: "/missing" },
+      state: { status: "failed" as const, error: "Import failed" },
+      features: { server: true },
+    } satisfies Plugin.Info
+    yield* plugins.activate([generation("1")], [discovery])
+    expect(yield* commands.get("runtime")).toBeDefined()
+    fail = true
+    yield* reload()
+    yield* plugins.awaitActivation
+    const inventory = yield* plugins.list()
+    expect(inventory[0]?.state).toMatchObject({ status: "failed", ref: expect.stringMatching(/^err_/) })
+    expect(JSON.stringify(inventory[0]?.state)).not.toContain("private failure detail")
+    expect(reported.at(-1)).toBe("failed")
+    expect(inventory[1]).toEqual(discovery)
+    expect(yield* commands.get("runtime")).toBeUndefined()
+
+    fail = false
+    yield* plugins.activate([generation("1")], [discovery])
+    expect(loads).toBe(1)
+    expect(yield* commands.get("runtime")).toBeUndefined()
+    yield* plugins.activate([generation("2")], [discovery])
+    expect(loads).toBe(2)
+    expect((yield* plugins.list())[0]?.state).toEqual({ status: "active" })
+    expect(yield* commands.get("runtime")).toBeDefined()
+  }),
+)
+
+it.effect("quarantines replay failures discovered during setup without restoring the old generation", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const cleaned = yield* Deferred.make<void>()
+    const loads: string[] = []
+    const generation = (revision: string): Plugin.Generation => ({
+      id: "replacement",
+      revision,
+      effect: (ctx) =>
+        Effect.gen(function* () {
+          loads.push(revision)
+          if (revision === "2")
+            yield* Effect.addFinalizer(() =>
+              plugins.awaitActivation.pipe(Effect.andThen(Deferred.succeed(cleaned, undefined))),
+            )
+          yield* ctx.command.transform((editor) => {
+            editor.add({ name: "replacement", execute: () => Effect.void })
+            if (revision === "2") throw new Error("replay failure")
+          })
+          if (revision === "2") {
+            yield* ctx.command.list().pipe(Effect.orDie)
+            yield* Effect.die("subsequent setup failure")
+          }
+        }),
+    })
+    yield* plugins.activate([generation("1")])
+    yield* plugins.activate([generation("2")])
+    yield* plugins.awaitActivation
+    yield* Deferred.await(cleaned)
+    expect(loads).toEqual(["1", "2"])
+    expect((yield* plugins.list())[0]?.state).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("command.transform"),
+    })
+    expect(yield* commands.get("replacement")).toBeUndefined()
+  }),
+)
+
+it.effect("does not let asynchronous plugin cleanup block recovered registry readiness", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const cleaned = yield* Deferred.make<void>()
+    yield* plugins.activate([
+      {
+        id: "async-cleanup",
+        revision: "1",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* ctx.command.transform(() => {
+              throw new Error("failed")
+            })
+            yield* Effect.addFinalizer(() =>
+              plugins.awaitActivation.pipe(Effect.andThen(Deferred.succeed(cleaned, undefined))),
+            )
+          }),
+      },
+      {
+        id: "healthy",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.command
+            .transform((editor) => editor.add({ name: "healthy", execute: () => Effect.void }))
+            .pipe(Effect.asVoid),
+      },
+    ])
+    yield* plugins.awaitActivation
+    yield* Deferred.await(cleaned)
+    expect(yield* commands.get("healthy")).toBeDefined()
+    expect((yield* plugins.list())[0]?.state.status).toBe("failed")
+  }),
+)
+
+it.live("retains Promise plugin ownership for later registrations and ignores a quarantined owner's attempts", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    let register = async () => {}
+    const definition = fromPromise({
+      id: "promise-owner",
+      setup(ctx) {
+        register = async () => {
+          await ctx.command.transform((editor) => {
+            editor.add({ name: "late", execute: async () => {} })
+            throw new Error("late Promise failure")
+          })
+        }
+      },
+    })
+    yield* plugins.activate([{ ...definition, revision: "1" }])
+    yield* Effect.promise(register)
+    yield* plugins.awaitActivation
+    expect((yield* plugins.list())[0]?.state).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("command.transform"),
+    })
+    expect(yield* commands.get("late")).toBeUndefined()
+    yield* Effect.promise(register)
+    expect(yield* commands.get("late")).toBeUndefined()
   }),
 )
 
