@@ -904,6 +904,8 @@ export const dict = {
   "settings.tab.notifications": "Notifications",
   "settings.tab.projects": "Projects",
   "settings.tab.extensions": "Extensions",
+  "settings.tab.experimental": "Experimental",
+  "settings.experimental.description": "Try experimental features",
   "settings.preferences.description": "Customize preferences and theme and default behavior",
   "settings.appearance.description": "Customize theme and fonts",
   "settings.appearance.section.experimental": "Experimental",

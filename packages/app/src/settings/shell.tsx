@@ -17,6 +17,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsGeneral } from "./general/general"
 import { SettingsAppearance } from "./appearance/appearance"
+import { SettingsExperimental } from "./experimental/experimental"
 import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
 import { SettingsProviders } from "./providers/providers"
@@ -52,6 +53,7 @@ const sections = [
     { value: "models", icon: "models", label: "settings.models.title" },
     { value: "extensions", icon: "extensions", label: "settings.tab.extensions" },
   ],
+  [{ value: "experimental", icon: "flask", label: "settings.tab.experimental" }],
 ] as const
 
 export const SettingsScreen: Component<{
@@ -215,6 +217,9 @@ export const SettingsScreen: Component<{
         </Tabs.Content>
         <Tabs.Content value="shortcuts" class="settings-panel">
           <SettingsKeybinds />
+        </Tabs.Content>
+        <Tabs.Content value="experimental" class="settings-panel">
+          <SettingsExperimental />
         </Tabs.Content>
         <Tabs.Content value="servers" class="settings-panel">
           <SettingsServers />

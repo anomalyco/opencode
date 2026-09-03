@@ -231,7 +231,7 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabB).toBeVisible()
 })
 
-test("appearance experimental settings control vertical tab details", async ({ page }) => {
+test("dedicated experimental settings control vertical tab details", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA }) => {
@@ -253,7 +253,11 @@ test("appearance experimental settings control vertical tab details", async ({ p
   await expect(settings.getByRole("tablist").getByText("OpenCode Desktop", { exact: true })).toBeInViewport()
   await expect(version).toBeInViewport()
   await settings.getByRole("tab", { name: "Appearance" }).click()
-  await expect(settings.getByRole("heading", { name: "Experimental" })).toBeVisible()
+  await expect(settings.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible()
+  await expect(settings.locator('[data-action="settings-tab-layout"]')).toHaveCount(0)
+  await expect(settings.getByRole("switch", { name: "Show project names", exact: true })).toHaveCount(0)
+  await settings.getByRole("tab", { name: "Experimental", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Experimental", level: 2, exact: true })).toBeVisible()
 
   const layout = settings.locator('[data-action="settings-tab-layout"]')
   await expect(layout).toContainText("Horizontal")
@@ -274,19 +278,27 @@ test("appearance experimental settings control vertical tab details", async ({ p
   await page.setViewportSize({ width: 920, height: 720 })
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toHaveCSS("width", "260px")
   await expect(settings.getByRole("tablist")).toBeHidden()
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeVisible()
+  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeVisible()
 
   await page.setViewportSize({ width: 800, height: 720 })
   await expect(settings.getByRole("tablist")).toBeHidden()
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeVisible()
+  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeVisible()
 
   await page.setViewportSize({ width: 390, height: 720 })
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeVisible()
+  await settings.getByRole("button", { name: "Experimental", exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "Appearance", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible()
+  await expect(layout).toHaveCount(0)
+  await settings.getByRole("button", { name: "Appearance", exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "Experimental", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Experimental", level: 2, exact: true })).toBeVisible()
+  await expect(layout).toContainText("Vertical")
+  await expect(projectNameSwitch).toBeChecked()
   await settings.evaluate((element) => element.setAttribute("dir", "rtl"))
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeInViewport()
+  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeInViewport()
 
   await page.setViewportSize({ width: 390, height: 360 })
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeInViewport()
+  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeInViewport()
 
   // Reload the UI-selected preference without seeding settings storage.
   await page.reload()
@@ -310,7 +322,7 @@ test("appearance experimental settings control vertical tab details", async ({ p
   ).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
   await page.keyboard.press("Control+,")
-  await settings.getByRole("tab", { name: "Appearance" }).click()
+  await settings.getByRole("tab", { name: "Experimental", exact: true }).click()
   await expect(layout).toContainText("Vertical")
 })
 
