@@ -3,6 +3,7 @@ export * as SubagentCompletion from "./subagent-completion.js"
 import { Effect } from "effect"
 import type { Job } from "../job.js"
 import type { Session } from "../session.js"
+import { SubagentJob } from "./subagent-job.js"
 
 export const deliver = Effect.fnUntraced(function* (
   sessions: Pick<Session.Interface, "synthetic">,
@@ -16,7 +17,7 @@ export const deliver = Effect.fnUntraced(function* (
   const recovery = input.recovery
   const text =
     input.status === "completed"
-      ? (input.output ?? "Subagent completed without a text response.")
+      ? (input.output ?? SubagentJob.noText)
       : input.status === "error"
         ? (input.error ?? "Subagent failed")
         : "Subagent cancelled"

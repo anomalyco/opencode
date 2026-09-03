@@ -12,7 +12,6 @@ import { SessionRunner } from "./runner/index.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
-import { UserInterruptedError } from "./error.js"
 import { SessionInbox } from "./inbox.js"
 
 export interface Interface {
@@ -43,9 +42,7 @@ type InterruptReason = "user" | "shutdown"
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
   if (Cause.hasInterrupts(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
-  const failure = Cause.squash(exit.cause)
-  if (failure instanceof UserInterruptedError) return { type: "interrupted" as const, reason: "user" as const }
-  return { type: "failed" as const, error: toSessionError(failure) }
+  return { type: "failed" as const, error: toSessionError(Cause.squash(exit.cause)) }
 }
 
 /** Process-local execution: drains run in this process using the selected instance. */

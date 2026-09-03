@@ -10,10 +10,10 @@ import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
+import { SubagentJob } from "../../session/subagent-job.js"
 
 export const name = "subagent"
 
-const NO_TEXT = "Subagent completed without a text response."
 const backgroundResult = (sessionID: SessionSchema.ID) => ({
   sessionID,
   status: "running" as const,
@@ -64,22 +64,6 @@ export const Plugin = {
     // One completion observer per job generation. Keyed by child plus start time so a fresh
     // continuation job is observable even while a settled generation's observer is finalizing.
     const notifications = new Set<string>()
-
-    // Concatenate the child's final completed assistant text. Distinguishes "completed with no
-    // text" (generic string) from "failed" (the run effect fails, surfaced as a job error).
-    const latestAssistantText = Effect.fn("SubagentTool.latestAssistantText")(function* (sessionID: SessionSchema.ID) {
-      const messages = yield* sessions.messages({ sessionID, order: "desc", limit: 20 })
-      const assistant = messages.find(
-        (message) =>
-          message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-      )
-      if (assistant === undefined || assistant.type !== "assistant") return NO_TEXT
-      const text = assistant.content
-        .filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text")
-        .map((part) => part.text)
-        .join("")
-      return text.length > 0 ? text : NO_TEXT
-    })
 
     const notifyWhenDone = Effect.fn("SubagentTool.notifyWhenDone")(function* (
       recovery: Extract<Job.Recovery, { kind: "subagent" }>,
@@ -225,14 +209,7 @@ export const Plugin = {
                 agent: agent.name,
                 description: input.description,
               }
-              const info = yield* jobs.start({
-                id: child.id,
-                type: name,
-                title: input.description,
-                metadata: {},
-                recovery,
-                run: sessions.resume(child.id).pipe(Effect.andThen(latestAssistantText(child.id))),
-              })
+              const info = yield* SubagentJob.start(sessions, jobs, recovery)
 
               if (background) {
                 yield* jobs.background(info.id)
@@ -258,7 +235,11 @@ export const Plugin = {
                 })
               if (result?.info.status === "cancelled")
                 return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
-              return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
+              return {
+                sessionID: child.id,
+                status: "completed" as const,
+                output: result?.info.output ?? SubagentJob.noText,
+              }
             }).pipe(
               Effect.map((output) => ({
                 output,

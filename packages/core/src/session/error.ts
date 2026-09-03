@@ -74,15 +74,6 @@ export class StepFailedError extends Schema.TaggedError<StepFailedError>()("Sess
   }
 }
 
-export class UserInterruptedError extends Schema.TaggedError<UserInterruptedError>()(
-  "Session.UserInterruptedError",
-  {},
-) {
-  override get message() {
-    return "Session interrupted by user"
-  }
-}
-
 export class PromptConflictError extends Schema.TaggedError<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
