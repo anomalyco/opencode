@@ -1971,6 +1971,7 @@ export type ConfigEntry =
             description?: string
             agent?: string
             model?: string | { providerID: string; model: string; variant?: string }
+            subagent?: boolean
             subtask?: boolean
           }
         }

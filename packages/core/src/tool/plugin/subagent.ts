@@ -2,18 +2,17 @@ export * as SubagentTool from "./subagent.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Context } from "@opencode-ai/plugin/effect/plugin"
-import { Effect, Schema, Scope } from "effect"
+import { Effect, Schema } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { Job } from "../../job.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
-import { SubagentCompletion } from "../../session/subagent-completion.js"
+import { SubagentJob } from "../../session/subagent-job.js"
 
 export const name = "subagent"
 
-const NO_TEXT = "Subagent completed without a text response."
 const backgroundResult = (sessionID: SessionSchema.ID) => ({
   sessionID,
   status: "running" as const,
@@ -60,42 +59,7 @@ export const Plugin = {
     const agents = yield* Agent.Service
     const config = yield* Config.Service
     const permission = yield* Permission.Service
-    const scope = yield* Scope.Scope
-    // One completion observer per job generation. Keyed by child plus start time so a fresh
-    // continuation job is observable even while a settled generation's observer is finalizing.
-    const notifications = new Set<string>()
-
-    // Concatenate the child's final completed assistant text. Distinguishes "completed with no
-    // text" (generic string) from "failed" (the run effect fails, surfaced as a job error).
-    const latestAssistantText = Effect.fn("SubagentTool.latestAssistantText")(function* (sessionID: SessionSchema.ID) {
-      const messages = yield* sessions.messages({ sessionID, order: "desc", limit: 20 })
-      const assistant = messages.find(
-        (message) =>
-          message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-      )
-      if (assistant === undefined || assistant.type !== "assistant") return NO_TEXT
-      const text = assistant.content
-        .filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text")
-        .map((part) => part.text)
-        .join("")
-      return text.length > 0 ? text : NO_TEXT
-    })
-
-    const notifyWhenDone = Effect.fn("SubagentTool.notifyWhenDone")(function* (
-      recovery: Extract<Job.Recovery, { kind: "subagent" }>,
-      startedAt: number,
-    ) {
-      const key = `${recovery.childSessionID}:${startedAt}`
-      if (notifications.has(key)) return
-      notifications.add(key)
-      yield* Effect.gen(function* () {
-        const info = (yield* jobs.wait({ id: recovery.childSessionID })).info
-        if (info) yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
-      }).pipe(
-        Effect.ensuring(Effect.sync(() => notifications.delete(key))),
-        Effect.forkIn(scope, { startImmediately: true }),
-      )
-    })
+    const subagents = yield* SubagentJob.make
 
     yield* ctx.tool
       .transform((editor) =>
@@ -225,18 +189,10 @@ export const Plugin = {
                 agent: agent.name,
                 description: input.description,
               }
-              const info = yield* jobs.start({
-                id: child.id,
-                type: name,
-                title: input.description,
-                metadata: {},
-                recovery,
-                run: sessions.resume(child.id).pipe(Effect.andThen(latestAssistantText(child.id))),
-              })
+              const info = yield* subagents.start(recovery)
 
               if (background) {
-                yield* jobs.background(info.id)
-                yield* notifyWhenDone(recovery, info.started_at)
+                yield* subagents.background(recovery, info.started_at)
                 return backgroundResult(child.id)
               }
 
@@ -248,7 +204,7 @@ export const Plugin = {
                 ),
               )
               if (result?.type === "backgrounded") {
-                yield* notifyWhenDone(recovery, result.info.started_at)
+                yield* subagents.notify(recovery, result.info.started_at)
                 return backgroundResult(child.id)
               }
               // Failure surfaces keep the sessionID visible so the model can continue the child.
@@ -258,7 +214,11 @@ export const Plugin = {
                 })
               if (result?.info.status === "cancelled")
                 return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
-              return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
+              return {
+                sessionID: child.id,
+                status: "completed" as const,
+                output: result?.info.output ?? SubagentJob.NO_TEXT,
+              }
             }).pipe(
               Effect.map((output) => ({
                 output,
