@@ -54,7 +54,7 @@ export function LimitsGraph(props: { href: string }) {
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600 },
     { id: "longcat-2.0", name: "LongCat-2.0", req: 11400 },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100 },
-    { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", req: 45300, edge: true },
+    { id: "muse-spark-1.3-contributor", name: "Muse Spark 1.3 Contributor", req: 45300, edge: true },
   ].map((model, index) => ({ ...model, d: `${50 + index * 25}ms` }))
   const bonuses = graph.filter((model) => model.baseReq)
 
@@ -232,7 +232,7 @@ export function LimitsGraph(props: { href: string }) {
                     <span data-value>{"infinite" in m ? "\u221e" : m.req.toLocaleString()}</span>
                   )}
                   <span data-name>{m.name}</span>
-                  {m.id === "muse-spark-1.2-contributor" && (
+                  {m.id === "muse-spark-1.3-contributor" && (
                     <span data-regions>
                       (
                       <a href="https://ai.developer.meta.com/legal/geographic-use-policy">
