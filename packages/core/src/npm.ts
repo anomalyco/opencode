@@ -2,6 +2,7 @@ export * as Npm from "./npm"
 
 import path from "path"
 import npa from "npm-package-arg"
+import semver from "semver"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "./fs-util"
@@ -24,8 +25,15 @@ export interface EntryPoint {
   readonly entrypoint?: string
 }
 
+export interface AddOptions {
+  readonly refresh?: boolean
+}
+
 export interface Interface {
-  readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+  readonly add: (
+    pkg: string,
+    options?: AddOptions,
+  ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
   readonly install: (
     dir: string,
     input?: {
@@ -67,6 +75,27 @@ interface ArboristNode {
 
 interface ArboristTree {
   edgesOut: Map<string, { to?: ArboristNode }>
+}
+
+export function isMutableRegistrySpec(spec: string) {
+  try {
+    const hit = npa(spec)
+    if (!hit.name) return false
+    if (hit.type === "git" || hit.type === "remote" || hit.type === "directory" || hit.type === "file") return false
+    if (hit.type === "version") return false
+    if (hit.type === "tag" && hit.fetchSpec && hit.fetchSpec !== "latest" && hit.fetchSpec !== "*") return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function shouldRefreshInstall(installed: string | undefined, registry: string | undefined) {
+  if (!installed || !registry) return false
+  const installedVersion = semver.valid(installed)
+  const registryVersion = semver.valid(registry)
+  if (!installedVersion || !registryVersion) return installed !== registry
+  return semver.gt(registryVersion, installedVersion)
 }
 
 const layer = Layer.effect(
@@ -112,7 +141,27 @@ const layer = Layer.effect(
         }),
       )
 
-    const add = Effect.fn("Npm.add")(function* (pkg: string) {
+    const fetchRegistryVersion = (name: string, cacheDir: string) =>
+      Effect.gen(function* () {
+        const registry = yield* NpmConfig.registry(cacheDir)
+        const encoded = name.startsWith("@") ? name.replace("/", "%2F") : name
+        const response = yield* Effect.tryPromise({
+          try: () =>
+            fetch(`${registry}/${encoded}`, {
+              headers: { Accept: "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8" },
+              signal: AbortSignal.timeout(5_000),
+            }),
+          catch: () => undefined,
+        }).pipe(Effect.orElseSucceed(() => undefined))
+        if (!response?.ok) return undefined
+        const data = yield* Effect.tryPromise({
+          try: () => response.json() as Promise<{ "dist-tags"?: Record<string, string> }>,
+          catch: () => undefined,
+        }).pipe(Effect.orElseSucceed(() => undefined))
+        return data?.["dist-tags"]?.latest
+      })
+
+    const add = Effect.fn("Npm.add")(function* (pkg: string, options?: AddOptions) {
       const dir = directory(pkg)
       const name = (() => {
         try {
@@ -121,9 +170,23 @@ const layer = Layer.effect(
           return pkg
         }
       })()
+      const modulePath = path.join(dir, "node_modules", name)
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      if (yield* afs.existsSafe(modulePath)) {
+        const refresh =
+          options?.refresh ||
+          (isMutableRegistrySpec(pkg) &&
+            shouldRefreshInstall(
+              yield* afs
+                .readJson(path.join(modulePath, "package.json"))
+                .pipe(
+                  Effect.map((json) => (json as { version?: string }).version),
+                  Effect.catch(() => Effect.succeed(undefined)),
+                ),
+              yield* fetchRegistryVersion(name, dir),
+            ))
+        if (!refresh) return resolveEntryPoint(name, modulePath)
+        yield* fs.remove(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => {}))
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
@@ -260,8 +323,8 @@ export async function install(...args: Parameters<Interface["install"]>) {
   return runPromise((svc) => svc.install(...args))
 }
 
-export async function add(...args: Parameters<Interface["add"]>) {
-  return runPromise((svc) => svc.add(...args))
+export async function add(pkg: string, options?: AddOptions) {
+  return runPromise((svc) => svc.add(pkg, options))
 }
 
 export async function which(...args: Parameters<Interface["which"]>) {
