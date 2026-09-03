@@ -195,6 +195,30 @@ test(
         expect(yield* Fiber.join(invalid.pending).pipe(Effect.flip)).toMatchObject({
           message: expect.stringContaining("Check that the desktop and server plugin use compatible versions"),
         })
+        const malformed = yield* host.command({ type: "screenshot", tabID: tab.id })
+        yield* host.rpc.result(
+          {
+            ...malformed.input,
+            outcome: {
+              type: "success",
+              result: {
+                value: null,
+                files: [
+                  {
+                    id: Browser.FileID.make(`file_${crypto.randomUUID()}`),
+                    name: "screenshot.png",
+                    mime: "image/png",
+                    data: png,
+                  },
+                ],
+              },
+            },
+          },
+          { location: host.location },
+        )
+        expect((yield* Fiber.join(malformed.pending).pipe(Effect.flip)).message).toContain(
+          "Browser returned malformed file output",
+        )
         const missing = yield* run('return await tools.browser.click({ref:"e1"})')
         expect(missing.metadata).toMatchObject({ error: true })
         expect(missing.output).toMatchObject({ output: expect.stringContaining("tabID") })
