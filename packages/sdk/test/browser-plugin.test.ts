@@ -10,6 +10,7 @@ import { Agent, Rpc } from "@opencode-ai/plugin/effect"
 import type { Info } from "@opencode-ai/schema/tool"
 import { AbsolutePath, OpenCode, SessionMessage } from "@opencode-ai/sdk/effect"
 import { Effect, Fiber, Queue, Schema, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 
 const tab: Browser.Tab = {
@@ -192,13 +193,62 @@ test(
           { location: host.location },
         )
         expect(yield* Fiber.join(invalid.pending).pipe(Effect.flip)).toMatchObject({
-          message: "Browser returned an invalid result.",
+          message: expect.stringContaining("Check that the desktop and server plugin use compatible versions"),
         })
         const missing = yield* run('return await tools.browser.click({ref:"e1"})')
         expect(missing.metadata).toMatchObject({ error: true })
+        expect(missing.output).toMatchObject({ output: expect.stringContaining("tabID") })
+        const unknown = yield* run(
+          `return await tools.browser.snapshot({tabID:${JSON.stringify(Browser.TabID.make(`tab_${crypto.randomUUID()}`))}})`,
+        )
+        expect(unknown.output).toMatchObject({ error: true, output: expect.stringContaining("browser.tabs.list({})") })
+        const absent = yield* run(
+          `return await tools.browser.files.upload({tabID:${JSON.stringify(tab.id)},ref:"e1",paths:["missing.txt"]})`,
+        )
+        const fileError = Schema.decodeUnknownSync(Schema.Struct({ error: Schema.Boolean, output: Schema.String }))(
+          absent.output,
+        )
+        expect(fileError.error).toBe(true)
+        expect(fileError.output).toContain("Upload paths are on the server, not the desktop")
+        expect(fileError.output).toContain("ENOENT")
+        const large = path.join(host.location.directory, "large.bin")
+        yield* Effect.promise(() => Bun.write(large, new Uint8Array(Browser.MAX_FILE_BYTES + 1)))
+        const oversized = yield* run(
+          `return await tools.browser.files.upload({tabID:${JSON.stringify(tab.id)},ref:"e1",paths:[${JSON.stringify(large)}]})`,
+        )
+        expect(oversized.output).toMatchObject({
+          error: true,
+          output: expect.stringContaining("Select a smaller file"),
+        })
+        yield* Fiber.interrupt(attached.lifetime)
+        const disconnected = yield* run("return await tools.browser.tabs.list({})")
+        expect(disconnected.output).toMatchObject({
+          error: true,
+          output: expect.stringContaining("Open this session in the desktop app"),
+        })
       }).pipe(
         Effect.provide(AppNodeBuilder.build(Tool.node, [Location.node.replace(Location.boundNode(host.location))])),
       )
+    }).pipe(Effect.scoped, Effect.runPromise),
+  15_000,
+)
+
+test(
+  "timeout errors explain unknown outcomes instead of encouraging duplicate actions",
+  () =>
+    Effect.gen(function* () {
+      const host = yield* fixture
+      const attached = yield* host.attach("timeout")
+      yield* host.rpc.state({ ...attached.input, state }, { location: host.location })
+      yield* Effect.gen(function* () {
+        const pending = yield* host.command({ type: "evaluate", tabID: tab.id, script: "new Promise(() => {})" })
+        yield* TestClock.adjust("61 seconds")
+        const failure = yield* Fiber.join(pending.pending).pipe(Effect.flip)
+        expect(failure.message).toContain("browser.evaluate did not finish within 60 seconds")
+        expect(failure.message).toContain("outcome is unknown")
+        expect(failure.message).toContain("Do not blindly repeat")
+        expect(failure.message).toContain("browser.files.list({tabID})")
+      }).pipe(Effect.provide(TestClock.layer()))
     }).pipe(Effect.scoped, Effect.runPromise),
   15_000,
 )
