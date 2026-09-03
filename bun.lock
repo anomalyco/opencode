@@ -318,7 +318,7 @@
         "@effect/opentelemetry": "catalog:",
         "@effect/platform-node": "catalog:",
         "@effect/sql-sqlite-bun": "catalog:",
-        "@ff-labs/fff-bun": "0.9.4",
+        "@ff-labs/fff-bun": "0.10.6",
         "@lydell/node-pty": "catalog:",
         "@npmcli/arborist": "9.4.0",
         "@npmcli/config": "10.8.1",
@@ -592,7 +592,7 @@
         "@clack/prompts": "1.0.0-alpha.1",
         "@effect/opentelemetry": "catalog:",
         "@effect/platform-node": "catalog:",
-        "@ff-labs/fff-bun": "0.9.4",
+        "@ff-labs/fff-bun": "0.10.6",
         "@gitlab/opencode-gitlab-auth": "1.3.3",
         "@modelcontextprotocol/sdk": "1.29.0",
         "@octokit/graphql": "9.0.2",
@@ -1625,23 +1625,25 @@
 
     "@fastify/rate-limit": ["@fastify/rate-limit@10.3.0", "", { "dependencies": { "@lukeed/ms": "^2.0.2", "fastify-plugin": "^5.0.0", "toad-cache": "^3.7.0" } }, "sha512-eIGkG9XKQs0nyynatApA3EVrojHOuq4l6fhB4eeCk4PIOeadvOJz9/4w3vGI44Go17uaXOWEcPkaD8kuKm7g6Q=="],
 
-    "@ff-labs/fff-bin-darwin-arm64": ["@ff-labs/fff-bin-darwin-arm64@0.9.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-xyivu2xB++O5xXDx5Qm50JsU2aXt8YgXlGVhH/HE7UMYDrE6L6f1RYdYs8Y0bn0D3D0+bFBrN5ELPszK9E4Wbw=="],
+    "@ff-labs/fff-bin-android-arm64": ["@ff-labs/fff-bin-android-arm64@0.10.6", "", { "os": "android", "cpu": "arm64" }, "sha512-hGOo0wlxdhObNdK9lTNhNIrzOs99l352E0QqglD/3H1B6LsSVoVHxNeR09RmiSoIM1lOJ+FnkpXOJ5EZXSGl0w=="],
 
-    "@ff-labs/fff-bin-darwin-x64": ["@ff-labs/fff-bin-darwin-x64@0.9.4", "", { "os": "darwin", "cpu": "x64" }, "sha512-xLooAhCnTDCipPSMMZz7kGF3lhRHx6aP5fb6DJ0Ipyw/w/UWJb+xITJFszUl/QnIBoJ/qjDc93/FZMo1dk6gVA=="],
+    "@ff-labs/fff-bin-darwin-arm64": ["@ff-labs/fff-bin-darwin-arm64@0.10.6", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Y0A1f9/UHYg0ej35rnt8Q2A2DMbBzRa4Fc9WpoBST/oVvWOQ7v5JF5ko7NAapOFM0N5oaB9oey1Hsshs6LIyYA=="],
 
-    "@ff-labs/fff-bin-linux-arm64-gnu": ["@ff-labs/fff-bin-linux-arm64-gnu@0.9.4", "", { "os": "linux", "cpu": "arm64" }, "sha512-m5+8vA+1veaUUWonwva1WsU6m1HRm8CpYUzr06KDB65mewlmPbqz7+Fh7hjEfiD8C4mHVHe6RysULvAH1yhsdw=="],
+    "@ff-labs/fff-bin-darwin-x64": ["@ff-labs/fff-bin-darwin-x64@0.10.6", "", { "os": "darwin", "cpu": "x64" }, "sha512-qQnmQWnotuOne10vtVHoMKTxCSANaJ3a/cegBKvfN8cZCr4b4Vtg51APADh8U3AwsI/k61rJQgjy6BqdBYj3cw=="],
 
-    "@ff-labs/fff-bin-linux-arm64-musl": ["@ff-labs/fff-bin-linux-arm64-musl@0.9.4", "", { "os": "linux", "cpu": "arm64" }, "sha512-EMeWm7CSTVkizy4ZEzUkLDP024tVcbCUthduuIhekFQRDsiaAze0YboIylWb9HBHJCZlCCoZrWAl4nnJbsX7AA=="],
+    "@ff-labs/fff-bin-linux-arm64-gnu": ["@ff-labs/fff-bin-linux-arm64-gnu@0.10.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-JwfgfwL4V0+tJCc1HW3In++1c+EZLix0ecV/k4b+8DyzSGh3GPZB1i7F4JXQFHVibs71mLeFEJO4owglullZNw=="],
 
-    "@ff-labs/fff-bin-linux-x64-gnu": ["@ff-labs/fff-bin-linux-x64-gnu@0.9.4", "", { "os": "linux", "cpu": "x64" }, "sha512-pglE0uLkhnlE6bStXqfgUjYTSj+2sVwXaPfoA0QksidAsQor6NRt8004mygzC9DPubgHq5B9QezPfEwigKaP9Q=="],
+    "@ff-labs/fff-bin-linux-arm64-musl": ["@ff-labs/fff-bin-linux-arm64-musl@0.10.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-g0ggmohZiVkNQsNho1r6I06sk8jlKmb8gzmmgL8HeDcaxyiZnxQrqxHmvwROP7T0scEbZGSOle/gyyqfcBRvjg=="],
 
-    "@ff-labs/fff-bin-linux-x64-musl": ["@ff-labs/fff-bin-linux-x64-musl@0.9.4", "", { "os": "linux", "cpu": "x64" }, "sha512-VNKxgl8qs3aTfXViX7lqRK1aLu311h8dtBFqG4Scv+9Oi7WprybUp5L7IZ8sxKERaDAaiJMXHodXa1c90QdK8w=="],
+    "@ff-labs/fff-bin-linux-x64-gnu": ["@ff-labs/fff-bin-linux-x64-gnu@0.10.6", "", { "os": "linux", "cpu": "x64" }, "sha512-oC8Tlg/+aNbdfEkj4QtVCbrqYUEjQZkP/e1KLwv142+dwjgxHQKQGSIKB67IvP07DKazvUG/0I0YR91dP/ClLA=="],
 
-    "@ff-labs/fff-bin-win32-arm64": ["@ff-labs/fff-bin-win32-arm64@0.9.4", "", { "os": "win32", "cpu": "arm64" }, "sha512-uFEt0aNL54vQxq1ivjxRuo+thnhS4wLqa4INl4VXnXJUmwB42XXxD+gsj7vzhBLLx4cFf0aWgy/+TVDR8yjZtQ=="],
+    "@ff-labs/fff-bin-linux-x64-musl": ["@ff-labs/fff-bin-linux-x64-musl@0.10.6", "", { "os": "linux", "cpu": "x64" }, "sha512-voj2gFq6knjzXKNy2k7EyqoXizv/VZbJ6bfq7enMI5T+tCM0cKlSEjwlBOMaVj+cxrh6fSb5vnnPjhBSuZcxmA=="],
 
-    "@ff-labs/fff-bin-win32-x64": ["@ff-labs/fff-bin-win32-x64@0.9.4", "", { "os": "win32", "cpu": "x64" }, "sha512-Yd2Eyxj+slWv+0QDW9/xBpu9FXq+hwD0rXQD5184/88d+xwWCLKhEP2w8I6OO9XCg+kLT79UJb+k0WwXUtBtMw=="],
+    "@ff-labs/fff-bin-win32-arm64": ["@ff-labs/fff-bin-win32-arm64@0.10.6", "", { "os": "win32", "cpu": "arm64" }, "sha512-GFfA21vuxcyqZZ2pSq7V5ClAKIVrWLulK5h93wjUc308zyxApY2luJdyIBHtw93UTkJQ079mRMPIthkeCEEn9A=="],
 
-    "@ff-labs/fff-bun": ["@ff-labs/fff-bun@0.9.4", "", { "optionalDependencies": { "@ff-labs/fff-bin-darwin-arm64": "0.9.4", "@ff-labs/fff-bin-darwin-x64": "0.9.4", "@ff-labs/fff-bin-linux-arm64-gnu": "0.9.4", "@ff-labs/fff-bin-linux-arm64-musl": "0.9.4", "@ff-labs/fff-bin-linux-x64-gnu": "0.9.4", "@ff-labs/fff-bin-linux-x64-musl": "0.9.4", "@ff-labs/fff-bin-win32-arm64": "0.9.4", "@ff-labs/fff-bin-win32-x64": "0.9.4" }, "os": [ "linux", "win32", "darwin", ], "cpu": [ "x64", "arm64", ] }, "sha512-7HUraaK/g5dStAnuKAuzsXVOQvqqX0ylo5G+DxYwsCjCDc42bjoEAAHqz/3Sn3raUNw97KMoz87XR9QyrLEfVw=="],
+    "@ff-labs/fff-bin-win32-x64": ["@ff-labs/fff-bin-win32-x64@0.10.6", "", { "os": "win32", "cpu": "x64" }, "sha512-EjOHtxRNmZnjrNx2fahiAhP2wLDad6tlLL3cIk3snEzHpP30VygZMcuq3u8fNBZOeHgEPGRnqkfhILQDyblvJQ=="],
+
+    "@ff-labs/fff-bun": ["@ff-labs/fff-bun@0.10.6", "", { "optionalDependencies": { "@ff-labs/fff-bin-android-arm64": "0.10.6", "@ff-labs/fff-bin-darwin-arm64": "0.10.6", "@ff-labs/fff-bin-darwin-x64": "0.10.6", "@ff-labs/fff-bin-linux-arm64-gnu": "0.10.6", "@ff-labs/fff-bin-linux-arm64-musl": "0.10.6", "@ff-labs/fff-bin-linux-x64-gnu": "0.10.6", "@ff-labs/fff-bin-linux-x64-musl": "0.10.6", "@ff-labs/fff-bin-win32-arm64": "0.10.6", "@ff-labs/fff-bin-win32-x64": "0.10.6" }, "os": [ "!aix", "!sunos", "!freebsd", "!openbsd", ], "cpu": [ "x64", "arm64", ] }, "sha512-ShRbXQ9kSIYom5IRpq6d0DE0RUWKIbXhtERPu3q5UN7387IO4gpSYNeBo85IEqD1yqgq86KyKeFJcAliY7RGNg=="],
 
     "@floating-ui/core": ["@floating-ui/core@1.7.5", "", { "dependencies": { "@floating-ui/utils": "^0.2.11" } }, "sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ=="],
 
