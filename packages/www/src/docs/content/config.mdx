@@ -396,6 +396,18 @@ but does not load these entries yet; use `AGENTS.md` for active instructions.
 
 See the [instructions guide](/instructions) for project instructions and `AGENTS.md`.
 
+### Custom instructions
+
+Store Codex-style personalized instructions in `customInstructions`. Describe your role, the tools on this machine, and how you like to work:
+
+```jsonc
+{
+  "customInstructions": "You are a senior TypeScript engineer. Prefer Bun APIs, explain tradeoffs briefly, and run typecheck before finishing.",
+}
+```
+
+Global and project configs are merged: keep personal defaults in your global config and extend them per project. `customInstructions` applies to every new chat.
+
 ### References
 
 Make local directories or Git repositories available as named supporting

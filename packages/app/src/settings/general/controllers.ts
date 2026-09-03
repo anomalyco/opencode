@@ -1,4 +1,5 @@
-import { createMemo, createResource, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup, onMount, type Accessor } from "solid-js"
+import { createStore } from "solid-js/store"
 import type { ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import {
@@ -40,6 +41,33 @@ export function createShellSettingsController(server: Accessor<ServerConnection.
       if (value === current()) return
       // TODO: Dax is considering the V2 shell discovery and config update APIs.
       // void serverSync.updateConfig({ shell: value })
+    },
+  }
+}
+
+export function createCustomInstructionsSettingsController(server: Accessor<ServerConnection.Any | undefined>) {
+  const serverCtx = useServerCtx(server)
+  const saved = createMemo(() => {
+    const value = serverCtx()?.sync.data.config.customInstructions
+    return typeof value === "string" ? value : ""
+  })
+  const [store, setStore] = createStore({ draft: "", dirty: false })
+  createEffect(() => {
+    if (store.dirty) return
+    setStore("draft", saved())
+  })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => {
+    if (timer !== undefined) clearTimeout(timer)
+  })
+  return {
+    draft: () => store.draft,
+    update: (next: string) => {
+      setStore({ draft: next, dirty: true })
+      if (timer !== undefined) clearTimeout(timer)
+      timer = setTimeout(() => {
+        void serverCtx()?.sync.updateConfig({ customInstructions: next }).catch(() => undefined)
+      }, 500)
     },
   }
 }
@@ -148,5 +176,6 @@ export function createSoundSettingsController() {
 }
 
 export type ShellSettingsController = ReturnType<typeof createShellSettingsController>
+export type CustomInstructionsSettingsController = ReturnType<typeof createCustomInstructionsSettingsController>
 export type AppearanceSettingsController = ReturnType<typeof createAppearanceSettingsController>
 export type SoundSettingsController = ReturnType<typeof createSoundSettingsController>
