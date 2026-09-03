@@ -1,11 +1,14 @@
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Location } from "@opencode-ai/core/location"
+import { Tool } from "@opencode-ai/core/tool"
 import plugin from "@opencode-ai/plugin-browser"
 import { Browser } from "@opencode-ai/schema/browser"
 import { Agent, Rpc } from "@opencode-ai/plugin/effect"
-import { Tool } from "@opencode-ai/schema/tool"
-import { AbsolutePath, Location, OpenCode, SessionMessage } from "@opencode-ai/sdk/effect"
+import type { Info } from "@opencode-ai/schema/tool"
+import { AbsolutePath, OpenCode, SessionMessage } from "@opencode-ai/sdk/effect"
 import { Effect, Fiber, Queue, Stream } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 
@@ -35,7 +38,7 @@ const fixture = Effect.gen(function* () {
     models: { fetch: false },
     fs: { filewatcher: false, fff: false },
   })
-  const captured = Promise.withResolvers<Tool.Info>()
+  const captured = Promise.withResolvers<Info>()
   yield* opencode.plugin({ ...plugin, id: "browser-test" })
   yield* opencode.plugin({
     id: "browser-test-observer",
@@ -73,6 +76,7 @@ const fixture = Effect.gen(function* () {
       progress: () => Effect.void,
     })
   return {
+    tool,
     opencode,
     location,
     rpc,
@@ -189,6 +193,65 @@ test(
       expect(yield* host.execute({ type: "open" }).pipe(Effect.flip)).toMatchObject({
         message: "No desktop browser is connected.",
       })
+    }).pipe(Effect.scoped, Effect.runPromise),
+  15_000,
+)
+
+test(
+  "Code Mode discovers and executes the browser without a raw tool and preserves screenshot attachments",
+  () =>
+    Effect.gen(function* () {
+      const host = yield* fixture
+      yield* Effect.gen(function* () {
+        const tools = yield* Tool.Service
+        yield* tools.transform((editor) => editor.add(host.tool))
+        const snapshot = yield* tools.snapshot()
+        expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+        expect(snapshot.codeModeCatalog?.tools).toMatchObject([{ type: "tool", name: "browser" }])
+
+        const attached = yield* host.attach("codemode")
+        const execute = (code: string) =>
+          snapshot.execute({
+            sessionID: attached.input.sessionID,
+            agent: Agent.ID.make("build"),
+            messageID: SessionMessage.ID.create(),
+            call: { type: "tool-call", id: crypto.randomUUID(), name: "execute", input: { code } },
+          })
+        const discovery = yield* execute('return search({ query: "browser" })')
+        expect(discovery.content).toMatchObject([{ type: "text", text: expect.stringContaining("tools.browser(") }])
+
+        yield* host.rpc.state({ ...attached.input, state }, { location: host.location })
+        const pending = yield* execute('return await tools.browser({ type: "screenshot" })').pipe(Effect.forkScoped)
+        const event = yield* host.next
+        if (event.data.type !== "command") throw new Error(`Expected command, received ${event.data.type}`)
+        expect(event.data.command).toEqual({ action: { type: "screenshot" }, generation: state.generation })
+        const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        yield* host.rpc.result(
+          {
+            ...attached.input,
+            requestID: event.data.requestID,
+            outcome: { type: "success", result: { type: "screenshot", state, data } },
+          },
+          { location: host.location },
+        )
+        const result = yield* Fiber.join(pending)
+        expect(result.content).toEqual([
+          { type: "text", text: "Untrusted browser screenshot." },
+          { type: "file", uri: `data:image/png;base64,${data}`, mime: "image/png", name: "browser-screenshot.png" },
+        ])
+        expect(result.metadata).toEqual({
+          toolCalls: [{ tool: "browser", status: "completed", input: { type: "screenshot" } }],
+        })
+
+        yield* Fiber.interrupt(attached.lifetime)
+        const disconnected = yield* execute('return await tools.browser({ type: "open" })')
+        expect(disconnected.metadata).toMatchObject({ error: true })
+        expect(disconnected.content).toMatchObject([
+          { type: "text", text: expect.stringContaining("No desktop browser is connected.") },
+        ])
+      }).pipe(
+        Effect.provide(AppNodeBuilder.build(Tool.node, [Location.node.replace(Location.boundNode(host.location))])),
+      )
     }).pipe(Effect.scoped, Effect.runPromise),
   15_000,
 )
