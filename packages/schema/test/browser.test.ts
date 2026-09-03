@@ -39,3 +39,11 @@ test("browser files are bounded bytes, not remote filesystem paths", () => {
     }),
   ).toThrow()
 })
+
+test("network lifecycle and RPC version are explicit", () => {
+  const request = { id: "request", url: "https://example.com", method: "GET", resourceType: "document", timestampMs: 1 }
+  const decode = Schema.decodeUnknownSync(Browser.NetworkRequest)
+  expect(decode({ ...request, state: "completed", statusCode: 404, durationMs: 3 }).state).toBe("completed")
+  expect(() => decode({ ...request, state: "failed" })).toThrow()
+  expect(() => Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client" })).toThrow()
+})

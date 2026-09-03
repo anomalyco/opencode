@@ -16,13 +16,19 @@ const limit = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 
 const timeoutMs = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30_000 }))).annotate({
   description: "Timeout in milliseconds, 1–30000. Default 10000.",
 })
-export const TabID = Schema.String.check(Schema.isPattern(/^tab_[a-f0-9-]{36}$/)).pipe(Schema.brand("Browser.TabID"))
+export const TabID = Schema.String.check(Schema.isPattern(/^tab_[a-f0-9-]{36}$/))
+  .pipe(Schema.brand("Browser.TabID"))
+  .annotate({ identifier: "Browser.TabID" })
 export type TabID = typeof TabID.Type
-export const Ref = Schema.String.check(Schema.isPattern(/^@?e[1-9][0-9]*$/)).pipe(Schema.brand("Browser.Ref"))
+export const Ref = Schema.String.check(Schema.isPattern(/^@?e[1-9][0-9]*$/))
+  .pipe(Schema.brand("Browser.Ref"))
+  .annotate({ identifier: "Browser.Ref" })
 export type Ref = typeof Ref.Type
-export const FileID = Schema.String.check(Schema.isPattern(/^file_[a-f0-9-]{36}$/)).pipe(Schema.brand("Browser.FileID"))
+export const FileID = Schema.String.check(Schema.isPattern(/^file_[a-f0-9-]{36}$/))
+  .pipe(Schema.brand("Browser.FileID"))
+  .annotate({ identifier: "Browser.FileID" })
 export type FileID = typeof FileID.Type
-export const tab = {
+const tab = {
   tabID: TabID.annotate({
     description: "Exact tab ID returned by browser.tabs.open/list. Focus does not select a tool target.",
   }),
@@ -87,7 +93,7 @@ export const ResourceType = Schema.Literals([
   "websocket",
   "manifest",
   "other",
-])
+]).annotate({ identifier: "Browser.ResourceType" })
 export type ResourceType = typeof ResourceType.Type
 const headers = Schema.Array(Schema.Struct({ name: short, value: text }))
 export const Body = Schema.Union([
@@ -99,17 +105,19 @@ export const Body = Schema.Union([
   }),
 ]).annotate({ identifier: "Browser.Body" })
 export type Body = typeof Body.Type
-export const NetworkRequest = Schema.Struct({
+const requestFields = {
   id: short,
   url: text,
   method: short,
   resourceType: ResourceType,
   timestampMs: Schema.Finite,
-  state: Schema.Literals(["pending", "completed", "failed"]),
   statusCode: optional(count),
-  durationMs: optional(Schema.Finite),
-  failure: optional(short),
-}).annotate({ identifier: "Browser.NetworkRequest" })
+}
+export const NetworkRequest = Schema.Union([
+  Schema.Struct({ ...requestFields, state: Schema.Literal("pending") }),
+  Schema.Struct({ ...requestFields, state: Schema.Literal("completed"), durationMs: Schema.Finite }),
+  Schema.Struct({ ...requestFields, state: Schema.Literal("failed"), durationMs: Schema.Finite, failure: short }),
+]).annotate({ identifier: "Browser.NetworkRequest" })
 export type NetworkRequest = typeof NetworkRequest.Type
 export const ConsoleEntry = Schema.Struct({
   id: short,
@@ -489,7 +497,7 @@ const attachment = { sessionID: Session.ID, connectionID: Schema.String }
 const request = { ...attachment, requestID: Schema.String }
 const errors = { unavailable: Schema.Struct({}) }
 export const Control = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("attached"), connectionID: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("attached"), connectionID: Schema.String, version: Schema.Literal(2) }),
   Schema.Struct({
     type: Schema.Literal("command"),
     connectionID: Schema.String,

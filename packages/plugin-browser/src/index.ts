@@ -58,7 +58,7 @@ export default Plugin.define({
                 (browser) => (browsers.get(input.sessionID) === browser ? close(input.sessionID) : Effect.void),
               )
               yield* rpc.events
-                .emit("control", { type: "attached", connectionID: input.connectionID })
+                .emit("control", { type: "attached", connectionID: input.connectionID, version: 2 })
                 .pipe(Effect.orDie)
               yield* Deferred.await(browser.closed)
             }).pipe(Effect.scoped),
@@ -95,8 +95,16 @@ export default Plugin.define({
         })
         .pipe(Effect.orDie)
 
-      const execute = (operation: Browser.Operation, action: Browser.Action, tool: Tool.Context) =>
+      const execute = (operation: Browser.Operation, input: Browser.Action, tool: Tool.Context) =>
         Effect.gen(function* () {
+          const action = yield* Effect.try({
+            try: () => normalizeAction(input),
+            catch: (error) =>
+              new Tool.Error({
+                message: "Invalid browser URL. Use HTTP, HTTPS, or about:blank without credentials.",
+                error,
+              }),
+          })
           const browser = browsers.get(tool.sessionID)
           if (!browser)
             return yield* new Tool.Error({ message: "[browser.disconnected] No desktop browser is connected." })
@@ -224,4 +232,17 @@ function requireObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Browser file output must be an object.")
   return value as Record<string, unknown>
+}
+
+function normalizeAction(action: Browser.Action): Browser.Action {
+  if (action.type !== "navigate" && action.type !== "tabs.open") return action
+  if (action.type === "tabs.open" && action.url === undefined) return action
+  const value = action.url?.trim() || "about:blank"
+  const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
+  const url = new URL(
+    value === "about:blank" || /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`,
+  )
+  if ((url.href !== "about:blank" && !/^https?:$/.test(url.protocol)) || url.username || url.password)
+    throw new Error("Unsupported browser URL")
+  return { ...action, url: url.href }
 }
