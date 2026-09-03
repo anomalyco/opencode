@@ -48,6 +48,7 @@ export function createBrowserFiles() {
       await ready
       const file = this.add(name, mime)
       await writeFile(file.path, data).catch((error: unknown) => {
+        file.state = "failed"
         throw new Error(
           "Cannot write the capture on the desktop. Ask the user to check desktop temporary-directory access and free space before retrying.",
           { cause: error },

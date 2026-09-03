@@ -62,6 +62,10 @@ test("files distinguish pending, failed, unknown and missing desktop copies", as
     await expect(
       files.save("large.bin", "application/octet-stream", new Uint8Array(Browser.MAX_FILE_BYTES + 1)),
     ).rejects.toThrow("Do not retry an identical capture")
+    await expect(files.save(".", "text/plain", new Uint8Array([1]))).rejects.toThrow(
+      "Cannot write the capture on the desktop",
+    )
+    expect(files.list().find((file) => file.name === ".")?.state).toBe("failed")
   } finally {
     await files.dispose()
   }
