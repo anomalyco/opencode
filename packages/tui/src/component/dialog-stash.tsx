@@ -35,7 +35,6 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const toast = useToast()
 
   const [toDelete, setToDelete] = createSignal<string>()
-  const [pending, setPending] = createSignal(false)
   let disposed = false
   onCleanup(() => {
     disposed = true
@@ -71,32 +70,24 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
         setToDelete(undefined)
       }}
       onSelect={async (option) => {
-        if (pending()) return
-        setPending(true)
-        await stash
-          .remove(option.value)
-          .then(
-            (entry) => {
-              // A consumed entry still belongs to the caller after this dialog closes.
-              if (entry) props.onSelect(entry)
-              if (!disposed) dialog.clear()
-            },
-            (error) => toast.error(error),
-          )
-          .finally(() => setPending(false))
+        if (stash.pending()) return
+        await stash.remove(option.value).then(
+          (entry) => {
+            // A consumed entry still belongs to the caller after this dialog closes.
+            if (entry) props.onSelect(entry)
+            if (!disposed) dialog.clear()
+          },
+          (error) => toast.error(error),
+        )
       }}
       actions={[
         {
           command: "stash.delete",
           title: "delete",
           onTrigger: async (option) => {
-            if (pending()) return
+            if (stash.pending()) return
             if (toDelete() === option.value) {
-              setPending(true)
-              await stash
-                .remove(option.value)
-                .catch((error) => toast.error(error))
-                .finally(() => setPending(false))
+              await stash.remove(option.value).catch((error) => toast.error(error))
               setToDelete(undefined)
               return
             }

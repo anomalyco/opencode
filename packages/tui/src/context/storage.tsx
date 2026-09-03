@@ -51,6 +51,7 @@ function createStorage(root: string, channel: string) {
   const memories = new Map<string, MemoryEntry<object>>()
   const pending = new Set<Promise<void>>()
   const location = path.join(root, segment(channel))
+  mkdirSync(path.join(location, "tui"), { recursive: true })
   const watchers = new Map<string, ReturnType<typeof watch>>()
   let timer: ReturnType<typeof setTimeout> | undefined
 

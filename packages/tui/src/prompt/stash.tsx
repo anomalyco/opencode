@@ -50,17 +50,14 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
       ? Promise.resolve()
       : update((draft) => {
           if (draft.migrated) return
-          const legacy = path.join(paths.state, "prompt-stash.jsonl")
-          const text = (() => {
-            try {
-              return readFileSync(legacy, "utf8")
-            } catch (error) {
-              if (error instanceof Error && "code" in error && error.code === "ENOENT") return ""
-              throw error
-            }
-          })()
-          draft.entries = parsePromptStash(text).map((entry) => ({ ...entry, id: crypto.randomUUID() }))
           draft.migrated = true
+          try {
+            const text = readFileSync(path.join(paths.state, "prompt-stash.jsonl"), "utf8")
+            draft.entries = parsePromptStash(text).map((entry) => ({ ...entry, id: crypto.randomUUID() }))
+          } catch (error) {
+            if (error instanceof Error && "code" in error && error.code === "ENOENT") return
+            throw error
+          }
         })
     void ready.catch((error) => console.error("Failed to load prompt stash", error))
 

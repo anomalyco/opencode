@@ -646,7 +646,9 @@ export function Prompt(props: PromptProps) {
           bind: false,
           palette: true as const,
           ...command,
-          enabled: !stash.pending() && (!("enabled" in command) || command.enabled),
+          enabled:
+            (!stash.pending() || name.startsWith("session.") || name === "prompt.images.view") &&
+            (!("enabled" in command) || command.enabled),
         }) satisfies KeymapCommand,
     ),
   )
@@ -881,10 +883,7 @@ export function Prompt(props: PromptProps) {
       saveDraft(stashSessionID, { prompt: entry.prompt, cursor: stringWidth(entry.prompt.text) })
       return
     }
-    input.setText(entry.prompt.text)
-    setStore("prompt", entry.prompt)
-    restoreExtmarksFromPrompt(entry.prompt)
-    input.gotoBufferEnd()
+    ref.set(entry.prompt)
   }
 
   const stashCommands = createMemo(() =>
