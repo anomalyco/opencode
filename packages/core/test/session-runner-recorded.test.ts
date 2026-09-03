@@ -126,7 +126,14 @@ const execution = (llmClient: Layer.Layer<LLMClientService>) =>
       return SessionExecution.Service.of({
         active: coordinator.active,
         isActive: coordinator.isActive,
-        resume: coordinator.run,
+        resume: (id) =>
+          coordinator
+            .run(id)
+            .pipe(
+              Effect.map((ended) =>
+                ended.type === "succeeded" ? ended : { type: "interrupted" as const, reason: "user" as const },
+              ),
+            ),
         wake: coordinator.wake,
         interrupt: (sessionID) => coordinator.interrupt(sessionID),
         awaitIdle: coordinator.awaitIdle,

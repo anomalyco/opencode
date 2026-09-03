@@ -9,8 +9,8 @@ import { Job } from "../../job.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
-import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentJob } from "../../session/subagent-job.js"
+import { SubagentOutcome } from "../../session/subagent-outcome.js"
 
 export const name = "subagent"
 
@@ -40,7 +40,7 @@ export const Input = Schema.Struct({
 
 export const Output = Schema.Struct({
   sessionID: SessionSchema.ID,
-  status: Schema.Literals(["completed", "running"]),
+  status: Schema.Literals(["completed", "running", "stopped"]),
   output: Schema.String,
 })
 export const description = [
@@ -166,8 +166,8 @@ export const Plugin = {
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              // Standard prompt admission outside the job: Job.start joining a running child skips
-              // its run effect, and the default wake starts an idle child or steers a running one.
+              // A new child starts only through its Job. Existing children still need the prompt's
+              // wake: joining an active Job skips run, but new input must still steer the child.
               yield* sessions
                 .prompt({
                   sessionID: child.id,
@@ -175,7 +175,7 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
-                  ...(background && existing === undefined ? { resume: false } : {}),
+                  ...(existing === undefined ? { resume: false } : {}),
                 })
                 .pipe(
                   Effect.mapError(
@@ -193,7 +193,7 @@ export const Plugin = {
               yield* subagents.start(recovery)
 
               if (background) {
-                yield* subagents.background(recovery)
+                yield* subagents.background(child.id)
                 return backgroundResult(child.id)
               }
 
@@ -205,7 +205,7 @@ export const Plugin = {
                 ),
               )
               if (result?.type === "backgrounded") {
-                yield* subagents.notify(recovery, result.info.started_at)
+                yield* subagents.notify(result.info)
                 return backgroundResult(child.id)
               }
               // Failure surfaces keep the sessionID visible so the model can continue the child.
@@ -213,20 +213,20 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
                 })
-              if (result?.info.status === "cancelled")
+              const outcome = result?.info.result?.kind === "subagent" ? result.info.result : undefined
+              if (outcome === undefined)
                 return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
-              return {
-                sessionID: child.id,
-                status: "completed" as const,
-                output: result?.info.output ?? SubagentCompletion.NO_TEXT,
-              }
+              // A user stop is a successful answer: the work ended and the parent should not redo it.
+              if (outcome.status === "interrupted")
+                return { sessionID: child.id, status: "stopped" as const, output: SubagentOutcome.stopped }
+              return { sessionID: child.id, status: "completed" as const, output: outcome.text }
             }).pipe(
               Effect.map((output) => ({
                 output,
                 content:
-                  output.status === "completed"
-                    ? `<subagent sessionID="${output.sessionID}" state="completed">\n${output.output}\n</subagent>`
-                    : output.output,
+                  output.status === "running"
+                    ? output.output
+                    : `<subagent sessionID="${output.sessionID}" state="${output.status}">\n${output.output}\n</subagent>`,
                 metadata: { sessionID: output.sessionID, status: output.status },
               })),
             ),

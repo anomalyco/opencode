@@ -6,6 +6,17 @@ import { Identifier } from "./id/id.js"
 import { KV } from "./kv.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
+import { ShellResult } from "./shell/result.js"
+import { SubagentOutcome } from "./session/subagent-outcome.js"
+
+/**
+ * The producer's typed account of how its work ended. A job never classifies the work itself:
+ * `status` says whether the run reported an outcome (`completed`), died (`error`), or was
+ * abandoned before reporting (`cancelled`). A user stop, a timeout, or a nonzero exit are all
+ * `completed` runs whose outcome says so.
+ */
+export const Outcome = Schema.Union([ShellResult.Outcome, SubagentOutcome.Outcome])
+export type Outcome = typeof Outcome.Type
 
 const Background = Schema.Struct({
   id: Schema.String,
@@ -26,6 +37,8 @@ const Background = Schema.Struct({
     }),
   ]),
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
+  result: Schema.optionalKey(Outcome),
+  // Read-only compatibility with markers written before typed outcomes. Never reconstruct facts from this text.
   output: Schema.optionalKey(Schema.String),
   error: Schema.optionalKey(Schema.String),
 })
@@ -33,6 +46,8 @@ const Background = Schema.Struct({
 export type Background = typeof Background.Type
 export type Recovery = Background["recovery"]
 export type Status = Background["status"]
+/** One job's terminal facts, shared by live Info and the durable background marker. */
+export type Terminal = Pick<Background, "status" | "result" | "output" | "error">
 
 const decodeBackground = Schema.decodeUnknownResult(Background)
 const backgroundPrefix = "job.background/"
@@ -44,10 +59,11 @@ export type Info = {
   status: Status
   started_at: number
   completed_at?: number
-  output?: string
+  result?: Outcome
   error?: string
   metadata?: Record<string, unknown>
   notificationID?: SessionMessage.ID
+  recovery?: Recovery
 }
 
 type Active = {
@@ -57,7 +73,6 @@ type Active = {
   scope: Scope.Closeable
   blockingSessions: Map<SessionSchema.ID, number>
   isBackgrounded: boolean
-  recovery?: Recovery
 }
 
 type State = {
@@ -96,7 +111,7 @@ export type StartInput = {
   metadata?: Record<string, unknown>
   recovery?: Recovery
   notificationID?: SessionMessage.ID
-  run: Effect.Effect<string, unknown>
+  run: Effect.Effect<Outcome, unknown>
 }
 
 export type WaitInput = {
@@ -172,18 +187,18 @@ export const make = Effect.gen(function* () {
   }
 
   const persistBackground = Effect.fnUntraced(function* (job: Active) {
-    if (!job.recovery || !job.info.notificationID) return
+    if (!job.info.recovery || !job.info.notificationID) return
     yield* kv.set(`${backgroundPrefix}${job.info.notificationID}`, {
       id: job.info.id,
       notificationID: job.info.notificationID,
-      recovery: job.recovery,
+      recovery: job.info.recovery,
       status: job.info.status,
-      ...(job.info.output !== undefined ? { output: job.info.output } : {}),
+      ...(job.info.result !== undefined ? { result: job.info.result } : {}),
       ...(job.info.error !== undefined ? { error: job.info.error } : {}),
     })
   })
 
-  const settle = Effect.fnUntraced(function* (id: string, scope: Scope.Closeable, exit: Exit.Exit<string, unknown>) {
+  const settle = Effect.fnUntraced(function* (id: string, scope: Scope.Closeable, exit: Exit.Exit<Outcome, unknown>) {
     const completed_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
@@ -204,7 +219,7 @@ export const make = Effect.gen(function* () {
             ...job.info,
             status,
             completed_at,
-            ...(Exit.isSuccess(exit) ? { output: exit.value } : {}),
+            ...(Exit.isSuccess(exit) ? { result: exit.value } : {}),
             ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
           },
         }
@@ -248,6 +263,7 @@ export const make = Effect.gen(function* () {
                 status: "running" as const,
                 started_at,
                 metadata: input.metadata,
+                recovery: input.recovery,
                 ...(input.notificationID ? { notificationID: input.notificationID } : {}),
               },
               done,
@@ -255,7 +271,6 @@ export const make = Effect.gen(function* () {
               scope,
               blockingSessions: new Map<SessionSchema.ID, number>(),
               isBackgrounded: false,
-              recovery: input.recovery,
             }
             return [{ info: snapshot(job), scope }, new Map(jobs).set(id, job)]
           }),
@@ -324,7 +339,7 @@ export const make = Effect.gen(function* () {
       blockingSessions: new Map<SessionSchema.ID, number>(),
       info: {
         ...job.info,
-        ...(job.recovery ? { notificationID: job.info.notificationID ?? SessionMessage.ID.create() } : {}),
+        ...(job.info.recovery ? { notificationID: job.info.notificationID ?? SessionMessage.ID.create() } : {}),
       },
     }
     yield* persistBackground(next)
@@ -337,7 +352,7 @@ export const make = Effect.gen(function* () {
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
         const job = jobs.get(id)
         // Recoverable work may finish before the caller backgrounds it.
-        if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
+        if (!job || (job.info.status !== "running" && !job.info.recovery)) return [{}, jobs]
         if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
         const next = yield* markBackground(job)
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]

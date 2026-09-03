@@ -3,7 +3,6 @@ export * as SessionExecution from "./execution.js"
 import { Cause, Context, Effect, Exit, Layer } from "effect"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
-import { Job } from "../job.js"
 import { Instance } from "../instance/service.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionEvent } from "./event.js"
@@ -15,13 +14,20 @@ import { toSessionError } from "./to-session-error.js"
 import { UserInterruptedError } from "./error.js"
 import { SessionInbox } from "./inbox.js"
 
+/**
+ * How a joined execution ended. A user interruption is an outcome the joiner learns about;
+ * shutdown interruption is not: it relinquishes local execution while the durable claim keeps
+ * restart continuity, so it interrupts process-local joiners instead of resolving them.
+ */
+export type Terminal = { readonly type: "succeeded" } | { readonly type: "interrupted"; readonly reason: "user" }
+
 export interface Interface {
   /** Snapshots active execution owned by this process. */
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   /** Checks process-local ownership, including interruption cleanup and terminal settlement. */
   readonly isActive: (sessionID: SessionSchema.ID) => Effect.Effect<boolean>
-  /** Starts execution while idle or joins the active execution. */
-  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
+  /** Starts execution while idle or joins the active execution, and returns how it ended. */
+  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<Terminal, SessionRunner.RunError>
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /**
@@ -42,7 +48,7 @@ type InterruptReason = "user" | "shutdown"
 
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
-  if (Cause.hasInterrupts(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
+  if (Cause.hasInterruptsOnly(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
   const failure = Cause.squash(exit.cause)
   if (failure instanceof UserInterruptedError) return { type: "interrupted" as const, reason: "user" as const }
   return { type: "failed" as const, error: toSessionError(failure) }
@@ -55,7 +61,6 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const instances = yield* Instance.Service
     const bus = yield* Bus.Service
-    const jobs = yield* Job.Service
     const db = (yield* Database.Service).db
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
@@ -122,7 +127,6 @@ export const layer = Layer.effect(
             if (outcome.type === "interrupted") {
               // A user cancel releases the claim: the turn must not resurrect at the next
               // boot. Shutdown interruption keeps it for restart continuity.
-              if (outcome.reason === "user") yield* jobs.cancel(sessionID)
               yield* bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
@@ -163,7 +167,14 @@ export const layer = Layer.effect(
             yield* coordinator.wake(sessionID, "steer")
           return interrupted
         }),
-      resume: coordinator.run,
+      resume: (sessionID) =>
+        coordinator.run(sessionID).pipe(
+          Effect.flatMap((terminal): Effect.Effect<Terminal> => {
+            if (terminal.type === "succeeded") return Effect.succeed(terminal)
+            if (terminal.reason === "user") return Effect.succeed({ type: "interrupted", reason: "user" })
+            return Effect.interrupt
+          }),
+        ),
       wake: coordinator.wake,
       awaitIdle: coordinator.awaitIdle,
     })
@@ -173,7 +184,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node],
+  deps: [SessionStore.node, Instance.node, Bus.node, Database.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
@@ -182,7 +193,7 @@ export const noopLayer = Layer.succeed(
   Service.of({
     active: Effect.succeed(new Set()),
     isActive: () => Effect.succeed(false),
-    resume: () => Effect.void,
+    resume: () => Effect.succeed({ type: "succeeded" }),
     wake: () => Effect.void,
     interrupt: () => Effect.succeed(false),
     awaitIdle: () => Effect.void,

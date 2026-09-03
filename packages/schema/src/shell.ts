@@ -19,7 +19,8 @@ export const ID = IDSchema.pipe(
 )
 export type ID = typeof ID.Type
 
-export const Status = Schema.Literals(["running", "exited", "timeout", "killed"])
+// `unavailable` records a lost result (removal or retention), not a process exit or a user stop.
+export const Status = Schema.Literals(["running", "exited", "timeout", "killed", "unavailable"])
 export type Status = typeof Status.Type
 
 export const Time = Schema.Struct({

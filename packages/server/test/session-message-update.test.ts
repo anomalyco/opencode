@@ -30,7 +30,7 @@ it.live("updates completed assistant message content through the session HTTP AP
         return SessionExecution.Service.of({
           active: Effect.sync(() => state.active),
           isActive: (sessionID) => Effect.sync(() => state.active.has(sessionID)),
-          resume: () => Effect.void,
+          resume: () => Effect.succeed({ type: "succeeded" as const }),
           wake: (sessionID) =>
             Effect.gen(function* () {
               yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: state.user })

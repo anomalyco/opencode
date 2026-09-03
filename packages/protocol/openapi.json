@@ -11901,6 +11901,118 @@
         "summary": "Read shell output"
       }
     },
+    "/api/shell/{id}/stop": {
+      "post": {
+        "tags": ["shell"],
+        "operationId": "v2.shell.stop",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^sh_"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Shell.Info"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ShellNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShellNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Kill a running shell command. It ends as killed and stays readable with its captured output; an already finished command is returned unchanged.",
+        "summary": "Stop shell command"
+      }
+    },
     "/api/reference": {
       "get": {
         "tags": ["reference"],
@@ -18221,6 +18333,12 @@
             "type": "string",
             "enum": ["auto", "manual"]
           },
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "providerState": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_5"
+          },
           "summary": {
             "type": "string"
           },
@@ -18448,6 +18566,9 @@
       "Session.Message.ProviderState_4": {
         "type": "object"
       },
+      "Session.Message.ProviderState_5": {
+        "type": "object"
+      },
       "Session.Message.Shell": {
         "type": "object",
         "properties": {
@@ -18484,7 +18605,7 @@
           },
           "status": {
             "type": "string",
-            "enum": ["running", "exited", "timeout", "killed"]
+            "enum": ["running", "exited", "timeout", "killed", "unavailable"]
           },
           "exit": {
             "anyOf": [
@@ -19205,7 +19326,7 @@
           },
           "status": {
             "type": "string",
-            "enum": ["running", "exited", "timeout", "killed"]
+            "enum": ["running", "exited", "timeout", "killed", "unavailable"]
           },
           "command": {
             "type": "string"

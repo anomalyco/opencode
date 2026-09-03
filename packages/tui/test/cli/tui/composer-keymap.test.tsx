@@ -30,7 +30,7 @@ async function renderComposer(
 ) {
   const events = createEventStream()
   const interrupted: string[] = []
-  const removed: string[] = []
+  const stopped: string[] = []
   const ready = Promise.withResolvers<void>()
   let closed = 0
   let dispatch!: ReturnType<typeof Keymap.use>["dispatch"]
@@ -52,10 +52,14 @@ async function renderComposer(
         data: shells,
       })
     }
-    const shellID = url.pathname.match(/^\/api\/shell\/([^/]+)$/)?.[1]
-    if (shellID && request.method === "DELETE") {
-      removed.push(shellID)
-      return new Response(null, { status: 204 })
+    const shellID = url.pathname.match(/^\/api\/shell\/([^/]+)\/stop$/)?.[1]
+    if (shellID && request.method === "POST") {
+      stopped.push(shellID)
+      const shell = shells.find((item) => item.id === shellID)
+      return json({
+        location: { directory, project: { id: "proj_test", directory } },
+        data: { ...shell, status: "killed" },
+      })
     }
   }, events)
 
@@ -118,7 +122,7 @@ async function renderComposer(
   return {
     app,
     interrupted,
-    removed,
+    stopped,
     route: () => route.data,
     dispatch: (command: string) => dispatch(command),
     closed: () => closed,
@@ -162,12 +166,12 @@ test("disabled shell bindings have no component fallbacks", async () => {
     composer.app.mockInput.pressKey("d", { ctrl: true })
     await composer.app.renderOnce()
     expect(composer.closed()).toBe(0)
-    expect(composer.removed).toEqual([])
+    expect(composer.stopped).toEqual([])
 
     composer.app.mockInput.pressArrow("down")
     composer.dispatch("composer.shell.kill")
-    await wait(() => composer.removed.length === 1)
-    expect(composer.removed).toEqual(["sh-a"])
+    await wait(() => composer.stopped.length === 1)
+    expect(composer.stopped).toEqual(["sh-a"])
   } finally {
     composer.app.renderer.destroy()
   }
@@ -180,8 +184,8 @@ test("configured composer bindings work with a focused textarea", async () => {
     await composer.app.renderOnce()
     expect(composer.app.captureCharFrame()).toContain("bun test")
     composer.app.mockInput.pressKey("u", { ctrl: true })
-    await wait(() => composer.removed.length === 1)
-    expect(composer.removed).toEqual(["sh-a"])
+    await wait(() => composer.stopped.length === 1)
+    expect(composer.stopped).toEqual(["sh-a"])
   } finally {
     composer.app.renderer.destroy()
   }

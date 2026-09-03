@@ -12,6 +12,8 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { Shell } from "@opencode-ai/core/shell"
+import { ShellResult } from "@opencode-ai/core/shell/result"
+import { ID } from "@opencode-ai/schema/shell"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { location } from "./fixture/location"
 import { offlineModels } from "./fixture/models"
@@ -47,7 +49,14 @@ const executionLayer = Layer.effect(
     return SessionExecution.Service.of({
       active: coordinator.active,
       isActive: coordinator.isActive,
-      resume: coordinator.run,
+      resume: (id) =>
+        coordinator
+          .run(id)
+          .pipe(
+            Effect.map((ended) =>
+              ended.type === "succeeded" ? ended : { type: "interrupted" as const, reason: "user" as const },
+            ),
+          ),
       interrupt: (sessionID) => coordinator.interrupt(sessionID),
       awaitIdle: coordinator.awaitIdle,
       wake: (sessionID) =>
@@ -277,22 +286,38 @@ describe("Session.shell", () => {
     )
   }
 
+  // Stop preserves the terminal and capture; removal only tells us that the result is unavailable.
   for (const outcome of [
     {
       status: "killed",
-      state: "cancelled",
-      text: "Command cancelled",
+      via: "stop",
+      end: (shell: Shell.Interface, id: ID) => shell.stop(id),
+      state: "stopped",
+      text: "Command stopped by user. Do not restart it unless the user asks.",
+      output: "killed started",
+    },
+    {
+      status: "unavailable",
+      via: "remove",
+      end: (shell: Shell.Interface, id: ID) => shell.remove(id),
+      state: "error",
+      text: "Shell command output is no longer available.",
       output: "Shell command output is no longer available.",
     },
-    { status: "timeout", state: "completed", text: "Command timed out", output: "timeout started" },
+    {
+      status: "timeout",
+      via: "timeout",
+      end: (shell: Shell.Interface, id: ID) => shell.timeout(id, 1),
+      state: "completed",
+      text: "Command timed out",
+      output: "timeout started",
+    },
   ]) {
-    it.live(`records a ${outcome.status} shell and admits its completion without waking the model`, () =>
+    it.live(`records a ${outcome.status} shell via ${outcome.via} without waking the model`, () =>
       Effect.gen(function* () {
         const fixture = yield* setup
         const command = yield* launch(fixture, outcome.status)
-        yield* outcome.status === "killed"
-          ? fixture.shell.remove(command.shellID)
-          : fixture.shell.timeout(command.shellID, 1)
+        yield* outcome.end(fixture.shell, command.shellID)
         yield* Fiber.join(command.caller).pipe(Effect.timeout("5 seconds"))
         expect(yield* fixture.session.messages({ sessionID: fixture.created.id })).toMatchObject([
           {
@@ -319,6 +344,74 @@ describe("Session.shell", () => {
       }),
     )
   }
+
+  it.live("reports a stop that lands before anyone waits, with its output still readable", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const started = yield* fixture.shell.create({
+        command: process.platform === "win32" ? "Write-Output early; Start-Sleep -Seconds 60" : "echo early; sleep 60",
+        timeout: 0,
+      })
+      yield* fixture.shell
+        .output(started.id)
+        .pipe(Effect.repeat({ until: (page) => page.size > 0, schedule: Schedule.spaced("10 millis") }))
+      expect(yield* fixture.shell.stop(started.id)).toMatchObject({ id: started.id, status: "killed" })
+      // A second stop is a no-op on an already terminal command.
+      expect(yield* fixture.shell.stop(started.id)).toMatchObject({ status: "killed" })
+      expect(yield* fixture.shell.list()).toEqual([])
+      expect(yield* fixture.shell.result(started)).toMatchObject({
+        info: { id: started.id, status: "killed" },
+        capture: { output: expect.stringContaining("early"), truncated: false },
+      })
+      expect(ShellResult.outcome(yield* fixture.shell.result(started))).toMatchObject({
+        kind: "shell",
+        status: "killed",
+        output: expect.stringContaining("early"),
+      })
+    }),
+  )
+
+  const posix = process.platform === "win32" ? it.live.skip : it.live
+  posix("finishes an accepted stop despite caller interruption and joins overlapping stops", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const started = yield* fixture.shell.create({
+        shell: "/bin/sh",
+        command: 'trap "" TERM; printf ready; while :; do sleep 60; done',
+        timeout: 0,
+      })
+      const pid = started.pid
+      if (pid === undefined) return yield* Effect.die("Expected shell process ID")
+      yield* Effect.addFinalizer(() =>
+        Effect.try(() => process.kill(-pid, "SIGKILL")).pipe(
+          Effect.ignore,
+          Effect.andThen(fixture.shell.remove(started.id).pipe(Effect.ignore)),
+        ),
+      )
+      yield* fixture.shell
+        .output(started.id)
+        .pipe(
+          Effect.repeat({ until: (page) => page.size > 0, schedule: Schedule.spaced("5 millis") }),
+          Effect.timeout("5 seconds"),
+        )
+      const first = yield* fixture.shell.stop(started.id).pipe(Effect.forkScoped)
+      yield* fixture.shell
+        .get(started.id)
+        .pipe(
+          Effect.repeat({ until: (info) => info.status === "killed", schedule: Schedule.spaced("1 millis") }),
+          Effect.timeout("5 seconds"),
+        )
+      const second = yield* fixture.shell.stop(started.id).pipe(Effect.forkScoped({ startImmediately: true }))
+      // SIGTERM is ignored, so both stops must wait for escalation and capture completion.
+      expect(second.pollUnsafe()).toBeUndefined()
+      yield* Fiber.interrupt(first)
+      const terminal = yield* fixture.shell.wait(started.id).pipe(Effect.timeout("5 seconds"))
+      expect(terminal.status).toBe("killed")
+      expect(yield* Fiber.join(second)).toEqual(terminal)
+      expect(yield* fixture.shell.result(started)).toMatchObject({ capture: { output: "ready", truncated: false } })
+      expect(yield* Effect.try(() => process.kill(pid, 0)).pipe(Effect.result)).toMatchObject({ _tag: "Failure" })
+    }),
+  )
 
   it.live("admits a spawn failure without waking the model before failing the caller", () =>
     Effect.gen(function* () {

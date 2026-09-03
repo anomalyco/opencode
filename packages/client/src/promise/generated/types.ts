@@ -106,7 +106,7 @@ export type SessionMessageShell = {
   type: "shell"
   shellID: string
   command: string
-  status: "running" | "exited" | "timeout" | "killed"
+  status: "running" | "exited" | "timeout" | "killed" | "unavailable"
   exit?: number | "Infinity" | "-Infinity" | "NaN"
   output?: { output: string; cursor: number; size: number; truncated: boolean }
 }
@@ -154,7 +154,7 @@ export type SessionInboxSyntheticPayload1 = { text: string; description?: string
 
 export type ShellInfo = {
   id: string
-  status: "running" | "exited" | "timeout" | "killed"
+  status: "running" | "exited" | "timeout" | "killed" | "unavailable"
   command: string
   cwd: string
   shell: string
@@ -386,7 +386,7 @@ export type PersistentPtyHandoff = { directory: string; instanceID: string; tick
 
 export type ShellInfo1 = {
   id: string
-  status: "running" | "exited" | "timeout" | "killed"
+  status: "running" | "exited" | "timeout" | "killed" | "unavailable"
   command: string
   cwd: string
   shell: string
@@ -1065,7 +1065,7 @@ export type ShellExited = {
   metadata?: { [x: string]: any }
   type: "shell.exited"
   location?: LocationRef
-  data: { id: string; exit?: number; status: "running" | "exited" | "timeout" | "killed" }
+  data: { id: string; exit?: number; status: "running" | "exited" | "timeout" | "killed" | "unavailable" }
 }
 
 export type ShellDeleted = {
@@ -2945,7 +2945,7 @@ export type SessionImportInput = {
           readonly type: "shell"
           readonly shellID: string
           readonly command: string
-          readonly status: "running" | "exited" | "timeout" | "killed"
+          readonly status: "running" | "exited" | "timeout" | "killed" | "unavailable"
           readonly exit?: number | "Infinity" | "-Infinity" | "NaN"
           readonly output?: {
             readonly output: string
@@ -3224,7 +3224,7 @@ export type SessionImportInput = {
           readonly type: "shell"
           readonly shellID: string
           readonly command: string
-          readonly status: "running" | "exited" | "timeout" | "killed"
+          readonly status: "running" | "exited" | "timeout" | "killed" | "unavailable"
           readonly exit?: number | "Infinity" | "-Infinity" | "NaN"
           readonly output?: {
             readonly output: string
@@ -3503,7 +3503,7 @@ export type SessionImportInput = {
           readonly type: "shell"
           readonly shellID: string
           readonly command: string
-          readonly status: "running" | "exited" | "timeout" | "killed"
+          readonly status: "running" | "exited" | "timeout" | "killed" | "unavailable"
           readonly exit?: number | "Infinity" | "-Infinity" | "NaN"
           readonly output?: {
             readonly output: string
@@ -6055,6 +6055,18 @@ export type ShellOutputInput = {
 export type ShellOutputOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: { output: string; cursor: number; size: number; truncated: boolean }
+}
+
+export type ShellStopInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type ShellStopOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: ShellInfo1
 }
 
 export type ShellRemoveInput = {

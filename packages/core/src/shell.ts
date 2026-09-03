@@ -44,9 +44,10 @@ type Active = {
   size: number
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
-  done: Deferred.Deferred<Info, NotFoundError>
+  done: Deferred.Deferred<ShellResult.TerminalInfo, NotFoundError>
   timeoutFiber?: Fiber.Fiber<void>
   timeout?: (duration: number) => Effect.Effect<void>
+  stop?: Effect.Effect<void>
 }
 
 /**
@@ -67,12 +68,16 @@ export interface Interface {
   readonly get: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
   // Resolves once the command reaches a terminal status, returning its final Info. Fails with
   // NotFoundError if the command is unknown or is removed before it terminates.
-  readonly wait: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
-  // A known shell's terminal state and bounded tail. Missing capture remains distinct from its exit status.
+  readonly wait: (id: Shell.ID) => Effect.Effect<ShellResult.TerminalInfo, NotFoundError>
+  // A known terminal state and bounded tail, or `unavailable` if observation outlives retention/removal.
   readonly result: (started: Shell.Info) => Effect.Effect<ShellResult.Result>
   // Replaces the running command's timeout from now; zero clears it.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
+  // Kills a running command. It ends as `killed` and stays observable like any exited command, so
+  // waiters see the real terminal Info and its captured output remains readable. Stopping is not
+  // removal: `remove` forgets the command and its capture. Resolves once the command is terminal.
+  readonly stop: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
 
@@ -193,6 +198,14 @@ const layer = () =>
         return command.info
       })
 
+      const stop = Effect.fn("Shell.stop")(function* (id: Shell.ID) {
+        const command = yield* require(id)
+        // Once accepted, a client's cancellation cannot abandon killing or capture settlement.
+        // Concurrent callers wait on the same completion, not the early status change.
+        if (command.info.status === "running" && command.stop) yield* command.stop
+        return yield* Deferred.await(command.done)
+      }, Effect.uninterruptible)
+
       const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const command = yield* require(id)
         const cursor = input?.cursor ?? 0
@@ -225,9 +238,7 @@ const layer = () =>
 
       const result = Effect.fn("Shell.result")(function* (started: Shell.Info) {
         const info = yield* wait(started.id).pipe(
-          Effect.catchTag("Shell.NotFoundError", () =>
-            Effect.succeed({ ...started, status: "killed" as const, time: { ...started.time, completed: Date.now() } }),
-          ),
+          Effect.catchTag("Shell.NotFoundError", () => Effect.succeed({ ...started, status: "unavailable" as const })),
         )
         const capture = yield* Effect.gen(function* () {
           const limits = Config.latest(yield* config.entries(), "tool_output")
@@ -309,7 +320,7 @@ const layer = () =>
                 }),
                 file,
                 size: 0,
-                done: Deferred.makeUnsafe<Info, NotFoundError>(),
+                done: Deferred.makeUnsafe<ShellResult.TerminalInfo, NotFoundError>(),
               }
               commands.set(id, command)
 
@@ -343,21 +354,23 @@ const layer = () =>
                   }),
               )
 
-              const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void) =>
+              const finish = (status: ShellResult.TerminalInfo["status"], exit?: number, beforeWait = Effect.void) =>
                 Effect.gen(function* () {
                   if (command.info.status !== "running") return
-                  command.info = produce(command.info, (draft) => {
-                    draft.status = status
-                    if (exit !== undefined) draft.exit = exit
-                    draft.time.completed = Date.now()
-                  })
+                  const info = {
+                    ...command.info,
+                    status,
+                    ...(exit !== undefined ? { exit } : {}),
+                    time: { ...command.info.time, completed: Date.now() },
+                  }
+                  command.info = info
                   yield* beforeWait
                   yield* outputDone.await
                   // Resolve waiters with the terminal Info before any retention eviction, so an evicted
                   // command still reports success rather than the removal NotFoundError. This runs before
                   // the timeout-fiber interrupt below, which on the timeout path would otherwise cancel
                   // this very fiber (finish is invoked by the timeout fiber) before waiters are resolved.
-                  yield* Deferred.succeed(command.done, command.info)
+                  yield* Deferred.succeed(command.done, info)
                   yield* bus.publish(Shell.Event.Exited, {
                     id,
                     ...(exit !== undefined ? { exit } : {}),
@@ -372,6 +385,7 @@ const layer = () =>
                   // Keep exited history data-only. Interrupt last because finish may run on the timeout fiber.
                   const timeoutFiber = command.timeoutFiber
                   command.timeout = undefined
+                  command.stop = undefined
                   command.timeoutFiber = undefined
                   if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 })
@@ -395,6 +409,11 @@ const layer = () =>
                 })
 
               yield* command.timeout(invocation.timeout)
+              command.stop = finish(
+                "killed",
+                undefined,
+                handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
+              )
 
               runFork(
                 handle.exitCode.pipe(
@@ -416,7 +435,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, output, stop, remove })
     }),
   )
 

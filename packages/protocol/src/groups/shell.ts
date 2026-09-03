@@ -91,6 +91,23 @@ export const ShellGroup = HttpApiGroup.make("server.shell")
       ),
   )
   .add(
+    HttpApiEndpoint.post("shell.stop", "/api/shell/:id/stop", {
+      params: { id: Shell.ID },
+      query: LocationQuery,
+      success: Location.response(Shell.Info),
+      error: ShellNotFoundError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.shell.stop",
+          summary: "Stop shell command",
+          description:
+            "Kill a running shell command. It ends as killed and stays readable with its captured output; an already finished command is returned unchanged.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.delete("shell.remove", "/api/shell/:id", {
       params: { id: Shell.ID },
       query: LocationQuery,
