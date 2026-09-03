@@ -38,9 +38,10 @@ export const WriteTool = Tool.define(
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const instance = yield* InstanceState.context
-          const filepath = path.isAbsolute(params.filePath)
-            ? params.filePath
-            : path.join(instance.directory, params.filePath)
+          // Local models sometimes emit trailing newlines in filePath.
+          const filePath = FSUtil.sanitizeToolPath(params.filePath)
+          if (!filePath) throw new Error("filePath is required")
+          const filepath = path.isAbsolute(filePath) ? filePath : path.join(instance.directory, filePath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)

@@ -68,7 +68,9 @@ export const EditTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          if (!params.filePath) {
+          // Local models sometimes emit trailing newlines in filePath.
+          const sanitized = FSUtil.sanitizeToolPath(params.filePath)
+          if (!sanitized) {
             throw new Error("filePath is required")
           }
 
@@ -77,9 +79,7 @@ export const EditTool = Tool.define(
           }
 
           const instance = yield* InstanceState.context
-          const filePath = path.isAbsolute(params.filePath)
-            ? params.filePath
-            : path.join(instance.directory, params.filePath)
+          const filePath = path.isAbsolute(sanitized) ? sanitized : path.join(instance.directory, sanitized)
           yield* assertExternalDirectoryEffect(ctx, filePath)
 
           let diff = ""

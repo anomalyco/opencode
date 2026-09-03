@@ -102,6 +102,26 @@ describe("tool.edit", () => {
       }),
     )
 
+    it.instance("strips trailing newlines from filePath before creating a file", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "trimmed-edit.txt")
+        yield* run({ filePath: `${filepath}\n`, oldString: "", newString: "trimmed edit" })
+
+        expect(yield* load(filepath)).toBe("trimmed edit")
+      }),
+    )
+
+    it.instance("keeps intentional leading spaces in file names", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, " draft-edit.md")
+        yield* run({ filePath: filepath, oldString: "", newString: "spaced edit" })
+
+        expect(yield* load(filepath)).toBe("spaced edit")
+      }),
+    )
+
     it.instance("rejects empty oldString on existing files and leaves content unchanged", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance

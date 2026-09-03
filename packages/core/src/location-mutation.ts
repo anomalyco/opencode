@@ -118,8 +118,11 @@ const layer = Layer.effect(
     })
 
     const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
-      const relative = !path.isAbsolute(input.path)
-      const absolute = path.resolve(location.directory, input.path)
+      // Local models sometimes emit trailing newlines in path args. Keep original
+      // path in errors for debugging; resolve against the sanitized form only.
+      const inputPath = FSUtil.sanitizeToolPath(input.path)
+      const relative = !path.isAbsolute(inputPath)
+      const absolute = path.resolve(location.directory, inputPath)
       const lexicallyInternal = FSUtil.contains(location.directory, absolute)
       if (relative && !lexicallyInternal) return yield* new PathError({ path: input.path, reason: "relative_escape" })
 
