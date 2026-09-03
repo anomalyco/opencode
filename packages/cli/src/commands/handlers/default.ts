@@ -4,7 +4,7 @@ import { run } from "@opencode-ai/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
-import { Context, Effect, FileSystem, Option, Queue } from "effect"
+import { Context, Effect, Fiber, FileSystem, Option, Queue } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
@@ -47,6 +47,7 @@ export default Runtime.handler(Commands, (input) =>
       ),
     )
     const updater = yield* Updater.Service
+    const update = yield* updater.check().pipe(Effect.forkScoped)
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -83,9 +84,11 @@ export default Runtime.handler(Commands, (input) =>
         update: (update) => runPromise(config.update(update)),
       },
       updater: {
-        monitor: (notify, signal) =>
+        subscribe: (notify, signal) =>
           runPromise(
-            updater.monitor((version) => Effect.sync(() => notify(version))),
+            Fiber.join(update).pipe(
+              Effect.flatMap((version) => (version === undefined ? Effect.void : Effect.sync(() => notify(version)))),
+            ),
             { signal },
           ),
         apply: (version) => runPromise(updater.apply(version)),

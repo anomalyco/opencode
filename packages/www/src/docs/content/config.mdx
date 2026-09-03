@@ -130,7 +130,10 @@ agents.
 ### Updates
 
 Control update checks from the global config. Set `update` to `"disable"` to
-skip them or `"notify"` to show available updates before installing them.
+skip them, `"notify"` to show available updates before installing them, or
+`"auto"` to install updates automatically.
+
+Automatic installation does not restart a running server. Restart it manually to activate the installed update.
 Project-level values are ignored.
 
 ```jsonc

@@ -11,6 +11,9 @@ import { useLocation } from "../context/location"
 import { FormPrompt } from "./session/form"
 import { Slot } from "../plugin/render"
 import { useTerminalDimensions } from "@opentui/solid"
+import { TextAttributes } from "@opentui/core"
+import { useTheme } from "../context/theme"
+import { useUpdateNotification } from "../context/update-notification"
 
 let once = false
 const placeholder = {
@@ -28,6 +31,8 @@ export function Home() {
   const data = useData()
   const location = useLocation()
   const dimensions = useTerminalDimensions()
+  const theme = useTheme()
+  const update = useUpdateNotification()
   // Global MCP elicitations can arrive without a session route, so keep them reachable from Home.
   const currentLocation = () => route.location ?? data.location.default()
   const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
@@ -89,6 +94,18 @@ export function Home() {
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
           <Prompt ref={bind} placeholders={placeholder} disabled={forms().length > 0} />
         </box>
+        <Show when={update.available()} keyed>
+          {(version) => (
+            <text
+              fg={theme.text.feedback.info.default}
+              attributes={TextAttributes.BOLD}
+              marginTop={1}
+              onMouseUp={update.open}
+            >
+              OpenCode {version} is available · click to update
+            </text>
+          )}
+        </Show>
         <box flexGrow={1} minHeight={0} />
       </box>
       <box width="100%" flexShrink={0}>

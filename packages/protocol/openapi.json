@@ -13904,7 +13904,7 @@
           },
           "update": {
             "type": "string",
-            "enum": ["disable", "notify"]
+            "enum": ["disable", "notify", "auto"]
           },
           "share": {
             "type": "string",
@@ -18221,6 +18221,12 @@
             "type": "string",
             "enum": ["auto", "manual"]
           },
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "providerState": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_5"
+          },
           "summary": {
             "type": "string"
           },
@@ -18446,6 +18452,9 @@
         "type": "object"
       },
       "Session.Message.ProviderState_4": {
+        "type": "object"
+      },
+      "Session.Message.ProviderState_5": {
         "type": "object"
       },
       "Session.Message.Shell": {
