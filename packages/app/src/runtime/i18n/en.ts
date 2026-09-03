@@ -813,6 +813,7 @@ export const dict = {
   "terminal.connectTicket.statusError": "PTY connect ticket failed with {{status}}",
 
   "session.browser.address": "Browser address",
+  "session.browser.replaced": "Browser control moved to another desktop window.",
   "session.browser.address.placeholder": "Enter a URL",
 
   "titlebar.update": "Update",
