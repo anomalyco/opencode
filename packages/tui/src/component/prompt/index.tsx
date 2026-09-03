@@ -35,7 +35,7 @@ import { saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode-ai/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
-import { usePromptStash } from "../../prompt/stash"
+import { usePromptStash, type StashEntry } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -871,52 +871,69 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  const [stashPending, setStashPending] = createSignal(false)
+
+  function restoreStash(entry: StashEntry) {
+    if (disposed) {
+      saveDraft(stashSessionID, { prompt: entry.prompt, cursor: entry.prompt.text.length })
+      return
+    }
+    input.setText(entry.prompt.text)
+    setStore("prompt", entry.prompt)
+    restoreExtmarksFromPrompt(entry.prompt)
+    input.gotoBufferEnd()
+  }
+
   const stashCommands = createMemo(() =>
     [
       {
         title: "Stash prompt",
         name: "prompt.stash",
         category: "Prompt",
-        enabled: !!store.prompt.text,
-        run: () => {
-          if (!store.prompt.text) return
-          stash.push({ prompt: store.prompt })
-          resetComposer()
+        enabled: !!store.prompt.text && !stashPending(),
+        run: async () => {
+          if (!store.prompt.text || stashPending()) return
+          const before = JSON.stringify(store.prompt)
+          setStashPending(true)
           dialog.clear()
+          await stash
+            .push({ prompt: store.prompt })
+            .then(
+              () => {
+                if (!disposed && JSON.stringify(store.prompt) === before) resetComposer()
+              },
+              (error) => toast.error(error),
+            )
+            .finally(() => setStashPending(false))
         },
       },
       {
         title: "Stash pop",
         name: "prompt.stash.pop",
         category: "Prompt",
-        enabled: stash.list().length > 0,
-        run: () => {
-          const entry = stash.pop()
-          if (entry) {
-            input.setText(entry.prompt.text)
-            setStore("prompt", entry.prompt)
-            restoreExtmarksFromPrompt(entry.prompt)
-            input.gotoBufferEnd()
-          }
+        enabled: stash.list().length > 0 && !stashPending(),
+        run: async () => {
+          if (stashPending()) return
+          setStashPending(true)
           dialog.clear()
+          await stash
+            .pop()
+            .then(
+              (entry) => {
+                if (entry) restoreStash(entry)
+              },
+              (error) => toast.error(error),
+            )
+            .finally(() => setStashPending(false))
         },
       },
       {
         title: "Stash list",
         name: "prompt.stash.list",
         category: "Prompt",
-        enabled: stash.list().length > 0,
+        enabled: stash.list().length > 0 && !stashPending(),
         run: () => {
-          dialog.replace(() => (
-            <DialogStash
-              onSelect={(entry) => {
-                input.setText(entry.prompt.text)
-                setStore("prompt", entry.prompt)
-                restoreExtmarksFromPrompt(entry.prompt)
-                input.gotoBufferEnd()
-              }}
-            />
-          ))
+          dialog.replace(() => <DialogStash onSelect={restoreStash} />)
         },
       },
     ].map(
