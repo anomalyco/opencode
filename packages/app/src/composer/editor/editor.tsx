@@ -673,6 +673,7 @@ export function ComposerEditorPopover(props: {
 }) {
   return (
     <div
+      data-component="composer-popover"
       class="absolute inset-x-0 -top-2 z-40 flex max-h-80 -translate-y-full flex-col overflow-auto rounded-xl bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-raised)] no-scrollbar"
       onMouseDown={(event) => event.preventDefault()}
     >
@@ -701,6 +702,7 @@ export function ComposerEditorPopover(props: {
             <button
               type="button"
               data-suggestion-id={item.id}
+              data-active={props.activeID === item.id ? "true" : undefined}
               class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
               classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
               onPointerMove={() => props.onActiveChange(item)}

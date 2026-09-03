@@ -6,3 +6,12 @@
 [data-color-scheme="dark"] [data-component="new-session"] [data-component="composer"] {
   background: var(--v2-background-bg-layer-01);
 }
+
+[data-color-scheme="dark"] [data-component="composer-popover"] {
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-color-scheme="dark"] [data-component="composer-popover"] [data-active="true"],
+[data-color-scheme="dark"] [data-component="composer-popover"] button:hover {
+  background: var(--v2-background-bg-layer-02);
+}
