@@ -11,6 +11,7 @@ import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } 
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
+import { useInteractivity } from "../../context/interactivity"
 import { usePathFormatter } from "../../context/path-format"
 import { SimulationSemantics } from "../../simulation/semantics"
 import { PatchDiff } from "../../component/patch-diff"
@@ -288,6 +289,7 @@ function RejectPrompt(props: {
   onCancel: () => void
 }) {
   let input: TextareaRenderable
+  const enabled = useInteractivity()
   const theme = useTheme("elevated")
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
@@ -364,7 +366,7 @@ function RejectPrompt(props: {
             }))(val)
             val.traits = { status: "REJECT" }
           }}
-          focused
+          focused={enabled()}
           textColor={theme.text.default}
           focusedTextColor={theme.text.default}
           cursorColor={theme.text.default}
