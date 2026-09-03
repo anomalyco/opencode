@@ -5,6 +5,7 @@ import {
   createSignal,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -39,6 +40,7 @@ import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 import { normalizeSessionInfo } from "@/utils/session"
+import { formatWindowTitle } from "./window-title"
 
 const legacyTitlebarHeight = 40
 const v2TitlebarHeight = 36
@@ -236,6 +238,24 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             }
 
             const currentTab = () => matchRoute(layout.route())
+
+            createEffect(() => {
+              if (platform.platform !== "desktop") return
+              const tab = currentTab()
+              if (!tab) {
+                document.title = formatWindowTitle()
+                return
+              }
+              if (tab.type === "draft") {
+                document.title = formatWindowTitle(language.t("command.session.new"), tab.directory)
+                return
+              }
+              const info = tabs.info[tabKey(tab)]
+              document.title = formatWindowTitle(info?.title, info?.directory)
+            })
+            onCleanup(() => {
+              if (platform.platform === "desktop") document.title = formatWindowTitle()
+            })
 
             createEffect(() => {
               const route = layout.route()
