@@ -269,18 +269,7 @@ export namespace Message {
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
 }
 
-export type ToolDefinitionInput = {
-  readonly name: string
-  readonly description: string
-  readonly inputSchema: JsonSchema
-  readonly outputSchema?: JsonSchema
-  readonly cache?: CacheHint
-  readonly metadata?: Readonly<Record<string, unknown>>
-  readonly native?: Readonly<Record<string, unknown>>
-}
-
-export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefinition")({
-  type: Schema.Literal("tool"),
+const toolDefinitionFields = {
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
@@ -288,6 +277,13 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+}
+
+export type ToolDefinitionInput = Schema.Struct.Type<typeof toolDefinitionFields>
+
+export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefinition")({
+  type: Schema.Literal("tool"),
+  ...toolDefinitionFields,
 }) {
   constructor(input: ToolDefinitionInput) {
     super({ ...input, type: "tool" })
@@ -324,10 +320,9 @@ export const ToolNamespace: Schema.Codec<ToolNamespace> & {
   }).annotate({ identifier: "LLM.ToolNamespace" }),
   {
     make: (input: ToolNamespace | ToolNamespaceInput): ToolNamespace => ({
+      ...input,
       type: "namespace",
-      name: input.name,
-      description: input.description,
-      tools: input.tools.map((tool) => ToolEntry.make(tool)),
+      tools: input.tools.map(ToolEntry.make),
     }),
   },
 )

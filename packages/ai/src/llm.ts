@@ -57,7 +57,7 @@ export const request = <const SelectedLanguageModel extends LanguageModel>(
     ...rest,
     system: SystemPart.content(requestSystem),
     messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
-    tools: tools?.map((tool) => ToolEntry.make(tool)) ?? [],
+    tools: tools?.map(ToolEntry.make) ?? [],
     toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
     generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),
     providerOptions: requestProviderOptions,

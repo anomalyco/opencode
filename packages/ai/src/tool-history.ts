@@ -68,9 +68,10 @@ function normalizeToolMessage(message: Message, pending: Map<string, ToolCallPar
 }
 
 function normalizeToolResult(part: ToolResultPart, call: ToolCallPart | undefined): ToolResultPart {
-  const name = call?.name ?? part.name
-  const namespace = call === undefined ? part.namespace : call.namespace
-  const named = part.name === name && part.namespace === namespace ? part : { ...part, name, namespace }
+  const named =
+    call === undefined || (part.name === call.name && part.namespace === call.namespace)
+      ? part
+      : { ...part, name: call.name, namespace: call.namespace }
   if (named.result.type === "text" && named.result.value === "")
     return { ...named, result: { type: "text", value: EMPTY_TOOL_OUTPUT } }
   if (named.result.type === "error" && named.result.value === "")

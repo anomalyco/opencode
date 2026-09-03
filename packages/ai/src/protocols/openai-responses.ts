@@ -5,7 +5,7 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { LLMRequest, type AIError, type JsonSchema, type ToolDefinition, type ToolEntry } from "../schema/index.js"
+import type { LLMRequest, JsonSchema, ToolDefinition, ToolEntry } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
@@ -139,24 +139,8 @@ const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDe
   return yield* OpenResponses.lowerTool(NAME, tool, inputSchema)
 })
 
-function lowerNamespaceTools(
-  tools: ReadonlyArray<ToolEntry>,
-  compatibility: Parameters<typeof ToolSchemaProjection.modelCompatibility>[1],
-  path: ReadonlyArray<string> = [],
-): Effect.Effect<ReadonlyArray<typeof OpenResponses.Tool.Type>, AIError> {
-  return Effect.gen(function* () {
-    const entries = yield* Effect.forEach(tools, (tool) => {
-      if (tool.type === "namespace") return lowerNamespaceTools(tool.tools, compatibility, [...path, tool.name])
-      return OpenResponses.lowerTool(
-        NAME,
-        tool,
-        ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility),
-      ).pipe(Effect.map((lowered) => [{ ...lowered, name: [...path, lowered.name].join("_") }]))
-    }).pipe(Effect.map((entries) => entries.flat()))
-    return Array.from(new Map(entries.map((tool) => [tool.name, tool])).values())
-  })
-}
-
+// Native namespaces hold only function tools, so deeper levels flatten into
+// the leaf names the same way non-native protocols flatten the whole tree.
 const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (
   tool: ToolEntry,
   compatibility: Parameters<typeof ToolSchemaProjection.modelCompatibility>[1],
@@ -169,7 +153,9 @@ const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (
     type: "namespace" as const,
     name: tool.name,
     description: tool.description,
-    tools: yield* lowerNamespaceTools(tool.tools, compatibility),
+    tools: yield* Effect.forEach(ProviderShared.flattenTools(tool.tools), (leaf) =>
+      OpenResponses.lowerTool(NAME, leaf, ToolSchemaProjection.modelCompatibility(leaf.inputSchema, compatibility)),
+    ),
   }
 })
 

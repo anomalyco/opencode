@@ -331,14 +331,12 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     },
     body: {
       schema: Schema.Unknown,
-      from: (request) => {
-        const flattened = ProviderShared.flattenToolRequest(request)
-        return Effect.try({
-          try: () => callOptions(flattened.request, packageName, info.modelID ?? info.id, optionKey, flattened.tools),
+      from: (request) =>
+        Effect.try({
+          try: () => callOptions(request, packageName, info.modelID ?? info.id, optionKey),
           catch: (cause) =>
             cause instanceof AIError ? cause : ProviderShared.invalidRequest("Invalid AI SDK request", cause),
-        })
-      },
+        }),
     },
     with: () => route,
     model: (input) =>
@@ -417,10 +415,10 @@ function callOptions(
   packageName: string | undefined,
   modelID: ID,
   optionKey: string,
-  tools: ReadonlyArray<ToolDefinition>,
 ): LanguageModelV3CallOptions {
+  const flattened = ProviderShared.flattenToolRequest(request)
   return {
-    prompt: prompt(request),
+    prompt: prompt(flattened.request),
     maxOutputTokens: request.generation?.maxTokens,
     temperature: request.generation?.temperature,
     stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
@@ -429,7 +427,7 @@ function callOptions(
     presencePenalty: request.generation?.presencePenalty,
     frequencyPenalty: request.generation?.frequencyPenalty,
     seed: request.generation?.seed,
-    tools: tools.map(tool),
+    tools: flattened.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.http?.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),

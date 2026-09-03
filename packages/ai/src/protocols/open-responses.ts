@@ -189,7 +189,7 @@ export const InputItem = Schema.Union([
     id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     name: Schema.String,
-    namespace: Schema.optionalKey(Schema.UndefinedOr(Schema.String)),
+    namespace: Schema.optional(Schema.String),
     arguments: Schema.String,
   }),
   Schema.Struct({

@@ -51,22 +51,16 @@ interface Budget {
 }
 
 const markLastTool = (tools: ReadonlyArray<ToolEntry>, hint: CacheHint, budget: Budget): ReadonlyArray<ToolEntry> => {
-  if (tools.length === 0) return tools
-  const last = tools.findLastIndex((tool) => tool.type === "tool" || tool.tools.some(hasTool))
-  if (last === -1) return tools
-  const target = tools[last]!
+  const target = tools.at(-1)
+  if (target === undefined) return tools
   if (target.type === "namespace") {
     const nested = markLastTool(target.tools, hint, budget)
-    return nested === target.tools
-      ? tools
-      : tools.map((tool, index) => (index === last ? { ...target, tools: nested } : tool))
+    return nested === target.tools ? tools : [...tools.slice(0, -1), { ...target, tools: nested }]
   }
   if (target.cache || budget.remaining === 0) return tools
   budget.remaining -= 1
-  return tools.map((tool, index) => (index === last ? new ToolDefinition({ ...target, cache: hint }) : tool))
+  return [...tools.slice(0, -1), new ToolDefinition({ ...target, cache: hint })]
 }
-
-const hasTool = (tool: ToolEntry): boolean => tool.type === "tool" || tool.tools.some(hasTool)
 
 const countToolHints = (tools: ReadonlyArray<ToolEntry>): number =>
   tools.reduce(

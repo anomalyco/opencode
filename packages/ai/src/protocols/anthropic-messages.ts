@@ -1068,11 +1068,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
   const flattened = ProviderShared.flattenToolRequest(request)
-  const definitions = flattened.tools
   const tools =
-    definitions.length === 0
+    flattened.tools.length === 0
       ? undefined
-      : definitions.map((tool) =>
+      : flattened.tools.map((tool) =>
           lowerTool(
             breakpoints,
             tool,

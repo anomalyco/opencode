@@ -283,14 +283,21 @@ export const unsupportedOperation = (input: {
     }),
   })
 
+/**
+ * Lower namespaces to flat definitions for protocols without a native
+ * namespace construct. Leaf names join their namespace path with `_` because
+ * `.` is not broadly accepted in provider tool names.
+ */
+export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string> = []) => {
+  const flat = tools.flatMap((tool): ReadonlyArray<ToolDefinition> => {
+    if (tool.type === "namespace") return flattenTools(tool.tools, [...path, tool.name])
+    if (path.length === 0) return [tool]
+    return [new ToolDefinition({ ...tool, name: [...path, tool.name].join("_") })]
+  })
+  return [...new Map(flat.map((tool) => [tool.name, tool])).values()]
+}
+
 export const flattenToolRequest = (request: LLMRequest) => {
-  const flatten = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string>): ReadonlyArray<ToolDefinition> =>
-    tools.flatMap((tool) => {
-      if (tool.type === "namespace") return flatten(tool.tools, [...path, tool.name])
-      if (path.length === 0) return [tool]
-      return [new ToolDefinition({ ...tool, name: [...path, tool.name].join("_") })]
-    })
-  const tools = Array.from(new Map(flatten(request.tools, []).map((tool) => [tool.name, tool])).values())
   const messages = request.messages.map((message) => {
     const content = message.content.map((part) => {
       if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
@@ -301,7 +308,7 @@ export const flattenToolRequest = (request: LLMRequest) => {
       : new Message({ ...message, content })
   })
   return {
-    tools,
+    tools: flattenTools(request.tools),
     request: messages.every((message, index) => message === request.messages[index])
       ? request
       : LLMRequest.update(request, { messages }),
