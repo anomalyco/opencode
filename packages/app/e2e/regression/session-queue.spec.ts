@@ -3,6 +3,7 @@ import type { OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/prom
 import { base64Encode } from "@opencode-ai/util/encode"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
+import { installSseTransport } from "../utils/sse-transport"
 
 const directory = "C:/OpenCode/SessionQueueRegression"
 const projectID = "proj_session_queue_regression"
@@ -166,6 +167,65 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect.poll(() => mock.prompts.map((prompt) => prompt.delivery)).toEqual(["queue", "steer"])
   await expect(view.input).toHaveText("")
 })
+
+for (const outcome of ["delivered", "cancelled"] as const) {
+  test(`refreshes a queued prompt ${outcome} while disconnected without reloading the page`, async ({
+    page,
+  }, testInfo) => {
+    const transport = await installSseTransport(page, { server, retry: 50 })
+    const mock = createQueueMock(["Follow-up consumed while disconnected"])
+    const reads: string[] = []
+    const inboxPath = `/api/session/${sessionID}/inbox`
+    const messagePath = `/api/session/${sessionID}/message`
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname
+      if (request.method() === "GET" && (path === inboxPath || path === messagePath)) reads.push(path)
+    })
+    const view = await openSession(page, mock)
+    const connection = await transport.waitForConnection()
+    await expect(view.rows).toHaveCount(1)
+    expect(reads.filter((path) => path === inboxPath)).toHaveLength(1)
+    const queued = mock.rows[0]
+    const transcript = page.locator(`[data-timeline-row="UserMessage"][data-message-id="${queued.id}"]`)
+    await expect(transcript).toHaveCount(0)
+
+    // Hold refreshed snapshots until the server-side change has been made, without
+    // depending on how quickly the browser establishes its replacement stream.
+    const changed = Promise.withResolvers<void>()
+    await page.route(
+      (url) => url.pathname === inboxPath || url.pathname === messagePath,
+      async (route) => {
+        await changed.promise
+        await route.fallback()
+      },
+    )
+    const refreshed = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === messagePath && response.status() === 200,
+    )
+    await transport.disconnect()
+    mock.rows.splice(0)
+    if (outcome === "delivered") {
+      mock.messages.push({
+        id: queued.id,
+        type: "user",
+        text: queued.payload.text,
+        time: { created: queued.timeCreated + 1 },
+      })
+    }
+    // Deliberately emit no inbox-delivered/cancelled event: it was missed offline.
+    changed.resolve()
+    await transport.waitForConnection({ after: connection.id })
+    await refreshed
+
+    await expect(view.rows).toHaveCount(0)
+    await expect(transcript).toHaveCount(outcome === "delivered" ? 1 : 0)
+    if (outcome === "delivered") await expect(transcript).toContainText(queued.payload.text)
+    expect(reads.filter((path) => path === inboxPath)).toHaveLength(2)
+    expect(reads.filter((path) => path === messagePath)).toHaveLength(2)
+    await expect(page).toHaveURL(`/server/${base64Encode(server)}/session/${sessionID}`)
+    await page.screenshot({ path: testInfo.outputPath(`reconnected-${outcome}.png`) })
+  })
+}
 
 test("dragging reorders queued prompts", async ({ page }) => {
   const mock = createQueueMock(["first queued prompt", "second queued prompt", "third queued prompt"])

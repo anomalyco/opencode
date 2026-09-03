@@ -7,6 +7,10 @@ type SessionStore<T> = {
   message: {
     sync: (id: string) => Promise<unknown>
   }
+  pending: {
+    list: (id: string) => readonly unknown[]
+    sync: (id: string) => Promise<unknown>
+  }
 }
 
 type Resolution<T> = { id: string; store: SessionStore<T> } & (
@@ -52,8 +56,11 @@ export function createSessionResolution<T>(
       onCleanup(() => {
         stale = true
       })
-      // The timeline owns message errors; metadata resolution stays independent.
-      void store.message.sync(id).catch(() => undefined)
+      // Message reconciliation retains pending placeholders. Refresh their membership
+      // first when present, but keep empty-cache reads parallel and metadata independent.
+      const messages = store.pending.list(id).length ? undefined : store.message.sync(id)
+      const pending = store.pending.sync(id).catch(() => undefined)
+      void (messages ?? pending.then(() => store.message.sync(id))).catch(() => undefined)
       if (cached() && !options?.children && !options?.connected) {
         setStatus({ id, store, state: "settled" })
         return

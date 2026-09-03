@@ -5,7 +5,7 @@ import { createSessionResolution } from "./session-resolution"
 describe("session resolution", () => {
   test("waits for a route session ID", () => {
     createRoot((dispose) => {
-      const syncs = { session: 0, message: 0 }
+      const syncs = { session: 0, message: 0, pending: 0 }
       const sessions = {
         get: () => undefined,
         sync: () => {
@@ -18,6 +18,13 @@ describe("session resolution", () => {
             return Promise.resolve()
           },
         },
+        pending: {
+          list: () => [],
+          sync: () => {
+            syncs.pending++
+            return Promise.resolve()
+          },
+        },
       }
       const session = createSessionResolution(
         () => undefined,
@@ -25,7 +32,7 @@ describe("session resolution", () => {
       )
 
       expect(session()).toBeUndefined()
-      expect(syncs).toEqual({ session: 0, message: 0 })
+      expect(syncs).toEqual({ session: 0, message: 0, pending: 0 })
       dispose()
     })
   })
