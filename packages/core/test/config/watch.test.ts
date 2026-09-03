@@ -14,32 +14,24 @@ const sources: ConfigDiscovery.Sources = {
 }
 
 describe("ConfigWatch.plan", () => {
-  test("groups missing candidates without watching ecosystem roots", () => {
-    expect(Array.from(ConfigWatch.plan(sources).values())).toEqual([
+  test("groups missing candidates and keeps parent watches when roots appear", () => {
+    const missing = ConfigWatch.plan(sources)
+    expect(Array.from(missing.values())).toEqual([
       { path: project, type: "entries", names: [".opencode", "opencode.json", "opencode.jsonc"] },
     ])
-  })
-
-  test("adds a recursive watch for a discovered root without replacing its parent sentinel", () => {
-    const missing = ConfigWatch.plan(sources)
     const present = ConfigWatch.plan({ ...sources, project: [{ path: root, present: true }] })
-    expect(present.size).toBe(missing.size + 1)
-    for (const [key, target] of missing) expect(present.get(key)).toEqual(target)
-    expect(Array.from(present.values()).filter((target) => target.type === "directory")).toEqual([
+    expect(Array.from(present.values())).toEqual([
       { path: root, type: "directory", ignore: ["node_modules", ".git", "**/{node_modules,.git}/**"] },
+      ...missing.values(),
     ])
-    expect(ConfigWatch.plan(sources)).toEqual(missing)
   })
 
-  test("deduplicates explicit sources already covered by another watch", () => {
+  test("adds exact watches for explicit files only when not already covered", () => {
     expect(ConfigWatch.plan({ ...sources, explicit: sources.direct[0] })).toEqual(ConfigWatch.plan(sources))
     const present = { ...sources, project: [{ path: root, present: true }] }
     expect(ConfigWatch.plan({ ...present, explicit: AbsolutePath.make(path.join(root, "custom.json")) })).toEqual(
       ConfigWatch.plan(present),
     )
-  })
-
-  test("watches an explicit source outside config roots by its exact name", () => {
     const directory = path.resolve("watch-plan-external")
     expect(
       Array.from(

@@ -27,40 +27,32 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   const globalDirectory = AbsolutePath.make(global.config)
   const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
   const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
-  // Classify symlinked/global paths once, before either loading or watch planning.
   const globalRoots = yield* Effect.forEach([globalDirectory, globalClaudeDirectory, globalAgentsDirectory], (item) =>
     fs.resolve(item),
   )
-  const locationIsGlobal = (yield* fs.resolve(location.directory)) === globalRoots[0]
-  const discovered =
-    locationIsGlobal || options?.project === false
+  const directories =
+    (yield* fs.resolve(location.directory)) === globalRoots[0] || options?.project === false
       ? []
-      : yield* fs.up({ targets: ["."], start: location.directory }).pipe(
-          Effect.flatMap((directories) =>
-            Effect.forEach(directories, (directory) =>
-              Effect.gen(function* () {
-                // Resolve each parent once, including for missing children.
-                const parent = yield* fs.resolve(directory)
-                const ecosystem = yield* Effect.filter([".claude", ".agents"], (name) =>
-                  fs.exists(path.join(directory, name)),
-                )
-                return yield* Effect.forEach([...ecosystem, ".opencode", ...names.toReversed()], (name) =>
-                  fs
-                    .resolve(path.join(parent, name))
-                    .pipe(
-                      Effect.map((resolved) => ({ item: AbsolutePath.make(path.join(directory, name)), resolved })),
-                    ),
-                )
-              }),
-            ).pipe(Effect.map((items) => items.flat())),
-          ),
-          Effect.orDie,
-        )
+      : yield* fs.up({ targets: ["."], start: location.directory }).pipe(Effect.orDie)
+  const discovered = yield* Effect.forEach(directories, (directory) =>
+    Effect.gen(function* () {
+      // Resolve the parent too: missing children must honor symlinked global roots.
+      const parent = yield* fs.resolve(directory)
+      const ecosystem = yield* Effect.filter([".claude", ".agents"], (name) => fs.exists(path.join(directory, name)))
+      return yield* Effect.forEach([...ecosystem, ".opencode", ...names.toReversed()], (name) =>
+        fs
+          .resolve(path.join(parent, name))
+          .pipe(Effect.map((resolved) => ({ item: AbsolutePath.make(path.join(directory, name)), resolved }))),
+      )
+    }),
+  ).pipe(
+    Effect.map((items) => items.flat()),
+    Effect.orDie,
+  )
 
   const globalEnabled = options?.global !== false
   const globalFiles = yield* Effect.forEach(names, (name) => fs.resolve(path.join(globalDirectory, name)))
-  // A walked path into a global root stays global, however it was reached.
-  // Enabled globals are loaded separately; disabled globals cannot leak back in.
+  // Global sources must not re-enter through the project walk.
   const visible = discovered
     .filter(({ resolved }) =>
       globalEnabled

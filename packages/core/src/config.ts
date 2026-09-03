@@ -235,6 +235,7 @@ export const layer = (options?: Options) =>
       let configs = yield* load(initial)
       const updates = yield* PubSub.unbounded<Watcher.Update>()
       const reloads = yield* PubSub.sliding<void>(1)
+      // Readiness rescans recover writes made before a watch attached.
       const requestReload = PubSub.publish(reloads, undefined).pipe(Effect.asVoid)
       const watched = yield* FiberMap.make<string>()
       const reconcile = Effect.fn("Config.reconcileWatches")(function* (sources: ConfigDiscovery.Sources) {
@@ -243,20 +244,14 @@ export const layer = (options?: Options) =>
           if (!plan.has(key)) yield* FiberMap.remove(watched, key)
         }
         for (const [key, target] of plan) {
-          yield* FiberMap.run(
-            watched,
-            key,
-            // A watch's ready notification closes the scan-to-subscribe gap:
-            // re-read anything written before native event delivery was armed.
-            watcher
-              .subscribe(target, requestReload)
-              .pipe(
-                Effect.flatMap(
-                  Stream.runForEach((update) => PubSub.publish(updates, update).pipe(Effect.andThen(requestReload))),
-                ),
+          yield* watcher
+            .subscribe(target, requestReload)
+            .pipe(
+              Effect.flatMap(
+                Stream.runForEach((update) => PubSub.publish(updates, update).pipe(Effect.andThen(requestReload))),
               ),
-            { onlyIfMissing: true, startImmediately: true },
-          )
+              FiberMap.run(watched, key, { onlyIfMissing: true, startImmediately: true }),
+            )
         }
       })
 
@@ -272,8 +267,7 @@ export const layer = (options?: Options) =>
         (effect) => reloadLock.withPermit(effect),
       )
 
-      // Subscribe before forking the debounce worker: initial watches may
-      // acquire synchronously and signal readiness before its first pull.
+      // Subscribe eagerly so synchronous watch readiness isn't dropped.
       const pendingReloads = yield* PubSub.subscribe(reloads)
       yield* Stream.fromSubscription(pendingReloads).pipe(
         Stream.debounce("100 millis"),

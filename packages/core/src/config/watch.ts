@@ -5,7 +5,6 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import type { Watcher } from "../filesystem/watcher.js"
 import type { ConfigDiscovery } from "./discovery.js"
 
-/** Pure watch planning; parsing documents and owning subscriptions happen elsewhere. */
 export function plan(sources: ConfigDiscovery.Sources) {
   const directories = [
     ...(sources.global ? [sources.global] : []),
@@ -16,15 +15,11 @@ export function plan(sources: ConfigDiscovery.Sources) {
     ...sources.project.map((root) => root.path),
     ...(sources.explicit ? [sources.explicit] : []),
   ]
-  const parents = new Map<string, Set<string>>()
-  for (const file of files) {
-    // A root still needs its parent sentinel even when recursively watched.
-    if (directories.some((directory) => file !== directory && FSUtil.contains(directory, file))) continue
-    const parent = path.dirname(file)
-    const names = parents.get(parent) ?? new Set<string>()
-    names.add(path.basename(file))
-    parents.set(parent, names)
-  }
+  // Keep a parent watch for each root so deletion/recreation is observable.
+  const parents = Map.groupBy(
+    files.filter((file) => !directories.some((directory) => file !== directory && FSUtil.contains(directory, file))),
+    (file) => path.dirname(file),
+  )
   return new Map(
     [
       ...directories.map((path) => ({
@@ -32,7 +27,11 @@ export function plan(sources: ConfigDiscovery.Sources) {
         type: "directory" as const,
         ignore: ["node_modules", ".git", "**/{node_modules,.git}/**"],
       })),
-      ...Array.from(parents, ([path, names]) => ({ path, type: "entries" as const, names: [...names].toSorted() })),
+      ...Array.from(parents, ([parent, files]) => ({
+        path: parent,
+        type: "entries" as const,
+        names: [...new Set(files.map((file) => path.basename(file)))].toSorted(),
+      })),
     ].map((target) => [JSON.stringify(target), target satisfies Watcher.WatchInput]),
   )
 }

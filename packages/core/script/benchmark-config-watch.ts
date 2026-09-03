@@ -1,12 +1,6 @@
-// Config-only benchmark, with real filesystem and native watcher layers.
-// Run from packages/core:
-//   TMPDIR=/tmp/opencode bun script/benchmark-config-watch.ts --ref bbac11b38d > /tmp/opencode/config-pr.json
-//   TMPDIR=/tmp/opencode bun script/benchmark-config-watch.ts --ref 0da51e9274 > /tmp/opencode/config-base.json
-//   TMPDIR=/tmp/opencode bun script/benchmark-config-watch.ts --ref working > /tmp/opencode/config-next.json
+// Run from packages/core: bun script/benchmark-config-watch.ts --ref <commit|working>
 // Optional: --depths 0,20,60 --locations 1,20,100 --reloads 3 --noise 100
-// Each case runs in a fresh child. Config discovery/planning and watcher sources are
-// snapshotted; all other dependencies come from this checkout. Source hashes
-// identify working snapshots. No checkout/reset, live database, or network.
+// Each case runs in a fresh process; only config/watcher sources vary by ref.
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -75,8 +69,7 @@ if (!args.snapshot) {
             .map((file) => file.slice("packages/core/".length))
     const directories = ["src", "src/filesystem", "src/config"]
     for (const directory of directories) await fs.mkdir(path.join(root, directory), { recursive: true })
-    // Symlink unchanged imports, but copy both measured modules before any child
-    // starts. Concurrent edits to those runtime files cannot change a running set.
+    // Snapshot measured sources; use this checkout for unchanged imports.
     for (const directory of directories) {
       for (const entry of await fs.readdir(path.join(core, directory))) {
         const relative = path.join(directory, entry)
@@ -310,8 +303,7 @@ if (!args.snapshot) {
           },
         }),
       )
-    // Warm one Config before measuring so module/JIT caches do not masquerade
-    // as retained per-location state. Its subscriptions are closed first.
+    // Exclude initial module/JIT allocation from retained per-location state.
     yield* build(directories[0]).pipe(Effect.andThen(settle), Effect.scoped)
     native.acquired = 0
     const configs: Config.Interface[] = []
@@ -334,8 +326,7 @@ if (!args.snapshot) {
       )
     }
     const constructed = performance.now() - start
-    // Native readiness can schedule a follow-up scan. Include it in CPU/call
-    // counts and retained memory, not in the construction-only wall time.
+    // Include readiness rescans in CPU/memory, but not construction wall time.
     yield* settle
     const startup = { ms: constructed, cpu: process.cpuUsage(startCPU), calls: delta(startCalls) }
     const after = memory()
@@ -363,8 +354,6 @@ if (!args.snapshot) {
     }
     const reloaded = { ms: latencies, calls: delta(reloadCalls) }
     const noiseResults: unknown[] = []
-    // Direct unrelated files stress the nonrecursive ancestor watches; files
-    // below .opencode stress the real recursive feed and Config's reload filter.
     for (const target of [project, path.join(project, ".opencode")]) {
       yield* Effect.sleep("300 millis")
       const before = { ...calls }

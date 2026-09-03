@@ -27,7 +27,7 @@ import { Credential } from "@opencode-ai/core/credential"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { AppProcess } from "@opencode-ai/util/process"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { testEffect } from "../lib/effect"
@@ -50,8 +50,7 @@ describe("config plugin reloads", () => {
           subscribe: (input) =>
             Effect.sync(() => {
               if (input.type === "entries" && input.target === tmp.path) {
-                // Keep acquisition synchronous: a delayed reload listener must
-                // not drop the readiness signal for this otherwise invisible write.
+                // No event is emitted: only synchronous readiness can trigger the reload.
                 writeFileSync(path.join(tmp.path, "opencode.json"), JSON.stringify({ references: { docs: "./docs" } }))
               }
               return { unsubscribe: () => Promise.resolve() }
@@ -60,20 +59,9 @@ describe("config plugin reloads", () => {
         return Effect.gen(function* () {
           const plugins = yield* Plugin.Service
           const references = yield* Reference.Service
-          const bus = yield* Bus.Service
           const host = yield* PluginHost.make(plugins)
-          const applied = yield* bus.subscribe(Reference.Event.Updated).pipe(
-            Stream.filterEffect(() =>
-              references.list().pipe(Effect.map((items) => items.some((item) => item.name === "docs"))),
-            ),
-            Stream.take(1),
-            Stream.runDrain,
-            Effect.forkScoped({ startImmediately: true }),
-          )
           yield* ConfigReferencePlugin.Plugin.effect(host)
-          if (!(yield* references.list()).some((item) => item.name === "docs")) {
-            yield* Fiber.join(applied).pipe(Effect.timeout("2 seconds"))
-          }
+          yield* waitUntil(references.list().pipe(Effect.map((items) => items.some((item) => item.name === "docs"))))
           expect((yield* references.list())[0]?.path).toBe(AbsolutePath.make(path.join(tmp.path, "docs")))
         }).pipe(Effect.provide(liveConfig(tmp.path, native)))
       }),
@@ -88,7 +76,6 @@ describe("config plugin reloads", () => {
           const parent = yield* Deferred.make<(update: Watcher.Update) => void>()
           const starting = yield* Deferred.make<void>()
           const release = yield* Deferred.make<void>()
-          const armed = yield* Deferred.make<void>()
           const native = Watcher.Native.of({
             subscribe: (input) =>
               Effect.gen(function* () {
@@ -98,7 +85,6 @@ describe("config plugin reloads", () => {
                 if (input.type === "directory" && input.target === root) {
                   yield* Deferred.succeed(starting, undefined)
                   yield* Deferred.await(release)
-                  yield* Deferred.succeed(armed, undefined)
                 }
                 return { unsubscribe: () => Promise.resolve() }
               }),
@@ -106,17 +92,8 @@ describe("config plugin reloads", () => {
           return yield* Effect.gen(function* () {
             const plugins = yield* Plugin.Service
             const references = yield* Reference.Service
-            const bus = yield* Bus.Service
             const host = yield* PluginHost.make(plugins)
             yield* ConfigReferencePlugin.Plugin.effect(host)
-            const applied = yield* bus.subscribe(Reference.Event.Updated).pipe(
-              Stream.filterEffect(() =>
-                references.list().pipe(Effect.map((items) => items.some((item) => item.name === "docs"))),
-              ),
-              Stream.take(1),
-              Stream.runDrain,
-              Effect.forkScoped({ startImmediately: true }),
-            )
             const publish = yield* Deferred.await(parent)
             yield* Effect.promise(() => fs.mkdir(root))
             publish({ path: root, type: "create" })
@@ -126,8 +103,7 @@ describe("config plugin reloads", () => {
               fs.writeFile(path.join(root, "opencode.json"), JSON.stringify({ references: { docs: "./docs" } })),
             )
             yield* Deferred.succeed(release, undefined)
-            yield* Deferred.await(armed)
-            yield* Fiber.join(applied).pipe(Effect.timeout("2 seconds"))
+            yield* waitUntil(references.list().pipe(Effect.map((items) => items.some((item) => item.name === "docs"))))
             expect((yield* references.list())[0]?.path).toBe(AbsolutePath.make(path.join(root, "docs")))
           }).pipe(Effect.provide(liveConfig(tmp.path, native)))
         }),
@@ -135,22 +111,18 @@ describe("config plugin reloads", () => {
     ),
   )
 
-  for (const file of [
-    "opencode.json",
-    "opencode.jsonc",
-    "../opencode.json",
-    "../opencode.jsonc",
-    ".opencode/opencode.json",
-    ".opencode/opencode.jsonc",
-    "../.opencode/opencode.json",
-    "../.opencode/opencode.jsonc",
+  for (const input of [
+    { file: "opencode.json", empty: false },
+    { file: "../opencode.jsonc", empty: false },
+    { file: ".opencode/opencode.json", empty: false },
+    { file: "../.opencode/opencode.jsonc", empty: true },
   ]) {
-    it.live(`loads references when ${file} is first created and keeps watching it`, () =>
+    it.live(`loads references when ${input.file} is first created and keeps watching it`, () =>
       Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
         Effect.flatMap((tmp) =>
           Effect.gen(function* () {
             const project = path.join(tmp.path, "project")
-            const target = path.resolve(project, file)
+            const target = path.resolve(project, input.file)
             yield* Effect.promise(() => fs.mkdir(project))
             return yield* Effect.gen(function* () {
               const plugins = yield* Plugin.Service
@@ -159,7 +131,7 @@ describe("config plugin reloads", () => {
               yield* ConfigReferencePlugin.Plugin.effect(host)
               expect(yield* references.list()).toEqual([])
 
-              if (file.includes(".opencode/") && file.endsWith(".jsonc")) {
+              if (input.empty) {
                 yield* Effect.promise(() => fs.mkdir(path.dirname(target)))
                 const config = yield* Config.Service
                 yield* waitUntil(
@@ -188,7 +160,7 @@ describe("config plugin reloads", () => {
               )
 
               yield* Effect.promise(() =>
-                fs.rm(file.includes(".opencode/") ? path.dirname(target) : target, { recursive: true }),
+                fs.rm(input.file.includes(".opencode/") ? path.dirname(target) : target, { recursive: true }),
               )
               yield* waitUntil(references.list().pipe(Effect.map((items) => items.length === 0)))
               yield* Effect.promise(async () => {
