@@ -104,6 +104,8 @@ describe("FileSystem", () => {
           expect(sibling.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
             { path: RelativePath.make(path.join("..", "sibling", "file.txt")), type: "file" },
           ])
+          const absolute = yield* filesystem.list({ path: path.join(directory, "sibling") })
+          expect(absolute).toEqual(sibling)
         }).pipe(provide(current))
       }),
     ),

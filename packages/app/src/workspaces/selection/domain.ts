@@ -331,27 +331,7 @@ export async function listPickerDirectory(
   location: { directory: string; workspace?: string },
   directory: string,
 ) {
-  const base = canonicalPickerPath(location.directory)
-  const target = canonicalPickerPath(directory)
-  const insensitive = /^[A-Za-z]:\//.test(base) || base.startsWith("//")
-  const parts = base.split("/")
-  const next = target.split("/")
-  const common = parts.findIndex((part, index) =>
-    insensitive ? part.toLowerCase() !== next[index]?.toLowerCase() : part !== next[index],
-  )
-  const offset = common === -1 ? parts.length : common
-  // Different drives or shares have no relative path between them.
-  const path =
-    pickerRoot(base).toLowerCase() !== pickerRoot(target).toLowerCase()
-      ? target
-      : [
-          ...parts
-            .slice(offset)
-            .filter(Boolean)
-            .map(() => ".."),
-          ...next.slice(offset).filter(Boolean),
-        ].join("/") || "."
-  const result = await sdk.api.file.list({ location, path })
+  const result = await sdk.api.file.list({ location, path: directory })
   return result.data.map((entry) => {
     const absolute = pickerAbsolutePath(entry.path, result.location.directory)
     return { name: getFilename(absolute), type: entry.type, absolute }

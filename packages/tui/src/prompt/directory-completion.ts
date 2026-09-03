@@ -11,7 +11,7 @@ export async function directoryAutocomplete(
   home: string,
 ) {
   const search = directoryAutocompleteSearch(query, location.directory, home)
-  const result = await file.list({ location, path: path.relative(location.directory, search.directory) || "." })
+  const result = await file.list({ location, path: search.directory })
   const exact = directoryAutocompleteExactValue(query, search)
   return [
     ...(exact ? [{ value: exact, absolute: search.directory }] : []),

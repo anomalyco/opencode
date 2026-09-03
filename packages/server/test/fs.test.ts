@@ -64,10 +64,12 @@ it.live(
       ).toBe(1)
 
       yield* list("..")
-      expect(yield* list("../sibling")).toEqual([
+      const sibling = yield* list("../sibling")
+      expect(sibling).toEqual([
         { path: path.join("..", "sibling", "nested") + path.sep, type: "directory" },
         { path: path.join("..", "sibling", "file.txt"), type: "file" },
       ])
+      expect(yield* list(path.join(tmp.path, "root", "sibling"))).toEqual(sibling)
       yield* list("../sibling/nested")
       yield* list("../sibling")
       expect(yield* loaded).toEqual([{ directory: current }])

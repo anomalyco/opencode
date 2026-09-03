@@ -158,7 +158,7 @@ test("resolves directory autocomplete from the browser root without changing loc
   ])
 })
 
-test("lists parents and preloads siblings relative to a stable workspace", async () => {
+test("lists absolute parents and preloads siblings through a stable workspace", async () => {
   const calls: unknown[] = []
   const location = { directory: "/repo/current", workspace: "workspace_1" }
   const sdk = {
@@ -169,7 +169,7 @@ test("lists parents and preloads siblings relative to a stable workspace", async
           return {
             location,
             data:
-              input.path === ".."
+              input.path === "/repo"
                 ? [
                     { path: "./", type: "directory" },
                     { path: "../sibling/", type: "directory" },
@@ -188,8 +188,8 @@ test("lists parents and preloads siblings relative to a stable workspace", async
     { name: "src", absolute: "/repo/sibling/src", type: "directory" },
   ])
   expect(calls).toEqual([
-    { location, path: ".." },
-    { location, path: "../sibling" },
+    { location, path: "/repo" },
+    { location, path: "/repo/sibling" },
   ])
 })
 
@@ -209,7 +209,7 @@ test("uses listings for typed searches outside the current location", async () =
   } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
   const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/repo", location: () => location })
   expect(await search("sib")).toEqual(["/repo/sibling"])
-  expect(calls).toEqual([{ location, path: ".." }])
+  expect(calls).toEqual([{ location, path: "/repo" }])
 })
 
 test("keeps literal tilde directory names in server listing and search results", async () => {
@@ -279,8 +279,8 @@ test("maps server-native drive and share paths without rebasing the location", a
     { name: "sibling", type: "directory", absolute: "//Server/Share/sibling" },
   ])
   expect(calls).toEqual([
-    { location: drive, path: ".." },
-    { location: share, path: ".." },
+    { location: drive, path: "c:/repo" },
+    { location: share, path: "//server/share" },
   ])
 })
 

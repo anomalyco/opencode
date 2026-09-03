@@ -1559,7 +1559,7 @@ export interface PermissionApi<E = never> {
 
 export type FileListInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  readonly path?: RelativePath | undefined
+  readonly path?: string | undefined
 }
 export type FileListOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<FileSystem.Entry> }
 export type FileListOperation<E = never> = (input?: FileListInput) => Effect.Effect<FileListOutput, E>

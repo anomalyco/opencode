@@ -38,8 +38,8 @@ describe("directoryAutocomplete", () => {
       { value: "../sibling/", absolute: path.resolve("/project/sibling") },
     ])
     expect(calls).toEqual([
-      { location, path: ".." },
-      { location, path: ".." },
+      { location, path: path.resolve("/project") },
+      { location, path: path.resolve("/project") },
     ])
   })
 
@@ -63,8 +63,8 @@ describe("directoryAutocomplete", () => {
       { value: "~/src/", absolute: path.resolve("/project/sibling/src") },
     ])
     expect(calls).toEqual([
-      { location, path: "../sibling" },
-      { location, path: "../sibling" },
+      { location, path: path.resolve("/project/sibling") },
+      { location, path: "/project/sibling" },
     ])
   })
 })

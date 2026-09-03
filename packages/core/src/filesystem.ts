@@ -25,7 +25,7 @@ export const Content = Schema.Struct({
 export type Content = typeof Content.Type
 
 export const ListInput = Schema.Struct({
-  path: RelativePath.pipe(Schema.optional),
+  path: Schema.String.pipe(Schema.optional),
 })
 export type ListInput = typeof ListInput.Type
 
