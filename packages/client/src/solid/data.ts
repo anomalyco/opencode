@@ -52,6 +52,7 @@ import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-
 
 export type DataSessionStatus = "idle" | "running"
 type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
+type SessionMove = Omit<OpenCodeEventMap["session.moved"]["data"], "sessionID">
 
 export type CreateDataInput = {
   readonly api: () => OpenCodeClient
@@ -213,6 +214,8 @@ export function createData(config: CreateDataInput) {
   )
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
+  // Keep only moves observed during each metadata read, including not-yet-loaded family members.
+  const sessionMoves = new Set<Map<string, SessionMove>>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -651,6 +654,13 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.moved": {
+        sessionMoves.forEach((moves) => {
+          moves.set(event.data.sessionID, {
+            location: { ...event.data.location },
+            projectID: event.data.projectID,
+            subpath: event.data.subpath,
+          })
+        })
         const current = store.session.info[event.data.sessionID]
         if (current) {
           const previous = {
@@ -658,7 +668,7 @@ export function createData(config: CreateDataInput) {
             projectID: current.projectID,
             subpath: current.subpath,
           }
-          setStore("session", "info", event.data.sessionID, "location", event.data.location)
+          setStore("session", "info", event.data.sessionID, "location", reconcile(event.data.location))
           if (event.data.projectID) setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
           setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
           message.insert(event.data.sessionID, {
@@ -1481,8 +1491,10 @@ export function createData(config: CreateDataInput) {
         })
       },
       sync(sessionID: string, options?: { children?: boolean }) {
-        return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
-          const [info, children] = await Promise.all([
+        return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, () => {
+          const moves = new Map<string, SessionMove>()
+          sessionMoves.add(moves)
+          return Promise.all([
             api().session.get({ sessionID }),
             options?.children
               ? api()
@@ -1490,20 +1502,24 @@ export function createData(config: CreateDataInput) {
                   .then((response) => response.data)
               : [],
           ])
-          const sessions = [info, ...children]
-          batch(() => {
-            setStore(
-              "session",
-              "info",
-              produce((draft) => {
-                for (const session of sessions) draft[session.id] = session
-              }),
-            )
-            for (const session of sessions) {
-              sync.complete(`session:${session.id}`)
-              registerSession(session.id)
-            }
-          })
+            .then(([info, children]) => {
+              const sessions = [info, ...children]
+              batch(() => {
+                setStore(
+                  "session",
+                  "info",
+                  produce((draft) => {
+                    // Publish once: even a transient old location can redirect the UI.
+                    for (const session of sessions) draft[session.id] = { ...session, ...moves.get(session.id) }
+                  }),
+                )
+                for (const session of sessions) {
+                  sync.complete(`session:${session.id}`)
+                  registerSession(session.id)
+                }
+              })
+            })
+            .finally(() => sessionMoves.delete(moves))
         })
       },
       invalidate(sessionID: string) {
