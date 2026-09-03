@@ -39,6 +39,7 @@ const appLocales = [
   "el",
   "et",
   "fa",
+  "he",
   "fo",
   "hr",
   "hu",
