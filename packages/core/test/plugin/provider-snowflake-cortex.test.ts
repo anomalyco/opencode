@@ -1,6 +1,9 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
+import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
@@ -12,10 +15,52 @@ import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
 
+const integrationID = Integration.ID.make("snowflake-cortex")
+const providerID = Provider.ID.make("snowflake-cortex")
+const browserMethodID = Integration.MethodID.make("browser")
+const templateURL = "https://${SNOWFLAKE_ACCOUNT}.snowflakecomputing.com/api/v2/cortex/v1"
+
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
   yield* SnowflakeCortexPlugin.effect(host)
+})
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected value")
+  return value
+}
+
+function eventually<A>(
+  effect: Effect.Effect<A>,
+  predicate: (value: A) => boolean,
+  remaining = 1000,
+): Effect.Effect<A, Error> {
+  return Effect.gen(function* () {
+    const value = yield* effect
+    if (predicate(value)) return value
+    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
+    yield* Effect.promise(() => Bun.sleep(1))
+    return yield* eventually(effect, predicate, remaining - 1)
+  })
+}
+
+const connect = (answer: Record<string, string>) =>
+  Effect.gen(function* () {
+    const integrations = yield* Integration.Service
+    const attempt = yield* integrations.oauth.connect({ integrationID, methodID: browserMethodID, answer })
+    return { attempt, url: new URL(attempt.url) }
+  })
+
+const seedCatalog = Effect.gen(function* () {
+  const catalog = yield* Catalog.Service
+  yield* catalog.transform((editor) => {
+    editor.provider.update(providerID, (provider) => {
+      provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+      provider.settings = { baseURL: templateURL }
+    })
+    editor.model.update(providerID, Model.ID.make("claude-sonnet-4-6"), () => {})
+  })
 })
 
 function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
@@ -46,6 +91,153 @@ describe("SnowflakeCortexPlugin", () => {
       const ids = ProviderPlugins.map((p) => p.id)
       expect(ids.indexOf("opencode.provider.snowflake.cortex")).toBeLessThan(
         ids.indexOf("opencode.provider.openai.compatible"),
+      )
+    }),
+  )
+
+  it.effect("registers the browser OAuth method with account and role prompts", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const integrations = yield* Integration.Service
+      expect((yield* integrations.get(integrationID))?.methods).toEqual([
+        {
+          id: browserMethodID,
+          type: "oauth",
+          label: "Login with Snowflake (browser)",
+          form: [
+            {
+              type: "string",
+              key: "account",
+              title: "Snowflake account identifier",
+              placeholder: "myorg-myaccount",
+              required: true,
+            },
+            { type: "string", key: "role", title: "Snowflake role (optional)", placeholder: "PUBLIC" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.live("authorizes against the account issuer with PKCE and a loopback redirect", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const integrations = yield* Integration.Service
+      const { attempt, url } = yield* connect({
+        account: "https://myorg-myaccount.snowflakecomputing.com/",
+        role: "ANALYST",
+      })
+      expect(url.origin).toBe("https://myorg-myaccount.snowflakecomputing.com")
+      expect(url.pathname).toBe("/oauth/authorize")
+      expect(url.searchParams.get("client_id")).toBe("LOCAL_APPLICATION")
+      expect(url.searchParams.get("response_type")).toBe("code")
+      expect(url.searchParams.get("scope")).toBe("refresh_token session:role:ANALYST")
+      expect(url.searchParams.get("code_challenge_method")).toBe("S256")
+      expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      expect(url.searchParams.get("state")).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      const redirect = new URL(required(url.searchParams.get("redirect_uri") ?? undefined))
+      expect(redirect.hostname).toBe("127.0.0.1")
+      expect(redirect.pathname).toBe("/")
+      expect(attempt.mode).toBe("auto")
+
+      // The loopback listener is live and rejects callbacks that do not carry our state.
+      const response = yield* Effect.promise(() => fetch(`${redirect.origin}/?code=stolen&state=forged`))
+      expect(response.status).toBe(400)
+      expect(yield* Effect.promise(() => response.text())).toContain("Invalid OAuth state")
+      const status = yield* eventually(
+        integrations.oauth.status({ integrationID, attemptID: attempt.attemptID }),
+        (status) => status.status === "failed",
+      )
+      expect(status).toMatchObject({ status: "failed", message: "Invalid OAuth state" })
+    }),
+  )
+
+  it.live("uses the encoded role scope for roles that are not plain identifiers", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const integrations = yield* Integration.Service
+      const { attempt, url } = yield* connect({ account: "myorg-myaccount", role: "my role" })
+      expect(url.searchParams.get("scope")).toBe("refresh_token session:role-encoded:my%20role")
+      yield* integrations.oauth.cancel({ integrationID, attemptID: attempt.attemptID })
+
+      const plain = yield* connect({ account: "myorg-myaccount" })
+      expect(plain.url.searchParams.get("scope")).toBe("refresh_token")
+      yield* integrations.oauth.cancel({ integrationID, attemptID: plain.attempt.attemptID })
+    }),
+  )
+
+  it.effect("rejects a blank account", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const error = yield* connect({ account: "https://.snowflakecomputing.com" }).pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Integration.AuthorizationError)
+      expect(String((error as Integration.AuthorizationError).cause)).toContain("Snowflake account is required")
+    }),
+  )
+
+  it.effect("expands the account into the Cortex endpoint under a browser login", () =>
+    Effect.gen(function* () {
+      yield* seedCatalog
+      const catalog = yield* Catalog.Service
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
+        integrationID,
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: browserMethodID,
+          access: "access",
+          refresh: "refresh",
+          expires: Date.now() + 3_600_000,
+          metadata: { account: "myorg-myaccount" },
+        }),
+      })
+      yield* addPlugin()
+
+      expect(required(yield* catalog.provider.get(providerID)).settings).toMatchObject({
+        baseURL: "https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/v1",
+      })
+      expect(required(yield* catalog.model.get(providerID, Model.ID.make("claude-sonnet-4-6"))).settings).toMatchObject(
+        { baseURL: "https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/v1" },
+      )
+    }),
+  )
+
+  it.effect("keeps the SNOWFLAKE_ACCOUNT template under an API key connection", () =>
+    Effect.gen(function* () {
+      yield* seedCatalog
+      const catalog = yield* Catalog.Service
+      const credentials = yield* Credential.Service
+      yield* credentials.create({ integrationID, value: Credential.Key.make({ type: "key", key: "pat" }) })
+      yield* addPlugin()
+
+      expect(required(yield* catalog.provider.get(providerID)).settings).toMatchObject({ baseURL: templateURL })
+    }),
+  )
+
+  it.live("re-expands the endpoint when the active connection changes", () =>
+    Effect.gen(function* () {
+      yield* seedCatalog
+      const catalog = yield* Catalog.Service
+      const credentials = yield* Credential.Service
+      yield* addPlugin()
+      expect(required(yield* catalog.provider.get(providerID)).settings).toMatchObject({ baseURL: templateURL })
+
+      // Far enough out that Integration does not try to refresh (and hit the network) on resolve.
+      yield* credentials.create({
+        integrationID,
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: browserMethodID,
+          access: "access",
+          refresh: "refresh",
+          expires: Date.now() + 3_600_000,
+          metadata: { account: "switched-account" },
+        }),
+      })
+      yield* eventually(
+        catalog.provider.get(providerID),
+        (provider) =>
+          provider?.settings?.baseURL === "https://switched-account.snowflakecomputing.com/api/v2/cortex/v1",
       )
     }),
   )
