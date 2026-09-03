@@ -897,6 +897,63 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    maple: Effect.fnUntraced(function* () {
+      const cfg = yield* dep.config()
+      const env = yield* dep.env()
+      const baseURL = cfg.provider?.["maple"]?.options?.baseURL ?? "http://127.0.0.1:8080/v1"
+
+      const auth = yield* dep.auth("maple")
+      const apiKey = auth?.type === "api" ? auth.key : env["MAPLE_API_KEY"]
+
+      if (!apiKey) return { autoload: false }
+
+      return {
+        autoload: true,
+        options: {
+          baseURL,
+          apiKey,
+        },
+        async discoverModels(): Promise<Record<string, Model>> {
+          const response = await fetch(`${baseURL}/models`, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: AbortSignal.timeout(5000),
+          })
+          if (!response.ok) return {}
+          const data = (await response.json()) as { data?: Array<{ id: string }> }
+          const models: Record<string, Model> = {}
+          for (const m of data.data ?? []) {
+            models[m.id] = {
+              id: ModelV2.ID.make(m.id),
+              providerID: ProviderV2.ID.make("maple"),
+              name: m.id,
+              family: "",
+              api: {
+                id: m.id,
+                url: baseURL,
+                npm: "@ai-sdk/openai-compatible",
+              },
+              status: "active",
+              headers: {},
+              options: {},
+              cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+              limit: { context: 128000, output: 8192 },
+              capabilities: {
+                temperature: true,
+                reasoning: false,
+                attachment: false,
+                toolcall: true,
+                input: { text: true, audio: false, image: false, video: false, pdf: false },
+                output: { text: true, audio: false, image: false, video: false, pdf: false },
+                interleaved: false,
+              },
+              release_date: "",
+              variants: {},
+            }
+          }
+          return models
+        },
+      }
+    }),
     "snowflake-cortex": Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
       const auth = yield* dep.auth(input.id)
@@ -1420,6 +1477,16 @@ const layer = Layer.effect(
           get: (key: string) => env.get(key),
         }
 
+        // Add Maple AI provider (models are populated dynamically from the proxy)
+        database["maple"] = {
+          id: ProviderV2.ID.make("maple"),
+          name: "Maple AI",
+          source: "custom",
+          env: ["MAPLE_API_KEY"],
+          options: {},
+          models: {},
+        }
+
         function mergeProvider(providerID: ProviderV2.ID, provider: Partial<Info>) {
           const existing = providers[providerID]
           if (existing) {
@@ -1650,14 +1717,16 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+        for (const [id, discover] of Object.entries(discoveryLoaders)) {
+          const providerID = ProviderV2.ID.make(id)
+          if (!providers[providerID] || !isProviderAllowed(providerID)) continue
           yield* Effect.promise(async () => {
             try {
-              const discovered = await discoveryLoaders[gitlab]()
+              const discovered = await discover()
               for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+                if (!providers[providerID].models[modelID]) {
+                  model.providerID = providerID
+                  providers[providerID].models[modelID] = model
                 }
               }
             } catch (e) {}

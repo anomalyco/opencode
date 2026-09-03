@@ -366,6 +366,14 @@ export const ProvidersLoginCommand = effectCmd({
     for (const [key, value] of Object.entries(allProviders)) {
       if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) providers[key] = value
     }
+    if ((enabled ? enabled.has("maple") : true) && !disabled.has("maple")) {
+      providers["maple"] = {
+        id: "maple",
+        name: "Maple AI",
+        env: ["MAPLE_API_KEY"],
+        models: {},
+      }
+    }
     const hooks = yield* pluginSvc.list()
 
     const priority: Record<string, number> = {
@@ -474,6 +482,19 @@ export const ProvidersLoginCommand = effectCmd({
     if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {
       yield* Prompt.log.info(
         "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
+      )
+    }
+
+    if (provider === "maple") {
+      yield* Prompt.log.info(
+        "Maple AI is a TEE-based private AI provider.\n\n" +
+          "Setup:\n" +
+          "  1. Start the Maple Proxy (desktop app or Docker)\n" +
+          "  2. Generate an API key in the Maple app\n" +
+          "  3. Enter your API key below\n\n" +
+          "The default proxy URL is http://127.0.0.1:8080/v1\n" +
+          "To use a different URL, add to opencode.json:\n" +
+          '  { "provider": { "maple": { "options": { "baseURL": "http://your-url/v1" } } } }',
       )
     }
 
