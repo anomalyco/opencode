@@ -1,7 +1,7 @@
 export * as PluginSupervisor from "./supervisor.js"
 
 import { Event } from "@opencode-ai/schema/config"
-import { Cause, Effect, Layer, PubSub, Queue, Stream } from "effect"
+import { Cause, Effect, Layer, Queue, Stream } from "effect"
 import path from "path"
 import { ConfigPluginSource } from "../config/plugin/source.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -131,7 +131,6 @@ export const layer = Layer.effectDiscard(
     const updating = new Set<string>()
     let generation = 0
     let observed = 0
-    const refresh = yield* PubSub.unbounded<void>()
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
       const current = ++generation
@@ -189,9 +188,8 @@ export const layer = Layer.effectDiscard(
         Effect.forkScoped({ startImmediately: true }),
       )
     })
-    // Each reload source is subscribed on its own fiber before generation 0 starts activating; a merged
-    // stream would open them a fiber hop later and lose a change that lands during the first activation.
-    // The sliding slot keeps accepting triggers while activation runs, retaining only the latest request.
+    // Start source consumers before activation, without an extra merge/debounce boundary delaying them.
+    // Each source owns its upstream subscriptions; the queue retains the latest observed request.
     const triggers = yield* Queue.sliding<number>(1)
     // Make accepted work visible to awaitActivation before coalescing the burst.
     const notify = Effect.gen(function* () {
@@ -205,7 +203,7 @@ export const layer = Layer.effectDiscard(
         Effect.forkScoped({ startImmediately: true }),
       )
     yield* watch(sources.changes())
-    yield* watch(Stream.fromPubSub(refresh))
+    yield* watch(Stream.fromEffectRepeat(Effect.sleep("24 hours")))
     yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated]))
     yield* watch(
       updates.changes().pipe(
@@ -218,8 +216,7 @@ export const layer = Layer.effectDiscard(
         ),
       ),
     )
-    // One lane serializes every activation. Generation 0 has nothing to coalesce with, so it runs at
-    // once; only the reload feed waits out the debounce that absorbs file-save bursts.
+    // Run initial activation immediately; debounce only later requests. One consumer serializes both.
     yield* Stream.concat(Stream.succeed(0), Stream.fromQueue(triggers).pipe(Stream.debounce("100 millis"))).pipe(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
@@ -231,12 +228,6 @@ export const layer = Layer.effectDiscard(
         }),
       ),
       Effect.forkScoped({ startImmediately: true }),
-    )
-    // The periodic refresh joins the reload feed above so it never activates concurrently with a change.
-    yield* Effect.sleep("24 hours").pipe(
-      Effect.andThen(PubSub.publish(refresh, undefined)),
-      Effect.forever,
-      Effect.forkScoped,
     )
   }),
 )
