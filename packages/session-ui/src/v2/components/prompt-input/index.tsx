@@ -239,7 +239,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
         </div>
 
         <div class="flex h-11 min-w-0 items-center px-2">
-          <div class="relative min-w-0 flex-1">
+          <div class="relative flex h-full min-w-0 flex-1 items-center">
             <div
               ref={setControls}
               data-slot="prompt-controls"
@@ -309,7 +309,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 aria-label={i18n.t("ui.promptInput.scrollControlsLeft")}
                 onClick={() => scrollControls(-1)}
               >
-                <IconV2 name="chevron-down" class="rotate-90" />
+                <IconV2 name="chevron-down" class="size-6 translate-y-[0.5px] rotate-90" />
               </button>
             </Show>
             <Show when={controlsScroll().right}>
@@ -320,19 +320,21 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 aria-label={i18n.t("ui.promptInput.scrollControlsRight")}
                 onClick={() => scrollControls(1)}
               >
-                <IconV2 name="chevron-down" class="-rotate-90" />
+                <IconV2 name="chevron-down" class="size-6 translate-y-[0.5px] -rotate-90" />
               </button>
             </Show>
           </div>
-          <PromptInputV2SubmitButton
-            mode={state.mode}
-            stopping={view.submit.stopping()}
-            disabled={!props.controller.canSubmit()}
-            sendLabel={i18n.t("ui.promptInput.send")}
-            stopLabel={i18n.t("ui.promptInput.stop")}
-            onSubmit={props.controller.submit}
-            onStop={props.controller.stop}
-          />
+          <div class="ml-1 flex shrink-0">
+            <PromptInputV2SubmitButton
+              mode={state.mode}
+              stopping={view.submit.stopping()}
+              disabled={!props.controller.canSubmit()}
+              sendLabel={i18n.t("ui.promptInput.send")}
+              stopLabel={i18n.t("ui.promptInput.stop")}
+              onSubmit={props.controller.submit}
+              onStop={props.controller.stop}
+            />
+          </div>
         </div>
       </form>
     </div>
