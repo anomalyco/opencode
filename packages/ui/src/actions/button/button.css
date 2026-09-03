@@ -260,3 +260,32 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Ghost faint */
+[data-component="button-v2"][data-variant="ghost-faint"] {
+  background-color: transparent;
+  color: var(--v2-text-text-faint);
+}
+
+[data-component="button-v2"][data-variant="ghost-faint"] [data-slot="icon-svg"] {
+  color: var(--v2-icon-icon-faint);
+}
+
+[data-component="button-v2"][data-variant="ghost-faint"]:is(:hover, [data-state="hover"]):not(:disabled):not(
+    [data-expanded]
+  ) {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="button-v2"][data-variant="ghost-faint"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="button-v2"][data-variant="ghost-faint"]:where([data-expanded]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="button-v2"][data-variant="ghost-faint"]:is(:disabled, [data-state="disabled"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
