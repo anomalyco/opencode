@@ -45,43 +45,45 @@ const layer = Layer.effect(
     })
     const host = yield* PluginHost.make({ list })
     const load = Effect.fnUntraced(function* (plugin: Generation) {
-      const child = yield* Scope.fork(scope)
+      const loaded: Loaded = { plugin, scope: yield* Scope.fork(scope) }
       const inherit = yield* State.inherit()
-      let failed: Quarantine | undefined
       const owned = State.owner((failure, refresh) => {
-        failed = {
-          plugin,
-          scope: child,
-          failure,
-          refresh,
+        loaded.quarantined = {
           error: `Plugin disabled after ${failure.state}.transform failed. Check server logs for details.`,
           ref: `err_${crypto.randomUUID().slice(0, 8)}`,
-          release: holdUnsafe(),
         }
-        Queue.offerUnsafe(quarantines, failed)
+        Queue.offerUnsafe(quarantines, {
+          plugin,
+          scope: loaded.scope,
+          failure,
+          refresh,
+          ref: loaded.quarantined.ref,
+          release: holdUnsafe(),
+        })
       })
-      const loaded = yield* Effect.suspend(() =>
+      const exit = yield* Effect.suspend(() =>
         plugin.effect({ ...host, storage: PluginHost.storage(kv, plugin.id) }),
       ).pipe(
         owned,
         inherit,
         Effect.updateContext((context: Context.Context<never>) =>
-          Context.make(Scope.Scope, child).pipe(
+          Context.make(Scope.Scope, loaded.scope).pipe(
             Context.add(Logger.CurrentLoggers, Context.get(context, Logger.CurrentLoggers)),
             Context.add(References.MinimumLogLevel, Context.get(context, References.MinimumLogLevel)),
           ),
         ),
         Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),
-        Effect.onExit((exit) => (Exit.isFailure(exit) && !failed ? Scope.close(child, exit) : Effect.void)),
+        Effect.onExit((exit) =>
+          Exit.isFailure(exit) && !loaded.quarantined ? Scope.close(loaded.scope, exit) : Effect.void,
+        ),
         Effect.exit,
       )
-      if (failed) return { error: failed.error, ref: failed.ref, quarantined: true } as const
-      if (Exit.isSuccess(loaded)) return { scope: child } as const
+      if (loaded.quarantined || Exit.isSuccess(exit)) return { loaded } as const
       yield* Effect.logWarning("failed to load plugin", {
         "plugin.id": plugin.id,
-        cause: loaded.cause,
+        cause: exit.cause,
       })
-      return { error: Cause.pretty(loaded.cause), ref: undefined, quarantined: false } as const
+      return { error: Cause.pretty(exit.cause) } as const
     })
 
     const activate = Effect.fn("Plugin.activate")(function* (
@@ -129,30 +131,29 @@ const layer = Layer.effect(
                     ([id, slot]) =>
                       Effect.gen(function* () {
                         active.delete(id)
-                        if (slot.loaded) yield* Scope.close(slot.loaded.scope, Exit.void)
+                        if (slot.loaded && !slot.loaded.quarantined) yield* Scope.close(slot.loaded.scope, Exit.void)
                       }),
                     { discard: true },
                   )
                   for (const definition of definitions.slice(prefix)) {
-                    const loaded = yield* load(definition)
-                    if (loaded.scope !== undefined) {
+                    const result = yield* load(definition)
+                    if (result.loaded !== undefined) {
                       active.set(definition.id, {
                         plugin: definition,
-                        loaded: { plugin: definition, scope: loaded.scope },
+                        loaded: result.loaded,
                       })
                       continue
                     }
-                    active.set(definition.id, { plugin: definition, error: loaded.error, ref: loaded.ref })
-                    if (loaded.quarantined) continue
+                    active.set(definition.id, { plugin: definition, error: result.error })
 
                     const fallback = previous.get(definition.id)?.loaded
-                    if (!fallback) continue
+                    if (!fallback || fallback.quarantined) continue
                     const restored = yield* load(fallback.plugin)
-                    if (restored.scope !== undefined) {
+                    if (restored.loaded !== undefined) {
                       active.set(definition.id, {
                         plugin: definition,
-                        loaded: { plugin: fallback.plugin, scope: restored.scope },
-                        error: loaded.error,
+                        loaded: restored.loaded,
+                        error: result.error,
                       })
                       continue
                     }
@@ -183,11 +184,8 @@ const layer = Layer.effect(
           yield* lock.withPermit(
             Effect.gen(function* () {
               if (closed) return
-              const id = Plugin.ID.make(item.plugin.id)
-              const slot = active.get(id)
-              // A queued failure from an old generation must never disable its replacement.
-              if (slot?.loaded?.scope === item.scope)
-                active.set(id, { plugin: slot.plugin, error: item.error, ref: item.ref })
+              // Failure is already recorded on its exact activation, so an old queued item
+              // cannot disable a replacement and teardown need not wait for this worker.
               inventory = [...Array.from(active.values()).map(slotInfo), ...discovered]
               const refreshed = yield* State.batch(item.refresh).pipe(Effect.exit)
               yield* bus.publish(Plugin.Event.Updated, {})
@@ -252,13 +250,20 @@ const layer = Layer.effect(
   }),
 )
 
-// `plugin` is the definition the slot was last asked to run; `loaded` is the generation actually
-// running, which stays an older fallback while the requested revision keeps failing setup.
+// `plugin` is the requested definition; `loaded` is its last activation, which may be
+// quarantined or an older fallback while the requested revision keeps failing setup.
 type Slot = {
   readonly plugin: Generation
-  readonly loaded?: { readonly plugin: Generation; readonly scope: Scope.Closeable }
+  readonly loaded?: Loaded
   readonly error?: string
-  readonly ref?: string
+}
+
+// Share the activation across slot snapshots so teardown sees failures synchronously,
+// including failures discovered after activate() has captured its previous slots.
+type Loaded = {
+  readonly plugin: Generation
+  readonly scope: Scope.Closeable
+  quarantined?: { readonly error: string; readonly ref: string }
 }
 
 type Quarantine = {
@@ -266,16 +271,16 @@ type Quarantine = {
   readonly scope: Scope.Closeable
   readonly failure: State.Failure
   readonly refresh: Effect.Effect<void>
-  readonly error: string
   readonly ref: string
   readonly release: Effect.Effect<void>
 }
 
 function slotInfo(slot: Slot): Plugin.Info {
+  const failure = slot.loaded?.quarantined ?? (slot.error === undefined ? undefined : { error: slot.error })
   return {
     id: Plugin.ID.make(slot.plugin.id),
     source: slot.plugin.source ?? { type: "builtin" },
-    state: slot.error === undefined ? { status: "active" } : { status: "failed", error: slot.error, ref: slot.ref },
+    state: failure === undefined ? { status: "active" } : { status: "failed", ...failure },
     features: { server: true, ...slot.plugin.features },
   }
 }

@@ -8,6 +8,108 @@ import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
+Array.of("reload", "teardown").forEach((boundary) =>
+  it.live(`does not join queued quarantine cleanup during ${boundary}`, () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const commands = yield* Command.Service
+      const entered = yield* Deferred.make<void>()
+      const escape = yield* Deferred.make<void>()
+      const activated = yield* Deferred.make<void>()
+      const cleaned = yield* Deferred.make<void>()
+      let fail = false
+      yield* plugins.activate([
+        {
+          id: "changing",
+          revision: "1",
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              yield* ctx.command.transform((editor) => {
+                editor.add({ name: "changing", description: "old", execute: () => Effect.void })
+                if (fail) throw new Error("changing failed")
+              })
+              yield* Effect.addFinalizer(() =>
+                Deferred.succeed(entered, undefined).pipe(
+                  Effect.andThen(plugins.awaitActivation.pipe(Effect.raceFirst(Deferred.await(escape)))),
+                  Effect.andThen(Deferred.succeed(cleaned, undefined)),
+                ),
+              )
+            }),
+        },
+        {
+          id: "trigger",
+          revision: "1",
+          effect: () =>
+            Effect.addFinalizer(() =>
+              boundary === "teardown"
+                ? commands.reload().pipe(Effect.andThen(commands.list()), Effect.asVoid)
+                : Effect.void,
+            ),
+        },
+      ])
+      fail = true
+      yield* (boundary === "reload" ? commands.reload() : Effect.void).pipe(
+        Effect.andThen(
+          plugins.activate([
+            {
+              id: "changing",
+              revision: "2",
+              effect: (ctx) =>
+                ctx.command
+                  .transform((editor) =>
+                    editor.add({ name: "changing", description: "new", execute: () => Effect.void }),
+                  )
+                  .pipe(Effect.asVoid),
+            },
+          ]),
+        ),
+        Effect.andThen(Deferred.succeed(activated, undefined)),
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* Deferred.await(entered)
+      const result = yield* Deferred.await(activated).pipe(Effect.timeout("250 millis"), Effect.exit)
+      // Allow teardown to finish even if activation incorrectly joins the old finalizer.
+      yield* Deferred.succeed(escape, undefined)
+      yield* Deferred.await(activated)
+      yield* plugins.awaitActivation
+      yield* Deferred.await(cleaned)
+      expect(Exit.isSuccess(result)).toBe(true)
+      expect((yield* plugins.list())[0]?.state).toEqual({ status: "active" })
+      expect(yield* commands.get("changing")).toMatchObject({ description: "new" })
+    }),
+  ),
+)
+
+it.live("does not restore a queued quarantined generation when its replacement fails setup", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const loads: string[] = []
+    let fail = false
+    const generation = (revision: string): Plugin.Generation => ({
+      id: "replacement",
+      revision,
+      effect: (ctx) =>
+        Effect.gen(function* () {
+          loads.push(revision)
+          if (revision === "2") return yield* Effect.die("setup failed")
+          yield* ctx.command.transform((editor) => {
+            editor.add({ name: "replacement", execute: () => Effect.void })
+            if (fail) throw new Error("replay failed")
+          })
+        }),
+    })
+    yield* plugins.activate([generation("1")])
+    fail = true
+    yield* commands.reload()
+    yield* plugins.activate([generation("2")])
+    yield* plugins.awaitActivation
+    expect(loads).toEqual(["1", "2"])
+    expect((yield* plugins.list())[0]?.state.status).toBe("failed")
+    expect(yield* commands.get("replacement")).toBeUndefined()
+  }),
+)
+
 it.live("continues quarantine processing and cleanup after a plugin update observer fails", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
