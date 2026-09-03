@@ -36,6 +36,8 @@ export type Status = Background["status"]
 
 const decodeBackground = Schema.decodeUnknownResult(Background)
 const backgroundPrefix = "job.background/"
+const HISTORY_LIMIT = 100
+const HISTORY_BYTES = 16 * 1024 * 1024
 
 export type Info = {
   id: string
@@ -58,6 +60,8 @@ type Active = {
   token: object
   blockingSessions: Map<SessionSchema.ID, number>
   isBackgrounded: boolean
+  observed: boolean
+  notificationPending: boolean
   recovery?: Recovery
 }
 
@@ -148,6 +152,28 @@ function errorText(error: unknown) {
   return String(error)
 }
 
+function prune(jobs: Map<string, Active>) {
+  const history = [...jobs.values()].filter(
+    (job) => job.info.status !== "running" && job.observed && !job.notificationPending,
+  )
+  let count = history.length
+  let bytes = history.reduce((sum, job) => sum + historyBytes(job), 0)
+  if (count <= HISTORY_LIMIT && bytes <= HISTORY_BYTES) return jobs
+  const next = new Map(jobs)
+  for (const job of history) {
+    if (count <= HISTORY_LIMIT && bytes <= HISTORY_BYTES) break
+    next.delete(job.info.id)
+    count--
+    bytes -= historyBytes(job)
+  }
+  return next
+}
+
+// The byte budget covers result/error text, not arbitrary caller-owned metadata or total heap size.
+function historyBytes(job: Active) {
+  return Buffer.byteLength(job.info.output ?? "", "utf8") + Buffer.byteLength(job.info.error ?? "", "utf8")
+}
+
 function incrementSession(input: Map<SessionSchema.ID, number>, sessionID: SessionSchema.ID) {
   return new Map(input).set(sessionID, (input.get(sessionID) ?? 0) + 1)
 }
@@ -164,6 +190,8 @@ function decrementSession(input: Map<SessionSchema.ID, number>, sessionID: Sessi
 /**
  * Makes one scoped, process-local registry. Explicitly recoverable background
  * work also owns a durable notification marker until its notification is admitted.
+ * Only claimed terminal results enter bounded history; unclaimed handoffs and
+ * pending notifications remain protected. Evicted IDs use the normal missing result.
  */
 export const make = Effect.gen(function* () {
   const kv = yield* KV.Service
@@ -173,7 +201,7 @@ export const make = Effect.gen(function* () {
   }
 
   const persistBackground = Effect.fnUntraced(function* (job: Active) {
-    if (!job.recovery || !job.info.notificationID) return
+    if (!job.notificationPending || !job.recovery || !job.info.notificationID) return
     yield* kv.set(`${backgroundPrefix}${job.info.notificationID}`, {
       id: job.info.id,
       notificationID: job.info.notificationID,
@@ -183,6 +211,17 @@ export const make = Effect.gen(function* () {
       ...(job.info.error !== undefined ? { error: job.info.error } : {}),
     })
   })
+
+  // Recoverable work may be observed with wait() before it is backgrounded. Only block() or
+  // notification acknowledgment completes that handoff; get() and running polls never consume it.
+  const observe = (job: Active) =>
+    job.recovery
+      ? Effect.void
+      : SynchronizedRef.update(state.jobs, (jobs) => {
+          const current = jobs.get(job.info.id)
+          if (!current || current.token !== job.token) return jobs
+          return prune(new Map(jobs).set(job.info.id, { ...current, observed: true }))
+        })
 
   const settle = Effect.fnUntraced(function* (id: string, token: object, exit: Exit.Exit<string, unknown>) {
     const completed_at = yield* Clock.currentTimeMillis
@@ -210,7 +249,11 @@ export const make = Effect.gen(function* () {
           },
         }
         if (status !== "cancelled") yield* persistBackground(next)
-        return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
+        // Terminal entries are ordered by completion, including reused IDs.
+        const updated = new Map(jobs)
+        updated.delete(id)
+        updated.set(id, next)
+        return [{ info: snapshot(next), done: job.done, scope: job.scope }, prune(updated)]
       }),
     )
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
@@ -258,6 +301,8 @@ export const make = Effect.gen(function* () {
               token,
               blockingSessions: new Map<SessionSchema.ID, number>(),
               isBackgrounded: false,
+              observed: false,
+              notificationPending: input.recovery !== undefined && input.notificationID !== undefined,
               recovery: input.recovery,
             }
             return [{ info: snapshot(job), scope, token }, new Map(jobs).set(id, job)]
@@ -278,11 +323,21 @@ export const make = Effect.gen(function* () {
   const wait: Interface["wait"] = Effect.fn("Job.wait")(function* (input) {
     const job = (yield* SynchronizedRef.get(state.jobs)).get(input.id)
     if (!job) return { timedOut: false }
-    if (job.info.status !== "running") return { info: snapshot(job), timedOut: false }
-    if (input.timeout === undefined) return { info: yield* Deferred.await(job.done), timedOut: false }
+    if (job.info.status !== "running") {
+      yield* observe(job)
+      return { info: snapshot(job), timedOut: false }
+    }
+    if (input.timeout === undefined) {
+      const info = yield* Deferred.await(job.done)
+      yield* observe(job)
+      return { info, timedOut: false }
+    }
     if (input.timeout <= 0) return { info: snapshot(job), timedOut: true }
     const info = yield* Deferred.await(job.done).pipe(Effect.timeoutOption(input.timeout))
-    if (info._tag === "Some") return { info: info.value, timedOut: false }
+    if (info._tag === "Some") {
+      yield* observe(job)
+      return { info: info.value, timedOut: false }
+    }
     return { info: snapshot(job), timedOut: true }
   })
 
@@ -301,12 +356,17 @@ export const make = Effect.gen(function* () {
     const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [BlockStart, Map<string, Active>] => {
       const job = jobs.get(input.id)
       if (!job) return [{ type: "missing" }, jobs]
-      if (job.info.status !== "running") return [{ type: "finished", info: snapshot(job) }, jobs]
+      if (job.info.status !== "running")
+        return [
+          { type: "finished", info: snapshot(job) },
+          prune(new Map(jobs).set(input.id, { ...job, observed: true })),
+        ]
       if (job.isBackgrounded) return [{ type: "backgrounded", info: snapshot(job) }, jobs]
       return [
         { type: "wait", wait: { done: job.done, backgrounded: job.backgrounded } },
         new Map(jobs).set(input.id, {
           ...job,
+          observed: true,
           blockingSessions: incrementSession(job.blockingSessions, input.sessionID),
         }),
       ]
@@ -324,6 +384,8 @@ export const make = Effect.gen(function* () {
     const next = {
       ...job,
       isBackgrounded: true,
+      observed: false,
+      notificationPending: job.recovery !== undefined,
       blockingSessions: new Map<SessionSchema.ID, number>(),
       info: {
         ...job.info,
@@ -392,7 +454,10 @@ export const make = Effect.gen(function* () {
           },
         }
         yield* persistBackground(next)
-        return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
+        const updated = new Map(jobs)
+        updated.delete(id)
+        updated.set(id, next)
+        return [{ info: snapshot(next), done: job.done, scope: job.scope }, prune(updated)]
       }),
     )
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
@@ -412,7 +477,15 @@ export const make = Effect.gen(function* () {
   }).pipe(Effect.withSpan("Job.pendingBackground"))
 
   const completeBackground: Interface["completeBackground"] = Effect.fn("Job.completeBackground")((notificationID) =>
-    kv.remove(`${backgroundPrefix}${notificationID}`),
+    SynchronizedRef.updateEffect(
+      state.jobs,
+      Effect.fnUntraced(function* (jobs) {
+        yield* kv.remove(`${backgroundPrefix}${notificationID}`)
+        const job = [...jobs.values()].find((job) => job.info.notificationID === notificationID)
+        if (!job) return jobs
+        return prune(new Map(jobs).set(job.info.id, { ...job, notificationPending: false, observed: true }))
+      }),
+    ),
   )
 
   return Service.of({
