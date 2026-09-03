@@ -1,5 +1,8 @@
 export const SESSION_OPEN_FILE_TAB = "open-file"
 export const SESSION_BROWSER_TAB = "browser"
+export const sessionBrowserTab = (tabID: string) => `${SESSION_BROWSER_TAB}:${tabID}`
+export const isSessionBrowserTab = (tab: string | undefined) =>
+  !!tab && (tab === SESSION_BROWSER_TAB || tab.startsWith(`${SESSION_BROWSER_TAB}:`))
 
 export type SessionTabs = {
   active?: string

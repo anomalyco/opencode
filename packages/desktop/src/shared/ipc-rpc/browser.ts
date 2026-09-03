@@ -11,7 +11,7 @@ const endpoint = Schema.Struct({
 })
 const target = Schema.Struct({ sessionID: text(256).check(Schema.isStartsWith("ses")), endpoint })
 const bounds = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite })
-const layout = Schema.Struct({ visible: Schema.Boolean, bounds: Schema.optionalKey(bounds) })
+const layout = Schema.Struct({ tabID: Browser.TabID, visible: Schema.Boolean, bounds: Schema.optionalKey(bounds) })
 export const BrowserPaneRequestSchema = Schema.Union([
   Schema.Struct({ type: Schema.Literal("register"), bindingID, target }),
   Schema.Struct({ type: Schema.Literal("layout"), bindingID, layout: Schema.optionalKey(layout) }),
@@ -21,7 +21,7 @@ export const BrowserPaneRequestSchema = Schema.Union([
 export type BrowserPaneRequest = Schema.Schema.Type<typeof BrowserPaneRequestSchema>
 
 export const BrowserPaneEventSchema = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("open") }),
+  Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
   Schema.Struct({
     type: Schema.Literal("state"),
     state: Schema.NullOr(Browser.State),
