@@ -117,6 +117,7 @@ const layer = Layer.effect(
     const approxTcaTolerance = Math.max(0, reflectiveReasoning?.approxTcaTolerance ?? 0)
     const preActionProjection = reflectiveReasoning?.preActionProjection ?? true
     const reflectionTimeout = Duration.millis(reflectiveReasoning?.reflectionTimeoutMs ?? 120_000)
+    const streamIdleTimeout = Duration.millis(Config.latest(configEntries, "stream_idle_timeout_ms") ?? 300_000)
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -354,6 +355,7 @@ const layer = Layer.effect(
 
       let overflowFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
+        Stream.timeout(streamIdleTimeout),
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return

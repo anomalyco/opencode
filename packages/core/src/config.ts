@@ -60,6 +60,10 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }).pipe(Schema.optional).annotate({
     description: "Reflective reasoning and stabilization configuration",
   }),
+  stream_idle_timeout_ms: Schema.Number.pipe(Schema.optional).annotate({
+    description:
+      "Idle timeout in milliseconds for the main agent provider stream. Ends the turn if the provider stops emitting events mid-response, so a silent provider cannot hang the session forever. Defaults to 300000.",
+  }),
   autoupdate: Schema.Union([Schema.Boolean, Schema.Literal("notify")])
     .pipe(Schema.optional)
     .annotate({
