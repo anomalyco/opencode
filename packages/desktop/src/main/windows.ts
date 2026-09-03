@@ -53,6 +53,9 @@ let relaunchHandler = () => {
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 const windowIDs = new WeakMap<BrowserWindow, string>()
+// Tracks windows we already auto-reloaded once after an out-of-memory crash,
+// so a second crash falls back to the full recovery dialog.
+const autoReloadedWindows = new WeakSet<BrowserWindow>()
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
@@ -442,6 +445,15 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
   win.webContents.on("render-process-gone", (_event, details) => {
     sampler.stopAndFlush()
     writeLog("window", "renderer process gone", { window: name, currentURL: safeWindowURL(win), details }, "error")
+    if (details.reason === "oom" && !win.isDestroyed() && !autoReloadedWindows.has(win)) {
+      autoReloadedWindows.add(win)
+      writeLog("window", "auto-reloading renderer after oom", { window: name }, "warn")
+      win.webContents.once("did-finish-load", () => {
+        if (!win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send("show-toast", "memory.recovered")
+      })
+      win.webContents.reload()
+      return
+    }
     void show(
       nativeT("desktop.recovery.terminated"),
       nativeT("desktop.recovery.terminated.detail", {

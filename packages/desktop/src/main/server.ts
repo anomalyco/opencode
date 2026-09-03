@@ -14,7 +14,7 @@ type SidecarMessage =
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
 
-export type SidecarListener = { stop: () => Promise<void> }
+export type SidecarListener = { stop: () => Promise<void>; gc: () => void }
 
 const SIDECAR_SERVICE_NAME = "opencode server"
 const SIDECAR_START_STALL_TIMEOUT = 60_000
@@ -25,6 +25,8 @@ type SpawnLocalServerOptions = {
   onStdout?: (message: string) => void
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
+  // Fires when the sidecar utility process is gone (matches by service name).
+  onGone?: (details: Details) => void
 }
 
 export function getDefaultServerUrl(): string | null {
@@ -66,6 +68,7 @@ export async function spawnLocalServer(
     env: createSidecarEnv(),
     serviceName: SIDECAR_SERVICE_NAME,
     stdio: "pipe",
+    execArgv: ["--expose-gc"],
   })
   let exited = false
   const exit = defer<number>()
@@ -73,6 +76,7 @@ export async function spawnLocalServer(
   const onProcessGone = (_event: unknown, details: Details) => {
     if (details.type !== "Utility" || details.name !== SIDECAR_SERVICE_NAME) return
     options.onStderr?.(`utility process gone reason=${details.reason} exitCode=${details.exitCode}`)
+    options.onGone?.(details)
   }
 
   app.on("child-process-gone", onProcessGone)
@@ -177,6 +181,10 @@ export async function spawnLocalServer(
           }),
         ])
         return stopping
+      },
+      gc: () => {
+        if (exited) return
+        child.postMessage({ type: "gc" })
       },
     },
     health: { wait },

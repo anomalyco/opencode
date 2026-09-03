@@ -11,6 +11,7 @@ import {
   PlatformProvider,
   createDraftStore,
   ServerConnection,
+  showToast,
   useCommand,
   useWslServers,
   useLanguage,
@@ -322,6 +323,25 @@ window.api.onMenuCommand((id) => {
   menuTrigger?.(id)
 })
 listenForDeepLinks()
+
+const desktopToastKeyToOptions: Record<string, { title: Parameters<typeof t>[0]; description: Parameters<typeof t>[0] }> = {
+  "memory.recovered": {
+    title: "desktop.toast.memory.recovered.title",
+    description: "desktop.toast.memory.recovered.description",
+  },
+}
+
+window.api.onToast((key) => {
+  const options = desktopToastKeyToOptions[key]
+  if (!options) return
+  showToast({ title: t(options.title), description: t(options.description) })
+})
+
+// Surface memory pressure as a window event so app-level cache owners can
+// release unused state in response to the main process request.
+window.api.onMemoryPressure(() => {
+  window.dispatchEvent(new CustomEvent("opencode:memory-pressure"))
+})
 
 function LoadingSplash() {
   return (
