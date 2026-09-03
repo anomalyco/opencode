@@ -21,6 +21,9 @@ import { Effect } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
 import { TestLLMServer } from "../../lib/llm-server"
 import path from "path"
+// Type-only: a value import here would load storage modules before `environment`
+// isolates OPENCODE_DB.
+import type { SessionID } from "../../../src/session/schema"
 import { array, boolean, check, isRecord, message, object, stable } from "./assertions"
 import { controlledPtyInput, http, route } from "./dsl"
 import {
@@ -1597,6 +1600,62 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
+    .post("/session/{sessionID}/handoff", "session.handoff")
+    .preserveDatabase()
+    .withLlm()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        const session = yield* ctx.session({ title: "Handoff session" })
+        yield* ctx.message(session.id, { text: "hand off this work" })
+        const summary = [
+          "## Objective",
+          "- Exercise session handoff.",
+          "",
+          "## Important Details",
+          "- Use fake LLM.",
+          "",
+          "## Work State",
+          "- Completed: Summary generated.",
+          "- Active: (none)",
+          "- Blocked: (none)",
+          "",
+          "## Next Move",
+          "1. (none)",
+        ].join("\n")
+        yield* ctx.llmText(summary)
+        yield* ctx.llmText(summary)
+        return session
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/handoff", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { providerID: "test", modelID: "test-model" },
+    }))
+    .jsonEffect(
+      200,
+      (body, ctx) =>
+        Effect.gen(function* () {
+          check(isRecord(body), "handoff should return a session")
+          if (!isRecord(body)) return
+          const id = body.id
+          check(typeof id === "string" && id !== ctx.state.id, "handoff should return a new session")
+          check(body.parentID === undefined, "handoff should not create a subagent session")
+          if (typeof id !== "string") return
+          const seeded = yield* ctx.messages(id as SessionID)
+          check(
+            seeded.some((message) =>
+              message.parts.some(
+                (part) => part.type === "text" && !part.synthetic && part.text.includes("Exercise session handoff"),
+              ),
+            ),
+            "handoff should seed the new session with a visible summary message",
+          )
+          yield* ctx.llmWait(1)
+        }),
+      "status",
+    ),
+  http.protected
     .post("/session/{sessionID}/revert", "session.revert")
     .mutating()
     .seeded((ctx) =>
@@ -1748,6 +1807,7 @@ const llmScenarios = new Set([
   "session.prompt_async",
   "session.command",
   "session.summarize",
+  "session.handoff",
 ])
 
 const main = Effect.gen(function* () {

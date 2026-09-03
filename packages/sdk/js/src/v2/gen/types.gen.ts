@@ -10141,6 +10141,43 @@ export type SessionSummarizeResponses = {
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
 
+export type SessionHandoffData = {
+  body?: {
+    providerID: string
+    modelID: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/handoff"
+}
+
+export type SessionHandoffErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionHandoffError = SessionHandoffErrors[keyof SessionHandoffErrors]
+
+export type SessionHandoffResponses = {
+  /**
+   * Session created to continue the work
+   */
+  200: Session
+}
+
+export type SessionHandoffResponse = SessionHandoffResponses[keyof SessionHandoffResponses]
+
 export type SessionPromptAsyncData = {
   body?: {
     messageID?: string

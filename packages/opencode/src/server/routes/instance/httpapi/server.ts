@@ -29,6 +29,7 @@ import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { SessionCompaction } from "@/session/compaction"
+import { SessionHandoff } from "@/session/handoff"
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
 import { SessionProcessor } from "@/session/processor"
@@ -244,6 +245,7 @@ const app = LayerNode.group([
   SessionRevert.node,
   SessionSummary.node,
   SessionPrompt.node,
+  SessionHandoff.node,
   Instruction.node,
   LLM.node,
   LSP.node,

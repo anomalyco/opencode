@@ -185,6 +185,8 @@ export const dict = {
   "command.session.redo.description": "Повторить отменённое сообщение",
   "command.session.compact": "Сжать сессию",
   "command.session.compact.description": "Сократить сессию для уменьшения размера контекста",
+  "command.session.handoff": "Передать сессию",
+  "command.session.handoff.description": "Сжать сессию и продолжить работу в новой сессии",
   "command.session.fork": "Создать ответвление",
   "command.session.fork.description": "Создать новую сессию из сообщения",
   "command.session.share": "Поделиться сессией",
@@ -654,6 +656,8 @@ export const dict = {
   "toast.session.share.success.description": "URL скопирован в буфер обмена!",
   "toast.session.share.failed.title": "Не удалось опубликовать сессию",
   "toast.session.share.failed.description": "Произошла ошибка при публикации сессии",
+  "toast.session.handoff.failed.title": "Не удалось передать сессию",
+  "toast.session.handoff.failed.description": "Не удалось сократить эту сессию для передачи",
 
   "toast.session.unshare.success.title": "Публикация отменена",
   "toast.session.unshare.success.description": "Публикация успешно отменена!",

@@ -188,6 +188,8 @@ export const dict = {
   "command.session.redo.description": "重做上一則復原的訊息",
   "command.session.compact": "精簡工作階段",
   "command.session.compact.description": "摘要工作階段以減少上下文大小",
+  "command.session.handoff": "交接工作階段",
+  "command.session.handoff.description": "精簡工作階段並在新的工作階段繼續工作",
   "command.session.fork": "從訊息分支",
   "command.session.fork.description": "從先前的訊息建立新工作階段",
   "command.session.share": "分享工作階段",
@@ -647,6 +649,8 @@ export const dict = {
   "toast.session.share.success.description": "分享連結已複製到剪貼簿",
   "toast.session.share.failed.title": "分享工作階段失敗",
   "toast.session.share.failed.description": "分享工作階段時發生錯誤",
+  "toast.session.handoff.failed.title": "交接工作階段失敗",
+  "toast.session.handoff.failed.description": "無法總結此工作階段以進行交接",
 
   "toast.session.unshare.success.title": "已取消分享工作階段",
   "toast.session.unshare.success.description": "工作階段已成功取消分享",

@@ -118,6 +118,7 @@ const sessionBindingCommands = [
   "session.timeline",
   "session.fork",
   "session.compact",
+  "session.handoff",
   "session.unshare",
   "session.undo",
   "session.redo",
@@ -582,6 +583,40 @@ export function Session() {
           providerID: selectedModel.providerID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Hand off session",
+      value: "session.handoff",
+      category: "Session",
+      slash: {
+        name: "handoff",
+      },
+      run: async () => {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Connect a provider to hand off this session",
+            duration: 3000,
+          })
+          return
+        }
+        dialog.clear()
+        const next = await sdk.client.session.handoff({
+          sessionID: route.sessionID,
+          modelID: selectedModel.modelID,
+          providerID: selectedModel.providerID,
+        })
+        if (!next.data) {
+          toast.show({
+            variant: "warning",
+            message: "Could not summarize this session to hand off",
+            duration: 3000,
+          })
+          return
+        }
+        navigate({ type: "session", sessionID: next.data.id })
       },
     },
     {

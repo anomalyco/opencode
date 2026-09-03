@@ -190,6 +190,8 @@ export const dict = {
   "command.session.redo.description": "Son geri alınan mesajı yinele",
   "command.session.compact": "Oturumu sıkıştır",
   "command.session.compact.description": "Bağlam boyutunu azaltmak için oturumu özetle",
+  "command.session.handoff": "Oturumu devret",
+  "command.session.handoff.description": "Oturumu sıkıştır ve çalışmaya yeni bir oturumda devam et",
   "command.session.fork": "Mesajdan dallandır",
   "command.session.fork.description": "Önceki bir mesajdan yeni oturum oluştur",
   "command.session.share": "Oturumu paylaş",
@@ -659,6 +661,8 @@ export const dict = {
   "toast.session.share.success.description": "Paylaşım URL'si panoya kopyalandı!",
   "toast.session.share.failed.title": "Oturum paylaşılamadı",
   "toast.session.share.failed.description": "Oturum paylaşılırken bir hata oluştu",
+  "toast.session.handoff.failed.title": "Oturum devredilemedi",
+  "toast.session.handoff.failed.description": "Devretmek için bu oturum özetlenemedi",
 
   "toast.session.unshare.success.title": "Oturum paylaşımı kaldırıldı",
   "toast.session.unshare.success.description": "Oturum paylaşımı başarıyla kaldırıldı!",

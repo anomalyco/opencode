@@ -414,6 +414,34 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     })
   }
 
+  const handoff = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+
+    const model = local.model.current()
+    if (!model) {
+      showToast({
+        title: language.t("toast.model.none.title"),
+        description: language.t("toast.model.none.description"),
+      })
+      return
+    }
+
+    const next = await sdk().client.session.handoff({
+      sessionID,
+      providerID: model.provider.id,
+      modelID: model.id,
+    })
+    if (!next.data) {
+      showToast({
+        title: language.t("toast.session.handoff.failed.title"),
+        description: language.t("toast.session.handoff.failed.description"),
+      })
+      return
+    }
+    navigate(`/${params.dir}/session/${next.data.id}`)
+  }
+
   const fork = () => {
     void openDialog(
       () => import("@/components/dialog-fork"),
@@ -482,6 +510,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "compact",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: compact,
+    }),
+    sessionCommand({
+      id: "session.handoff",
+      title: language.t("command.session.handoff"),
+      description: language.t("command.session.handoff.description"),
+      slash: "handoff",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: handoff,
     }),
     sessionCommand({
       id: "session.fork",
