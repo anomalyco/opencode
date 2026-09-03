@@ -489,10 +489,10 @@
     gap: 8px;
     min-width: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
   }
@@ -1548,8 +1548,16 @@
   color: var(--v2-text-text-contrast);
 }
 
-:root body [data-local-session] [data-component="user-message"] [data-slot="user-message-text"] {
-  background: var(--v2-state-bg-info);
-  color: var(--v2-text-text-accent);
+:root[data-color-scheme="light"] body [data-local-session] [data-component="user-message"]
+  [data-slot="user-message-text"] {
+  background: var(--v2-blue-100);
+  color: var(--v2-blue-700);
+  border-radius: 8px;
+}
+
+:root[data-color-scheme="dark"] body [data-local-session] [data-component="user-message"]
+  [data-slot="user-message-text"] {
+  background: var(--v2-blue-1200);
+  color: var(--v2-blue-300);
   border-radius: 8px;
 }

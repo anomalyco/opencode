@@ -32,8 +32,11 @@ story("renders every admitted tool family and hides timeline-only exclusions", a
   await expect(patch.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "false")
   await expect(patch.locator('[data-slot="message-part-title-filename"]')).toHaveCount(0)
   await expect(patch.locator('[data-slot="message-part-actions"]')).toHaveCount(0)
+  await expect(patch.locator('[data-slot="basic-tool-tool-title"]')).toHaveCSS("font-size", "13px")
   const edit = timeline.locator('[data-timeline-part-id="tool_family_edit"]')
   await expect(edit).toContainText("Edit")
+  await expect(edit.locator('[data-slot="message-part-title"]')).toHaveCSS("font-size", "13px")
+  await expect(edit.locator('[data-slot="message-part-title"]')).toHaveCSS("line-height", "16px")
   await expect(timeline.locator('[data-timeline-part-id="tool_family_todo"]')).toHaveCount(0)
 })
 
