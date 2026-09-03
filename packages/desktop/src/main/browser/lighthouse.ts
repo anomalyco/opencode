@@ -57,7 +57,10 @@ export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp
         disableFullPageScreenshot: true,
       },
     })
-    if (!result) throw new Error("Lighthouse did not produce a report.")
+    if (!result)
+      throw new Error(
+        "Lighthouse did not produce a report. Check browser.console and browser.network.list for page failures and confirm the tab has loaded. Report an audit failure if the page is healthy; do not repeat the audit unchanged.",
+      )
     return {
       scores: Object.values(result.lhr.categories).map((category) => ({
         id: category.id,

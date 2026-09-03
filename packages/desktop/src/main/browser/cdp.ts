@@ -1,5 +1,6 @@
 import type { WebContents } from "electron"
 import type { ProtocolMapping } from "devtools-protocol/types/protocol-mapping.js"
+import { protocolError } from "./errors"
 
 export type Cdp = ReturnType<typeof createCdp>
 
@@ -23,10 +24,17 @@ export function createCdp(contents: WebContents) {
       params: object = {},
       sessionID?: string,
     ): Promise<ProtocolMapping.Commands[Method]["returnType"]> {
-      if (contents.isDestroyed()) throw new Error("Browser tab was closed.")
-      if (!contents.debugger.isAttached()) contents.debugger.attach("1.3")
-      // Electron is the CDP boundary. Its native response follows the selected protocol method.
-      return contents.debugger.sendCommand(method, params, sessionID)
+      if (contents.isDestroyed())
+        throw new Error(
+          "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID, or browser.tabs.open({}) if no tabs remain.",
+        )
+      // attach can throw synchronously; sendCommand can reject asynchronously.
+      try {
+        if (!contents.debugger.isAttached()) contents.debugger.attach("1.3")
+        return await contents.debugger.sendCommand(method, params, sessionID)
+      } catch (error) {
+        throw protocolError(method, error)
+      }
     },
     on<Method extends keyof ProtocolMapping.Events>(
       method: Method,
@@ -50,7 +58,10 @@ export function createCdp(contents: WebContents) {
 }
 
 export function abortError(signal: AbortSignal) {
-  if (signal.aborted) throw new Error("Browser operation was cancelled.")
+  if (signal.aborted)
+    throw new Error(
+      "Browser operation was cancelled. Inspect the tab before deciding to repeat an action; cancellation does not undo changes already made.",
+    )
 }
 
 export async function waitFor(check: () => boolean | Promise<boolean>, signal: AbortSignal, timeoutMs = 10_000) {
