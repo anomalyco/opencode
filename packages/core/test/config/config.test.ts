@@ -165,7 +165,16 @@ describe("Config", () => {
           const entries = yield* config.entries()
           expect(entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))).toEqual([global])
           expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual(["global"])
-          expect((yield* watcher.subscriptions()).map((subscription) => subscription.path)).toEqual([global])
+          expect(
+            (yield* watcher.subscriptions())
+              .filter((subscription) => subscription.type === "directory")
+              .map((subscription) => subscription.path),
+          ).toEqual([global])
+          expect(
+            (yield* watcher.subscriptions()).filter((subscription) =>
+              subscription.path.includes(`${path.sep}.opencode${path.sep}`),
+            ),
+          ).toEqual([])
         })
         return Effect.promise(async () => {
           await fs.mkdir(global, { recursive: true })
@@ -230,6 +239,8 @@ describe("Config", () => {
             Effect.gen(function* () {
               const config = yield* Config.Service
               expect(Config.latest(yield* config.entries(), "shell")).toBe("global")
+              const watcher = yield* Watcher.Test
+              expect((yield* watcher.subscriptions()).map((subscription) => subscription.path)).toEqual([global])
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
@@ -273,6 +284,35 @@ describe("Config", () => {
           }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
         }),
       ),
+    ),
+  )
+
+  it.live("excludes missing files under symlinked global roots when global is disabled", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const link = path.join(tmp.path, "link")
+        const project = path.join(link, "plugins", "demo")
+        return Effect.promise(async () => {
+          await fs.mkdir(path.join(global, "plugins", "demo"), { recursive: true })
+          await fs.symlink(global, link, process.platform === "win32" ? "junction" : undefined)
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const watcher = yield* Watcher.Test
+              const subscriptions = yield* watcher.subscriptions()
+              expect(subscriptions.length).toBeGreaterThan(0)
+              expect(
+                subscriptions.filter((item) => inFixture(global, item.path) || inFixture(link, item.path)),
+              ).toEqual([])
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, undefined, undefined, { global: false }),
+              ),
+            ),
+          ),
+        )
+      }),
     ),
   )
 
@@ -892,6 +932,8 @@ describe("Config", () => {
                 path: AbsolutePath.make(path.join(tmp.path, "global")),
                 ignore: ["**/{node_modules,.git}/**", ".git", "node_modules"],
               },
+              { type: "file", path: path.join(tmp.path, "opencode.json") },
+              { type: "file", path: path.join(tmp.path, "opencode.jsonc") },
             ])
           }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, Watcher.testLayer)))
         }),

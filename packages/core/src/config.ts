@@ -200,19 +200,31 @@ export const layer = (options?: Options) =>
         const discovered =
           locationIsGlobal || options?.project === false
             ? []
-            : yield* fs
-                .up({
-                  targets: [".opencode", ".claude", ".agents", ...names.toReversed()],
-                  start: location.directory,
-                })
-                .pipe(
-                  Effect.flatMap((items) =>
-                    Effect.forEach(items, (item) =>
-                      fs.resolve(item).pipe(Effect.map((resolved) => ({ item, resolved }))),
+            : yield* Effect.all([
+                fs.up({ targets: [".opencode", ".claude", ".agents"], start: location.directory }),
+                // Missing direct files still need a watch so their first creation
+                // reloads config. File watches observe the parent non-recursively.
+                fs
+                  .up({ targets: ["."], start: location.directory })
+                  .pipe(
+                    Effect.map((directories) =>
+                      directories.flatMap((directory) => names.toReversed().map((name) => path.join(directory, name))),
                     ),
                   ),
-                  Effect.orDie,
-                )
+              ]).pipe(
+                Effect.map((items) => items.flat()),
+                Effect.flatMap((items) =>
+                  Effect.forEach(items, (item) =>
+                    // Resolve the parent too: a missing file under a symlinked
+                    // global root must obey the same exclusion as an existing one.
+                    fs.resolve(path.dirname(item)).pipe(
+                      Effect.flatMap((directory) => fs.resolve(path.join(directory, path.basename(item)))),
+                      Effect.map((resolved) => ({ item, resolved })),
+                    ),
+                  ),
+                ),
+                Effect.orDie,
+              )
 
         const globalEnabled = options?.global !== false
         // A walked path that resolves into a global root is global config

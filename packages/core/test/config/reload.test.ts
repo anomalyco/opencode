@@ -1,4 +1,5 @@
 import path from "path"
+import fs from "fs/promises"
 import { describe, expect } from "bun:test"
 import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { Agent } from "@opencode-ai/core/agent"
@@ -20,12 +21,18 @@ import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Global } from "@opencode-ai/util/global"
+import { Location } from "@opencode-ai/core/location"
+import { Credential } from "@opencode-ai/core/credential"
+import { WellKnown } from "@opencode-ai/core/wellknown"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
+import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
+import { location } from "../fixture/location"
+import { tmpdir } from "../fixture/tmpdir"
 
 const it = testEffect(
   Layer.merge(PluginTestLayer, AppNodeBuilder.build(LayerNode.group([AppProcess.node, ShellSelect.node]))),
@@ -34,6 +41,67 @@ const decode = Schema.decodeUnknownSync(Info)
 const document = path.join(import.meta.dir, "opencode.json")
 
 describe("config plugin reloads", () => {
+  for (const file of ["opencode.json", "opencode.jsonc", "../opencode.json", "../opencode.jsonc"]) {
+    it.live(`loads references when ${file} is first created and keeps watching it`, () =>
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const project = path.join(tmp.path, "project")
+            const target = path.resolve(project, file)
+            yield* Effect.promise(() => fs.mkdir(project))
+            return yield* Effect.gen(function* () {
+              const plugins = yield* Plugin.Service
+              const references = yield* Reference.Service
+              const host = yield* PluginHost.make(plugins)
+              yield* ConfigReferencePlugin.Plugin.effect(host)
+              expect(yield* references.list()).toEqual([])
+              yield* Effect.sleep("10 millis")
+
+              yield* Effect.promise(() => fs.writeFile(target, JSON.stringify({ references: { docs: "./docs" } })))
+              yield* waitUntil(
+                references.list().pipe(Effect.map((items) => items.some((item) => item.name === "docs"))),
+              )
+              expect((yield* references.list())[0]?.path).toBe(
+                AbsolutePath.make(path.join(path.dirname(target), "docs")),
+              )
+              yield* Effect.promise(() => fs.writeFile(target, JSON.stringify({ references: { next: "./next" } })))
+              yield* waitUntil(
+                references.list().pipe(Effect.map((items) => items.length === 1 && items[0]?.name === "next")),
+              )
+
+              yield* Effect.promise(() => fs.rm(target))
+              yield* waitUntil(references.list().pipe(Effect.map((items) => items.length === 0)))
+              yield* Effect.promise(() => fs.writeFile(target, JSON.stringify({ references: { docs: "./docs" } })))
+              yield* waitUntil(
+                references.list().pipe(Effect.map((items) => items.length === 1 && items[0]?.name === "docs")),
+              )
+            }).pipe(
+              Effect.provide(
+                AppNodeBuilder.build(
+                  LayerNode.group([Config.node, Bus.node, Reference.node, Global.node, Location.node]),
+                  [
+                    Config.node.replace(Config.configured({ global: false })),
+                    Location.node.replace(
+                      Layer.succeed(
+                        Location.Service,
+                        Location.Service.of(location({ directory: AbsolutePath.make(project) })),
+                      ),
+                    ),
+                    Global.node.replace(
+                      Global.layerWith({ config: path.join(tmp.path, "global"), home: path.join(tmp.path, "home") }),
+                    ),
+                    Credential.node.replace(emptyCredentialNode),
+                    WellKnown.node.replace(emptyWellknownNode),
+                  ],
+                ),
+              ),
+            )
+          }),
+        ),
+      ),
+    )
+  }
+
   it.effect("preserves reference precedence and insertion order across documents", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
