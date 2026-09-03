@@ -226,6 +226,28 @@ it.instance(
 )
 
 it.instance(
+  "config-defined github-copilot models default to the dedicated Copilot SDK",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const models = providers[ProviderV2.ID.make("github-copilot")].models
+    expect(models["copilot-grok-4.6"].api.npm).toBe("@ai-sdk/github-copilot")
+    expect(models["explicit-anthropic"].api.npm).toBe("@ai-sdk/anthropic")
+  }),
+  {
+    config: {
+      provider: {
+        "github-copilot": {
+          models: {
+            "copilot-grok-4.6": { name: "Grok 4.6", tool_call: true },
+            "explicit-anthropic": { name: "Sonnet", provider: { npm: "@ai-sdk/anthropic" }, tool_call: true },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "filters alpha provider models by default",
   Effect.gen(function* () {
     const providers = yield* list
@@ -1454,6 +1476,39 @@ test("mode options and cost are derived from the base model", () => {
     output: 22.5,
     cache: { read: 0.5, write: 0 },
   })
+})
+
+test("github-copilot models default to the dedicated Copilot SDK", () => {
+  const provider = {
+    id: "github-copilot",
+    name: "GitHub Copilot",
+    env: [],
+    npm: "@ai-sdk/openai-compatible",
+    api: "https://api.githubcopilot.com",
+    models: {
+      "gpt-5.4": {
+        id: "gpt-5.4",
+        name: "GPT-5.4",
+        limit: { context: 128_000, output: 64_000 },
+      },
+      "copilot-grok-4.6": {
+        id: "copilot-grok-4.6",
+        name: "Grok 4.6",
+        limit: { context: 128_000, output: 64_000 },
+      },
+      "explicit-anthropic": {
+        id: "claude-sonnet-4",
+        name: "Sonnet",
+        provider: { npm: "@ai-sdk/anthropic" },
+        limit: { context: 128_000, output: 64_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const models = Provider.fromModelsDevProvider(provider).models
+  expect(models["gpt-5.4"].api.npm).toBe("@ai-sdk/github-copilot")
+  expect(models["copilot-grok-4.6"].api.npm).toBe("@ai-sdk/github-copilot")
+  expect(models["explicit-anthropic"].api.npm).toBe("@ai-sdk/anthropic")
 })
 
 test("models.dev normalization fills required response fields", () => {
