@@ -38,7 +38,6 @@ import { useSettings } from "@/context/settings"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { CustomProviderForm } from "./dialog-custom-provider"
 import { decode64 } from "@/utils/base64"
-import { providerAuthUrl } from "@/utils/provider-auth"
 
 const CUSTOM_ID = "_custom"
 type ConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
@@ -563,13 +562,12 @@ function ProviderConnection(props: {
         })
         .then((x) => {
           if (!alive.value) return
-          dispatch({
-            type: "auth.complete",
-            authorization: {
-              ...x.data,
-              url: providerAuthUrl(x.data.url, props.provider, platform.platform),
-            },
-          })
+          if (props.provider === "opencode" && platform.platform === "desktop") {
+            const url = new URL(x.data.url)
+            url.searchParams.set("client_id", "opencode-desktop")
+            x.data.url = url.href
+          }
+          dispatch({ type: "auth.complete", authorization: x.data })
         })
         .catch((e) => {
           if (!alive.value) return
