@@ -4,64 +4,9 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
+import { unquoteGitPath } from "./git-path"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
-
-function unquoteGitPath(input: string) {
-  if (!input.startsWith('"')) return input
-  if (!input.endsWith('"')) return input
-  const body = input.slice(1, -1)
-  const bytes: number[] = []
-
-  for (let i = 0; i < body.length; i++) {
-    const char = body[i]!
-    if (char !== "\\") {
-      bytes.push(char.charCodeAt(0))
-      continue
-    }
-
-    const next = body[i + 1]
-    if (!next) {
-      bytes.push("\\".charCodeAt(0))
-      continue
-    }
-
-    if (next >= "0" && next <= "7") {
-      const chunk = body.slice(i + 1, i + 4)
-      const match = chunk.match(/^[0-7]{1,3}/)
-      if (!match) {
-        bytes.push(next.charCodeAt(0))
-        i++
-        continue
-      }
-      bytes.push(parseInt(match[0], 8))
-      i += match[0].length
-      continue
-    }
-
-    const escaped =
-      next === "n"
-        ? "\n"
-        : next === "r"
-          ? "\r"
-          : next === "t"
-            ? "\t"
-            : next === "b"
-              ? "\b"
-              : next === "f"
-                ? "\f"
-                : next === "v"
-                  ? "\v"
-                  : next === "\\" || next === '"'
-                    ? next
-                    : undefined
-
-    bytes.push((escaped ?? next).charCodeAt(0))
-    i++
-  }
-
-  return Buffer.from(bytes).toString()
-}
 
 export interface Interface {
   readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
@@ -111,19 +56,23 @@ const layer = Layer.effect(
           files: 0,
         },
       })
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
-      if ((yield* config.get()).snapshot === false) return
-      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      if (!all.length) return
-
-      const messages = all.filter(
-        (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
-      )
-      const target = messages.find((m) => m.info.id === input.messageID)
-      if (!target || target.info.role !== "user") return
-      const msgDiffs = yield* computeDiff({ messages })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-      yield* sessions.updateMessage(target.info)
+      let diff: Snapshot.FileDiff[] = []
+      if ((yield* config.get()).snapshot !== false) {
+        const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+        if (all.length) {
+          const messages = all.filter(
+            (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+          )
+          const target = messages.find((m) => m.info.id === input.messageID)
+          if (target && target.info.role === "user") {
+            const msgDiffs = yield* computeDiff({ messages })
+            target.info.summary = { ...target.info.summary, diffs: msgDiffs }
+            yield* sessions.updateMessage(target.info)
+            diff = yield* sessions.diff(input.sessionID)
+          }
+        }
+      }
+      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff })
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
