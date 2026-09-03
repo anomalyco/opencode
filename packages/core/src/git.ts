@@ -9,6 +9,7 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { File } from "./file.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
+import { VcsPatch } from "./vcs/patch.js"
 
 export class Repository extends Schema.Class<Repository>("Git.Repository")({
   worktree: AbsolutePath,
@@ -519,95 +520,133 @@ const layer = Layer.effect(
       context?: number
       paths?: readonly RelativePath[]
     }) {
-      const paths = input.paths ?? (yield* treeFiles(input))
-      return yield* Effect.forEach(paths, (file) =>
-        Effect.gen(function* () {
-          const statusText = (yield* repositoryOperation("diff", input.repository, [
-            "diff",
-            "--name-status",
-            "--no-renames",
-            input.from,
-            input.to,
-            "--",
+      const diffs = new Map<RelativePath, File.Diff>()
+      // Stable headers keep user diff settings from mixing neighboring files' patch chunks.
+      const read = (options: string[], paths: readonly RelativePath[]) =>
+        repositoryOperation("diff", input.repository, [
+          "--literal-pathspecs",
+          "diff",
+          "--no-ext-diff",
+          "--no-color",
+          "--no-renames",
+          "--src-prefix=a/",
+          "--dst-prefix=b/",
+          "--submodule=short",
+          ...options,
+          input.from,
+          input.to,
+          "--",
+          ...paths,
+        ])
+      for (const paths of input.paths === undefined
+        ? [[]]
+        : pathBatches(input.paths.map((file) => repositoryPath(input.repository, file)))) {
+        const result = yield* Effect.all(
+          {
+            names: read(["--name-status", "-z"], paths),
+            stats: read(["--numstat", "-z"], paths),
+            patch: read([`--unified=${input.context ?? 3}`], paths),
+          },
+          { concurrency: 3 },
+        )
+        const names = result.names.text.split("\0")
+        const statuses = new Map(
+          names.flatMap((status, index) => (index % 2 === 0 && status ? [[names[index + 1], status] as const] : [])),
+        )
+        const patches = VcsPatch.chunksByFile({ text: result.patch.text, truncated: false }, () => undefined)
+        for (const entry of result.stats.text.split("\0").filter(Boolean)) {
+          const first = entry.indexOf("\t")
+          const second = entry.indexOf("\t", first + 1)
+          const file = RelativePath.make(entry.slice(second + 1))
+          const additions = entry.slice(0, first)
+          const deletions = entry.slice(first + 1, second)
+          const binary = additions === "-" || deletions === "-"
+          const status = statuses.get(file)
+          diffs.set(file, {
             file,
-          ])).text.trim()
-          const status = statusText.startsWith("A") ? "added" : statusText.startsWith("D") ? "deleted" : "modified"
-          const stats = (yield* repositoryOperation("diff", input.repository, [
-            "diff",
-            "--numstat",
-            "--no-renames",
-            input.from,
-            input.to,
-            "--",
-            file,
-          ])).text.split("\t")
-          const binary = stats[0] === "-" || stats[1] === "-"
-          const patch = binary
-            ? ""
-            : (yield* repositoryOperation("diff", input.repository, [
-                "diff",
-                `--unified=${input.context ?? 3}`,
-                "--no-renames",
-                input.from,
-                input.to,
-                "--",
-                file,
-              ])).text
-          return {
-            file,
-            status,
-            additions: binary ? 0 : Number(stats[0] ?? 0),
-            deletions: binary ? 0 : Number(stats[1] ?? 0),
-            patch,
-          } satisfies File.Diff
-        }),
-      )
-    })
-
-    const hasEntry = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, file: RelativePath) {
-      const text = (yield* repositoryOperation("restore", repository, [
-        "ls-tree",
-        "-z",
-        tree,
-        "--",
-        file,
-      ])).text.replace(/\0$/, "")
-      if (!text) return false
-      if (!/^\d+\s+\w+\s+[0-9a-f]+\t/.test(text))
-        return yield* new OperationError({
-          operation: "restore",
-          directory: repository.worktree,
-          message: `Invalid tree entry for ${file}`,
-        })
-      return true
+            status: status === "A" ? "added" : status === "D" ? "deleted" : "modified",
+            additions: binary ? 0 : Number(additions),
+            deletions: binary ? 0 : Number(deletions),
+            patch: binary ? "" : (patches.get(file) ?? ""),
+          })
+        }
+      }
+      return input.paths === undefined
+        ? Array.from(diffs.values())
+        : input.paths.map((file) => {
+            const diff = diffs.get(repositoryPath(input.repository, file))
+            return diff
+              ? { ...diff, file }
+              : { file, status: "modified" as const, additions: 0, deletions: 0, patch: "" }
+          })
     })
 
     const restore = Effect.fn("Git.tree.restore")(
       (input: { repository: Repository; files: ReadonlyMap<RelativePath, TreeID> }) =>
         locked(
           input.repository,
-          Effect.forEach(
-            input.files,
-            ([file, tree]) =>
-              Effect.gen(function* () {
-                if (yield* hasEntry(input.repository, tree, file)) {
-                  yield* repositoryOperation("restore", input.repository, ["checkout", tree, "--", file])
-                  return
-                }
-                yield* fs.remove(path.join(input.repository.worktree, file), { recursive: true, force: true }).pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new OperationError({
-                        operation: "restore",
-                        directory: input.repository.worktree,
-                        message: `Failed to remove ${file}`,
-                        cause,
-                      }),
-                  ),
+          Effect.gen(function* () {
+            // Only group consecutive snapshots: directory restores can overlap paths from another snapshot.
+            const groups: { tree: TreeID; files: RelativePath[] }[] = []
+            for (const [inputPath, tree] of input.files) {
+              const file = repositoryPath(input.repository, inputPath)
+              const previous = groups.at(-1)
+              if (previous?.tree === tree) {
+                previous.files.push(file)
+                continue
+              }
+              groups.push({ tree, files: [file] })
+            }
+            for (const group of groups) {
+              // Checkout uses stdin, so its batch can span multiple argv-limited lookups.
+              const pending: RelativePath[] = []
+              const flush = () =>
+                pending.length === 0
+                  ? Effect.void
+                  : repositoryOperation(
+                      "restore",
+                      input.repository,
+                      ["--literal-pathspecs", "checkout", group.tree, "--pathspec-from-file=-", "--pathspec-file-nul"],
+                      { stdin: pending.splice(0).join("\0") + "\0" },
+                    )
+              for (const paths of pathBatches(group.files)) {
+                const entries = new Set(
+                  (yield* repositoryOperation("restore", input.repository, [
+                    "--literal-pathspecs",
+                    "ls-tree",
+                    "--name-only",
+                    "-t",
+                    "-z",
+                    group.tree,
+                    "--",
+                    ...paths,
+                  ])).text
+                    .split("\0")
+                    .filter(Boolean),
                 )
-              }),
-            { discard: true },
-          ),
+                for (const file of paths) {
+                  if (entries.has(file) || (file === "." && entries.size > 0)) {
+                    pending.push(file)
+                    continue
+                  }
+                  // Keep deletions in their original position relative to the surrounding checkouts.
+                  yield* flush()
+                  yield* fs.remove(path.join(input.repository.worktree, file), { recursive: true, force: true }).pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new OperationError({
+                          operation: "restore",
+                          directory: input.repository.worktree,
+                          message: `Failed to remove ${file}`,
+                          cause,
+                        }),
+                    ),
+                  )
+                }
+              }
+              yield* flush()
+            }
+          }),
         ),
     )
 
@@ -701,6 +740,28 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, AppProcess.node] })
+
+function repositoryPath(repository: Repository, file: RelativePath) {
+  return RelativePath.make(
+    path.relative(repository.worktree, path.resolve(repository.worktree, file)).split(path.sep).join("/") || ".",
+  )
+}
+
+// diff and ls-tree have no pathspec-from-file option. Bound argv size, including quoting overhead on Windows.
+function pathBatches(paths: readonly RelativePath[]) {
+  const batches: RelativePath[][] = []
+  let bytes = 0
+  for (const file of paths) {
+    const size = Buffer.byteLength(file) + 3
+    if (batches.length === 0 || bytes + size > 16_384) {
+      batches.push([])
+      bytes = 0
+    }
+    batches[batches.length - 1].push(file)
+    bytes += size
+  }
+  return batches
+}
 
 interface Result {
   readonly exitCode: number
