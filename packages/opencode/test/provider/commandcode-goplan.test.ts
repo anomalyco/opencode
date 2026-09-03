@@ -8,6 +8,7 @@ import {
   extractXMLToolCalls,
   isOverflow,
   mapFinish,
+  toolOutputText,
   toWireMessages,
   toWireTools,
 } from "@/provider/commandcode-goplan"
@@ -66,6 +67,35 @@ test("maps finish and overflow", () => {
   expect(isOverflow(403, `{"error":"FORBIDDEN"}`)).toBe(false)
 })
 
+test("serializes every tool-result variant", () => {
+  expect(toolOutputText({ type: "text", value: "a" })).toBe("a")
+  expect(toolOutputText({ type: "json", value: { files: ["x"] } })).toBe(`{"files":["x"]}`)
+  expect(toolOutputText({ type: "error-json", value: "boom" })).toBe("boom")
+  expect(toolOutputText({ type: "execution-denied", reason: "no" })).toBe("no")
+})
+
+test("keeps tool results after their assistant message", () => {
+  const wired = toWireMessages([
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "reading" },
+        { type: "tool-call", toolCallId: "call_1", toolName: "read", input: { filePath: "/tmp/x" } },
+        {
+          type: "tool-result",
+          toolCallId: "call_1",
+          toolName: "read",
+          output: { type: "json", value: { content: "hi" } },
+        },
+      ],
+    },
+  ])
+  expect(wired.messages.map((message) => message.role)).toEqual(["assistant", "tool"])
+  expect(wired.messages[0].toolCalls).toEqual([{ id: "call_1", name: "read", args: `{"filePath":"/tmp/x"}` }])
+  expect(wired.messages[1].text).toBe(`{"content":"hi"}`)
+  expect(wired.messages[1].toolCallID).toBe("call_1")
+})
+
 test("seeds 36 models", () => {
   const provider = catalog()
   expect(provider.id).toBe("commandcode-goplan")
@@ -89,18 +119,20 @@ test("doGenerate reposts on pause_turn with gateway headers", () => {
     const body = calls === 1 ? first : second
     return new Response(body, { status: 200, headers: { "Content-Type": "application/x-ndjson" } })
   }
-  const model = new CommandcodeLanguageModel("m", { apiKey: "k", baseURL: "https://example.test", fetch: stub as unknown as typeof fetch })
-  return model
-    .doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] })
-    .then((result) => {
-      expect(calls).toBe(2)
-      expect(seen[0]["authorization"]).toBe("Bearer k")
-      expect(seen[0]["user-agent"]).toBe("cli")
-      expect(seen[0]["x-command-code-version"]).toBe("1.44.0")
-      expect(result.content).toEqual([{ type: "text", text: "apple" }])
-      expect(result.finishReason.unified).toBe("stop")
-      expect(result.usage.outputTokens.total).toBe(3)
-    })
+  const model = new CommandcodeLanguageModel("m", {
+    apiKey: "k",
+    baseURL: "https://example.test",
+    fetch: stub as unknown as typeof fetch,
+  })
+  return model.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] }).then((result) => {
+    expect(calls).toBe(2)
+    expect(seen[0]["authorization"]).toBe("Bearer k")
+    expect(seen[0]["user-agent"]).toBe("cli")
+    expect(seen[0]["x-command-code-version"]).toBe("1.44.0")
+    expect(result.content).toEqual([{ type: "text", text: "apple" }])
+    expect(result.finishReason.unified).toBe("stop")
+    expect(result.usage.outputTokens.total).toBe(3)
+  })
 })
 
 test("doStream emits deltas then finish with usage", async () => {
@@ -108,9 +140,12 @@ test("doStream emits deltas then finish with usage", async () => {
     `{"type":"text-delta","text":"hi"}\n` +
     `{"type":"tool-call","toolName":"read","toolCallId":"call_1","input":{"filePath":"/tmp/x"}}\n` +
     `{"type":"finish","finishReason":"end_turn","rawFinishReason":"end_turn","totalUsage":{"inputTokens":500,"outputTokens":2,"inputTokenDetails":{"cacheReadTokens":100,"cacheWriteTokens":50}}}\n`
-  const stub = async () =>
-    new Response(ndjson, { status: 200, headers: { "Content-Type": "application/x-ndjson" } })
-  const model = new CommandcodeLanguageModel("m", { apiKey: "k", baseURL: "https://example.test", fetch: stub as unknown as typeof fetch })
+  const stub = async () => new Response(ndjson, { status: 200, headers: { "Content-Type": "application/x-ndjson" } })
+  const model = new CommandcodeLanguageModel("m", {
+    apiKey: "k",
+    baseURL: "https://example.test",
+    fetch: stub as unknown as typeof fetch,
+  })
   const { stream } = await model.doStream({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] })
   const parts: LanguageModelV3StreamPart[] = []
   const reader = stream.getReader()
@@ -127,4 +162,29 @@ test("doStream emits deltas then finish with usage", async () => {
     expect(finish.finishReason.unified).toBe("tool-calls")
     expect(finish.usage.inputTokens.cacheRead).toBe(100)
   }
+  // ai-sdk executes only on tool-call; input-* alone leaves the call pending.
+  expect(parts).toContainEqual({
+    type: "tool-call",
+    toolCallId: "call_1",
+    toolName: "read",
+    input: `{"filePath":"/tmp/x"}`,
+  })
+})
+
+test("doGenerate keeps tool-call input stringified", () => {
+  const ndjson =
+    `{"type":"tool-call","toolName":"read","toolCallId":"call_1","input":{"filePath":"/tmp/x"}}\n` +
+    `{"type":"finish","finishReason":"tool-calls","rawFinishReason":"tool_calls","totalUsage":{"inputTokens":5,"outputTokens":2}}\n`
+  const stub = async () => new Response(ndjson, { status: 200, headers: { "Content-Type": "application/x-ndjson" } })
+  const model = new CommandcodeLanguageModel("m", {
+    apiKey: "k",
+    baseURL: "https://example.test",
+    fetch: stub as unknown as typeof fetch,
+  })
+  return model.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] }).then((result) => {
+    // Stringified: ai-sdk parses generate-content tool input itself.
+    expect(result.content).toEqual([
+      { type: "tool-call", toolCallId: "call_1", toolName: "read", input: `{"filePath":"/tmp/x"}` },
+    ])
+  })
 })

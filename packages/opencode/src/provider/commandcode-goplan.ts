@@ -7,6 +7,7 @@ import type {
   LanguageModelV3FinishReason,
   LanguageModelV3Prompt,
   LanguageModelV3StreamPart,
+  LanguageModelV3ToolResultPart,
   LanguageModelV3Usage,
   SharedV3Warning,
 } from "@ai-sdk/provider"
@@ -47,13 +48,37 @@ const SEED: SeedModel[] = [
   { id: "z-ai/glm-5.3-flash", name: "GLM-5.3 Flash", context: 1048576, image: true, reasoning: true },
   { id: "moonshotai/Kimi-K3", name: "Kimi K3", context: 1000000, image: true, reasoning: true },
   { id: "moonshotai/Kimi-K2.7-Code", name: "Kimi K2.7 Code", context: 256000, image: true, reasoning: true },
-  { id: "moonshotai/Kimi-K2.7-Code-Highspeed", name: "Kimi K2.7 Code HighSpeed", context: 262000, image: true, reasoning: true },
+  {
+    id: "moonshotai/Kimi-K2.7-Code-Highspeed",
+    name: "Kimi K2.7 Code HighSpeed",
+    context: 262000,
+    image: true,
+    reasoning: true,
+  },
   { id: "moonshotai/Kimi-K2.6", name: "Kimi K2.6", context: 256000, image: true, reasoning: false },
   { id: "moonshotai/Kimi-K2.5", name: "Kimi K2.5", context: 256000, image: true, reasoning: false },
   { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro (latest)", context: 1000000, image: false, reasoning: true },
-  { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash (latest)", context: 1000000, image: false, reasoning: true },
-  { id: "deepseek/deepseek-v4-flash-fast", name: "DeepSeek V4 Flash Fast", context: 1000000, image: false, reasoning: true },
-  { id: "deepseek/deepseek-v4-flash-vision-exp", name: "DeepSeek V4 Flash Vision (exp)", context: 1000000, image: true, reasoning: true },
+  {
+    id: "deepseek/deepseek-v4-flash",
+    name: "DeepSeek V4 Flash (latest)",
+    context: 1000000,
+    image: false,
+    reasoning: true,
+  },
+  {
+    id: "deepseek/deepseek-v4-flash-fast",
+    name: "DeepSeek V4 Flash Fast",
+    context: 1000000,
+    image: false,
+    reasoning: true,
+  },
+  {
+    id: "deepseek/deepseek-v4-flash-vision-exp",
+    name: "DeepSeek V4 Flash Vision (exp)",
+    context: 1000000,
+    image: true,
+    reasoning: true,
+  },
   { id: "MiniMaxAI/MiniMax-M3", name: "MiniMax M3", context: 1000000, image: true, reasoning: true },
   { id: "MiniMaxAI/MiniMax-M2.5", name: "MiniMax M2.5", context: 200000, image: false, reasoning: false },
   { id: "stepfun/Step-3.7-Flash", name: "Step 3.7 Flash", context: 256000, image: true, reasoning: true },
@@ -64,7 +89,13 @@ const SEED: SeedModel[] = [
   { id: "xai/grok-4.5", name: "Grok 4.5", context: 500000, image: true, reasoning: true },
   { id: "thinkingmachines/inkling", name: "Inkling", context: 256000, image: true, reasoning: true },
   { id: "thinkingmachines/inkling-small", name: "Inkling Small", context: 1000000, image: true, reasoning: true },
-  { id: "meta/muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", context: 1048576, image: true, reasoning: true },
+  {
+    id: "meta/muse-spark-1.2-contributor",
+    name: "Muse Spark 1.2 Contributor",
+    context: 1048576,
+    image: true,
+    reasoning: true,
+  },
 ]
 
 export function catalog(): ModelsDev.Provider {
@@ -115,6 +146,23 @@ function safeJSON(text: string): unknown {
   }
 }
 
+// toolOutputText renders every tool-result output variant as text. The
+// previous build sent "" for json outputs, so the gateway saw empty tool
+// results and the model retried the same call forever.
+export function toolOutputText(output: LanguageModelV3ToolResultPart["output"]): string {
+  if (output.type === "text" || output.type === "error-text") return output.value
+  if (output.type === "json" || output.type === "error-json") {
+    return typeof output.value === "string" ? output.value : JSON.stringify(output.value)
+  }
+  if (output.type === "execution-denied") return output.reason ?? "Tool execution was denied."
+  return output.value
+    .map((part) => {
+      if (part.type === "text") return part.text
+      return `[${part.type} omitted]`
+    })
+    .join("\n")
+}
+
 export function toWireMessages(prompt: LanguageModelV3Prompt): {
   system: string
   messages: WireMessage[]
@@ -132,7 +180,8 @@ export function toWireMessages(prompt: LanguageModelV3Prompt): {
       const texts: string[] = []
       for (const part of message.content) {
         if (part.type === "text") texts.push(part.text)
-        else warnings.push({ type: "unsupported", feature: "file-input", details: "CommandCode gateway takes text only" })
+        else
+          warnings.push({ type: "unsupported", feature: "file-input", details: "CommandCode gateway takes text only" })
       }
       messages.push({ role: "user", text: texts.join(""), toolCalls: [], toolCallID: "" })
       continue
@@ -140,23 +189,24 @@ export function toWireMessages(prompt: LanguageModelV3Prompt): {
     if (message.role === "assistant") {
       let text = ""
       const toolCalls: WireMessage["toolCalls"] = []
+      const pending: WireMessage[] = []
       for (const part of message.content) {
         if (part.type === "text") text += part.text
         else if (part.type === "tool-call") {
           const input = typeof part.input === "string" ? part.input : JSON.stringify(part.input ?? {})
           toolCalls.push({ id: part.toolCallId, name: part.toolName, args: input })
         } else if (part.type === "tool-result") {
-          const output = part.output.type === "text" || part.output.type === "error-text" ? part.output.value : ""
-          messages.push({ role: "tool", text: output, toolCalls: [], toolCallID: part.toolCallId })
-        } else warnings.push({ type: "unsupported", feature: "reasoning-input", details: "Reasoning parts are not resent" })
+          // Tool results belong after their assistant message, never before it.
+          pending.push({ role: "tool", text: toolOutputText(part.output), toolCalls: [], toolCallID: part.toolCallId })
+        } else
+          warnings.push({ type: "unsupported", feature: "reasoning-input", details: "Reasoning parts are not resent" })
       }
-      messages.push({ role: "assistant", text, toolCalls, toolCallID: "" })
+      messages.push({ role: "assistant", text, toolCalls, toolCallID: "" }, ...pending)
       continue
     }
     for (const part of message.content) {
       if (part.type !== "tool-result") continue
-      const output = part.output.type === "text" || part.output.type === "error-text" ? part.output.value : ""
-      messages.push({ role: "tool", text: output, toolCalls: [], toolCallID: part.toolCallId })
+      messages.push({ role: "tool", text: toolOutputText(part.output), toolCalls: [], toolCallID: part.toolCallId })
     }
   }
   return { system: systems.join("\n"), messages, warnings }
@@ -310,7 +360,17 @@ function inputArgs(input: unknown): string {
 }
 
 export function collectWire(body: string): Collected {
-  const result: Collected = { text: "", prompt: 0, completion: 0, cached: 0, reasoning: 0, raw: "", fingerprint: "", calls: [], error: "" }
+  const result: Collected = {
+    text: "",
+    prompt: 0,
+    completion: 0,
+    cached: 0,
+    reasoning: 0,
+    raw: "",
+    fingerprint: "",
+    calls: [],
+    error: "",
+  }
   let seq = 0
   for (const line of body.split("\n")) {
     const event = parseWireLine(line)
@@ -327,8 +387,7 @@ export function collectWire(body: string): Collected {
       result.raw = event.rawFinishReason ?? ""
       result.prompt = event.totalUsage?.inputTokens ?? 0
       result.completion = event.totalUsage?.outputTokens ?? 0
-      result.reasoning =
-        event.totalUsage?.reasoningTokens ?? event.totalUsage?.outputTokenDetails?.reasoningTokens ?? 0
+      result.reasoning = event.totalUsage?.reasoningTokens ?? event.totalUsage?.outputTokenDetails?.reasoningTokens ?? 0
       result.cached = event.totalUsage?.inputTokenDetails?.cacheReadTokens ?? 0
     } else if (event.type === "provider-metadata") {
       const fp = fingerprintOf(event.providerMetadata)
@@ -359,7 +418,8 @@ export function extractXMLToolCalls(text: string): { clean: string; calls: WireT
   return { clean, calls }
 }
 
-const OVERFLOW = /prompt is too long|context.{0,20}(length|window)|maximum.{0,20}tokens|too many tokens|exceeds.*context/i
+const OVERFLOW =
+  /prompt is too long|context.{0,20}(length|window)|maximum.{0,20}tokens|too many tokens|exceeds.*context/i
 
 export function isOverflow(status: number, body: string): boolean {
   if (status === 413) return true
@@ -442,7 +502,11 @@ export class CommandcodeLanguageModel implements LanguageModelV3 {
         statusCode: status,
         responseHeaders,
         responseBody: JSON.stringify({
-          error: { message: "prompt is too long for context window", type: "invalid_request_error", code: "context_length_exceeded" },
+          error: {
+            message: "prompt is too long for context window",
+            type: "invalid_request_error",
+            code: "context_length_exceeded",
+          },
         }),
         isRetryable: false,
       })
@@ -459,7 +523,10 @@ export class CommandcodeLanguageModel implements LanguageModelV3 {
   }
 
   private prepare(options: LanguageModelV3CallOptions): { body: string; warnings: SharedV3Warning[] } {
-    if (!this.config.apiKey) throw new LoadAPIKeyError({ message: "CommandCode API key is missing. Run `opencode auth login` and choose commandcode-goplan." })
+    if (!this.config.apiKey)
+      throw new LoadAPIKeyError({
+        message: "CommandCode API key is missing. Run `opencode auth login` and choose commandcode-goplan.",
+      })
     const wired = toWireMessages(options.prompt)
     const tools = toWireTools(options.tools, options.toolChoice)
     const warnings = [...wired.warnings, ...tools.warnings]
@@ -468,7 +535,11 @@ export class CommandcodeLanguageModel implements LanguageModelV3 {
         warnings.push({ type: "unsupported", feature, details: "The CommandCode gateway ignores this setting" })
     }
     if (options.responseFormat?.type === "json")
-      warnings.push({ type: "unsupported", feature: "responseFormat", details: "The CommandCode gateway ignores response_format" })
+      warnings.push({
+        type: "unsupported",
+        feature: "responseFormat",
+        details: "The CommandCode gateway ignores response_format",
+      })
     const providerOptions = options.providerOptions?.[PROVIDER_ID] as { reasoningEffort?: unknown } | undefined
     return {
       body: buildWireBody({
@@ -544,7 +615,10 @@ export class CommandcodeLanguageModel implements LanguageModelV3 {
     const unified = mapFinish(calls.length, raw)
     const content: LanguageModelV3Content[] = []
     if (text) content.push({ type: "text", text })
-    for (const call of calls) content.push({ type: "tool-call", toolCallId: call.id, toolName: call.name, input: call.args })
+    for (const call of calls)
+      // ponytail: V3 generate content uses the stringified args; ai-sdk parses
+      // them into the tool call itself (see parseToolCall in ai/dist).
+      content.push({ type: "tool-call", toolCallId: call.id, toolName: call.name, input: call.args })
     return {
       content,
       finishReason: toFinishReason(unified, raw),
@@ -589,7 +663,11 @@ export class CommandcodeLanguageModel implements LanguageModelV3 {
                   statusCode: response.status,
                   responseHeaders,
                   responseBody: JSON.stringify({
-                    error: { message: "prompt is too long", type: "invalid_request_error", code: "context_length_exceeded" },
+                    error: {
+                      message: "prompt is too long",
+                      type: "invalid_request_error",
+                      code: "context_length_exceeded",
+                    },
                   }),
                   isRetryable: false,
                 }),
@@ -624,10 +702,15 @@ export class CommandcodeLanguageModel implements LanguageModelV3 {
             for (const line of lines) {
               const event = parseWireLine(line)
               if (!event) continue
-              if (event.type === "text-delta" && event.text) controller.enqueue({ type: "text-delta", id: textId, delta: event.text })
+              if (event.type === "text-delta" && event.text)
+                controller.enqueue({ type: "text-delta", id: textId, delta: event.text })
               else if (event.type === "tool-call") {
                 seq++
-                calls.push({ id: event.toolCallId || `call_${seq}`, name: event.toolName || "unknown", args: inputArgs(event.input) })
+                calls.push({
+                  id: event.toolCallId || `call_${seq}`,
+                  name: event.toolName || "unknown",
+                  args: inputArgs(event.input),
+                })
               } else if (event.type === "finish") {
                 attemptRaw = event.rawFinishReason ?? ""
                 prompt += event.totalUsage?.inputTokens ?? 0
@@ -660,6 +743,10 @@ export class CommandcodeLanguageModel implements LanguageModelV3 {
           controller.enqueue({ type: "tool-input-start", id: call.id, toolName: call.name })
           controller.enqueue({ type: "tool-input-delta", id: call.id, delta: call.args })
           controller.enqueue({ type: "tool-input-end", id: call.id })
+          // ponytail: ai-sdk only executes on tool-call; input-* alone leaves
+          // the call pending and the session re-asks forever. V3 stream parts
+          // take the stringified args here (unlike content parts above).
+          controller.enqueue({ type: "tool-call", toolCallId: call.id, toolName: call.name, input: call.args })
         }
         controller.enqueue({
           type: "finish",
@@ -673,10 +760,13 @@ export class CommandcodeLanguageModel implements LanguageModelV3 {
   }
 }
 
-export function createCommandcodeGoplan(input: { apiKey?: string; baseURL?: string; headers?: Record<string, string | undefined>; fetch?: typeof fetch } = {}) {
+export function createCommandcodeGoplan(
+  input: { apiKey?: string; baseURL?: string; headers?: Record<string, string | undefined>; fetch?: typeof fetch } = {},
+) {
   const apiKey = input.apiKey ?? process.env["COMMANDCODE_API_KEY"] ?? ""
   const baseURL = (input.baseURL || GATEWAY_URL).replace(/\/$/, "")
-  const create = (modelId: string) => new CommandcodeLanguageModel(modelId, { apiKey, baseURL, headers: input.headers, fetch: input.fetch })
+  const create = (modelId: string) =>
+    new CommandcodeLanguageModel(modelId, { apiKey, baseURL, headers: input.headers, fetch: input.fetch })
   const provider = (modelId: string) => create(modelId)
   provider.languageModel = create
   provider.chat = create
