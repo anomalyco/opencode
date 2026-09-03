@@ -237,6 +237,17 @@ const invalid = ProviderShared.invalidRequest
 // that exceed it.
 const ANTHROPIC_BREAKPOINT_CAP = 4
 
+const ANTHROPIC_SSE_EVENTS = new Set([
+  "message",
+  "message_start",
+  "message_delta",
+  "message_stop",
+  "content_block_start",
+  "content_block_delta",
+  "content_block_stop",
+  "error",
+])
+
 const EPHEMERAL_5M = { type: "ephemeral" as const }
 const EPHEMERAL_1H = { type: "ephemeral" as const, ttl: "1h" as const }
 
@@ -848,7 +859,7 @@ export const route = Route.make({
   protocol,
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.none,
-  framing: Framing.sse,
+  framing: Framing.sseByEventName(ANTHROPIC_SSE_EVENTS),
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 

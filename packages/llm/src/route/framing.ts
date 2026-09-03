@@ -24,4 +24,9 @@ export interface Framing<Frame> {
 /** Server-Sent Events framing. Used by every JSON-streaming HTTP provider. */
 export const sse: Framing<string> = { id: "sse", frame: ProviderShared.sseFraming }
 
+export const sseByEventName = (names: ReadonlySet<string>): Framing<string> => ({
+  id: "sse",
+  frame: ProviderShared.sseFramingByEventName(names),
+})
+
 export * as Framing from "./framing"
