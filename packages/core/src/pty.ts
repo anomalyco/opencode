@@ -108,7 +108,9 @@ const layer = Layer.effect(
         }
         try {
           subscriber.onEnd(event)
-        } catch {}
+        } catch {
+          // Ignore error if subscriber is already dead or detached
+        }
       }
       session.subscribers.clear()
     }
@@ -119,7 +121,9 @@ const layer = Layer.effect(
       if (session.info.status === "running") {
         try {
           session.process.kill()
-        } catch {}
+        } catch {
+          // Ignore error if process is already dead or killed
+        }
       }
       notifyEnd(session, {})
     }
