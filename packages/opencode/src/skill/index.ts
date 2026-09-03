@@ -20,9 +20,9 @@ import { escapeHtml } from "@/util/html"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
-const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
-const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
-const SKILL_PATTERN = "**/SKILL.md"
+const EXTERNAL_SKILL_PATTERN = ["skills/*/SKILL.md", "skills/**/SKILL.md"]
+const OPENCODE_SKILL_PATTERN = ["{skill,skills}/*/SKILL.md", "{skill,skills}/**/SKILL.md"]
+const SKILL_PATTERN = ["*/SKILL.md", "**/SKILL.md"]
 
 // Built-in skill that ships with opencode. The model's intuition for what an
 // opencode.json should look like is often wrong, and opencode hard-fails on
@@ -142,31 +142,35 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
 const scan = Effect.fnUntraced(function* (
   state: ScanState,
   root: string,
-  pattern: string,
+  patterns: string | string[],
   opts?: { dot?: boolean; scope?: string },
 ) {
-  const matches = yield* Effect.tryPromise({
-    try: () =>
-      Glob.scan(pattern, {
-        cwd: root,
-        absolute: true,
-        include: "file",
-        symlink: true,
-        dot: opts?.dot,
-      }),
-    catch: (error) => error,
-  }).pipe(
-    Effect.catch((error) => {
-      if (!opts?.scope) return Effect.die(error)
-      return Effect.logError(`failed to scan ${opts.scope} skills`, { dir: root, error: error }).pipe(
-        Effect.as([] as string[]),
-      )
-    }),
-  )
+  // Scan each pattern separately: a single array glob call is unreliable in
+  // the Desktop build, and a failure in one pattern must not drop the others.
+  const list = Array.isArray(patterns) ? patterns : [patterns]
+  for (const pattern of list) {
+    const matches = yield* Effect.tryPromise({
+      try: () =>
+        Glob.scan(pattern, {
+          cwd: root,
+          absolute: true,
+          include: "file",
+          symlink: true,
+          dot: opts?.dot,
+        }),
+      catch: (error) => error,
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("failed to scan skills", { dir: root, pattern: pattern, error: error }).pipe(
+          Effect.as([] as string[]),
+        ),
+      ),
+    )
 
-  for (const match of matches) {
-    state.matches.add(match)
-    state.dirs.add(path.dirname(match))
+    for (const match of matches) {
+      state.matches.add(match)
+      state.dirs.add(path.dirname(match))
+    }
   }
 })
 
@@ -209,7 +213,7 @@ const discoverSkills = Effect.fnUntraced(function* (
 
   const cfg = yield* config.get()
   for (const item of cfg.skills?.paths ?? []) {
-    const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
+    const expanded = item === "~" || item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
     const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
     if (!(yield* fsys.isDir(dir))) {
       yield* Effect.logWarning("skill path not found", { path: dir })
