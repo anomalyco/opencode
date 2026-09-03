@@ -9,6 +9,7 @@ import { createEventStream, createFetch, directory, json, type FetchHandler } fr
 import { tmpdir } from "./fixture/fixture"
 import type { TuiInput } from "../src/app"
 import type { Config } from "../src/config"
+import type { PluginInfo } from "@opencode-ai/client"
 
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
   await using state = await tmpdir()
@@ -1419,6 +1420,116 @@ test.each([100, 44])(
     await setup.waitForFrame((frame) => frame.includes("Keep this draft intact"))
   },
 )
+
+test.each([
+  [100, true],
+  [44, true],
+  [100, false],
+  [44, false],
+] as const)("server plugin failures are visible at width %s (already failed: %s)", async (width, initial) => {
+  await using state = await tmpdir()
+  const failure: PluginInfo["state"] = {
+    status: "failed",
+    error: "Plugin disabled after command.transform failed. Check server logs for details.",
+    ref: "err_fixture",
+  }
+  let inventory: PluginInfo[] = [
+    {
+      id: "broken",
+      source: { type: "builtin" },
+      features: { server: true },
+      state: initial ? failure : { status: "active" },
+    },
+    { id: "healthy", source: { type: "builtin" }, features: { server: true }, state: { status: "active" } },
+  ]
+  let requests = 0
+  await using setup = await createAppFixture({
+    width,
+    state: state.path,
+    fetch: (url) => {
+      if (url.pathname !== "/api/plugin") return undefined
+      requests++
+      return json({
+        location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+        data: inventory,
+      })
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  if (!initial) {
+    expect(setup.captureCharFrame()).not.toContain("Plugin failed")
+    inventory = inventory.map((plugin) => (plugin.id === "broken" ? { ...plugin, state: failure } : plugin))
+    setup.events.emit({ id: "evt_failure", created: 1, type: "plugin.updated", data: {} })
+  }
+  await setup.waitForFrame((frame) => frame.includes("Plugin failed:") && frame.includes("broken"))
+  expect(setup.captureCharFrame()).toContain("/plugins")
+  expect(setup.captureCharFrame()).toContain("1 plugin failed")
+
+  const lines = setup.captureCharFrame().split("\n")
+  const row = lines.findIndex((line) => line.includes("Open plugins"))
+  expect(row).toBeGreaterThanOrEqual(0)
+  const line = lines[row]
+  if (!line) throw new Error("Open plugins action is missing")
+  await setup.mockMouse.click(line.indexOf("Open plugins"), row)
+  await setup.waitForFrame((frame) => frame.includes("ctrl+a") && frame.includes("broken"))
+  expect(setup.captureCharFrame()).toContain("broken")
+  expect(setup.captureCharFrame()).not.toContain("healthy")
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Server plugin error") && frame.includes("transform failed"))
+  expect(setup.captureCharFrame()).toContain("Plugin disabled")
+  expect(setup.captureCharFrame()).toContain("transform failed")
+  expect(setup.captureCharFrame()).toContain("err_fixture")
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => frame.includes("ctrl+a"))
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => !frame.includes("ctrl+a"))
+  expect(setup.captureCharFrame()).toContain("1 plugin failed")
+
+  const seen = requests
+  setup.events.emit({ id: "evt_repeat", created: 2, type: "plugin.updated", data: {} })
+  setup.events.emit({ id: "evt_reconnect", type: "server.connected", data: {} })
+  await setup.waitFor(() => requests >= seen + 2)
+  await setup.flush()
+  expect(setup.captureCharFrame()).not.toContain("Plugin failed:")
+
+  inventory = inventory.map((plugin) => ({ ...plugin, state: { status: "active" } }))
+  setup.events.emit({ id: "evt_recovered", created: 3, type: "plugin.updated", data: {} })
+  await setup.waitForFrame((frame) => !frame.includes("1 plugin failed"))
+  inventory = inventory.map((plugin) => (plugin.id === "broken" ? { ...plugin, state: failure } : plugin))
+  setup.events.emit({ id: "evt_failed_again", created: 4, type: "plugin.updated", data: {} })
+  await setup.waitForFrame((frame) => frame.includes("Plugin failed:") && frame.includes("broken"))
+})
+
+test("server plugin failures share one notice and use source names before an ID is known", async () => {
+  await using state = await tmpdir()
+  await using setup = await createAppFixture({
+    state: state.path,
+    fetch: (url) =>
+      url.pathname === "/api/plugin"
+        ? json({
+            location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+            data: [
+              {
+                source: { type: "package", target: "missing-package" },
+                features: {},
+                state: { status: "failed", error: "Package missing" },
+              },
+              {
+                source: { type: "local", path: "/fixture/broken.ts" },
+                features: {},
+                state: { status: "failed", error: "Invalid plugin" },
+              },
+            ],
+          })
+        : undefined,
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("2 plugins failed"))
+  expect(setup.captureCharFrame()).toContain("missing-package")
+  expect(setup.captureCharFrame()).toContain("/fixture/broken.ts")
+  expect(setup.captureCharFrame()).toContain("Open plugins")
+})
 
 async function createAppFixture(
   input: {
