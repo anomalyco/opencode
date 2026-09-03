@@ -40,7 +40,7 @@ pure and does not load any of these runtime modules.
 The plugin-owned contract is `@opencode-ai/plugin-browser/rpc`. This entrypoint
 contains only schemas and descriptions; it does not load the server plugin or
 filesystem code. The desktop subscribes
-to control events before starting `attach` with `version: 2`. The attachment call
+to control events before starting `attach` with `version: 3`. The attachment call
 stays pending for its lifetime. A matching `attached` event is the readiness barrier.
 
 - `state` publishes the authoritative tab inventory.
@@ -48,6 +48,10 @@ stays pending for its lifetime. A matching `attached` event is the readiness bar
   script source, file bytes, or browser results on the server-wide event feed.
 - `command` retrieves the pending request through authenticated RPC.
 - `result` completes it. The plugin validates the selected operation's output.
+- Inspection commands return only target/source metadata. Execution checks that
+  the approved target has not changed while permission was pending.
+- `attach` returns `replaced` when another desktop takes ownership. That is not
+  a retryable disconnect; the old desktop must not reclaim the session automatically.
 
 The connection ID is correlation, not separate client authentication. Requests
 are bound to their attachment and tab. Disconnect, replacement, session movement,

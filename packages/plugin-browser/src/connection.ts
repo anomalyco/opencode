@@ -4,13 +4,13 @@ import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode-ai/plugin/effect/rpc"
 import type { Session } from "@opencode-ai/schema/session"
 import { Tool } from "@opencode-ai/schema/tool"
-import { Deferred, Effect, Stream } from "effect"
+import { Deferred, Effect, Schema, Stream } from "effect"
 import { Browser } from "./rpc.js"
 
 type Attachment = {
   connectionID: string
   state: Browser.State
-  closed: Deferred.Deferred<void>
+  closed: Deferred.Deferred<"closed" | "replaced">
   pending: Map<string, { command: Browser.Command; result: Deferred.Deferred<Browser.Result, Tool.Error> }>
 }
 
@@ -21,16 +21,16 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
 ) {
   const browsers = new Map<Session.ID, Attachment>()
   let active = true
-  const close = (sessionID: Session.ID) =>
+  const close = (sessionID: Session.ID, reason: "closed" | "replaced" = "closed") =>
     Effect.gen(function* () {
       const browser = browsers.get(sessionID)
       if (!browser) return
       browsers.delete(sessionID)
-      yield* Deferred.succeed(browser.closed, undefined)
+      yield* Deferred.succeed(browser.closed, reason)
     })
   yield* Effect.addFinalizer(() => {
     active = false
-    return Effect.forEach(browsers.keys(), close, { discard: true })
+    return Effect.forEach(browsers.keys(), (id) => close(id), { discard: true })
   })
   const rpc: RpcRegistration<typeof Browser.Definition> = yield* ctx.rpc
     .register(Browser.Definition, {
@@ -47,11 +47,11 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
           const browser = yield* Effect.acquireRelease(
             Effect.gen(function* () {
               if (!active) return yield* Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
-              yield* close(input.sessionID)
+              yield* close(input.sessionID, "replaced")
               const browser: Attachment = {
                 connectionID: input.connectionID,
                 state: { tabs: [], focusedTabID: null },
-                closed: yield* Deferred.make<void>(),
+                closed: yield* Deferred.make<"closed" | "replaced">(),
                 pending: new Map(),
               }
               browsers.set(input.sessionID, browser)
@@ -60,9 +60,9 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             (browser) => (browsers.get(input.sessionID) === browser ? close(input.sessionID) : Effect.void),
           )
           yield* rpc.events
-            .emit("control", { type: "attached", connectionID: input.connectionID, version: 2 })
+            .emit("control", { type: "attached", connectionID: input.connectionID, version: 3 })
             .pipe(Effect.orDie)
-          yield* Deferred.await(browser.closed)
+          return yield* Deferred.await(browser.closed)
         }).pipe(Effect.scoped),
       state: (input, call) =>
         Effect.gen(function* () {
@@ -117,7 +117,25 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             "[browser.tab_unavailable] This tab is closed or does not belong to the connected session. Call browser.tabs.list({}) and use an exact returned tabID. If no tabs exist, use browser.tabs.open({}). Never substitute a request ID, file ID, or element ref for tabID.",
         })
       // Keep the selected attachment and document, even while permissions or file IO wait.
-      return { tab, request: (files: readonly Browser.File[]) => request(rpc, browser, action, tab, files) }
+      return {
+        tab,
+        inspect: () =>
+          request(rpc, browser, action, tab, [], { inspect: true }).pipe(
+            Effect.flatMap((result) => Schema.decodeUnknownEffect(Browser.Target)(result.value)),
+            Effect.mapError(
+              (error) =>
+                new Tool.Error({
+                  message:
+                    error instanceof Tool.Error
+                      ? error.message
+                      : "Browser returned invalid target metadata. Check desktop/plugin versions; no action was authorized.",
+                  error,
+                }),
+            ),
+          ),
+        request: (files: readonly Browser.File[], target?: Browser.Target) =>
+          request(rpc, browser, action, tab, files, { target }),
+      }
     }),
   }
 })
@@ -128,6 +146,7 @@ const request = Effect.fn("BrowserConnection.request")(function* (
   action: Browser.Action,
   tab: Browser.Tab | undefined,
   files: readonly Browser.File[],
+  inspection: Pick<Browser.Command, "inspect" | "target">,
 ) {
   const requestID = crypto.randomUUID()
   const pending = yield* Deferred.make<Browser.Result, Tool.Error>()
@@ -136,7 +155,7 @@ const request = Effect.fn("BrowserConnection.request")(function* (
       ? { ...action, paths: files.map((file) => file.name) }
       : action
   browser.pending.set(requestID, {
-    command: { action: command, ...(tab ? { generation: tab.generation } : {}), files },
+    command: { action: command, ...(tab ? { generation: tab.generation } : {}), files, ...inspection },
     result: pending,
   })
   return yield* rpc.events.emit("control", { type: "command", connectionID: browser.connectionID, requestID }).pipe(
