@@ -109,8 +109,10 @@ test("retention is enforced on shared state and push snapshots the complete draf
       pasted: [{ text: "full pasted text", source: { start: 0, end: 8, text: "[pasted]" } }],
     }
     const saving = setup.stashes[0].push({ prompt: draft })
+    expect(setup.stashes[0].pending()).toBe(true)
     draft.text = "edited while saving"
     await saving
+    expect(setup.stashes[0].pending()).toBe(false)
     expect((await setup.stashes[1].pop())?.prompt).toEqual({ ...draft, text: "[pasted]" })
   } finally {
     setup.app.renderer.destroy()
@@ -128,7 +130,10 @@ test("two TUIs cannot pop the same stashed prompt", async () => {
   const setup = await renderStashes(tmp.path, state)
   try {
     await until(() => setup.stashes.every((stash) => stash.list().length === 1))
-    const entries = await Promise.all(setup.stashes.map((stash) => stash.pop()))
+    const pops = setup.stashes.map((stash) => stash.pop())
+    expect(setup.stashes.every((stash) => stash.pending())).toBe(true)
+    const entries = await Promise.all(pops)
+    expect(setup.stashes.every((stash) => !stash.pending())).toBe(true)
     expect(entries.filter(Boolean)).toHaveLength(1)
     await until(() => setup.stashes.every((stash) => stash.list().length === 0))
   } finally {

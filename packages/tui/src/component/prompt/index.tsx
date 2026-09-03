@@ -209,6 +209,9 @@ export function Prompt(props: PromptProps) {
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
   const history = usePromptHistory()
   const stash = usePromptStash()
+  // A pop/list selection can wait on another terminal's write. Keep the
+  // composer read-only until restoration so it cannot overwrite newer input.
+  const disabled = () => props.disabled || stash.pending()
   const keymap = Keymap.use()
   const renderer = useRenderer()
   const exit = useExit()
@@ -348,8 +351,8 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.disabled) input.cursorColor = theme.background.surface.offset
-    if (!props.disabled) input.cursorColor = theme.text.default
+    if (disabled()) input.cursorColor = theme.background.surface.offset
+    if (!disabled()) input.cursorColor = theme.text.default
     if (config.cursor) input.cursorStyle = config.cursor
   })
 
@@ -372,12 +375,13 @@ export function Prompt(props: PromptProps) {
   function enqueuePaste(run: (changed: () => boolean) => Promise<void>) {
     pasteQueue = pasteQueue
       .then(async () => {
-        if (disposed || input.isDestroyed) return
+        if (disposed || input.isDestroyed || disabled()) return
         const before = { sessionID: props.sessionID, mode: store.mode, text: input.plainText }
         await run(
           () =>
             disposed ||
             input.isDestroyed ||
+            disabled() ||
             props.sessionID !== before.sessionID ||
             store.mode !== before.mode ||
             input.plainText !== before.text,
@@ -642,6 +646,7 @@ export function Prompt(props: PromptProps) {
           bind: false,
           palette: true as const,
           ...command,
+          enabled: !stash.pending() && (!("enabled" in command) || command.enabled),
         }) satisfies KeymapCommand,
     ),
   )
@@ -733,7 +738,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.visible === false || props.disabled || dialog.stack.length > 0) {
+    if (props.visible === false || disabled() || dialog.stack.length > 0) {
       if (input.focused) input.blur()
       return
     }
@@ -871,11 +876,9 @@ export function Prompt(props: PromptProps) {
     )
   }
 
-  const [stashPending, setStashPending] = createSignal(false)
-
   function restoreStash(entry: StashEntry) {
     if (disposed) {
-      saveDraft(stashSessionID, { prompt: entry.prompt, cursor: entry.prompt.text.length })
+      saveDraft(stashSessionID, { prompt: entry.prompt, cursor: stringWidth(entry.prompt.text) })
       return
     }
     input.setText(entry.prompt.text)
@@ -890,48 +893,40 @@ export function Prompt(props: PromptProps) {
         title: "Stash prompt",
         name: "prompt.stash",
         category: "Prompt",
-        enabled: !!store.prompt.text && !stashPending(),
+        enabled: !!store.prompt.text && !stash.pending(),
         run: async () => {
-          if (!store.prompt.text || stashPending()) return
+          if (!store.prompt.text || stash.pending()) return
           const before = JSON.stringify(store.prompt)
-          setStashPending(true)
           dialog.clear()
-          await stash
-            .push({ prompt: store.prompt })
-            .then(
-              () => {
-                if (!disposed && JSON.stringify(store.prompt) === before) resetComposer()
-              },
-              (error) => toast.error(error),
-            )
-            .finally(() => setStashPending(false))
+          await stash.push({ prompt: store.prompt }).then(
+            () => {
+              if (!disposed && JSON.stringify(store.prompt) === before) resetComposer()
+            },
+            (error) => toast.error(error),
+          )
         },
       },
       {
         title: "Stash pop",
         name: "prompt.stash.pop",
         category: "Prompt",
-        enabled: stash.list().length > 0 && !stashPending(),
+        enabled: stash.list().length > 0 && !stash.pending(),
         run: async () => {
-          if (stashPending()) return
-          setStashPending(true)
+          if (stash.pending()) return
           dialog.clear()
-          await stash
-            .pop()
-            .then(
-              (entry) => {
-                if (entry) restoreStash(entry)
-              },
-              (error) => toast.error(error),
-            )
-            .finally(() => setStashPending(false))
+          await stash.pop().then(
+            (entry) => {
+              if (entry) restoreStash(entry)
+            },
+            (error) => toast.error(error),
+          )
         },
       },
       {
         title: "Stash list",
         name: "prompt.stash.list",
         category: "Prompt",
-        enabled: stash.list().length > 0 && !stashPending(),
+        enabled: stash.list().length > 0 && !stash.pending(),
         run: () => {
           dialog.replace(() => <DialogStash onSelect={restoreStash} />)
         },
@@ -956,7 +951,7 @@ export function Prompt(props: PromptProps) {
   Keymap.createLayer(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && !props.disabled,
+      enabled: inputTarget() !== undefined && !disabled(),
       bindings: ["prompt.paste"],
     }
   })
@@ -964,7 +959,7 @@ export function Prompt(props: PromptProps) {
   Keymap.createLayer(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && !props.disabled && store.prompt.text !== "",
+      enabled: inputTarget() !== undefined && !disabled() && store.prompt.text !== "",
       bindings: ["prompt.clear"],
     }
   })
@@ -976,7 +971,7 @@ export function Prompt(props: PromptProps) {
         cursorVersion()
         return (
           inputTarget() !== undefined &&
-          !props.disabled &&
+          !disabled() &&
           store.mode === "normal" &&
           !auto()?.visible &&
           input?.visualCursor.offset === 0
@@ -1033,7 +1028,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+        return inputTarget() !== undefined && !disabled() && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -1069,7 +1064,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+        return inputTarget() !== undefined && !disabled() && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -1127,7 +1122,7 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", "text", input.plainText)
       syncExtmarksWithPromptParts()
     }
-    if (props.disabled) return false
+    if (disabled()) return false
     if (move.creating()) return false
     if (auto()?.visible) return false
     const trimmed = store.prompt.text.trim()
@@ -1786,7 +1781,7 @@ export function Prompt(props: PromptProps) {
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
               onKeyDown={(e: { preventDefault(): void }) => {
-                if (props.disabled) {
+                if (disabled()) {
                   e.preventDefault()
                   return
                 }
@@ -1797,7 +1792,7 @@ export function Prompt(props: PromptProps) {
                 setTimeout(() => setTimeout(() => submit(), 0), 0)
               }}
               onPaste={(event: PasteEvent) => {
-                if (props.disabled) {
+                if (disabled()) {
                   event.preventDefault()
                   return
                 }
@@ -1838,7 +1833,7 @@ export function Prompt(props: PromptProps) {
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => {
-                if (props.disabled || r.button !== 0) return
+                if (disabled() || r.button !== 0) return
                 r.target?.focus()
                 const extmark = input.extmarks
                   .getAtOffset(input.cursorOffset)
@@ -1848,7 +1843,7 @@ export function Prompt(props: PromptProps) {
                 r.stopPropagation()
               }}
               focusedBackgroundColor="transparent"
-              cursorColor={props.disabled ? theme.background.surface.offset : theme.text.default}
+              cursorColor={disabled() ? theme.background.surface.offset : theme.text.default}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">

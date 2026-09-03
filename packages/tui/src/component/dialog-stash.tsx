@@ -1,6 +1,6 @@
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, onCleanup } from "solid-js"
 import { Locale } from "../util/locale"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
@@ -36,6 +36,10 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
 
   const [toDelete, setToDelete] = createSignal<string>()
   const [pending, setPending] = createSignal(false)
+  let disposed = false
+  onCleanup(() => {
+    disposed = true
+  })
 
   const options = createMemo(() => {
     const entries = stash.list()
@@ -62,6 +66,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
     <DialogSelect
       title="Stash"
       options={options()}
+      preserveSelection
       onMove={() => {
         setToDelete(undefined)
       }}
@@ -72,8 +77,9 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
           .remove(option.value)
           .then(
             (entry) => {
+              // A consumed entry still belongs to the caller after this dialog closes.
               if (entry) props.onSelect(entry)
-              dialog.clear()
+              if (!disposed) dialog.clear()
             },
             (error) => toast.error(error),
           )
