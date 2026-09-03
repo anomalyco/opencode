@@ -131,9 +131,11 @@ async function main() {
     const second = await call("tabs.open", { url: `${fixture}/other`, focus: false })
     assert.equal((await call("tabs.list", {})).tabs.length, 2)
     const tabID = first.id
+    const upload = await rpc.write({ text: "server upload bytes" }, { location })
     await fails("trace.stop", { tabID }, /browser\.trace\.start/)
     await fails("cpu.stop", { tabID }, /browser\.cpu\.start/)
     await fails("evaluate", { tabID, frameID: "missing-frame", script: "1" }, /browser\.frames/)
+    await fails("evaluate", { tabID, script: "throw new Error('fixture exception')" }, /Check the script and frameID/)
     await fails("press", { tabID, key: "ControlOrMeta+A" }, /Supported modifiers are Alt, Control, Meta, and Shift/)
     await fails("wait", { tabID, condition: "text" }, /requires non-empty text/)
     await fails("wait", { tabID, condition: "text", text: "not-on-the-page", timeoutMs: 1 }, /check text\/frameID/)
@@ -141,6 +143,7 @@ async function main() {
     await call("evaluate", {
       tabID,
       script: `(async () => {
+      const radio=document.createElement('input'); radio.type='radio'; radio.checked=true; radio.setAttribute('aria-label','Selected radio'); document.querySelector('select').after(radio);
       const source=document.createElement('div'); source.draggable=true; source.tabIndex=0; source.setAttribute('role','button'); source.textContent='Drag source'; source.ondragstart=e=>e.dataTransfer.setData('text/plain','element dropped'); document.body.prepend(source);
       const drop=document.createElement('div'); drop.tabIndex=0; drop.setAttribute('role','button'); drop.textContent='Drop target'; drop.style.cssText='height:40px;width:300px;background:#ddd'; drop.ondragover=e=>e.preventDefault(); drop.ondrop=async e=>{e.preventDefault();document.querySelector('output').textContent=e.dataTransfer.files.length?await e.dataTransfer.files[0].text():e.dataTransfer.getData('text/plain')}; document.body.prepend(drop);
       await new Promise(resolve=>{const frame=document.querySelector('iframe'); frame.onload=()=>resolve(null); frame.src=${JSON.stringify(`http://localhost:${address.port}/frame`)};});
@@ -160,6 +163,10 @@ async function main() {
     }
     await call("fill", { tabID, ref: ref("Name"), text: "remote browser" })
     await fails("fill", { tabID, ref: ref("Apply"), text: "wrong target" }, /choose a textbox/)
+    await fails("fill", { tabID, ref: ref("Upload"), text: "wrong target" }, /browser\.files\.upload/)
+    await fails("check", { tabID, ref: ref("Selected radio"), checked: false }, /Select a different radio/)
+    await call("check", { tabID, ref: ref("Selected radio"), checked: true })
+    await fails("files.upload", { tabID, ref: ref("Apply"), paths: [upload] }, /choose an input\[type=file\] ref/)
     await fails("select", { tabID, ref: ref("Color"), values: ["missing-option"] }, /values are not visible labels/)
     await fails("click", { tabID, ref: "e999999999" }, /tab's newest snapshot/)
     await fails("screenshot", { tabID, ref: ref("Name"), fullPage: true }, /Remove the other argument/)
@@ -238,7 +245,6 @@ async function main() {
     const detail = await call("network.get", { tabID, id: network.requests[0].id, includeBody: true })
     assert.equal(detail.responseBody.state, "text")
     await fails("network.get", { tabID, id: "unknown-request" }, /Do not reload or resend/)
-    const upload = await rpc.write({ text: "server upload bytes" }, { location })
     const fileSnap = await call("snapshot", { tabID })
     const input = fileSnap.content
       .split("\n")
@@ -285,7 +291,9 @@ async function main() {
     )
     await call("evaluate", { tabID, script: "setTimeout(()=>alert('hello dialog'),0); null" })
     await until(async () => (await call("dialog", { tabID, action: "get" })).dialog)
+    await fails("evaluate", { tabID, script: "1" }, /Inspect it with browser\.dialog/)
     await call("dialog", { tabID, action: "dismiss" })
+    await fails("dialog", { tabID, action: "accept" }, /no JavaScript dialog to handle/)
     await call("evaluate", { tabID, script: "window.open('/frame'); null" })
     await until(async () => (await call("tabs.list", {})).tabs.length === 3)
     await call("navigate", { tabID, url: `${fixture}/next` })
