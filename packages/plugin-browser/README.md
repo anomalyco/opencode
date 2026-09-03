@@ -27,11 +27,13 @@ current signatures with `search({ namespace: "browser" })`.
 - Audits: `lighthouse` (accessibility, SEO, best practices).
 
 The source of truth for inputs, descriptions, and outputs is
-`Browser.Operations` in `@opencode-ai/schema/browser`.
+`Browser.Operations` in `@opencode-ai/plugin-browser/rpc`.
 
 ## RPC
 
-The shared contract remains `@opencode-ai/schema/browser`. The desktop subscribes
+The plugin-owned contract is `@opencode-ai/plugin-browser/rpc`. This entrypoint
+contains only schemas and descriptions; it does not load the server plugin or
+filesystem code. The desktop subscribes
 to control events before starting `attach` with `version: 2`. The attachment call
 stays pending for its lifetime. A matching `attached` event is the readiness barrier.
 
