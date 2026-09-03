@@ -139,31 +139,45 @@ const sourceProbe = (options: { execution?: boolean } = {}) =>
   })
 
 describe("Session.move", () => {
-  itWithInstance.live("binds move preparation dependencies in the service implementation", () =>
+  itWithInstance.live("moves through the bound service without depending on the Session facade", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       const directory = AbsolutePath.make(tmp.path)
       const context = yield* Layer.build(
-        AppNodeBuilder.build(LayerNode.group([Session.node, SessionMove.node]), [
+        AppNodeBuilder.build(LayerNode.group([SessionMove.node, SessionStore.node, Bus.node, Project.node]), [
           Global.node.replace(tempGlobalLayer),
           Project.node.replace(globalProjectNode),
           SessionExecution.node.replace(SessionExecution.noopLayer),
           offlineModels,
         ]),
       )
-      const sessions = Context.get(context, Session.Service)
       const moves = Context.get(context, SessionMove.Service)
-      const session = yield* sessions.create({ location: Location.Ref.make({ directory }) })
+      const store = Context.get(context, SessionStore.Service)
+      const bus = Context.get(context, Bus.Service)
+      const projects = Context.get(context, Project.Service)
+      const sessionID = Session.ID.create()
 
-      // Call the bound service outside its construction context: no leaf services are provided here.
-      expect(yield* moves.prepare({ session, directory })).toMatchObject({
+      // Call outside the construction context: the service owns all of its dependencies.
+      expect(yield* moves.move({ sessionID, directory }).pipe(Effect.flip)).toEqual(
+        new Session.NotFoundError({ sessionID }),
+      )
+      yield* projects.resolve(directory)
+      yield* bus.publish(SessionEvent.Created, {
+        sessionID,
+        slug: "move-service",
+        version: "test",
+        projectID: Project.ID.global,
+        location: Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "missing")) }),
+      })
+      yield* moves.move({ sessionID, directory })
+      expect(yield* store.get(sessionID)).toMatchObject({
         location: { directory },
         projectID: Project.ID.global,
       })
     }),
   )
 
-  itWithInstance.live("uses the provided move preparation service", () =>
+  itWithInstance.live("delegates to the provided move service", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       const directory = AbsolutePath.make(tmp.path)
@@ -173,7 +187,7 @@ describe("Session.move", () => {
           Global.node.replace(tempGlobalLayer),
           Project.node.replace(globalProjectNode),
           SessionExecution.node.replace(SessionExecution.noopLayer),
-          SessionMove.node.replace(Layer.succeed(SessionMove.Service, { prepare: () => Effect.fail(rejection) })),
+          SessionMove.node.replace(Layer.succeed(SessionMove.Service, { move: () => Effect.fail(rejection) })),
           offlineModels,
         ]),
       )

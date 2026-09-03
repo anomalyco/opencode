@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { Cause, Effect, Layer, Schema, Context, Stream } from "effect"
+import { Effect, Layer, Schema, Context, Stream } from "effect"
 import { LLMClient } from "@opencode-ai/ai"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, desc, eq } from "drizzle-orm"
@@ -16,7 +16,7 @@ import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
-import { AbsolutePath, RelativePath } from "./schema.js"
+import { RelativePath } from "./schema.js"
 import { Agent } from "@opencode-ai/schema/agent"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
@@ -166,15 +166,7 @@ export interface Interface {
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
-  readonly move: (input: {
-    sessionID: SessionSchema.ID
-    directory: AbsolutePath
-    workspaceID?: Location.Ref["workspaceID"]
-    delivery?: SessionInbox.Delivery
-  }) => Effect.Effect<
-    void,
-    NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError | DestinationUnavailableError
-  >
+  readonly move: SessionMove.Interface["move"]
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["prompt"]>
@@ -236,11 +228,9 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const instances = yield* Instance.Service
     const moves = yield* SessionMove.Service
-    const fs = yield* FSUtil.Service
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
     const sessions = yield* Session.make()
-    const admission = yield* SessionInbox.Service
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
 
     const result = Service.of({
@@ -407,55 +397,7 @@ const layer = Layer.effect(
       switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
       switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
       rename: (input) => sessions.forSession(input.sessionID).rename(input),
-      move: Effect.fn("Session.move")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        const payload = yield* moves.prepare({ ...input, session })
-        // Probe the same instance execution would use, without holding up inbox cancellation.
-        const unavailable =
-          !(yield* execution.isActive(input.sessionID)) &&
-          (!(yield* fs.isDir(session.location.directory)) ||
-            !(yield* SessionRunner.Service.pipe(
-              instances.provide(session),
-              Effect.as(true),
-              Effect.catchCause((cause) =>
-                Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.succeed(false),
-              ),
-            )))
-        const item = SessionInbox.Item.make({
-          type: "move",
-          payload,
-          delivery: input.delivery ?? "steer",
-        })
-        yield* SessionInbox.serialized(
-          input.sessionID,
-          Effect.gen(function* () {
-            const latest = yield* result.get(input.sessionID)
-            // Active runners must hand off at a step boundary to retain their continuation.
-            if (
-              unavailable &&
-              latest.location.directory === session.location.directory &&
-              latest.location.workspaceID === session.location.workspaceID &&
-              !(yield* execution.isActive(input.sessionID))
-            ) {
-              const cancellations = (yield* SessionInbox.moveIDs(db, input.sessionID)).map(
-                (item) => [SessionEvent.InboxCancelled, { sessionID: input.sessionID, inboxID: item.id }] as const,
-              )
-              const moved = [SessionEvent.Moved, { sessionID: input.sessionID, ...payload }] as const
-              const first = cancellations[0]
-              if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
-              return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
-            }
-            yield* admission
-              .admit({
-                id: SessionMessage.ID.create(),
-                sessionID: input.sessionID,
-                item,
-              })
-              .pipe(Effect.orDie)
-          }),
-        )
-        yield* execution.wake(input.sessionID)
-      }),
+      move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),
       active: execution.active,
