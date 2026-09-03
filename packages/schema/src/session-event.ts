@@ -6,7 +6,7 @@ import { Event } from "./event.js"
 import { FinishReason } from "./llm.js"
 import { Content } from "./tool.js"
 import { Model } from "./model.js"
-import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
+import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { FileAttachment } from "./prompt.js"
 import { SessionID } from "./session-id.js"
 import { SessionMetadata } from "./session-metadata.js"
@@ -315,6 +315,8 @@ export namespace Step {
       agent: Agent.ID,
       model: Model.Ref,
       snapshot: Snapshot.ID.pipe(optional),
+      /** Request start, before waiting for provider output. Absent on older events. */
+      started: DateTimeUtcFromMillis.pipe(optional),
     },
   })
   export type Started = typeof Started.Type

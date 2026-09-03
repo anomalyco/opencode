@@ -748,7 +748,14 @@ export type SessionStepStarted = {
   type: "session.step.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; agent: string; model: ModelRef; snapshot?: string }
+  data: {
+    sessionID: string
+    assistantMessageID: string
+    agent: string
+    model: ModelRef
+    snapshot?: string
+    started?: number
+  }
 }
 
 export type SessionStepStreamed = {
