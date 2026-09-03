@@ -160,7 +160,7 @@ const layer = Layer.effect(
           args: [
             "--no-config",
             "--files",
-            ...(input.hidden ? ["--hidden"] : []),
+            ...(input.hidden ?? targetsHiddenPath(input.pattern) ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
             `--glob=${input.pattern}`,
             "--glob=!**/.git/**",
@@ -280,5 +280,8 @@ const layer = Layer.effect(
     })
   }),
 )
+
+const targetsHiddenPath = (pattern: string) =>
+  pattern.split(/[\\/]/u).some((part) => part.startsWith(".") || part.startsWith("{."))
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [RipgrepBinary.node, AppProcess.node] })
