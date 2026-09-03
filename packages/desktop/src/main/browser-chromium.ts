@@ -50,6 +50,18 @@ export function createBrowserPage(
     },
   })
   const contents = view.webContents
+  contents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown" || input.alt || !(process.platform === "darwin" ? input.meta : input.control)) return
+    const step =
+      input.key === "=" || input.key === "+" || input.code === "NumpadAdd"
+        ? 0.5
+        : input.key === "-" || input.code === "NumpadSubtract"
+          ? -0.5
+          : 0
+    if (!step && input.key !== "0") return
+    event.preventDefault()
+    contents.setZoomLevel(input.key === "0" ? 0 : contents.getZoomLevel() + step)
+  })
   const cdp = createCdp(contents)
   const files = createBrowserFiles()
   const diagnostics = createDiagnostics(cdp)
@@ -420,9 +432,14 @@ export function createBrowserPage(
       }
       case "screenshot": {
         if (action.ref && action.fullPage) throw new Error("Choose an element ref or fullPage, not both.")
+        const element = action.ref ? await rect(target(action.ref), true) : undefined
         const metrics = await cdp.send("Page.getLayoutMetrics")
-        const bounds = action.ref
-          ? await rect(target(action.ref))
+        const bounds = element
+          ? {
+              ...element,
+              x: element.x + metrics.cssVisualViewport.pageX,
+              y: element.y + metrics.cssVisualViewport.pageY,
+            }
           : action.fullPage
             ? metrics.cssContentSize
             : {
@@ -431,8 +448,10 @@ export function createBrowserPage(
                 width: metrics.cssVisualViewport.clientWidth,
                 height: metrics.cssVisualViewport.clientHeight,
               }
-        const scale = Math.min(1, (action.maxWidth ?? 2000) / bounds.width)
-        if (!bounds.width || !bounds.height || bounds.width * bounds.height * scale * scale > 16_000_000)
+        const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
+        const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
+        if (bounds.width <= 0 || bounds.height <= 0) throw new Error("Element or page has no visible screenshot area.")
+        if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
           throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
         const format = action.format ?? "png"
         const capture = await cdp.send("Page.captureScreenshot", {
@@ -673,8 +692,9 @@ export function createBrowserPage(
   }
 
   async function key(chord: string) {
-    const parts = chord.split("+")
-    const key = parts.pop() ?? ""
+    if (!chord) throw new Error("A key or key chord is required.")
+    const parts = (chord.endsWith("+") ? chord.slice(0, -1) : chord).split("+")
+    const key = parts.pop() || "+"
     const modifiers = parts.reduce((mask, key) => {
       const bit = { Alt: 1, Control: 2, Meta: 4, Shift: 8 }[key]
       if (!bit) throw new Error(`Unknown key modifier: ${key}`)

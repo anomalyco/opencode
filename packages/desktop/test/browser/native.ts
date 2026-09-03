@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { once } from "node:events"
 import path from "node:path"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, nativeImage } from "electron"
 import { Browser } from "@opencode-ai/schema/browser"
 import { OpenCode } from "@opencode-ai/client"
 import { Effect, Fiber, Schema, Stream } from "effect"
@@ -218,6 +218,18 @@ async function main() {
       .find((line) => line.includes('"Upload"'))
       ?.match(/@e\d+/)?.[0]
     assert(input, fileSnap.content)
+    await call("scroll", { tabID, deltaY: 500 })
+    const elementImage = await call("screenshot", {
+      tabID,
+      ref: Browser.Ref.make(input),
+      format: "jpeg",
+      quality: 70,
+      maxWidth: 100,
+    })
+    const imageBytes = Buffer.from(await rpc.read({ path: elementImage.files[0].path }, { location }), "base64")
+    assert.equal(imageBytes[0], 255)
+    assert.equal(imageBytes[1], 216)
+    assert(nativeImage.createFromBuffer(imageBytes).getSize().width <= 100)
     await call("files.upload", { tabID, ref: Browser.Ref.make(input), paths: [upload] })
     assert.equal(
       (await call("evaluate", { tabID, script: "document.querySelector('input[type=file]').files[0].name" })).value,
