@@ -4,7 +4,6 @@ import type {
   SessionMessageUser,
   SessionStatus,
 } from "@opencode-ai/client/promise"
-import { Card } from "@opencode-ai/ui/card"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
@@ -22,6 +21,7 @@ import {
 import { AssistantReasoningContent, SessionCompactionMessage } from "../message/message-content"
 import type { ContextGroupPart } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
+import { SessionError } from "../components/session-error"
 import { timelineCategory, type TimelineDetail } from "./detail"
 import { currentToolFailed } from "../message/current-tool-state"
 import {
@@ -689,9 +689,7 @@ export function createSessionTimelineRowRenderer(input: {
     return (
       <Frame row={current()}>
         <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-          <Card variant="error" class="error-card">
-            {current().text}
-          </Card>
+          <SessionError message={current().text} />
         </div>
       </Frame>
     )

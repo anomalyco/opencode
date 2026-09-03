@@ -18,6 +18,7 @@ const names = [
   "outline-arrow-to-corner-top-right",
   "outline-copy",
   "outline-dots",
+  "outline-hexagonal-warning",
   "plus",
   "review",
   "settings-gear",
