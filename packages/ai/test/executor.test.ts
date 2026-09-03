@@ -29,6 +29,25 @@ const expectAIError = (error: unknown) => {
 const largeProviderMessage = `Upstream request failed: ${"validation failed; ".repeat(1_000)}`
 
 describe("RequestExecutor", () => {
+  it.effect("preserves free-tier exhaustion on HTTP 429 responses", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+      expect(error.reason).toMatchObject({
+        _tag: "QuotaExceeded",
+        classification: "free-tier",
+        http: { status: 429, headers: { "retry-after": "60" } },
+      })
+    }).pipe(
+      Effect.provide(
+        fixedResponse(JSON.stringify({ error: { type: "FreeUsageLimitError", message: "Rate limit exceeded" } }), {
+          status: 429,
+          headers: { "content-type": "application/json", "retry-after": "60" },
+        }),
+      ),
+    ),
+  )
+
   it.effect("preserves externally captured HTTP errors without inventing response context", () =>
     Effect.sync(() => {
       const cause = new Error("upstream request failed")

@@ -55,7 +55,10 @@ export class RateLimitError extends Schema.TaggedError<RateLimitError>("AI.Error
 
 export class QuotaExceededError extends Schema.TaggedError<QuotaExceededError>("AI.Error.QuotaExceeded")(
   "QuotaExceeded",
-  ReasonFields,
+  {
+    ...ReasonFields,
+    classification: Schema.optional(Schema.Literal("free-tier")),
+  },
 ) {}
 
 export class ContentPolicyError extends Schema.TaggedError<ContentPolicyError>("AI.Error.ContentPolicy")(
