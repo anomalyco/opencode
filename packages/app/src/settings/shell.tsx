@@ -2,7 +2,6 @@ import { Component, createEffect, createMemo, createSignal, onCleanup, onMount, 
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsGeneral } from "./general/general"
 import { SettingsAppearance } from "./appearance/appearance"
 import { SettingsKeybinds } from "./keybinds/keybinds"
@@ -28,7 +27,6 @@ export const SettingsScreen: Component<{
   defaultValue?: string
 }> = (props) => {
   const language = useLanguage()
-  const platform = usePlatform()
   const dialog = useDialog()
   const command = useCommand()
   const surface = useSettingsSurface()
@@ -178,12 +176,6 @@ export const SettingsScreen: Component<{
                 </Tabs.Trigger>
               </div>
             </div>
-          </div>
-          <div class="settings-nav-footer">
-            <span>{language.t("app.name.desktop")}</span>
-            <span>
-              <bdi dir="ltr">v{platform.version}</bdi>
-            </span>
           </div>
         </Tabs.List>
 

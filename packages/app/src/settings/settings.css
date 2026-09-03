@@ -59,21 +59,6 @@
   gap: 16px;
 }
 
-.settings-nav-footer {
-  display: flex;
-  flex-shrink: 0;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: auto;
-  padding-block: 20px 4px;
-  padding-inline-start: 4px;
-  font-size: 11px;
-  font-weight: 440;
-  line-height: var(--line-height-tight);
-  color: var(--v2-text-text-faint);
-  user-select: none;
-}
-
 .settings-about {
   align-items: center;
   padding-inline: 24px;

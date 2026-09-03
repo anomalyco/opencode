@@ -123,6 +123,9 @@ test("about opens without waiting for contributors", async ({ page }) => {
   await requested
   await expect(settings.getByRole("tab", { name: "About", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(settings.getByText("Released under the MIT License", { exact: true })).toBeVisible()
+  await expect(settings.getByText(/^Version /)).toBeVisible()
+  await expect(settings.getByText("OpenCode Desktop", { exact: true })).toHaveCount(0)
+  await expect(settings.getByText(/^v\d+\./)).toHaveCount(0)
   await expect(settings.getByRole("link", { name: "935 others", exact: true })).toBeVisible()
   await expect(settings.getByRole("button", { name: "Back to app" })).toBeVisible()
 
