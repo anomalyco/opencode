@@ -14,6 +14,7 @@ import { filetype } from "../../util/filetype"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
+import { DiffFileMenu } from "./diff-viewer-file-menu"
 import { DiffViewerImage, isDiffImageFile } from "./diff-viewer-image"
 import { DialogSelect } from "../../ui/dialog-select"
 import { EmptyBorder } from "../../ui/border"
@@ -1072,76 +1073,6 @@ export function DiffViewerContent(props: {
           />
         )}
       </Show>
-    </box>
-  )
-}
-
-function DiffFileMenu(props: {
-  context: Plugin.Context
-  state: FileMenuState
-  reviewed: boolean
-  onToggle: () => void
-  onClose: () => void
-}) {
-  const dimensions = useTerminalDimensions()
-  const theme = props.context.theme.contextual.overlay
-  const [hovered, setHovered] = createSignal(false)
-  const label = () => (props.reviewed ? "Mark incomplete" : "Mark complete")
-  const run = () => {
-    props.onClose()
-    props.onToggle()
-  }
-  onCleanup(props.context.keymap.mode.push("menu"))
-  props.context.keymap.layer(() => ({
-    mode: "menu",
-    commands: [
-      { bind: "escape,ctrl+c", title: "Close file menu", group: "Diff", run: props.onClose },
-      { bind: "return", title: label(), group: "Diff", run },
-    ],
-  }))
-
-  return (
-    <box
-      id="diff-file-menu-overlay"
-      position="absolute"
-      left={0}
-      top={0}
-      width={dimensions().width}
-      height={dimensions().height}
-      zIndex={2600}
-      onMouseDown={(event) => {
-        props.onClose()
-        event.preventDefault()
-        event.stopPropagation()
-      }}
-    >
-      <box
-        id="diff-file-menu"
-        position="absolute"
-        left={Math.max(0, Math.min(props.state.x, dimensions().width - 19))}
-        top={Math.max(0, Math.min(props.state.y + 1, dimensions().height - 1))}
-        width={19}
-        height={1}
-        paddingLeft={1}
-        paddingRight={1}
-        backgroundColor={hovered() ? theme.background.action.primary.hovered : theme.background.default}
-        onMouseOver={() => setHovered(true)}
-        onMouseOut={() => setHovered(false)}
-        onMouseDown={(event) => {
-          if (event.button === MouseButton.RIGHT) props.onClose()
-          event.preventDefault()
-          event.stopPropagation()
-        }}
-        onMouseUp={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          if (event.button === MouseButton.LEFT) run()
-        }}
-      >
-        <text fg={theme.text.default} selectable={false}>
-          {label()}
-        </text>
-      </box>
     </box>
   )
 }
