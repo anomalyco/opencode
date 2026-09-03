@@ -1,9 +1,11 @@
 import type { FormAnswer, IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
+import { providerAuthUrl } from "./url"
 
 export type ProviderConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
 type Authorization = IntegrationOauthConnectOutput["data"]
@@ -15,6 +17,7 @@ export function createProviderConnectionController(options: {
   pollInterval?: number
 }) {
   const language = useLanguage()
+  const platform = usePlatform()
   const serverSDK = useServerSDK()
   const data = useData()
   const location = () => {
@@ -184,7 +187,13 @@ export function createProviderConnectionController(options: {
         ...(answer ? { answer } : {}),
         location: location(),
       })
-      .then((response) => ({ ok: true as const, authorization: response.data }))
+      .then((response) => ({
+        ok: true as const,
+        authorization: {
+          ...response.data,
+          url: providerAuthUrl(response.data.url, options.provider(), platform.platform),
+        },
+      }))
       .catch((error) => ({ ok: false as const, error }))
     if (polling.disposed || generation !== polling.generation) return
     if (!result.ok) {
