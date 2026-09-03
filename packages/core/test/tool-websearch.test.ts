@@ -17,17 +17,11 @@ import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
-import { webSearchHost } from "./plugin/host"
 import { TestWebSearch } from "./lib/websearch"
 
 const webSearchToolNode = makeLocationNode({
   name: "test/websearch-tool-plugin",
-  layer: Layer.effectDiscard(
-    Effect.gen(function* () {
-      const websearch = yield* WebSearch.Service
-      yield* registerToolPlugin(WebSearchTool.Plugin, { websearch: webSearchHost(websearch) })
-    }),
-  ),
+  layer: Layer.effectDiscard(registerToolPlugin(WebSearchTool.Plugin)),
   deps: [Tool.node, Permission.node, WebSearch.node, Form.node],
 })
 
@@ -393,6 +387,7 @@ describe("WebSearchTool registration", () => {
           }),
         { discard: true },
       )
+      expect(fixture.formRequests).toEqual([])
     }),
   )
 })
