@@ -1,7 +1,7 @@
 export * as PluginSupervisor from "./supervisor.js"
 
 import { Event } from "@opencode-ai/schema/config"
-import { Cause, Effect, Layer, PubSub, Stream } from "effect"
+import { Cause, Effect, Layer, PubSub, Queue, Stream } from "effect"
 import path from "path"
 import { ConfigPluginSource } from "../config/plugin/source.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -189,16 +189,15 @@ export const layer = Layer.effectDiscard(
         Effect.forkScoped({ startImmediately: true }),
       )
     })
-    // Reload triggers are subscribed eagerly, each on its own fiber, before generation 0 starts
-    // activating: Stream.merge and Stream.debounce open upstream a fiber hop later and PubSub does not
-    // replay for late subscribers, so a change landing during the first activation would otherwise be
-    // lost. The sliding slot keeps observing while activation runs, retaining only the latest request.
-    const triggers = yield* PubSub.sliding<number>(1)
+    // Each reload source is subscribed on its own fiber before generation 0 starts activating; a merged
+    // stream would open them a fiber hop later and lose a change that lands during the first activation.
+    // The sliding slot keeps accepting triggers while activation runs, retaining only the latest request.
+    const triggers = yield* Queue.sliding<number>(1)
     // Make accepted work visible to awaitActivation before coalescing the burst.
     const notify = Effect.gen(function* () {
       observed++
       if (!release) release = yield* registry.hold()
-      yield* PubSub.publish(triggers, observed)
+      yield* Queue.offer(triggers, observed)
     })
     const watch = <A>(stream: Stream.Stream<A>) =>
       stream.pipe(
@@ -219,10 +218,9 @@ export const layer = Layer.effectDiscard(
         ),
       ),
     )
-    const reloads = yield* PubSub.subscribe(triggers)
     // One lane serializes every activation. Generation 0 has nothing to coalesce with, so it runs at
     // once; only the reload feed waits out the debounce that absorbs file-save bursts.
-    yield* Stream.concat(Stream.succeed(0), Stream.fromSubscription(reloads).pipe(Stream.debounce("100 millis"))).pipe(
+    yield* Stream.concat(Stream.succeed(0), Stream.fromQueue(triggers).pipe(Stream.debounce("100 millis"))).pipe(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
           yield* activate().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause })))
