@@ -1,11 +1,11 @@
 export * as Vcs from "./vcs.js"
 
 import path from "path"
-import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
-import type { VcsDefinition, VcsDraft } from "@opencode-ai/plugin/effect/vcs"
+import { Cause, Context, Effect, FiberSet, Layer, Schema, Semaphore, Stream } from "effect"
+import type { VcsDefinition, VcsEditor } from "@opencode-ai/plugin/effect/vcs"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
-import { BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
+import { Base, BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -14,10 +14,15 @@ import { Bus } from "./bus.js"
 import { State } from "./state.js"
 import { emptyPatch, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./vcs/patch.js"
 
-export { BranchList, FileStatus, Info, Mode }
+export { Base, BranchList, FileStatus, Info, Mode }
+
+export class DiffError extends Schema.TaggedError<DiffError>()("Vcs.DiffError", {
+  message: Schema.String,
+}) {}
 
 export interface DiffOptions {
   readonly context?: number
+  readonly base?: string
 }
 
 export interface BranchOptions {
@@ -27,12 +32,15 @@ export interface BranchOptions {
 
 export interface Adapter {
   readonly info: () => Effect.Effect<Info>
+  readonly base?: () => Effect.Effect<Base | null, DiffError>
   readonly branches: (options?: BranchOptions) => Effect.Effect<BranchList>
   readonly status: () => Effect.Effect<FileStatus[]>
-  readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[]>
+  readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[], DiffError>
 }
 
-export interface Interface extends Adapter, State.Transformable<VcsDraft> {}
+export interface Interface extends Adapter, State.Transformable<VcsEditor> {
+  readonly base: () => Effect.Effect<Base | null, DiffError>
+}
 
 interface Data {
   readonly providers: Map<string, VcsDefinition>
@@ -47,8 +55,11 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const bus = yield* Bus.Service
+    const root = yield* Effect.scope
+    const fork = yield* FiberSet.makeRuntime<never, void, never>()
     const vcs = location.vcs
     const current: { info: Info } = { info: { branch: {} } }
+    const refreshLock = Semaphore.makeUnsafe(1)
     const scope = {
       directory: location.directory,
       worktree: location.project.directory,
@@ -56,24 +67,25 @@ const layer = Layer.effect(
       ...(vcs ? { store: vcs.store } : {}),
     }
     const decodeInfo = Schema.decodeUnknownEffect(Schema.toType(Info))
+    const decodeBase = Schema.decodeUnknownEffect(Schema.NullOr(Base))
     const decodeBranches = Schema.decodeUnknownEffect(BranchList)
     const decodeStatus = Schema.decodeUnknownEffect(Schema.Array(FileStatus))
     const decodeDiff = Schema.decodeUnknownEffect(Schema.Array(FileDiff.Info))
-    const state: State.Interface<Data, VcsDraft> = State.create<Data, VcsDraft>({
+    const state: State.Interface<Data, VcsEditor> = State.create<Data, VcsEditor>({
       name: "vcs",
       initial: () => ({ providers: new Map() }),
-      draft: (draft) => ({
-        add: (provider) => draft.providers.set(provider.id, provider),
+      editor: (editor) => ({
+        add: (provider) => editor.providers.set(provider.id, provider),
         default: {
-          get: () => draft.selection,
-          set: (selection) => (draft.selection = selection),
+          get: () => editor.selection,
+          set: (selection) => (editor.selection = selection),
         },
       }),
-      finalize: () => refresh(),
+      notify: () => State.reconcile(root, fork, () => refresh()),
     })
     const selected = () => {
       const value = state.get()
-      const id = value.selection ?? location.vcsBackend ?? vcs?.type
+      const id = value.selection ?? vcs?.type
       return id ? value.providers.get(id) : undefined
     }
     const protect = <A>(provider: VcsDefinition, operation: string, effect: Effect.Effect<A, unknown>, fallback: A) =>
@@ -86,14 +98,45 @@ const layer = Layer.effect(
               ),
         ),
       )
+    const review = <A>(provider: VcsDefinition, operation: "base" | "diff", effect: Effect.Effect<A, unknown>) =>
+      effect.pipe(
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterrupts(cause)) return Effect.failCause(cause).pipe(Effect.orDie)
+          const error = Cause.squash(cause)
+          return Effect.logWarning("vcs provider failed", { provider: provider.id, operation, cause }).pipe(
+            Effect.andThen(
+              Effect.fail(
+                error instanceof DiffError
+                  ? error
+                  : new DiffError({
+                      message:
+                        operation === "base"
+                          ? "VCS provider could not resolve a review base"
+                          : "VCS provider could not produce a diff",
+                    }),
+              ),
+            ),
+          )
+        }),
+      )
     const refresh = Effect.fn("Vcs.refresh")(function* () {
-      const provider = selected()
-      const next: Info = provider
-        ? yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), { branch: {} })
-        : { branch: {} }
-      const changed = current.info.branch.current !== next.branch.current
-      current.info = next
-      if (changed) yield* bus.publish(VcsEvent.BranchUpdated, { branch: next.branch.current })
+      const changed = yield* Effect.gen(function* () {
+        const provider = selected()
+        const next: Info = provider
+          ? yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), { branch: {} })
+          : { branch: {} }
+        const changed = current.info.branch.current !== next.branch.current
+        current.info = next
+        return changed
+      }).pipe(Semaphore.withPermit(refreshLock))
+      if (!changed) return
+      // Legacy listeners can publish nested updates before streams and SSE receive
+      // this event. Re-announce the latest branch if publication was overtaken.
+      while (true) {
+        const branch = current.info.branch.current
+        yield* bus.publish(VcsEvent.BranchUpdated, { branch })
+        if (branch === current.info.branch.current) return
+      }
     })
 
     if (vcs) {
@@ -105,7 +148,13 @@ const layer = Layer.effect(
       yield* bus.subscribe(FileSystem.Event.Changed).pipe(
         Stream.filter((event) => isBranchMetadata(event.data.file)),
         Stream.runForEach((event) =>
-          refresh().pipe(Effect.withSpan("Vcs.refreshBranch", { attributes: { file: event.data.file } })),
+          refresh().pipe(
+            Effect.catchCauseIf(
+              (cause) => !Cause.hasInterrupts(cause),
+              (cause) => Effect.logWarning("vcs refresh failed", { file: event.data.file, cause }),
+            ),
+            Effect.withSpan("Vcs.refreshBranch", { attributes: { file: event.data.file } }),
+          ),
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
@@ -116,6 +165,11 @@ const layer = Layer.effect(
       reload: state.reload,
       info: Effect.fn("Vcs.info")(function* () {
         return current.info
+      }),
+      base: Effect.fn("Vcs.base")(function* () {
+        const provider = selected()
+        if (!provider?.base) return null
+        return yield* review(provider, "base", provider.base(scope).pipe(Effect.flatMap(decodeBase)))
       }),
       branches: Effect.fn("Vcs.branches")(function* (options?: BranchOptions) {
         const provider = selected()
@@ -145,18 +199,18 @@ const layer = Layer.effect(
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode, options?: DiffOptions) {
         const provider = selected()
         if (!provider) return []
-        const rows = yield* protect(
+        const rows = yield* review(
           provider,
           "diff",
           provider
             .diff({
               ...scope,
               mode,
+              ...(options?.base !== undefined ? { base: options.base } : {}),
               context: options?.context ?? PATCH_CONTEXT_LINES,
               maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
             })
             .pipe(Effect.flatMap(decodeDiff)),
-          [],
         )
         let total = 0
         return rows.map((row) => {

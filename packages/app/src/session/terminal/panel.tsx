@@ -17,7 +17,6 @@ import { SortableTerminalTab } from "@/session/terminal/tab"
 import { Terminal } from "@/session/terminal/terminal"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useLayout } from "@/shell/state/layout"
 import { useTerminal, type LocalPTY } from "@/session/terminal/context"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { terminalTabLabel } from "@/session/terminal/terminal-label"
@@ -38,9 +37,16 @@ type CachedTerminalSurface = {
 }
 
 export function TerminalPanel(
-  props: { stacked?: boolean; fill?: boolean; framed?: boolean; present?: boolean; contentHeight?: string } = {},
+  props: {
+    stacked?: boolean
+    fill?: boolean
+    framed?: boolean
+    present?: boolean
+    contentHeight?: string
+    embedded?: boolean
+    animate?: boolean
+  } = {},
 ) {
-  const layout = useLayout()
   const terminal = useTerminal()
   const sdk = useWorkspaceLocation()
   const language = useLanguage()
@@ -50,7 +56,7 @@ export function TerminalPanel(
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
-  const height = createMemo(() => layout.terminal.height())
+  const height = createMemo(() => view().terminal.height())
   const close = () => view().terminal.close()
   let root: HTMLElement | undefined
   let tabList: HTMLDivElement | undefined
@@ -223,6 +229,7 @@ export function TerminalPanel(
       opened={opened()}
       present={present()}
       framed={props.framed}
+      embedded={props.embedded}
       desktop={isDesktop()}
       stacked={stacked()}
       height={panelHeight()}
@@ -230,10 +237,11 @@ export function TerminalPanel(
       pane={pane()}
       max={max()}
       resizing={size.active()}
+      animate={props.animate}
       onResizeStart={size.start}
       onResize={(next) => {
         size.touch()
-        layout.terminal.resize(next)
+        view().terminal.resize(next)
       }}
       onCollapse={close}
     >

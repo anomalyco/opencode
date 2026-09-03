@@ -469,7 +469,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues an item-id-less tool call with only the new tool output", () =>
+  it.effect("continues a streamed tool call with only the new tool output", () =>
     Effect.gen(function* () {
       const firstRequest = {
         type: "response.create",
@@ -485,6 +485,7 @@ describe("OpenAI Responses route", () => {
           type: "response.output_item.done",
           item: {
             type: "function_call",
+            id: "fc_1",
             status: "completed",
             call_id: "call_1",
             name: "weather",
@@ -2129,47 +2130,6 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("routes item-id-less function arguments by output index and prefers item completion", () =>
-    Effect.gen(function* () {
-      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
-      const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              { type: "response.output_item.added", output_index: 2, item },
-              {
-                type: "response.function_call_arguments.delta",
-                output_index: 2,
-                item_id: "opaque_delta",
-                delta: '{"query":"streamed"}',
-              },
-              {
-                type: "response.function_call_arguments.done",
-                output_index: 2,
-                item_id: "opaque_done",
-                arguments: '{"query":"arguments-done"}',
-              },
-              {
-                type: "response.output_item.done",
-                output_index: 2,
-                item: { ...item, arguments: '{"query":"output-item-done"}' },
-              },
-              { type: "response.completed", response: { id: "resp_1" } },
-            ),
-          ),
-        ),
-      )
-
-      expect(response.events.filter((event) => event.type === "tool-input-delta")).toMatchObject([
-        { id: "call_1", text: '{"query":"streamed"}' },
-      ])
-      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
-        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "output-item-done" } }),
-      ])
-      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
-    }),
-  )
-
   it.effect("routes reasoning summary events by output index", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
@@ -2389,7 +2349,7 @@ describe("OpenAI Responses route", () => {
                 {
                   type: "response.output_item.added",
                   output_index: 0,
-                  item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" },
+                  item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "" },
                 },
                 event,
                 { type: "response.completed", response: { id: "resp_1" } },
@@ -2554,7 +2514,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("preserves terminal reasoning metadata when output item completion is missing", () =>
+  it.effect("ignores terminal reasoning output when item completion is missing", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, { providerOptions: { store: false } }),
@@ -2595,29 +2555,13 @@ describe("OpenAI Responses route", () => {
 
       expect(response.reasoning).toBe("Checked the diff.")
       expect(response.events.filter((event) => event.type === "reasoning-end")).toEqual([
-        {
-          type: "reasoning-end",
-          id: "rs_1:0",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
-        },
+        { type: "reasoning-end", id: "rs_1:0" },
       ])
       expect(response.message.content).toContainEqual({
         type: "reasoning",
         text: "Checked the diff.",
-        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
+        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
       })
-
-      const prepared = yield* compileRequest(
-        LLM.request({ model, messages: [response.message], providerOptions: { store: false } }),
-      )
-      expect(prepared.body.input).toEqual([
-        {
-          type: "reasoning",
-          id: "rs_1",
-          summary: [{ type: "summary_text", text: "Checked the diff." }],
-          encrypted_content: "terminal-state",
-        },
-      ])
     }),
   )
 
@@ -2644,7 +2588,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("reconciles pending reasoning and function calls in completed output order", () =>
+  it.effect("recovers pending function calls without reconciling terminal reasoning", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, { providerOptions: { store: false } }),
@@ -2682,14 +2626,15 @@ describe("OpenAI Responses route", () => {
         ),
       )
 
-      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
-        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
+      expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
+        type: "reasoning-end",
+        id: "rs_1:0",
       })
       expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
         expect.objectContaining({ id: "call_1", input: { query: "weather" } }),
       ])
-      expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
-        response.events.findIndex(LLMEvent.is.toolCall),
+      expect(response.events.findIndex(LLMEvent.is.toolCall)).toBeLessThan(
+        response.events.findIndex((event) => event.type === "reasoning-end"),
       )
       expect(response.finishReason.normalized).toBe("tool-calls")
     }),
@@ -2750,6 +2695,208 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("concludes reasoning at implicit summary boundaries", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, { providerOptions: { store: false } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              // The next part is enough to conclude the previous one even when
+              // its done event is delayed.
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 1, delta: "Second" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
+              // Some compatible providers begin the next part with its first delta.
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 2, delta: "Third" },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("FirstSecondThird")
+      expect(response.events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
+        {
+          type: "reasoning-start",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:0", text: "First", providerMetadata: undefined },
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        {
+          type: "reasoning-start",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:1", text: "Second", providerMetadata: undefined },
+        {
+          type: "reasoning-end",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1" } },
+        },
+        {
+          type: "reasoning-start",
+          id: "rs_1:2",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:2", text: "Third", providerMetadata: undefined },
+        {
+          type: "reasoning-end",
+          id: "rs_1:2",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects a reasoning item that starts before the previous item ends", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_2" } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toContain("started reasoning before the previous item ended")
+    }),
+  )
+
+  it.effect("concludes text at implicit message boundaries", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              // An item that never streams text is untracked at the boundary too.
+              { type: "response.output_item.added", item: { type: "message", id: "msg_0" } },
+              { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
+              { type: "response.output_text.delta", item_id: "msg_1", delta: "First" },
+              // The previous message's done event is missing; the next message
+              // item is the boundary for its open text.
+              { type: "response.output_item.added", item: { type: "message", id: "msg_2" } },
+              // Late deltas for concluded or untracked messages must stay no-ops.
+              { type: "response.output_text.delta", item_id: "msg_1", delta: " late" },
+              { type: "response.output_text.delta", item_id: "msg_0", delta: " stale" },
+              { type: "response.output_text.delta", item_id: "msg_2", delta: "Second" },
+              { type: "response.output_item.done", item: { type: "message", id: "msg_2" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("FirstSecond")
+      expect(response.events.filter((event) => event.type.startsWith("text-"))).toMatchObject([
+        { type: "text-start", id: "msg_1" },
+        { type: "text-delta", id: "msg_1", text: "First" },
+        { type: "text-end", id: "msg_1" },
+        { type: "text-start", id: "msg_2" },
+        { type: "text-delta", id: "msg_2", text: "Second" },
+        { type: "text-end", id: "msg_2" },
+      ])
+    }),
+  )
+
+  it.effect("opens the tool lifecycle for a done-only function call", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              // No output_item.added: the call arrives only as a completed item.
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "function_call",
+                  id: "fc_1",
+                  call_id: "call_1",
+                  name: "lookup",
+                  arguments: '{"query":"weather"}',
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type.startsWith("tool-"))).toMatchObject([
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
+        { type: "tool-input-end", id: "call_1", name: "lookup" },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+      ])
+      expect(response.finishReason.normalized).toBe("tool-calls")
+    }),
+  )
+
+  it.effect("ignores duplicate item start events", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
+              // Duplicate added for a known item is not overlap and must no-op.
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "Think" },
+              { type: "response.output_item.done", item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.output_item.done", item: { type: "reasoning", id: "rs_1" } },
+              {
+                type: "response.output_item.added",
+                item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "" },
+              },
+              { type: "response.function_call_arguments.delta", item_id: "fc_1", delta: '{"query":"weather"}' },
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "function_call",
+                  id: "fc_1",
+                  call_id: "call_1",
+                  name: "lookup",
+                  arguments: '{"query":"weather"}',
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Think")
+      expect(response.events.filter((event) => event.type === "reasoning-start")).toHaveLength(1)
+      expect(response.events.filter((event) => event.type === "reasoning-end")).toHaveLength(1)
+      expect(response.events.filter((event) => event.type === "tool-input-start")).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", input: { query: "weather" } }),
+      ])
+    }),
+  )
+
   it.effect("reconciles reasoning summaries that arrive only as finals", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
@@ -2798,6 +2945,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning-end",
           id: "rs_1:0",
+          text: "Checked the diff.",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
       ])
@@ -3586,43 +3734,6 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("finalizes and replays a completed function call without an optional item id", () =>
-    Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              {
-                type: "response.output_item.done",
-                item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
-              },
-              { type: "response.completed", response: { id: "resp_1" } },
-            ),
-          ),
-        ),
-      )
-
-      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
-        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "weather" } }),
-      ])
-      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
-
-      const prepared = yield* compileRequest(
-        LLM.request({
-          model,
-          messages: [
-            response.message,
-            Message.tool({ id: "call_1", name: "lookup", resultType: "json", result: { forecast: "sunny" } }),
-          ],
-        }),
-      )
-      expect(prepared.body.input).toEqual([
-        { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
-        { type: "function_call_output", call_id: "call_1", output: '{"forecast":"sunny"}' },
-      ])
-    }),
-  )
-
   it.effect("emits only missing function arguments from the arguments done event", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -3844,37 +3955,6 @@ describe("OpenAI Responses route", () => {
       expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
       expect(response.finishReason.normalized).toBe("tool-calls")
-    }),
-  )
-
-  it.effect("reconciles an item-id-less pending function call from completed response output", () =>
-    Effect.gen(function* () {
-      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
-      const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              { type: "response.output_item.added", output_index: 0, item },
-              {
-                type: "response.function_call_arguments.delta",
-                output_index: 0,
-                item_id: "opaque_delta",
-                delta: '{"query":"partial',
-              },
-              {
-                type: "response.completed",
-                response: { id: "resp_1", output: [{ ...item, arguments: '{"query":"complete"}' }] },
-              },
-            ),
-          ),
-        ),
-      )
-
-      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
-        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "complete" } }),
-      ])
-      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
-      expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
     }),
   )
 

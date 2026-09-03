@@ -23,37 +23,39 @@ import { SimulatedProvider } from "./simulated-provider"
 
 export const simulationReplacements: (app: {
   readonly version: string
-}) => Effect.Effect<LayerNode.Replacements, Error, FileSystem.FileSystem> = Effect.fn("Simulation.replacements")(function* (app: {
-  readonly version: string
-}) {
-  // ModelsDev dies when its catalog fetch fails, so simulation answers it with
-  // an empty catalog; providers come from seeded config instead.
-  const models = SimulationNetwork.json("GET", "https://models.opencode.ai/api.json", {})
-  const drive = yield* Config.string("OPENCODE_DRIVE").pipe(Config.withDefault(undefined))
-  if (!drive) return [[httpClient, SimulationNetwork.layer([models])]] satisfies LayerNode.Replacements
+}) => Effect.Effect<LayerNode.Replacements, Error, FileSystem.FileSystem> = Effect.fn("Simulation.replacements")(
+  function* (app: { readonly version: string }) {
+    // ModelsDev dies when its catalog fetch fails, so simulation answers it with
+    // an empty catalog; providers come from seeded config instead.
+    const models = SimulationNetwork.json("GET", "https://models.opencode.ai/api.json", {})
+    const drive = yield* Config.string("OPENCODE_DRIVE").pipe(Config.withDefault(undefined))
+    if (!drive) return [httpClient.replace(SimulationNetwork.layer([models]))] satisfies LayerNode.Replacements
 
-  const manifest = yield* DriveManifest.resolve()
-  const networkLayer = Layer.effect(
-    HttpClient.HttpClient,
-    Effect.gen(function* () {
-      const provider = yield* SimulatedProvider.Service
-      const network = yield* SimulationNetwork.make([SimulationOpenAI.route(provider), models])
-      return network.client
-    }),
-  ).pipe(
-    Layer.provide(
-      SimulatedProvider.layerDrive({
-        endpoint: manifest.endpoints.backend,
-        version: app.version,
+    const manifest = yield* DriveManifest.resolve()
+    const networkLayer = Layer.effect(
+      HttpClient.HttpClient,
+      Effect.gen(function* () {
+        const provider = yield* SimulatedProvider.Service
+        const network = yield* SimulationNetwork.make([SimulationOpenAI.route(provider), models])
+        return network.client
       }),
-    ),
-  )
-  const networkNode = makeGlobalNode({
-    service: HttpClient.HttpClient,
-    layer: networkLayer,
-    deps: [SdkPlugins.node],
-  })
-  return [[httpClient, networkNode]] satisfies LayerNode.Replacements
-})
+    ).pipe(
+      Layer.provide(
+        SimulatedProvider.layerDrive({
+          endpoint: manifest.endpoints.backend,
+          version: app.version,
+        }),
+      ),
+      // The platform HTTP contract is infallible; a failed driver installation aborts startup.
+      Layer.orDie,
+    )
+    const networkNode = makeGlobalNode({
+      service: HttpClient.HttpClient,
+      layer: networkLayer,
+      deps: [SdkPlugins.node],
+    })
+    return [httpClient.replace(networkNode)] satisfies LayerNode.Replacements
+  },
+)
 
 export * as Simulation from "./index"

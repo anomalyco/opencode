@@ -19,6 +19,11 @@ export interface Context {
   readonly progress: (update: Metadata) => Effect.Effect<void>
 }
 
+export interface Namespace {
+  readonly name: string
+  readonly description: string
+}
+
 interface BaseOptions {
   readonly namespace?: string
   readonly permission?: string

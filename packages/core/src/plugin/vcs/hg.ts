@@ -10,6 +10,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Location } from "../../location.js"
 import type { Adapter, DiffOptions } from "../../vcs.js"
+import { DiffError } from "../../vcs.js"
 import {
   addPatch,
   chunksByFile,
@@ -23,7 +24,6 @@ import {
 
 export const Plugin = define({
   id: "opencode.vcs.hg",
-  vcs: { id: "hg", markers: [".hg"] },
   effect: Effect.fn("VcsHgPlugin")(function* (ctx) {
     const location = yield* Location.Service
     if (location.vcs?.type !== "hg") return
@@ -35,14 +35,14 @@ export const Plugin = define({
       worktree: location.project.directory,
     })
 
-    yield* ctx.vcs.transform((draft) => {
-      draft.add({
+    yield* ctx.vcs.transform((editor) => {
+      editor.add({
         id: "hg",
         name: "Mercurial",
         info: () => adapter.info(),
         branches: (input) => adapter.branches({ search: input.search, limit: input.limit }),
         status: () => adapter.status(),
-        diff: (input) => adapter.diff(input.mode, { context: input.context }),
+        diff: (input) => adapter.diff(input.mode, { context: input.context, base: input.base }),
       })
     })
   }),
@@ -109,29 +109,23 @@ function make(
       return []
     }),
     status: Effect.fn("VcsHg.status")(function* () {
-      const [items, batch] = yield* Effect.all(
-        // Zero-context patches are enough to count changed lines.
-        [hg.status(undefined, scope), hg.diff(undefined, scope, { context: 0 })],
-        { concurrency: 2 },
-      )
-      const chunks = chunksByFile(batch, () => undefined)
-      return yield* Effect.forEach(
-        items.toSorted((a, b) => a.file.localeCompare(b.file)),
+      return (yield* diffAgainst(undefined, { context: 0 })).map(
         (item) =>
-          Effect.gen(function* () {
-            const patch = yield* patchFor(item, undefined, chunks.get(item.file))
-            const counts = countPatch(patch)
-            return {
-              file: item.file,
-              additions: counts.additions,
-              deletions: counts.deletions,
-              status: item.status,
-            } satisfies FileStatus
-          }),
+          ({
+            file: item.file,
+            additions: item.additions,
+            deletions: item.deletions,
+            status: item.status,
+          }) satisfies FileStatus,
       )
     }),
     diff: Effect.fn("VcsHg.diff")(function* (mode: Mode, options?: DiffOptions) {
       if (mode === "working") return yield* diffAgainst(undefined, options)
+      if (mode === "committed" || options?.base !== undefined) {
+        return yield* new DiffError({
+          message: "The Mercurial provider does not support committed reviews or explicit bases",
+        })
+      }
 
       const branch = yield* hg.branch()
       if (!branch || branch === "default") return []

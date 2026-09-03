@@ -4,7 +4,7 @@ import { expect, story } from "../../storybook/playwright/story"
 story("opens the comment editor when code is clicked", async ({ mount }) => {
   const root = await mount("components-session-review--interactive-comments")
   const review = root.locator('[data-component="session-review"]')
-  await review.getByText("export const value = 'after'", { exact: true }).click()
+  await review.locator('[data-line-type="change-addition"] [data-diff-span]').click()
   await expect(review.getByRole("textbox")).toBeVisible()
   await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 2")
 })

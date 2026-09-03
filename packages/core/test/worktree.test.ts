@@ -15,6 +15,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Worktree } from "@opencode-ai/core/worktree"
 import { WorktreeDirectory } from "@opencode-ai/core/worktree/directory"
 import { WorktreeTable } from "@opencode-ai/core/worktree/sql"
+import { initRepo } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -28,15 +29,6 @@ function abs(input: string) {
 }
 
 const gitWorktree = Worktree.StrategyID.make("git")
-
-async function initRepo(directory: string) {
-  await $`git init`.cwd(directory).quiet()
-  await $`git config core.fsmonitor false`.cwd(directory).quiet()
-  await $`git config commit.gpgsign false`.cwd(directory).quiet()
-  await $`git config user.email test@opencode.test`.cwd(directory).quiet()
-  await $`git config user.name Test`.cwd(directory).quiet()
-  await $`git commit --allow-empty -m root`.cwd(directory).quiet()
-}
 
 function setup() {
   return Effect.gen(function* () {
@@ -85,9 +77,7 @@ describe("Worktree", () => {
       )
       yield* Effect.promise(() => initRepo(root.path))
       const linked = `${root.path}-linked`
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(linked, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(linked, { recursive: true, force: true })))
       yield* Effect.promise(() => $`git worktree add ${linked} -b linked-${Date.now()}`.cwd(root.path).quiet())
       const project = yield* Project.Service
 
@@ -162,9 +152,7 @@ describe("Worktree", () => {
       const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
       const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-created"))
       const target = abs(path.join(parent, "worktree"))
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
       const fiber = yield* bus
         .subscribe(Worktree.Event.Updated)
         .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
@@ -183,7 +171,7 @@ describe("Worktree", () => {
           { directory: created.directory, strategy: "git" },
         ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
       )
-      expect(Array.from(yield* Fiber.join(fiber))[0]?.data).toEqual({ projectID: input.projectID })
+      expect((yield* Fiber.join(fiber))[0]?.data).toEqual({ projectID: input.projectID })
 
       yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: false })
 
@@ -198,9 +186,7 @@ describe("Worktree", () => {
       const worktree = yield* Worktree.Service
       const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
       const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-setup"))
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
       yield* input.db
         .update(ProjectTable)
         .set({
@@ -284,9 +270,7 @@ describe("Worktree", () => {
       const input = yield* setup()
       const worktree = yield* Worktree.Service
       const parent = abs(`${input.root.path}-branch-worktree`)
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
       yield* Effect.promise(async () => {
         await $`git branch feature-base`.cwd(input.sourceDirectory).quiet()
       })
@@ -312,9 +296,7 @@ describe("Worktree", () => {
       const input = yield* setup()
       const worktree = yield* Worktree.Service
       const parent = abs(`${input.root.path}-option-worktree`)
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
 
       const error = yield* worktree
         .create({
@@ -360,8 +342,8 @@ describe("Worktree", () => {
       const targetParent = abs(path.join(temp, path.basename(input.root.path) + "-managed-target"))
       yield* Effect.addFinalizer(() =>
         Effect.all([
-          Effect.promise(() => fs.rm(sourceParent, { recursive: true, force: true })).pipe(Effect.ignore),
-          Effect.promise(() => fs.rm(targetParent, { recursive: true, force: true })).pipe(Effect.ignore),
+          Effect.promise(() => fs.rm(sourceParent, { recursive: true, force: true })),
+          Effect.promise(() => fs.rm(targetParent, { recursive: true, force: true })),
         ]).pipe(Effect.asVoid),
       )
       const source = yield* worktree.create({
@@ -397,9 +379,7 @@ describe("Worktree", () => {
       const worktree = yield* Worktree.Service
       const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
       const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-dirty"))
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
@@ -455,9 +435,7 @@ describe("Worktree", () => {
       const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
       const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-suffix"))
       const target = abs(path.join(parent, "worktree-3"))
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
       yield* Effect.promise(() => fs.mkdir(path.join(parent, "worktree"), { recursive: true }))
       yield* Effect.promise(() => fs.mkdir(path.join(parent, "worktree-2")))
 
@@ -487,9 +465,7 @@ describe("Worktree", () => {
       const worktree = yield* Worktree.Service
       const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
       const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-conflicts"))
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
       yield* Effect.promise(() =>
         Promise.all(
           Array.from({ length: 10 }, (_, index) =>
@@ -542,13 +518,20 @@ describe("Worktree", () => {
       const worktree = yield* Worktree.Service
       const bus = yield* Bus.Service
       const target = abs(`${input.root.path}-worktree-external`)
+      const unchanged = abs(`${input.root.path}-worktree-existing`)
       yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(target, { recursive: true, force: true })).pipe(Effect.ignore),
+        Effect.promise(() =>
+          Promise.all([target, unchanged].map((item) => fs.rm(item, { recursive: true, force: true }))),
+        ).pipe(Effect.asVoid),
       )
       yield* Effect.promise(() => $`git worktree add --detach ${target} HEAD`.cwd(input.root.path).quiet())
+      yield* Effect.promise(() => $`git worktree add --detach ${unchanged} HEAD`.cwd(input.root.path).quiet())
       yield* input.db
         .insert(WorktreeTable)
-        .values({ project_id: input.projectID, directory: target })
+        .values([
+          { project_id: input.projectID, directory: target },
+          { project_id: input.projectID, directory: unchanged, strategy: "git" },
+        ])
         .run()
         .pipe(Effect.orDie)
       const fiber = yield* bus
@@ -557,18 +540,24 @@ describe("Worktree", () => {
       yield* Effect.yieldNow
 
       const discovered = abs(yield* Effect.promise(() => fs.realpath(target)))
+      const existing = abs(yield* Effect.promise(() => fs.realpath(unchanged)))
       expect(yield* worktree.refresh({ projectID: input.projectID })).toEqual({ updated: [discovered], removed: [] })
 
       expect(yield* stored(input.projectID)).toEqual(
         [
           { directory: input.sourceDirectory, strategy: null },
           { directory: discovered, strategy: "git" },
+          { directory: existing, strategy: "git" },
         ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
       )
-      expect(Array.from(yield* Fiber.join(fiber))[0]?.data).toEqual({ projectID: input.projectID })
+      expect((yield* Fiber.join(fiber))[0]?.data).toEqual({ projectID: input.projectID })
 
       yield* Effect.promise(() => $`git worktree remove --force ${target}`.cwd(input.root.path).quiet())
-      expect(yield* worktree.refresh({ projectID: input.projectID })).toEqual({ updated: [], removed: [discovered] })
+      yield* Effect.promise(() => $`git worktree remove --force ${unchanged}`.cwd(input.root.path).quiet())
+      expect(yield* worktree.refresh({ projectID: input.projectID })).toEqual({
+        updated: [],
+        removed: [discovered, existing].toSorted(),
+      })
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
     }),
   )
@@ -581,9 +570,7 @@ describe("Worktree", () => {
         const worktree = yield* Worktree.Service
         const stale = abs(`${input.root.path}-worktree-stale`)
         const target = abs(`${input.root.path}-worktree-after-stale`)
-        yield* Effect.addFinalizer(() =>
-          Effect.promise(() => fs.rm(target, { recursive: true, force: true })).pipe(Effect.ignore),
-        )
+        yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(target, { recursive: true, force: true })))
         yield* Effect.promise(() => $`git worktree add --detach ${stale} HEAD`.cwd(input.root.path).quiet())
         yield* Effect.promise(() => fs.rm(stale, { recursive: true, force: true }))
         yield* Effect.promise(() => $`git worktree add --detach ${target} HEAD`.cwd(input.root.path).quiet())

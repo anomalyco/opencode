@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test"
-import { spawn } from "child_process"
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
@@ -9,13 +8,11 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { EffectFlock } from "@opencode-ai/util/effect-flock"
 import { Global } from "@opencode-ai/util/global"
 import { Hash } from "@opencode-ai/util/hash"
+import { runLockWorker, spawnLockWorker, stopLockWorker, waitForFile } from "../fixture/lock-worker"
+import { tmpdir } from "../fixture/tmpdir"
 
 function lock(dir: string, key: string) {
   return path.join(dir, Hash.fast(key) + ".lock")
-}
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
 async function exists(file: string) {
@@ -42,58 +39,7 @@ type Msg = {
   done?: string
 }
 
-const root = path.join(import.meta.dir, "../..")
 const worker = path.join(import.meta.dir, "../fixture/effect-flock-worker.ts")
-
-function run(msg: Msg) {
-  return new Promise<{ code: number; stdout: Buffer; stderr: Buffer }>((resolve) => {
-    const proc = spawn(process.execPath, [worker, JSON.stringify(msg)], { cwd: root })
-    const stdout: Buffer[] = []
-    const stderr: Buffer[] = []
-    proc.stdout?.on("data", (data) => stdout.push(Buffer.from(data)))
-    proc.stderr?.on("data", (data) => stderr.push(Buffer.from(data)))
-    proc.on("close", (code) => {
-      resolve({ code: code ?? 1, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) })
-    })
-  })
-}
-
-function spawnWorker(msg: Msg) {
-  return spawn(process.execPath, [worker, JSON.stringify(msg)], {
-    cwd: root,
-    stdio: ["ignore", "pipe", "pipe"],
-  })
-}
-
-async function stopWorker(proc: ReturnType<typeof spawnWorker>) {
-  if (proc.exitCode !== null || proc.signalCode !== null) return
-
-  const closed = new Promise<void>((resolve) => proc.once("close", () => resolve()))
-
-  if (process.platform !== "win32" || !proc.pid) {
-    proc.kill()
-    await closed
-    return
-  }
-
-  await new Promise<void>((resolve) => {
-    const killProc = spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"])
-    killProc.on("close", () => {
-      proc.kill()
-      resolve()
-    })
-  })
-  await closed
-}
-
-async function waitForFile(file: string, timeout = 3_000) {
-  const stop = Date.now() + timeout
-  while (Date.now() < stop) {
-    if (await exists(file)) return
-    await sleep(20)
-  }
-  throw new Error(`Timed out waiting for file: ${file}`)
-}
 
 // ---------------------------------------------------------------------------
 // Test layer
@@ -109,7 +55,7 @@ const testGlobal = Global.layerWith({
   log: os.tmpdir(),
 })
 
-const testLayer = LayerNode.compile(EffectFlock.node, [[Global.node, testGlobal]])
+const testLayer = LayerNode.compile(EffectFlock.node, { replacements: [Global.node.replace(testGlobal)] })
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -122,14 +68,13 @@ describe("util.effect-flock", () => {
     "acquire and release via scoped Effect",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
       const lockDir = lock(dir, "eflock:acquire")
 
       yield* Effect.scoped(flock.acquire("eflock:acquire", dir))
 
       expect(yield* Effect.promise(() => exists(lockDir))).toBe(false)
-      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
     }),
   )
 
@@ -137,7 +82,7 @@ describe("util.effect-flock", () => {
     "supports an acquisition timeout",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
       const key = "eflock:timeout"
 
@@ -150,7 +95,6 @@ describe("util.effect-flock", () => {
           expect(error._tag).toBe("LockTimeoutError")
         }),
       )
-      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
     }),
   )
 
@@ -158,7 +102,7 @@ describe("util.effect-flock", () => {
     "withLock data-first",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
 
       let hit = false
@@ -170,7 +114,6 @@ describe("util.effect-flock", () => {
         dir,
       )
       expect(hit).toBe(true)
-      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
     }),
   )
 
@@ -178,7 +121,7 @@ describe("util.effect-flock", () => {
     "withLock pipeable",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
 
       let hit = false
@@ -186,7 +129,6 @@ describe("util.effect-flock", () => {
         hit = true
       }).pipe(flock.withLock("eflock:pipe", dir))
       expect(hit).toBe(true)
-      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
     }),
   )
 
@@ -194,7 +136,7 @@ describe("util.effect-flock", () => {
     "writes owner metadata",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
       const key = "eflock:meta"
       const file = path.join(lock(dir, key), "meta.json")
@@ -211,7 +153,29 @@ describe("util.effect-flock", () => {
           expect(typeof json.createdAt).toBe("string")
         }),
       )
-      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
+    }),
+  )
+
+  it.live(
+    "advances the heartbeat timestamp while the lock is held",
+    Effect.gen(function* () {
+      const flock = yield* EffectFlock.Service
+      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const dir = path.join(tmp, "locks")
+      const heartbeat = path.join(lock(dir, "eflock:heartbeat"), "heartbeat")
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(tmp, { recursive: true, force: true })))
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* flock.acquire("eflock:heartbeat", dir, { staleMs: 300 })
+          yield* Effect.sleep(150)
+          const first = yield* Effect.promise(() => fs.stat(heartbeat))
+          yield* Effect.sleep(250)
+          const second = yield* Effect.promise(() => fs.stat(heartbeat))
+
+          expect(second.mtimeMs).toBeGreaterThan(first.mtimeMs)
+        }),
+      )
     }),
   )
 
@@ -219,7 +183,7 @@ describe("util.effect-flock", () => {
     "breaks stale lock dirs",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
       const key = "eflock:stale"
       const lockDir = lock(dir, key)
@@ -239,7 +203,6 @@ describe("util.effect-flock", () => {
         dir,
       )
       expect(hit).toBe(true)
-      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
     }),
   )
 
@@ -247,7 +210,7 @@ describe("util.effect-flock", () => {
     "recovers from stale breaker",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
       const key = "eflock:stale-breaker"
       const lockDir = lock(dir, key)
@@ -271,7 +234,6 @@ describe("util.effect-flock", () => {
       )
       expect(hit).toBe(true)
       expect(yield* Effect.promise(() => exists(breaker))).toBe(false)
-      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
     }),
   )
 
@@ -279,7 +241,7 @@ describe("util.effect-flock", () => {
     "detects compromise when lock dir removed",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
       const key = "eflock:compromised"
       const lockDir = lock(dir, key)
@@ -294,7 +256,6 @@ describe("util.effect-flock", () => {
 
       expect(Exit.isFailure(result)).toBe(true)
       expect(Exit.isFailure(result) ? Cause.pretty(result.cause) : "").toContain("missing")
-      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
     }),
   )
 
@@ -302,7 +263,7 @@ describe("util.effect-flock", () => {
     "detects token mismatch",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
       const key = "eflock:token"
       const lockDir = lock(dir, key)
@@ -323,7 +284,6 @@ describe("util.effect-flock", () => {
       expect(Exit.isFailure(result)).toBe(true)
       expect(Exit.isFailure(result) ? Cause.pretty(result.cause) : "").toContain("token mismatch")
       expect(yield* Effect.promise(() => exists(lockDir))).toBe(true)
-      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
     }),
   )
 
@@ -332,18 +292,18 @@ describe("util.effect-flock", () => {
     Effect.gen(function* () {
       if (process.platform === "win32") return
       const flock = yield* EffectFlock.Service
-      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
       const dir = path.join(tmp, "locks")
 
       yield* Effect.promise(async () => {
         await fs.mkdir(dir, { recursive: true })
-        await fs.chmod(dir, 0o500)
       })
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.chmod(dir, 0o700)))
+      yield* Effect.promise(() => fs.chmod(dir, 0o500))
 
       const result = yield* flock.withLock(Effect.void, "eflock:perm", dir).pipe(Effect.exit)
       // oxlint-disable-next-line no-base-to-string -- Exit has a useful toString for test assertions
       expect(String(result)).toContain("PermissionDenied")
-      yield* Effect.promise(() => fs.chmod(dir, 0o700).then(() => fs.rm(tmp, { recursive: true, force: true })))
     }),
   )
 
@@ -359,7 +319,9 @@ describe("util.effect-flock", () => {
 
         try {
           const out = await Promise.all(
-            Array.from({ length: n }, () => run({ key: "eflock:stress", dir, done, active, holdMs: 30 })),
+            Array.from({ length: n }, () =>
+              runLockWorker(worker, { key: "eflock:stress", dir, done, active, holdMs: 30 } satisfies Msg),
+            ),
           )
 
           expect(out.map((x) => x.code)).toEqual(Array.from({ length: n }, () => 0))
@@ -385,11 +347,11 @@ describe("util.effect-flock", () => {
         const dir = path.join(tmp, "locks")
         const ready = path.join(tmp, "ready")
 
-        const proc = spawnWorker({ key: "eflock:crash", dir, ready, holdMs: 120_000 })
+        const proc = spawnLockWorker(worker, { key: "eflock:crash", dir, ready, holdMs: 120_000 } satisfies Msg)
 
         try {
           await waitForFile(ready, 5_000)
-          await stopWorker(proc)
+          await stopLockWorker(proc)
 
           // Backdate lock files so they're past STALE_MS (60s)
           const lockDir = lock(dir, "eflock:crash")
@@ -399,11 +361,11 @@ describe("util.effect-flock", () => {
           await fs.utimes(path.join(lockDir, "meta.json"), old, old).catch(() => {})
 
           const done = path.join(tmp, "done.log")
-          const result = await run({ key: "eflock:crash", dir, done, holdMs: 10 })
+          const result = await runLockWorker(worker, { key: "eflock:crash", dir, done, holdMs: 10 } satisfies Msg)
           expect(result.code).toBe(0)
           expect(result.stderr.toString()).toBe("")
         } finally {
-          await stopWorker(proc).catch(() => {})
+          await stopLockWorker(proc).catch(() => {})
           await fs.rm(tmp, { recursive: true, force: true })
         }
       }),

@@ -1,8 +1,3 @@
-// Paths branch softly through the screen,
-// A quiet tree of changed designs;
-// Each leaf remembers what has been,
-// And waits where careful light aligns.
-
 export type FileTreeItem = {
   readonly file: string
   readonly status?: "added" | "deleted" | "modified"
@@ -119,44 +114,20 @@ export function compareFileTreeNodes(tree: FileTree, left: number, right: number
   return left - right
 }
 
-export function moveFileTreeSelection(rows: readonly FileTreeRow[], selected: number | undefined, offset: number) {
-  if (rows.length === 0) return undefined
-  const index = selected === undefined ? -1 : rows.findIndex((row) => row.id === selected)
-  if (index === -1) return rows[0]!.id
-  return rows[Math.max(0, Math.min(rows.length - 1, index + offset))]!.id
-}
-
-export function moveFileTreeSelectionToFirstChild(rows: readonly FileTreeRow[], selected: number | undefined) {
-  const index = selected === undefined ? -1 : rows.findIndex((row) => row.id === selected)
-  const row = index === -1 ? undefined : rows[index]
-  if (row?.kind !== "directory") return selected
-  const child = rows[index + 1]
-  return child && child.depth > row.depth ? child.id : selected
-}
-
-export function moveFileTreeSelectionToParent(rows: readonly FileTreeRow[], selected: number | undefined) {
-  const index = selected === undefined ? -1 : rows.findIndex((row) => row.id === selected)
-  const row = index === -1 ? undefined : rows[index]
-  if (!row || row.depth === 0) return selected
-  return rows.findLast((item, itemIndex) => itemIndex < index && item.depth < row.depth)?.id ?? selected
-}
-
 export function fileTreeFileSelection(tree: FileTree, fileIndex: number) {
   const node = tree.nodes.find((item) => item.kind === "file" && item.fileIndex === fileIndex)
   if (!node) return undefined
   return {
-    highlightedNode: node.id,
     expandedNodes: fileTreeParentDirectories(tree, node.id),
   }
 }
 
 export function singlePatchFileIndex(
   selected: number | undefined,
-  active: number | undefined,
   current: number | undefined,
   first: number | undefined,
 ) {
-  return selected ?? active ?? current ?? first
+  return selected ?? current ?? first
 }
 
 export function orderedPatchFileIndexes(rows: readonly FileTreeRow[]) {
@@ -183,19 +154,6 @@ export function toggleFileTreeDirectory(tree: FileTree, expanded: ReadonlySet<nu
   const next = new Set(expanded)
   if (next.has(selected)) next.delete(selected)
   else next.add(selected)
-  return next
-}
-
-export function setFileTreeDirectoryExpanded(
-  tree: FileTree,
-  expanded: ReadonlySet<number>,
-  selected: number | undefined,
-  value: boolean,
-) {
-  if (selected === undefined || tree.nodes[selected]?.kind !== "directory") return expanded
-  const next = new Set(expanded)
-  if (value) next.add(selected)
-  else next.delete(selected)
   return next
 }
 

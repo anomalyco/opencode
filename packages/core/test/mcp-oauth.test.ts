@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { refreshAuthorization } from "@modelcontextprotocol/sdk/client/auth.js"
+import { auth, refreshAuthorization } from "@modelcontextprotocol/sdk/client/auth.js"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
+import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { McpOAuth } from "@opencode-ai/core/mcp/oauth"
 import { Effect } from "effect"
@@ -27,6 +28,96 @@ const authorize = (redirect_uri?: string) =>
   )
 
 describe("MCP OAuth", () => {
+  test("completes interactive authorization through the loopback callback", async () => {
+    const tokenRequests: URLSearchParams[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (request.method !== "POST" || url.pathname !== "/token") return new Response(null, { status: 404 })
+        tokenRequests.push(new URLSearchParams(await request.text()))
+        return Response.json({
+          access_token: "access",
+          token_type: "Bearer",
+          refresh_token: "refresh",
+          expires_in: 3600,
+        })
+      },
+    })
+
+    const credential = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const authorization = yield* McpOAuth.authorize({
+            name: "test",
+            config: new ConfigMCP.Remote({
+              type: "remote",
+              url: server.url.href,
+              oauth: { client_id: "client" },
+            }),
+            methodID: Integration.MethodID.make("oauth"),
+          })
+          const authorizationUrl = new URL(authorization.url)
+          const redirectValue = authorizationUrl.searchParams.get("redirect_uri")
+          const state = authorizationUrl.searchParams.get("state")
+          if (!redirectValue || !state) throw new Error("Missing OAuth redirect parameters")
+          const redirect = new URL(redirectValue)
+          redirect.searchParams.set("code", "accepted")
+          redirect.searchParams.set("state", state)
+          expect((yield* Effect.promise(() => fetch(redirect))).status).toBe(200)
+          return yield* authorization.callback
+        }),
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(credential.access).toBe("access")
+    expect(credential.refresh).toBe("refresh")
+    expect(tokenRequests).toHaveLength(1)
+    expect(tokenRequests[0]?.get("grant_type")).toBe("authorization_code")
+    expect(tokenRequests[0]?.get("code")).toBe("accepted")
+    expect(tokenRequests[0]?.get("code_verifier")).not.toBeNull()
+  })
+
+  test("refreshes tokens loaded from a persisted credential", async () => {
+    const tokenRequests: URLSearchParams[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (request.method !== "POST" || url.pathname !== "/token") return new Response(null, { status: 404 })
+        tokenRequests.push(new URLSearchParams(await request.text()))
+        return Response.json({ access_token: "next", token_type: "Bearer" })
+      },
+    })
+    const store = McpOAuth.memoryStore()
+    await store.saveTokens(
+      McpOAuth.toTokens(
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("oauth"),
+          access: "expired",
+          refresh: "refresh",
+          expires: Date.now() - 1000,
+          metadata: { serverUrl: server.url.href, tokenType: "Bearer" },
+        }),
+      ),
+    )
+    const oauthProvider = McpOAuth.provider({
+      redirectUrl: "http://127.0.0.1/callback",
+      client: { id: "client" },
+      onRedirect: () => undefined,
+      store,
+    })
+
+    const result = await auth(oauthProvider, { serverUrl: server.url.href }).finally(() => server.stop(true))
+
+    expect(result).toBe("AUTHORIZED")
+    expect(await store.tokens()).toEqual({ access_token: "next", token_type: "Bearer", refresh_token: "refresh" })
+    expect(tokenRequests).toHaveLength(1)
+    expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
+    expect(tokenRequests[0]?.get("refresh_token")).toBe("refresh")
+  })
+
   test("shares concurrent refreshes for the same token", async () => {
     let requests = 0
     const pending = Promise.withResolvers<void>()
@@ -71,6 +162,6 @@ describe("MCP OAuth", () => {
   })
 
   test("rejects an invalid redirect URL", async () => {
-    await expect(authorize("not a URL")).rejects.toThrow("cannot be parsed as a URL")
+    await expect(authorize("not a URL")).rejects.toThrow(TypeError)
   })
 })

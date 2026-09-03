@@ -1,16 +1,9 @@
 import fs from "fs/promises"
 import path from "path"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
-import {
-  AgentsDirectory,
-  ClaudeDirectory,
-  Directory as ConfigDirectory,
-  Document,
-  type Entry,
-  Info,
-} from "@opencode-ai/schema/config"
+import { AgentsDirectory, ClaudeDirectory, Directory, Document, type Entry, Info } from "@opencode-ai/schema/config"
 import { ConfigSkillPlugin } from "@opencode-ai/core/config/plugin/skill"
 import { SkillFile } from "@opencode-ai/core/config/plugin/skill-file"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -31,26 +24,10 @@ import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
-const urls = new Map<string, AbsolutePath[]>()
-const failedUrls = new Set<string>()
-let pulls = 0
-const discoveryLayer = Layer.succeed(
-  SkillDiscovery.Service,
-  SkillDiscovery.Service.of({
-    pull: (url) => {
-      pulls++
-      if (failedUrls.has(url)) return Effect.die(`failed to pull ${url}`)
-      return Effect.succeed(urls.get(url) ?? [])
-    },
-  }),
-)
+const emptyDiscovery = SkillDiscovery.Service.of({ pull: () => Effect.succeed([]) })
 const watcherLayer = Watcher.testLayer
 const it = testEffect(
-  Layer.mergeAll(
-    AppNodeBuilder.build(LayerNode.group([Skill.node, Bus.node, FSUtil.node])),
-    discoveryLayer,
-    watcherLayer,
-  ),
+  Layer.merge(AppNodeBuilder.build(LayerNode.group([Skill.node, Bus.node, FSUtil.node])), watcherLayer),
 )
 const decode = Schema.decodeUnknownSync(Info)
 
@@ -65,7 +42,12 @@ description: ${description}
   )
 }
 
-const startEntries = Effect.fnUntraced(function* (entries: Entry[], directory: string, home = directory) {
+const startEntries = Effect.fnUntraced(function* (
+  entries: Entry[],
+  directory: string,
+  home = directory,
+  discovery = emptyDiscovery,
+) {
   const service = yield* Skill.Service
   yield* ConfigSkillPlugin.Plugin.effect(
     host({
@@ -77,13 +59,14 @@ const startEntries = Effect.fnUntraced(function* (entries: Entry[], directory: s
     }),
   ).pipe(
     Effect.provide(Config.testLayer(entries)),
+    Effect.provideService(SkillDiscovery.Service, discovery),
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
     Effect.provideService(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
   )
   return service
 })
 
-const start = (skills: string[], directory: string) =>
+const start = (skills: string[], directory: string, discovery = emptyDiscovery) =>
   startEntries(
     [
       new Document({
@@ -92,6 +75,8 @@ const start = (skills: string[], directory: string) =>
       }),
     ],
     directory,
+    directory,
+    discovery,
   )
 
 const discover = (directory: string, global: string) =>
@@ -101,14 +86,13 @@ const discover = (directory: string, global: string) =>
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
-        [
-          Location.node,
+        Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-        ],
-        [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
-        [Credential.node, emptyCredentialNode],
-        [WellKnown.node, emptyWellknownNode],
-        [Watcher.node, Watcher.testLayer],
+        ),
+        Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+        Credential.node.replace(emptyCredentialNode),
+        WellKnown.node.replace(emptyWellknownNode),
+        Watcher.node.replace(Watcher.testLayer),
       ]),
     ),
   )
@@ -130,14 +114,13 @@ function emitAndWait(update: Watcher.Update) {
 }
 
 describe("SkillFile.parse", () => {
-  it.effect("parses root and nested skill ids and metadata flags", () =>
-    Effect.sync(() => {
-      const directory = "/repo/skills"
-      expect(
-        SkillFile.parse(
-          directory,
-          "/repo/skills/manual/SKILL.md",
-          `---
+  test("parses root and nested skill ids and metadata flags", () => {
+    const directory = "/repo/skills"
+    expect(
+      SkillFile.parse(
+        directory,
+        "/repo/skills/manual/SKILL.md",
+        `---
 name: Manual
 description: Manual only
 metadata:
@@ -145,45 +128,41 @@ metadata:
   opencode/autoinvoke: false
 ---
 # manual`,
-        ),
-      ).toEqual({
-        _tag: "Parsed",
-        skill: {
-          id: Skill.ID.make("manual"),
-          name: Skill.Name.make("Manual"),
-          description: "Manual only",
-          slash: true,
-          autoinvoke: false,
-          location: AbsolutePath.make("/repo/skills/manual/SKILL.md"),
-          content: "# manual",
-        },
-      })
-      expect(SkillFile.parse(directory, "/repo/skills/foo.md", "---\nslash: true\n---\n# foo")).toMatchObject({
-        _tag: "Parsed",
-        skill: { id: Skill.ID.make("foo") },
-      })
-      expect(SkillFile.parse("/repo/skills/manual", "/repo/skills/manual/SKILL.md", "# manual")).toMatchObject({
-        _tag: "Parsed",
-        skill: { id: Skill.ID.make("manual"), name: Skill.Name.make("manual") },
-      })
-      expect(
-        SkillFile.parse(directory, "/repo/skills/broken.md", "---\ndescription: foo: bar\nmetadata: [\n---\n# broken"),
-      ).toEqual({ _tag: "Skipped", reason: "markdown" })
-      expect(SkillFile.parse(directory, "/repo/skills/broken.md", "---\nslash: nope\n---\n# broken")).toMatchObject({
-        _tag: "Skipped",
-        reason: "frontmatter",
-        issue: expect.anything(),
-      })
-    }),
-  )
+      ),
+    ).toEqual({
+      _tag: "Parsed",
+      skill: {
+        id: Skill.ID.make("manual"),
+        name: Skill.Name.make("Manual"),
+        description: "Manual only",
+        slash: true,
+        autoinvoke: false,
+        location: AbsolutePath.make("/repo/skills/manual/SKILL.md"),
+        content: "# manual",
+      },
+    })
+    expect(SkillFile.parse(directory, "/repo/skills/foo.md", "---\nslash: true\n---\n# foo")).toMatchObject({
+      _tag: "Parsed",
+      skill: { id: Skill.ID.make("foo") },
+    })
+    expect(SkillFile.parse("/repo/skills/manual", "/repo/skills/manual/SKILL.md", "# manual")).toMatchObject({
+      _tag: "Parsed",
+      skill: { id: Skill.ID.make("manual"), name: Skill.Name.make("manual") },
+    })
+    expect(
+      SkillFile.parse(directory, "/repo/skills/broken.md", "---\ndescription: foo: bar\nmetadata: [\n---\n# broken"),
+    ).toEqual({ _tag: "Skipped", reason: "markdown" })
+    expect(SkillFile.parse(directory, "/repo/skills/broken.md", "---\nslash: nope\n---\n# broken")).toMatchObject({
+      _tag: "Skipped",
+      reason: "frontmatter",
+      issue: expect.anything(),
+    })
+  })
 })
 
 describe("ConfigSkillPlugin.Plugin", () => {
   it.live("maps config entry types to skill directories", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const claude = path.join(tmp.path, "claude")
@@ -205,7 +184,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
             [
               new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(claude) }),
               new AgentsDirectory({ type: "agents", path: AbsolutePath.make(agents) }),
-              new ConfigDirectory({ type: "directory", path: AbsolutePath.make(opencode) }),
+              new Directory({ type: "directory", path: AbsolutePath.make(opencode) }),
               new Document({ type: "document", info: decode({ skills: ["~/shared", "./relative"] }) }),
             ],
             directory,
@@ -219,10 +198,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
   )
 
   it.live("loads directory and individual downloaded skill roots with later-source precedence", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const first = path.join(tmp.path, "first")
@@ -235,30 +211,32 @@ describe("ConfigSkillPlugin.Plugin", () => {
             await write(second, "deploy", "Deploy")
             await write(second, "review", "Second")
           })
-          pulls = 0
-          urls.set("https://example.test/skills/", [
-            AbsolutePath.make(path.join(second, "deploy")),
-            AbsolutePath.make(path.join(second, "review")),
-          ])
+          const pulls: string[] = []
+          const discovery = SkillDiscovery.Service.of({
+            pull: (url) => {
+              pulls.push(url)
+              return Effect.succeed([
+                AbsolutePath.make(path.join(second, "deploy")),
+                AbsolutePath.make(path.join(second, "review")),
+              ])
+            },
+          })
 
-          const skill = yield* start([first, "https://example.test/skills/"], tmp.path)
+          const skill = yield* start([first, "https://example.test/skills/"], tmp.path, discovery)
           expect((yield* skill.list()).map((item) => item.id).toSorted()).toEqual([
             Skill.ID.make("deploy"),
             Skill.ID.make("review"),
           ])
           expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Deploy")
           expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Second")
-          expect(pulls).toBe(1)
+          expect(pulls).toEqual(["https://example.test/skills/"])
         }),
       ),
     ),
   )
 
   it.live("prefers a worktree skill over the parent checkout copy", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const checkout = path.join(tmp.path, "repo")
@@ -286,10 +264,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
   )
 
   it.live("keeps directory skills when a URL source fails", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(async () => {
@@ -297,21 +272,17 @@ describe("ConfigSkillPlugin.Plugin", () => {
             await write(tmp.path, "review", "Available")
           })
           const url = "https://unreachable.example.test/skills/"
-          failedUrls.add(url)
+          const discovery = SkillDiscovery.Service.of({ pull: () => Effect.die(`failed to pull ${url}`) })
 
-          const skill = yield* start([tmp.path, url], tmp.path)
+          const skill = yield* start([tmp.path, url], tmp.path, discovery)
           expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Available")
-          failedUrls.delete(url)
         }),
       ),
     ),
   )
 
   it.live("rescans directory sources when watched files change", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(async () => {
@@ -345,10 +316,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
   )
 
   it.live("watches canonical directories behind symlinked skills", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const source = path.join(tmp.path, "source")
@@ -375,10 +343,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
   )
 
   it.live("reloads symlinked sources when their target changes", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const source = path.join(tmp.path, "source")
@@ -419,10 +384,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
   )
 
   it.live("follows missing source directories as their parents appear", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const source = path.join(tmp.path, "generated", "skills")

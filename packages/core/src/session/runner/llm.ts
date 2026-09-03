@@ -1,7 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
-import { Cause, Config, Effect, Exit, FiberMap, Layer, Pull, Schedule } from "effect"
+import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { InstructionState } from "../instruction-state.js"
@@ -9,13 +9,14 @@ import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
+import { SessionHistory } from "../history.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionTitle } from "../title.js"
-import { DrainResult, Service, type Continuation } from "./index.js"
+import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../../effect/app-node-platform.js"
@@ -23,8 +24,7 @@ import { StepFailedError } from "../error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
-import { PluginSupervisor } from "../../plugin/supervisor.js"
-import { PromptCacheDiagnostics } from "../prompt-cache-diagnostics.js"
+import { Plugin } from "../../plugin.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -39,44 +39,13 @@ const layer = Layer.effect(
     const modelTransport = yield* SessionModelTransport.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
-    const plugins = yield* PluginSupervisor.Service
+    const plugins = yield* Plugin.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
-    const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
-      Config.withDefault(false),
-      Effect.orDie,
-    )
-    const promptCacheSnapshots = diagnostics ? new Map<string, PromptCacheDiagnostics.Snapshot>() : undefined
-    const diagnosePromptCache = Effect.fn("SessionRunner.diagnosePromptCache")(function* (
-      sessionID: SessionSchema.ID,
-      request: Parameters<typeof PromptCacheDiagnostics.snapshot>[0],
-    ) {
-      if (!promptCacheSnapshots) return
-      const current = PromptCacheDiagnostics.snapshot(request)
-      const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(sessionID), current)
-      promptCacheSnapshots.delete(sessionID)
-      promptCacheSnapshots.set(sessionID, current)
-      const oldest = promptCacheSnapshots.keys().next().value
-      if (promptCacheSnapshots.size > 100 && oldest !== undefined) promptCacheSnapshots.delete(oldest)
-      yield* Effect.logInfo("prompt cache prefix").pipe(
-        Effect.annotateLogs({
-          sessionID,
-          toolCount: current.tools.length,
-          systemParts: current.system.length,
-          messageCount: current.messages.length,
-          ...comparison,
-        }),
-      )
-    })
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
-    const drain = Effect.fn("SessionRunner.drain")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly force: boolean
-      readonly continuation?: Continuation
-      readonly promotable?: SessionInbox.Promotable
-    }) {
+    const drain = Effect.fn("SessionRunner.drain")(function* (input: Parameters<Interface["drain"]>[0]) {
       const sessionID = input.sessionID
       let force = input.force
       let continuing = input.continuation !== undefined
@@ -89,7 +58,7 @@ const layer = Layer.effect(
         const control = pending.type === "compaction" || pending.type === "move"
         if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
-      yield* plugins.flush
+      yield* plugins.awaitActivation
       yield* settleStaleToolCalls(sessionID)
 
       const advanceToStep = Effect.fn("SessionRunner.advanceToStep")(() =>
@@ -128,7 +97,7 @@ const layer = Layer.effect(
                 step = 1
               }
               if (pending?.type === "move")
-                return DrainResult.Moved({ continuation: !entering && continuing ? { step } : undefined })
+                return DrainResult.Moved({ continuation: continuing ? { step } : undefined })
               if (pending?.type === "compaction") {
                 const session = yield* store.get(sessionID)
                 if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
@@ -136,7 +105,22 @@ const layer = Layer.effect(
                   Effect.gen(function* () {
                     return yield* compaction.compactManual({
                       session,
-                      resolveModel: context.resolveModel,
+                      resolveContext: (session) =>
+                        Effect.gen(function* () {
+                          const selected = yield* context.select(session.id)
+                          const model = yield* context.resolveModel(selected.session)
+                          // Preview updates without admitting them after the already-delivered compaction marker.
+                          const history = yield* SessionHistory.preview(db, session.id, selected.instructions)
+                          return {
+                            session: selected.session,
+                            agent: selected.agent,
+                            tools: selected.tools,
+                            model,
+                            initial: history.initial,
+                            messages: history.messages,
+                            instructionUpdate: history.instructionUpdate,
+                          }
+                        }),
                       prepare: context.prepare,
                       messages: yield* store.context(sessionID),
                       inputID: pending.id,
@@ -170,7 +154,7 @@ const layer = Layer.effect(
                     entering && !continuing ? promotable : "steer",
                   )
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
-                    yield* FiberMap.run(titles, sessionID, title.generate(sessionID).pipe(Effect.ignore), {
+                    yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
                     })
                   if (promoted > 0) step = 1
@@ -203,7 +187,7 @@ const layer = Layer.effect(
     const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
-      const retry = yield* Schedule.toStepWithSleep(SessionRunnerRetry.schedule(bus, sessionID))
+      const retry = yield* SessionRunnerRetry.make(bus, sessionID)
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
@@ -212,12 +196,10 @@ const layer = Layer.effect(
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
         initial = undefined
         const compactionInput = {
-          session: loaded.session,
-          messages: loaded.messages,
-          resolved: loaded.model,
+          context: loaded,
           prepare: context.prepare,
         }
-        if (compaction.required(compactionInput)) {
+        if (compaction.required({ messages: loaded.messages, resolved: loaded.model, context: loaded })) {
           const compacted = yield* compaction.compact(compactionInput)
           if (compacted.status !== "completed") return yield* new StepFailedError({ error: compacted.error })
           assistantMessageID = SessionMessage.ID.create()
@@ -243,14 +225,21 @@ const layer = Layer.effect(
           toolChoice: stepLimitReached ? "none" : undefined,
           webSocket: "session",
         })
-        yield* diagnosePromptCache(sessionID, prepared.request)
         const outcome = yield* steps.attempt({
           sessionID,
           assistantMessageID,
           agent: loaded.agent.id,
           model: loaded.model,
           prepared,
-          toolsDisabled: stepLimitReached,
+          retry: (cause, error, proposed) =>
+            retry.decide({
+              cause,
+              error,
+              agent: loaded.agent.id,
+              model: loaded.model.ref,
+              hook: prepared.retry,
+              retry: proposed,
+            }),
           recoverContinuation,
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow && compaction.enabled()
@@ -261,18 +250,17 @@ const layer = Layer.effect(
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
           Retry: (outcome) =>
-            retry({ cause: outcome.cause, error: outcome.error, assistantMessageID }).pipe(
-              Pull.catchDone(() =>
-                bus
-                  .publish(SessionEvent.Step.Failed, { sessionID, assistantMessageID, error: outcome.error })
-                  .pipe(Effect.andThen(outcome.cause)),
-              ),
-              Effect.asVoid,
-            ),
+            retry.wait({
+              decision: outcome.decision,
+              error: outcome.error,
+              assistantMessageID,
+            }),
           Continue: Effect.fnUntraced(function* (outcome) {
-            yield* retry({ cause: outcome.cause, error: outcome.error, assistantMessageID }).pipe(
-              Pull.catchDone(() => outcome.cause),
-            )
+            yield* retry.wait({
+              decision: outcome.decision,
+              error: outcome.error,
+              assistantMessageID,
+            })
             yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_INCOMPLETE_STREAM })
             assistantMessageID = SessionMessage.ID.create()
           }),
@@ -327,7 +315,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
-    PluginSupervisor.node,
+    Plugin.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

@@ -5,6 +5,8 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useServer } from "@/runtime/server/current"
+import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 
 export const OPEN_APPS = [
   "vscode",
@@ -25,6 +27,10 @@ export const OPEN_APPS = [
 
 export type OpenApp = (typeof OPEN_APPS)[number]
 export type OpenAppOS = "macos" | "windows" | "linux" | "unknown"
+
+export const OpenAppPreferences = Persistence.struct({
+  app: Schema.Literals(OPEN_APPS),
+})
 
 export const MAC_OPEN_APPS = [
   {
@@ -163,7 +169,7 @@ export function useOpenInApp(input: { directory: () => string }) {
     ] as const
   })
 
-  const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp | "finder" }))
+  const [prefs, setPrefs] = persisted(Persist.global("open.app"), OpenAppPreferences, { app: "finder" })
   const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore({
     app: undefined as OpenApp | undefined,

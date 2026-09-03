@@ -1,4 +1,5 @@
 import { DataProvider } from "@opencode-ai/session-ui/context"
+import { MarkdownProvider, type ReadMarkdownImage } from "@opencode-ai/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createMemo, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
@@ -8,6 +9,7 @@ import { sessionHref } from "@/shell/routes/session"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
+import { readLocalImage } from "@/runtime/server/image"
 
 export function SessionUIProvider(
   props: ParentProps<{
@@ -21,6 +23,10 @@ export function SessionUIProvider(
   const serverSDK = useServerSDK()
   const tabs = useTabs()
   const directory = () => props.directory
+  const readImage = createMemo<ReadMarkdownImage>(() => {
+    const dir = directory()
+    return (path, signal) => readLocalImage(serverSDK.api, dir, path, signal)
+  })
   const href = (sessionID: string) => sessionHref(props.server, sessionID)
   const navigateToSession = async (sessionID: string) => {
     const tab = tabs.store.find(
@@ -60,7 +66,9 @@ export function SessionUIProvider(
       onNavigateToSession={navigateToSession}
       onSessionHref={href}
     >
-      <LocalProvider>{props.children}</LocalProvider>
+      <MarkdownProvider readImage={readImage()}>
+        <LocalProvider>{props.children}</LocalProvider>
+      </MarkdownProvider>
     </DataProvider>
   )
 }

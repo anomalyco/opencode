@@ -23,6 +23,7 @@ type StreamItem =
 
 export function TerminalPane(props: {
   ptyID: string
+  resizing?: boolean
   autoFocus?: boolean
   onAutoFocus?: () => void
   onFocusRequest?: (focus: (() => void) | undefined) => void
@@ -76,6 +77,10 @@ export function TerminalPane(props: {
     if (!size) return
     send(interactionFrame(size))
   }
+
+  createEffect(() => {
+    if (props.resizing) interact()
+  })
 
   const sendInput = (data: Uint8Array) => {
     if (!restored) {

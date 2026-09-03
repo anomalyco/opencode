@@ -3,6 +3,7 @@ import type { SessionInboxInfo, SessionMessageInfo } from "@opencode-ai/client/p
 import { createRoot } from "solid-js"
 import { applyTimelineMessageHandoff, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 
 const messages = [
   { id: "msg_1", type: "user", text: "first", time: { created: 1 } },
@@ -63,6 +64,7 @@ describe("visibleTimelineMessages", () => {
         reasoningMode: () => "compact",
         shellToolDefaultOpen: () => false,
         editToolDefaultOpen: () => false,
+        timelineDetail: () => timelinePresets[2].value,
         pendingUserMessageIDs: () => new Set([steer.id]),
       })
       expect(projection.activeMessageID()).toBe("msg_1")
@@ -79,6 +81,17 @@ describe("visibleTimelineMessages", () => {
           ?.map((message) => message.id),
       ).toEqual(["msg_2", "msg_5"])
       expect(projection.assistantMessagesByParent().has(steer.id)).toBe(false)
+      expect([...projection.messageRowIndex()]).toEqual([
+        ["msg_1", 0],
+        ["msg_3", 2],
+      ])
+      expect([...projection.messageLastRowIndex()]).toEqual([
+        ["msg_1", 1],
+        ["msg_3", 3],
+      ])
+      expect([...projection.lastAssistantGroupKey()]).toEqual([["msg_1", "context:msg_5:tool_read"]])
+      expect(projection.rowByKey().get("user-message:msg_1")).toBe(projection.rows()[0])
+      expect(projection.rowByKey().size).toBe(projection.rows().length)
       dispose()
     })
   })

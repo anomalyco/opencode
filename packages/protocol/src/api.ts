@@ -11,6 +11,7 @@ import { FileSystemGroup } from "./groups/fs.js"
 import { makeFormGroup } from "./groups/form.js"
 import { CommandGroup } from "./groups/command.js"
 import { SkillGroup } from "./groups/skill.js"
+import { RpcGroup } from "./groups/rpc.js"
 import { EventGroup, makeEventGroup } from "./groups/event.js"
 import type { Definition } from "@opencode-ai/schema/event"
 import { AgentGroup } from "./groups/agent.js"
@@ -49,6 +50,7 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof FileSystemGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof CommandGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof SkillGroup, LocationId>
+  | HttpApiGroup.AddMiddleware<typeof RpcGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof PtyGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ShellGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ReferenceGroup, LocationId>
@@ -168,6 +170,7 @@ const makeApiFromGroup = <
     .add(FileSystemGroup.middleware(locationMiddleware))
     .add(CommandGroup.middleware(locationMiddleware))
     .add(SkillGroup.middleware(locationMiddleware))
+    .add(RpcGroup.middleware(locationMiddleware))
     .add(eventGroup)
     .add(PtyGroup.middleware(locationMiddleware))
     .add(PersistentPtyGroup)

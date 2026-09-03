@@ -13,6 +13,18 @@ function abortFromInput(input: RequestInfo | URL, init?: RequestInit) {
 }
 
 describe("checkServerHealth", () => {
+  test.each([undefined, "secret"])("authenticates using only the password (%s)", async (password) => {
+    const headers: Array<string | null> = []
+    const fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      headers.push(new Headers(init?.headers).get("authorization"))
+      return Response.json({ healthy: true, version: "2.0.0" })
+    }) as typeof globalThis.fetch
+
+    const legacy = { ...server, username: "legacy", password }
+    expect(await checkServerHealth(legacy, fetch)).toEqual({ healthy: true, version: "2.0.0" })
+    expect(headers).toEqual([password ? `Basic ${btoa(`opencode:${password}`)}` : null])
+  })
+
   test("returns healthy response with version", async () => {
     let request: URL | undefined
     const fetch = (async (input: RequestInfo | URL) => {
@@ -34,10 +46,13 @@ describe("checkServerHealth", () => {
     const fetch = (async (input: RequestInfo | URL) => {
       const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
       requests.push(url.pathname)
-      return new Response(JSON.stringify(url.pathname === "/global/health" ? { version: "1.18.15" } : { healthy: true }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })
+      return new Response(
+        JSON.stringify(url.pathname === "/global/health" ? { version: "1.18.15" } : { healthy: true }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
     }) as unknown as typeof globalThis.fetch
 
     const result = await checkServerHealth(server, fetch)

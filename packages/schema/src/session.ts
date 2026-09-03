@@ -8,6 +8,7 @@ import { Project } from "./project.js"
 import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema.js"
 import { SessionEvent } from "./session-event.js"
 import { SessionID } from "./session-id.js"
+import { SessionMetadata } from "./session-metadata.js"
 import { Money } from "./money.js"
 import { TokenUsage } from "./token-usage.js"
 import { Revert } from "./session-revert.js"
@@ -15,6 +16,9 @@ import { SessionFork } from "./session-fork.js"
 
 export const ID = SessionID
 export type ID = SessionID
+
+export const Metadata = SessionMetadata
+export type Metadata = SessionMetadata
 
 export const Event = SessionEvent
 
@@ -49,6 +53,7 @@ export const Info = Schema.Struct({
   title: Schema.String.pipe(optional),
   location: Location.Ref,
   subpath: RelativePath.pipe(optional),
+  metadata: Metadata.pipe(optional),
   revert: Revert.pipe(optional),
 }).annotate({ identifier: "Session.Info" })
 

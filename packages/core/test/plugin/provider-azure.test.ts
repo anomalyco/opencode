@@ -2,7 +2,6 @@ import { chmod } from "node:fs/promises"
 import { Agent } from "@opencode-ai/core/agent"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect, Schedule } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
@@ -15,8 +14,8 @@ import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
 import { Location } from "@opencode-ai/core/location"
 import { Session } from "@opencode-ai/core/session"
-import { State } from "@opencode-ai/core/state"
 import { AppProcess } from "@opencode-ai/util/process"
+import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -24,7 +23,6 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* AzurePlugin.effect(host)
 })
@@ -55,12 +53,7 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Ef
   )
 }
 
-function withAzureCommands<A, E, R>(
-  run: (args: readonly string[]) => unknown,
-  fx: () => Effect.Effect<A, E, R>,
-  deploymentDelay = 0,
-  signedIn = true,
-) {
+function withAzureCommands<A, E, R>(run: (args: readonly string[]) => unknown, fx: () => Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
     const processes = yield* AppProcess.Service
     const directory = (yield* Location.Service).directory
@@ -69,9 +62,6 @@ function withAzureCommands<A, E, R>(
       Bun.write(executable, process.platform === "win32" ? "@exit /b 0\r\n" : "#!/bin/sh\nexit 0\n"),
     )
     yield* Effect.promise(() => chmod(executable, 0o755))
-    if (signedIn) {
-      yield* Effect.promise(() => Bun.write(`${directory}/azure-cli/azureProfile.json`, '{"subscriptions":[{}]}'))
-    }
     const fake = AppProcess.Service.of({
       ...processes,
       run: (command) => {
@@ -80,7 +70,7 @@ function withAzureCommands<A, E, R>(
         if (value instanceof Error) {
           return Effect.fail(new AppProcess.AppProcessError({ command: "az", cause: value }))
         }
-        const result = Effect.succeed({
+        return Effect.succeed({
           command: `az ${command.args.join(" ")}`,
           exitCode: 0,
           stdout: Buffer.from(JSON.stringify(value)),
@@ -88,16 +78,11 @@ function withAzureCommands<A, E, R>(
           stdoutTruncated: false,
           stderrTruncated: false,
         })
-        if (deploymentDelay > 0 && command.args.includes("deployment")) {
-          return Effect.sleep(`${deploymentDelay} millis`).pipe(Effect.andThen(result))
-        }
-        return result
       },
     })
     return yield* withEnv(
       {
         PATH: `${directory}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}`,
-        AZURE_CONFIG_DIR: `${directory}/azure-cli`,
       },
       () => fx().pipe(Effect.provideService(AppProcess.Service, fake)),
     )
@@ -118,26 +103,13 @@ const azureCredential = Effect.gen(function* () {
     }),
   })
 })
-
-function fakeSelectorSdk(calls: string[]) {
-  const make = (method: string) => (id: string) => {
-    calls.push(`${method}:${id}`)
-    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
-  }
-  return {
-    responses: make("responses"),
-    messages: make("messages"),
-    chat: make("chat"),
-    languageModel: make("languageModel"),
-  }
-}
-
 describe("AzurePlugin", () => {
   it.effect("registers a resource name form when the environment does not provide one", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
         yield* addPlugin()
-        expect((yield* (yield* Integration.Service).get(Integration.ID.make("azure")))?.methods).toContainEqual({
+        const integrations = yield* Integration.Service
+        expect((yield* integrations.get(Integration.ID.make("azure")))?.methods).toContainEqual({
           type: "key",
           label: "API key",
           form: [
@@ -191,13 +163,12 @@ describe("AzurePlugin", () => {
     ),
   )
 
-  it.live("does not invoke Azure CLI at startup without a cached Azure login", () => {
+  it.live("does not invoke Azure CLI at startup without an Azure connection", () => {
     const commands: string[] = []
     return withEnv(
       {
         AZURE_RESOURCE_NAME: undefined,
         AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined,
-        AZURE_RESOURCE_GROUP: undefined,
       },
       () =>
         withAzureCommands(
@@ -212,48 +183,20 @@ describe("AzurePlugin", () => {
               const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
               expect(integration?.methods.some((method) => method.type === "oauth")).toBe(true)
             }),
-          0,
-          false,
         ),
     )
   })
 
-  it.live("lists Azure CLI resources and keeps manual resource entry available", () =>
-    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
-      withAzureCommands(
-        () => [
-          { name: "first-resource", resourceGroup: "first-group" },
-          { name: "second-resource", resourceGroup: "second-group" },
-        ],
-        () =>
-          Effect.gen(function* () {
-            yield* addPlugin()
-            const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
-            const method = integration?.methods.find((item) => item.type === "oauth")
-            expect(method?.form?.[0]).toMatchObject({
-              title: "Enter Azure Resource Name",
-              options: [
-                { value: "first-resource", label: "first-resource", description: "first-group" },
-                { value: "second-resource", label: "second-resource", description: "second-group" },
-              ],
-              custom: true,
-            })
-          }),
-      ),
-    ),
-  )
-
-  it.live("connects with the Azure CLI and accepts legacy token expiration", () =>
-    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
+  it.live("connects with the Azure CLI and accepts legacy token expiration", () => {
+    const commands: string[][] = []
+    return withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
       withAzureCommands(
         (args) => {
-          if (args.includes("get-access-token")) {
-            return {
-              accessToken: "legacy-cli-token",
-              expiresOn: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-            }
+          commands.push([...args])
+          return {
+            accessToken: "legacy-cli-token",
+            expiresOn: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           }
-          return []
         },
         () =>
           Effect.gen(function* () {
@@ -276,178 +219,48 @@ describe("AzurePlugin", () => {
               access: "legacy-cli-token",
               metadata: { resourceName: "test-resource" },
             })
+            expect(commands).toEqual([
+              [
+                "account",
+                "get-access-token",
+                "--scope",
+                "https://cognitiveservices.azure.com/.default",
+                "--output",
+                "json",
+              ],
+            ])
           }),
       ),
-    ),
-  )
-
-  it.live("finishes deployment discovery before Azure authorization completes", () =>
-    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
-      withAzureCommands(
-        (args) => {
-          if (args.includes("get-access-token")) {
-            return {
-              accessToken: "azure-token",
-              expires_on: Math.floor((Date.now() + 60 * 60 * 1000) / 1000),
-            }
-          }
-          if (args.includes("deployment")) {
-            return [
-              {
-                name: "gpt-production",
-                properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" },
-              },
-            ]
-          }
-          return [{ name: "test-resource", resourceGroup: "test-group" }]
-        },
-        () =>
-          Effect.gen(function* () {
-            const catalog = yield* Catalog.Service
-            yield* catalog.transform((draft) => {
-              draft.provider.update(Provider.ID.azure, (provider) => {
-                provider.package = Provider.aisdk("@ai-sdk/azure")
-              })
-              draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
-              draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
-            })
-            yield* addPlugin()
-            const integrations = yield* Integration.Service
-            const integrationID = Integration.ID.make("azure")
-            const attempt = yield* integrations.oauth.connect({
-              integrationID,
-              methodID: Integration.MethodID.make("azure-cli"),
-              answer: { resourceName: "test-resource" },
-            })
-            yield* Effect.gen(function* () {
-              const status = yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })
-              if (status.status !== "complete") {
-                return yield* Effect.fail(
-                  new Error(
-                    `Azure CLI authorization ${status.status}${"message" in status ? `: ${status.message}` : ""}`,
-                  ),
-                )
-              }
-            }).pipe(Effect.retry({ times: 1500, schedule: Schedule.spaced("1 millis") }))
-
-            expect(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-nano"))).toBeUndefined()
-            expect((yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-mini")))?.modelID).toBe(
-              Model.ID.make("gpt-production"),
-            )
-          }),
-        50,
-      ),
-    ),
-  )
-
-  for (const batched of [false, true]) {
-    it.effect(
-      `discovers deployments with an existing connection (${batched ? "batched startup" : "ready catalog"})`,
-      () =>
-        withEnv({ AZURE_RESOURCE_GROUP: undefined }, () =>
-          withAzureCommands(
-            (args) => {
-              if (args.includes("deployment")) {
-                return [
-                  {
-                    name: "gpt-production",
-                    properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" },
-                  },
-                  {
-                    name: "gpt-staging",
-                    properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" },
-                  },
-                  {
-                    name: "gpt-pending",
-                    properties: { model: { name: "gpt-5-mini" }, provisioningState: "Creating" },
-                  },
-                ]
-              }
-              return [{ name: "test-resource", resourceGroup: "test-group" }]
-            },
-            () =>
-              Effect.gen(function* () {
-                const catalog = yield* Catalog.Service
-                yield* azureCredential
-                const startup = Effect.gen(function* () {
-                  yield* catalog.transform((draft) => {
-                    draft.provider.update(Provider.ID.azure, (provider) => {
-                      provider.package = Provider.aisdk("@ai-sdk/azure")
-                    })
-                    draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), (model) => {
-                      model.name = "GPT-5 Mini"
-                    })
-                    draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
-                  })
-                  yield* addPlugin()
-                })
-                yield* batched ? State.batch(startup) : startup
-
-                expect((yield* catalog.provider.get(Provider.ID.azure))?.settings?.resourceName).toBe("test-resource")
-                expect((yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-mini")))?.modelID).toBe(
-                  Model.ID.make("gpt-production"),
-                )
-                expect((yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-staging")))?.modelID).toBe(
-                  Model.ID.make("gpt-staging"),
-                )
-                expect(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-nano"))).toBeUndefined()
-              }),
-          ),
-        ),
     )
-  }
+  })
 
-  it.effect("keeps existing models when Azure deployment discovery is unavailable", () =>
-    withAzureCommands(
-      () => new Error("management access denied"),
+  it.live("does not invoke Azure CLI at startup with an existing connection", () => {
+    const commands: string[][] = []
+    return withAzureCommands(
+      (args) => {
+        commands.push([...args])
+        return []
+      },
       () =>
         Effect.gen(function* () {
           const catalog = yield* Catalog.Service
-          yield* catalog.transform((draft) => {
-            draft.provider.update(Provider.ID.azure, (provider) => {
+          yield* catalog.transform((editor) => {
+            editor.provider.update(Provider.ID.azure, (provider) => {
               provider.package = Provider.aisdk("@ai-sdk/azure")
             })
-            draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
+            editor.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
+            editor.model.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
           })
           yield* azureCredential
           yield* addPlugin()
 
+          expect(commands).toEqual([])
+          expect((yield* catalog.provider.get(Provider.ID.azure))?.settings?.resourceName).toBe("test-resource")
           expect(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-mini"))).toBeDefined()
+          expect(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-nano"))).toBeDefined()
         }),
-    ),
-  )
-
-  it.effect("skips subscription discovery when the resource group is configured", () =>
-    withEnv({ AZURE_RESOURCE_GROUP: "restricted-group" }, () =>
-      withAzureCommands(
-        (args) => {
-          expect(args).toContain("deployment")
-          expect(args).toContain("restricted-group")
-          return [
-            {
-              name: "gpt-production",
-              properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" },
-            },
-          ]
-        },
-        () =>
-          Effect.gen(function* () {
-            const catalog = yield* Catalog.Service
-            yield* catalog.transform((draft) => {
-              draft.provider.update(Provider.ID.azure, (provider) => {
-                provider.package = Provider.aisdk("@ai-sdk/azure")
-              })
-              draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
-            })
-            yield* azureCredential
-            yield* addPlugin()
-            expect((yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-mini")))?.modelID).toBe(
-              Model.ID.make("gpt-production"),
-            )
-          }),
-      ),
-    ),
-  )
+    )
+  })
 
   it.effect("uses the correct bearer token audience for Azure and Foundry requests", () =>
     withAzureCommands(
@@ -562,13 +375,8 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const azure = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.azure),
-            package: Provider.aisdk("@ai-sdk/azure"),
-            settings: { resourceName: "from-config" },
-          })
-          catalog.provider.update(azure.id, (item) => {
-            item.package = azure.package
+          catalog.provider.update(Provider.ID.azure, (item) => {
+            item.package = Provider.aisdk("@ai-sdk/azure")
             item.settings = { resourceName: "from-config" }
           })
           catalog.provider.update(Provider.ID.openai, () => {})
@@ -585,13 +393,8 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const azure = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.azure),
-            package: Provider.aisdk("@ai-sdk/azure"),
-            settings: { resourceName: "" },
-          })
-          catalog.provider.update(azure.id, (item) => {
-            item.package = azure.package
+          catalog.provider.update(Provider.ID.azure, (item) => {
+            item.package = Provider.aisdk("@ai-sdk/azure")
             item.settings = { resourceName: "" }
           })
         })
@@ -606,13 +409,8 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const azure = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.azure),
-            package: Provider.aisdk("@ai-sdk/azure"),
-            settings: { resourceName: "   " },
-          })
-          catalog.provider.update(azure.id, (item) => {
-            item.package = azure.package
+          catalog.provider.update(Provider.ID.azure, (item) => {
+            item.package = Provider.aisdk("@ai-sdk/azure")
             item.settings = { resourceName: "   " }
           })
         })
@@ -625,7 +423,6 @@ describe("AzurePlugin", () => {
   it.effect("allows configured baseURL without resourceName", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) =>
@@ -634,7 +431,8 @@ describe("AzurePlugin", () => {
           }),
         )
         yield* addPlugin()
-        expect((yield* (yield* Integration.Service).get(Integration.ID.make("azure")))?.methods).toContainEqual({
+        const integrations = yield* Integration.Service
+        expect((yield* integrations.get(Integration.ID.make("azure")))?.methods).toContainEqual({
           type: "key",
           label: "API key",
         })
@@ -664,24 +462,24 @@ describe("AzurePlugin", () => {
           gateway: Model.ID.make("gateway"),
           nonAzure: Model.ID.make("non-azure"),
         }
-        yield* catalog.transform((draft) => {
-          draft.provider.update(Provider.ID.azure, (provider) => {
+        yield* catalog.transform((editor) => {
+          editor.provider.update(Provider.ID.azure, (provider) => {
             provider.package = Provider.aisdk("@ai-sdk/azure")
           })
-          draft.model.update(Provider.ID.azure, models.responses, () => {})
-          draft.model.update(Provider.ID.azure, models.chat, (model) => {
+          editor.model.update(Provider.ID.azure, models.responses, () => {})
+          editor.model.update(Provider.ID.azure, models.chat, (model) => {
             model.settings = { useCompletionUrls: true }
           })
-          draft.model.update(Provider.ID.azure, models.preview, (model) => {
+          editor.model.update(Provider.ID.azure, models.preview, (model) => {
             model.settings = { apiVersion: "2025-04-01-preview" }
           })
-          draft.model.update(Provider.ID.azure, models.deploymentURL, (model) => {
+          editor.model.update(Provider.ID.azure, models.deploymentURL, (model) => {
             model.settings = { useDeploymentBasedUrls: true }
           })
-          draft.model.update(Provider.ID.azure, models.gateway, (model) => {
+          editor.model.update(Provider.ID.azure, models.gateway, (model) => {
             model.settings = { baseURL: "https://gateway.example/azure" }
           })
-          draft.model.update(Provider.ID.azure, models.nonAzure, (model) => {
+          editor.model.update(Provider.ID.azure, models.nonAzure, (model) => {
             model.package = Provider.aisdk("@ai-sdk/anthropic")
           })
         })
@@ -722,7 +520,6 @@ describe("AzurePlugin", () => {
 
   it.effect("selects chat only for completion URLs", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -741,7 +538,6 @@ describe("AzurePlugin", () => {
 
   it.effect("selects chat from per-call useCompletionUrls", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -760,7 +556,6 @@ describe("AzurePlugin", () => {
 
   it.effect("ignores model useCompletionUrls when per-call option is unset", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -780,7 +575,6 @@ describe("AzurePlugin", () => {
 
   it.effect("uses the legacy Azure selector order and provider guard", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -809,7 +603,6 @@ describe("AzurePlugin", () => {
 
   it.effect("falls back through the legacy Azure selector order", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       const make = (method: string) => (id: string) => {

@@ -31,7 +31,9 @@ Registrations are owned by the plugin scope. Closing the scope removes them auto
 
 ## Transform Hooks
 
-Transform hooks contribute to stateful domains:
+Transform hooks contribute to stateful domains. Their editor callbacks are
+synchronous, so load effectful data before registering a transform or reloading
+its domain:
 
 ```ts
 yield *
@@ -43,7 +45,7 @@ yield *
   })
 ```
 
-OpenCode rebuilds the domain when a transform is registered or disposed. A rebuild starts from fresh domain state and runs every active transform in registration order.
+Registry reads rebuild synchronously when registrations changed, applying every transform in registration order to a fresh value; unchanged registries return the previous value. Values read earlier are never mutated. Notifications and resource reconciliation run separately from that materialization.
 
 Available transform hooks are namespaced by domain:
 
@@ -52,8 +54,12 @@ ctx.agent.transform
 ctx.catalog.transform
 ctx.command.transform
 ctx.integration.transform
+ctx.mcp.transform
 ctx.reference.transform
 ctx.skill.transform
+ctx.tool.transform
+ctx.vcs.transform
+ctx.websearch.transform
 ```
 
 ## Runtime Hooks
@@ -72,10 +78,12 @@ yield *
   )
 
 yield *
-  ctx.aisdk.hook("language", (event) => {
-    if (event.model.providerID !== "xai") return
-    event.language = event.sdk.responses(event.model.api.id)
-  })
+  ctx.aisdk.hook("language", (event) =>
+    Effect.sync(() => {
+      if (event.model.providerID !== "xai") return
+      event.language = event.sdk.responses(event.model.modelID)
+    }),
+  )
 ```
 
 Hooks run sequentially in registration order. Later hooks observe mutations made by earlier hooks.
@@ -88,6 +96,13 @@ yield *
     Effect.sync(() => {
       event.tools.read.description = "Read a file using narrow line ranges."
       delete event.tools.write
+    }),
+  )
+
+yield *
+  ctx.session.hook("retry", (event) =>
+    Effect.sync(() => {
+      if (event.attempt >= 3) event.decision = { retry: false }
     }),
   )
 ```
@@ -117,6 +132,10 @@ ctx.agent.reload()
 ctx.catalog.reload()
 ctx.command.reload()
 ctx.integration.reload()
+ctx.mcp.reload()
 ctx.reference.reload()
 ctx.skill.reload()
+ctx.tool.reload()
+ctx.vcs.reload()
+ctx.websearch.reload()
 ```

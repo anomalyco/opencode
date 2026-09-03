@@ -139,7 +139,7 @@ const toAIError = (error: AuthError): AIError => {
     return new AIError({
       reason:
         error instanceof MissingCredentialError
-          ? new AuthenticationError({ message: error.message, cause: error, kind: "missing" })
+          ? new AuthenticationError({ message: error.message, cause: error })
           : new InvalidRequestError({ message: `Failed to resolve auth config: ${error.message}`, cause: error }),
     })
   }

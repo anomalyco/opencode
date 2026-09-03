@@ -60,6 +60,7 @@ export function SessionWorkspaceMenu(props: {
         selection === "create"
           ? await createWorktree({
               api: sdk.api,
+              data,
               directory: props.directory,
               project: data.location.info({ directory: props.directory })?.project,
             })

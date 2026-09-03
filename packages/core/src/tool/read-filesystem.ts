@@ -101,6 +101,7 @@ export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
 }) {}
 
 export interface Interface {
+  readonly list: (path: AbsolutePath) => ReturnType<Files["list"]>
   readonly read: (
     path: AbsolutePath,
     resource: string,
@@ -378,7 +379,10 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const environment = yield* Environment.Service
-    return Service.of({ read: (path, resource, page) => read(environment.files, path, resource, page) })
+    return Service.of({
+      list: environment.files.list,
+      read: (path, resource, page) => read(environment.files, path, resource, page),
+    })
   }),
 )
 

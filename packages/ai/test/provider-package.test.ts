@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { model } from "@opencode-ai/ai/providers/openai"
+import { LLM } from "../src/index.js"
+import { Endpoint } from "../src/route/endpoint.js"
 
 describe("provider package entrypoints", () => {
   test("semantic API aliases expose the same contract", async () => {
@@ -36,7 +38,8 @@ describe("provider package entrypoints", () => {
     expect(modules[0].model).toBe(modules[1].model)
     expect(modules[8].model).toBe(modules[9].model)
     expect(modules[12].model).toBe(modules[13].model)
-    expect(modules[19].model).toBe(modules[20].model)
+    expect(modules[19].model).toBe(modules[21].model)
+    expect(modules[19].model).not.toBe(modules[20].model)
   })
 
   test("maps DeepInfra package settings onto its native executable model", async () => {
@@ -139,8 +142,10 @@ describe("provider package entrypoints", () => {
     expect(selected.route.id).toBe("anthropic-messages")
     expect(selected.route.endpoint).toMatchObject({
       baseURL: "https://messages.example.test/v1",
-      path: "/messages",
     })
+    expect(
+      Endpoint.render(selected.route.endpoint, { request: LLM.request({ model: selected }), body: {} }).toString(),
+    ).toBe("https://messages.example.test/v1/messages")
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ metadata: { user_id: "user_1" } })
     expect(selected.route.defaults.providerOptions).toEqual({ effort: "low" })

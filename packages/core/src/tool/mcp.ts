@@ -2,7 +2,7 @@ export * as McpTool from "./mcp.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Context, Effect, Fiber, type JsonSchema, Layer, Semaphore, Stream } from "effect"
+import { Context, Effect, Fiber, type JsonSchema, Layer, PubSub, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../bus.js"
 
@@ -38,10 +38,10 @@ export const layer = Layer.effect(
       .withPermit(
         Effect.gen(function* () {
           discovered = yield* mcp.tools()
-          yield* tools.transform((draft) => {
+          yield* tools.transform((editor) => {
             for (const tool of discovered) {
               const schema = (tool.inputSchema ?? {}) as JsonSchema.JsonSchema
-              draft.add({
+              editor.add({
                 name: tool.name,
                 options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
                 description: tool.description ?? "",
@@ -72,6 +72,7 @@ export const layer = Layer.effect(
                         server: tool.server,
                         name: tool.name,
                         args: (input ?? {}) as Record<string, unknown>,
+                        sessionID: context.sessionID,
                       })
                       .pipe(
                         Effect.catchTags({
@@ -122,9 +123,17 @@ export const layer = Layer.effect(
       }),
     )
 
+    // Servers announce tools in bursts and each read loads the whole catalog, so settle and refresh
+    // once. The bus subscription stays eager; only the already-open sliding subscription is debounced.
+    const changes = yield* PubSub.sliding<void>(1)
     yield* bus.subscribe(McpEvent.ToolsChanged).pipe(
-      // Each read loads the whole catalog, so queued notifications need only one refresh.
-      Stream.runForEachArray(() => reconcile),
+      Stream.runForEach(() => PubSub.publish(changes, undefined)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    const updates = yield* PubSub.subscribe(changes)
+    yield* Stream.fromSubscription(updates).pipe(
+      Stream.debounce("100 millis"),
+      Stream.runForEach(() => reconcile),
       Effect.forkScoped({ startImmediately: true }),
     )
     return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) })

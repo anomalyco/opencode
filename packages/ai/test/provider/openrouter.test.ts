@@ -305,9 +305,11 @@ describe("OpenRouter", () => {
       expect(prepared.body.messages).toEqual([
         {
           role: "assistant",
-          content: null,
+          content: "",
           reasoning: "Thinking",
+          reasoning_content: undefined,
           reasoning_details: details,
+          reasoning_text: undefined,
         },
       ])
     }),
@@ -335,7 +337,14 @@ describe("OpenRouter", () => {
       )
 
       expect(prepared.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning: "Thinking", reasoning_details: details },
+        {
+          role: "assistant",
+          content: "",
+          reasoning: "Thinking",
+          reasoning_content: undefined,
+          reasoning_details: details,
+          reasoning_text: undefined,
+        },
       ])
     }),
   )
@@ -361,7 +370,14 @@ describe("OpenRouter", () => {
       )
 
       expect(prepared.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning: "AB", reasoning_details: details },
+        {
+          role: "assistant",
+          content: "",
+          reasoning: "AB",
+          reasoning_content: undefined,
+          reasoning_details: details,
+          reasoning_text: undefined,
+        },
       ])
     }),
   )
@@ -376,7 +392,16 @@ describe("OpenRouter", () => {
         }),
       )
 
-      expect(prepared.body.messages).toEqual([{ role: "assistant", content: null }])
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "",
+          reasoning: undefined,
+          reasoning_content: undefined,
+          reasoning_details: undefined,
+          reasoning_text: undefined,
+        },
+      ])
     }),
   )
 })

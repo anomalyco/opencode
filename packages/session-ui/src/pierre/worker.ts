@@ -4,8 +4,6 @@ import { registerOpenCodeTheme } from "@opencode-ai/ui/context/marked-theme-regi
 
 registerOpenCodeTheme()
 
-export type WorkerPoolStyle = "unified" | "split"
-
 export function workerFactory(): Worker {
   return new Worker(ShikiWorkerUrl, { type: "module" })
 }
@@ -24,6 +22,9 @@ function createPool(lineDiffType: "none" | "word-alt") {
     {
       theme: "OpenCode",
       lineDiffType,
+      // Pierre renders with the pool's options, not the viewer's, whenever the pool works. The "none" pool only
+      // serves diffs above the large-file threshold, so it carries the plain-text fallback the viewer requests.
+      ...(lineDiffType === "none" && { maxLineDiffLength: 0, tokenizeMaxLineLength: 1 }),
       preferredHighlighter: "shiki-wasm",
     },
   )
@@ -32,24 +33,25 @@ function createPool(lineDiffType: "none" | "word-alt") {
   return pool
 }
 
-let unified: WorkerPoolManager | undefined
-let split: WorkerPoolManager | undefined
+let plain: WorkerPoolManager | undefined
+let diff: WorkerPoolManager | undefined
 
-export function getWorkerPool(style: WorkerPoolStyle | undefined): WorkerPoolManager | undefined {
+export function getWorkerPool(lineDiffType: "none" | "word-alt" = "word-alt"): WorkerPoolManager | undefined {
   if (typeof window === "undefined") return
 
-  if (style === "split") {
-    if (!split) split = createPool("word-alt")
-    return split
+  if (lineDiffType === "none") {
+    if (!plain) plain = createPool("none")
+    return plain
   }
 
-  if (!unified) unified = createPool("none")
-  return unified
+  if (!diff) diff = createPool("word-alt")
+  return diff
 }
 
 export function getWorkerPools() {
+  const pool = getWorkerPool()
   return {
-    unified: getWorkerPool("unified"),
-    split: getWorkerPool("split"),
+    unified: pool,
+    split: pool,
   }
 }

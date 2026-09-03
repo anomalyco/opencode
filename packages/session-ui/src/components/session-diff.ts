@@ -1,5 +1,6 @@
 import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
 import { parsePatch } from "diff"
+import { checksum } from "@opencode-ai/util/encode"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { PresentationFileDiff } from "../file-presentation"
 
@@ -65,6 +66,8 @@ function fileDiffFromPatch(file: string, patch: string) {
   const value = contents
     ? fileDiffFromContent(file, contents.before, contents.after)
     : ((input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file))
+  // Complete patches already carry a content key from fileDiffFromContent; partial patches are keyed by the patch text.
+  value.cacheKey ??= highlightKey(key)
   patchFileDiffCache.set(key, value)
   while (patchFileDiffCache.size > diffCacheLimit) patchFileDiffCache.delete(patchFileDiffCache.keys().next().value!)
   return value
@@ -136,7 +139,16 @@ function patchInput(file: string, patch: string) {
 
 function fileDiffFromContent(file: string, before: string, after: string) {
   if (!before && !after) return emptyFileDiff(file)
-  return parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+  const value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+  value.cacheKey = highlightKey(`${file}\0${before}\0${after}`)
+  return value
+}
+
+// Pierre reuses and dedups worker highlighting only for diffs that carry a cacheKey, and it treats diffs with equal
+// keys as the same target. Derive the key from every input that shapes the highlighted output: the file name selects
+// the language and the content selects the lines.
+function highlightKey(value: string) {
+  return `${value.length}:${checksum(value) ?? 0}`
 }
 
 function emptyFileDiff(file: string) {

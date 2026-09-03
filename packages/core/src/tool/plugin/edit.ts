@@ -6,7 +6,7 @@
  */
 export * as EditTool from "./edit.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Bom } from "@opencode-ai/util/bom"
@@ -108,7 +108,7 @@ const findLineOccurrences = (content: string, search: string) => {
 
 export const Plugin = {
   id: "opencode.tool.edit",
-  effect: Effect.fn("EditTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("EditTool.Plugin")(function* (ctx: Context) {
     const mutation = yield* LocationMutation.Service
     const fileMutation = yield* FileMutation.Service
     const environment = yield* Environment.Service
@@ -117,8 +117,8 @@ export const Plugin = {
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false, permission: "edit" },
           description:

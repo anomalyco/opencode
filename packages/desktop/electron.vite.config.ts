@@ -30,8 +30,12 @@ const sentry =
 
 export default defineConfig(({ command }) => ({
   main: {
+    resolve: {
+      dedupe: ["effect"],
+    },
     define: {
-      "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
+      // Local renderer/server mode still uses the dev application identity and updater policy.
+      "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel === "local" ? "dev" : channel),
     },
     build: {
       minify: command === "build",
@@ -50,7 +54,11 @@ const require = __cjs_mod__.createRequire(import.meta.url);
 `,
         },
       },
-      externalizeDeps: { include: [nodePtyPkg] },
+      externalizeDeps: {
+        // Bundle the Effect family together; native MessagePack acceleration stays optional and external.
+        exclude: ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"],
+        include: [nodePtyPkg, "msgpackr-extract"],
+      },
     },
     plugins: [
       {
@@ -83,7 +91,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
     },
-    plugins: [{ ...picker, transformIndexHtml: undefined }, appPlugin, sentry],
+    plugins: [picker, appPlugin, sentry],
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {

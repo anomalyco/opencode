@@ -97,7 +97,7 @@ export const api: ElectronAPI = {
   readPickedFile: (token, path) => invoke("FilesReadPickedFile", { token, path }).then(toArrayBuffer),
   releasePickedFiles: (token) => invoke("FilesReleasePickedFiles", { token }),
   getPathForFile: (file) => window.electron.getPathForFile(file),
-  saveFilePicker: (opts) => invoke("FilesSaveFilePicker", { options: opts }),
+  saveFile: (opts, content) => invoke("FilesSaveFile", { options: opts, content }),
   openExternal: (url) => send("FilesOpenExternal", { url }),
   openLocalFile: (url) => send("FilesOpenLocalFile", { url }),
   openPath: (path, app) => invoke("FilesOpenPath", { path, application: app }).then((value) => value ?? undefined),

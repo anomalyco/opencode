@@ -486,6 +486,321 @@
         "summary": "List plugins"
       }
     },
+    "/api/plugin/await-activation": {
+      "post": {
+        "tags": ["plugin"],
+        "operationId": "v2.plugin.awaitActivation",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Wait for configured plugin activation at a Location to settle, including missing-package installs. Completion does not imply every plugin succeeded or background resource discovery finished. Cancelling this wait does not cancel activation.",
+        "summary": "Wait for plugin activation"
+      }
+    },
+    "/api/plugin/check": {
+      "post": {
+        "tags": ["plugin"],
+        "operationId": "v2.plugin.check",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Plugin.Info"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Check one or all package plugins for available updates.",
+        "summary": "Check plugin updates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/plugin/update": {
+      "post": {
+        "tags": ["plugin"],
+        "operationId": "v2.plugin.update",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update package plugins concurrently and notify active locations to reload them. Responds once every update has finished; fails when any update fails.",
+        "summary": "Update plugins",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "targets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["targets"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/session": {
       "get": {
         "tags": ["session"],
@@ -790,6 +1105,16 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "metadata": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Metadata"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -977,6 +1302,16 @@
               }
             }
           },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
           "409": {
             "description": "ConflictError",
             "content": {
@@ -988,7 +1323,7 @@
             }
           }
         },
-        "description": "Import a projected session transcript at the requested location.",
+        "description": "Import a projected session transcript at the requested location. If parentID is supplied, the parent session must already exist; import parents before children.",
         "summary": "Import session",
         "requestBody": {
           "content": {
@@ -7338,14 +7673,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -8223,14 +8551,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -8569,7 +8890,8 @@
                 {
                   "type": "null"
                 }
-              ]
+              ],
+              "description": "An absolute path or a path relative to the requested location. Defaults to the location directory."
             },
             "required": false
           }
@@ -8620,7 +8942,7 @@
             }
           }
         },
-        "description": "List direct children of one directory relative to the requested location.",
+        "description": "List direct children using an absolute path or a path relative to the requested location, including parents and siblings outside its directory. Entry paths remain relative to the requested location; listing does not switch locations.",
         "summary": "List directory"
       }
     },
@@ -8944,6 +9266,132 @@
         "summary": "List skills"
       }
     },
+    "/api/rpc/{rpcID}/{method}": {
+      "post": {
+        "tags": ["rpc"],
+        "operationId": "v2.rpc.call",
+        "parameters": [
+          {
+            "name": "rpcID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "method",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Rpc.Output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rpc.Output"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "RpcError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RpcErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "RpcInternalError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpcInternalErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Dispatch a method to the currently registered RPC at the requested location.",
+        "summary": "Call a plugin RPC",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Rpc.Input"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/event": {
       "get": {
         "tags": ["event"],
@@ -9063,7 +9511,7 @@
             }
           }
         },
-        "description": "Subscribe to native event payloads for the server. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",
+        "description": "Subscribe to native events and plugin RPC events across all server locations. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",
         "summary": "Subscribe to events"
       }
     },
@@ -9872,6 +10320,97 @@
         "x-websocket": true
       }
     },
+    "/api/experimental/session/{sessionID}/terminal/read": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.read",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "lines",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PersistentPty.ReadLinesEncoded"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/PersistentPty.ReadResult"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read the last physical rows without changing selection or taking control. Omitted lines uses the live terminal height; larger counts include retained history. Blank rows are preserved. Screen dimensions and cursor remain relative to the live screen. Returns null when no current terminal exists. Selection is server-local and resets on restart. Experimental: may change without compatibility guarantees.",
+        "summary": "Read the session's most recently controlled terminal"
+      }
+    },
     "/api/experimental/session/{sessionID}/terminal": {
       "get": {
         "tags": ["persistentPty"],
@@ -10040,6 +10579,70 @@
         "responses": {
           "204": {
             "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/handoff": {
+      "post": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.handoff",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "handoff": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/PersistentPty.Handoff"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["handoff"],
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "400": {
             "description": "InvalidRequestError",
@@ -11903,6 +12506,116 @@
         "summary": "VCS info"
       }
     },
+    "/api/vcs/base": {
+      "get": {
+        "tags": ["vcs"],
+        "operationId": "v2.vcs.base",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/Vcs.Base"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Infer a local review base from named branch creation history, or the repository default only when currently on that branch. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit base on diff requests.",
+        "summary": "VCS review base"
+      }
+    },
     "/api/vcs/status": {
       "get": {
         "tags": ["vcs"],
@@ -12176,6 +12889,14 @@
             "required": true
           },
           {
+            "name": "base",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "context",
             "in": "query",
             "schema": {
@@ -12235,9 +12956,19 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Diff the working copy against HEAD (mode git) or the default-branch merge base (mode branch) for the requested location.",
+        "description": "Diff HEAD to the working copy (working), the base merge-base to the working copy (branch), or the base merge-base to HEAD (committed). Omitting base preserves repository-default comparison; supplying it overrides the comparison without saving it.",
         "summary": "VCS diff"
       }
     },
@@ -13047,8 +13778,12 @@
               }
             ]
           },
-          "subtask": {
+          "subagent": {
             "type": "boolean"
+          },
+          "subtask": {
+            "type": "boolean",
+            "description": "Deprecated alias for subagent."
           }
         },
         "required": ["template"],
@@ -13167,16 +13902,9 @@
           "default_agent": {
             "type": "string"
           },
-          "autoupdate": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "string",
-                "enum": ["notify"]
-              }
-            ]
+          "update": {
+            "type": "string",
+            "enum": ["disable", "notify"]
           },
           "share": {
             "type": "string",
@@ -13649,6 +14377,9 @@
       "Config.ProviderEncoded": {
         "type": "object",
         "properties": {
+          "canonical": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -14983,6 +15714,9 @@
           "name": {
             "type": "string"
           },
+          "metadata": {
+            "type": "object"
+          },
           "methods": {
             "type": "array",
             "items": {
@@ -15493,6 +16227,9 @@
           "reasoningField": {
             "$ref": "#/components/schemas/Model.ReasoningField"
           },
+          "requireReasoning": {
+            "type": "boolean"
+          },
           "maxTokensField": {
             "$ref": "#/components/schemas/Model.MaxTokensField"
           },
@@ -15555,6 +16292,9 @@
             "type": "string"
           },
           "providerID": {
+            "type": "string"
+          },
+          "canonical": {
             "type": "string"
           },
           "family": {
@@ -15870,7 +16610,34 @@
             "additionalProperties": false
           }
         },
-        "required": ["command", "args", "cwd", "title", "env"],
+        "required": ["args", "title", "env"],
+        "additionalProperties": false
+      },
+      "PersistentPty.Handoff": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "instanceID": {
+            "type": "string"
+          },
+          "ticket": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": ["directory", "instanceID", "ticket", "expiresAt"],
         "additionalProperties": false
       },
       "PersistentPty.Info": {
@@ -15967,6 +16734,69 @@
         ],
         "additionalProperties": false
       },
+      "PersistentPty.ReadLinesEncoded": {
+        "type": "string"
+      },
+      "PersistentPty.ReadResult": {
+        "type": "object",
+        "properties": {
+          "ptyID": {
+            "type": "string",
+            "pattern": "^pty"
+          },
+          "title": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "foregroundProcess": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "screen": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "cols": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "rows": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "cursor": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["text", "cols", "rows", "cursor"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["ptyID", "title", "cwd", "foregroundProcess", "screen"],
+        "additionalProperties": false
+      },
       "PersistentPty.Snapshot": {
         "type": "object",
         "properties": {
@@ -16025,52 +16855,42 @@
         "required": ["size"],
         "additionalProperties": false
       },
-      "Plugin.Info": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "source": {
-                "$ref": "#/components/schemas/Plugin.Source"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["active"]
-              },
-              "tui": {
-                "type": "boolean"
-              }
-            },
-            "required": ["id", "source", "status", "tui"],
-            "additionalProperties": false
+      "Plugin.Features": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "boolean",
+            "enum": [true]
           },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "source": {
-                "$ref": "#/components/schemas/Plugin.Source"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["failed"]
-              },
-              "error": {
-                "type": "string"
-              },
-              "tui": {
-                "type": "boolean"
-              }
-            },
-            "required": ["source", "status", "error", "tui"],
-            "additionalProperties": false
+          "tui": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "rpc": {
+            "type": "boolean",
+            "enum": [true]
           }
-        ]
+        },
+        "additionalProperties": false
+      },
+      "Plugin.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Plugin.Source"
+          },
+          "features": {
+            "$ref": "#/components/schemas/Plugin.Features"
+          },
+          "state": {
+            "$ref": "#/components/schemas/Plugin.State"
+          }
+        },
+        "required": ["source", "features", "state"],
+        "additionalProperties": false
       },
       "Plugin.Source": {
         "anyOf": [
@@ -16092,11 +16912,22 @@
                 "type": "string",
                 "enum": ["package"]
               },
-              "package": {
+              "target": {
                 "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "outdated": {
+                "type": "boolean",
+                "enum": [true]
+              },
+              "updating": {
+                "type": "boolean",
+                "enum": [true]
               }
             },
-            "required": ["type", "package"],
+            "required": ["type", "target"],
             "additionalProperties": false
           },
           {
@@ -16122,6 +16953,38 @@
               }
             },
             "required": ["type"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Plugin.State": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["active"]
+              }
+            },
+            "required": ["status"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["failed"]
+              },
+              "error": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "error"],
             "additionalProperties": false
           }
         ]
@@ -16222,7 +17085,7 @@
       },
       "Project.Vcs": {
         "type": "string",
-        "enum": ["git", "hg"]
+        "pattern": "^[a-z][a-z0-9._-]*$"
       },
       "ProjectNotFoundErrorEncoded": {
         "type": "object",
@@ -16383,6 +17246,9 @@
         "type": "object",
         "properties": {
           "id": {
+            "type": "string"
+          },
+          "canonical": {
             "type": "string"
           },
           "integrationID": {
@@ -16596,6 +17462,71 @@
             "$ref": "#/components/schemas/Reference.GitSource"
           }
         ]
+      },
+      "Rpc.Input": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "additionalProperties": false
+      },
+      "Rpc.Output": {
+        "type": "object",
+        "properties": {
+          "output": {}
+        },
+        "additionalProperties": false
+      },
+      "RpcErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["RpcError"]
+          },
+          "type": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["_tag", "type", "message"],
+        "additionalProperties": false
+      },
+      "RpcInternalErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["RpcInternalError"]
+          },
+          "type": {
+            "type": "string",
+            "enum": ["rpc.internal", "rpc.invalid_output"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["_tag", "type", "message"],
+        "additionalProperties": false
       },
       "ServiceHealth": {
         "type": "object",
@@ -16983,6 +17914,9 @@
           "subpath": {
             "type": "string"
           },
+          "metadata": {
+            "$ref": "#/components/schemas/Session.Metadata"
+          },
           "revert": {
             "$ref": "#/components/schemas/Session.Revert"
           }
@@ -17038,6 +17972,9 @@
             "type": "object",
             "properties": {
               "created": {
+                "type": "number"
+              },
+              "streamed": {
                 "type": "number"
               },
               "completed": {
@@ -17831,6 +18768,9 @@
         "required": ["id", "time", "text", "type"],
         "additionalProperties": false
       },
+      "Session.Metadata": {
+        "type": "object"
+      },
       "Session.Revert": {
         "type": "object",
         "properties": {
@@ -18490,6 +19430,23 @@
         "type": "string",
         "contentMediaType": "application/json"
       },
+      "Vcs.Base": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["reflog", "default"]
+          }
+        },
+        "required": ["name", "ref", "source"],
+        "additionalProperties": false
+      },
       "Vcs.Branch": {
         "type": "object",
         "properties": {
@@ -18542,7 +19499,7 @@
       },
       "Vcs.Mode": {
         "type": "string",
-        "enum": ["working", "branch"]
+        "enum": ["working", "branch", "committed"]
       },
       "WebSearch.Provider": {
         "type": "object",
@@ -18745,6 +19702,10 @@
     {
       "name": "skill",
       "description": "Experimental skill routes."
+    },
+    {
+      "name": "rpc",
+      "description": "Plugin RPC routes."
     },
     {
       "name": "event",

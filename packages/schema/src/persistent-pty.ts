@@ -47,6 +47,24 @@ export const Snapshot = Schema.Struct({
 }).annotate({ identifier: "PersistentPty.Snapshot" })
 export interface Snapshot extends Schema.Schema.Type<typeof Snapshot> {}
 
+export const ReadLines = PositiveInt.check(Schema.isLessThanOrEqualTo(65535)).annotate({
+  identifier: "PersistentPty.ReadLines",
+})
+
+export const ReadResult = Schema.Struct({
+  ptyID: Pty.ID,
+  title: Schema.String,
+  cwd: Schema.String,
+  foregroundProcess: Schema.NullOr(Schema.String),
+  screen: Schema.Struct({
+    text: Schema.String,
+    cols: PositiveInt,
+    rows: PositiveInt,
+    cursor: Snapshot.fields.cursor,
+  }),
+}).annotate({ identifier: "PersistentPty.ReadResult" })
+export interface ReadResult extends Schema.Schema.Type<typeof ReadResult> {}
+
 export const Added = ephemeral({ type: "persistent-pty.added", schema: { sessionID: Session.ID, terminal: Info } })
 export const Removed = ephemeral({ type: "persistent-pty.removed", schema: { sessionID: Session.ID, ptyID: Pty.ID } })
 export const Event = { Added, Removed, Definitions: inventory(Added, Removed) }

@@ -1,7 +1,7 @@
+import type { OpenCodeClient } from "@opencode-ai/client"
 import type { GenerateApi, PluginApi } from "@opencode-ai/client/promise/api"
 import type { Location } from "@opencode-ai/schema/location"
 import type { PluginOptions } from "../options.js"
-import type { VcsDiscovery } from "../vcs.js"
 import type { App } from "../app.js"
 import type { AgentDomain } from "./agent.js"
 import type { AISDKDomain } from "./aisdk.js"
@@ -12,6 +12,7 @@ import type { IntegrationDomain } from "./integration.js"
 import type { MCPDomain } from "./mcp.js"
 import type { PermissionDomain } from "./permission.js"
 import type { ReferenceDomain } from "./reference.js"
+import type { RpcDomain } from "./rpc.js"
 import type { SessionDomain } from "./session.js"
 import type { ShellDomain } from "./shell.js"
 import type { SkillDomain } from "./skill.js"
@@ -29,12 +30,16 @@ export interface Context {
   readonly catalog: CatalogDomain
   readonly command: CommandDomain
   readonly event: EventDomain
+  readonly experimental: {
+    readonly terminal: Pick<OpenCodeClient["experimental"]["persistentPty"], "read">
+  }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly generate: GenerateApi
   readonly permission: PermissionDomain
-  readonly plugin: PluginApi
+  readonly plugin: Pick<PluginApi, "list">
   readonly reference: ReferenceDomain
+  readonly rpc: RpcDomain
   readonly session: SessionDomain
   readonly shell: ShellDomain
   readonly skill: SkillDomain
@@ -48,8 +53,6 @@ export type Cleanup = () => Promise<void> | void
 
 export interface Plugin {
   readonly id: string
-  readonly tui?: boolean
-  readonly vcs?: VcsDiscovery
   readonly setup: (context: Context) => Promise<Cleanup | void> | Cleanup | void
 }
 

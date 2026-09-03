@@ -1,4 +1,3 @@
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import path, { dirname, isAbsolute, join, relative, sep } from "path"
 import { realpathSync } from "fs"
 import { readdir } from "fs/promises"
@@ -251,7 +250,7 @@ export namespace FSUtil {
     try {
       return normalizePath(realpathSync(resolved))
     } catch (e: any) {
-      if (e?.code === "ENOENT") return normalizePath(resolved)
+      if (e?.code === "ENOENT" || e?.code === "ENOTDIR") return normalizePath(resolved)
       throw e
     }
   }

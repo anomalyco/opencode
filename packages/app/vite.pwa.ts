@@ -10,6 +10,8 @@ export function serviceWorker(directory: string) {
     injectRegister: false,
     manifest: false,
     workbox: {
+      // Workbox runs after Sentry's upload and cleanup, so do not publish an unuploaded map.
+      sourcemap: false,
       globDirectory: directory,
       clientsClaim: false,
       // Keep each open tab on its complete build until all old clients close.

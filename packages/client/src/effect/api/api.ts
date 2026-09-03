@@ -88,8 +88,33 @@ export type PluginListInput = {
 export type PluginListOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<Plugin.Info> }
 export type PluginListOperation<E = never> = (input?: PluginListInput) => Effect.Effect<PluginListOutput, E>
 
+export type PluginAwaitActivationInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type PluginAwaitActivationOutput = void
+export type PluginAwaitActivationOperation<E = never> = (
+  input?: PluginAwaitActivationInput,
+) => Effect.Effect<PluginAwaitActivationOutput, E>
+
+export type PluginCheckInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly target?: string | undefined
+}
+export type PluginCheckOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<Plugin.Info> }
+export type PluginCheckOperation<E = never> = (input?: PluginCheckInput) => Effect.Effect<PluginCheckOutput, E>
+
+export type PluginUpdateInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly targets: ReadonlyArray<string>
+}
+export type PluginUpdateOutput = void
+export type PluginUpdateOperation<E = never> = (input: PluginUpdateInput) => Effect.Effect<PluginUpdateOutput, E>
+
 export interface PluginApi<E = never> {
   readonly list: PluginListOperation<E>
+  readonly awaitActivation: PluginAwaitActivationOperation<E>
+  readonly check: PluginCheckOperation<E>
+  readonly update: PluginUpdateOperation<E>
 }
 
 export type SessionListInput = {
@@ -183,6 +208,7 @@ export type SessionCreateInput = {
   readonly agent?: Agent.ID | undefined
   readonly model?: Model.Ref | undefined
   readonly location?: Location.Ref | undefined
+  readonly metadata?: Session.Metadata | undefined
 }
 export type SessionCreateOutput = Session.Info
 export type SessionCreateOperation<E = never> = (input?: SessionCreateInput) => Effect.Effect<SessionCreateOutput, E>
@@ -410,6 +436,7 @@ export type SessionLogOutput =
             readonly title?: string | undefined
             readonly agent?: Agent.ID | undefined
             readonly model?: Model.Ref | undefined
+            readonly metadata?: Session.Metadata | undefined
             readonly version: string
           }
         }
@@ -938,6 +965,8 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
+            readonly model?: Model.Ref | undefined
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly text: string
             readonly recent: string
           }
@@ -1532,7 +1561,7 @@ export interface PermissionApi<E = never> {
 
 export type FileListInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  readonly path?: RelativePath | undefined
+  readonly path?: string | undefined
 }
 export type FileListOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<FileSystem.Entry> }
 export type FileListOperation<E = never> = (input?: FileListInput) => Effect.Effect<FileListOutput, E>
@@ -1569,6 +1598,19 @@ export type SkillListOperation<E = never> = (input?: SkillListInput) => Effect.E
 
 export interface SkillApi<E = never> {
   readonly list: SkillListOperation<E>
+}
+
+export type RpcCallInput = {
+  readonly rpcID: string
+  readonly method: string
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly input?: unknown | undefined
+}
+export type RpcCallOutput = { readonly output?: unknown }
+export type RpcCallOperation<E = never> = (input: RpcCallInput) => Effect.Effect<RpcCallOutput, E>
+
+export interface RpcApi<E = never> {
+  readonly call: RpcCallOperation<E>
 }
 
 export type EventSubscribeOutput = OpenCodeEvent
@@ -1636,6 +1678,23 @@ export interface PtyApi<E = never> {
   readonly remove: PtyRemoveOperation<E>
   readonly connect: { readonly token: PtyConnectTokenOperation<E> }
 }
+
+export type ExperimentalPersistentPtyReadInput = { readonly sessionID: Session.ID; readonly lines?: number | undefined }
+export type ExperimentalPersistentPtyReadOutput = {
+  readonly ptyID: Pty.ID
+  readonly title: string
+  readonly cwd: string
+  readonly foregroundProcess: string | null
+  readonly screen: {
+    readonly text: string
+    readonly cols: number
+    readonly rows: number
+    readonly cursor: { readonly x: number; readonly y: number }
+  }
+} | null
+export type ExperimentalPersistentPtyReadOperation<E = never> = (
+  input: ExperimentalPersistentPtyReadInput,
+) => Effect.Effect<ExperimentalPersistentPtyReadOutput, E>
 
 export type ExperimentalPersistentPtyListInput = { readonly sessionID: Session.ID }
 export type ExperimentalPersistentPtyListOutput = ReadonlyArray<{
@@ -1785,6 +1844,7 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
 
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
+    readonly read: ExperimentalPersistentPtyReadOperation<E>
     readonly list: ExperimentalPersistentPtyListOperation<E>
     readonly create: ExperimentalPersistentPtyCreateOperation<E>
     readonly shutdown: ExperimentalPersistentPtyShutdownOperation<E>
@@ -1930,6 +1990,12 @@ export type VcsGetInput = {
 export type VcsGetOutput = { readonly location: Location.Info; readonly data: Vcs.Info }
 export type VcsGetOperation<E = never> = (input?: VcsGetInput) => Effect.Effect<VcsGetOutput, E>
 
+export type VcsBaseInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type VcsBaseOutput = { readonly location: Location.Info; readonly data: Vcs.Base | null }
+export type VcsBaseOperation<E = never> = (input?: VcsBaseInput) => Effect.Effect<VcsBaseOutput, E>
+
 export type VcsStatusInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
@@ -1947,6 +2013,7 @@ export type VcsBranchesOperation<E = never> = (input?: VcsBranchesInput) => Effe
 export type VcsDiffInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly mode: Vcs.Mode
+  readonly base?: string | undefined
   readonly context?: number | undefined
 }
 export type VcsDiffOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<FileDiff.Info> }
@@ -1954,6 +2021,7 @@ export type VcsDiffOperation<E = never> = (input: VcsDiffInput) => Effect.Effect
 
 export interface VcsApi<E = never> {
   readonly get: VcsGetOperation<E>
+  readonly base: VcsBaseOperation<E>
   readonly status: VcsStatusOperation<E>
   readonly branches: VcsBranchesOperation<E>
   readonly diff: VcsDiffOperation<E>
@@ -2045,6 +2113,7 @@ export interface AppApi<E = never> {
   readonly file: FileApi<E>
   readonly command: CommandApi<E>
   readonly skill: SkillApi<E>
+  readonly rpc: RpcApi<E>
   readonly event: EventApi<E>
   readonly pty: PtyApi<E>
   readonly experimental: ExperimentalApi<E>

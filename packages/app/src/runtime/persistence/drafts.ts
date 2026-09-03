@@ -1,4 +1,5 @@
 import type { AsyncStorage } from "@solid-primitives/storage"
+import { Option, Schema } from "effect"
 
 export type BlobReference = { id: string; url: string }
 
@@ -38,6 +39,19 @@ export async function createBlobReference(blob: Blob): Promise<BlobReference> {
 
 export function createDraftStore(driver: Driver): DraftStore {
   const versions = new Map<string, number>()
+  const loading = new Map<string, Promise<string | undefined>>()
+  const loadBlobUrl = (id: string) => {
+    const existing = urls.get(id)
+    if (existing) return existing
+    const pending = loading.get(id)
+    if (pending) return pending
+    const next = driver
+      .getBlob(id)
+      .then((blob) => (blob ? blobUrl(id, blob) : undefined))
+      .finally(() => loading.delete(id))
+    loading.set(id, next)
+    return next
+  }
   const putBlob = async (blob: Blob) => {
     const id = await driver.putBlob(blob)
     return { id, url: blobUrl(id, blob) }
@@ -70,8 +84,8 @@ export function createDraftStore(driver: Driver): DraftStore {
     if (item.blob && typeof item.blob === "object") {
       const ref = item.blob as Record<string, unknown>
       if (typeof ref.id === "string") {
-        const blob = await driver.getBlob(ref.id)
-        if (blob) return { ...item, blob: { id: ref.id, url: blobUrl(ref.id, blob) } }
+        const url = await loadBlobUrl(ref.id)
+        if (url) return { ...item, blob: { id: ref.id, url } }
       }
     }
     return Object.fromEntries(
@@ -81,7 +95,11 @@ export function createDraftStore(driver: Driver): DraftStore {
   return {
     getItem: async (key) => {
       const value = await driver.get(key)
-      return value === null ? null : JSON.stringify(await decode(JSON.parse(value)))
+      if (value === null) return null
+      const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(value)
+      // Let the owning persistence codec apply its invalid-document policy.
+      if (Option.isNone(parsed)) return value
+      return JSON.stringify(await decode(parsed.value))
     },
     setItem: async (key, value) => {
       const version = (versions.get(key) ?? 0) + 1

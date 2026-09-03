@@ -17,6 +17,7 @@ export interface VcsBranchesInput extends VcsScope {
 
 export interface VcsDiffInput extends VcsScope {
   readonly mode: Vcs.Mode
+  readonly base?: string
   readonly context: number
   readonly maxOutputBytes: number
 }
@@ -25,17 +26,18 @@ export interface VcsDefinition {
   readonly id: string
   readonly name: string
   readonly info: (input: VcsScope, context: { readonly signal: AbortSignal }) => Promise<Vcs.Info>
+  readonly base?: (input: VcsScope, context: { readonly signal: AbortSignal }) => Promise<Vcs.Base | null>
   readonly branches: (input: VcsBranchesInput, context: { readonly signal: AbortSignal }) => Promise<Vcs.BranchList>
   readonly status: (input: VcsScope, context: { readonly signal: AbortSignal }) => Promise<readonly Vcs.FileStatus[]>
   readonly diff: (input: VcsDiffInput, context: { readonly signal: AbortSignal }) => Promise<readonly FileDiff.Info[]>
 }
 
 export interface VcsDomain extends VcsApi {
-  readonly transform: Transform<VcsDraft>
+  readonly transform: Transform<VcsEditor>
   readonly reload: () => Promise<void>
 }
 
-export interface VcsDraft {
+export interface VcsEditor {
   add(definition: VcsDefinition): void
   readonly default: {
     get(): string | undefined

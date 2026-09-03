@@ -1,5 +1,5 @@
-import { Cause, Effect, Exit, Schema } from "effect"
-import { ToolError, toolError } from "./tool-error.js"
+import { Cause, Effect, Exit, Formatter, Schema } from "effect"
+import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
@@ -8,6 +8,7 @@ import {
   inputTypeScript,
   outputTypeScript,
 } from "./tool-schema.js"
+import { isNamespace, type Namespace } from "./namespace.js"
 import { isTool, type Tool } from "./tool.js"
 import type { Tools } from "./tools.js"
 import {
@@ -116,15 +117,6 @@ export class ToolRuntimeError extends Error {
     this.name = "ToolRuntimeError"
   }
 }
-
-const runHost = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, ToolError, R> =>
-  effect.pipe(
-    Effect.catchCause((cause) => {
-      if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
-      const error = Cause.squash(cause)
-      return Effect.fail(error instanceof ToolError ? error : toolError("Tool execution failed", error))
-    }),
-  )
 
 const blockedMemberNames = new Set(["__proto__", "constructor", "prototype"])
 
@@ -286,6 +278,7 @@ export const copyOut = (value: unknown, mode: CopyOutMode): unknown => {
 // Dots in tool names are namespace separators; the last tool for a canonical path wins.
 type ToolNode<R> = {
   tool?: Tool<R>
+  namespace?: Namespace<R>
   readonly children: Map<string, ToolNode<R>>
 }
 
@@ -301,7 +294,10 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
         current = child
       }
       if (isTool<R>(value)) current.tool = value
-      else insert(current, value)
+      else if (isNamespace<R>(value)) {
+        current.namespace = value
+        insert(current, value.tools)
+      } else insert(current, value)
     }
   }
   insert(root, tools)
@@ -311,29 +307,33 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
 const canonicalSegments = (path: ReadonlyArray<string>): ReadonlyArray<string> =>
   path.flatMap((segment) => segment.split("."))
 
+type VisibleTool<R> = {
+  readonly path: string
+  readonly tool: Tool<R>
+  readonly namespaces: ReadonlyArray<Namespace<R>>
+}
+
 const flattenTools = <R>(
   node: ToolNode<R>,
   path: ReadonlyArray<string> = [],
-): Array<{ path: string; tool: Tool<R> }> => [
-  ...(node.tool === undefined ? [] : [{ path: path.join("."), tool: node.tool }]),
-  ...Array.from(node.children, ([name, child]) => flattenTools(child, [...path, name])).flat(),
-]
+  namespaces: ReadonlyArray<Namespace<R>> = [],
+): Array<VisibleTool<R>> => {
+  const next = node.namespace === undefined ? namespaces : [...namespaces, node.namespace]
+  return [
+    ...(node.tool === undefined ? [] : [{ path: path.join("."), tool: node.tool, namespaces: next }]),
+    ...Array.from(node.children).flatMap(([name, child]) => flattenTools(child, [...path, name], next)),
+  ]
+}
 
-const describeTool = <R>(path: string, tool: Tool<R>): ToolDescription => ({
-  path,
-  description: tool.description,
-  signature: `${toolExpression(path)}(input: ${inputTypeScript(tool, true)}): Promise<${outputTypeScript(tool, true)}>`,
+const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => ({
+  path: visible.path,
+  description: visible.tool.description,
+  signature: `${toolExpression(visible.path)}(input: ${inputTypeScript(visible.tool, true)}): Promise<${outputTypeScript(visible.tool, true)}>`,
 })
 
 // Discovery bytes are durable instructions, so order only after canonical-path collisions settle.
 const visibleTools = <R>(tools: Tools<R>) =>
-  flattenTools(toolTrie(tools))
-    .sort((left, right) => compareText(left.path, right.path))
-    .map(({ path, tool }) => ({
-      path,
-      tool,
-      description: describeTool(path, tool),
-    }))
+  flattenTools(toolTrie(tools)).sort((left, right) => compareText(left.path, right.path))
 
 export type DiscoveryPlan = {
   readonly catalog: ReadonlyArray<ToolDescription>
@@ -429,12 +429,13 @@ export const searchSignature = (() => {
   return `search(input: ${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
 })()
 
-const toSearchEntry = <R>(path: string, tool: Tool<R>, description: ToolDescription): SearchEntry => ({
-  description,
+const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
+  description: describeTool(visible),
   searchText: [
-    path,
-    tool.description,
-    ...inputProperties(tool).flatMap(({ name, description: property }) =>
+    visible.path,
+    visible.tool.description,
+    ...visible.namespaces.flatMap((namespace) => (namespace.description === undefined ? [] : [namespace.description])),
+    ...inputProperties(visible.tool).flatMap(({ name, description: property }) =>
       property === undefined ? [name] : [name, property],
     ),
   ]
@@ -442,14 +443,13 @@ const toSearchEntry = <R>(path: string, tool: Tool<R>, description: ToolDescript
     .toLowerCase(),
 })
 
-export const searchIndex = <R>(tools: Tools<R>): ReadonlyArray<SearchEntry> =>
-  visibleTools(tools).map(({ path, tool, description }) => toSearchEntry(path, tool, description))
+export const searchIndex = <R>(tools: Tools<R>): ReadonlyArray<SearchEntry> => visibleTools(tools).map(toSearchEntry)
 
 export const prepare = <R>(tools: Tools<R>): DiscoveryPlan => {
   const visible = visibleTools(tools)
   return {
-    catalog: visible.map(({ description }) => description),
-    searchIndex: visible.map(({ path, tool, description }) => toSearchEntry(path, tool, description)),
+    catalog: visible.map(describeTool),
+    searchIndex: visible.map(toSearchEntry),
   }
 }
 
@@ -507,18 +507,11 @@ export const make = <R>(
         if (Exit.isSuccess(exit)) return onEnd({ ...call, durationMs, outcome: "success" })
         if (Cause.hasInterruptsOnly(exit.cause)) return onEnd({ ...call, durationMs, outcome: "interrupted" })
         const error = Cause.squash(exit.cause)
-        const message =
-          error instanceof ToolError || error instanceof ToolRuntimeError ? error.message : "Tool execution failed"
+        const message = error instanceof Error ? error.message : Cause.pretty(exit.cause)
         return onEnd({ ...call, durationMs, outcome: "failure", message })
       }),
     )
   }
-
-  const decodeOutput = (value: unknown, name: string) =>
-    Effect.try({
-      try: () => copyIn(value, `Result from tool '${name}'`),
-      catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
-    })
 
   const recordCall = (call: ToolCall): void => {
     if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
@@ -548,12 +541,22 @@ export const make = <R>(
       return yield* observeEnd(
         Effect.gen(function* () {
           if (hooks?.onToolCallStart !== undefined) yield* hooks.onToolCallStart(call)
-          const raw = yield* runHost(Effect.suspend(() => tool.execute(input)))
-          const result = yield* Effect.try({
-            try: () => decodeToolOutput(tool, raw),
-            catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
+          const raw = yield* Effect.suspend(() => tool.execute(input)).pipe(
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+              return Effect.fail(
+                toolError(
+                  Cause.prettyErrors(cause)
+                    .map((error) => (error.cause ? Formatter.format(error) : error.message || error.name))
+                    .join("\n"),
+                ),
+              )
+            }),
+          )
+          return yield* Effect.try({
+            try: () => copyIn(decodeToolOutput(tool, raw), `Result from tool '${name}'`),
+            catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
           })
-          return yield* decodeOutput(result, name)
         }),
         call,
       )

@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -42,7 +42,7 @@ const http = Layer.succeed(
 export const webSearchIntegrationTest = testEffect(
   Layer.merge(
     AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node, Form.node, WebSearch.node]), [
-      [Config.node, Config.testLayer()],
+      Config.node.replace(Config.testLayer()),
     ]),
     http,
   ),

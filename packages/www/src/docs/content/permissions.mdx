@@ -83,10 +83,10 @@ current built-in actions use these resources:
 
 ## External directories
 
-An external path requires a separate `external_directory` decision before the
-tool's own `read` or `edit` decision. This applies to external paths used by
-`read`, `edit`, `write`, and `patch`, and to an external `shell` working
-directory.
+A path outside both the active Location and its non-root project worktree
+requires a separate `external_directory` decision before the tool's own `read`
+or `edit` decision. This applies to external paths used by `read`, `edit`,
+`write`, and `patch`, and to an external `shell` working directory.
 
 ```jsonc
 {
@@ -122,8 +122,9 @@ raw command text and are **not** home-expanded.
   identify every dangerous command.
 </Callout>
 
-Relative mutation paths cannot escape the active Location, and symlink escapes
-from inside it are rejected. Explicit external paths are canonicalized before
+Relative mutation paths may traverse outside the active Location while
+remaining inside its project worktree. Paths outside both boundaries require
+`external_directory` approval. Explicit external paths are canonicalized before
 matching, so authorize only trusted directory boundaries.
 
 ## Experimental shell scanner

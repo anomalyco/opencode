@@ -12,12 +12,7 @@ import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerModel } from "./model"
 
-export function Composer(props: {
-  class?: string
-  model: ComposerModel
-  borderUnderlay?: boolean
-  accentSubmit?: boolean
-}) {
+export function Composer(props: { class?: string; model: ComposerModel; borderUnderlay?: boolean }) {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
@@ -26,13 +21,13 @@ export function Composer(props: {
     <div class="flex flex-col gap-3">
       <ComposerEditor
         controller={props.model}
-        accentSubmit={props.accentSubmit}
         borderUnderlay={props.borderUnderlay}
         class={props.class}
         modelControlsVisible={!props.model.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
-        alternateKeybind={[formatKeybind("mod", language.t), formatKeybind("enter", language.t)]}
+        alternateKeybind={[formatKeybind("mod", language.t), "↵"]}
+        exitShellKeybind={[formatKeybind("esc", language.t)]}
         modelControl={
           <ComposerModelControl
             loading={props.model.model.loading}

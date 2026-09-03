@@ -5,5 +5,5 @@
     "noEmit": true,
     "rootDir": "."
   },
-  "include": ["test/**/*.types.ts"]
+  "include": ["test/**/*.types.ts", "test/testing.test.ts"]
 }

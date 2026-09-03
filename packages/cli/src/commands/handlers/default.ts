@@ -9,7 +9,7 @@ import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode-ai/util/npm"
-import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 import { Env } from "../../env"
 
 export default Runtime.handler(Commands, (input) =>
@@ -47,7 +47,6 @@ export default Runtime.handler(Commands, (input) =>
       ),
     )
     const updater = yield* Updater.Service
-    yield* updater.check().pipe(Effect.forkScoped)
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -59,7 +58,7 @@ export default Runtime.handler(Commands, (input) =>
     const service = server.service
     yield* run({
       app: {
-        name: process.env.OPENCODE_CLIENT ?? "cli",
+        name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
         version: OPENCODE_VERSION,
         channel: process.env.OPENCODE_TUI_CHANNEL ?? OPENCODE_CHANNEL,
       },
@@ -83,13 +82,16 @@ export default Runtime.handler(Commands, (input) =>
         get: () => runPromise(config.get()),
         update: (update) => runPromise(config.update(update)),
       },
-      packages: {
-        resolve: (spec, install = true) =>
+      updater: {
+        monitor: (notify, signal) =>
           runPromise(
-            (install ? npm.add(spec, { subpaths: ["tui"] }) : npm.resolve(spec, { subpaths: ["tui"] })).pipe(
-              Effect.map((result) => result.entrypoint),
-            ),
+            updater.monitor((version) => Effect.sync(() => notify(version))),
+            { signal },
           ),
+        apply: (version) => runPromise(updater.apply(version)),
+      },
+      packages: {
+        prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },
       environment: requestedServer === undefined ? Env.session() : undefined,
       terminalHandoff: () => preflight.finish(),

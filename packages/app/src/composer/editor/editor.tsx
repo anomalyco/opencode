@@ -9,6 +9,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { Menu } from "@opencode-ai/ui/menu"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { AttachmentCard } from "@opencode-ai/session-ui/attachment-card"
 import { CommentCard } from "@opencode-ai/session-ui/comment-card"
 import { typeLabel } from "@opencode-ai/session-ui/message-file"
@@ -37,7 +38,6 @@ export type ComposerMode = "normal" | "shell"
 
 export type ComposerEditorProps = {
   controller: ComposerEditorModel
-  accentSubmit?: boolean
   disabled?: boolean
   readOnly?: boolean
   borderUnderlay?: boolean
@@ -47,6 +47,7 @@ export type ComposerEditorProps = {
   attachKeybind?: string[]
   attachShortcut?: string
   alternateKeybind?: string[]
+  exitShellKeybind?: string[]
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -54,6 +55,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const state = props.controller.state
   const view = props.controller.view
   let editor: HTMLDivElement | undefined
+  let viewport: HTMLDivElement | undefined
   let localInput = false
   const updateCursor = () => {
     if (!editor || !window.getSelection()?.isCollapsed) return
@@ -90,7 +92,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
           event.currentTarget.value = ""
         }}
       />
-      <Show when={state.popover.type !== "closed"}>
+      <Show when={!view.draftOnly && state.popover.type !== "closed"}>
         <ComposerEditorPopover
           emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
           items={props.controller.suggestions()}
@@ -146,12 +148,18 @@ export function ComposerEditor(props: ComposerEditorProps) {
           />
         </Show>
 
-        <div class="relative min-h-[60px]">
+        <ScrollView
+          data-component="composer-scroll"
+          class="min-h-[60px] max-h-[180px]"
+          viewportRef={(element) => {
+            viewport = element
+            element.tabIndex = -1
+          }}
+        >
           <div
             ref={(element) => {
               editor = element
               props.controller.setEditor(element)
-              renderComposerEditor(element, props.controller.parts())
             }}
             data-component="composer-editor"
             role="textbox"
@@ -164,7 +172,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             spellcheck={state.mode === "normal"}
             // @ts-expect-error
             autocomplete="off"
-            class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
+            class="relative z-10 block min-h-[60px] w-full whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
             style={{
               "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
@@ -178,7 +186,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
             }}
             onKeyDown={(event) => {
-              if (props.controller.onKeyDown(event)) return
+              if (!view.draftOnly && props.controller.onKeyDown(event)) return
               const mod = event.metaKey || event.ctrlKey
               if (mod && event.key === "ArrowUp" && !event.shiftKey && !event.altKey) {
                 if (view.submit.queue?.editFirst()) event.preventDefault()
@@ -192,7 +200,20 @@ export function ComposerEditor(props: ComposerEditorProps) {
             }}
             onKeyUp={updateCursor}
             onPointerUp={updateCursor}
-            onPaste={props.controller.onPaste}
+            onPaste={(event) => {
+              props.controller.onPaste(event)
+              // Programmatic multiline insertion does not reliably reveal the caret.
+              requestAnimationFrame(() => {
+                const selection = window.getSelection()
+                if (!editor || !viewport || !selection?.isCollapsed || !selection.rangeCount) return
+                if (!editor.contains(selection.anchorNode)) return
+                const caret = selection.getRangeAt(0).getBoundingClientRect()
+                if (!caret.height) return
+                const bounds = viewport.getBoundingClientRect()
+                if (caret.bottom > bounds.bottom - 8) viewport.scrollTop += caret.bottom - bounds.bottom + 8
+                if (caret.top < bounds.top + 8) viewport.scrollTop += caret.top - bounds.top - 8
+              })
+            }}
             onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
           />
           <Show when={!props.controller.value()}>
@@ -208,7 +229,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
             </div>
           </Show>
-        </div>
+        </ScrollView>
 
         <div class="flex h-11 items-center px-2">
           <div
@@ -218,7 +239,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             style={buttons()}
           >
             <ComposerEditorAddMenu
-              disabled={state.mode === "shell"}
+              disabled={view.draftOnly || state.mode === "shell"}
               title={i18n.t("ui.promptInput.add")}
               keybind={props.attachKeybind ?? ["Mod", "U"]}
               attachLabel={i18n.t("ui.promptInput.attachments")}
@@ -261,11 +282,28 @@ export function ComposerEditor(props: ComposerEditorProps) {
               keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
             />
           </Show>
+          <Show when={state.mode === "shell"}>
+            <Button
+              data-action="composer-exit-shell"
+              type="button"
+              variant="ghost-faint"
+              size="small"
+              class="me-3 gap-1.5 px-1.5"
+              onClick={() => {
+                props.controller.dispatch({ type: "mode.normal" })
+                props.controller.restoreFocus()
+              }}
+            >
+              {i18n.t("ui.promptInput.exitShell")}
+              <span class="hidden sm:block">
+                <Keybind keys={props.exitShellKeybind ?? ["ESC"]} variant="neutral" />
+              </span>
+            </Button>
+          </Show>
           <ComposerEditorSubmitButton
             mode={state.mode}
             stopping={view.submit.stopping()}
             disabled={!props.controller.canSubmit()}
-            accent={props.accentSubmit}
             sendLabel={i18n.t("ui.promptInput.send")}
             stopLabel={i18n.t("ui.promptInput.stop")}
             onSubmit={() => props.controller.submit()}
@@ -536,7 +574,10 @@ export function ComposerEditorAddMenu(props: {
           aria-label={props.title}
         />
         <Menu.Portal>
-          <Menu.Content style={{ "min-width": "180px" }}>
+          <Menu.Content
+            class="[&_[data-slot=menu-v2-item-shortcut]]:w-5 [&_[data-slot=menu-v2-item-shortcut]]:justify-center"
+            style={{ "min-width": "180px" }}
+          >
             <Menu.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
               {props.attachLabel}
             </Menu.Item>
@@ -651,6 +692,7 @@ export function ComposerEditorPopover(props: {
 }) {
   return (
     <div
+      data-component="composer-suggestions"
       class="absolute inset-x-0 -top-2 z-40 flex max-h-80 -translate-y-full flex-col overflow-auto rounded-xl bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-raised)] no-scrollbar"
       onMouseDown={(event) => event.preventDefault()}
     >
@@ -679,6 +721,7 @@ export function ComposerEditorPopover(props: {
             <button
               type="button"
               data-suggestion-id={item.id}
+              data-active={props.activeID === item.id ? "" : undefined}
               class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
               classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
               onPointerMove={() => props.onActiveChange(item)}
@@ -727,9 +770,9 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
             ref={setButton}
             data-action="composer-alternate-delivery"
             type="button"
-            variant="ghost-muted"
+            variant="ghost-faint"
             size="small"
-            class="me-3 gap-1.5 px-1.5 text-v2-text-text-muted ![font-weight:530] duration-150 motion-reduce:animate-none"
+            class="me-3 gap-1.5 px-1.5 ![font-weight:530] duration-150 motion-reduce:animate-none"
             classList={{
               "animate-in fade-in": presence.animate() && presence.show(),
               "animate-out fade-out fill-mode-forwards": presence.animate() && !presence.show(),
@@ -751,7 +794,6 @@ export function ComposerEditorSubmitButton(props: {
   mode: ComposerMode
   stopping: boolean
   disabled: boolean
-  accent?: boolean
   sendLabel: string
   stopLabel: string
   onSubmit: () => void
@@ -770,16 +812,10 @@ export function ComposerEditorSubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={<Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}
         variant="contrast"
-        class="size-7 rounded-md p-[6px] shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
-        classList={{
-          "text-v2-text-text-contrast": !!props.accent && !props.stopping && !props.disabled,
-          "text-v2-icon-icon-muted": !props.accent || props.stopping || props.disabled,
-        }}
+        class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
         style={{
           "background-image":
-            props.accent && !props.stopping && !props.disabled
-              ? "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-accent) 0%,var(--v2-background-bg-accent) 100%)"
-              : "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
+            "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
         }}
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
         onClick={(event) => {

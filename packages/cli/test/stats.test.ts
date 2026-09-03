@@ -48,6 +48,20 @@ describe("stats rendering", () => {
     expect(output).not.toContain("$12.34")
   })
 
+  test("renders shared intensity levels and partial month labels", () => {
+    const output = renderStats(
+      {
+        ...stats,
+        range: { from: new Date(2026, 3, 29).getTime(), to: new Date(2026, 4, 20).getTime() },
+        activity: [{ date: "2026-04-29", steps: 1 }],
+      },
+      options(),
+    )
+    expect(output).toContain("    May")
+    expect(output).not.toContain("Apr")
+    expect(output.split(/\r?\n/).find((line) => line.startsWith("We "))).toContain("\u2588")
+  })
+
   test("renders only requested detail tables", () => {
     const output = renderStats(stats, options({ tools: true, cost: true }))
     expect(output).toContain("COST & TOKENS")

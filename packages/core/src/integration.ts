@@ -130,7 +130,7 @@ type Data = {
   integrations: Map<ID, Entry>
 }
 
-export type Draft = {
+export type Editor = {
   list: () => readonly Ref[]
   get: (id: ID) => Ref | undefined
   update: (id: ID, update: (integration: Types.DeepMutable<Ref>) => void) => void
@@ -142,7 +142,7 @@ export type Draft = {
   }
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   /** Registers a scoped transform over the integration registry. */
   /** Returns one integration with its methods and current connections. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
@@ -266,27 +266,27 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
     const commandAttempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, CommandAttemptEntry>())
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "integration",
       initial: () => ({ integrations: new Map<ID, Entry>() }),
-      draft: (draft) => ({
-        list: () => Array.from(draft.integrations.values(), (entry) => entry.ref) as Ref[],
-        get: (id) => draft.integrations.get(id)?.ref as Ref | undefined,
+      editor: (editor) => ({
+        list: () => Array.from(editor.integrations.values(), (entry) => entry.ref) as Ref[],
+        get: (id) => editor.integrations.get(id)?.ref as Ref | undefined,
         update: (id, update) => {
-          const current = draft.integrations.get(id) ?? {
+          const current = editor.integrations.get(id) ?? {
             ref: { id, name: id },
             methods: [],
             implementations: new Map(),
           }
-          if (!draft.integrations.has(id)) draft.integrations.set(id, current)
+          if (!editor.integrations.has(id)) editor.integrations.set(id, current)
           update(current.ref)
           current.ref.id = id
         },
-        remove: (id) => draft.integrations.delete(id),
+        remove: (id) => editor.integrations.delete(id),
         method: {
-          list: (integrationID) => (draft.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
+          list: (integrationID) => (editor.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
           update: (implementation) => {
-            const current = draft.integrations.get(implementation.integrationID) ?? {
+            const current = editor.integrations.get(implementation.integrationID) ?? {
               ref: {
                 id: implementation.integrationID,
                 name: implementation.integrationID,
@@ -294,8 +294,8 @@ const layer = Layer.effect(
               methods: [],
               implementations: new Map<MethodID, Types.DeepMutable<OAuthImplementation>>(),
             }
-            if (!draft.integrations.has(implementation.integrationID)) {
-              draft.integrations.set(implementation.integrationID, current)
+            if (!editor.integrations.has(implementation.integrationID)) {
+              editor.integrations.set(implementation.integrationID, current)
             }
             const index = current.methods.findIndex((method) => {
               if (method.type !== implementation.method.type) return false
@@ -315,7 +315,7 @@ const layer = Layer.effect(
             }
           },
           remove: (integrationID, method) => {
-            const current = draft.integrations.get(integrationID)
+            const current = editor.integrations.get(integrationID)
             if (!current) return
             const index = current.methods.findIndex((candidate) => {
               if (candidate.type !== method.type) return false
@@ -328,7 +328,7 @@ const layer = Layer.effect(
           },
         },
       }),
-      finalize: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {
@@ -378,117 +378,105 @@ const layer = Layer.effect(
     }
 
     const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.OAuth, unknown>) {
-      return yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          const now = yield* Clock.currentTimeMillis
-          const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
-            const match = current.get(attemptID)
-            if (!match || match.status !== "pending" || match.persisting) return [undefined, current]
-            const next = Exit.isSuccess(exit)
-              ? { ...match, persisting: true }
-              : {
-                  status: "failed" as const,
-                  integrationID: match.integrationID,
-                  message: message(exit.cause),
-                  time: match.time,
-                  removeAt: now + terminalRetention,
-                }
-            return [match, new Map(current).set(attemptID, next)]
-          })
-          if (!attempt) return
-          if (Exit.isFailure(exit)) {
-            yield* close(attempt.scope)
-            return
-          }
+      const now = yield* Clock.currentTimeMillis
+      const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
+        const match = current.get(attemptID)
+        if (!match || match.status !== "pending" || match.persisting) return [undefined, current]
+        const next = Exit.isSuccess(exit)
+          ? { ...match, persisting: true }
+          : {
+              status: "failed" as const,
+              integrationID: match.integrationID,
+              message: message(exit.cause),
+              time: match.time,
+              removeAt: now + terminalRetention,
+            }
+        return [match, new Map(current).set(attemptID, next)]
+      })
+      if (!attempt) return
+      if (Exit.isFailure(exit)) {
+        yield* close(attempt.scope)
+        return
+      }
 
-          yield* Effect.gen(function* () {
-            const implementation = state
-              .get()
-              .integrations.get(attempt.integrationID)
-              ?.implementations.get(attempt.methodID)
-            const persistence = yield* Effect.sync(() => attempt.label ?? implementation?.label?.(exit.value)).pipe(
-              Effect.flatMap((label) =>
-                createCredential({
-                  integrationID: attempt.integrationID,
-                  label,
-                  value: exit.value,
-                }),
-              ),
-              Effect.asVoid,
-              Effect.exit,
-            )
-            const settledAt = yield* Clock.currentTimeMillis
-            const terminal: TerminalAttempt = Exit.isSuccess(persistence)
-              ? {
-                  status: "complete",
-                  integrationID: attempt.integrationID,
-                  time: attempt.time,
-                  removeAt: settledAt + terminalRetention,
-                }
-              : {
-                  status: "failed",
-                  integrationID: attempt.integrationID,
-                  message: message(persistence.cause),
-                  time: attempt.time,
-                  removeAt: settledAt + terminalRetention,
-                }
-            // Persisting attempts cannot be cancelled, expired, or claimed again.
-            yield* SynchronizedRef.update(attempts, (current) => new Map(current).set(attemptID, terminal))
-            if (Exit.isFailure(persistence)) yield* Effect.failCause(persistence.cause)
-          }).pipe(Effect.ensuring(close(attempt.scope)))
-        }),
-      )
-    })
+      yield* Effect.gen(function* () {
+        const persistence = yield* Effect.suspend(() => {
+          const implementation = state
+            .get()
+            .integrations.get(attempt.integrationID)
+            ?.implementations.get(attempt.methodID)
+          return createCredential({
+            integrationID: attempt.integrationID,
+            label: attempt.label ?? implementation?.label?.(exit.value),
+            value: exit.value,
+          })
+        }).pipe(Effect.asVoid, Effect.exit)
+        const settledAt = yield* Clock.currentTimeMillis
+        const terminal: TerminalAttempt = Exit.isSuccess(persistence)
+          ? {
+              status: "complete",
+              integrationID: attempt.integrationID,
+              time: attempt.time,
+              removeAt: settledAt + terminalRetention,
+            }
+          : {
+              status: "failed",
+              integrationID: attempt.integrationID,
+              message: message(persistence.cause),
+              time: attempt.time,
+              removeAt: settledAt + terminalRetention,
+            }
+        // Persisting attempts cannot be cancelled, expired, or claimed again.
+        yield* SynchronizedRef.update(attempts, (current) => new Map(current).set(attemptID, terminal))
+        yield* persistence
+      }).pipe(Effect.ensuring(close(attempt.scope)))
+    }, Effect.uninterruptible)
 
     const settleCommand = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<string, unknown>) {
-      return yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          const now = yield* Clock.currentTimeMillis
-          const attempt = yield* SynchronizedRef.modify(commandAttempts, (current) => {
-            const match = current.get(attemptID)
-            if (!match || match.status !== "pending" || match.persisting) return [undefined, current]
-            const next = Exit.isSuccess(exit)
-              ? { ...match, persisting: true }
-              : {
-                  status: "failed" as const,
-                  integrationID: match.integrationID,
-                  message: message(exit.cause),
-                  time: match.time,
-                  removeAt: now + terminalRetention,
-                }
-            return [match, new Map(current).set(attemptID, next)]
-          })
-          if (!attempt) return
-          if (Exit.isFailure(exit)) {
-            yield* close(attempt.scope)
-            return
-          }
+      const now = yield* Clock.currentTimeMillis
+      const attempt = yield* SynchronizedRef.modify(commandAttempts, (current) => {
+        const match = current.get(attemptID)
+        if (!match || match.status !== "pending" || match.persisting) return [undefined, current]
+        const next = Exit.isSuccess(exit)
+          ? { ...match, persisting: true }
+          : {
+              status: "failed" as const,
+              integrationID: match.integrationID,
+              message: message(exit.cause),
+              time: match.time,
+              removeAt: now + terminalRetention,
+            }
+        return [match, new Map(current).set(attemptID, next)]
+      })
+      if (!attempt) return
+      if (Exit.isFailure(exit)) {
+        yield* close(attempt.scope)
+        return
+      }
 
-          const persistence = yield* createCredential({
+      const persistence = yield* createCredential({
+        integrationID: attempt.integrationID,
+        label: attempt.label,
+        value: Credential.Key.make({ type: "key", key: exit.value }),
+      }).pipe(Effect.asVoid, Effect.exit)
+      const settledAt = yield* Clock.currentTimeMillis
+      const terminal: TerminalCommandAttempt = Exit.isSuccess(persistence)
+        ? {
+            status: "complete",
             integrationID: attempt.integrationID,
-            label: attempt.label,
-            value: Credential.Key.make({ type: "key", key: exit.value }),
-          }).pipe(Effect.asVoid, Effect.exit)
-          const settledAt = yield* Clock.currentTimeMillis
-          const terminal: TerminalCommandAttempt = Exit.isSuccess(persistence)
-            ? {
-                status: "complete",
-                integrationID: attempt.integrationID,
-                time: attempt.time,
-                removeAt: settledAt + terminalRetention,
-              }
-            : {
-                status: "failed",
-                integrationID: attempt.integrationID,
-                message: message(persistence.cause),
-                time: attempt.time,
-                removeAt: settledAt + terminalRetention,
-              }
-          yield* SynchronizedRef.update(commandAttempts, (current) => new Map(current).set(attemptID, terminal))
-          yield* close(attempt.scope)
-        }),
-      )
-    })
+            time: attempt.time,
+            removeAt: settledAt + terminalRetention,
+          }
+        : {
+            status: "failed",
+            integrationID: attempt.integrationID,
+            message: message(persistence.cause),
+            time: attempt.time,
+            removeAt: settledAt + terminalRetention,
+          }
+      yield* SynchronizedRef.update(commandAttempts, (current) => new Map(current).set(attemptID, terminal))
+      yield* close(attempt.scope)
+    }, Effect.uninterruptible)
 
     const scrub = Effect.fnUntraced(function* () {
       const now = yield* Clock.currentTimeMillis

@@ -4,7 +4,7 @@ import { Workspace } from "@opencode-ai/schema/workspace"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { Scope } from "effect"
-import type { Driver as EnvironmentDriver } from "../environment/driver.js"
+import type { EnvironmentDriver } from "../environment/driver.js"
 
 /**
  * Smallest provider-owned JSON value required to reconnect to the same
@@ -41,7 +41,7 @@ export interface Interface {
     readonly workspaceID: Workspace.ID
     readonly binding: Binding
     readonly saveBinding: (binding: Binding) => Effect.Effect<void>
-  }) => Effect.Effect<EnvironmentDriver, Error, Scope.Scope>
+  }) => Effect.Effect<EnvironmentDriver.Driver, Error, Scope.Scope>
   readonly suspendForIdle: (input: {
     readonly workspaceID: Workspace.ID
     readonly binding: Binding

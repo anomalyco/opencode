@@ -5,7 +5,6 @@ import { ProviderShared } from "../protocols/shared.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type LLMRequest } from "../schema/index.js"
 import { profiles } from "./openai-compatible-profile.js"
@@ -75,7 +74,7 @@ export const route = Route.make({
   providerMetadataKey: "openai",
   protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL: profiles.groq.baseURL }),
-  framing: Framing.sse,
+  framing: OpenAIChat.framing,
 })
 
 export const configure = (input: LanguageModelOptions = {}) => {

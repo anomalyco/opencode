@@ -355,6 +355,14 @@ test.describe("smoke: session timeline", () => {
     await expectCanScrollToStart(page, expectedPartIDs, expectedMessageIDs, errors)
 
     const shell = page.locator(`[data-timeline-part-id="${fixture.expected.expandedShellPartID}"]`)
+    // The shell is below a long diff; reveal it rather than depending on offscreen overscan.
+    while ((await shell.count()) === 0) {
+      const before = await timelineState(page)
+      await timelineScroller(page).press("PageDown")
+      await expect.poll(async () => (await timelineState(page)).signature).not.toBe(before.signature)
+    }
+    await shell.scrollIntoViewIfNeeded()
+    await expect(shell).toBeInViewport()
     const shellTrigger = shell.locator('[data-slot="collapsible-trigger"]')
     const shellSubtitle = shell.locator('[data-slot="basic-tool-tool-subtitle"]')
     await expect(shellSubtitle).toHaveCount(0)
@@ -694,6 +702,7 @@ async function expectSessionTimelineReady(
   expectedMessageIDs: string[],
   errors: string[],
 ) {
+  await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
   await waitForTimelineStable(page)
   for (const text of forbiddenText) await expect(page.getByText(text)).toHaveCount(0)
   const currentState = await timelineState(page)

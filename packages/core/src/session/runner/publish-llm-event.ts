@@ -1,17 +1,18 @@
 import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/ai"
-import { Clock, Effect, Iterable } from "effect"
+import type { Agent } from "@opencode-ai/schema/agent"
+import type { Model } from "@opencode-ai/schema/model"
+import type { RelativePath } from "@opencode-ai/schema/schema"
+import type { Snapshot } from "@opencode-ai/schema/snapshot"
+import { Effect, Fiber, Iterable } from "effect"
+import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
-import { Model } from "../../model.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Money } from "@opencode-ai/schema/money"
-import { Agent } from "../../agent.js"
-import { Snapshot } from "../../snapshot.js"
-import { RelativePath } from "../../schema.js"
 import { SessionUsage } from "../usage.js"
-import { Tool } from "@opencode-ai/schema/tool"
+import type { Tool } from "../../tool.js"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
@@ -45,9 +46,6 @@ export interface StepRecord {
 /** Derives canonical model content from a provider-hosted tool result. */
 type NonEmptyContent = readonly [Tool.Content, ...Tool.Content[]]
 
-const nonEmpty = (content: ReadonlyArray<Tool.Content>): NonEmptyContent | undefined =>
-  content.length > 0 ? (content as NonEmptyContent) : undefined
-
 const stringify = (value: unknown) => {
   if (typeof value === "string") return value
   try {
@@ -58,10 +56,7 @@ const stringify = (value: unknown) => {
 }
 
 const hostedContent = (result: ToolResultValue): NonEmptyContent => {
-  if (result.type === "content") {
-    const content = nonEmpty(result.value)
-    if (content !== undefined) return content
-  }
+  if (result.type === "content" && isReadonlyArrayNonEmpty(result.value)) return result.value
   return [{ type: "text", text: stringify(result.value) }]
 }
 
@@ -72,7 +67,9 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  * concurrently without a lock. Two rules keep that safe, and every method must preserve
  * them. (1) Commit state marks synchronously before the first await: never a yield
  * between a check (`tool.settled`, `stepStarted`, ...) and its mark, so check-and-mark
- * stays atomic under cooperative scheduling. (2) Never require a cross-source event
+ * stays atomic under cooperative scheduling. Provider-event publication remains
+ * uninterruptible through its writes so cancellation cannot strand a mark without
+ * its durable event. (2) Never require a cross-source event
  * order: each publishing fiber is sequential, so per-source order holds by construction,
  * and consumers fold by id/ordinal rather than global position.
  */
@@ -93,10 +90,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   }
   const assistantMessageID = input.assistantMessageID
   let stepStarted = false
-  let stepFailed = false
   let providerFailed = false
   let outputStarted = false
-  let stepStreamed = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
 
@@ -115,8 +110,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   const currentAssistantMessageID = () =>
     stepStarted ? Effect.succeed(assistantMessageID) : Effect.die(new Error("Tool event before assistant step start"))
   const streamed = Effect.fnUntraced(function* () {
-    if (stepStreamed) return
-    stepStreamed = true
     yield* bus.publish(SessionEvent.Step.Streamed, {
       sessionID: input.sessionID,
       assistantMessageID: yield* startAssistant(),
@@ -133,7 +126,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       readonly ordinal: number
       readonly values: string[]
       pending: string
-      publishedAt?: number
+      timer?: Fiber.Fiber<void>
       state?: Record<string, unknown>
     }
     const chunks = new Map<string, Fragment>()
@@ -146,36 +139,46 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         chunks.set(id, { ordinal, values: [], pending: "", state })
         return Effect.succeed(ordinal)
       })
-    const publishDelta = Effect.fnUntraced(function* (id: string, force = false) {
+    const publishDelta = Effect.fnUntraced(function* (id: string) {
       if (!delta) return undefined
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
       if (!current.pending) return undefined
-      const now = yield* Clock.currentTimeMillis
-      if (!force && current.publishedAt === undefined) {
-        current.publishedAt = now
-        return undefined
-      }
-      if (!force && current.publishedAt !== undefined && now - current.publishedAt < deltaBatchInterval)
-        return undefined
-      yield* delta(id, current.pending, current.ordinal)
+      const value = current.pending
+      // New chunks can arrive while the timer is publishing this batch.
       current.pending = ""
-      current.publishedAt = now
+      yield* delta(id, value, current.ordinal)
       return undefined
-    })
+    }, Effect.uninterruptible)
     const append = Effect.fnUntraced(function* (id: string, value: string, state?: Record<string, unknown>) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
       current.values.push(value)
       if (delta) current.pending += value
       if (state !== undefined) current.state = { ...current.state, ...state }
-      yield* publishDelta(id)
+      if (current.pending && !current.timer) {
+        // Own the trailing flush in the provider fiber, even if no more chunks arrive.
+        current.timer = yield* Effect.gen(function* () {
+          while (current.pending) {
+            yield* Effect.sleep(deltaBatchInterval)
+            yield* publishDelta(id)
+          }
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              current.timer = undefined
+            }),
+          ),
+          Effect.forkChild({ startImmediately: true }),
+        )
+      }
       return current.ordinal
     })
     const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>, value?: string) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
-      yield* publishDelta(id, true)
+      if (current.timer) yield* Fiber.interrupt(current.timer)
+      yield* publishDelta(id)
       yield* ended(
         id,
         value ?? current.values.join(""),
@@ -360,9 +363,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     readonly snapshot?: Snapshot.ID
     readonly files?: readonly RelativePath[]
   }) {
-    if (stepFailed || stepFailure === undefined) return
+    if (stepFailure === undefined) return
     const assistantMessageID = yield* startAssistant()
-    stepFailed = true
     yield* bus.publish(SessionEvent.Step.Failed, {
       sessionID: input.sessionID,
       assistantMessageID,
@@ -396,7 +398,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* text.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "text-end":
-        yield* text.end(event.id, providerState(event.providerMetadata))
+        yield* text.end(event.id, providerState(event.providerMetadata), event.text)
         return
       case "reasoning-start":
         outputStarted = true
@@ -412,7 +414,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* reasoning.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "reasoning-end":
-        yield* reasoning.end(event.id, providerState(event.providerMetadata))
+        yield* reasoning.end(event.id, providerState(event.providerMetadata), event.text)
         return
       case "tool-input-start":
         outputStarted = true
@@ -533,7 +535,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* failAssistant({ type: "provider.unknown", message: event.message })
         return
     }
-  })
+  }, Effect.uninterruptible)
 
   const publishTraced = Effect.fn("SessionRunner.publishLLMEvent")(publish)
 
@@ -550,25 +552,20 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
 
   /** Publishes one canonical terminal event for a locally executed tool call. */
-  const toolExecution = Effect.fnUntraced(function* (id: string, name: string, result: Tool.Result) {
+  const toolExecution = Effect.fnUntraced(function* (id: string, name: string, result: Tool.NormalizedResult) {
     const tool = tools.get(id)
     if (!tool?.called) return yield* Effect.die(new Error(`Tool execution before call: ${id}`))
     if (tool.name !== name)
       return yield* Effect.die(new Error(`Tool execution name changed for ${id}: ${tool.name} -> ${name}`))
     if (tool.settled) return yield* Effect.die(new Error(`Duplicate tool execution: ${id}`))
     tool.settled = true
-    const content =
-      typeof result.content === "string"
-        ? [{ type: "text" as const, text: result.content }]
-        : result.content === undefined
-          ? []
-          : [...result.content]
-    if (content.length === 0) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
+    const content = result.content
+    if (!isReadonlyArrayNonEmpty(content)) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
     yield* bus.publish(SessionEvent.Tool.Success, {
       sessionID: input.sessionID,
       assistantMessageID,
       id,
-      content: [content[0], ...content.slice(1)],
+      content,
       ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
       executed: tool.providerExecuted,
     })

@@ -55,7 +55,6 @@ type Active = {
   done: Deferred.Deferred<Info>
   backgrounded: Deferred.Deferred<Info>
   scope: Scope.Closeable
-  token: object
   blockingSessions: Map<SessionSchema.ID, number>
   isBackgrounded: boolean
   recovery?: Recovery
@@ -77,7 +76,7 @@ type BackgroundResult = {
   backgrounded?: Deferred.Deferred<Info>
 }
 
-type StartResult = { info: Info } | { info: Info; scope: Scope.Closeable; token: object }
+type StartResult = { info: Info } | { info: Info; scope: Scope.Closeable }
 
 type BlockWait = {
   done: Deferred.Deferred<Info>
@@ -184,14 +183,14 @@ export const make = Effect.gen(function* () {
     })
   })
 
-  const settle = Effect.fnUntraced(function* (id: string, token: object, exit: Exit.Exit<string, unknown>) {
+  const settle = Effect.fnUntraced(function* (id: string, scope: Scope.Closeable, exit: Exit.Exit<string, unknown>) {
     const completed_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [FinishResult, Map<string, Active>]> {
         const job = jobs.get(id)
         if (!job) return [{}, jobs]
-        if (job.token !== token) return [{}, jobs]
+        if (job.scope !== scope) return [{}, jobs]
         if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
         const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
           ? "completed"
@@ -213,7 +212,7 @@ export const make = Effect.gen(function* () {
         return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
       }),
     )
-    if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
+    if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
     if (result.scope) {
       yield* Scope.close(result.scope, Exit.void).pipe(Effect.forkIn(state.scope, { startImmediately: true }))
     }
@@ -241,7 +240,6 @@ export const make = Effect.gen(function* () {
               return [{ info: snapshot(existing) }, jobs]
             }
             const scope = yield* Scope.fork(state.scope, "parallel")
-            const token = {}
             const job = {
               info: {
                 id,
@@ -255,18 +253,17 @@ export const make = Effect.gen(function* () {
               done,
               backgrounded,
               scope,
-              token,
               blockingSessions: new Map<SessionSchema.ID, number>(),
               isBackgrounded: false,
               recovery: input.recovery,
             }
-            return [{ info: snapshot(job), scope, token }, new Map(jobs).set(id, job)]
+            return [{ info: snapshot(job), scope }, new Map(jobs).set(id, job)]
           }),
         )
         if ("scope" in result)
           yield* restore(input.run).pipe(
             Effect.exit,
-            Effect.flatMap((exit) => settle(id, result.token, exit)),
+            Effect.flatMap((exit) => settle(id, result.scope, exit)),
             Effect.asVoid,
             Effect.forkIn(result.scope, { startImmediately: true }),
           )
@@ -346,8 +343,7 @@ export const make = Effect.gen(function* () {
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]
       }),
     )
-    if (result.info && result.backgrounded)
-      yield* Deferred.succeed(result.backgrounded, result.info).pipe(Effect.ignore)
+    if (result.info && result.backgrounded) yield* Deferred.succeed(result.backgrounded, result.info)
     return result.info
   })
 
@@ -396,7 +392,7 @@ export const make = Effect.gen(function* () {
         return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
       }),
     )
-    if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
+    if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
     if (result.scope) yield* Scope.close(result.scope, Exit.void)
     return result.info
   })

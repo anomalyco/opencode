@@ -11,7 +11,7 @@ export function Wordmark(props: Pick<ComponentProps<"svg">, "class">) {
       fill="none"
       classList={{ [props.class ?? ""]: !!props.class }}
     >
-      <g opacity="0.6">
+      <g opacity="0.6" class="[[data-color-scheme=dark]_&]:opacity-100">
         <g mask={`url(#${mask})`}>
           <g opacity="0.16">
             <path

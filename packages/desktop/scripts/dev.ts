@@ -1,5 +1,6 @@
 import { $ } from "bun"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { downloadCliToResources, windowsify } from "./utils"
 
 type ServerSource = { type: "build" } | { type: "download"; version: string }
@@ -43,13 +44,18 @@ async function prepareServer(source: ServerSource) {
   if (source.type === "download")
     return downloadCliToResources(source.version, windowsify("resources/opencode-cli-dev"))
   process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
+  await $`bun run --cwd ${process.env.OPENCODE_DESKTOP_CLI_DEV} --define=OPENCODE_VERSION=${JSON.stringify(process.env.OPENCODE_VERSION)} src/index.ts --version`
   if (process.platform !== "win32") return
   process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD = join(import.meta.dirname, "../../cli/script/build.ts")
   process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT = join(import.meta.dirname, "../resources/opencode-cli-wsl")
 }
 
 async function startDesktop(args: string[]) {
-  await $`electron-vite dev ${args}`
+  // Bun's implicit spawn environment omits values set during preparation.
+  process.exitCode = await Bun.spawn(
+    ["node", fileURLToPath(new URL("../bin/electron-vite.js", import.meta.resolve("electron-vite"))), "dev", ...args],
+    { env: process.env, stdio: ["inherit", "inherit", "inherit"] },
+  ).exited
 }
 
 await main()

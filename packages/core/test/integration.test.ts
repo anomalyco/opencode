@@ -1,12 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Cause, Clock, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
-import * as TestClock from "effect/testing/TestClock"
+import { TestClock } from "effect/testing"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Integration } from "@opencode-ai/core/integration"
+import { State } from "@opencode-ai/core/state"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node])))
@@ -27,7 +28,7 @@ const failingCredentialNode = makeGlobalNode({
   deps: [],
 })
 const failingIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Integration.node, Bus.node]), [[Credential.node, failingCredentialNode]]),
+  AppNodeBuilder.build(LayerNode.group([Integration.node, Bus.node]), [Credential.node.replace(failingCredentialNode)]),
 )
 
 function eventually<A, E, R>(
@@ -186,7 +187,7 @@ describe("Integration", () => {
           value: Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
         }),
       ])
-      expect(Array.from(yield* Fiber.join(created), (event) => ({ type: event.type, data: event.data }))).toEqual([
+      expect((yield* Fiber.join(created)).map((event) => ({ type: event.type, data: event.data }))).toEqual([
         { type: Credential.Event.Updated.type, data: {} },
         { type: Credential.Event.Switched.type, data: { credentialID: stored[0]?.id, integrationID } },
       ])
@@ -426,6 +427,62 @@ describe("Integration", () => {
         message: "credential persistence failed",
         time: attempt.time,
       })
+    }),
+  )
+
+  it.effect("fails and closes OAuth attempts when a pending transform throws during persistence", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("replay-fixture")
+      const methodID = Integration.MethodID.make("code")
+      let closed = false
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "Fixture" },
+          authorize: () =>
+            Effect.addFinalizer(() => Effect.sync(() => (closed = true))).pipe(
+              Effect.as({
+                mode: "code" as const,
+                url: "https://example.com/authorize",
+                instructions: "Enter the fixture code",
+                callback: () =>
+                  Effect.succeed(
+                    Credential.OAuth.make({
+                      type: "oauth",
+                      methodID,
+                      access: "fixture-access",
+                      refresh: "fixture-refresh",
+                      expires: 1,
+                    }),
+                  ),
+              }),
+            ),
+        }),
+      )
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          const failure = new Error("integration transform failed")
+          yield* integrations.transform(() => {
+            throw failure
+          })
+          const exit = yield* integrations.oauth
+            .complete({ integrationID, attemptID: attempt.attemptID, code: "fixture-code" })
+            .pipe(Effect.exit)
+
+          expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(failure)
+          expect(yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })).toEqual({
+            status: "failed",
+            message: failure.message,
+            time: attempt.time,
+          })
+          expect(closed).toBe(true)
+          expect(yield* credentials.list(integrationID)).toEqual([])
+        }).pipe(Effect.scoped),
+      )
     }),
   )
 

@@ -445,14 +445,17 @@ describe("SessionModelTransport", () => {
     )
   })
 
-  test("closes an active exchange without waiting for its Session permit", async () => {
+  test.each([false, true])("classifies active and queued close (observed: %s)", async (observed) => {
     const started = Deferred.makeUnsafe<void>()
     const messages = queue<string | Uint8Array, AIError>()
     let closed = 0
     const connector: WebSocketConnector = {
       open: () =>
         Effect.succeed({
-          sendText: () => Deferred.succeed(started, undefined),
+          sendText: () =>
+            observed
+              ? Queue.offer(messages, "frame").pipe(Effect.asVoid)
+              : Deferred.succeed(started, undefined).pipe(Effect.asVoid),
           messages: Stream.fromQueue(messages),
           close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
         }),
@@ -462,17 +465,30 @@ describe("SessionModelTransport", () => {
       connector,
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
-        const running = yield* collect(transport.bind(session), exchange("active")).pipe(
+        const executor = transport.bind(session)
+        const item = exchange("active")
+        const running = yield* collect(executor, {
+          ...item,
+          driver: {
+            ...item.driver,
+            observe: (_create, frame) => Deferred.succeed(started, undefined).pipe(Effect.as({ type: "frame", frame })),
+          },
+        }).pipe(Effect.result, Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(started)
+        const queued = yield* collect(executor, exchange("queued")).pipe(
+          Effect.result,
           Effect.forkChild({ startImmediately: true }),
         )
-        yield* Deferred.await(started)
 
         yield* transport.close(session)
-        const result = yield* Effect.result(Fiber.join(running))
 
-        expect(result).toMatchObject({
+        expect(yield* Fiber.join(running)).toMatchObject({
           _tag: "Failure",
-          failure: { reason: { _tag: "Transport", code: "close", delivery: "ambiguous" } },
+          failure: { reason: { _tag: "Transport", code: "close", delivery: observed ? "accepted" : "ambiguous" } },
+        })
+        expect(yield* Fiber.join(queued)).toMatchObject({
+          _tag: "Failure",
+          failure: { reason: { _tag: "Transport", code: "owner-closed", phase: "queue", delivery: "not-sent" } },
         })
         expect(closed).toBe(1)
       }),
@@ -540,6 +556,43 @@ describe("SessionModelTransport", () => {
         }).pipe(Effect.forkChild({ startImmediately: true }))
         yield* Deferred.await(opened)
         yield* Fiber.interrupt(fiber)
+        expect(closed).toBe(1)
+      }),
+    )
+  })
+
+  test("closes a connection returned after its owner closes during setup", async () => {
+    const connecting = Deferred.makeUnsafe<void>()
+    const release = Deferred.makeUnsafe<void>()
+    let closed = 0
+    const connector: WebSocketConnector = {
+      open: () =>
+        Deferred.succeed(connecting, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+          Effect.as({
+            sendText: () => Effect.die("Unexpected send after owner close"),
+            messages: Stream.never,
+            close: Effect.sync(() => closed++).pipe(Effect.asVoid),
+          }),
+        ),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const running = yield* collect(
+          transport.bind(session),
+          exchange("first", { fallback: () => Stream.die("Unexpected fallback after owner close") }),
+        ).pipe(Effect.result, Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(connecting)
+        yield* transport.close(session)
+        yield* Deferred.succeed(release, undefined)
+
+        expect(yield* Fiber.join(running)).toMatchObject({
+          _tag: "Failure",
+          failure: { reason: { _tag: "Transport", code: "owner-closed", phase: "connect", delivery: "not-sent" } },
+        })
         expect(closed).toBe(1)
       }),
     )
@@ -857,8 +910,7 @@ describe("SessionModelTransport", () => {
   test("records metadata-only lifecycle metrics", async () => {
     const fixture = automatic()
 
-    await run(
-      fixture.connector,
+    await Effect.runPromise(
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
         const executor = transport.bind(session)
@@ -874,7 +926,11 @@ describe("SessionModelTransport", () => {
         )
         expect(JSON.stringify(lifecycle)).not.toContain("secret-one")
         expect(JSON.stringify(lifecycle)).not.toContain("secret-two")
-      }),
+      }).pipe(
+        Effect.provide(SessionModelTransport.makeLayer(fixture.connector)),
+        Effect.scoped,
+        Effect.provideService(Metric.MetricRegistry, new Map()),
+      ),
     )
   })
 })

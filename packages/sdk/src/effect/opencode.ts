@@ -4,13 +4,16 @@ import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/effect"
 import type { Workspace } from "@opencode-ai/core/workspace"
 import { Context, Effect, Layer } from "effect"
 import type { Config, Scope } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { EmbeddedHost } from "../internal/host"
+import type { SdkInstances } from "../internal/instances"
 
 export type { LogEntry, LogLevel, LogOptions, LogWriter } from "../logging"
 
-export type CreateOptions = EmbeddedHost.CreateOptions
+export type CreateOptions<R = never> = EmbeddedHost.CreateOptions<R>
 export type EmbedOptions = EmbeddedHost.EmbedOptions
+export type InstanceOptions<R = never> = SdkInstances.Options<R>
+export type InstanceConfiguration = SdkInstances.Configuration
 
 export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
   readonly sessions: OpenCodeClient["session"]
@@ -25,17 +28,19 @@ export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
   readonly plugin: EmbeddedHost.Interface["plugins"]["register"] & OpenCodeClient["plugin"]
 }
 
-export const create: (
-  options?: CreateOptions,
+export const create: <R = never>(
+  options?: CreateOptions<R>,
   embed?: EmbedOptions,
-) => Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope> = Effect.fn("OpenCode.create")(function* (
-  options: CreateOptions = {},
-  embed: EmbedOptions = {},
-) {
+) => Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope | R> = Effect.fn("OpenCode.create")(function* <
+  R = never,
+>(options: CreateOptions<R> = {}, embed: EmbedOptions = {}) {
   const host = yield* Effect.acquireRelease(EmbeddedHost.create(options, embed), (host) => Effect.promise(host.close))
+  const httpClient = yield* HttpClient.HttpClient.pipe(Effect.provide(FetchHttpClient.layer))
   const client = yield* OpenCode.make({ baseUrl: "http://opencode.local" }).pipe(
-    Effect.provide(
-      FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, host.fetch)), Layer.fresh),
+    Effect.provideService(
+      HttpClient.HttpClient,
+      // FetchHttpClient reads Fetch at request time; callers must not replace this host's in-process transport.
+      HttpClient.transformResponse(httpClient, Effect.provideService(FetchHttpClient.Fetch, host.fetch)),
     ),
   )
 
@@ -54,5 +59,6 @@ export const create: (
 
 export class Service extends Context.Service<Service, Interface>()("@opencode-ai/sdk/OpenCode") {}
 
-export const layer = (options: CreateOptions = {}): Layer.Layer<Service, Config.ConfigError | Error> =>
-  Layer.effect(Service, create(options))
+export const layer = <R = never>(
+  options: CreateOptions<R> = {},
+): Layer.Layer<Service, Config.ConfigError | Error, Exclude<R, Scope.Scope>> => Layer.effect(Service, create(options))

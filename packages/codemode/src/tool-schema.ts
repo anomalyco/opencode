@@ -63,21 +63,58 @@ const docTags = (schema: JsonSchema): Array<string> => {
     } catch {}
   }
   if (typeof schema.format === "string") tags.push(`@format ${schema.format}`)
+  if (schema.type === "integer") tags.push("@integer")
+  if (typeof schema.minimum === "number") tags.push(`@minimum ${schema.minimum}`)
+  if (typeof schema.maximum === "number") tags.push(`@maximum ${schema.maximum}`)
+  if (typeof schema.exclusiveMinimum === "number") tags.push(`@exclusiveMinimum ${schema.exclusiveMinimum}`)
+  if (typeof schema.exclusiveMaximum === "number") tags.push(`@exclusiveMaximum ${schema.exclusiveMaximum}`)
+  if (typeof schema.multipleOf === "number") tags.push(`@multipleOf ${schema.multipleOf}`)
+  if (typeof schema.minLength === "number") tags.push(`@minLength ${schema.minLength}`)
+  if (typeof schema.maxLength === "number") tags.push(`@maxLength ${schema.maxLength}`)
+  if (typeof schema.pattern === "string") tags.push(`@pattern ${schema.pattern}`)
   if (typeof schema.minItems === "number") tags.push(`@minItems ${schema.minItems}`)
   if (typeof schema.maxItems === "number") tags.push(`@maxItems ${schema.maxItems}`)
+  if (schema.uniqueItems === true) tags.push("@uniqueItems true")
   return tags
 }
 
-// Neutralize `*\/` so model-provided schema text cannot terminate generated documentation.
-const jsdoc = (description: string | undefined, tags: ReadonlyArray<string>, pad: string): string => {
-  const lines = [...(description === undefined ? [] : description.split("\n")), ...tags].map((line) =>
-    line.replaceAll("*/", "* /").replace(/\s+$/, ""),
-  )
+const docLines = (schema: JsonSchema, width: number): Array<string> => {
+  const summary = docTags(schema).join(" ")
+  const lines = (schema.description ?? "").split("\n").map((line) => line.replace(/\s+$/, ""))
   while (lines.length > 0 && lines[0]!.trim() === "") lines.shift()
   while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()
-  if (lines.length === 0) return ""
-  if (lines.length === 1) return `${pad}/** ${lines[0]} */\n`
-  const body = lines.map((line) => `${pad} *${line === "" ? "" : ` ${line}`}`).join("\n")
+  const inline = lines.length === 1 ? `${lines[0]}${lines[0].endsWith(".") ? "" : "."} ${summary}` : summary
+  return summary && lines.length === 1 && !summary.includes("\n") && width + inline.length + 7 <= 120
+    ? [inline]
+    : [...lines, ...(summary ? summary.split("\n") : [])]
+}
+
+// Neutralize `*\/` so model-provided schema text cannot terminate generated documentation.
+const jsdoc = (schema: JsonSchema, pad: string): string => {
+  const content = docLines(schema, pad.length)
+  const types = typeof schema.type === "string" ? [schema.type] : (schema.type ?? [])
+
+  const append = (label: string, child: JsonSchema) => {
+    docLines(child, pad.length + label.length + 2).forEach((line, index) => {
+      if (index === 0) {
+        content.push(`${label}: ${line}`)
+        return
+      }
+      content.push(line ? `  ${line}` : "")
+    })
+  }
+
+  // Document only the immediate contents; recursive labels obscure which level a constraint belongs to.
+  if (types.includes("array") && schema.items) append("Each item", schema.items)
+  if ((types.includes("object") || schema.properties) && typeof schema.additionalProperties === "object") {
+    const label = Object.keys(schema.properties ?? {}).length > 0 ? "Each additional value" : "Each value"
+    append(label, schema.additionalProperties)
+  }
+
+  if (content.length === 0) return ""
+  const escaped = content.map((line) => line.replaceAll("*/", "* /"))
+  if (escaped.length === 1 && pad.length + escaped[0].length + 7 <= 120) return `${pad}/** ${escaped[0]} */\n`
+  const body = escaped.map((line) => `${pad} *${line === "" ? "" : ` ${line}`}`).join("\n")
   return `${pad}/**\n${body}\n${pad} */\n`
 }
 
@@ -127,8 +164,8 @@ const renderSchema = (
     ])
   }
   if (schema.allOf) {
-    const members = schema.allOf.map((item) => renderSchema(item, nested, depth + 1, seen))
     if (schema.allOf.some((item) => hasUnresolvedRef(item, nested.definitions))) return "unknown"
+    const members = schema.allOf.map((item) => renderSchema(item, nested, depth + 1, seen))
     return intersection([renderSchema({ ...schema, allOf: undefined }, nested, depth + 1, seen), ...members])
   }
   if (Array.isArray(schema.type)) {
@@ -156,9 +193,7 @@ const renderSchema = (
 
     if (properties.length === 0 && indexType === undefined) return "{}"
     const pad = "  ".repeat(depth + 1)
-    const lines = properties.map(
-      (entry) => `${jsdoc(entry[1].description, docTags(entry[1]), pad)}${pad}${field(entry)},`,
-    )
+    const lines = properties.map((entry) => `${jsdoc(entry[1], pad)}${pad}${field(entry)},`)
     if (indexType !== undefined) lines.push(`${pad}[key: string]: ${indexType},`)
     return `{\n${lines.join("\n")}\n${"  ".repeat(depth)}}`
   }
@@ -180,7 +215,7 @@ export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false
 
 export const jsonSchemaToTypeScript = (schema: JsonSchema, pretty = false): string => {
   try {
-    return renderSchema(schema, { definitions: { ...(schema.definitions ?? {}), ...(schema.$defs ?? {}) }, pretty })
+    return renderSchema(schema, { definitions: {}, pretty })
   } catch {
     return "unknown"
   }

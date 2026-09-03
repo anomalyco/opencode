@@ -93,7 +93,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
         const event = await iterator.next()
         if (signal.aborted) return { error: undefined, connectedAt }
         if (event.done) return { error: new Error("Event stream disconnected"), connectedAt }
-        if ("durable" in event.value)
+        if ("durable" in event.value && event.value.durable)
           options.log?.debug?.("event", {
             type: event.value.type,
             aggregateID: event.value.durable.aggregateID,

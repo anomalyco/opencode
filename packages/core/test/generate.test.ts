@@ -15,7 +15,7 @@ import { testEffect } from "./lib/effect"
 
 const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
-  package: Provider.aisdk("@ai-sdk/mistral"),
+  package: Provider.aisdk("@ai-sdk/cohere"),
 })
 const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 
@@ -65,7 +65,7 @@ const aisdk = Layer.mock(AISDK.Service, {
   },
   model: () => Effect.succeed(runtime),
 })
-const client = TestLLM.clientLayer.pipe(Layer.provide(TestLLM.layer({ fallback: TestLLM.text("OK", "generate") })))
+const client = TestLLM.testLayer({ fallback: TestLLM.text("OK", "generate") })
 
 const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))

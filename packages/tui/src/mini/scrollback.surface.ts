@@ -1,11 +1,11 @@
 // Retained streaming append logic for direct-mode scrollback.
 //
-// Static entries are rendered through `scrollback.writer.tsx`. This file only
-// keeps the retained-surface machinery needed for streaming assistant,
-// reasoning, and tool progress entries that need stable markdown/code layout
-// while content is still arriving.
+// Static text entries are rendered through `scrollback.writer.tsx`. Retained
+// surfaces keep streaming markdown/code layout stable and wait for image loads
+// before their snapshots enter scrollback.
 import {
   CodeRenderable,
+  ImageRenderable,
   MarkdownRenderable,
   TextRenderable,
   getTreeSitterClient,
@@ -87,10 +87,13 @@ export class RunScrollbackStream {
   private tail: StreamCommit | undefined
   private rendered: StreamCommit | undefined
   private active: ActiveEntry | undefined
+  private imageSurface: ScrollbackSurface | undefined
   private treeSitterClient: TreeSitterClient | undefined
   private wrote: boolean
   private shellOutput: () => boolean
   private mono: boolean
+  private imagePreview: boolean
+  private destroyed = false
   private pendingThemes: RunTheme[] = []
 
   constructor(
@@ -102,16 +105,33 @@ export class RunScrollbackStream {
       onThemeRelease?: (theme: RunTheme) => void
       shellOutput?: () => boolean
       mono?: boolean
+      imagePreview?: boolean
     } = {},
   ) {
     this.treeSitterClient = options.treeSitterClient
     this.wrote = options.wrote ?? false
     this.shellOutput = options.shellOutput ?? (() => true)
     this.mono = options.mono ?? false
+    this.imagePreview = options.imagePreview ?? false
     this.onThemeRelease = options.onThemeRelease
   }
 
   private onThemeRelease: ((theme: RunTheme) => void) | undefined
+
+  public async setMono(mono: boolean): Promise<void> {
+    if (this.mono === mono) return
+    const active = this.active
+    if (active?.body.type !== "markdown") await this.complete()
+    this.mono = mono
+    if (active?.body.type !== "markdown") return
+
+    // Rebuild the Markdown tree, keeping its source and printed block boundary.
+    // Mono hooks are one-way, and ending the entry would lose open fence/list context.
+    const next = this.createEntry(active.commit, active.body)
+    this.active = { ...active, surface: next.surface, renderable: next.renderable }
+    active.surface.destroy()
+    this.releasePendingThemes()
+  }
 
   private releasePendingThemes(): void {
     if (this.pendingThemes.length === 0) {
@@ -348,16 +368,88 @@ export class RunScrollbackStream {
     }
   }
 
+  private async writeImage(commit: StreamCommit): Promise<void> {
+    const surface = this.renderer.createScrollbackSurface(entryFlags(commit))
+    this.imageSurface = surface
+
+    try {
+      const image = new ImageRenderable(surface.renderContext, {
+        source: commit.image,
+        fit: "fit",
+        visible: false,
+        alignSelf: "flex-start",
+        flexShrink: 0,
+      })
+      surface.root.add(image)
+      // settle() waits for code highlighting, not image decoding.
+      await image.loadPromise
+      if (surface.isDestroyed) return
+
+      const body = entryBody(commit, { mono: this.mono })
+      if (body.type !== "text") return
+      const style = entryLook(commit, this.theme.entry)
+      const caption = new TextRenderable(surface.renderContext, {
+        content: body.content + (image.image ? "" : "\nNo preview"),
+        width: "100%",
+        wrapMode: "word",
+        fg: style.fg,
+        attributes: style.attrs,
+        flexShrink: 0,
+      })
+      surface.root.add(caption, 0)
+      surface.render()
+
+      if (image.image && !this.mono) {
+        const resolution = this.renderer.resolution
+        const fitted = image.getFittedSize(
+          Math.min(
+            surface.width,
+            resolution?.width
+              ? Math.max(1, Math.floor((image.image.width * this.renderer.terminalWidth) / resolution.width))
+              : Infinity,
+          ),
+          Math.min(
+            Math.max(0, this.renderer.terminalHeight - this.renderer.height - caption.height),
+            resolution?.height
+              ? Math.max(1, Math.floor((image.image.height * this.renderer.terminalHeight) / resolution.height))
+              : Infinity,
+          ),
+          image.cellAspectRatio,
+        )
+        // fit centers within its rectangle, so the rectangle itself must be fitted.
+        image.width = fitted.width
+        image.height = fitted.height
+        image.visible = fitted.width > 0 && fitted.height > 0
+        surface.render()
+      }
+
+      this.writeSpacer(separatorRows(this.rendered, commit, body) || (!this.rendered && this.wrote ? 1 : 0))
+      surface.commitRows(0, surface.height, { trailingNewline: entryFlags(commit).trailingNewline })
+      this.markRendered(commit)
+    } finally {
+      surface.destroy()
+      this.imageSurface = undefined
+    }
+  }
+
   public async append(commit: StreamCommit): Promise<void> {
+    if (this.destroyed || this.renderer.isDestroyed) return
     const same = sameEntryGroup(this.tail, commit)
-    if (!same) {
+    if (!same || commit.image) {
       this.markRendered(await this.finishActive(false))
     }
+    if (this.destroyed || this.renderer.isDestroyed) return
 
     if (commit.summary) {
       this.writeSpacer(1)
       this.renderer.writeToScrollback(turnSummaryWriter({ ...commit.summary, theme: this.theme, mono: this.mono }))
       this.markRendered(commit)
+      this.tail = commit
+      return
+    }
+
+    if (commit.image && this.imagePreview && !this.mono) {
+      await this.writeImage(commit)
       this.tail = commit
       return
     }
@@ -426,6 +518,9 @@ export class RunScrollbackStream {
   }
 
   public destroy(): void {
+    this.destroyed = true
+    this.imageSurface?.destroy()
+    this.imageSurface = undefined
     this.resetActive()
     this.releasePendingThemes()
   }

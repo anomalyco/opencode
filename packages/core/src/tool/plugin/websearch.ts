@@ -1,6 +1,6 @@
 export * as WebSearchTool from "./websearch.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema, Semaphore } from "effect"
 import { HttpClientError } from "effect/unstable/http"
@@ -26,14 +26,14 @@ const Output = Schema.Struct({
 })
 export const Plugin = {
   id: "opencode.tool.websearch",
-  effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: Context) {
     const permission = yield* Permission.Service
     const forms = yield* Form.Service
     const websearch = yield* WebSearch.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description,

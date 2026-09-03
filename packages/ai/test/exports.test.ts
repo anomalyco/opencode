@@ -32,6 +32,8 @@ describe("public exports", () => {
     expect(Provider.make).toBeFunction()
     expect(ProviderSubpath.make).toBe(Provider.make)
     expect(TestLLM.layer).toBeFunction()
+    expect(TestLLM.testLayer).toBeFunction()
+    expect(TestLLM.Test.of).toBeFunction()
   })
 
   test("route barrel exposes route-authoring APIs", () => {

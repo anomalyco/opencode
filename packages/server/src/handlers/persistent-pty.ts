@@ -12,6 +12,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Socket } from "effect/unstable/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
+import { runPtySocket } from "./pty-socket"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
   Effect.gen(function* () {
@@ -20,6 +21,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const pty = yield* PersistentPty.Service
 
     return handlers
+      .handle(
+        "persistentPty.read",
+        Effect.fn(function* (ctx) {
+          return { data: yield* pty.read(ctx.params.sessionID, ctx.query.lines).pipe(mapUnavailable) }
+        }),
+      )
       .handle(
         "persistentPty.list",
         Effect.fn(function* (ctx) {
@@ -185,7 +192,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
             }
           })
 
-          yield* Effect.race(
+          yield* runPtySocket(
             drain,
             socket.runRaw(
               (message) =>
@@ -215,9 +222,9 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
                 ),
               { onOpen },
             ),
+            () => attachment?.detach(),
           ).pipe(
             Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
-            Effect.ensuring(Effect.sync(() => attachment?.detach())),
             Effect.orDie,
           )
           return HttpServerResponse.empty()

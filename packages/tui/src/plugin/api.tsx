@@ -236,7 +236,10 @@ function settle<T>(resolve: (value: T) => void) {
   }
 }
 
-function createDialogApi(dialog: ReturnType<typeof useDialog>, provide: (render: () => JSX.Element) => JSX.Element) {
+export function createDialogApi(
+  dialog: ReturnType<typeof useDialog>,
+  provide: (render: () => JSX.Element) => JSX.Element,
+) {
   const api: Dialog = {
     show(render, onClose) {
       dialog.replace(() => provide(render), onClose)

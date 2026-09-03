@@ -507,16 +507,16 @@ export function AssistantReasoningContent(props: {
   const i18n = useI18n()
   const [state, setState] = createStore<{ open?: boolean }>({})
   const open = () => props.open ?? state.open ?? props.defaultOpen ?? false
-  const heading = createMemo(() => reasoningHeading(props.content.text))
-  const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
+  const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
   const duration = createMemo(() => {
     const time = props.content.time
     if (time?.completed === undefined) return undefined
     const total = Math.max(0, Math.round((time.completed - time.created) / 1000))
-    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt().format(total) })
+    const numfmt = new Intl.NumberFormat(i18n.locale())
+    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
     return i18n.t("ui.message.duration.minutesSeconds", {
-      minutes: numfmt().format(Math.floor(total / 60)),
-      seconds: numfmt().format(total % 60),
+      minutes: numfmt.format(Math.floor(total / 60)),
+      seconds: numfmt.format(total % 60),
     })
   })
   return (
@@ -525,6 +525,7 @@ export function AssistantReasoningContent(props: {
         icon="mcp"
         status={props.streaming ? "running" : "completed"}
         compact
+        hasContent
         allowOpenWhilePending
         hideDetails={!props.content.text.trim()}
         open={open()}

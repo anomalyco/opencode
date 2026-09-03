@@ -4,6 +4,7 @@ import {
   ContentPolicyError,
   InvalidProviderOutputError,
   InvalidRequestError,
+  UnsupportedOperationError,
   AIError,
   NoRouteError,
   ModelID,
@@ -32,9 +33,7 @@ describe("toSessionError", () => {
       type: "provider.rate-limit",
       message: "rate",
     })
-    expect(toSessionError(llm(new AuthenticationError({ message: "auth", kind: "invalid" }))).type).toBe(
-      "provider.auth",
-    )
+    expect(toSessionError(llm(new AuthenticationError({ message: "auth" }))).type).toBe("provider.auth")
     expect(toSessionError(llm(new QuotaExceededError({ message: "quota" }))).type).toBe("provider.quota")
     expect(toSessionError(llm(new ContentPolicyError({ message: "blocked" }))).type).toBe("provider.content-filter")
     expect(
@@ -45,6 +44,18 @@ describe("toSessionError", () => {
       "provider.invalid-output",
     )
     expect(toSessionError(llm(new InvalidRequestError({ message: "request" }))).type).toBe("provider.invalid-request")
+    expect(
+      toSessionError(
+        llm(
+          new UnsupportedOperationError({
+            message: "no compact endpoint",
+            operation: "compact",
+            provider: ProviderID.make("provider"),
+            route: "route",
+          }),
+        ),
+      ),
+    ).toEqual({ type: "provider.unsupported-operation", message: "no compact endpoint" })
     expect(
       toSessionError(
         llm(
@@ -129,18 +140,20 @@ describe("toSessionError", () => {
     })
   })
 
-  test("retries only rate limits, provider-internal failures, and transport failures", () => {
+  test("retries rate limits, provider-internal, transport, and unrecognized failures", () => {
     const eligible = [
       llm(new RateLimitError({ message: "rate" })),
       llm(new ProviderInternalError({ message: "internal" })),
       llm(new TransportError({ message: "transport", transport: "http", operation: "request" })),
+      llm(new UnknownProviderError({ message: "unknown" })),
     ]
     const ineligible = [
-      llm(new AuthenticationError({ message: "auth", kind: "invalid" })),
+      llm(new AuthenticationError({ message: "auth" })),
       llm(new QuotaExceededError({ message: "quota" })),
       llm(new ContentPolicyError({ message: "blocked" })),
       llm(new InvalidProviderOutputError({ message: "output" })),
       llm(new InvalidRequestError({ message: "request" })),
+      llm(new UnsupportedOperationError({ message: "unsupported", operation: "compact" })),
       llm(
         new NoRouteError({
           message: "failed",
@@ -149,10 +162,9 @@ describe("toSessionError", () => {
           model: ModelID.make("model"),
         }),
       ),
-      llm(new UnknownProviderError({ message: "unknown" })),
     ]
 
-    expect(eligible.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true])
+    expect(eligible.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true, true])
     expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false, false])
   })
 

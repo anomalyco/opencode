@@ -1,7 +1,7 @@
 export * as SessionInstructions from "./instructions.js"
 
 import { relative } from "path"
-import { Context, DateTime, Effect, Layer, Option, Ref, Schema } from "effect"
+import { Context, Effect, Layer, Option, Ref, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../bus.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -43,10 +43,7 @@ const layer = Layer.effect(
     // are re-discovered and re-injected instead of staying silently lost.
     const inFlight = yield* Ref.make<Map<SessionSchema.ID, Set<string>>>(new Map())
 
-    const load = Effect.fn("SessionInstructions.load")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly paths: ReadonlyArray<string>
-    }) {
+    const load = Effect.fn("SessionInstructions.load")(function* (input: Parameters<Interface["load"]>[0]) {
       const claimed = yield* Ref.modify(inFlight, (map) => {
         const existing = map.get(input.sessionID) ?? new Set<string>()
         const newlyClaimed = input.paths.filter((path) => !existing.has(path))

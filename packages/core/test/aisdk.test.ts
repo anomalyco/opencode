@@ -10,6 +10,8 @@ import { Provider } from "@opencode-ai/core/provider"
 import {
   LLM,
   AIError,
+  CompactionPart,
+  ProviderID,
   HttpContext,
   LLMEvent,
   Message,
@@ -68,6 +70,32 @@ const client = LLMClient.layer.pipe(
   ),
 )
 
+it.effect("rejects native provider compaction rather than silently dropping replay state", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => streamModel([]) }
+    })
+    const resolved = yield* aisdk.model(model("@ai-sdk/openai"))
+    const error = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.assistant(
+            CompactionPart.make({
+              provider: ProviderID.make("test-provider"),
+              encrypted: "opaque",
+            }),
+          ),
+        ],
+      }),
+    ).pipe(Effect.flip)
+    expect(error.reason._tag).toBe("UnsupportedOperation")
+    expect(error.message).toContain("cannot replay")
+    if (error.reason._tag === "UnsupportedOperation") expect(error.reason.operation).toBe("compaction-replay")
+  }),
+)
+
 it.effect("keys language models by package and flattened overlays", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
@@ -84,6 +112,43 @@ it.effect("keys language models by package and flattened overlays", () =>
     expect(first).not.toBe(second)
     expect(second).not.toBe(third)
     expect(loaded).toEqual(["first", "second", "second"])
+  }),
+)
+
+it.effect("uses canonical names and metadata without merging connection cache partitions", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const loaded: string[] = []
+    yield* aisdk.hook.sdk((event) => {
+      loaded.push(`${event.model.providerID}:${event.options.name}`)
+      event.sdk = createOpenAICompatible({
+        ...event.options,
+        name: String(event.options.name),
+        baseURL: String(event.options.baseURL),
+      })
+    })
+    const input = {
+      ...model("@ai-sdk/openai-compatible", { baseURL: "https://proxy.example/v1", reasoningEffort: "high" }),
+      providerID: Provider.ID.make("work"),
+      canonical: Provider.ID.openai,
+    }
+    const first = yield* aisdk.language(input)
+    const second = yield* aisdk.language({ ...input, providerID: Provider.ID.make("personal") })
+    const plain = yield* aisdk.language({ ...input, canonical: undefined })
+
+    expect(yield* aisdk.language(input)).toBe(first)
+    expect(first).not.toBe(second)
+    expect(first).not.toBe(plain)
+    expect(first).toMatchObject({ modelId: "api-model", provider: "openai.chat" })
+    expect(plain.provider).toBe("work.chat")
+    expect(loaded).toEqual(["work:openai", "personal:openai", "work:work"])
+
+    const resolved = yield* aisdk.model(input)
+    expect(resolved).toMatchObject({ id: "api-model", provider: "openai" })
+    expect(resolved.route).toMatchObject({ provider: "openai", providerMetadataKey: "openai" })
+    expect(resolved.route.model({ id: "another-model" })).toMatchObject({ provider: "openai" })
+    const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+    expect(prepared.body.providerOptions).toEqual({ openai: { reasoningEffort: "high" } })
   }),
 )
 
@@ -326,6 +391,8 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
         model: resolved,
         messages: [
           Message.assistant([
+            { type: "text", text: "Answer", providerMetadata: { anthropic: { cacheControl: { type: "ephemeral" } } } },
+            { type: "text", text: " without metadata" },
             { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "signed" } } },
             {
               type: "tool-call",
@@ -345,6 +412,16 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
         role: "assistant",
         content: [
           {
+            type: "text",
+            text: "Answer",
+            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+          },
+          {
+            type: "text",
+            text: " without metadata",
+            providerOptions: undefined,
+          },
+          {
             type: "reasoning",
             text: "Think",
             providerOptions: { anthropic: { signature: "signed" } },
@@ -363,7 +440,100 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   }),
 )
 
-it.effect("moves a tool image through the real Mistral provider as a user message", () =>
+it.effect("normalizes file data across AI SDK prompt parts", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model(model("opaque-provider"))
+    const bytes = new Uint8Array([0, 1, 2, 3])
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.user([
+            { type: "media", mediaType: "image/png", data: bytes, filename: "bytes.png" },
+            { type: "media", mediaType: "image/png", data: "AAAA", filename: "base64.png" },
+            {
+              type: "media",
+              mediaType: "image/png",
+              data: "data:image/png;charset=utf-8;base64,AQID",
+              filename: "inline.png",
+            },
+            { type: "media", mediaType: "image/png", data: "https://example.com/image.png" },
+            { type: "media", mediaType: "image/png", data: "s3://bucket/image.png" },
+          ]),
+          Message.assistant({
+            type: "media",
+            mediaType: "application/pdf",
+            data: "http://example.com/document.pdf",
+            filename: "document.pdf",
+          }),
+          Message.tool({
+            id: "call_1",
+            name: "screenshot",
+            result: {
+              type: "content",
+              value: [{ type: "file", uri: "data:image/png;base64,BAUG", mime: "image/png", name: "tool.png" }],
+            },
+          }),
+        ],
+      }),
+    )
+
+    expect(prepared.body.prompt).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "file", mediaType: "image/png", data: bytes, filename: "bytes.png" },
+          { type: "file", mediaType: "image/png", data: "AAAA", filename: "base64.png" },
+          { type: "file", mediaType: "image/png", data: "AQID", filename: "inline.png" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            data: new URL("https://example.com/image.png"),
+            filename: undefined,
+          },
+          { type: "file", mediaType: "image/png", data: "s3://bucket/image.png", filename: undefined },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            data: new URL("http://example.com/document.pdf"),
+            filename: "document.pdf",
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+            toolName: "screenshot",
+            output: { type: "text", value: "Media attached in the following user message." },
+            providerOptions: undefined,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          { type: "file", mediaType: "image/png", data: "BAUG", filename: "tool.png" },
+        ],
+      },
+    ])
+  }),
+)
+
+it.effect("normalizes user and tool media through the real Mistral provider", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
     let body: { messages?: unknown[] } | undefined
@@ -403,7 +573,14 @@ it.effect("moves a tool image through the real Mistral provider as a user messag
       LLM.request({
         model: resolved,
         messages: [
-          Message.user("Inspect the screenshot."),
+          Message.user([
+            { type: "text", text: "Inspect the attachments." },
+            { type: "media", mediaType: "image/png", data: new Uint8Array([0, 1, 2, 3]) },
+            { type: "media", mediaType: "image/png", data: "AQID" },
+            { type: "media", mediaType: "image/png", data: "data:image/png;base64,BAUG" },
+            { type: "media", mediaType: "image/png", data: "http://example.com/image.png" },
+            { type: "media", mediaType: "application/pdf", data: "https://example.com/document.pdf" },
+          ]),
           Message.assistant({ type: "tool-call", id: "call_1", name: "screenshot", input: {} }),
           Message.tool({
             type: "tool-result",
@@ -414,6 +591,12 @@ it.effect("moves a tool image through the real Mistral provider as a user messag
               value: [
                 { type: "text", text: "Screenshot captured" },
                 { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "screen.png" },
+                {
+                  type: "file",
+                  uri: "https://example.com/tool-document.pdf",
+                  mime: "application/pdf",
+                  name: "tool-document.pdf",
+                },
               ],
             },
           }),
@@ -422,7 +605,17 @@ it.effect("moves a tool image through the real Mistral provider as a user messag
     ).pipe(Effect.provide(client))
 
     expect(body?.messages).toEqual([
-      { role: "user", content: [{ type: "text", text: "Inspect the screenshot." }] },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Inspect the attachments." },
+          { type: "image_url", image_url: "data:image/png;base64,AAECAw==" },
+          { type: "image_url", image_url: "data:image/png;base64,AQID" },
+          { type: "image_url", image_url: "data:image/png;base64,BAUG" },
+          { type: "image_url", image_url: "http://example.com/image.png" },
+          { type: "document_url", document_url: "https://example.com/document.pdf" },
+        ],
+      },
       {
         role: "assistant",
         content: "",
@@ -445,6 +638,7 @@ it.effect("moves a tool image through the real Mistral provider as a user messag
         content: [
           { type: "text", text: "Attached media from tool result:" },
           { type: "image_url", image_url: "data:image/png;base64,AAAA" },
+          { type: "document_url", document_url: "https://example.com/tool-document.pdf" },
         ],
       },
     ])
@@ -745,7 +939,7 @@ it.effect("classifies data-only AI SDK authentication errors", () =>
         data: { error: { code: "authentication_error" } },
       }),
     )
-    expect(error.reason).toMatchObject({ _tag: "Authentication", kind: "invalid" })
+    expect(error.reason).toMatchObject({ _tag: "Authentication" })
     expect(SessionRunnerRetry.isRetryable(error)).toBeFalse()
   }),
 )
@@ -764,7 +958,7 @@ Object.entries({
         responseBody,
       })
       const error = yield* streamFailure(cause)
-      expect(error.reason).toMatchObject({ _tag: "Authentication", kind: "invalid" })
+      expect(error.reason).toMatchObject({ _tag: "Authentication" })
       expect(SessionRunnerRetry.isRetryable(error)).toBeFalse()
       expect(error.reason.body).toBe(responseBody)
       expect(error.reason.cause).toBe(cause)
@@ -808,6 +1002,55 @@ it.effect("retries status-less AI SDK transport failures", () =>
     expect(error.reason.body).toBe(JSON.stringify(cause.data))
     expect(error.reason).toMatchObject({ url: "https://api.example.com/chat" })
     expect(error.reason.http).toBeUndefined()
+  }),
+)
+
+it.effect("classifies native fetch failures as request transport errors", () =>
+  Effect.gen(function* () {
+    const cause = Object.assign(new TypeError("fetch failed"), {
+      cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:443"), { code: "ECONNREFUSED" }),
+    })
+    const error = yield* streamFailure(cause)
+    expect(error.reason).toMatchObject({
+      _tag: "Transport",
+      transport: "http",
+      operation: "request",
+      code: "ECONNREFUSED",
+    })
+    expect(error.message).toBe("connect ECONNREFUSED 127.0.0.1:443")
+    expect(error.reason.cause).toBe(cause)
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("classifies mid-stream socket drops as read transport errors", () =>
+  Effect.gen(function* () {
+    const cause = Object.assign(new Error("terminated"), {
+      cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }),
+    })
+    const error = yield* streamFailure(cause, true)
+    expect(error.reason).toMatchObject({
+      _tag: "Transport",
+      transport: "http",
+      operation: "read",
+      code: "UND_ERR_SOCKET",
+    })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("classifies the SSE chunk timeout as a read transport error", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(new Error("SSE read timed out"), true)
+    expect(error.reason).toMatchObject({ _tag: "Transport", transport: "http", operation: "read" })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("keeps unrecognized error codes on the unknown provider path", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(Object.assign(new Error("kaput"), { code: "E_SOMETHING_ELSE" }), true)
+    expect(error.reason).toBeInstanceOf(UnknownProviderError)
   }),
 )
 

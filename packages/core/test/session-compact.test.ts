@@ -6,7 +6,6 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
-import { Job } from "@opencode-ai/core/job"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
@@ -20,9 +19,9 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { DateTime, Effect, Layer, LayerMap, Stream } from "effect"
+import { Effect, Layer, LayerMap, Stream } from "effect"
 import { testEffect } from "./lib/effect"
-import { globalProjectLayer } from "./lib/project"
+import { globalProjectNode } from "./lib/project"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const model = LanguageModel.make({
@@ -66,9 +65,9 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [LocationServiceMap.node, locations],
-      [Project.node, globalProjectLayer],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      LocationServiceMap.node.replace(locations),
+      Project.node.replace(globalProjectNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
     ],
   ),
 )
@@ -129,6 +128,43 @@ describe("Session.compact", () => {
 
       expect(admitted[1]?.id).toBe(admitted[0]?.id)
       expect(yield* session.inbox(created.id)).toHaveLength(1)
+    }),
+  )
+
+  it.effect("commits a staged revert before admitting manual compaction", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const created = yield* session.create({ location })
+      const messageID = SessionMessage.ID.create()
+
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
+        sessionID: created.id,
+        inboxID: messageID,
+        item: {
+          type: "user",
+          payload: { text: "Undo this prompt before compacting." },
+          delivery: "steer",
+        },
+      })
+      yield* bus.publish(SessionEvent.InboxDelivered, {
+        sessionID: created.id,
+        inboxID: messageID,
+      })
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID: created.id,
+        revert: { messageID, files: [] },
+      })
+
+      expect((yield* session.get(created.id)).revert?.messageID).toBe(messageID)
+
+      const compacted = yield* session.compact({ sessionID: created.id })
+
+      expect((yield* session.get(created.id)).revert).toBeUndefined()
+      expect(yield* session.context(created.id)).toEqual([])
+      expect(yield* session.inbox(created.id)).toEqual([
+        expect.objectContaining({ id: compacted.id, type: "compaction" }),
+      ])
     }),
   )
 })

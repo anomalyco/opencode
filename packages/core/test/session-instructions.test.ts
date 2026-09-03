@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { DateTime, Effect, Layer, Stream } from "effect"
-import { Message } from "@opencode-ai/ai"
+import { DateTime, Effect, Layer } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -34,7 +33,7 @@ import { tempLocationLayer } from "./fixture/location"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { globalProjectLayer } from "./lib/project"
+import { globalProjectNode } from "./lib/project"
 import { executeTool, registerToolPlugin } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
@@ -54,7 +53,7 @@ const readToolNode = makeLocationNode({
 
 const permission = permissionLayer({ assert: () => Effect.void })
 const config = Config.testLayer()
-const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
+const imageLayer = AppNodeBuilder.build(Image.node, [Config.node.replace(config)])
 
 const testLayer = AppNodeBuilder.build(
   LayerNode.group([
@@ -75,14 +74,14 @@ const testLayer = AppNodeBuilder.build(
     Image.node,
   ]),
   [
-    [Project.node, globalProjectLayer],
-    [SessionExecution.node, SessionExecution.noopLayer],
-    [Location.node, tempLocationLayer],
-    [Permission.node, permission],
-    [Config.node, config],
-    [Image.node, imageLayer],
+    Project.node.replace(globalProjectNode),
+    SessionExecution.node.replace(SessionExecution.noopLayer),
+    Location.node.replace(tempLocationLayer),
+    Permission.node.replace(permission),
+    Config.node.replace(config),
+    Image.node.replace(imageLayer),
   ],
-) as unknown as Layer.Layer<unknown>
+)
 
 const it = testEffect(testLayer)
 

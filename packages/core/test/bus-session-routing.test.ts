@@ -21,7 +21,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
-    [Bus.node, Bus.configured({ persist: true })],
+    Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
 const a = Location.Ref.make({ directory: AbsolutePath.make("/a") })
@@ -85,8 +85,8 @@ describe("Bus Session routing", () => {
         projectID: Project.ID.global,
       })
       const done = yield* bus.publish(Done, {})
-      expect(Array.from(yield* Fiber.join(first))).toEqual([moved, done])
-      expect(Array.from(yield* Fiber.join(second))).toEqual([moved, after, same, done])
+      expect(yield* Fiber.join(first)).toEqual([moved, done])
+      expect(yield* Fiber.join(second)).toEqual([moved, after, same, done])
       expect(moved.location).toEqual(a)
     }),
   )
@@ -130,8 +130,8 @@ describe("Bus Session routing", () => {
             )
           const after = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: child })
           const done = yield* bus.publish(Done, {})
-          expect(Array.from(yield* Fiber.join(first)).map((event) => event.id)).toEqual([eventID, after.id, done.id])
-          expect(Array.from(yield* Fiber.join(second))).toEqual([done])
+          expect((yield* Fiber.join(first)).map((event) => event.id)).toEqual([eventID, after.id, done.id])
+          expect(yield* Fiber.join(second)).toEqual([done])
         }),
       )
     }),
@@ -158,19 +158,17 @@ describe("Bus Session routing", () => {
       const explicit = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: id }, { location: b })
       const done = yield* bus.publish(Done, {})
 
-      expect(Array.from(yield* Fiber.join(first))).toEqual([renamed, text, broadcast, done])
-      expect(Array.from(yield* Fiber.join(second))).toEqual([broadcast, explicit, done])
-      expect(Array.from(yield* Fiber.join(workspace))).toEqual([broadcast, done])
-      expect(Array.from(yield* Fiber.join(global))).toEqual([renamed, text, broadcast, explicit, done])
+      expect(yield* Fiber.join(first)).toEqual([renamed, text, broadcast, done])
+      expect(yield* Fiber.join(second)).toEqual([broadcast, explicit, done])
+      expect(yield* Fiber.join(workspace)).toEqual([broadcast, done])
+      expect(yield* Fiber.join(global)).toEqual([renamed, text, broadcast, explicit, done])
       expect(listened).toEqual([renamed, text, broadcast, explicit, done])
       expect(renamed).not.toHaveProperty("location")
       expect(text).not.toHaveProperty("location")
       expect(JSON.parse(JSON.stringify(renamed))).not.toHaveProperty("location")
       const history = yield* bus.log({ aggregateID: id }).pipe(Stream.runCollect)
       expect(
-        Array.from(history)
-          .filter((event): event is Event.Payload => !Bus.isSynced(event))
-          .every((event) => !event.location),
+        history.filter((event): event is Event.Payload => !Bus.isSynced(event)).every((event) => !event.location),
       ).toBe(true)
     }),
   )
@@ -197,8 +195,8 @@ describe("Bus Session routing", () => {
       yield* bus.publish(SessionEvent.Moved, { sessionID: id, location: b, projectID: Project.ID.global })
       const expected = yield* bus.publish(SessionEvent.Renamed, { sessionID: id, title: "destination" })
       const done = yield* bus.publish(Done, {})
-      expect(Array.from(yield* Fiber.join(typed))).toEqual([expected])
-      expect(Array.from(yield* Fiber.join(multiple))).toEqual([expected, done])
+      expect(yield* Fiber.join(typed)).toEqual([expected])
+      expect(yield* Fiber.join(multiple)).toEqual([expected, done])
     }),
   )
 
@@ -226,8 +224,8 @@ describe("Bus Session routing", () => {
       const done = yield* bus.publish(Done, {})
       yield* Deferred.succeed(gate, undefined)
 
-      expect(Array.from(yield* Fiber.join(first))).toEqual([created, before, moved, done])
-      expect(Array.from(yield* Fiber.join(second))).toEqual([moved, after, done])
+      expect(yield* Fiber.join(first)).toEqual([created, before, moved, done])
+      expect(yield* Fiber.join(second)).toEqual([moved, after, done])
       expect(moved).not.toHaveProperty("location")
     }),
   )
@@ -245,9 +243,9 @@ describe("Bus Session routing", () => {
 
       const database = yield* Database.Service
       expect(yield* database.db.select().from(SessionTable).where(eq(SessionTable.id, id)).get()).toBeUndefined()
-      expect(Array.from(yield* Fiber.join(first))).toEqual([deleted, done])
-      expect(Array.from(yield* Fiber.join(second))).toEqual([done])
-      expect(Array.from(yield* Fiber.join(global))).toEqual([deleted, missing, done])
+      expect(yield* Fiber.join(first)).toEqual([deleted, done])
+      expect(yield* Fiber.join(second)).toEqual([done])
+      expect(yield* Fiber.join(global)).toEqual([deleted, missing, done])
     }),
   )
 
@@ -266,8 +264,8 @@ describe("Bus Session routing", () => {
       ])
       const done = yield* bus.publish(Done, {})
       yield* Deferred.succeed(gate, undefined)
-      expect(Array.from(yield* Fiber.join(first))).toEqual([events[0], events[1], done])
-      expect(Array.from(yield* Fiber.join(second))).toEqual([events[1], events[2], events[3], done])
+      expect(yield* Fiber.join(first)).toEqual([events[0], events[1], done])
+      expect(yield* Fiber.join(second)).toEqual([events[1], events[2], events[3], done])
     }),
   )
 
@@ -295,8 +293,8 @@ describe("Bus Session routing", () => {
       const done = yield* bus.publish(Done, {})
       expect(Exit.isFailure(single)).toBe(true)
       expect(Exit.isFailure(batch)).toBe(true)
-      expect(Array.from(yield* Fiber.join(first))).toEqual([before, after, done])
-      expect(Array.from(yield* Fiber.join(second))).toEqual([done])
+      expect(yield* Fiber.join(first)).toEqual([before, after, done])
+      expect(yield* Fiber.join(second)).toEqual([done])
     }),
   )
 
@@ -327,8 +325,8 @@ describe("Bus Session routing", () => {
         { publish: true },
       )
       const done = yield* bus.publish(Done, {})
-      expect(Array.from(yield* Fiber.join(first))).toEqual([done])
-      const received = Array.from(yield* Fiber.join(second))
+      expect(yield* Fiber.join(first)).toEqual([done])
+      const received = yield* Fiber.join(second)
       expect(received.map((event) => event.id)).toEqual([after.id, replayID, done.id])
       expect(received[1]).not.toHaveProperty("location")
     }),

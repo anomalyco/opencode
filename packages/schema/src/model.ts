@@ -68,7 +68,13 @@ export const Capabilities = Schema.Struct({
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
   responsesWebsockets: Schema.Boolean.pipe(optional),
-}).annotate({ identifier: "Model.Capabilities" })
+})
+  .annotate({ identifier: "Model.Capabilities" })
+  .pipe(
+    statics(() => ({
+      default: () => ({ tools: true, input: ["text", "image"], output: ["text"] }) satisfies Capabilities,
+    })),
+  )
 
 export interface Cost extends Schema.Schema.Type<typeof Cost> {}
 export const Cost = Schema.Struct({
@@ -95,6 +101,7 @@ export const Info = Schema.Struct({
   id: ID,
   modelID: ID,
   providerID: Provider.ID,
+  canonical: Provider.ID.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String,
   compatibility: Compatibility.pipe(optional),
@@ -123,7 +130,7 @@ export const Info = Schema.Struct({
           modelID: id,
           providerID,
           name: id,
-          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+          capabilities: Capabilities.default(),
           variants: [],
           time: { released: 0 },
           cost: [],

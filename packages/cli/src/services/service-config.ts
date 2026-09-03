@@ -15,11 +15,12 @@ export const Info = Schema.Struct({
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
+  cors: Schema.optional(Schema.Array(Schema.String)),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 })
 export type Info = typeof Info.Type
 
-const keys = ["hostname", "port", "password", "env"] as const
+const keys = ["hostname", "port", "password", "cors", "env"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
@@ -77,7 +78,7 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
 })
 
 function configKey(key: string): Key {
-  if (key === "hostname" || key === "port" || key === "password" || key === "env") return key
+  if (key === "hostname" || key === "port" || key === "password" || key === "cors" || key === "env") return key
   throw new Error(`Unknown service config key: ${key}`)
 }
 
@@ -160,6 +161,9 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string, 
     case "password": {
       return yield* password()
     }
+    case "cors": {
+      return JSON.stringify((yield* read()).cors ?? [], null, 2)
+    }
     case "env": {
       const env = (yield* read()).env ?? {}
       return name === undefined ? JSON.stringify(env, null, 2) : (env[name] ?? "")
@@ -197,6 +201,19 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
       yield* write({ ...existing, env: { ...existing.env, [value]: nestedValue } })
       return
     }
+    case "cors": {
+      const cors = value.split(",").map((origin) => origin.trim())
+      if (
+        cors.some((origin) => {
+          const url = URL.parse(origin)
+          return !url || (url.protocol !== "http:" && url.protocol !== "https:") || url.origin !== origin
+        })
+      )
+        throw new Error("CORS must be a comma-separated list of HTTP(S) origins without paths or trailing slashes")
+      yield* Service.stop(yield* options())
+      yield* write({ ...(yield* read()), cors })
+      return
+    }
   }
 })
 
@@ -229,6 +246,12 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
       const { [name]: _removed, ...env } = existing.env ?? {}
       const { env: _existingEnv, ...rest } = existing
       yield* write(Object.keys(env).length === 0 ? rest : { ...rest, env })
+      return
+    }
+    case "cors": {
+      yield* Service.stop(yield* options())
+      const { cors: _cors, ...next } = yield* read()
+      yield* write(next)
       return
     }
   }

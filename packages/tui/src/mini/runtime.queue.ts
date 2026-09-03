@@ -21,7 +21,7 @@ export type QueueInput = {
   footer: FooterApi
   initialInput?: string
   trace?: Trace
-  onSend?: (prompt: RunPrompt, delivery: RunDelivery) => void
+  onSend?: (prompt: RunPrompt, emittedUser: boolean) => void
   onAdmissionError?: (prompt: RunPrompt, error: unknown) => void | Promise<void>
   onNewSession?: () => void | Promise<void>
   onCompact?: () => void | Promise<void>
@@ -172,7 +172,8 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               break
             }
 
-            if (sent.mode !== "shell") {
+            const emittedUser = sent.mode !== "shell" && sent.command?.source === "skill" && !!sent.text.trim()
+            if (emittedUser) {
               const commit = {
                 kind: "user",
                 text: sent.text,
@@ -183,7 +184,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               input.trace?.write("ui.commit", commit)
               input.footer.append(commit)
             }
-            input.onSend?.(sent, sent.delivery ?? "steer")
+            input.onSend?.(sent, emittedUser)
 
             if (state.closed) {
               break
@@ -252,7 +253,10 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
   }
 
   const submit = (prompt: RunPrompt) => {
-    if (!prompt.text.trim() || state.closed) {
+    if (
+      state.closed ||
+      (!prompt.text.trim() && (prompt.mode === "shell" || !prompt.parts.some((part) => part.type === "file")))
+    ) {
       return
     }
 
@@ -275,7 +279,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       const admission = state.admission
       admissionVersion += 1
       const delivery = prompt.delivery ?? "queue"
-      input.onSend?.(sent, delivery)
+      input.onSend?.(sent, false)
       admissions = admissions
         .then(() => admission)
         .then(() => input.admit(sent, delivery, admissionController.signal))

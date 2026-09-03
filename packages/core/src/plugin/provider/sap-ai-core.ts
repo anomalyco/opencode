@@ -1,9 +1,8 @@
 import { Effect } from "effect"
-import { pathToFileURL } from "url"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Npm } from "@opencode-ai/util/npm"
 import { Provider } from "../../provider.js"
-import { importModule } from "@opencode-ai/util/runtime-import"
+import { loadSDKFactory } from "./sdk-factory.js"
 
 export const SapAICorePlugin = define({
   id: "opencode.provider.sap.ai.core",
@@ -18,17 +17,7 @@ export const SapAICorePlugin = define({
           (typeof evt.options.serviceKey === "string" ? evt.options.serviceKey : undefined)
         if (serviceKey && !process.env.AICORE_SERVICE_KEY) process.env.AICORE_SERVICE_KEY = serviceKey
 
-        const installedPath = evt.package.startsWith("file://")
-          ? evt.package
-          : (yield* npm.add(evt.package).pipe(Effect.orDie)).entrypoint
-        if (!installedPath) return yield* Effect.die(new Error(`Package ${evt.package} has no import entrypoint`))
-
-        const mod = (yield* Effect.promise(() =>
-          importModule(installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href),
-        )) as Record<string, unknown>
-        const match = Object.keys(mod).find((name) => name.startsWith("create"))
-        if (!match) return yield* Effect.die(new Error(`Package ${evt.package} has no provider factory export`))
-        const factory = mod[match]
+        const factory = yield* loadSDKFactory(npm, evt.package)
         if (typeof factory !== "function")
           return yield* Effect.die(new Error(`Package ${evt.package} provider factory export is not callable`))
 

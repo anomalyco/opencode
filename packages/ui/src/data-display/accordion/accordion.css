@@ -50,11 +50,10 @@
         line-height: var(--line-height-large);
         letter-spacing: var(--letter-spacing-normal);
 
-        &:hover:not([data-disabled]) {
-          background-color: var(--v2-overlay-simple-overlay-hover);
-        }
-        &:active:not([data-disabled]) {
-          background-color: var(--v2-overlay-simple-overlay-pressed);
+        @media (hover: hover) {
+          &:hover:not([data-disabled]) {
+            background-color: var(--v2-overlay-simple-overlay-hover);
+          }
         }
         &:focus-visible {
           outline: none;

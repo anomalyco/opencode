@@ -27,6 +27,8 @@ import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "../components/tool-error-card"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "../components/markdown"
+import { createMarkdownImages } from "../components/markdown-image"
+import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -42,9 +44,11 @@ import type {
 } from "@opencode-ai/client/promise"
 import {
   currentToolError,
+  currentToolHasLoadedFiles,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
+  executeToolFailed,
 } from "../message/current-tool-state"
 import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
 
@@ -272,6 +276,12 @@ function readToolPath(input: Record<string, unknown>) {
   return undefined
 }
 
+function readImagePath(input: Record<string, unknown>) {
+  const path = readToolPath(input)
+  if (!path || !/\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(path)) return
+  return path.replaceAll("\\", "/")
+}
+
 function skillToolName(input: Record<string, unknown>, metadata?: Record<string, unknown>) {
   if (typeof metadata?.name === "string") return metadata.name
   if (typeof input.id === "string") return input.id
@@ -472,7 +482,10 @@ function ExaOutput(props: { output?: string }) {
   )
 }
 
-export type ContextGroupPart = SessionMessageAssistantTool | (SessionMessageAssistantReasoning & { id: string })
+export type ContextGroupPart =
+  | SessionMessageAssistantTool
+  | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
+  | { type: "notice" | "shell"; id: string; render: () => JSX.Element }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -483,6 +496,12 @@ export function CurrentContextToolGroup(props: {
   reasoningDefaultOpen?: boolean
   reasoningOpen?: (id: string) => boolean | undefined
   onReasoningOpenChange?: (id: string, open: boolean) => void
+  toolDefaultOpen?: (tool: SessionMessageAssistantTool) => boolean | undefined
+  toolOpen?: (id: string) => boolean | undefined
+  onToolOpenChange?: (id: string, open: boolean) => void
+  fileOpen?: (path: string) => boolean | undefined
+  onFileOpenChange?: (path: string, open: boolean) => void
+  patchGroupKey?: (tools: SessionMessageAssistantTool[]) => string
 }) {
   const i18n = useI18n()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
@@ -491,26 +510,38 @@ export function CurrentContextToolGroup(props: {
   )
   const names = createMemo(() =>
     [
-      ...new Set(
-        tools().map((tool) => {
-          const input = currentToolInput(tool)
-          if (tool.name === "skill") return i18n.t("ui.tool.skill")
-          if (tool.name === "subagent") return i18n.t("ui.tool.agent.default")
-          return getToolInfo(tool.name, input, currentToolMetadata(tool)).title
-        }),
-      ),
-    ].join(", "),
+      ...props.parts.reduce((counts, part) => {
+        if (part.type !== "tool" && part.type !== "shell") return counts
+        const name =
+          part.type !== "tool"
+            ? i18n.t("ui.tool.shell")
+            : part.name === "skill"
+              ? i18n.t("ui.tool.skill")
+              : part.name === "subagent"
+                ? i18n.t("ui.tool.agent.default")
+                : getToolInfo(part.name, currentToolInput(part), currentToolMetadata(part)).title
+        counts.set(name, (counts.get(name) ?? 0) + 1)
+        return counts
+      }, new Map<string, number>()),
+    ]
+      .map(([name, count]) => `${count} ${name}`)
+      .join(", "),
   )
   const label = createMemo(() => {
-    const title = `${tools().length} ${names()}`
+    const notices = props.parts.filter((part) => part.type === "notice").length
+    const title =
+      [names(), notices ? i18n.plural("ui.messagePart.context.notice", notices) : undefined]
+        .filter(Boolean)
+        .join(", ") ||
+      i18n.plural("ui.messagePart.context.thought", props.parts.filter((part) => part.type === "reasoning").length)
     const text = i18n.t("ui.messagePart.tools.used", { tools: title })
     const index = text.indexOf(title)
     return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
   })
   const items = createMemo(() =>
-    props.parts.reduce<(SessionMessageAssistantTool[] | (SessionMessageAssistantReasoning & { id: string }))[]>(
+    props.parts.reduce<(SessionMessageAssistantTool[] | Exclude<ContextGroupPart, SessionMessageAssistantTool>)[]>(
       (groups, tool) => {
-        if (tool.type === "reasoning") {
+        if (tool.type !== "tool") {
           groups.push(tool)
           return groups
         }
@@ -543,6 +574,15 @@ export function CurrentContextToolGroup(props: {
       [],
     ),
   )
+  const patchKeys = createMemo(() => {
+    const keys = new Map<SessionMessageAssistantTool, string>()
+    items().forEach((item) => {
+      if (!Array.isArray(item) || item[0]?.name !== "patch" || item[0].state.status === "error") return
+      const key = props.patchGroupKey?.(item) ?? item[0].id
+      item.forEach((tool) => keys.set(tool, key))
+    })
+    return keys
+  })
   const change = (open: boolean) => {
     props.onOpenChange(open)
     props.onSizeChange?.()
@@ -554,6 +594,7 @@ export function CurrentContextToolGroup(props: {
         icon="glasses"
         status={pending() ? "running" : "completed"}
         compact
+        hasContent
         allowOpenWhilePending
         open={props.open}
         onOpenChange={change}
@@ -580,19 +621,30 @@ export function CurrentContextToolGroup(props: {
               })
               const reasoning = createMemo(() => {
                 const value = item()
-                return Array.isArray(value) ? undefined : value
+                return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
+              })
+              const callback = createMemo(() => {
+                const value = item()
+                return !Array.isArray(value) && (value.type === "notice" || value.type === "shell") ? value : undefined
               })
               return (
                 <Show
                   when={group()}
                   fallback={
-                    <Show when={reasoning()}>
+                    <Show
+                      when={reasoning()}
+                      fallback={
+                        <Show when={callback()}>
+                          {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                        </Show>
+                      }
+                    >
                       {(part) => (
                         <div data-slot="context-tool-group-item">
                           <AssistantReasoningContent
                             id={part().id}
                             content={part()}
-                            streaming={false}
+                            streaming={part().streaming ?? false}
                             defaultOpen={props.reasoningDefaultOpen}
                             open={props.reasoningOpen?.(part().id)}
                             onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
@@ -620,7 +672,10 @@ export function CurrentContextToolGroup(props: {
                       <div data-slot="context-tool-group-item">
                         <Show
                           when={
-                            tool().state.status !== "error" && ["read", "glob", "grep", "list"].includes(tool().name)
+                            tool().state.status !== "error" &&
+                            ["read", "glob", "grep", "list"].includes(tool().name) &&
+                            !(tool().name === "read" && readImagePath(currentToolInput(tool()))) &&
+                            !currentToolHasLoadedFiles(tool())
                           }
                           fallback={
                             <Show
@@ -637,14 +692,28 @@ export function CurrentContextToolGroup(props: {
                                       output={currentToolOutput(tool())}
                                       error={currentToolError(tool())}
                                       status={tool().state.status}
-                                      defaultOpen={false}
+                                      defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
+                                      open={props.toolOpen?.(tool().id) ?? props.toolDefaultOpen?.(tool())}
+                                      onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
                                       deferContent
                                       virtualizeDiff={false}
                                       onContentRendered={props.onSizeChange}
                                     />
                                   }
                                 >
-                                  <CurrentFileToolGroup tools={group()} onSizeChange={props.onSizeChange} />
+                                  <CurrentFileToolGroup
+                                    tools={group()}
+                                    fileOpen={
+                                      props.fileOpen &&
+                                      ((path) => props.fileOpen?.(`${patchKeys().get(tool())}:${path}`))
+                                    }
+                                    onFileOpenChange={
+                                      props.onFileOpenChange &&
+                                      ((path, open) =>
+                                        props.onFileOpenChange?.(`${patchKeys().get(tool())}:${path}`, open))
+                                    }
+                                    onSizeChange={props.onSizeChange}
+                                  />
                                 </Show>
                               }
                             >
@@ -1011,7 +1080,9 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   if (props.tool === "websearch") return text(props.input.query)
   if (props.tool === "skill") return skillToolName(props.input, props.metadata)
   if (props.tool === "patch") {
-    const count = patchFileGroups(props.metadata.files).length
+    const count = new Set(
+      Array.isArray(props.metadata.files) ? props.metadata.files.filter(changedFileDiff).map((file) => file.file) : [],
+    ).size
     if (count === 0) return undefined
     return `${count} ${i18n.plural("ui.common.file", count)}`
   }
@@ -1026,19 +1097,7 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
 function toolDisplayError(props: ToolProps & { error?: string }, fallback: string) {
   if (props.status === "error") return props.error
   if (props.tool !== "execute") return undefined
-  const calls = props.metadata.toolCalls
-  const failed =
-    props.metadata.error === true ||
-    (Array.isArray(calls) &&
-      calls.some(
-        (call) =>
-          call !== null &&
-          typeof call === "object" &&
-          !Array.isArray(call) &&
-          "status" in call &&
-          call.status === "error",
-      ))
-  if (!failed) return undefined
+  if (!executeToolFailed(props.metadata)) return undefined
   if (typeof props.output === "string" && props.output) return props.output
   return fallback
 }
@@ -1048,6 +1107,7 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
+    const image = createMemo(() => (props.status === "completed" ? readImagePath(props.input) : undefined))
     const args: string[] = []
     if (typeof props.input.offset === "number") args.push("offset=" + props.input.offset)
     if (typeof props.input.limit === "number") args.push("limit=" + props.input.limit)
@@ -1070,12 +1130,22 @@ ToolRegistry.register({
         <BasicTool
           {...props}
           icon="glasses"
+          hasContent={!!image()}
+          defer
+          onOpenChange={(open) => {
+            props.onOpenChange?.(open)
+            props.onContentRendered?.()
+          }}
           trigger={{
             title: i18n.t("ui.tool.read"),
             subtitle: getFilename(readToolPath(props.input) ?? ""),
             args,
           }}
-        />
+        >
+          <Show when={image()} keyed>
+            {(path) => <ReadImage path={path} onContentRendered={props.onContentRendered} />}
+          </Show>
+        </BasicTool>
         <Show when={paths().length > 0}>
           <div
             data-component="tool-loaded-item"
@@ -1100,6 +1170,28 @@ ToolRegistry.register({
     )
   },
 })
+
+function ReadImage(props: { path: string; onContentRendered?: () => void }) {
+  const markdown = useMarkdown()
+  let root!: HTMLDivElement
+  createEffect(() => {
+    if (!markdown?.readImage) return
+    const images = createMarkdownImages(markdown.readImage)
+    images.update(root)
+    onCleanup(() => images.dispose())
+  })
+  onMount(() => props.onContentRendered?.())
+  return (
+    <div ref={root} data-component="read-image">
+      <img
+        data-local-image={props.path}
+        alt={getFilename(props.path)}
+        onLoad={() => props.onContentRendered?.()}
+        onError={() => props.onContentRendered?.()}
+      />
+    </div>
+  )
+}
 
 ToolRegistry.register({
   name: "list",
@@ -1347,13 +1439,13 @@ ToolRegistry.register({
                 <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
               </Show>
             </div>
+            <Show when={clickable()}>
+              <div data-component="task-tool-action">
+                <Icon name="chevron-right" size="normal" />
+              </div>
+            </Show>
           </div>
         </div>
-        <Show when={clickable()}>
-          <div data-component="task-tool-action">
-            <Icon name="square-arrow-top-right" size="small" />
-          </div>
-        </Show>
       </div>
     )
 
@@ -1376,7 +1468,7 @@ ToolRegistry.register({
       >
         <div
           data-component="task-tool-delegating"
-          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-01 p-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px]"
+          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-02 p-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px]"
         >
           <Icon name="subagent" size="small" class="shrink-0 text-v2-icon-icon-faint" />
           <TextShimmer text={i18n.t("ui.tool.agent.delegating")} class="min-w-0 truncate" />
@@ -1475,7 +1567,14 @@ ToolRegistry.register({
       (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true)
     const sawStreaming = streaming()
     const [streamed, setStreamed] = createSignal("")
+    // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
+    const saved = createMemo(() =>
+      props.metadata.status === "exited" || props.metadata.status === "timeout" || props.metadata.status === "killed"
+        ? props.output
+        : undefined,
+    )
     createEffect(() => {
+      if (saved() !== undefined) return
       const id = props.metadata.shellID
       const shellOutput = data.shellOutput
       if (typeof id !== "string" || !shellOutput) return
@@ -1511,7 +1610,7 @@ ToolRegistry.register({
       return ""
     }
     const output = createMemo(() =>
-      stripAnsi((typeof props.metadata.shellID === "string" && streamed()) || props.output || "").replace(
+      stripAnsi(saved() ?? ((typeof props.metadata.shellID === "string" && streamed()) || props.output || "")).replace(
         /\r\n?/g,
         "\n",
       ),
@@ -1560,7 +1659,15 @@ export function SessionShellMessage(props: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
+  const i18n = useI18n()
   const render = ToolRegistry.render("shell") ?? GenericTool
+  const error = createMemo(() => {
+    const message = props.message
+    if (message.status === "timeout") return i18n.t("ui.tool.shell.timeout")
+    if (message.status === "killed") return i18n.t("ui.tool.shell.cancelled")
+    if (message.status !== "exited" || message.exit === undefined || message.exit === 0) return
+    return i18n.t("ui.tool.shell.exit", { code: message.exit })
+  })
   return (
     <div data-component="session-shell-message" data-timeline-part-id={props.message.id}>
       <Dynamic
@@ -1568,6 +1675,7 @@ export function SessionShellMessage(props: {
         tool="shell"
         input={{ command: props.message.command }}
         metadata={{
+          shellID: props.message.shellID,
           status: props.message.status,
           exit: props.message.exit,
           truncated: props.message.output?.truncated,
@@ -1578,6 +1686,9 @@ export function SessionShellMessage(props: {
         open={props.open}
         onOpenChange={props.onOpenChange}
       />
+      <Show when={error()}>
+        {(error) => <ToolErrorCard tool="shell" error={error()} subtitle={props.message.command} />}
+      </Show>
     </div>
   )
 }

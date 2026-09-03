@@ -52,19 +52,19 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
   id: "opencode.websearch.parallel",
   effect: Effect.fn("WebSearchParallel.Plugin")(function* (ctx) {
     const http = yield* HttpClient.HttpClient
-    yield* ctx.integration.transform((draft) => {
-      draft.update("parallel", (integration) => (integration.name = "Parallel"))
-      draft.method.update({
+    yield* ctx.integration.transform((editor) => {
+      editor.update("parallel", (integration) => (integration.name = "Parallel"))
+      editor.method.update({
         integrationID: "parallel",
         method: { type: "key" },
       })
-      draft.method.update({
+      editor.method.update({
         integrationID: "parallel",
         method: { type: "env", names: ["PARALLEL_API_KEY"] },
       })
     })
-    yield* ctx.websearch.transform((draft) => {
-      draft.add({
+    yield* ctx.websearch.transform((editor) => {
+      editor.add({
         id: "parallel",
         name: "Parallel",
         execute: (input) =>

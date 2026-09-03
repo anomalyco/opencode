@@ -36,14 +36,14 @@ export const DefaultServices = Layer.merge(EffectCache.Default, EffectLogger.Def
  *
  * @example
  * ```ts
- * import { SqliteClient } from '@effect/sql-sqlite-node';
- * import * as SQLiteDrizzle from 'drizzle-orm/effect-sqlite';
- * import * as Effect from 'effect/Effect';
+ * import { SqliteClient } from "@effect/sql-sqlite-node"
+ * import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
+ * import { Effect } from "effect"
  *
- * const db = yield* SQLiteDrizzle.make({ relations }).pipe(
- *   Effect.provide(SQLiteDrizzle.DefaultServices),
- *   Effect.provide(SqliteClient.layer({ filename: 'sqlite.db' })),
- * );
+ * const db = yield* EffectDrizzleSqlite.make({ relations }).pipe(
+ *   Effect.provide(EffectDrizzleSqlite.DefaultServices),
+ *   Effect.provide(SqliteClient.layer({ filename: "sqlite.db" })),
+ * )
  * ```
  */
 export const make = Effect.fn("SQLiteDrizzle.make")(function* <TRelations extends AnyRelations = EmptyRelations>(

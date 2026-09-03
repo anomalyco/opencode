@@ -2,7 +2,7 @@ export * as SkillDiscovery from "./discovery.js"
 
 import path from "path"
 import { Context, Effect, Layer, Schedule, Schema } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
@@ -37,15 +37,7 @@ function isSafeRelativePath(value: string) {
     !path.win32.isAbsolute(value) &&
     segments.every((segment) => {
       try {
-        const decoded = decodeURIComponent(segment)
-        return (
-          decoded.length > 0 &&
-          decoded !== "." &&
-          decoded !== ".." &&
-          !decoded.includes("/") &&
-          !decoded.includes("\\") &&
-          !decoded.includes("\0")
-        )
+        return isSafeSegment(decodeURIComponent(segment))
       } catch {
         return false
       }
@@ -146,10 +138,9 @@ const layer = Layer.effect(
                 file,
               }
             })
-            if (files.some((file) => file === undefined)) {
+            if (!files.every((file): file is { url: string; destination: string; file: string } => file !== undefined))
               return []
-            }
-            return [{ skill, root, versionFile, files: files as { url: string; destination: string; file: string }[] }]
+            return [{ skill, root, versionFile, files }]
           }),
           ({ skill, root, versionFile, files }) =>
             Effect.gen(function* () {

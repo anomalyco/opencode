@@ -2,7 +2,8 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import type { SessionStatus } from "@opencode-ai/client/promise"
 import { onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import { useSessionLayout } from "./session-layout"
 import { useDialog, useI18n } from "@opencode-ai/ui/context"
 import { DialogUsageExceeded } from "@/providers/connect/usage-exceeded"
@@ -13,6 +14,13 @@ const GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT = "go_upsell_account_rate_limit_
 const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
+
+export const GoUpsellState = Persistence.struct({
+  [GO_UPSELL_FREE_TIER_LAST_SEEN_AT]: Schema.NullOr(Schema.Finite),
+  [GO_UPSELL_FREE_TIER_DONT_SHOW]: Schema.NullOr(Schema.Finite),
+  [GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT]: Schema.NullOr(Schema.Finite),
+  [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: Schema.NullOr(Schema.Finite),
+})
 
 function goUpsellKeys(status: SessionStatus) {
   if (status.type !== "retry" || !status.action) return
@@ -39,15 +47,12 @@ export function useUsageExceededDialogs() {
   const { t, locale } = useI18n()
   const isEnglish = () => locale() === "en"
 
-  const [goUpsellState, setGoUpsellState] = persisted(
-    Persist.global("go-upsell"),
-    createStore({
-      [GO_UPSELL_FREE_TIER_LAST_SEEN_AT]: null as null | number,
-      [GO_UPSELL_FREE_TIER_DONT_SHOW]: null as null | number,
-      [GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT]: null as null | number,
-      [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: null as null | number,
-    }),
-  )
+  const [goUpsellState, setGoUpsellState] = persisted(Persist.global("go-upsell"), GoUpsellState, {
+    [GO_UPSELL_FREE_TIER_LAST_SEEN_AT]: null,
+    [GO_UPSELL_FREE_TIER_DONT_SHOW]: null,
+    [GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT]: null,
+    [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: null,
+  })
 
   onCleanup(
     sdk().event.on("session.status", (evt) => {

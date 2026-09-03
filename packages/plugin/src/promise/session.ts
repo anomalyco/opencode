@@ -5,6 +5,7 @@ import type { Model } from "@opencode-ai/schema/model"
 import type { PromptInput } from "@opencode-ai/schema/prompt-input"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
+import type { SessionError } from "@opencode-ai/schema/session-error"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { JsonSchema, Types } from "effect"
 import type { ModelHooks } from "./registration.js"
@@ -52,12 +53,24 @@ export interface SessionHttpResponse {
   response: Response
 }
 
+export type SessionRetryDecision = { retry: false } | { retry: true; delay: number }
+
+export interface SessionRetry {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly error: SessionError.Error
+  readonly attempt: number
+  decision: SessionRetryDecision
+}
+
 export interface SessionHooks {
   readonly prompt: SessionPrompt
   readonly context: SessionContext
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly retry: SessionRetry
 }
 
 export type SessionDomain = Pick<

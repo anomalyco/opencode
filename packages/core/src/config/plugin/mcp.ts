@@ -36,7 +36,7 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
 
   // Subscribe before the initial load so updates racing it trigger a rebuild.
   loaded.entries = yield* config.entries()
-  yield* mcp.transform((draft) => {
+  yield* mcp.transform((editor) => {
     const documents = loaded.entries.filter((entry): entry is Document => entry.type === "document")
     // Global timeout defaults merge in config order; each server can override them.
     const timeout = Object.assign(
@@ -46,12 +46,12 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
     const servers = new Map<string, ServerConfig>()
     for (const document of documents) {
       for (const [name, server] of Object.entries(document.info.mcp?.servers ?? {})) {
-        servers.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
+        servers.set(name, server)
       }
     }
     for (const [name, server] of servers) {
-      if (draft.get(name)) continue
-      draft.set(name, server)
+      if (editor.get(name)) continue
+      editor.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
     }
   })
 })

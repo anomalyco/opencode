@@ -62,9 +62,8 @@ export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
 const transactionLocks = KeyedMutex.makeUnsafe<string>()
 
 /**
- * Serialize file changes by absolute target. Conditional writes compare and
- * write under the same process-local lock so cooperating OpenCode mutations do
- * not overwrite changes made from the same stale content.
+ * Mutation locking is process-local and serializes cooperating OpenCode
+ * changes; external writes can still race.
  */
 const layer = Layer.effect(
   Service,
@@ -129,7 +128,6 @@ export const node = makeLocationNode({ service: Service, layer, deps: [Environme
 /**
  * Deferred until the corresponding integrations exist.
  */
-// TODO: Add formatter integration after formatter runtime exists.
 // TODO: Publish watcher/file-edit events after watcher integration exists.
 // TODO: Add snapshots / undo after snapshot design exists.
 // TODO: Notify LSP and collect diagnostics after LSP runtime exists.

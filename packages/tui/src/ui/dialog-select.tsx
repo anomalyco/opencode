@@ -284,8 +284,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           selection = option
           if (!moved) return
           if (
-            (!props.preserveSelection && (props.current === undefined || props.focusCurrent === false)) ||
-            store.filter.length > 0
+            !props.preserveSelection &&
+            (props.current === undefined || props.focusCurrent === false || store.filter.length > 0)
           )
             return
           scrollAfterLayout(false, option.value)

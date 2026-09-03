@@ -574,6 +574,7 @@ describe("WebSocket channel execution", () => {
   const model = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini")
   const request = LLM.request({ model, prompt: "Say hello." })
   const frames = [
+    JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_1" } }),
     JSON.stringify({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
     JSON.stringify({ type: "response.completed", response: { id: "resp_1" } }),
   ]

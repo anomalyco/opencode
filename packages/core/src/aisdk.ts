@@ -119,7 +119,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 function prepareOptions(model: Info, pkg: string) {
   const projected = mapBodyToProviderOptions(model, pkg)
   const options: Record<string, any> = {
-    name: model.providerID,
+    name: model.canonical ?? model.providerID,
     ...(model.settings ?? {}),
     headers: model.headers,
     body: projected.body,
@@ -249,6 +249,7 @@ export const locationLayer = Layer.effect(
       language: Effect.fn("AISDK.language")(function* (model) {
         const key = cacheKey({
           providerID: model.providerID,
+          canonical: model.canonical,
           id: model.id,
           modelID: model.modelID,
           package: model.package,
@@ -269,6 +270,7 @@ export const locationLayer = Layer.effect(
         const options = prepareOptions(model, packageName)
         const sdkKey = cacheKey({
           providerID: model.providerID,
+          canonical: model.canonical,
           package: packageName,
           settings: model.settings,
           headers: model.headers,
@@ -301,10 +303,12 @@ export const locationLayer = Layer.effect(
 function modelFromLanguage(info: Info, language: LanguageModelV3) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
-  const optionKey = providerOptionKey(packageName, info.providerID)
+  const providerID = info.canonical ?? info.providerID
+  const optionKey = providerOptionKey(packageName, providerID)
   const route: AnyRoute = {
+    compact: undefined,
     id: `ai-sdk:${packageName}`,
-    provider: ProviderID.make(info.providerID),
+    provider: ProviderID.make(providerID),
     providerMetadataKey: optionKey,
     protocol: "ai-sdk",
     endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
@@ -327,17 +331,22 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     },
     body: {
       schema: Schema.Unknown,
-      from: (request) => Effect.succeed(callOptions(request, packageName, info.modelID ?? info.id, optionKey)),
+      from: (request) =>
+        Effect.try({
+          try: () => callOptions(request, packageName, info.modelID ?? info.id, optionKey),
+          catch: (cause) =>
+            cause instanceof AIError ? cause : ProviderShared.invalidRequest("Invalid AI SDK request", cause),
+        }),
     },
     with: () => route,
     model: (input) =>
-      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : info.providerID, route }),
+      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared) => streamLanguage(language, prepared as LanguageModelV3CallOptions),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
-    provider: info.providerID,
+    provider: providerID,
     route,
     compatibility: info.compatibility,
   })
@@ -482,8 +491,7 @@ function toolMessage(input: LLMRequest["messages"][number]) {
     const value = part.result.value.filter((item) => {
       if (item.type !== "file") return true
       if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
-      const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1] ?? item.uri
-      media.push({ type: "file", mediaType: item.mime, data, filename: item.name })
+      media.push({ type: "file", mediaType: item.mime, data: fileData(item.uri), filename: item.name })
       return false
     })
     return toolResultPart({
@@ -507,16 +515,22 @@ function text(part: ContentPart) {
 function userPart(part: ContentPart): UserContent {
   if (part.type === "text") return [{ type: "text", text: part.text }]
   if (part.type === "media")
-    return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
+    return [{ type: "file", mediaType: part.mediaType, data: fileData(part.data), filename: part.filename }]
   return []
 }
 
 function assistantPart(part: ContentPart): AssistantContent {
   switch (part.type) {
+    case "compaction":
+      throw ProviderShared.unsupportedOperation({
+        operation: "compaction-replay",
+        provider: part.provider,
+        message: "AI SDK routes cannot replay native provider compaction state",
+      })
     case "text":
-      return [{ type: "text", text: part.text }]
+      return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":
-      return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
+      return [{ type: "file", mediaType: part.mediaType, data: fileData(part.data), filename: part.filename }]
     case "reasoning":
       return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "tool-call":
@@ -533,6 +547,15 @@ function assistantPart(part: ContentPart): AssistantContent {
     case "tool-result":
       return toolResultPart(part)
   }
+}
+
+function fileData(data: Extract<ContentPart, { type: "media" }>["data"]) {
+  if (typeof data !== "string") return data
+  const base64 = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(data)?.[1]
+  if (base64 !== undefined) return base64
+  if (!URL.canParse(data)) return data
+  const url = new URL(data)
+  return url.protocol === "http:" || url.protocol === "https:" ? url : data
 }
 
 function toolResultPart(part: ContentPart): ToolResultContent[] {
@@ -612,12 +635,12 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
     Stream.unwrap(
       Effect.tryPromise({
         try: () => language.doStream(options),
-        catch: llmError,
+        catch: (error) => llmError(error, "request"),
       }).pipe(
         Effect.map((result) =>
           Stream.fromReadableStream({
             evaluate: () => result.stream,
-            onError: llmError,
+            onError: (error) => llmError(error, "read"),
           }).pipe(
             Stream.mapEffect((event) => streamPartEvents(state, event)),
             Stream.flatMap((events) => Stream.fromIterable(events)),
@@ -744,7 +767,7 @@ function streamPartEvents(
         }),
       ])
     case "error":
-      return Effect.fail(llmError(event.error))
+      return Effect.fail(llmError(event.error, "read"))
   }
 }
 
@@ -794,9 +817,20 @@ function messageValue(input: unknown) {
   }
 }
 
-function llmError(error: unknown) {
+function llmError(error: unknown, operation: "request" | "read") {
   if (error instanceof AIError) return error
   if (APICallError.isInstance(error)) return apiCallError(error)
+  const network = networkFailure(error)
+  if (network)
+    return new AIError({
+      reason: new TransportError({
+        message: network.message.trim() === "" ? unknownErrorMessage(error) : network.message,
+        cause: error,
+        transport: "http",
+        operation,
+        code: network.code,
+      }),
+    })
   return new AIError({
     reason: new UnknownProviderError({
       message: unknownErrorMessage(error),
@@ -804,6 +838,50 @@ function llmError(error: unknown) {
       cause: error,
     }),
   })
+}
+
+// Runtime-generated network failure shapes. The codes mirror the AI SDK's own
+// Bun network error list in handleFetchError; the messages are undici's fetch
+// TypeError and stream termination strings plus our SSE chunk timeout error.
+// Unrecognized shapes still retry via the UnknownProvider default; this match
+// only adds transport semantics (continuation eligibility, display).
+const NETWORK_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ConnectionRefused",
+  "ConnectionClosed",
+  "FailedToOpenSocket",
+])
+const NETWORK_ERROR_MESSAGES = new Set([
+  "fetch failed",
+  "failed to fetch",
+  "terminated",
+  "other side closed",
+  "sse read timed out",
+])
+
+const NativeErrorShape = Schema.Struct({
+  message: Schema.String,
+  code: Schema.optionalKey(Schema.String),
+  cause: Schema.optionalKey(Schema.Unknown),
+})
+const decodeNativeErrorShape = Schema.decodeUnknownOption(NativeErrorShape)
+
+function networkFailure(error: unknown, depth = 0): { message: string; code?: string } | undefined {
+  if (depth > 4) return undefined
+  const shape = Option.getOrUndefined(decodeNativeErrorShape(error))
+  if (!shape) return undefined
+  // Prefer the deepest match: wrappers like undici's "fetch failed" TypeError
+  // carry the specific network code on their cause.
+  const cause = networkFailure(shape.cause, depth + 1)
+  if (cause) return cause
+  if (shape.code !== undefined && (NETWORK_ERROR_CODES.has(shape.code) || shape.code.startsWith("UND_ERR")))
+    return { message: shape.message, code: shape.code }
+  if (NETWORK_ERROR_MESSAGES.has(shape.message.trim().toLowerCase()))
+    return { message: shape.message, code: shape.code }
+  return undefined
 }
 
 function apiCallError(error: APICallError) {

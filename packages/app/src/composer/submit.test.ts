@@ -52,10 +52,12 @@ function submitInput(
   adapter: ActiveComposerAdapter | NewSessionComposerAdapter,
   notify = { missingSelection() {}, failed(_kind: "shell" | "command" | "prompt", _error: unknown) {} },
   mode: "normal" | "shell" = "normal",
+  commands: () => readonly { name: string }[] | undefined = () => [],
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
+    commands,
     editor: () => undefined,
     queueScroll() {},
     addToHistory() {},
@@ -231,6 +233,7 @@ describe("Composer submission", () => {
 
   test("previews the first prompt while starting and hands it off before completing preparation", async () => {
     const draft = createMemoryComposerState({ prompt: "prepare my worktree" }).capture()
+    const promoted = createMemoryComposerState().capture()
     const preview = Promise.withResolvers<SessionMessageUser>()
     const ready = Promise.withResolvers<void>()
     const calls: string[] = []
@@ -247,9 +250,10 @@ describe("Composer submission", () => {
       controls,
       working: () => false,
       submitted() {},
-      async start(_selection, _submission, message) {
+      async start(_selection, submission, message) {
         preview.resolve(message)
         await ready.promise
+        submission.retarget(promoted, { preserveDraft: true })
         return {
           session: target,
           cleanupReady: Promise.resolve(),
@@ -257,6 +261,8 @@ describe("Composer submission", () => {
             expect(handoff).toHaveLength(1)
             expect(handoff[0]?.id).toBe(message.id)
             expect(handoff[0]?.text).toBe("prepare my worktree")
+            expect(promoted.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+            promoted.set([{ type: "text", content: "follow up", start: 0, end: 9 }], 9)
             calls.push("complete")
           },
         }
@@ -271,6 +277,7 @@ describe("Composer submission", () => {
     await submitted
     expect(calls).toContain("complete")
     expect(draft.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+    expect(promoted.current()).toEqual([{ type: "text", content: "follow up", start: 0, end: 9 }])
   })
 
   test("does not restore a prompt already acknowledged by the durable inbox", async () => {
@@ -415,7 +422,6 @@ describe("Composer submission", () => {
       prompt: async () => undefined,
       command: async (value) => sent.resolve(value),
     })
-    target.data.location.command.list = () => [{ name: "review", description: "Review changes", template: "" }]
     const adapter: ActiveComposerAdapter = {
       kind: "active-session",
       state,
@@ -428,13 +434,58 @@ describe("Composer submission", () => {
       setEditor() {},
     }
 
-    await submitInput(adapter).submit(new Event("submit"))
+    await submitInput(adapter, undefined, "normal", () => [{ name: "review" }]).submit(new Event("submit"))
     const request = await sent.promise
 
     expect(request.files).toMatchObject([{ name: "app.ts", mention: { text: "@src/app.ts" } }])
     expect(request.agents).toMatchObject([{ name: "review", mention: { text: "@review" } }])
     expect(request.skills).toMatchObject([{ id: "effect", name: "Effect", mention: { text: "@effect" } }])
     expect(request.delivery).toBe("steer")
+  })
+
+  test("captures commands before creating a session in a new worktree", async () => {
+    const state = createMemoryComposerState({ prompt: "/review https://github.com/example/repo/pull/1" }).capture()
+    const catalog = [{ name: "review" }]
+    const sent = Promise.withResolvers<"prompt" | "command">()
+    const requests: Parameters<ComposerSession["api"]["command"]>[0][] = []
+    const target = session({
+      calls: [],
+      prompt: async () => sent.resolve("prompt"),
+      command: async (value) => {
+        requests.push(value)
+        sent.resolve("command")
+      },
+    })
+    target.directory = "C:/new-worktree"
+    target.data.location.command.list = () => undefined
+    const adapter: NewSessionComposerAdapter = {
+      kind: "new-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      submitted() {},
+      async start() {
+        // The destination catalog has not loaded, and the source composer is leaving.
+        catalog.splice(0)
+        return { session: target, cleanupReady: Promise.resolve() }
+      },
+    }
+
+    await submitInput(adapter, undefined, "normal", () => catalog).submit(new Event("submit"))
+
+    expect(await sent.promise).toBe("command")
+    expect(requests).toEqual([
+      {
+        sessionID: target.id,
+        command: "review",
+        text: "https://github.com/example/repo/pull/1",
+        files: [],
+        agents: [],
+        skills: [],
+        delivery: "steer",
+      },
+    ])
   })
 
   test("does not run an empty shell command from hidden attachments", async () => {

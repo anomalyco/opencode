@@ -41,7 +41,7 @@ export type DeepMutable<T> = T extends string | number | boolean | bigint | symb
 
 /**
  * Nominal wrapper for scalar types. The class itself is a valid schema —
- * pass it directly to `Schema.decode`, `Schema.decodeEffect`, etc.
+ * pass it directly to `Schema.decodeUnknownSync`, `Schema.decodeEffect`, etc.
  *
  * The runtime value remains an unwrapped primitive. `Schema.brand` supplies
  * the primitive schema behavior and constructor validation, while the class

@@ -12,6 +12,7 @@ import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
+import { ModelState } from "./persistence"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -98,18 +99,11 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
 })
 
 function createGlobalModels() {
-  const [store, setStore, _, ready] = persisted(
-    Persist.global("model"),
-    createStore<{
-      user: Array<{ providerID: string; modelID: string; visibility: "show" | "hide"; favorite?: boolean }>
-      recent: Array<{ providerID: string; modelID: string }>
-      variant?: Record<string, string | undefined>
-    }>({
-      user: [],
-      recent: [],
-      variant: {},
-    }),
-  )
+  const [store, setStore, _, ready] = persisted(Persist.global("model"), ModelState, {
+    user: [],
+    recent: [],
+    variant: {},
+  })
   const [recent] = createResource(
     async () => {
       const value = store.recent

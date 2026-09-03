@@ -6,11 +6,13 @@ import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/
 import {
   InvalidProviderOutputError,
   InvalidRequestError,
+  UnsupportedOperationError,
   AIError,
   HttpContext,
   type ContentPart,
   type LLMRequest,
   type MediaPart,
+  type ProviderID,
   type TextPart,
   type ToolResultPart,
 } from "../schema/index.js"
@@ -207,15 +209,16 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, optionally filters named events, and drops empty / `[DONE]`
- * keep-alive events so the protocol event schema sees one JSON string per
- * element. Retry control events are ignored without interrupting the stream.
+ * decoder, optionally filters named events, and drops empty events. `[DONE]`
+ * is dropped by default or retained for protocols that use it as their stream
+ * boundary. Retry control events are ignored without interrupting the stream.
  * Decoder failures become provider output errors so the public error channel
  * stays `AIError`.
  */
 export const sseFraming = (
   bytes: Stream.Stream<Uint8Array, AIError>,
   events?: ReadonlySet<string>,
+  includeDone = false,
 ): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
@@ -240,7 +243,7 @@ export const sseFraming = (
       (event) =>
         (events === undefined || events.has(event.event)) &&
         event.data.length > 0 &&
-        (event.data !== "[DONE]" || (events !== undefined && event.event !== "message")),
+        (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message")),
     ),
     Stream.map((event) => event.data),
   )
@@ -251,6 +254,29 @@ export const sseFraming = (
 export const invalidRequest = (message: string, cause?: unknown) =>
   new AIError({
     reason: new InvalidRequestError({ message, cause }),
+  })
+
+/**
+ * Canonical constructor for operations the selected route does not implement.
+ * Prefer this over `invalidRequest` when the failure is a missing route
+ * capability rather than a malformed caller input, so consumers can branch on
+ * `reason._tag` plus `reason.operation` instead of matching message text.
+ */
+export const unsupportedOperation = (input: {
+  readonly operation: string
+  readonly message: string
+  readonly provider?: ProviderID
+  readonly route?: string
+  readonly cause?: unknown
+}) =>
+  new AIError({
+    reason: new UnsupportedOperationError({
+      operation: input.operation,
+      message: input.message,
+      provider: input.provider,
+      route: input.route,
+      cause: input.cause,
+    }),
   })
 
 export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function* (

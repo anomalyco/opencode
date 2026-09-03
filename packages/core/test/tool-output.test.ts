@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
+import type { Tool } from "@opencode-ai/core/tool"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Identifier } from "@opencode-ai/core/id/id"
@@ -18,12 +19,13 @@ const withStore = <A, E, R>(
     Effect.promise(() => tmpdir()),
     (tmp) => {
       const layer = AppNodeBuilder.build(LayerNode.group([ToolOutput.node, FSUtil.node]), [
-        [Global.node, Global.layerWith({ data: tmp.path })],
+        Global.node.replace(Global.layerWith({ data: tmp.path })),
       ])
       return Effect.gen(function* () {
         const output = yield* ToolOutput.Service
-        if (limits) yield* output.transform((draft) => draft.configure(limits))
-        return yield* body(output, yield* FSUtil.Service, tmp.path)
+        const fs = yield* FSUtil.Service
+        if (limits) yield* output.transform((editor) => editor.configure(limits))
+        return yield* body(output, fs, tmp.path)
       }).pipe(Effect.provide(layer))
     },
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -35,7 +37,7 @@ describe("ToolOutput", () => {
       (service, fs) =>
         Effect.gen(function* () {
           const output = { items: [1, 2, 3] }
-          const result = yield* service.truncate({ output, content: "one\ntwo\nthree" })
+          const result = yield* service.truncate({ output, content: [{ type: "text", text: "one\ntwo\nthree" }] })
           expect(result.output).toBe(output)
           expect(result.metadata).toMatchObject({ truncated: true })
           const outputPath = result.metadata?.outputPath
@@ -55,7 +57,7 @@ describe("ToolOutput", () => {
     withStore(
       (output) =>
         Effect.gen(function* () {
-          const result = yield* output.truncate({ content: "one\ntwo" })
+          const result = yield* output.truncate({ content: [{ type: "text", text: "one\ntwo" }] })
           expect(result.content).toEqual([
             { type: "text", text: "one" },
             {
@@ -90,8 +92,9 @@ describe("ToolOutput", () => {
   it.live("skips results that report a truncation state", () =>
     withStore((output) =>
       Effect.gen(function* () {
-        const truncated = { content: "one\ntwo", metadata: { truncated: true, source: "tool" } }
-        const retained = { content: "one\ntwo", metadata: { truncated: false, source: "tool" } }
+        const content: Tool.NormalizedResult["content"] = [{ type: "text", text: "one\ntwo" }]
+        const truncated = { content, metadata: { truncated: true, source: "tool" } }
+        const retained = { content, metadata: { truncated: false, source: "tool" } }
         expect(yield* output.truncate(truncated)).toBe(truncated)
         expect(yield* output.truncate(retained)).toBe(retained)
       }),
@@ -111,8 +114,8 @@ describe("ToolOutput", () => {
     withStore(
       (output) =>
         Effect.gen(function* () {
-          expect(yield* output.truncate({ content: "one\ntwo\n" })).toEqual({
-            content: "one\ntwo\n",
+          expect(yield* output.truncate({ content: [{ type: "text", text: "one\ntwo\n" }] })).toEqual({
+            content: [{ type: "text", text: "one\ntwo\n" }],
             metadata: { truncated: false },
           })
         }),
@@ -124,7 +127,7 @@ describe("ToolOutput", () => {
     withStore(
       (output) =>
         Effect.gen(function* () {
-          const result = yield* output.truncate({ content: "one\n" })
+          const result = yield* output.truncate({ content: [{ type: "text", text: "one\n" }] })
           expect(result.content).toEqual([
             { type: "text", text: "one" },
             { type: "text", text: expect.stringMatching(/^\.\.\. 1 byte truncated; full content saved to /) },
