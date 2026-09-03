@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { Effect, Layer, Schema, Context, Stream } from "effect"
+import { Cause, Effect, Layer, Schema, Context, Stream } from "effect"
 import { LLMClient } from "@opencode-ai/ai"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, desc, eq } from "drizzle-orm"
@@ -418,6 +418,17 @@ const layer = Layer.effect(
           Effect.provideService(Project.Service, projects),
           Effect.provideService(LocationServiceMap.Service, locations),
         )
+        // Probe the same instance execution would use, without holding up inbox cancellation.
+        const unavailable =
+          !(yield* execution.isActive(input.sessionID)) &&
+          (!(yield* fs.isDir(session.location.directory)) ||
+            !(yield* SessionRunner.Service.pipe(
+              instances.provide(session),
+              Effect.as(true),
+              Effect.catchCause((cause) =>
+                Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.succeed(false),
+              ),
+            )))
         const item = SessionInbox.Item.make({
           type: "move",
           payload,
@@ -427,9 +438,13 @@ const layer = Layer.effect(
           input.sessionID,
           Effect.gen(function* () {
             const latest = yield* result.get(input.sessionID)
-            const source = yield* fs.stat(latest.location.directory).pipe(Effect.orElseSucceed(() => undefined))
             // Active runners must hand off at a step boundary to retain their continuation.
-            if ((!source || source.type !== "Directory") && !(yield* execution.isActive(input.sessionID))) {
+            if (
+              unavailable &&
+              latest.location.directory === session.location.directory &&
+              latest.location.workspaceID === session.location.workspaceID &&
+              !(yield* execution.isActive(input.sessionID))
+            ) {
               const cancellations = (yield* SessionInbox.moveIDs(db, input.sessionID)).map(
                 (item) => [SessionEvent.InboxCancelled, { sessionID: input.sessionID, inboxID: item.id }] as const,
               )
