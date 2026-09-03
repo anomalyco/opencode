@@ -3,11 +3,13 @@ import { Agent } from "@opencode-ai/core/agent"
 import type { Permission } from "@opencode-ai/core/permission"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Image } from "@opencode-ai/core/image"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { State } from "@opencode-ai/core/state"
 import { Tool } from "@opencode-ai/core/tool"
 import type { Info } from "@opencode-ai/schema/tool"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
@@ -35,7 +37,9 @@ const imageStore = Layer.mock(Image.Service, {
     })
   },
 })
-const registryLayer = AppNodeBuilder.build(Tool.node, [Image.node.replace(imageStore)])
+const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node]), [
+  Image.node.replace(imageStore),
+])
 const it = testEffect(registryLayer)
 const identity = {
   agent: Agent.ID.make("build"),
@@ -843,6 +847,36 @@ describe("Tool", () => {
       ])
     }),
   )
+  ;[
+    { name: "string", content: "hooked", text: "hooked" },
+    { name: "empty string", content: "", text: "" },
+    { name: "missing content", content: undefined, text: '{"text":"hooked"}' },
+    { name: "empty content array", content: [], text: '{"text":"hooked"}' },
+  ].forEach((input) => {
+    it.effect(`normalizes ${input.name} after the final tool hook`, () =>
+      Effect.gen(function* () {
+        const service = yield* Tool.Service
+        const hooks = yield* PluginHooks.Service
+        yield* transform(service, { echo: make() }, { codemode: false })
+        yield* hooks.register("tool", "execute.after", (event) =>
+          Effect.sync(() => {
+            if (event.status !== "completed") return
+            event.result = {
+              output: { text: "hooked" },
+              content: input.content,
+              metadata: { source: "hook" },
+            }
+          }),
+        )
+        const snapshot = yield* service.snapshot()
+        expect(yield* snapshot.execute(call("echo"))).toEqual({
+          output: { text: "hooked" },
+          content: [{ type: "text", text: input.text }],
+          metadata: { source: "hook" },
+        })
+      }),
+    )
+  })
 
   it.effect("normalizes image tool output once and drops unresizable images", () =>
     Effect.gen(function* () {
