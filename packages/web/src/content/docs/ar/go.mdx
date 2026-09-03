@@ -50,6 +50,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 تشمل قائمة النماذج الحالية:
 
 - **Grok 4.6**
+- **GLM-5.3-Flash**
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
@@ -62,20 +63,34 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([مناطق محدودة](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([مناطق محدودة](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
+- **Qwen3.8 Flash**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
+- **Hy4 preview**
 - **Hy3**
-- **Ox Alpha Free** (لفترة محدودة)
 
 قد تتغير قائمة النماذج مع استمرارنا في اختبار نماذج جديدة وإضافتها.
 
 ---
+
+## أين يمكنني استخدامه؟
+
+صُمّم OpenCode Go للاستخدام مع [OpenCode](https://opencode.ai) وغيره من وكلاء البرمجة الشائعين الذين ينشئون أنواعًا مماثلة من الطلبات.
+
+تتم مراقبة حركة المرور لرصد الاستخدام المسيء الذي يؤدي إلى تدهور تجربة المستخدمين الآخرين.
+
+لتجنب وضع علامة على حسابك، تأكد من أن الأداة التي تستخدمها
+
+1\. لا تنشئ حركة مرور مسيئة  
+2\. تعرّف عن نفسها بشكل صحيح (من دون معرّفات وكيل مستخدم عامة)  
+3\. تتضمن ترويسة `x-opencode-session` حتى نتمكن من تحسين التخزين المؤقت للمطالبات
 
 ## حدود الاستخدام
 
@@ -93,6 +108,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | ---------------------------- | ------------------- | ------------------ | ---------------- |
 | Grok 4.6                     | 169                 | 423                | 845              |
 | GPT 5.6 Luna                 | 2,050               | 5,100              | 10,250           |
+| GLM-5.3-Flash                | 1,580               | 3,950              | 7,900            |
 | GLM-5.3                      | 220                 | 540                | 1,080            |
 | GLM-5.2                      | 880                 | 2,150              | 4,300            |
 | GLM-5.1                      | 880                 | 2,150              | 4,300            |
@@ -104,20 +120,23 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | MiMo-V2.5-Pro                | 3,250               | 8,150              | 16,300           |
 | MiniMax M3                   | 3,200               | 8,000              | 16,000           |
 | MiniMax M2.7                 | 3,400               | 8,500              | 17,000           |
+| Muse Spark 1.3 Contributor   | 45,300              | 113,300            | 226,600          |
 | Muse Spark 1.2 Contributor   | 45,300              | 113,300            | 226,600          |
 | Qwen3.8 Max                  | 160                 | 400                | 810              |
-| Qwen3.7 Max                  | 340                 | 840                | 1,690            |
+| Qwen3.8 Flash                | 5,400               | 13,500             | 27,000           |
+| Qwen3.7 Max                  | 170                 | 420                | 840              |
 | Qwen3.7 Plus                 | 4,300               | 10,800             | 21,600           |
 | Qwen3.6 Plus                 | 3,300               | 8,200              | 16,300           |
 | DeepSeek V4 Pro              | 1,050               | 2,600              | 5,200            |
 | DeepSeek V4 Flash            | 7,600               | 18,900             | 37,800           |
 | DeepSeek V4 Flash Vision Exp | 3,800               | 9,450              | 18,900           |
+| Hy4 preview                  | 1,350               | 3,380              | 6,770            |
 | Hy3                          | 4,300               | 10,750             | 21,500           |
-| Ox Alpha Free                | -                   | -                  | -                |
 
 تستند التقديرات إلى أنماط الطلبات المرصودة:
 
 - Grok 4.6 — ‏390 input، و32,500 cached، و120 output tokens لكل طلب
+- GLM-5.3-Flash — ‏1,000 input، و55,000 cached، و200 output tokens لكل طلب
 - GLM-5.3/5.2/5.1 — ‏700 input، و52,000 cached، و150 output tokens لكل طلب
 - GPT 5.6 Luna — ‏1,000 توكن إدخال، و50,000 توكن مخزّن مؤقتًا، و220 توكن إخراج لكل طلب
 - Kimi K3 — ‏1,050 input، و76,500 cached، و300 output tokens لكل طلب
@@ -128,11 +147,14 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 - DeepSeek V4 Flash Vision Exp — ‏410 input، و71,300 cached، و310 output tokens لكل طلب
 - MiniMax M3 — ‏510 input، و56,000 cached، و190 output tokens لكل طلب
 - MiniMax M2.7 — ‏300 input، و55,000 cached، و125 output tokens لكل طلب
+- Muse Spark 1.3 Contributor — ‏620 input، و71,400 cached، و300 output tokens لكل طلب
 - Muse Spark 1.2 Contributor — ‏620 input، و71,400 cached، و300 output tokens لكل طلب
 - Qwen3.8 Max — ‏420 input، و66,000 cached، و200 output tokens لكل طلب
+- Qwen3.8 Flash — ‏600 input، و58,000 cached، و200 output tokens لكل طلب
 - Qwen3.7 Max — ‏420 input، و66,000 cached، و200 output tokens لكل طلب
 - Qwen3.7 Plus — ‏500 input، و57,000 cached، و190 output tokens لكل طلب
 - Qwen3.6 Plus — ‏500 input، و57,000 cached، و190 output tokens لكل طلب
+- Hy4 preview — ‏830 input، و71,500 cached، و295 output tokens لكل طلب
 - Hy3 — ‏830 input، و71,500 cached، و295 output tokens لكل طلب
 - MiMo-V2.5 — ‏830 input، و71,500 cached، و295 output tokens لكل طلب
 - MiMo-V2.5-Pro — ‏790 input، و86,000 cached، و305 output tokens لكل طلب
@@ -145,6 +167,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | Grok 4.6 (> 200K tokens)                | $4.00   | $12.00  | $1.00           | -               | $15       |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20   | $1.20   | $0.02           | $0.25           | $15       |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40   | $1.80   | $0.04           | $0.50           | $15       |
+| GLM-5.3-Flash                           | $0.15   | $0.50   | $0.03           | -               | $15       |
 | GLM-5.3                                 | $1.40   | $4.40   | $0.26           | -               | $15       |
 | GLM-5.2                                 | $1.40   | $4.40   | $0.26           | -               | $60       |
 | GLM-5.1                                 | $1.40   | $4.40   | $0.26           | -               | $60       |
@@ -157,9 +180,11 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | MiniMax M3                              | $0.30   | $1.20   | $0.06           | -               | $60       |
 | MiniMax M2.7                            | $0.30   | $1.20   | $0.06           | $0.375          | $60       |
 | MiniMax M2.5                            | $0.30   | $1.20   | $0.06           | $0.375          | $60       |
+| Muse Spark 1.3 Contributor              | $0.10   | $0.20   | $0.002          | -               | $60       |
 | Muse Spark 1.2 Contributor              | $0.10   | $0.20   | $0.002          | -               | $60       |
 | Qwen3.8 Max                             | $2.00   | $6.00   | $0.25           | $2.50           | $15       |
-| Qwen3.7 Max                             | $2.50   | $7.50   | $0.50           | $3.125          | $60       |
+| Qwen3.8 Flash                           | $0.15   | $0.47   | $0.016          | $0.20           | $30       |
+| Qwen3.7 Max                             | $2.50   | $7.50   | $0.50           | $3.125          | $30       |
 | Qwen3.7 Plus (≤ 256K tokens)            | $0.40   | $1.60   | $0.04           | $0.50           | $60       |
 | Qwen3.7 Plus (> 256K tokens)            | $1.20   | $4.80   | $0.12           | $1.50           | $60       |
 | Qwen3.6 Plus (≤ 256K tokens)            | $0.50   | $3.00   | $0.05           | $0.625          | $60       |
@@ -170,14 +195,12 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | DeepSeek V4 Flash (Peak)                | $0.44   | $1.32   | $0.014          | -               | $30       |
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22   | $0.66   | $0.007          | -               | $15       |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44   | $1.32   | $0.014          | -               | $15       |
+| Hy4 preview                             | $0.834  | $2.501  | $0.042          | -               | $30       |
 | Hy3                                     | $0.14   | $0.58   | $0.035          | -               | $60       |
-| Ox Alpha Free                           | -       | -       | -               | -               | -         |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** ساعات Peak هي 01:00-04:00 و06:00-10:00 UTC من الاثنين إلى الجمعة؛ وجميع الساعات الأخرى، بما في ذلك عطلات نهاية الأسبوع، Off-Peak. [اعرف المزيد](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** يتم تحويل الصور إلى رموز بناءً على أبعادها، وتُحتسب كرموز إدخال إلى جانب رموز النص. [اعرف المزيد](https://api-docs.deepseek.com/quick_start/pricing/).
-
-**Ox Alpha Free:** مجاني لفترة محدودة.
 
 يمكنك تتبّع استخدامك الحالي في **<a href={console}>console</a>**.
 
@@ -215,6 +238,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1                      | glm-5.1                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -230,13 +254,15 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 يستخدم [model id](/docs/config/#models) في إعدادات OpenCode لديك التنسيق `opencode-go/<model-id>`. على سبيل المثال، بالنسبة إلى Kimi K3، ستستخدم `opencode-go/kimi-k3` في إعداداتك.
 
@@ -258,6 +284,7 @@ https://opencode.ai/zen/go/v1/models
 | ---------------------------- | ------------- | ------------------ |
 | Grok 4.6                     | غير مستخدَمة  | 30 يومًا           |
 | GPT 5.6 Luna                 | غير مستخدَمة  | 30 يومًا           |
+| GLM-5.3-Flash                | غير مستخدَمة  | 0 أيام             |
 | GLM-5.3                      | غير مستخدَمة  | 0 أيام             |
 | GLM-5.2                      | غير مستخدَمة  | 0 أيام             |
 | GLM-5.1                      | غير مستخدَمة  | 0 أيام             |
@@ -268,20 +295,23 @@ https://opencode.ai/zen/go/v1/models
 | MiMo-V2.5-Pro                | غير مستخدَمة  | 0 أيام             |
 | MiMo-V2.5                    | غير مستخدَمة  | 0 أيام             |
 | Qwen3.8 Max                  | غير مستخدَمة  | 0 أيام             |
+| Qwen3.8 Flash                | غير مستخدَمة  | 0 أيام             |
 | Qwen3.7 Max                  | غير مستخدَمة  | 0 أيام             |
 | Qwen3.7 Plus                 | غير مستخدَمة  | 0 أيام             |
 | Qwen3.6 Plus                 | غير مستخدَمة  | 0 أيام             |
 | MiniMax M3                   | غير مستخدَمة  | 0 أيام             |
 | MiniMax M2.7                 | غير مستخدَمة  | 0 أيام             |
+| Muse Spark 1.3 Contributor   | نعم           | ليست ZDR           |
 | Muse Spark 1.2 Contributor   | نعم           | ليست ZDR           |
 | DeepSeek V4 Pro              | غير مستخدَمة  | 0 أيام             |
 | DeepSeek V4 Flash            | غير مستخدَمة  | 0 أيام             |
 | DeepSeek V4 Flash Vision Exp | غير مستخدَمة  | 0 أيام             |
+| Hy4 preview                  | غير مستخدَمة  | 0 أيام             |
 | Hy3                          | غير مستخدَمة  | 0 أيام             |
-| Ox Alpha Free                | غير مستخدَمة  | 0 أيام             |
 
 - **Grok 4.6:** تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API. [اعرف المزيد](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا. [اعرف المزيد](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Muse Spark 1.3 Contributor:** أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية. يقتصر التوفر على المناطق التي تسمح بها [سياسة الاستخدام الجغرافي](https://ai.developer.meta.com/legal/geographic-use-policy) الخاصة بـ Meta. [اعرف المزيد](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية. يقتصر التوفر على المناطق التي تسمح بها [سياسة الاستخدام الجغرافي](https://ai.developer.meta.com/legal/geographic-use-policy) الخاصة بـ Meta. [اعرف المزيد](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek V4 Flash:** تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أغسطس 2026.
 

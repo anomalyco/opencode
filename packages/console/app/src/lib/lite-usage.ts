@@ -18,7 +18,20 @@ export type LiteUsageBreakdownItem = {
 }
 
 export function buildLiteUsageBreakdown(input: { usage: number; limit: number; sources: LiteUsageBreakdownSource[] }) {
-  const rows: LiteUsageBreakdownItem[] = input.sources
+  // Legacy usage can resolve to the same rate as a separately grouped recorded multiplier.
+  const groups = new Map<string, LiteUsageBreakdownSource>()
+  input.sources.forEach((item) => {
+    const key = JSON.stringify([item.model, item.multiplier])
+    const row = groups.get(key)
+    if (!row) {
+      groups.set(key, { ...item })
+      return
+    }
+    row.cost += item.cost
+    row.quotaCost += item.quotaCost
+    row.estimated ||= item.estimated
+  })
+  const rows: LiteUsageBreakdownItem[] = Array.from(groups.values())
     .filter((item) => item.cost !== 0 || item.quotaCost !== 0)
     .sort((a, b) => b.quotaCost - a.quotaCost)
     .map((item) => ({
