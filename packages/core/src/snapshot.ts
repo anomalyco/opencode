@@ -139,9 +139,34 @@ const layer = Layer.effect(
         to: Git.TreeID.make(input.to),
       }
       const files = yield* git.tree.files(comparison).pipe(Effect.mapError((cause) => failure(operation, cause)))
-      const ignored = yield* git.index
-        .ignored({ repository: repo.source, paths: files })
-        .pipe(Effect.mapError((cause) => failure(operation, cause)))
+      const ignored = yield* git.index.ignored({ repository: repo.source, paths: files }).pipe(
+        Effect.catch((cause) =>
+          Effect.gen(function* () {
+            // Git cannot check historical descendants below a current symlink; check the link itself instead.
+            const paths = yield* Effect.forEach(files, (file) =>
+              Effect.gen(function* () {
+                const parts = file.split("/")
+                for (let index = 1; index < parts.length; index++) {
+                  const parent = RelativePath.make(parts.slice(0, index).join("/"))
+                  const symlink = yield* fs.readLink(path.join(repo.worktree, parent)).pipe(
+                    Effect.as(true),
+                    Effect.orElseSucceed(() => false),
+                  )
+                  if (symlink) return { file, query: parent }
+                }
+                return { file, query: file }
+              }),
+            )
+            if (paths.every((entry) => entry.file === entry.query)) return yield* Effect.fail(cause)
+            const ignored = yield* git.index.ignored({
+              repository: repo.source,
+              paths: Array.from(new Set(paths.map((entry) => entry.query))),
+            })
+            return new Set(paths.filter((entry) => ignored.has(entry.query)).map((entry) => entry.file))
+          }),
+        ),
+        Effect.mapError((cause) => failure(operation, cause)),
+      )
       return {
         input: comparison,
         files,

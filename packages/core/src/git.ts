@@ -564,7 +564,7 @@ const layer = Layer.effect(
       )
     })
 
-    const hasEntry = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, file: RelativePath) {
+    const entryType = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, file: RelativePath) {
       const text = (yield* repositoryOperation("restore", repository, [
         "ls-tree",
         "-z",
@@ -572,42 +572,67 @@ const layer = Layer.effect(
         "--",
         file,
       ])).text.replace(/\0$/, "")
-      if (!text) return false
-      if (!/^\d+\s+\w+\s+[0-9a-f]+\t/.test(text))
+      if (!text) return undefined
+      const entry = /^\d+\s+(\w+)\s+[0-9a-f]+\t/.exec(text)
+      if (!entry)
         return yield* new OperationError({
           operation: "restore",
           directory: repository.worktree,
           message: `Invalid tree entry for ${file}`,
         })
-      return true
+      return entry[1]
     })
 
     const restore = Effect.fn("Git.tree.restore")(
       (input: { repository: Repository; files: ReadonlyMap<RelativePath, TreeID> }) =>
         locked(
           input.repository,
-          Effect.forEach(
-            input.files,
-            ([file, tree]) =>
-              Effect.gen(function* () {
-                if (yield* hasEntry(input.repository, tree, file)) {
-                  yield* repositoryOperation("restore", input.repository, ["checkout", tree, "--", file])
-                  return
-                }
-                yield* fs.remove(path.join(input.repository.worktree, file), { recursive: true, force: true }).pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new OperationError({
+          Effect.gen(function* () {
+            const entries = yield* Effect.forEach(input.files, ([file, tree]) =>
+              Effect.map(entryType(input.repository, tree, file), (type) => ({ file, tree, type })),
+            )
+            const ordered = entries.toSorted((a, b) => a.file.split("/").length - b.file.split("/").length)
+            yield* Effect.forEach(
+              ordered,
+              (entry) =>
+                Effect.gen(function* () {
+                  if (entry.type) {
+                    yield* repositoryOperation("restore", input.repository, ["checkout", entry.tree, "--", entry.file])
+                    return
+                  }
+                  // A restored symlink, file, or missing ancestor has no project-owned descendants to delete.
+                  const ancestor = ordered.findLast((parent) => entry.file.startsWith(`${parent.file}/`))
+                  if (ancestor && ancestor.type !== "tree") return
+                  const absolute = path.join(input.repository.worktree, entry.file)
+                  yield* Effect.gen(function* () {
+                    const parent = yield* fs
+                      .realPath(path.dirname(absolute))
+                      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined))
+                    if (parent === undefined) return
+                    const worktree = yield* fs.realPath(input.repository.worktree)
+                    if (!FSUtil.contains(worktree, parent))
+                      return yield* new OperationError({
                         operation: "restore",
                         directory: input.repository.worktree,
-                        message: `Failed to remove ${file}`,
-                        cause,
-                      }),
-                  ),
-                )
-              }),
-            { discard: true },
-          ),
+                        message: `Path escapes the project: ${entry.file}`,
+                      })
+                    yield* fs.remove(absolute, { recursive: true, force: true })
+                  }).pipe(
+                    Effect.catchTag("PlatformError", (cause) =>
+                      Effect.fail(
+                        new OperationError({
+                          operation: "restore",
+                          directory: input.repository.worktree,
+                          message: `Failed to remove ${entry.file}`,
+                          cause,
+                        }),
+                      ),
+                    ),
+                  )
+                }),
+              { discard: true },
+            )
+          }),
         ),
     )
 
