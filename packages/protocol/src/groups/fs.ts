@@ -42,7 +42,8 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
         OpenApi.annotations({
           identifier: "v2.fs.list",
           summary: "List directory",
-          description: "List direct children of one directory relative to the requested location.",
+          description:
+            "List direct children of a directory, including parents and siblings outside the location directory. Entry paths remain relative to the requested location; listing does not switch locations.",
         }),
       ),
   )

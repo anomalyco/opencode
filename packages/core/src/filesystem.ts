@@ -93,17 +93,18 @@ const baseLayer = Layer.effect(
         }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
-        const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+        // Navigation can leave the cwd without activating another Location.
+        const directory = path.resolve(location.directory, input.path ?? ".")
+        const info = yield* fs.stat(directory).pipe(Effect.orDie)
         if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
-        return yield* fs.readDirectoryEntries(target.real).pipe(
+        return yield* fs.readDirectoryEntries(directory).pipe(
           Effect.orDie,
           Effect.map((items) =>
             items
               .flatMap((item) => {
                 if (item.type !== "file" && item.type !== "directory") return []
-                const absolute = path.join(target.absolute, item.name)
-                const relative = path.relative(target.directory, absolute)
+                const absolute = path.join(directory, item.name)
+                const relative = path.relative(location.directory, absolute) || "."
                 return [
                   Entry.make({
                     path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),

@@ -76,6 +76,11 @@ export function pickerFileSearchQuery(root: string, input: string, home: string)
 
 export function pickerAbsoluteInput(input: string, home: string, current: string) {
   const value = normalizePickerDrive(input).replace(/^~(?=\/|$)/, normalizePickerDrive(home))
+  return pickerAbsolutePath(value, current)
+}
+
+export function pickerAbsolutePath(input: string, current: string) {
+  const value = normalizePickerDrive(input)
   const absolute = pickerRoot(value) ? value : joinPickerPath(current, value)
   return canonicalPickerPath(absolute)
 }
@@ -321,7 +326,44 @@ export function displayPickerPath(path: string, input: string, home: string) {
   return pickerTilde(value, home) || value
 }
 
-export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string | undefined; home: () => string }) {
+export async function listPickerDirectory(
+  sdk: ServerSDK,
+  location: { directory: string; workspace?: string },
+  directory: string,
+) {
+  const base = canonicalPickerPath(location.directory)
+  const target = canonicalPickerPath(directory)
+  const insensitive = /^[A-Za-z]:\//.test(base) || base.startsWith("//")
+  const parts = base.split("/")
+  const next = target.split("/")
+  const common = parts.findIndex((part, index) =>
+    insensitive ? part.toLowerCase() !== next[index]?.toLowerCase() : part !== next[index],
+  )
+  const offset = common === -1 ? parts.length : common
+  // Different drives or shares have no relative path between them.
+  const path =
+    pickerRoot(base).toLowerCase() !== pickerRoot(target).toLowerCase()
+      ? target
+      : [
+          ...parts
+            .slice(offset)
+            .filter(Boolean)
+            .map(() => ".."),
+          ...next.slice(offset).filter(Boolean),
+        ].join("/") || "."
+  const result = await sdk.api.file.list({ location, path })
+  return result.data.map((entry) => {
+    const absolute = pickerAbsolutePath(entry.path, result.location.directory)
+    return { name: getFilename(absolute), type: entry.type, absolute }
+  })
+}
+
+export function createDirectorySearch(args: {
+  sdk: ServerSDK
+  location: () => { directory: string; workspace?: string } | undefined
+  base: () => string | undefined
+  home: () => string
+}) {
   const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
   let current = 0
 
@@ -339,21 +381,14 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
   }
 
   const directories = async (directory: string) => {
-    const key = trimPickerPath(directory)
+    const location = args.location()
+    if (!location) return []
+    const key = JSON.stringify([location, trimPickerPath(directory)])
     const existing = cache.get(key)
     if (existing) return existing
-    const request = args.sdk.api.file
-      .list({ location: { directory: key } })
-      .then((result) => result.data)
+    const request = listPickerDirectory(args.sdk, location, directory)
       .catch(() => [])
-      .then((nodes) =>
-        nodes
-          .filter((node) => node.type === "directory")
-          .map((node) => {
-            const relative = trimPickerPath(normalizePickerDrive(node.path))
-            return { name: getFilename(relative), absolute: joinPickerPath(key, relative) }
-          }),
-      )
+      .then((nodes) => nodes.filter((node) => node.type === "directory"))
     cache.set(key, request)
     return request
   }
@@ -369,18 +404,27 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const active = () => token === current
     const value = cleanPickerInput(filter)
     const input = scoped(value)
-    if (!input) return [] as string[]
+    const location = args.location()
+    if (!input || !location) return [] as string[]
     const raw = normalizePickerDrive(value)
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)
     if (!pathInput) {
-      const results = await args.sdk.api.file
-        .find({ location: { directory: input.directory }, query, type: "directory", limit: 50 })
-        .then((result) => result.data.map((entry) => entry.path))
-        .catch(() => [])
+      const relative = pickerRelativePath(location.directory, input.directory)
+      const results =
+        relative === undefined
+          ? []
+          : await args.sdk.api.file
+              .find({ location, query: joinPickerPath(relative, query), type: "directory", limit: 50 })
+              .then((result) =>
+                result.data
+                  .map((entry) => pickerAbsolutePath(entry.path, result.location.directory))
+                  .filter((path) => treePathWithin(input.directory, path)),
+              )
+              .catch(() => [])
       if (!active()) return []
       if (results.length) {
-        return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
+        return results.slice(0, 50)
       }
       const fallback = query
         ? await match(input.directory, query, 50)

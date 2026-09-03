@@ -16,6 +16,7 @@ describe("directoryPickerKind", () => {
   test("uses the native picker only for local desktop projects", () => {
     expect(directoryPickerKind("desktop", local)).toBe("native")
     expect(directoryPickerKind("desktop", remote)).toBe("server")
+    expect(directoryPickerKind("desktop", { ...local, variant: "wsl", distro: "Ubuntu" })).toBe("server")
     expect(directoryPickerKind("web", local)).toBe("server")
   })
 })
