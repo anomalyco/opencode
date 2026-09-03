@@ -27,6 +27,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       app: ${{ steps.packages.outputs.app }}
+      cli: ${{ steps.packages.outputs.cli }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -47,13 +48,15 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "app=true" >> "$GITHUB_OUTPUT"
+            echo "cli=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          bun x turbo@2.10.2 ls --affected --filter=@opencode-ai/app --output=json > affected.json
-          bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
+          bun x turbo@2.10.2 ls --affected --output=json > affected.json
+          bun -e 'const result = await Bun.file("affected.json").json(); for (const name of ["app", "cli"]) console.log(`${name}=${result.packages.items.some((item) => item.name === `@opencode-ai/${name}`)}`)' >> "$GITHUB_OUTPUT"
 
   unit:
     name: unit (${{ matrix.settings.name }})
+    needs: affected
     strategy:
       fail-fast: false
       matrix:
@@ -151,13 +154,13 @@ jobs:
           bun run script/service-smoke.ts
 
       - name: Setup Node build runtime
-        if: always()
+        if: needs.affected.outputs.cli == 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "26.4.0"
 
       - name: Verify Node build
-        if: always()
+        if: needs.affected.outputs.cli == 'true'
         timeout-minutes: 15
         working-directory: packages/cli
         env:
