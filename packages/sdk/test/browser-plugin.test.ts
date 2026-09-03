@@ -95,7 +95,7 @@ const fixture = Effect.gen(function* () {
     attach: Effect.fn(function* (connectionID: string) {
       const input = { sessionID: session.id, connectionID }
       const lifetime = yield* rpc.attach({ ...input, version: 2 }, { location }).pipe(Effect.forkScoped)
-      expect((yield* next).data).toEqual({ type: "attached", connectionID })
+      expect((yield* next).data).toEqual({ type: "attached", connectionID, version: 2 })
       return { input, lifetime }
     }),
     command: Effect.fn(function* (action: Browser.Action) {
