@@ -6,6 +6,8 @@ import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./index"
+import { useDialog } from "../../../ui/dialog"
+import { DialogShellOutput } from "../../../component/dialog-shell-output"
 
 export function ShellTab(props: { sessionID: string }) {
   const data = useData()
@@ -13,6 +15,7 @@ export function ShellTab(props: { sessionID: string }) {
   const theme = useTheme()
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
+  const dialog = useDialog()
 
   const entries = createMemo(() =>
     data.shell.listBySession(props.sessionID).filter((shell) => shell.status === "running"),
@@ -22,6 +25,11 @@ export function ShellTab(props: { sessionID: string }) {
   let scroll: ScrollBoxRenderable | undefined
 
   const selectedEntry = createMemo(() => entries()[store.selected])
+
+  const open = () => {
+    const entry = selectedEntry()
+    if (entry) dialog.replace(() => <DialogShellOutput shell={entry} location={entry.location} />)
+  }
 
   createEffect(() => {
     if (store.selected >= entries().length) setStore("selected", Math.max(0, entries().length - 1))
@@ -42,7 +50,13 @@ export function ShellTab(props: { sessionID: string }) {
     const cleanup = composer.register({
       id: "shell",
       label: "Shell",
-      hints: () => (selectedEntry() ? [{ label: "kill", shortcut: shortcuts.get("composer.shell.kill") ?? "" }] : []),
+      hints: () =>
+        selectedEntry()
+          ? [
+              { label: "output", shortcut: shortcuts.get("composer.shell.select") ?? "" },
+              { label: "kill", shortcut: shortcuts.get("composer.shell.kill") ?? "" },
+            ]
+          : [],
     })
     onCleanup(cleanup)
   })
@@ -73,6 +87,12 @@ export function ShellTab(props: { sessionID: string }) {
           if (list.length === 0) return
           setStore("selected", (prev) => (prev + 1) % list.length)
         },
+      },
+      {
+        id: "composer.shell.select",
+        title: "View shell output",
+        group: "Composer",
+        run: open,
       },
       {
         id: "composer.shell.kill",
@@ -106,6 +126,10 @@ export function ShellTab(props: { sessionID: string }) {
                     active() ? theme.background.action.primary.focused : theme.background.action.primary.default
                   }
                   onMouseOver={() => setStore("selected", index())}
+                  onMouseUp={() => {
+                    setStore("selected", index())
+                    open()
+                  }}
                 >
                   <text
                     fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.default}
