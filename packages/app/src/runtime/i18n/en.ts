@@ -908,6 +908,8 @@ export const dict = {
   "settings.tab.notifications": "Notifications",
   "settings.tab.projects": "Projects",
   "settings.tab.extensions": "Extensions",
+  "settings.tab.experimental": "Experimental",
+  "settings.experimental.description": "Try experimental features",
   "settings.tab.about": "About",
   "settings.about.version": "Version {{version}}",
   "settings.about.devVersion": "development",
