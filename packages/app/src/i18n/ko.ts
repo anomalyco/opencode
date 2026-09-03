@@ -894,6 +894,7 @@ export const dict = {
   "command.project.previous": "이전 프로젝트",
   "command.project.next": "다음 프로젝트",
   "command.project.index": "{{index}}번 프로젝트로 전환",
+  "command.project.run": "시작 명령 실행",
   "command.tab.reopenClosed": "닫은 탭 다시 열기",
   "model.tooltip.context.label": "컨텍스트",
   "model.tooltip.inputs": "입력",

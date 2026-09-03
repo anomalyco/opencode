@@ -35,7 +35,10 @@ import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/comp
 import { useGlobal } from "@/context/global"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabKey, useTabs } from "@/context/tabs"
-import type { PromptSession } from "@/context/prompt"
+import { useServerSync } from "@/context/server-sync"
+import { useSDK } from "@/context/sdk"
+import { defaultTitle } from "@/context/terminal-title"
+import { decode64 } from "@/utils/base64"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 import { normalizeSessionInfo } from "@/utils/session"
@@ -358,6 +361,60 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 
             const [tabsAreOverflowing, setTabsAreOverflowing] = createSignal(false)
 
+            const getCurrentProject = () => {
+              const route = layout.route()
+              if (route.type === "session" || route.type === "draft") {
+                const conn = global.servers
+                  .list()
+                  .find((item) => ServerConnection.key(item) === (route.server ?? server.key))
+                if (!conn) return undefined
+                const serverCtx = global.ensureServerCtx(conn)
+                const worktree = route.type === "session" && session()?.directory
+                  ? session()!.directory
+                  : route.type === "draft"
+                    ? global
+                        .ensureServerCtx(conn)
+                        .projects.list()
+                        .find((p) => p.worktree === decode64(params.dir ?? ""))?.worktree
+                    : undefined
+                if (!worktree) return undefined
+                return serverCtx.projects.list().find((p) => p.worktree === worktree)
+              }
+              return undefined
+            }
+
+            const runProjectCommand = async () => {
+              const project = getCurrentProject()
+              if (!project?.commands?.start) return
+              const route = layout.route()
+              const conn = global.servers
+                .list()
+                .find((item) => ServerConnection.key(item) === (route.server ?? server.key))
+              if (!conn) return
+              const sdk = global.ensureServerCtx(conn).sdk
+              const worktree = project.worktree
+
+              const pty = await sdk.client.pty
+                .create({
+                  body: {
+                    command: project.commands.start,
+                    cwd: worktree,
+                    title: `Run: ${project.commands.start}`,
+                  },
+                  query: { directory: worktree },
+                })
+                .catch((error: unknown) => {
+                  console.error("Failed to create terminal for run command", error)
+                  return undefined
+                })
+
+              if (!pty?.data) return
+              layout.terminal.open()
+            }
+
+            const currentProject = () => getCurrentProject()
+            const hasRunCommand = () => !!currentProject()?.commands?.start
+
             return (
               <div
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pr-3"
@@ -394,6 +451,20 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                     aria-pressed={layout.route().type === "home"}
                   />
                 </TooltipV2>
+
+                <Show when={hasRunCommand()}>
+                  <TooltipV2 placement="bottom" value={language.t("command.project.run")}>
+                    <IconButtonV2
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="shrink-0"
+                      icon={<IconV2 name="play" />}
+                      onClick={runProjectCommand}
+                      aria-label={language.t("command.project.run")}
+                    />
+                  </TooltipV2>
+                </Show>
 
                 <TitlebarTabStrip
                   tabs={tabsStore}

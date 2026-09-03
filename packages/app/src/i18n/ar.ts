@@ -123,6 +123,7 @@ export const dict = {
   "command.project.previous": "المشروع السابق",
   "command.project.next": "المشروع التالي",
   "command.project.index": "التبديل إلى المشروع {{index}}",
+  "command.project.run": "تشغيل أمر التشغيل",
   "command.provider.connect": "اتصال بموفر",
   "command.server.switch": "تبديل الخادم",
   "command.settings.open": "فتح الإعدادات",

@@ -123,6 +123,7 @@ export const dict = {
   "command.project.previous": "前のプロジェクト",
   "command.project.next": "次のプロジェクト",
   "command.project.index": "プロジェクト{{index}}に切り替え",
+  "command.project.run": "スタートアップコマンドを実行",
   "command.provider.connect": "プロバイダーに接続",
   "command.server.switch": "サーバーの切り替え",
   "command.settings.open": "設定を開く",

@@ -49,6 +49,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M8 2.88867V13.1109" stroke="currentColor" stroke-linejoin="round"/><path d="M2.88867 8H13.1109" stroke="currentColor" stroke-linejoin="round"/>`,
   },
+  play: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M4.66675 3.77783V12.2223L12.8891 8.00006L4.66675 3.77783Z" fill="currentColor"/>`,
+  },
   "settings-gear": {
     viewBox: "0 0 16 16",
     body: `<path d="M7.99998 1.3335L14 4.66683V11.3335L7.99998 14.6668L2 11.3335V4.66683L7.99998 1.3335Z" stroke="currentColor"/><path d="M9.99998 8.00016C9.99998 9.10476 9.10458 10.0002 7.99998 10.0002C6.89538 10.0002 5.99998 9.10476 5.99998 8.00016C5.99998 6.89556 6.89538 6.00016 7.99998 6.00016C9.10458 6.00016 9.99998 6.89556 9.99998 8.00016Z" stroke="currentColor"/>`,

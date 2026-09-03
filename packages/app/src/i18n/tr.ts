@@ -131,6 +131,7 @@ export const dict = {
   "command.project.previous": "Önceki proje",
   "command.project.next": "Sonraki proje",
   "command.project.index": "{{index}} numaralı projeye geç",
+  "command.project.run": "Başlangıç komutunu çalıştır",
   "command.provider.connect": "Sağlayıcı bağla",
   "command.server.switch": "Sunucu değiştir",
   "command.settings.open": "Ayarları aç",

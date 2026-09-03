@@ -127,6 +127,7 @@ export const dict = {
   "command.project.previous": "Prethodni projekat",
   "command.project.next": "Sljedeći projekat",
   "command.project.index": "Prebaci na projekat {{index}}",
+  "command.project.run": "Pokreni naredbu pokretanja",
   "command.provider.connect": "Poveži provajdera",
   "command.server.switch": "Promijeni server",
   "command.settings.open": "Otvori postavke",
