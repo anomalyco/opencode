@@ -117,6 +117,10 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
   const cancelled = new Set<string>()
   const matches = (job: BackgroundJob.Info) => {
     if (job.status !== "running") return false
+    // Heartbeats are durable session monitors, not child work owned by the
+    // active response. A new prompt or response cancellation must not silently
+    // disarm them; only the heartbeat cancel action (or session deletion) does.
+    if (job.type === "heartbeat") return false
     if (cancelled.has(job.id)) return false
     if (pending.has(job.id)) return true
     if (typeof job.metadata?.sessionId === "string" && pending.has(job.metadata.sessionId)) return true

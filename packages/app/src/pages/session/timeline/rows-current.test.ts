@@ -92,6 +92,44 @@ describe("current session timeline rows", () => {
     ])
   })
 
+  test("folds a synthetic heartbeat turn into one trackable row", () => {
+    const source = [
+      { id: "msg_heartbeat", type: "user", text: "heartbeat", time: { created: 1 } },
+      {
+        id: "msg_check",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "112/140 done, 0 crashes. Waiting." }],
+        time: { created: 2, completed: 3 },
+      },
+    ] satisfies SessionMessageInfo[]
+    const normalized = normalizeSessionMessages("ses_1", source)
+    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
+    const heartbeatParts = normalized.parts.get("msg_heartbeat") ?? []
+    const text = heartbeatParts[0]
+    if (!text || text.type !== "text") throw new Error("expected heartbeat text")
+    text.synthetic = true
+    text.text = '<heartbeat task="r4matrix" check="17/40">\nNo-thinking monitoring turn.\n</heartbeat>'
+
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      (messageID) => messages.get(messageID),
+      (messageID) => normalized.parts.get(messageID) ?? [],
+      true,
+      "idle",
+      true,
+      normalized.messages.filter((message) => message.role === "user"),
+    )
+
+    expect(result.rows.map(TimelineRow.key)).toEqual(["heartbeat:msg_heartbeat"])
+    expect(result.rows[0]).toMatchObject({
+      _tag: "Heartbeat",
+      task: "r4matrix",
+      check: "17/40",
+    })
+  })
+
   test("keeps a projected parent missing from the source page before newer turns", () => {
     const source = [
       { id: "msg_user_1", type: "user", text: "first question", time: { created: 1 } },

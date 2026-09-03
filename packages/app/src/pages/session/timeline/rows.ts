@@ -17,6 +17,12 @@ export type TimelineRowMap = {
     userMessageID: string
     anchor: boolean
   }
+  Heartbeat: {
+    userMessageID: string
+    task: string
+    check: string
+    error?: string
+  }
   TurnDivider: {
     userMessageID: string
     label: "compaction" | "interrupted"
@@ -33,6 +39,23 @@ export type TimelineRowMap = {
 }
 
 export namespace Timeline {
+  export function heartbeatInfo(parts: Part[]) {
+    const part = parts.find(
+      (item) => item.type === "text" && item.synthetic && item.text.trimStart().startsWith("<heartbeat "),
+    )
+    if (!part || part.type !== "text") return
+    const match = part.text.trimStart().match(/^<heartbeat\s+task=("(?:[^"\\]|\\.)*")\s+check=("(?:[^"\\]|\\.)*")>/)
+    if (!match?.[1] || !match[2]) return
+    try {
+      const task = JSON.parse(match[1])
+      const check = JSON.parse(match[2])
+      if (typeof task !== "string" || typeof check !== "string") return
+      return { task, check }
+    } catch {
+      return
+    }
+  }
+
   export function constructSessionMessageRows(
     messages: SessionMessageInfo[],
     getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
@@ -113,6 +136,7 @@ export namespace Timeline {
 
     const previousUserMessage = index > 0
     const userParts = getMessageParts(userMessage.id)
+    const heartbeat = heartbeatInfo(userParts)
     const comments = userParts.flatMap((p) => MessageComment.fromPart(p) ?? [])
     const compaction = userParts.some((p) => p.type === "compaction")
     const interruptedMessageIndex = assistantMessages.findIndex((m) => m.error?.name === "MessageAbortedError")
@@ -144,6 +168,26 @@ export namespace Timeline {
           ]
         : groupParts(assistantPartRefs).map((group) => ({ type: "part" as const, group }))
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: userMessage.id }))
+
+    if (heartbeat) {
+      rows.push(
+        new TimelineRow.Heartbeat({
+          userMessageID: userMessage.id,
+          task: heartbeat.task,
+          check: heartbeat.check,
+          error: error
+            ? unwrapErrorMessage(
+                typeof error.data?.message === "string"
+                  ? error.data.message
+                  : error.data?.message === undefined || error.data.message === null
+                    ? ""
+                    : String(error.data.message),
+              )
+            : undefined,
+        }),
+      )
+      return rows
+    }
 
     if (comments.length > 0 && !inlineComments)
       rows.push(

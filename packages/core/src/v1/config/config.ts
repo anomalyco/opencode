@@ -182,6 +182,30 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      heartbeat: Schema.optional(
+        Schema.Struct({
+          enabled: Schema.optional(Schema.Boolean).annotate({ description: "Enable heartbeat scheduling" }),
+          initial_delay_seconds: Schema.optional(
+            PositiveInt.check(Schema.isBetween({ minimum: 1, maximum: 3600 })),
+          ).annotate({ description: "Seconds of silence before the first heartbeat (default: 5)" }),
+          interval_seconds: Schema.optional(
+            PositiveInt.check(Schema.isBetween({ minimum: 1, maximum: 3600 })),
+          ).annotate({ description: "Base interval for follow-up heartbeats (default: 10)" }),
+          backoff: Schema.optional(Schema.Literals(["fixed", "linear", "exponential"])).annotate({
+            description: "Backoff applied to follow-up heartbeat intervals (default: exponential)",
+          }),
+          max_interval_seconds: Schema.optional(
+            PositiveInt.check(Schema.isBetween({ minimum: 1, maximum: 3600 })),
+          ).annotate({ description: "Maximum automatically selected heartbeat interval (default: 60)" }),
+          max_checks: Schema.optional(
+            PositiveInt.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+          ).annotate({
+            description: "Maximum heartbeat checks in one same-session task chain (default: 60)",
+          }),
+        }),
+      ).annotate({
+        description: "Same-session no-thinking heartbeat defaults for monitoring long-running external work",
+      }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),

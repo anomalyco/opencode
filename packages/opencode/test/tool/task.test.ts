@@ -1098,4 +1098,25 @@ describe("tool.task", () => {
       expect((yield* jobs.get(grandchild.id))?.status).toBe("cancelled")
     }),
   )
+
+  it.instance("cancelling a parent run preserves durable heartbeat monitors", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const runState = yield* SessionRunState.Service
+      const { chat } = yield* seed()
+      const jobID = `heartbeat:${chat.id}:monitor`
+
+      yield* jobs.start({
+        id: jobID,
+        type: "heartbeat",
+        metadata: { sessionId: chat.id, task: "monitor" },
+        run: Effect.never,
+      })
+
+      yield* runState.cancel(chat.id)
+
+      expect((yield* jobs.get(jobID))?.status).toBe("running")
+      yield* jobs.cancel(jobID)
+    }),
+  )
 })

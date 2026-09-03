@@ -109,6 +109,15 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("exposes heartbeat scheduling", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("heartbeat")
+    }),
+  )
+
   it.instance("does not expose execute unless code mode is enabled", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service

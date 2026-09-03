@@ -17,6 +17,7 @@ import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
 import { Accordion } from "@opencode-ai/ui/accordion"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { Button } from "@opencode-ai/ui/button"
 import { Card } from "@opencode-ai/ui/card"
 import {
@@ -24,7 +25,9 @@ import {
   Message,
   MessageDivider,
   Part as MessagePart,
+  groupParts,
   partDefaultOpen,
+  renderable,
   type UserActions,
 } from "@opencode-ai/session-ui/message-part"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
@@ -1043,7 +1046,7 @@ export function MessageTimeline(props: {
   function TimelineRowFrame(input: { row: Accessor<FramedTimelineRow>; children: JSX.Element }) {
     const anchor = () => {
       const row = input.row()
-      return row._tag === "CommentStrip" || (row._tag === "UserMessage" && row.anchor)
+      return row._tag === "CommentStrip" || row._tag === "Heartbeat" || (row._tag === "UserMessage" && row.anchor)
     }
     const previousAssistantPart = () => {
       const row = input.row()
@@ -1113,6 +1116,144 @@ export function MessageTimeline(props: {
                   </Index>
                 </div>
               </div>
+            </div>
+          </TimelineRowFrame>
+        )
+      }
+      case "Heartbeat": {
+        const heartbeatRow = row as Accessor<TimelineRowByTag<"Heartbeat">>
+        const assistantParts = createMemo(() =>
+          (assistantMessagesByParent().get(heartbeatRow().userMessageID) ?? emptyAssistantMessages).flatMap((message) =>
+            getMsgParts(message.id)
+              .filter((part) => renderable(part, settings.general.showReasoningSummaries()))
+              .map((part) => ({ messageID: message.id, part })),
+          ),
+        )
+        const groups = createMemo(() => groupParts(assistantParts()))
+        const summary = createMemo(() => {
+          const parts = assistantParts()
+          for (let index = parts.length - 1; index >= 0; index -= 1) {
+            const part = parts[index]?.part
+            if (part?.type === "text" && part.text.trim()) return part.text.trim()
+          }
+        })
+        const heartbeatTool = createMemo(() => {
+          const parts = assistantParts()
+          for (let index = parts.length - 1; index >= 0; index -= 1) {
+            const part = parts[index]?.part
+            if (part?.type === "tool" && part.tool === "heartbeat") return part
+          }
+        })
+        const durableStatus = createMemo(() => {
+          const state = heartbeatTool()?.state
+          if (!state || !("metadata" in state)) return
+          const metadata = state.metadata
+          if (!metadata || typeof metadata !== "object") return
+          const value = (metadata as Record<string, unknown>).durableStatus
+          return typeof value === "string" ? value : undefined
+        })
+        const heartbeatStatus = createMemo(() => {
+          if (workingTurn(heartbeatRow().userMessageID)) return "checking" as const
+          if (heartbeatRow().error || heartbeatTool()?.state.status === "error") return "failed" as const
+          if (durableStatus() === "scheduled" || durableStatus() === "firing") return "scheduled" as const
+          if (durableStatus() === "cancelled") return "cancelled" as const
+          return "completed" as const
+        })
+        const statusLabel = createMemo(() => {
+          switch (heartbeatStatus()) {
+            case "checking":
+              return "Checking"
+            case "scheduled":
+              return "Scheduled"
+            case "failed":
+              return "Failed"
+            case "cancelled":
+              return "Cancelled"
+            case "completed":
+              return "Completed"
+          }
+        })
+        const statusColor = createMemo(() => {
+          switch (heartbeatStatus()) {
+            case "checking":
+              return "var(--icon-info-base)"
+            case "scheduled":
+              return "var(--icon-success-base)"
+            case "failed":
+              return "var(--icon-critical-base)"
+            case "cancelled":
+            case "completed":
+              return "var(--icon-weak-base)"
+          }
+        })
+        const openKey = () => `heartbeat:${heartbeatRow().userMessageID}`
+        const opened = () => toolOpen[openKey()] === true
+        const handleOpenChange = (value: boolean) => {
+          setToolOpen(openKey(), value)
+          queueMicrotask(() => onSizeChange?.())
+        }
+
+        return (
+          <TimelineRowFrame row={heartbeatRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <Collapsible
+                variant="ghost"
+                open={opened()}
+                onOpenChange={handleOpenChange}
+                class="rounded-[8px] border border-border-weak-base bg-background-base px-3"
+              >
+                <Collapsible.Trigger class="!h-auto !cursor-pointer !flex-col !items-stretch py-2.5 text-left">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <Icon name="task" size="small" class="shrink-0 text-icon-info-base" />
+                    <span class="text-12-medium text-text-strong">Heartbeat</span>
+                    <span class="min-w-0 truncate text-12-regular text-text-base">{heartbeatRow().task}</span>
+                    <span class="shrink-0 rounded-md bg-surface-base px-1.5 py-0.5 text-11-medium text-text-weak">
+                      {heartbeatRow().check}
+                    </span>
+                    <span class="ml-auto flex shrink-0 items-center gap-1.5 text-11-regular text-text-weak">
+                      <span
+                        class="size-1.5 rounded-full"
+                        style={{ "background-color": statusColor() }}
+                        aria-hidden="true"
+                      />
+                      {statusLabel()}
+                    </span>
+                    <Collapsible.Arrow />
+                  </div>
+                  <Show when={summary()}>
+                    {(text) => <div class="truncate pl-6 text-12-regular text-text-weak">{text()}</div>}
+                  </Show>
+                </Collapsible.Trigger>
+                <Collapsible.Content>
+                  <div class="border-t border-border-weak-base pb-3 pt-3">
+                    <div data-slot="session-turn-assistant-content">
+                      <Index each={groups()}>
+                        {(group, index) =>
+                          renderAssistantPartGroup(
+                            () =>
+                              new TimelineRow.AssistantPart({
+                                userMessageID: heartbeatRow().userMessageID,
+                                group: group(),
+                                previousAssistantPart: index > 0,
+                              }),
+                            onSizeChange,
+                          )
+                        }
+                      </Index>
+                      <Show when={workingTurn(heartbeatRow().userMessageID) && groups().length === 0}>
+                        <TimelineThinkingRow showReasoningSummaries={false} />
+                      </Show>
+                      <Show when={heartbeatRow().error}>
+                        {(error) => (
+                          <Card variant="error" class="error-card">
+                            {error()}
+                          </Card>
+                        )}
+                      </Show>
+                    </div>
+                  </div>
+                </Collapsible.Content>
+              </Collapsible>
             </div>
           </TimelineRowFrame>
         )

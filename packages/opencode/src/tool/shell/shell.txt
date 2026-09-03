@@ -10,6 +10,10 @@ IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO N
 
 ${commandSection}
 
+# Long-running external work
+
+When a command starts work that will continue after this shell call (for example via nohup or a remote job), call Heartbeat with action=schedule after the command returns. Pick a short stable task name. Omit delay_seconds for the configured first-silence/interval/backoff policy, or set it for an exact next check. Each heartbeat is a no-thinking follow-up; if work is still running, schedule the same task again. Use action=status to inspect a schedule and action=cancel when it is no longer needed. Do not use sleep or a blocking polling loop to wait for external work.
+
 # Git and GitHub
 - Only commit, amend, push, or create PRs when explicitly requested.
 - Before committing, inspect `git status`, `git diff`, and `git log --oneline -10`; stage only intended files and never commit secrets.

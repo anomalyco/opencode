@@ -15,6 +15,12 @@ export namespace TimelineRow {
     userMessageID: string
     anchor: boolean
   }> {}
+  export class Heartbeat extends Data.TaggedClass("Heartbeat")<{
+    userMessageID: string
+    task: string
+    check: string
+    error?: string
+  }> {}
   export class TurnDivider extends Data.TaggedClass("TurnDivider")<{
     userMessageID: string
     label: "compaction" | "interrupted"
@@ -44,6 +50,7 @@ export namespace TimelineRow {
     | TurnGap
     | CommentStrip
     | UserMessage
+    | Heartbeat
     | TurnDivider
     | AssistantPart
     | Thinking
@@ -59,6 +66,8 @@ export namespace TimelineRow {
         return `comment-strip:${row.userMessageID}`
       case "UserMessage":
         return `user-message:${row.userMessageID}`
+      case "Heartbeat":
+        return `heartbeat:${row.userMessageID}`
       case "TurnDivider":
         return `turn-divider:${row.userMessageID}:${row.label}`
       case "AssistantPart":

@@ -1,0 +1,27 @@
+Manage lightweight, no-thinking follow-ups in this same session for ongoing external work.
+
+Use this after starting work that outlives the current tool call, such as a nohup build, benchmark, fuzz run, deployment, or remote job that has no automatic completion notification. Do not sleep or hold a shell call open just to poll it.
+
+Actions:
+- schedule: create or replace the next check for this task;
+- status: inspect its current schedule, check number, and next fire time;
+- cancel: stop its pending check.
+
+For schedule, delay_seconds is optional. The first check uses the configured initial silence delay. Later checks use the configured interval and backoff. Set delay_seconds when the next check needs an exact custom delay. You may also override interval_seconds, backoff, max_interval_seconds, and max_checks for this task chain.
+
+Each scheduled heartbeat fires once. When it fires:
+- check the task using the cheapest direct status command;
+- report only material progress;
+- if it is still running, call heartbeat again with the same task and set delay_seconds to the desired next interval;
+- if it completed, continue and verify the original task;
+- if it failed, diagnose or report the failure.
+
+Calling schedule again with the same task before it fires replaces the pending schedule without incrementing the check number. Do not use heartbeat for Task-tool background agents because those already notify this session automatically.
+
+Schedules, check counts, timing, and interval policy are durable. If OpenCode restarts, a pending check resumes at its original fire time; an overdue check runs immediately without resetting the chain.
+
+Default schedule when config does not override it:
+- first check after 5 seconds;
+- follow-ups start at 10 seconds;
+- exponential backoff capped at 60 seconds;
+- at most 60 checks.

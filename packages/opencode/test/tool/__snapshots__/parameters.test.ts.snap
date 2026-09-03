@@ -136,6 +136,68 @@ exports[`tool parameters JSON Schema (wire shape) invalid 1`] = `
 }
 `;
 
+exports[`tool parameters JSON Schema (wire shape) heartbeat 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "action": {
+      "description": "Operation to perform (default: schedule)",
+      "enum": [
+        "schedule",
+        "status",
+        "cancel",
+      ],
+      "type": "string",
+    },
+    "backoff": {
+      "description": "Interval policy retained for later checks: fixed, linear, or exponential.",
+      "enum": [
+        "fixed",
+        "linear",
+        "exponential",
+      ],
+      "type": "string",
+    },
+    "delay_seconds": {
+      "description": "Exact delay before this next check. Omit to use the configured initial/next interval.",
+      "exclusiveMinimum": 0,
+      "maximum": 3600,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "interval_seconds": {
+      "description": "Base interval retained for later checks in this same task chain.",
+      "exclusiveMinimum": 0,
+      "maximum": 3600,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "max_checks": {
+      "description": "Safety limit for checks in this task chain.",
+      "exclusiveMinimum": 0,
+      "maximum": 1000,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "max_interval_seconds": {
+      "description": "Upper bound for automatically calculated intervals.",
+      "exclusiveMinimum": 0,
+      "maximum": 3600,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "task": {
+      "description": "Stable short name for the ongoing task. Reuse it for status, rescheduling, and cancellation.",
+      "type": "string",
+    },
+  },
+  "required": [
+    "task",
+  ],
+  "type": "object",
+}
+`;
+
 exports[`tool parameters JSON Schema (wire shape) lsp 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
