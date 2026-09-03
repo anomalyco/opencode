@@ -29,3 +29,15 @@ export type PluginConfigsPayload = {
   recentlyRemoved: RecentlyRemoved[]
   paths: { global: string; project: string | null }
 }
+
+export type PluginManagerPlatform = {
+  fetchCatalog(): Promise<CatalogResult>
+  readConfigs(projectDir?: string): Promise<PluginConfigsPayload>
+  install(
+    name: string,
+    entry?: PluginEntry,
+    scope?: "global" | "project",
+    projectDir?: string,
+  ): Promise<{ ok: true }>
+  remove(name: string, scope: "global" | "project", remember: boolean, projectDir?: string): Promise<{ ok: true }>
+}
