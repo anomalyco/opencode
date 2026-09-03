@@ -811,17 +811,18 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const flattened = adapter.toolNamespaceHistory === true ? undefined : ProviderShared.flattenToolRequest(request)
-  const tools = flattened === undefined ? yield* ProviderShared.requireFlatTools(adapter.name, request.tools) : flattened.tools
-  const input = flattened?.request ?? request
+  const projected =
+    adapter.toolNamespaceHistory === true
+      ? { request, tools: yield* ProviderShared.requireFlatTools(adapter.name, request.tools) }
+      : ProviderShared.flattenToolRequest(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
-    ...(yield* lowerConversation(input, adapter)),
+    ...(yield* lowerConversation(projected.request, adapter)),
     ...lowerGeneration(request),
     tools:
-      tools.length === 0
+      projected.tools.length === 0
         ? undefined
-        : yield* Effect.forEach(tools, (tool) =>
+        : yield* Effect.forEach(projected.tools, (tool) =>
             lowerTool(
               adapter.name,
               tool,
