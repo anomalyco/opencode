@@ -9,7 +9,7 @@ import { PluginTestLayer } from "./plugin/fixture"
 const it = testEffect(PluginTestLayer)
 
 Array.of("reload", "teardown").forEach((boundary) =>
-  it.live(`does not join queued quarantine cleanup during ${boundary}`, () =>
+  it.live(`does not join queued failed-plugin cleanup during ${boundary}`, () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const commands = yield* Command.Service
@@ -78,7 +78,7 @@ Array.of("reload", "teardown").forEach((boundary) =>
   ),
 )
 
-it.live("does not restore a queued quarantined generation when its replacement fails setup", () =>
+it.live("does not restore a disabled generation with a pending failure when its replacement fails setup", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
@@ -109,7 +109,7 @@ it.live("does not restore a queued quarantined generation when its replacement f
 )
 
 Array.of("pending", "reported").forEach((status) =>
-  it.live(`preserves ${status} quarantine when an earlier plugin changes`, () =>
+  it.live(`preserves ${status} failures when an earlier plugin changes`, () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const commands = yield* Command.Service
@@ -158,7 +158,7 @@ Array.of("pending", "reported").forEach((status) =>
   ),
 )
 
-it.live("continues quarantine processing and cleanup after a plugin update observer fails", () =>
+it.live("continues failure reporting and cleanup after a plugin update observer fails", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
@@ -198,7 +198,7 @@ it.live("continues quarantine processing and cleanup after a plugin update obser
   }),
 )
 
-it.live("settles readiness before shutdown joins a quarantined plugin's finalizers", () =>
+it.live("settles readiness before shutdown joins a disabled plugin's finalizers", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service

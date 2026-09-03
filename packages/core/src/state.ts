@@ -36,39 +36,39 @@ export interface Failure {
   readonly cause: unknown
 }
 
-type OwnedRegistration = {
+type GroupedRegistration = {
   readonly remove: () => boolean
   readonly notify: Effect.Effect<void>
 }
 
-type Owner = {
+type RegistrationGroup = {
   failed: boolean
-  readonly registrations: Set<OwnedRegistration>
+  readonly registrations: Set<GroupedRegistration>
   readonly report: (failure: Failure, refresh: Effect.Effect<void>) => void
 }
 
-const CurrentOwner = Context.Reference<Owner | undefined>("@opencode/State/CurrentOwner", {
+const CurrentGroup = Context.Reference<RegistrationGroup | undefined>("@opencode/State/CurrentGroup", {
   defaultValue: () => undefined,
 })
 
 /**
  * Groups registrations without coupling State to plugin identity or asynchronous cleanup.
- * A failed owner is detached synchronously; its supervisor must run refresh and close its scope.
+ * A failed group is detached synchronously; its supervisor must run refresh and close its scope.
  */
-export function owner(report: Owner["report"]) {
-  const owner: Owner = { failed: false, registrations: new Set(), report }
-  return <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provideService(effect, CurrentOwner, owner)
+export function group(report: RegistrationGroup["report"]) {
+  const group: RegistrationGroup = { failed: false, registrations: new Set(), report }
+  return <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provideService(effect, CurrentGroup, group)
 }
 
-function quarantine(owner: Owner, failure: Failure) {
-  if (owner.failed) return
-  owner.failed = true
+function disable(group: RegistrationGroup, failure: Failure) {
+  if (group.failed) return
+  group.failed = true
   const notifications = new Set<Effect.Effect<void>>()
-  for (const registration of owner.registrations) {
+  for (const registration of group.registrations) {
     registration.remove()
     notifications.add(registration.notify)
   }
-  owner.report(
+  group.report(
     failure,
     Effect.forEach(notifications, (notify) => notify, { discard: true }),
   )
@@ -155,7 +155,7 @@ export interface Interface<State, Editor> extends Transformable<Editor> {
 
 export function create<State, Editor>(options: Options<State, Editor>): Interface<State, Editor> {
   let state = options.initial()
-  const transforms = new Set<{ run: TransformCallback<Editor>; owner: Owner | undefined }>()
+  const transforms = new Set<{ run: TransformCallback<Editor>; group: RegistrationGroup | undefined }>()
   let dirty = false
   let closed = false
   let version = 0
@@ -175,14 +175,14 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
         try {
           transform.run(editor)
         } catch (cause) {
-          if (!transform.owner) throw cause
-          quarantine(transform.owner, { state: options.name ?? "anonymous", cause })
+          if (!transform.group) throw cause
+          disable(transform.group, { state: options.name ?? "anonymous", cause })
         }
-        // A nested read can quarantine an owner that already contributed to this candidate.
+        // A nested read can disable a group that already contributed to this candidate.
         if (version !== started) break
       }
       if (version !== started) continue
-      // Unowned failures still propagate; owned failures restart from a fresh candidate.
+      // Ungrouped failures still propagate; grouped failures restart from a fresh candidate.
       state = next
       dirty = false
       return state
@@ -218,15 +218,15 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
     transform: Effect.fn("State.transform")(function* (update) {
       yield* Effect.annotateCurrentSpan("state", options.name ?? "anonymous")
       const scope = yield* Scope.Scope
-      const owner = yield* CurrentOwner
-      if (owner?.failed) return { dispose: Effect.void }
+      const group = yield* CurrentGroup
+      if (group?.failed) return { dispose: Effect.void }
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
-          const transform = { run: update, owner }
-          const registration: OwnedRegistration = {
+          const transform = { run: update, group }
+          const registration: GroupedRegistration = {
             remove: () => {
               if (!transforms.delete(transform)) return false
-              owner?.registrations.delete(registration)
+              group?.registrations.delete(registration)
               invalidate()
               return true
             },
@@ -234,7 +234,7 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
           }
           const dispose = Effect.uninterruptible(Effect.suspend(() => (registration.remove() ? changed : Effect.void)))
           transforms.add(transform)
-          owner?.registrations.add(registration)
+          group?.registrations.add(registration)
           yield* Scope.addFinalizer(scope, dispose)
           yield* changed
           return { dispose }

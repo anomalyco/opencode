@@ -156,7 +156,7 @@ it.effect("reports a failed plugin without blocking a healthy plugin", () =>
   }),
 )
 
-it.effect("quarantines a plugin whose transform fails after setup without publishing its partial edits", () =>
+it.effect("disables a plugin whose transform fails after setup without publishing its partial edits", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
@@ -249,18 +249,18 @@ it.effect("keeps the suffix after a failed plugin alive across identical activat
   }),
 )
 
-it.effect("attributes replay failure to its owner rather than a later plugin reading the registry", () =>
+it.effect("attributes replay failure to the broken plugin rather than a later plugin reading the registry", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
     yield* plugins.activate([
       {
-        id: "broken-owner",
+        id: "broken-plugin",
         revision: "1",
         effect: (ctx) =>
           ctx.command
             .transform(() => {
-              throw new Error("owner failed")
+              throw new Error("plugin failed")
             })
             .pipe(Effect.asVoid),
       },
@@ -276,14 +276,14 @@ it.effect("attributes replay failure to its owner rather than a later plugin rea
     ])
     yield* plugins.awaitActivation
     expect((yield* plugins.list()).map((entry) => `${entry.id}:${entry.state.status}`)).toEqual([
-      "broken-owner:failed",
+      "broken-plugin:failed",
       "reader:active",
     ])
     expect(yield* commands.get("reader")).toBeDefined()
   }),
 )
 
-it.effect("quarantines runtime reload failures without retrying an unchanged generation", () =>
+it.effect("disables plugins after runtime reload failures without retrying an unchanged generation", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
@@ -344,7 +344,7 @@ it.effect("quarantines runtime reload failures without retrying an unchanged gen
   }),
 )
 
-it.effect("quarantines replay failures discovered during setup without restoring the old generation", () =>
+it.effect("disables plugins after replay failures discovered during setup without restoring the old generation", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
@@ -418,13 +418,13 @@ it.effect("does not let asynchronous plugin cleanup block recovered registry rea
   }),
 )
 
-it.live("retains Promise plugin ownership for later registrations and ignores a quarantined owner's attempts", () =>
+it.live("retains Promise plugin groups for later registrations and ignores a disabled group's attempts", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
     let register = async () => {}
     const definition = fromPromise({
-      id: "promise-owner",
+      id: "promise-plugin",
       setup(ctx) {
         register = async () => {
           await ctx.command.transform((editor) => {
