@@ -99,8 +99,9 @@ it.live("allows browser preflight requests without credentials", () =>
     )
     expect(event.status).toBe(200)
     expect(event.headers.get("content-encoding")).toBeNull()
-    if (!event.body) return yield* Effect.die(new Error("Event response has no body"))
-    yield* Effect.promise(() => event.body.cancel())
+    const body = event.body
+    if (!body) return yield* Effect.die(new Error("Event response has no body"))
+    yield* Effect.promise(() => body.cancel())
 
     const missing = yield* Effect.promise(() =>
       fetch(new URL("/missing", HttpServer.formatAddress(server.address)), {
