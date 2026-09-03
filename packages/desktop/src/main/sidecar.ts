@@ -76,7 +76,6 @@ async function stop() {
   } finally {
     listener = undefined
     parentPort.postMessage({ type: "stopped" })
-    setImmediate(() => process.exit(0))
   }
 }
 
