@@ -44,9 +44,11 @@ import type {
 } from "@opencode-ai/client/promise"
 import {
   currentToolError,
+  currentToolHasLoadedFiles,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
+  executeToolFailed,
 } from "../message/current-tool-state"
 import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
 
@@ -480,7 +482,10 @@ function ExaOutput(props: { output?: string }) {
   )
 }
 
-export type ContextGroupPart = SessionMessageAssistantTool | (SessionMessageAssistantReasoning & { id: string })
+export type ContextGroupPart =
+  | SessionMessageAssistantTool
+  | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
+  | { type: "notice" | "shell"; id: string; render: () => JSX.Element }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -491,6 +496,12 @@ export function CurrentContextToolGroup(props: {
   reasoningDefaultOpen?: boolean
   reasoningOpen?: (id: string) => boolean | undefined
   onReasoningOpenChange?: (id: string, open: boolean) => void
+  toolDefaultOpen?: (tool: SessionMessageAssistantTool) => boolean | undefined
+  toolOpen?: (id: string) => boolean | undefined
+  onToolOpenChange?: (id: string, open: boolean) => void
+  fileOpen?: (path: string) => boolean | undefined
+  onFileOpenChange?: (path: string, open: boolean) => void
+  patchGroupKey?: (tools: SessionMessageAssistantTool[]) => string
 }) {
   const i18n = useI18n()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
@@ -499,14 +510,16 @@ export function CurrentContextToolGroup(props: {
   )
   const names = createMemo(() =>
     [
-      ...tools().reduce((counts, tool) => {
-        const input = currentToolInput(tool)
+      ...props.parts.reduce((counts, part) => {
+        if (part.type !== "tool" && part.type !== "shell") return counts
         const name =
-          tool.name === "skill"
-            ? i18n.t("ui.tool.skill")
-            : tool.name === "subagent"
-              ? i18n.t("ui.tool.agent.default")
-              : getToolInfo(tool.name, input, currentToolMetadata(tool)).title
+          part.type !== "tool"
+            ? i18n.t("ui.tool.shell")
+            : part.name === "skill"
+              ? i18n.t("ui.tool.skill")
+              : part.name === "subagent"
+                ? i18n.t("ui.tool.agent.default")
+                : getToolInfo(part.name, currentToolInput(part), currentToolMetadata(part)).title
         counts.set(name, (counts.get(name) ?? 0) + 1)
         return counts
       }, new Map<string, number>()),
@@ -515,15 +528,20 @@ export function CurrentContextToolGroup(props: {
       .join(", "),
   )
   const label = createMemo(() => {
-    const title = names()
+    const notices = props.parts.filter((part) => part.type === "notice").length
+    const title =
+      [names(), notices ? i18n.plural("ui.messagePart.context.notice", notices) : undefined]
+        .filter(Boolean)
+        .join(", ") ||
+      i18n.plural("ui.messagePart.context.thought", props.parts.filter((part) => part.type === "reasoning").length)
     const text = i18n.t("ui.messagePart.tools.used", { tools: title })
     const index = text.indexOf(title)
     return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
   })
   const items = createMemo(() =>
-    props.parts.reduce<(SessionMessageAssistantTool[] | (SessionMessageAssistantReasoning & { id: string }))[]>(
+    props.parts.reduce<(SessionMessageAssistantTool[] | Exclude<ContextGroupPart, SessionMessageAssistantTool>)[]>(
       (groups, tool) => {
-        if (tool.type === "reasoning") {
+        if (tool.type !== "tool") {
           groups.push(tool)
           return groups
         }
@@ -556,6 +574,15 @@ export function CurrentContextToolGroup(props: {
       [],
     ),
   )
+  const patchKeys = createMemo(() => {
+    const keys = new Map<SessionMessageAssistantTool, string>()
+    items().forEach((item) => {
+      if (!Array.isArray(item) || item[0]?.name !== "patch" || item[0].state.status === "error") return
+      const key = props.patchGroupKey?.(item) ?? item[0].id
+      item.forEach((tool) => keys.set(tool, key))
+    })
+    return keys
+  })
   const change = (open: boolean) => {
     props.onOpenChange(open)
     props.onSizeChange?.()
@@ -594,19 +621,30 @@ export function CurrentContextToolGroup(props: {
               })
               const reasoning = createMemo(() => {
                 const value = item()
-                return Array.isArray(value) ? undefined : value
+                return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
+              })
+              const callback = createMemo(() => {
+                const value = item()
+                return !Array.isArray(value) && (value.type === "notice" || value.type === "shell") ? value : undefined
               })
               return (
                 <Show
                   when={group()}
                   fallback={
-                    <Show when={reasoning()}>
+                    <Show
+                      when={reasoning()}
+                      fallback={
+                        <Show when={callback()}>
+                          {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                        </Show>
+                      }
+                    >
                       {(part) => (
                         <div data-slot="context-tool-group-item">
                           <AssistantReasoningContent
                             id={part().id}
                             content={part()}
-                            streaming={false}
+                            streaming={part().streaming ?? false}
                             defaultOpen={props.reasoningDefaultOpen}
                             open={props.reasoningOpen?.(part().id)}
                             onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
@@ -636,7 +674,8 @@ export function CurrentContextToolGroup(props: {
                           when={
                             tool().state.status !== "error" &&
                             ["read", "glob", "grep", "list"].includes(tool().name) &&
-                            !(tool().name === "read" && readImagePath(currentToolInput(tool())))
+                            !(tool().name === "read" && readImagePath(currentToolInput(tool()))) &&
+                            !currentToolHasLoadedFiles(tool())
                           }
                           fallback={
                             <Show
@@ -653,14 +692,28 @@ export function CurrentContextToolGroup(props: {
                                       output={currentToolOutput(tool())}
                                       error={currentToolError(tool())}
                                       status={tool().state.status}
-                                      defaultOpen={false}
+                                      defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
+                                      open={props.toolOpen?.(tool().id) ?? props.toolDefaultOpen?.(tool())}
+                                      onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
                                       deferContent
                                       virtualizeDiff={false}
                                       onContentRendered={props.onSizeChange}
                                     />
                                   }
                                 >
-                                  <CurrentFileToolGroup tools={group()} onSizeChange={props.onSizeChange} />
+                                  <CurrentFileToolGroup
+                                    tools={group()}
+                                    fileOpen={
+                                      props.fileOpen &&
+                                      ((path) => props.fileOpen?.(`${patchKeys().get(tool())}:${path}`))
+                                    }
+                                    onFileOpenChange={
+                                      props.onFileOpenChange &&
+                                      ((path, open) =>
+                                        props.onFileOpenChange?.(`${patchKeys().get(tool())}:${path}`, open))
+                                    }
+                                    onSizeChange={props.onSizeChange}
+                                  />
                                 </Show>
                               }
                             >
@@ -1044,19 +1097,7 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
 function toolDisplayError(props: ToolProps & { error?: string }, fallback: string) {
   if (props.status === "error") return props.error
   if (props.tool !== "execute") return undefined
-  const calls = props.metadata.toolCalls
-  const failed =
-    props.metadata.error === true ||
-    (Array.isArray(calls) &&
-      calls.some(
-        (call) =>
-          call !== null &&
-          typeof call === "object" &&
-          !Array.isArray(call) &&
-          "status" in call &&
-          call.status === "error",
-      ))
-  if (!failed) return undefined
+  if (!executeToolFailed(props.metadata)) return undefined
   if (typeof props.output === "string" && props.output) return props.output
   return fallback
 }
@@ -1400,7 +1441,7 @@ ToolRegistry.register({
             </div>
             <Show when={clickable()}>
               <div data-component="task-tool-action">
-                <Icon name="chevron-right" size="small" />
+                <Icon name="chevron-right" size="normal" />
               </div>
             </Show>
           </div>
@@ -1427,7 +1468,7 @@ ToolRegistry.register({
       >
         <div
           data-component="task-tool-delegating"
-          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-01 p-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px]"
+          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-02 p-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px]"
         >
           <Icon name="subagent" size="small" class="shrink-0 text-v2-icon-icon-faint" />
           <TextShimmer text={i18n.t("ui.tool.agent.delegating")} class="min-w-0 truncate" />

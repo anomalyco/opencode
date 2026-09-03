@@ -4,7 +4,7 @@ import { NodeServices } from "@effect/platform-node"
 import { Service, type DiscoverOptions } from "@opencode-ai/client/effect/service"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
-import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import { spawn } from "node:child_process"
@@ -86,7 +86,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const server = yield* start(
         {
           app: {
-            name: process.env.OPENCODE_CLIENT ?? "cli",
+            name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
             version: OPENCODE_VERSION,
             channel: OPENCODE_CHANNEL,
           },

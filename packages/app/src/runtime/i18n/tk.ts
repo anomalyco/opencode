@@ -134,6 +134,7 @@ export const dict = {
   "command.language.cycle": "Sikl dili",
   "command.language.set": "Dil ulanyň: {{language}}",
   "command.session.new": "Täze sessiýa",
+  "command.session.import": "Sessiýany import et",
   "command.file.open": "Faýl açyň",
   "command.tab.close": "Salgy ýapyň",
   "command.tab.reopenClosed": "Closedapyk goýmany açyň",

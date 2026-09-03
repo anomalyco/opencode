@@ -47,6 +47,7 @@ export function isRetryable(error: AIError) {
     case "QuotaExceeded":
     case "ContentPolicy":
     case "InvalidRequest":
+    case "UnsupportedOperation":
     case "NoRoute":
       return false
     default: {

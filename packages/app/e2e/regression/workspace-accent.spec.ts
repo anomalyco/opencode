@@ -78,9 +78,13 @@ for (const theme of ["light", "dark"] as const) {
         await expectToken(
           message,
           "background-color",
-          scenario.accent ? "--v2-background-bg-accent" : "--v2-state-bg-info",
+          scenario.accent ? "--v2-background-bg-accent" : theme === "light" ? "--v2-blue-100" : "--v2-blue-1200",
         )
-        await expectToken(message, "color", scenario.accent ? "--v2-text-text-contrast" : "--v2-text-text-accent")
+        await expectToken(
+          message,
+          "color",
+          scenario.accent ? "--v2-text-text-contrast" : theme === "light" ? "--v2-blue-700" : "--v2-blue-300",
+        )
       })
     }
 

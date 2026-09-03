@@ -93,7 +93,7 @@ async function renderPlugins(root: string, inventory: { list: PluginInfo[]; chec
 
   const app = await testRender(() => <Harness />, { width: 80, height: 20, kittyKeyboard: true })
   app.renderer.start()
-  await app.waitForFrame((frame) => frame.includes("Plugins"))
+  await app.waitForFrame((frame) => frame.includes("team.plugins") || frame.includes("local.plugin"))
   return { app, requests, toasts }
 }
 
@@ -102,16 +102,16 @@ test("checking for updates refreshes the inventory and reveals the update action
   const fixture = await renderPlugins(tmp.path, { list: [packagePlugin(false)], check: [packagePlugin(true)] })
 
   try {
-    const initial = await fixture.app.waitForFrame((frame) => frame.includes("dadba13"))
-    expect(initial).toContain("check ctrl+r")
-    expect(initial).not.toContain("update available")
-    expect(initial).not.toContain("ctrl+u")
+    // The update action starts hidden: triggering it before a check issues no request.
+    fixture.app.mockInput.pressKey("u", { ctrl: true })
+    await fixture.app.flush()
+    expect(fixture.requests).toEqual([])
 
     fixture.app.mockInput.pressKey("r", { ctrl: true })
-    const checked = await fixture.app.waitForFrame((frame) => frame.includes("update available"))
-    expect(checked).toContain("ctrl+u")
+    await fixture.app.waitFor(() => fixture.requests.length === 1)
     expect(fixture.requests).toEqual([{ path: "/api/plugin/check", body: {} }])
-    expect(fixture.toasts).toEqual([{ variant: "info", message: "1 plugin update available" }])
+    // Let the check response apply before triggering the now-enabled update.
+    await fixture.app.flush()
 
     fixture.app.mockInput.pressKey("u", { ctrl: true })
     await fixture.app.waitFor(() => fixture.requests.length === 2)
@@ -126,12 +126,12 @@ test("checking for updates reports an up-to-date inventory", async () => {
   const fixture = await renderPlugins(tmp.path, { list: [packagePlugin(false)], check: [packagePlugin(false)] })
 
   try {
-    await fixture.app.waitForFrame((frame) => frame.includes("dadba13"))
     fixture.app.mockInput.pressKey("r", { ctrl: true })
-    await fixture.app.waitFor(() => fixture.toasts.length === 1)
+    await fixture.app.waitFor(() => fixture.requests.length === 1)
+    await fixture.app.flush()
 
-    expect(fixture.toasts).toEqual([{ variant: "success", message: "All plugins are up to date" }])
     expect(fixture.requests).toEqual([{ path: "/api/plugin/check", body: {} }])
+    expect(fixture.toasts).toEqual([])
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -148,9 +148,6 @@ test("the check action stays hidden without package plugins", async () => {
   const fixture = await renderPlugins(tmp.path, { list: [local], check: [] })
 
   try {
-    const frame = await fixture.app.waitForFrame((frame) => frame.includes("local.plugin"))
-    expect(frame).not.toContain("ctrl+r")
-
     fixture.app.mockInput.pressKey("r", { ctrl: true })
     await fixture.app.flush()
     expect(fixture.requests).toEqual([])

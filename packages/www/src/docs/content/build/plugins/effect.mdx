@@ -644,7 +644,8 @@ effect: (ctx) =>
   }),
 ```
 
-Add or remove local and Git references, then reload after external state changes.
+Add or remove local and Git references, then reload after external state changes. `get(name)` returns the current configured
+source, or `undefined` when the name is absent.
 
 ```ts
 effect: (ctx) =>
@@ -653,6 +654,7 @@ effect: (ctx) =>
     yield* reference.transform((editor) => {
       editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
       editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+      const handbook = editor.get("handbook")
       editor.remove("legacy")
     })
     yield* reference.reload()
@@ -667,6 +669,7 @@ interface ReferenceEditor {
   add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
   remove(name: string): void
   list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
 }
 
 interface ReferenceDomain extends ReferenceApi<unknown> {
@@ -747,7 +750,8 @@ effect: (ctx) =>
   }),
 ```
 
-Transform and reload skills. Use the re-exported Effect schema constructors for branded values.
+Transform and reload skills. Use the re-exported Effect schema constructors for branded values. `get(id)` returns the
+current editor entry, or `undefined` when the skill is absent.
 
 ```ts
 effect: (ctx) =>
@@ -761,6 +765,7 @@ effect: (ctx) =>
         location: "/workspace/.opencode/skills/review.md",
         content: "Review the current changes for correctness and missing tests.",
       }))
+      const review = editor.get("review")
       editor.update("review", (item) => (item.autoinvoke = true))
       editor.remove("legacy")
     })
@@ -773,6 +778,7 @@ Schema: [`Skill.Info`](/api#schema-Skill.Info).
 ```ts
 interface SkillEditor {
   list(): readonly Types.DeepMutable<Skill.Info>[]
+  get(id: string): Types.DeepMutable<Skill.Info> | undefined
   add(skill: Skill.Info): void
   update(id: string, update: (skill: Types.DeepMutable<Skill.Info>) => void): void
   remove(id: string): void

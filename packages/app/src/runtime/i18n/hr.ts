@@ -137,6 +137,7 @@ export const dict = {
   "command.language.cycle": "Promijeni jezik",
   "command.language.set": "Koristite jezik: {{language}}",
   "command.session.new": "Nova sesija",
+  "command.session.import": "Uvezi sesiju",
   "command.file.open": "Otvori datoteku",
   "command.tab.close": "Zatvori karticu",
   "command.tab.reopenClosed": "Ponovno otvori zatvorenu karticu",

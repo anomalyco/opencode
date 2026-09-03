@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "ភាសាវដ្ត",
   "command.language.set": "ប្រើភាសា៖ {{language}}",
   "command.session.new": "សម័យថ្មី។",
+  "command.session.import": "នាំចូលសម័យ",
   "command.file.open": "បើកឯកសារ",
   "command.tab.close": "បិទផ្ទាំង",
   "command.tab.reopenClosed": "បើកផ្ទាំងបិទឡើងវិញ",

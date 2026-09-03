@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentListOutput, ModelListOutput, Project, ProviderListOutput } from "@opencode-ai/client/promise"
-import { directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
+import {
+  directoryKey,
+  normalizeAgentList,
+  normalizeProjectInfo,
+  normalizeProviderList,
+  updateProjectInfo,
+} from "./utils"
 
 describe("normalizeAgentList", () => {
   test("adapts current agents to the app agent shape", () => {
@@ -108,5 +114,36 @@ describe("directoryKey", () => {
     expect(String(directoryKey("C:/Repos/sst/opencode/"))).toBe("C:/Repos/sst/opencode")
     expect(String(directoryKey("C:/"))).toBe("C:/")
     expect(String(directoryKey("/"))).toBe("/")
+  })
+})
+
+describe("updateProjectInfo", () => {
+  test("applies saved metadata without losing workspace inventory", () => {
+    const update = {
+      id: "project",
+      canonical: "/repo",
+      name: "Repo",
+      icon: { color: "purple" },
+      time: { created: 1, updated: 2 },
+      sandboxes: ["/repo-sandbox"],
+    } satisfies Project
+
+    expect(
+      updateProjectInfo(
+        {
+          ...update,
+          name: "Old name",
+          icon: { color: "gray" },
+          worktree: "/old-repo",
+          worktrees: [{ directory: "/repo", strategy: "git" }],
+        },
+        update,
+      ),
+    ).toMatchObject({
+      name: "Repo",
+      icon: { color: "purple" },
+      worktree: "/repo",
+      worktrees: [{ directory: "/repo", strategy: "git" }],
+    })
   })
 })

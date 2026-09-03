@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "Jezik cikla",
   "command.language.set": "Uporabi jezik: {{language}}",
   "command.session.new": "Nova seja",
+  "command.session.import": "Uvozi sejo",
   "command.file.open": "Odpri datoteko",
   "command.tab.close": "Zapri zavihek",
   "command.tab.reopenClosed": "Ponovno odpri zaprt zavihek",

@@ -24,7 +24,7 @@
     --v2-text-text-accent: var(--v2-blue-600);
     --v2-text-text-accent-hover: var(--v2-blue-700);
     --v2-text-text-code-accent: var(--v2-blue-900);
-    --v2-text-text-code-path: var(--v2-cyan-900);
+    --v2-text-text-code-path: var(--v2-blue-900);
 
     /* ── Icon ── */
     --v2-icon-icon-base: var(--v2-grey-800);
@@ -64,7 +64,7 @@
     --v2-state-bg-danger: var(--v2-red-100);
     --v2-state-fg-danger: var(--v2-red-800);
     --v2-state-border-danger: var(--v2-red-300);
-    --v2-state-bg-info: var(--v2-blue-100);
+    --v2-state-bg-info: var(--v2-blue-200);
     --v2-state-fg-info: var(--v2-blue-800);
     --v2-state-border-info: var(--v2-blue-300);
 
@@ -163,7 +163,7 @@
       --v2-text-text-accent: var(--v2-blue-400);
       --v2-text-text-accent-hover: var(--v2-blue-300);
       --v2-text-text-code-accent: var(--v2-blue-400);
-      --v2-text-text-code-path: var(--v2-cyan-400);
+      --v2-text-text-code-path: var(--v2-blue-300);
 
       --v2-icon-icon-base: var(--v2-grey-400);
       --v2-icon-icon-muted: var(--v2-grey-600);
@@ -279,7 +279,7 @@
     --v2-text-text-accent: var(--v2-blue-600);
     --v2-text-text-accent-hover: var(--v2-blue-700);
     --v2-text-text-code-accent: var(--v2-blue-900);
-    --v2-text-text-code-path: var(--v2-cyan-900);
+    --v2-text-text-code-path: var(--v2-blue-900);
 
     --v2-icon-icon-base: var(--v2-grey-800);
     --v2-icon-icon-muted: var(--v2-grey-600);
@@ -315,7 +315,7 @@
     --v2-state-bg-danger: var(--v2-red-100);
     --v2-state-fg-danger: var(--v2-red-800);
     --v2-state-border-danger: var(--v2-red-300);
-    --v2-state-bg-info: var(--v2-blue-100);
+    --v2-state-bg-info: var(--v2-blue-200);
     --v2-state-fg-info: var(--v2-blue-800);
     --v2-state-border-info: var(--v2-blue-300);
 
@@ -404,7 +404,7 @@
     --v2-text-text-accent: var(--v2-blue-400);
     --v2-text-text-accent-hover: var(--v2-blue-300);
     --v2-text-text-code-accent: var(--v2-blue-400);
-    --v2-text-text-code-path: var(--v2-cyan-400);
+    --v2-text-text-code-path: var(--v2-blue-300);
 
     --v2-icon-icon-base: var(--v2-grey-400);
     --v2-icon-icon-muted: var(--v2-grey-600);

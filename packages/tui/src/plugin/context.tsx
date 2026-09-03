@@ -1,6 +1,6 @@
 import type { PluginInfo } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
-import { createMarkdownCodeBlockRenderer, type MarkdownCodeBlockRenderer, type MarkdownOptions } from "@opentui/core"
+import type { MarkdownCodeBlockRenderer, MarkdownOptions } from "@opentui/core"
 import {
   batch,
   createContext,
@@ -33,6 +33,7 @@ import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, 
 import { createSourceWatcher } from "./watch"
 import { discoverPluginTargets, freshSpecifier, localSource } from "./discovery"
 import { isMissingPath } from "../util/config-directories"
+import { createMarkdownRenderer } from "./markdown"
 
 export interface PackageSource {
   readonly prepare: (spec: string, install?: boolean) => Promise<Host.Target>
@@ -83,17 +84,6 @@ type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "
 const PluginContext = createContext<Value>()
 let sourceVersion = Date.now()
 
-export function combineMarkdownRenderers(
-  sources: ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>,
-): MarkdownOptions["renderNode"] {
-  const renderers = new Map<string, MarkdownCodeBlockRenderer>()
-  for (const source of sources) {
-    for (const [language, render] of Object.entries(source)) renderers.set(language, render)
-  }
-  if (renderers.size === 0) return undefined
-  return createMarkdownCodeBlockRenderer(renderers)
-}
-
 export function PluginProvider(props: ParentProps<{ packages: PackageSource; directories: string[] }>) {
   const host = usePluginHost()
   const config = useConfig()
@@ -125,12 +115,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
     sourceVersions.set(entrypoint, { digest, generation })
     return generation
   }
-  const markdown = createMemo(() =>
-    combineMarkdownRenderers(
-      Object.values(store.registrations).flatMap((registration) =>
-        registration.active ? [registration.markdown] : [],
-      ),
-    ),
+  const markdown = createMarkdownRenderer(() =>
+    Object.values(store.registrations).flatMap((registration) => (registration.active ? [registration.markdown] : [])),
   )
   const clearContributions = (id: string) => {
     setStore("registrations", id, "routes", reconcileStore({}))

@@ -59,8 +59,8 @@ type PlatformBase = {
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
 
-  /** Open a native save file picker dialog (desktop only) */
-  saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
+  /** Open a native save file dialog and write content to the selected path (desktop only) */
+  saveFile?(opts: SaveFilePickerOptions, content: string): Promise<boolean>
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage

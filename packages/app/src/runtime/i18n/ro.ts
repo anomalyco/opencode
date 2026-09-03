@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "Schimbă limba",
   "command.language.set": "Folosește limba: {{language}}",
   "command.session.new": "Sesiune nouă",
+  "command.session.import": "Importă sesiunea",
   "command.file.open": "Deschide fișier",
   "command.tab.close": "Închide fila",
   "command.tab.reopenClosed": "Redeschide fila închisă",
