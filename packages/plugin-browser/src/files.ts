@@ -1,6 +1,7 @@
 export * as BrowserFiles from "./files.js"
 
 import { Browser } from "./rpc.js"
+import { Tool } from "@opencode-ai/schema/tool"
 
 // Files cross machines as bytes. Only this endpoint interprets its local paths.
 export async function read(paths: readonly string[], directory: string): Promise<Browser.File[]> {
@@ -11,8 +12,12 @@ export async function read(paths: readonly string[], directory: string): Promise
       const file = await open(resolve(directory, input), "r")
       try {
         const stat = await file.stat()
-        if (!stat.isFile() || stat.size > Browser.MAX_FILE_BYTES)
-          throw new Error("Upload must be a file no larger than 5 MiB.")
+        if (!stat.isFile())
+          throw new Error("Upload paths must name files, not directories. Select a server-local file.")
+        if (stat.size > Browser.MAX_FILE_BYTES)
+          throw new Error(
+            `Upload is ${stat.size} bytes; the limit is ${Browser.MAX_FILE_BYTES} bytes (5 MiB). Select a smaller file; do not retry the same upload.`,
+          )
         return {
           id: Browser.FileID.make(`file_${crypto.randomUUID()}`),
           name: basename(input),
@@ -25,7 +30,9 @@ export async function read(paths: readonly string[], directory: string): Promise
     }),
   )
   if (files.reduce((size, file) => size + file.data.byteLength, 0) > Browser.MAX_FILE_BYTES)
-    throw new Error("File transfer exceeds 5 MiB total.")
+    throw new Error(
+      "The selected upload files exceed 5 MiB in total. Send fewer or smaller files; splitting them into one batch does not bypass the total limit.",
+    )
   return files
 }
 
@@ -48,7 +55,9 @@ const types: Record<string, string> = {
 export async function save(files: readonly Browser.File[]): Promise<Browser.FileInfo[]> {
   if (files.length === 0) return []
   if (files.reduce((size, file) => size + file.data.byteLength, 0) > Browser.MAX_FILE_BYTES)
-    throw new Error("File transfer exceeds 5 MiB total. Capture a smaller file.")
+    throw new Error(
+      "Capture files exceed the 5 MiB total transfer limit. Use a smaller screenshot, a shorter trace/profile, or a smaller page for heap capture; do not retry the identical capture.",
+    )
   const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises")
   const { join } = await import("node:path")
   const { tmpdir } = await import("node:os")
@@ -62,4 +71,20 @@ export async function save(files: readonly Browser.File[]): Promise<Browser.File
       return { id: file.id, name: file.name, mime: file.mime, bytes: file.data.byteLength, path }
     }),
   )
+}
+
+export function failure(operation: "resolve" | "read" | "save", error: unknown) {
+  const detail = error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400)
+  const code =
+    error instanceof Error && "code" in error && typeof error.code === "string" && !detail.startsWith(error.code)
+      ? `${error.code}: `
+      : ""
+  const recovery =
+    operation === "save"
+      ? "The browser may have completed the capture, but no server-local export is confirmed. Check free space and write access on the server. Use browser.files.list({tabID}) and browser.files.get({tabID,fileID}) to retrieve an existing completed capture instead of repeating its browser action."
+      : "Upload paths are on the server, not the desktop. Check that each path exists, is a file, and is readable on the server; correct paths or select smaller files before retrying."
+  return new Tool.Error({
+    message: `Cannot ${operation} browser files on the server. ${recovery} Details: ${code}${detail}`,
+    error,
+  })
 }
