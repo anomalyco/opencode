@@ -63,6 +63,7 @@ Mevcut model listesi şunları içerir:
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([sınırlı bölgeler](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([sınırlı bölgeler](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
@@ -107,6 +108,7 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 | MiMo-V2.5-Pro                | 3,250              | 8,150          | 16,300      |
 | MiniMax M3                   | 3,200              | 8,000          | 16,000      |
 | MiniMax M2.7                 | 3,400              | 8,500          | 17,000      |
+| Muse Spark 1.3 Contributor   | 45,300             | 113,300        | 226,600     |
 | Muse Spark 1.2 Contributor   | 45,300             | 113,300        | 226,600     |
 | Qwen3.8 Max                  | 160                | 400            | 810         |
 | Qwen3.8 Flash                | 5,400              | 13,500         | 27,000      |
@@ -133,6 +135,7 @@ Tahminler, gözlemlenen istek modellerine dayanır:
 - DeepSeek V4 Flash Vision Exp — İstek başına 410 girdi, 71.300 önbelleğe alınmış, 310 çıktı token'ı
 - MiniMax M3 — İstek başına 510 girdi, 56.000 önbelleğe alınmış, 190 çıktı token'ı
 - MiniMax M2.7 — İstek başına 300 girdi, 55.000 önbelleğe alınmış, 125 çıktı token'ı
+- Muse Spark 1.3 Contributor — İstek başına 620 girdi, 71.400 önbelleğe alınmış, 300 çıktı token'ı
 - Muse Spark 1.2 Contributor — İstek başına 620 girdi, 71.400 önbelleğe alınmış, 300 çıktı token'ı
 - Qwen3.8 Max — İstek başına 420 girdi, 66.000 önbelleğe alınmış, 200 çıktı token'ı
 - Qwen3.8 Flash — İstek başına 600 girdi, 58.000 önbelleğe alınmış, 200 çıktı token'ı
@@ -165,6 +168,7 @@ Tahminler ayrıca 1M token başına aşağıdaki fiyatlara ve her modelle birlik
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60      |
 | MiniMax M2.7                            | $0.30  | $1.20  | $0.06       | $0.375       | $60      |
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | $60      |
+| Muse Spark 1.3 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60      |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60      |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | $15      |
 | Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | $30      |
@@ -238,6 +242,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -284,6 +289,7 @@ https://opencode.ai/zen/go/v1/models
 | Qwen3.6 Plus                 | Kullanılmaz   | 0 gün        |
 | MiniMax M3                   | Kullanılmaz   | 0 gün        |
 | MiniMax M2.7                 | Kullanılmaz   | 0 gün        |
+| Muse Spark 1.3 Contributor   | Evet          | ZDR değil    |
 | Muse Spark 1.2 Contributor   | Evet          | ZDR değil    |
 | DeepSeek V4 Pro              | Kullanılmaz   | 0 gün        |
 | DeepSeek V4 Flash            | Kullanılmaz   | 0 gün        |
@@ -293,6 +299,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.6:** ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır. [Daha fazla bilgi](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır. [Daha fazla bilgi](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Muse Spark 1.3 Contributor:** İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları. Kullanılabilirlik, Meta'nın [Coğrafi Kullanım Politikası](https://ai.developer.meta.com/legal/geographic-use-policy) kapsamında izin verilen bölgelerle sınırlıdır. [Daha fazla bilgi](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları. Kullanılabilirlik, Meta'nın [Coğrafi Kullanım Politikası](https://ai.developer.meta.com/legal/geographic-use-policy) kapsamında izin verilen bölgelerle sınırlıdır. [Daha fazla bilgi](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek V4 Flash:** ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ağustos 2026 tarihine kadar geçerlidir.
 
