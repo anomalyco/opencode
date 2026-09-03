@@ -93,4 +93,17 @@ await esbuild.build({
   outfile: path.join(outDir, "worker.mjs"),
 });
 
+// Copy WASM files for tree-sitter
+const wasmFiles = [
+  "node_modules/.pnpm/web-tree-sitter@0.25.10/node_modules/web-tree-sitter/tree-sitter.wasm",
+  "node_modules/.pnpm/tree-sitter-bash@0.25.0/node_modules/tree-sitter-bash/tree-sitter-bash.wasm",
+  "node_modules/.pnpm/tree-sitter-powershell@0.25.10/node_modules/tree-sitter-powershell/tree-sitter-powershell.wasm",
+];
+for (const f of wasmFiles) {
+  const src = path.join(root, f);
+  const dst = path.join(outDir, path.basename(f));
+  await fs.copyFile(src, dst);
+  console.error("[build] copied", path.basename(f));
+}
+
 console.error("[build] done");
