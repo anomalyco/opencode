@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdir } from "node:fs/promises"
+import { mkdir, readFile, rm } from "node:fs/promises"
 import path from "node:path"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
@@ -9,10 +9,11 @@ import { Browser } from "@opencode-ai/schema/browser"
 import { Agent, Rpc } from "@opencode-ai/plugin/effect"
 import type { Info } from "@opencode-ai/schema/tool"
 import { AbsolutePath, OpenCode, SessionMessage } from "@opencode-ai/sdk/effect"
-import { Effect, Fiber, Queue, Stream } from "effect"
+import { Effect, Fiber, Queue, Schema, Stream } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 
-const state: Browser.State = {
+const tab: Browser.Tab = {
+  id: Browser.TabID.make(`tab_${crypto.randomUUID()}`),
   url: "https://example.com/",
   title: "Example",
   loading: false,
@@ -20,6 +21,8 @@ const state: Browser.State = {
   canGoForward: false,
   generation: 7,
 }
+const state: Browser.State = { tabs: [tab], focusedTabID: tab.id }
+const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
 const fixture = Effect.gen(function* () {
   const directory = yield* tmpdirScoped("opencode-browser-")
@@ -33,26 +36,29 @@ const fixture = Effect.gen(function* () {
       project: false,
       content: JSON.stringify({
         plugins: ["-opencode.browser"],
+        permissions: [{ action: "*", resource: "*", effect: "allow" }],
       }),
     },
     models: { fetch: false },
     fs: { filewatcher: false, fff: false },
   })
-  const captured = Promise.withResolvers<Info>()
+  const captured = Promise.withResolvers<readonly Info[]>()
   yield* opencode.plugin({ ...plugin, id: "browser-test" })
   yield* opencode.plugin({
     id: "browser-test-observer",
     effect: (ctx) =>
-      Effect.gen(function* () {
-        // Inspect the real tool through the public draft, without replacing its executor.
-        yield* ctx.tool.transform((draft) => {
-          const tool = draft.get("browser")
-          if (tool && ctx.location.directory === location.directory) captured.resolve(tool)
+      ctx.tool
+        .transform((draft) => {
+          if (ctx.location.directory !== location.directory) return
+          const tools = draft
+            .list()
+            .filter((tool) => tool.options?.namespace === "browser" || tool.options?.namespace?.startsWith("browser."))
+          if (tools.length) captured.resolve(tools)
         })
-      }).pipe(Effect.orDie),
+        .pipe(Effect.orDie),
   })
   yield* opencode.plugin.list({ location })
-  const tool = yield* Effect.promise(() => captured.promise)
+  const tools = yield* Effect.promise(() => captured.promise)
   const session = yield* opencode.sessions.create({ location })
   const rpc = opencode.rpc(Browser.Definition)
   const events = yield* Queue.unbounded<Rpc.EventPayload<typeof Browser.Definition, "control">>()
@@ -60,195 +66,136 @@ const fixture = Effect.gen(function* () {
     Stream.runForEach((event) => Queue.offer(events, event)),
     Effect.forkScoped({ startImmediately: true }),
   )
-  // RPC and native subscriptions share one stream; connected is the readiness barrier.
   yield* opencode.events.subscribe().pipe(
     Stream.filter((event) => event.type === "server.connected"),
     Stream.runHead,
     Effect.timeout("5 seconds"),
   )
   const next = Queue.take(events).pipe(Effect.timeout("5 seconds"))
-  const execute = (action: Browser.Action) =>
-    tool.execute(action, {
-      sessionID: session.id,
-      agent: Agent.ID.make("build"),
-      messageID: SessionMessage.ID.create(),
-      id: Tool.CallID.make(crypto.randomUUID()),
-      progress: () => Effect.void,
-    })
+  const context = {
+    sessionID: session.id,
+    agent: Agent.ID.make("build"),
+    messageID: SessionMessage.ID.create(),
+    id: Tool.CallID.make(crypto.randomUUID()),
+    progress: () => Effect.void,
+  }
+  const execute = (action: Browser.Action) => {
+    const tool = tools.find((tool) => `${tool.options?.namespace}.${tool.name}` === `browser.${action.type}`)
+    if (!tool) throw new Error(`Missing browser tool ${action.type}`)
+    return tool.execute(action, context)
+  }
   return {
-    tool,
     opencode,
     location,
     rpc,
-    execute,
+    tools,
     next,
+    execute,
+    context,
     attach: Effect.fn(function* (connectionID: string) {
       const input = { sessionID: session.id, connectionID }
-      const lifetime = yield* rpc.attach(input, { location }).pipe(Effect.forkScoped)
-      expect(yield* next).toMatchObject({
-        type: "rpc.experimental.browser.control",
-        location,
-        data: { type: "attached", connectionID },
-      })
-      expect(lifetime.pollUnsafe()).toBeUndefined()
+      const lifetime = yield* rpc.attach({ ...input, version: 2 }, { location }).pipe(Effect.forkScoped)
+      expect((yield* next).data).toEqual({ type: "attached", connectionID })
       return { input, lifetime }
     }),
     command: Effect.fn(function* (action: Browser.Action) {
       const pending = yield* execute(action).pipe(Effect.forkScoped)
       const event = yield* next.pipe(
-        Effect.raceFirst(
-          Fiber.join(pending).pipe(Effect.andThen(Effect.die("Tool completed without a browser command"))),
-        ),
+        Effect.raceFirst(Fiber.join(pending).pipe(Effect.andThen(Effect.die("Completed without a command")))),
       )
-      expect(event.location).toEqual(location)
-      if (event.data.type !== "command") throw new Error(`Expected command, received ${event.data.type}`)
-      expect(event.data.command.action).toEqual(action)
-      return { ...event.data, pending }
+      if (event.data.type !== "command") throw new Error(`Expected command: ${event.data.type}`)
+      expect(Object.keys(event.data).sort()).toEqual(["connectionID", "requestID", "type"])
+      const input = { sessionID: session.id, connectionID: event.data.connectionID, requestID: event.data.requestID }
+      const command = yield* rpc.command(input, { location })
+      return { input, command, pending }
     }),
   }
 })
 
 test(
-  "attachment ownership, cancellation, and plugin unload release pending browser work",
+  "browser RPC preserves ownership, cancellation, replacement and unload without broadcasting commands",
   () =>
     Effect.gen(function* () {
       const host = yield* fixture
       const options = { location: host.location }
-      expect(yield* host.execute({ type: "open" }).pipe(Effect.flip)).toMatchObject({
-        message: "No desktop browser is connected.",
+      expect(yield* host.execute({ type: "tabs.list" }).pipe(Effect.flip)).toMatchObject({
+        message: expect.stringContaining("No desktop browser"),
       })
-      const stale = yield* host.attach("stale")
-      // A newer attachment for the same session replaces the previous one.
-      const attached = yield* host.attach("first")
-      yield* Fiber.join(stale.lifetime).pipe(Effect.timeout("5 seconds"))
-      expect(yield* host.rpc.state({ ...stale.input, state }, options).pipe(Effect.flip)).toMatchObject({
+      const old = yield* host.attach("old")
+      const attached = yield* host.attach("current")
+      yield* Fiber.join(old.lifetime)
+      expect(yield* host.rpc.state({ ...old.input, state }, options).pipe(Effect.flip)).toMatchObject({
         type: "unavailable",
       })
-      const other = Location.Ref.make({ directory: AbsolutePath.make(path.join(host.location.directory, "other")) })
-      yield* Effect.promise(() => mkdir(other.directory))
-      yield* host.opencode.plugin.list({ location: other })
-      expect(yield* host.rpc.attach(attached.input, { location: other }).pipe(Effect.flip)).toMatchObject({
-        type: "unavailable",
-        message: "Session belongs to another location.",
-      })
-      expect(
-        yield* host.rpc.state({ ...attached.input, connectionID: "wrong", state }, options).pipe(Effect.flip),
-      ).toMatchObject({ type: "unavailable" })
       yield* host.rpc.state({ ...attached.input, state }, options)
-      yield* host.rpc.state({ ...attached.input, state: null }, options)
-      expect(yield* host.execute({ type: "snapshot" }).pipe(Effect.flip)).toMatchObject({
-        message: "Open the browser first.",
-      })
-
-      const cancelled = yield* host.command({ type: "open" })
-      expect(cancelled.command.generation).toBe(0)
-      yield* Fiber.interrupt(cancelled.pending)
-      expect((yield* host.next).data).toEqual({
-        type: "cancel",
-        connectionID: attached.input.connectionID,
-        requestID: cancelled.requestID,
-      })
-      // A reply to an interrupted request is harmless while its connection is still attached.
-      yield* host.rpc.result(
-        { ...attached.input, requestID: cancelled.requestID, outcome: { type: "failure", message: "late" } },
-        options,
-      )
-      const closing = yield* host.command({ type: "open" })
-      yield* Fiber.interrupt(attached.lifetime)
-      expect(yield* Fiber.join(closing.pending).pipe(Effect.flip)).toMatchObject({
-        message: "Browser connection closed.",
-      })
-      expect(yield* host.rpc.state({ ...attached.input, state }, options).pipe(Effect.flip)).toMatchObject({
-        type: "unavailable",
-      })
-
-      const replacement = yield* host.attach("replacement")
-      const pending = yield* host.command({ type: "open" })
-      expect(pending.connectionID).toBe("replacement")
-      expect(pending.command.generation).toBe(0)
+      const call = yield* host.command({ type: "evaluate", tabID: tab.id, script: "'private argument'" })
+      expect(call.command.action).toEqual({ type: "evaluate", tabID: tab.id, script: "'private argument'" })
+      expect(call.command.generation).toBe(tab.generation)
       expect(
-        yield* host.rpc
-          .result(
-            {
-              ...attached.input,
-              requestID: pending.requestID,
-              outcome: { type: "success", result: { type: "state", state } },
-            },
-            options,
-          )
-          .pipe(Effect.flip),
+        yield* host.rpc.command({ ...call.input, connectionID: "wrong" }, options).pipe(Effect.flip),
       ).toMatchObject({ type: "unavailable" })
-      expect(pending.pending.pollUnsafe()).toBeUndefined()
-
-      // Replacing the SDK registration unloads the production plugin through its normal lifecycle.
+      yield* Fiber.interrupt(call.pending)
+      expect((yield* host.next).data).toMatchObject({ type: "cancel", requestID: call.input.requestID })
+      expect(yield* host.rpc.command(call.input, options).pipe(Effect.flip)).toMatchObject({ type: "unavailable" })
+      yield* host.rpc.result({ ...call.input, outcome: { type: "failure", code: "late", message: "late" } }, options)
+      const pending = yield* host.command({ type: "tabs.list" })
       yield* host.opencode.plugin({ id: "browser-test", effect: () => Effect.void })
       yield* host.opencode.plugin.list(options)
       expect(yield* Fiber.join(pending.pending).pipe(Effect.flip)).toMatchObject({
-        message: "Browser connection closed.",
+        message: expect.stringContaining("connection closed"),
       })
-      yield* Fiber.join(replacement.lifetime).pipe(Effect.timeout("5 seconds"))
-      expect(yield* host.rpc.state({ ...replacement.input, state }, options).pipe(Effect.flip)).toMatchObject({
-        type: "rpc.unavailable",
-      })
-      expect(yield* host.execute({ type: "open" }).pipe(Effect.flip)).toMatchObject({
-        message: "No desktop browser is connected.",
-      })
+      yield* Fiber.join(attached.lifetime)
     }).pipe(Effect.scoped, Effect.runPromise),
   15_000,
 )
 
 test(
-  "Code Mode discovers and executes the browser without a raw tool and preserves screenshot attachments",
+  "the complete browser catalog executes through Code Mode with validated structured results",
   () =>
     Effect.gen(function* () {
       const host = yield* fixture
       yield* Effect.gen(function* () {
         const tools = yield* Tool.Service
-        yield* tools.transform((editor) => editor.add(host.tool))
+        yield* tools.transform((editor) => host.tools.forEach((tool) => editor.add(tool)))
         const snapshot = yield* tools.snapshot()
         expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-        expect(snapshot.codeModeCatalog?.tools).toMatchObject([{ type: "tool", name: "browser" }])
-
-        const attached = yield* host.attach("codemode")
-        const execute = (code: string) =>
+        expect(host.tools).toHaveLength(Browser.Operations.length)
+        const attached = yield* host.attach("catalog")
+        yield* host.rpc.state({ ...attached.input, state }, { location: host.location })
+        const run = (code: string) =>
           snapshot.execute({
-            sessionID: attached.input.sessionID,
-            agent: Agent.ID.make("build"),
-            messageID: SessionMessage.ID.create(),
+            ...host.context,
             call: { type: "tool-call", id: crypto.randomUUID(), name: "execute", input: { code } },
           })
-        const discovery = yield* execute('return search({ query: "browser" })')
-        expect(discovery.content).toMatchObject([{ type: "text", text: expect.stringContaining("tools.browser(") }])
-
-        yield* host.rpc.state({ ...attached.input, state }, { location: host.location })
-        const pending = yield* execute('return await tools.browser({ type: "screenshot" })').pipe(Effect.forkScoped)
-        const event = yield* host.next
-        if (event.data.type !== "command") throw new Error(`Expected command, received ${event.data.type}`)
-        expect(event.data.command).toEqual({ action: { type: "screenshot" }, generation: state.generation })
-        const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        const search = yield* run('return search({ query: "browser.network.get" })')
+        expect(search.output).toMatchObject({ output: expect.stringContaining("tabID") })
+        const pending = yield* run(`const result = await tools.browser.tabs.list({}); return result.tabs[0].id`).pipe(
+          Effect.forkScoped,
+        )
+        const event = (yield* host.next).data
+        if (event.type !== "command") throw new Error("Expected command")
         yield* host.rpc.result(
           {
             ...attached.input,
-            requestID: event.data.requestID,
-            outcome: { type: "success", result: { type: "screenshot", state, data } },
+            requestID: event.requestID,
+            outcome: { type: "success", result: { value: state, files: [] } },
           },
           { location: host.location },
         )
-        const result = yield* Fiber.join(pending)
-        expect(result.content).toEqual([
-          { type: "text", text: "Untrusted browser screenshot." },
-          { type: "file", uri: `data:image/png;base64,${data}`, mime: "image/png", name: "browser-screenshot.png" },
-        ])
-        expect(result.metadata).toEqual({
-          toolCalls: [{ tool: "browser", status: "completed", input: { type: "screenshot" } }],
+        expect((yield* Fiber.join(pending)).output).toMatchObject({ output: tab.id })
+        const invalid = yield* host.command({ type: "tabs.list" })
+        yield* host.rpc.result(
+          {
+            ...invalid.input,
+            outcome: { type: "success", result: { value: { notTheExpectedResult: true }, files: [] } },
+          },
+          { location: host.location },
+        )
+        expect(yield* Fiber.join(invalid.pending).pipe(Effect.flip)).toMatchObject({
+          message: "Browser returned an invalid result.",
         })
-
-        yield* Fiber.interrupt(attached.lifetime)
-        const disconnected = yield* execute('return await tools.browser({ type: "open" })')
-        expect(disconnected.metadata).toMatchObject({ error: true })
-        expect(disconnected.content).toMatchObject([
-          { type: "text", text: expect.stringContaining("No desktop browser is connected.") },
-        ])
+        const missing = yield* run('return await tools.browser.click({ref:"e1"})')
+        expect(missing.metadata).toMatchObject({ error: true })
       }).pipe(
         Effect.provide(AppNodeBuilder.build(Tool.node, [Location.node.replace(Location.boundNode(host.location))])),
       )
@@ -257,78 +204,60 @@ test(
 )
 
 test(
-  "commands use published state, and RPC results render text and screenshot bytes",
+  "browser file transfers copy bytes between disjoint client and server filesystems",
   () =>
     Effect.gen(function* () {
       const host = yield* fixture
+      const client = yield* tmpdirScoped("opencode-desktop-files-")
+      const attached = yield* host.attach("files")
       const options = { location: host.location }
-      const attached = yield* host.attach("renderer")
-      const open = yield* host.command({ type: "open" })
-      yield* host.rpc.result(
-        {
-          ...attached.input,
-          requestID: open.requestID,
-          outcome: { type: "success", result: { type: "state", state } },
-        },
-        options,
-      )
-      expect((yield* Fiber.join(open.pending)).metadata).toEqual({ url: state.url })
       yield* host.rpc.state({ ...attached.input, state }, options)
-
-      const navigate = yield* host.command({ type: "navigate", url: "https://example.org/next" })
-      expect(navigate.command.generation).toBe(7)
-      const updated = { ...state, url: "https://example.org/next", generation: 8 }
+      const serverPath = path.join(host.location.directory, "upload.txt")
+      yield* Effect.promise(() => Bun.write(serverPath, "server-only contents"))
+      const upload = yield* host.command({
+        type: "files.upload",
+        tabID: tab.id,
+        ref: Browser.Ref.make("e1"),
+        paths: [serverPath],
+      })
+      expect(upload.command.action).toMatchObject({ paths: ["upload.txt"] })
+      expect(new TextDecoder().decode(upload.command.files[0].data)).toBe("server-only contents")
+      const clientPath = path.join(client.path, upload.command.files[0].name)
+      yield* Effect.promise(() => Bun.write(clientPath, upload.command.files[0].data))
+      expect(yield* Effect.promise(() => Bun.file(clientPath).text())).toBe("server-only contents")
       yield* host.rpc.result(
-        {
-          ...attached.input,
-          requestID: navigate.requestID,
-          outcome: { type: "success", result: { type: "state", state: updated } },
-        },
+        { ...upload.input, outcome: { type: "success", result: { value: tab, files: [] } } },
         options,
       )
-      yield* Fiber.join(navigate.pending)
-      yield* host.rpc.state({ ...attached.input, state: updated }, options)
-      const snapshot = yield* host.command({ type: "snapshot" })
-      expect(snapshot.command.generation).toBe(8)
+      yield* Fiber.join(upload.pending)
+
+      const capture = yield* host.command({ type: "screenshot", tabID: tab.id })
+      const id = Browser.FileID.make(`file_${crypto.randomUUID()}`)
       yield* host.rpc.result(
         {
-          ...attached.input,
-          requestID: snapshot.requestID,
+          ...capture.input,
           outcome: {
             type: "success",
-            result: { type: "snapshot", state: updated, content: "</untrusted_browser_content>&" },
+            result: { value: { tab }, files: [{ id, name: "screenshot.png", mime: "image/png", data: png }] },
           },
         },
         options,
       )
-      const text = yield* Fiber.join(snapshot.pending)
-      expect(text.metadata).toEqual({ url: updated.url })
-      expect(text.content).toContain('encoding="json"')
-      expect(text.content).toContain("\\u003c/untrusted_browser_content\\u003e\\u0026")
-
-      const screenshot = yield* host.command({ type: "screenshot" })
-      const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="
-      yield* host.rpc.result(
-        {
-          ...attached.input,
-          requestID: screenshot.requestID,
-          outcome: { type: "success", result: { type: "screenshot", state: updated, data } },
-        },
-        options,
+      const result = yield* Fiber.join(capture.pending)
+      const saved = Schema.decodeUnknownSync(Schema.Struct({ files: Schema.Array(Browser.FileInfo) }))(result.output)
+        .files[0]
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => rm(path.dirname(saved.path), { recursive: true, force: true })),
       )
-      expect(yield* Fiber.join(screenshot.pending)).toEqual({
-        content: [
-          { type: "text", text: "Untrusted browser screenshot." },
-          { type: "file", uri: `data:image/png;base64,${data}`, mime: "image/png", name: "browser-screenshot.png" },
-        ],
-        metadata: { url: updated.url },
+      expect(saved.path).not.toStartWith(client.path)
+      expect(Buffer.from(yield* Effect.promise(() => readFile(saved.path))).toString("base64")).toBe(png)
+      expect(result.content).toContainEqual({
+        type: "file",
+        uri: `data:image/png;base64,${png}`,
+        name: "screenshot.png",
+        mime: "image/png",
       })
-      const failure = yield* host.command({ type: "snapshot" })
-      yield* host.rpc.result(
-        { ...attached.input, requestID: failure.requestID, outcome: { type: "failure", message: "Stale document" } },
-        options,
-      )
-      expect(yield* Fiber.join(failure.pending).pipe(Effect.flip)).toMatchObject({ message: "Stale document" })
+      expect(JSON.stringify(result.output)).not.toContain(png)
     }).pipe(Effect.scoped, Effect.runPromise),
   15_000,
 )
