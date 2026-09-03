@@ -26,7 +26,7 @@ import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/server/tui-event"
-import { Cause, Effect, Exit, Layer, Context, Schema, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Context, Schedule, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -337,6 +337,11 @@ const layer = Layer.effect(
       }
     })
 
+    // Errors that will not resolve by re-spawning the process (e.g. a typo'd
+    // command, missing binary, or a server that cannot initialize in time).
+    const isPermanentLocalError = (error: Error): boolean =>
+      /(ENOENT|EACCES|EPERM|not found|no such file|timed out|timeout)/i.test(error.message)
+
     const connectLocal = Effect.fn("MCP.connectLocal")(function* (
       key: string,
       mcp: ConfigMCPV1.Info & { type: "local" },
@@ -344,20 +349,32 @@ const layer = Layer.effect(
       const [cmd, ...args] = mcp.command
       const baseDir = yield* InstanceState.directory
       const cwd = mcp.cwd ? path.resolve(baseDir, mcp.cwd) : baseDir
-      const transport = new StdioClientTransport({
-        stderr: "pipe",
-        command: cmd,
-        args,
-        cwd,
-        env: {
-          ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-          ...mcp.environment,
-        },
+      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+
+      const attempt = Effect.fn("MCP.connectLocal.attempt")(function* () {
+        const transport = new StdioClientTransport({
+          stderr: "pipe",
+          command: cmd,
+          args,
+          cwd,
+          env: {
+            ...process.env,
+            ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+            ...mcp.environment,
+          },
+        })
+        return yield* connectTransport(transport, connectTimeout)
       })
 
-      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
-      return yield* connectTransport(transport, connectTimeout).pipe(
+      return yield* attempt().pipe(
+        // When servers are spawned in parallel (concurrency: "unbounded"),
+        // transient races (e.g. `bun x` cache contention) can kill a
+        // subprocess before it completes the MCP handshake. Re-spawning the
+        // process resolves those; permanent errors are not retried.
+        Effect.retry({
+          while: (error) => !isPermanentLocalError(error),
+          schedule: Schedule.exponential("200 millis", 2).pipe(Schedule.both(Schedule.recurs(2))),
+        }),
         Effect.map((client): { client: MCPClient | undefined; status: Status } => ({
           client,
           status: { status: "connected" },
