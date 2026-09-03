@@ -46,4 +46,8 @@ test("network lifecycle and RPC version are explicit", () => {
   expect(decode({ ...request, state: "completed", statusCode: 404, durationMs: 3 }).state).toBe("completed")
   expect(() => decode({ ...request, state: "failed" })).toThrow()
   expect(() => Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client" })).toThrow()
+  expect(() =>
+    Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client", version: 2 }),
+  ).toThrow()
+  expect(Schema.decodeUnknownSync(Browser.Definition.methods.attach.output)("replaced")).toBe("replaced")
 })
