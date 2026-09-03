@@ -1,7 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { currentSession } from "../utils/mock-server"
-import pkg from "../../package.json" with { type: "json" }
 
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const sessionA = session("ses_tab_a", "Tab A session")
@@ -249,9 +248,8 @@ test("dedicated experimental settings control vertical tab details", async ({ pa
 
   const settings = page.getByTestId("settings-screen")
   await expect(settings).toBeVisible()
-  const version = settings.getByRole("tablist").getByText(`v${pkg.version}`, { exact: true })
-  await expect(settings.getByRole("tablist").getByText("OpenCode Desktop", { exact: true })).toBeInViewport()
-  await expect(version).toBeInViewport()
+  await expect(settings.getByRole("tablist").getByText("OpenCode Desktop", { exact: true })).toHaveCount(0)
+  await expect(settings.getByRole("tablist").getByText(/^v\d+\./)).toHaveCount(0)
   await settings.getByRole("tab", { name: "Appearance" }).click()
   await expect(settings.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible()
   await expect(settings.locator('[data-action="settings-tab-layout"]')).toHaveCount(0)

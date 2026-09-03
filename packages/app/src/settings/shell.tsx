@@ -4,7 +4,6 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Menu } from "@opencode-ai/ui/menu"
 import { Button } from "@opencode-ai/ui/button"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsGeneral } from "./general/general"
 import { SettingsAppearance } from "./appearance/appearance"
 import { SettingsExperimental } from "./experimental/experimental"
@@ -16,6 +15,7 @@ import { SettingsServers } from "./servers/servers"
 import { SettingsWorkspaces } from "./workspaces/workspaces"
 import { SettingsProjects } from "./workspaces/projects"
 import { SettingsExtensions } from "./providers/extensions"
+import { SettingsAbout } from "./about/about"
 import { SettingsServerScope } from "./server-scope"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/shell/state/layout"
@@ -44,11 +44,11 @@ const sections = [
     { value: "extensions", icon: "extensions", label: "settings.tab.extensions" },
   ],
   [{ value: "experimental", icon: "flask", label: "settings.tab.experimental" }],
+  [{ value: "about", icon: "info", label: "settings.tab.about" }],
 ] as const
 
 export const SettingsScreen: Component = () => {
   const language = useLanguage()
-  const platform = usePlatform()
   const dialog = useDialog()
   const command = useCommand()
   const surface = useSettingsSurface()
@@ -187,12 +187,6 @@ export const SettingsScreen: Component = () => {
               </For>
             </div>
           </div>
-          <div class="settings-nav-footer">
-            <span>{language.t("app.name.desktop")}</span>
-            <span>
-              <bdi dir="ltr">v{platform.version}</bdi>
-            </span>
-          </div>
         </Tabs.List>
 
         <Tabs.Content value="general" class="settings-panel">
@@ -230,6 +224,9 @@ export const SettingsScreen: Component = () => {
             <SettingsExtensions />
           </Tabs.Content>
         </SettingsServerScope>
+        <Tabs.Content value="about" class="settings-panel settings-about">
+          <SettingsAbout active={surface.tab() === "about"} />
+        </Tabs.Content>
       </Tabs>
     </div>
   )
