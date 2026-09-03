@@ -436,7 +436,20 @@ export function DraftTabItem(props: {
         classList={{ "flex-1": props.orientation === "vertical", "flex-none pe-10": props.orientation !== "vertical" }}
       >
         <span class="flex size-4 shrink-0 items-center justify-center">
-          <Icon name="edit" />
+          <svg
+            class="text-v2-icon-icon-muted group-data-[active='true']:text-v2-icon-icon-base"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M9.00002 13.5H14M2.60419 10.9167V13.3958H5.08335L13.3959 5.08333L10.9167 2.60416L2.60419 10.9167Z"
+              stroke="currentColor"
+            />
+          </svg>
         </span>
         <span
           data-titlebar-tab-title

@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createResource, Match, Show, Switch, untrack } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -13,7 +13,7 @@ import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { WindowsAppMenu } from "./windows-menu"
-import { applyPath, backPath, forwardPath } from "./history"
+import { applyPath, backPath, forwardPath, type HistoryLocation } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -75,7 +75,7 @@ export function Titlebar(props: {
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
 
   const [history, setHistory] = createStore({
-    stack: [] as string[],
+    stack: [] as HistoryLocation[],
     index: 0,
     action: undefined as "back" | "forward" | undefined,
   })
@@ -83,7 +83,7 @@ export function Titlebar(props: {
   const path = () => `${location.pathname}${location.search}${location.hash}`
 
   createEffect(() => {
-    const current = path()
+    const current = { url: path(), state: location.state }
 
     untrack(() => {
       const next = applyPath(history, current)
@@ -113,14 +113,14 @@ export function Titlebar(props: {
     const next = backPath(history)
     if (!next) return
     setHistory(next.state)
-    navigate(next.to)
+    navigate(next.to.url, { state: unwrap(next.to.state) })
   }
 
   const forward = () => {
     const next = forwardPath(history)
     if (!next) return
     setHistory(next.state)
-    navigate(next.to)
+    navigate(next.to.url, { state: unwrap(next.to.state) })
   }
 
   command.register(() => [
@@ -297,6 +297,7 @@ export function Titlebar(props: {
                   void tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
                   return
                 }
+                case "settings":
                 case "home": {
                   const selection = layout.home.selection()
                   const conn =
@@ -432,8 +433,8 @@ export function Titlebar(props: {
                   "md:pl-4": !macTrafficLights(),
                 }}
               >
-                <Show when={!mobile() && !props.verticalTabs}>
-                  <ChannelIndicator debugTools={props.debugTools} />
+                <Show when={!mobile() && (!props.verticalTabs || windows())}>
+                  <ChannelIndicator debugTools={props.debugTools} height={windows() ? minHeight() : undefined} />
                 </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
@@ -624,10 +625,22 @@ export function Titlebar(props: {
                           >
                             <Show when={macVerticalTabs()}>
                               <div
-                                class="relative w-full shrink-0"
+                                class="relative mb-2 w-full shrink-0"
                                 style={{ height: `${macTrafficLightsTopClearance / zoom()}px` }}
                                 data-tauri-drag-region
-                              ></div>
+                              >
+                                <div
+                                  class="absolute -top-0.5 bottom-0.5 flex items-center"
+                                  style={{
+                                    // Native traffic lights stay on the physical left; subtract the sidebar padding.
+                                    left: macTrafficLights()
+                                      ? `calc(${macTrafficLightsBaseWidth / zoom()}px - 0.625rem)`
+                                      : "0px",
+                                  }}
+                                >
+                                  <ChannelIndicator debugTools={props.debugTools} />
+                                </div>
+                              </div>
                             </Show>
                             {homeButton(true)}
                             <button
@@ -640,7 +653,7 @@ export function Titlebar(props: {
                               <Icon name="plus" />
                               {language.t("command.session.new")}
                             </button>
-                            <div class="my-1 h-px w-full shrink-0 bg-v2-border-border-muted" aria-hidden="true" />
+                            <div class="h-4 w-full shrink-0" aria-hidden="true" />
                             <div class="flex min-h-0 flex-1 flex-col gap-1">
                               <TitlebarTabStrip
                                 orientation="vertical"
@@ -657,13 +670,14 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <div data-slot="vertical-tabs-footer" class="relative mt-auto h-9 w-full shrink-0">
-                              <div class="absolute bottom-0 left-0 flex h-9 items-center">
+                            <div
+                              data-slot="vertical-tabs-footer"
+                              class="mt-auto flex h-9 w-full shrink-0 items-center gap-1.5"
+                            >
+                              <TitlebarRightMount />
+                              <Show when={!macVerticalTabs() && !windows()}>
                                 <ChannelIndicator debugTools={props.debugTools} />
-                              </div>
-                              <div class="absolute bottom-0 right-0 flex h-9 items-center">
-                                <TitlebarRightMount />
-                              </div>
+                              </Show>
                             </div>
                           </Portal>
                         )}
@@ -739,13 +753,19 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   )
 }
 
-function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void } }) {
+function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void }; height?: string }) {
+  const platform = usePlatform()
+  const style = () => ({
+    height: props.height,
+    "font-size": platform.platform === "desktop" && platform.os === "macos" ? "9px" : "10px",
+  })
   const channel = import.meta.env.VITE_OPENCODE_CHANNEL
   if (channel === "dev" && props.debugTools) {
     return (
       <button
         type="button"
-        class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono cursor-pointer"
+        class="inline-flex h-4 shrink-0 items-center bg-icon-interactive-base text-[#FFF] leading-4 font-medium px-1.5 rounded-full uppercase font-mono cursor-pointer [app-region:no-drag]"
+        style={style()}
         onClick={props.debugTools.toggle}
         aria-label="Toggle debug tools"
         aria-pressed={props.debugTools.visible}
@@ -759,7 +779,10 @@ function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () =
   return (
     <Show when={label}>
       {(value) => (
-        <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
+        <div
+          class="inline-flex h-4 shrink-0 items-center bg-icon-interactive-base text-[#FFF] leading-4 font-medium px-1.5 rounded-full uppercase font-mono"
+          style={style()}
+        >
           {value()}
         </div>
       )}
