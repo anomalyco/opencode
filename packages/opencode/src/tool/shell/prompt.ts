@@ -19,6 +19,10 @@ export function parameterSchema() {
     workdir: Schema.optional(Schema.String).annotate({
       description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
     }),
+    run_in_background: Schema.optional(Schema.Boolean).annotate({
+      description:
+        "Set to true to run the command in the background and return immediately. The output is delivered automatically when the command exits; do not poll, sleep, or re-run the command while it runs. Intended for long-running commands like dev servers, watch processes, builds, or long test suites.",
+    }),
   })
 }
 
@@ -270,7 +274,22 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
   }
 }
 
-export function render(name: string, platform: NodeJS.Platform, limits: Limits, defaultTimeoutMs: number) {
+function backgroundSection(enabled: boolean) {
+  if (!enabled) return ""
+  return `# Running commands in the background
+- Set \`run_in_background: true\` for long-running commands (dev servers, watch modes, builds, long test suites) so you do not block on them.
+- The tool returns immediately with a \`jobId\` in its metadata; when the command exits, its output is delivered to you automatically as a new message.
+- While a background command runs, NEVER sleep, poll, check on it, or re-run it to see progress. Continue other work or briefly tell the user what you started and end your turn.
+- Do not use it when the next step depends on the command's result; run those commands in the foreground.`
+}
+
+export function render(
+  name: string,
+  platform: NodeJS.Platform,
+  limits: Limits,
+  defaultTimeoutMs: number,
+  options?: { background?: boolean },
+) {
   const selected = profile(name, platform, limits, defaultTimeoutMs)
   return {
     description: renderPrompt(DESCRIPTION, {
@@ -280,6 +299,7 @@ export function render(name: string, platform: NodeJS.Platform, limits: Limits, 
       tmp: Global.Path.tmp,
       workdirSection: selected.workdirSection,
       commandSection: selected.commandSection,
+      backgroundSection: backgroundSection(options?.background === true),
       gitCommands: selected.gitCommands,
       toolName: ShellID.ToolID,
       gitCommandRestriction: selected.gitCommandRestriction,
