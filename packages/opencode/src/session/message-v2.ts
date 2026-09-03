@@ -603,17 +603,101 @@ function isAfter(info: Info, other?: Info) {
   return info.id > other.id
 }
 
+// Transport failures that can recover without changing the request. Every code
+// here is still bounded by the global retry limit (~60s of backoff) and then
+// surfaces, so a genuinely broken endpoint still reports within a minute.
+//
+// Bun's native fetch collapses DNS failure, refused connection, TLS mismatch,
+// and unroutable network into a single ConnectionRefused with one shared
+// message, so it cannot be treated as permanent without also giving up retries
+// for wifi flaps, VPN reconnects, and sleep/wake. Bounded retry is the only
+// classification that serves both.
+const TRANSIENT_SYS_CODES = new Set([
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET",
+  "ConnectionClosed",
+  "ConnectionRefused",
+  "FailedToOpenSocket",
+  "Timeout",
+])
+// Node and undici report these only for a genuinely unresolvable or refused
+// endpoint, so they stay permanent and surface immediately. They are reachable
+// through a custom fetch implementation rather than Bun's own.
+const PERMANENT_SYS_CODES = new Set(["ENOTFOUND", "ECONNREFUSED", "DNSResolveFailed", "DNSResolutionFailed"])
+const TRANSIENT_ERROR_CODES = new Set([
+  "TimeoutError",
+  "NETWORK_ERROR",
+  "ZlibError",
+  "ProviderHeaderTimeoutError",
+  "ProviderResponseStreamError",
+])
+const CAUSE_MAX_DEPTH = 8
+
+export function isPermanentTransportCode(code: unknown) {
+  return typeof code === "string" && PERMANENT_SYS_CODES.has(code)
+}
+
+export function isTransientTransportCode(code: unknown) {
+  return typeof code === "string" && (TRANSIENT_SYS_CODES.has(code) || TRANSIENT_ERROR_CODES.has(code))
+}
+
+// Exact messages emitted for a prematurely closed transport. Generic text
+// such as "network error" or "fetch failed" cannot distinguish a transient
+// disconnect from a permanent DNS, TLS, authentication, or endpoint failure.
+const TRANSIENT_MESSAGES = new Set(["socket hang up", "sse read timed out", "other side closed", "terminated"])
+
+// Walks the cause chain, which is where a transport fault ends up once the
+// provider SDK wraps it. CAUSE_MAX_DEPTH bounds the walk, so a self-referential
+// cause cannot spin.
+function classifyTransportError(error: unknown) {
+  let current = error
+  let transient: SystemError | undefined
+  for (let depth = 0; depth < CAUSE_MAX_DEPTH; depth++) {
+    if (!(current instanceof Error)) break
+    const code = "code" in current && typeof current.code === "string" ? current.code : undefined
+    if (isPermanentTransportCode(code)) return { type: "permanent" as const, error: current as SystemError }
+    if (!transient && code && TRANSIENT_SYS_CODES.has(code)) transient = current as SystemError
+    current = current.cause
+  }
+  if (transient) return { type: "transient" as const, error: transient }
+  return undefined
+}
+
 export function fromError(
   e: unknown,
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
+  const error = classify(e, ctx)
+  // A cancelled request must never be retried. Abort can surface as a
+  // transport-shaped failure instead of an interrupt when it races the read, so
+  // rather than guarding each transport branch, refuse every retryable
+  // classification once the turn is known to be aborted.
+  if (ctx.aborted && APIError.isInstance(error) && error.data.isRetryable)
+    return new AbortedError({ message: error.data.message }, { cause: e }).toObject()
+  return error
+}
+
+function classify(e: unknown, ctx: { providerID: ProviderV2.ID; aborted?: boolean }): NonNullable<Assistant["error"]> {
+  const transport = classifyTransportError(e)
+  const transient = transport?.type === "transient" ? transport.error : undefined
+  const permanent = transport?.type === "permanent" ? transport.error : undefined
+  const sysCode = transient?.code
   switch (true) {
     case e instanceof DOMException && e.name === "AbortError":
-      return new AbortedError(
-        { message: e.message },
-        {
-          cause: e,
-        },
+      // Controlled timeouts carry their own error types. A bare AbortError is a cancellation.
+      return new AbortedError({ message: e.message }, { cause: e }).toObject()
+    case e instanceof DOMException && e.name === "TimeoutError":
+      return new APIError(
+        { message: e.message || "Request timed out", isRetryable: true, metadata: { code: "TimeoutError" } },
+        { cause: e },
       ).toObject()
     case OutputLengthError.isInstance(e):
       return e
@@ -625,23 +709,23 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case (e as SystemError)?.code === "ECONNRESET":
+    // An APICallError carrying a transport fault is handled in its own branch
+    // below so the response envelope survives; this branch is for a bare
+    // transport error with no response.
+    case sysCode !== undefined && !APICallError.isInstance(e):
       return new APIError(
         {
-          message: "Connection reset by server",
+          message: sysCode === "ECONNRESET" ? "Connection reset by server" : `Network error (${sysCode})`,
           isRetryable: true,
           metadata: {
-            code: (e as SystemError).code ?? "",
-            syscall: (e as SystemError).syscall ?? "",
-            message: (e as SystemError).message ?? "",
+            code: sysCode,
+            syscall: transient?.syscall ?? "",
+            message: transient?.message ?? "",
           },
         },
         { cause: e },
       ).toObject()
     case e instanceof Error && (e as FetchDecompressionError).code === "ZlibError":
-      if (ctx.aborted) {
-        return new AbortedError({ message: e.message }, { cause: e }).toObject()
-      }
       return new APIError(
         {
           message: "Response decompression failed",
@@ -691,15 +775,31 @@ export function fromError(
         ).toObject()
       }
 
+      // Keep the response envelope even when a transport fault is the root
+      // cause: retry-after headers and the body are the useful diagnostics, and
+      // replacing them with a bare network error loses both.
+      const transportError = permanent ?? transient
       return new APIError(
         {
           message: parsed.message,
           statusCode: parsed.statusCode,
-          isRetryable: parsed.isRetryable,
+          isRetryable: permanent ? false : transient !== undefined || parsed.isRetryable,
           responseHeaders: parsed.responseHeaders,
           responseBody: parsed.responseBody,
-          metadata: parsed.metadata,
+          metadata: transportError
+            ? {
+                ...parsed.metadata,
+                code: transportError.code ?? "",
+                syscall: transportError.syscall ?? "",
+                message: transportError.message ?? "",
+              }
+            : parsed.metadata,
         },
+        { cause: e },
+      ).toObject()
+    case e instanceof Error && TRANSIENT_MESSAGES.has(e.message.toLowerCase()):
+      return new APIError(
+        { message: e.message, isRetryable: true, metadata: { code: "NETWORK_ERROR", message: e.message } },
         { cause: e },
       ).toObject()
     case e instanceof Error:

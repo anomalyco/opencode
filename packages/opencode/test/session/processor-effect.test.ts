@@ -507,8 +507,9 @@ it.live("session.processor effect tests reset reasoning state across retries", (
 
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(2)
-        expect(reasoning.some((part) => part.text === "two")).toBe(true)
-        expect(reasoning.some((part) => part.text === "onetwo")).toBe(false)
+        // The retry neither appends to the abandoned part nor leaves it behind:
+        // "one" is removed with the rest of the failed attempt.
+        expect(reasoning.map((part) => part.text)).toEqual(["two"])
       }),
     { config: (url) => providerCfg(url) },
   ),
@@ -757,6 +758,59 @@ it.live("session.processor effect tests publish retry status updates", () =>
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(2)
         expect(states).toStrictEqual([1])
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests discard a failed attempt's parts before retrying", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        // A genuine mid-stream drop: text is written, then the connection is
+        // reset. Retrying replays the request unchanged, so the truncated text
+        // has to be removed or the transcript ends up holding both it and the
+        // full replacement.
+        yield* llm.push(reply().text("partial out").reset())
+        yield* llm.text("recovered")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "partial")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "partial" }],
+          tools: {},
+        })
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(2)
+        expect(handle.message.error).toBeUndefined()
+        expect(
+          (yield* MessageV2.parts(msg.id))
+            .filter((part): part is SessionV1.TextPart => part.type === "text")
+            .map((part) => part.text),
+        ).toEqual(["recovered"])
       }),
     { config: (url) => providerCfg(url) },
   ),
