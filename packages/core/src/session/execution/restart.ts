@@ -11,6 +11,7 @@ import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
+import { SubagentJob } from "../subagent-job.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
@@ -163,28 +164,9 @@ export const layer = (options?: Options) =>
           return
         }
 
-        yield* jobs.start({
+        yield* SubagentJob.start(sessions, jobs, recovery, {
           id: background.id,
-          type: "subagent",
-          title: recovery.description,
           notificationID: background.notificationID,
-          recovery,
-          run: execution.resume(recovery.childSessionID).pipe(
-            Effect.andThen(store.context(recovery.childSessionID)),
-            Effect.map((messages) => {
-              const assistant = messages.findLast(
-                (message) =>
-                  message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-              )
-              if (assistant?.type !== "assistant") return "Subagent completed without a text response."
-              return (
-                assistant.content
-                  .filter((part) => part.type === "text")
-                  .map((part) => part.text)
-                  .join("") || "Subagent completed without a text response."
-              )
-            }),
-          ),
         })
         yield* jobs.background(background.id)
         yield* jobs.wait({ id: background.id }).pipe(

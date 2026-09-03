@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { AIError, TransportError } from "@opencode-ai/ai"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Model } from "@opencode-ai/schema/model"
+import { Provider } from "@opencode-ai/schema/provider"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -15,13 +18,13 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
-import { UserInterruptedError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
-import { SessionInboxTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SubagentJob } from "@opencode-ai/core/session/subagent-job"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -50,10 +53,6 @@ describe("SessionExecution lifecycle", () => {
     const interrupted = Effect.runSyncExit(Effect.interrupt)
     expect(SessionExecution.terminal(interrupted)).toEqual({ type: "interrupted", reason: "shutdown" })
     expect(SessionExecution.terminal(interrupted, "user")).toEqual({ type: "interrupted", reason: "user" })
-    expect(SessionExecution.terminal(Exit.fail(new UserInterruptedError()))).toEqual({
-      type: "interrupted",
-      reason: "user",
-    })
   })
 
   it.effect("the sweep only lists claimed top-level Sessions", () =>
@@ -376,6 +375,97 @@ describe("SessionExecution lifecycle", () => {
       expect((yield* claims(database))[sessionID]).toBe(true)
     }),
   )
+})
+
+describe("Subagent job results", () => {
+  for (const recovered of [false, true]) {
+    for (const result of ["text", "empty", "stale"] as const) {
+      it.effect(`${recovered ? "recovered" : "live"} jobs use the same ${result} result selection`, () =>
+        Effect.gen(function* () {
+          const database = yield* Database.Service
+          const jobs = yield* Job.Service
+          const parent = Session.ID.make("ses_result_parent")
+          const child = Session.ID.make("ses_result_child")
+          yield* seedSessions(database, [parent])
+          yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now() })
+          const data = {
+            agent: Agent.ID.make("explore"),
+            model: Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") }),
+            time: { created: 1, completed: 2 },
+          }
+          yield* database.db
+            .insert(SessionMessageTable)
+            .values([
+              ...[
+                { ...data, content: [{ type: "text" as const, text: "Older answer" }] },
+                {
+                  ...data,
+                  content: [
+                    { type: "reasoning" as const, text: "Not part of the result" },
+                    ...(result === "empty"
+                      ? []
+                      : [
+                          { type: "text" as const, text: "Final " },
+                          { type: "text" as const, text: "answer" },
+                        ]),
+                  ],
+                },
+                {
+                  ...data,
+                  content: [{ type: "text" as const, text: "Failed answer" }],
+                  error: { type: "unknown", message: "Failed" },
+                },
+                { ...data, time: { created: 1 }, content: [{ type: "text" as const, text: "Unfinished answer" }] },
+              ].map((data, seq) => ({
+                id: SessionMessage.ID.create(),
+                session_id: child,
+                type: "assistant" as const,
+                seq: seq + 1,
+                data,
+              })),
+              ...Array.from({ length: result === "stale" ? 20 : 0 }, (_, seq) => ({
+                id: SessionMessage.ID.create(),
+                session_id: child,
+                type: "synthetic" as const,
+                seq: seq + 5,
+                data: { text: "Later activity", time: { created: 3 } },
+              })),
+            ])
+            .run()
+            .pipe(Effect.orDie)
+
+          const recovery = {
+            kind: "subagent" as const,
+            parentSessionID: parent,
+            childSessionID: child,
+            agent: "explore",
+            description: "Select the child result",
+          }
+          const scope = yield* Scope.make()
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+          const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+          const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted)
+          const sessions = Context.get(context, Session.Service)
+          const id = recovered ? "recovered-child-job" : child
+          if (recovered) {
+            yield* jobs.start({ id, type: "subagent", recovery, run: Effect.never })
+            const marker = yield* jobs.background(id)
+            yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+            expect((yield* restarted.get(id))?.notificationID).toBe(marker?.notificationID)
+          }
+          if (!recovered) yield* SubagentJob.start(sessions, restarted, recovery)
+
+          expect((yield* restarted.wait({ id })).info).toMatchObject({
+            id,
+            type: "subagent",
+            title: recovery.description,
+            status: "completed",
+            output: result === "text" ? "Final answer" : "Subagent completed without a text response.",
+          })
+        }),
+      )
+    }
+  }
 })
 
 describe("SessionRestart background recovery", () => {
@@ -1342,6 +1432,7 @@ function buildExecution(
         const execution = yield* SessionExecution.Service
         return Session.Service.of({
           ...sessions,
+          resume: execution.resume,
           synthetic: (input) =>
             sessions
               .synthetic({ ...input, resume: false })

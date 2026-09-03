@@ -4,7 +4,7 @@ import type { AIError } from "@opencode-ai/ai"
 import { Context, Data, Effect } from "effect"
 import { SessionSchema } from "../schema.js"
 import type { Promotable } from "../inbox.js"
-import type { AgentNotFoundError, MessageDecodeError, StepFailedError, UserInterruptedError } from "../error.js"
+import type { AgentNotFoundError, MessageDecodeError, StepFailedError } from "../error.js"
 import { SessionRunnerModel } from "./model.js"
 import type { Instructions } from "../../instructions/index.js"
 
@@ -14,7 +14,6 @@ export type RunError =
   | MessageDecodeError
   | AgentNotFoundError
   | StepFailedError
-  | UserInterruptedError
   | Instructions.InitializationBlocked
 
 export type Continuation = { readonly step: number }
