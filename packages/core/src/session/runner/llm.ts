@@ -11,6 +11,7 @@ import {
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
+import { ConfigInfinite } from "../../config/infinite"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
@@ -28,9 +29,13 @@ import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
+import { SessionInfinite } from "../infinite"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
+import { Prompt } from "../prompt"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
+import { SessionTodo } from "../todo"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
@@ -105,6 +110,9 @@ const layer = Layer.effect(
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
+    const todos = yield* SessionTodo.Service
+    const permissions = yield* PermissionV2.Service
+    const questions = yield* QuestionV2.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -349,7 +357,11 @@ const layer = Layer.effect(
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
-          return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
+          return {
+            needsContinuation: !publisher.hasProviderError() && needsContinuation,
+            step: currentStep,
+            hadProviderError: publisher.hasProviderError(),
+          }
         }),
       )
     }, Effect.scoped)
@@ -357,7 +369,10 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-    ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
+    ) => Effect.Effect<
+      { readonly needsContinuation: boolean; readonly step: number; readonly hadProviderError: boolean },
+      RunError
+    >
 
     const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
       return yield* runTurnAttempt(sessionID, promotion, step).pipe(
@@ -387,6 +402,50 @@ const layer = Layer.effect(
       )
     })
 
+    const lastAssistantText = Effect.fn("SessionRunner.lastAssistantText")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      const context = yield* store.context(sessionID)
+      const assistant = context.toReversed().find((message) => message.type === "assistant")
+      if (!assistant || assistant.type !== "assistant") return ""
+      return assistant.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+    })
+
+    const maybeInfiniteContinue = Effect.fn("SessionRunner.maybeInfiniteContinue")(function* (
+      sessionID: SessionSchema.ID,
+      hadProviderError: boolean,
+    ) {
+      if (hadProviderError) return false
+      if (!SessionInfinite.isEnabled(sessionID)) return false
+      const entries = yield* config.entries()
+      const settings = ConfigInfinite.resolve(
+        entries
+          .filter((entry): entry is Config.Document => entry.type === "document")
+          .flatMap((entry) => (entry.info.infinite ? [entry.info.infinite] : [])),
+      )
+      const pendingPermissions = yield* permissions.forSession(sessionID)
+      if (pendingPermissions.length > 0) return false
+      const pendingQuestions = (yield* questions.list()).filter((request) => request.sessionID === sessionID)
+      if (pendingQuestions.length > 0) return false
+      const progress = SessionInfinite.getProgress(sessionID) ?? { iterations: 0, startedAt: Date.now() }
+      if (progress.iterations >= settings.maxIterations) return false
+      if (Date.now() - progress.startedAt >= settings.maxHours * 3_600_000) return false
+      const text = yield* lastAssistantText(sessionID)
+      if (SessionInfinite.containsSentinel(text, settings.sentinel)) return false
+      if (settings.todoDetection) {
+        const current = yield* todos.get(sessionID)
+        if (SessionInfinite.isTerminated(current)) return false
+      }
+      yield* SessionInput.admit(db, events, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        prompt: Prompt.make({ text: SessionInfinite.continuationPrompt(settings.sentinel) }),
+        delivery: "steer",
+      })
+      SessionInfinite.recordIteration(sessionID)
+      return true
+    })
+
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
@@ -400,12 +459,23 @@ const layer = Layer.effect(
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
+        let hadProviderError = false
         while (needsContinuation) {
           const result = yield* runTurn(input.sessionID, promotion, step)
           needsContinuation = result.needsContinuation
+          hadProviderError = result.hadProviderError
           step = result.step + 1
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          if (!needsContinuation) {
+            const continued = yield* maybeInfiniteContinue(input.sessionID, hadProviderError)
+            if (continued) {
+              needsContinuation = true
+              hadProviderError = false
+              step = 1
+              promotion = "steer"
+            }
+          }
         }
         shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = shouldRun ? "queue" : undefined
@@ -428,6 +498,9 @@ export const node = makeLocationNode({
     ToolRegistry.node,
     SessionRunnerModel.node,
     SessionStore.node,
+    SessionTodo.node,
+    PermissionV2.node,
+    QuestionV2.node,
     Location.node,
     SystemContextRegistry.node,
     SkillGuidance.node,

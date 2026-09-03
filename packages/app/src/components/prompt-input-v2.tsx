@@ -21,6 +21,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePermission } from "@/context/permission"
 import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
+import { useLocal } from "@/context/local"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -89,6 +90,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const local = useLocal()
   const prompt = props.state ?? usePrompt()
   let editor: HTMLDivElement | undefined
 
@@ -399,6 +401,14 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         current: () => props.controls.model.selection.variant.current() ?? "default",
         onSelect: (value) => props.controls.model.selection.variant.set(value === "default" ? undefined : value),
         keybind: () => command.keybindParts("model.variant.cycle"),
+      },
+      mode: {
+        options: () => [
+          { id: "complete", label: language.t("session.mode.complete") },
+          { id: "infinite", label: language.t("session.mode.infinite") },
+        ],
+        current: () => local.mode.current(),
+        onSelect: (value) => local.mode.set(value === "infinite" ? "infinite" : "complete"),
       },
       submit: {
         stopping,
