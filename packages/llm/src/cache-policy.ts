@@ -96,16 +96,31 @@ const markMessages = (
   return next
 }
 
-export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
-  if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
+// Compute only the fields the policy changes, as an `LLMRequest.update` patch,
+// or `undefined` when nothing changes. Returning a patch (rather than a rebuilt
+// request) lets the caller fold this into a single `LLMRequest.update` alongside
+// other option merges, so the O(n) message-history schema re-decode inside the
+// constructor is paid once per request instead of once per merge step.
+export const cachePolicyPatch = (request: LLMRequest): Partial<LLMRequest.Input> | undefined => {
+  if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return undefined
   const policy = resolve(request.cache)
-  if (!policy.tools && !policy.system && !policy.messages) return request
+  if (!policy.tools && !policy.system && !policy.messages) return undefined
 
   const hint = makeHint(policy.ttlSeconds)
   const tools = policy.tools ? markLastTool(request.tools, hint) : request.tools
   const system = policy.system ? markLastSystem(request.system, hint) : request.system
   const messages = policy.messages ? markMessages(request.messages, policy.messages, hint) : request.messages
 
-  if (tools === request.tools && system === request.system && messages === request.messages) return request
-  return LLMRequest.update(request, { tools, system, messages })
+  const patch: Partial<LLMRequest.Input> = {
+    ...(tools !== request.tools ? { tools } : undefined),
+    ...(system !== request.system ? { system } : undefined),
+    ...(messages !== request.messages ? { messages } : undefined),
+  }
+  if (Object.keys(patch).length === 0) return undefined
+  return patch
+}
+
+export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
+  const patch = cachePolicyPatch(request)
+  return patch ? LLMRequest.update(request, patch) : request
 }
