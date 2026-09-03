@@ -21,17 +21,16 @@ const accountForm = Form.Fields.make([
     title: "Snowflake account",
     placeholder: "myorg-myaccount",
     required: true,
-    pattern: "^\\s*(?:https?://)?[\\w-]+(?:\\.[\\w-]+)*/*\\s*$",
   },
 ])
 const Token = Schema.Struct({
   access_token: Schema.NonEmptyString,
-  refresh_token: Schema.optional(Schema.NonEmptyString),
+  refresh_token: Schema.optional(Schema.String),
   expires_in: Schema.optional(Schema.Number),
 })
 const decodeError = Schema.decodeUnknownOption(
   Schema.fromJsonString(
-    Schema.Struct({ message: Schema.optional(Schema.String), error: Schema.optional(Schema.String) }),
+    Schema.Struct({ message: Schema.optional(Schema.Unknown), error: Schema.optional(Schema.Unknown) }),
   ),
 )
 
@@ -55,7 +54,7 @@ export const SnowflakeCortexPlugin = define({
           HttpClientRequest.setHeaders({
             Accept: "application/json",
             "User-Agent": App.useragent(ctx.app),
-            // Snowflake's public local-app client uses its ID as both Basic credentials.
+            // Same built-in OAuth client and Basic header as V1; this is not a user password.
             Authorization: `Basic ${Buffer.from(`${clientID}:${clientID}`).toString("base64")}`,
           }),
           HttpClientRequest.bodyUrlParams({ ...form, client_id: clientID }),
@@ -66,7 +65,7 @@ export const SnowflakeCortexPlugin = define({
           new Error(`Snowflake token request failed (${response.status}): ${yield* response.text}`),
         )
       const tokens = yield* HttpClientResponse.schemaBodyJson(Token)(response)
-      const refresh = tokens.refresh_token ?? current
+      const refresh = tokens.refresh_token || current
       if (!refresh) return yield* Effect.fail(new Error("Snowflake token response did not include refresh_token"))
       return Credential.OAuth.make({
         type: "oauth",
@@ -107,7 +106,7 @@ export const SnowflakeCortexPlugin = define({
         authorize: (answer) =>
           Effect.gen(function* () {
             const account = normalizeAccount(answer.account)
-            if (!account) return yield* Effect.fail(new Error("A valid Snowflake account is required"))
+            if (!account) return yield* Effect.fail(new Error("Snowflake account is required"))
             const role = typeof answer.role === "string" ? answer.role.trim() : ""
             const verifier = Buffer.from(crypto.getRandomValues(new Uint8Array(48))).toString("base64url")
             const challenge = Buffer.from(
@@ -226,7 +225,9 @@ export const SnowflakeCortexPlugin = define({
       Effect.fn(function* (event) {
         if (event.response.status !== 400) return
         const error = Option.getOrUndefined(decodeError(yield* Effect.promise(() => event.response.clone().text())))
-        if (!(error?.message || error?.error)?.toLowerCase().includes("conversation complete")) return
+        // oxlint-disable-next-line typescript-eslint/no-base-to-string -- Preserve V1's error-body coercion.
+        const message = String(error?.message || error?.error || "")
+        if (!message.toLowerCase().includes("conversation complete")) return
         event.response = new Response(
           'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
           { headers: { "content-type": "text/event-stream" } },
@@ -250,12 +251,11 @@ export const SnowflakeCortexPlugin = define({
 
 function normalizeAccount(value: unknown) {
   if (typeof value !== "string") return ""
-  const account = value
+  return value
     .trim()
     .replace(/^https?:\/\//i, "")
     .replace(/\/+$/, "")
     .replace(/\.snowflakecomputing\.com$/i, "")
-  return /^[\w-]+(?:\.[\w-]+)*$/.test(account) && account.toLowerCase() !== "snowflakecomputing.com" ? account : ""
 }
 
 function issuer(account: string) {

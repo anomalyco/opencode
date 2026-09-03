@@ -139,7 +139,7 @@ it.live("browser OAuth supplies the native endpoint/token and refreshes a reject
       test.replies.push(new Response("Unauthorized", { status: 401 }))
       expect((yield* test.send.pipe(Effect.exit))._tag).toBe("Failure")
       expect(test.requests[1].headers.get("authorization")).toBe("Bearer access")
-      test.replies.push(Response.json({ access_token: "renewed", expires_in: 3600 }))
+      test.replies.push(Response.json({ access_token: "renewed", refresh_token: "", expires_in: 3600 }))
       const retry = {
         ...test.scope,
         error: { type: "provider.authentication", message: "Unauthorized", status: 401 },
@@ -149,7 +149,7 @@ it.live("browser OAuth supplies the native endpoint/token and refreshes a reject
       expect((yield* test.hooks.trigger("session", "retry", retry)).decision).toEqual({ retry: true, delay: 0 })
       const refresh = new URLSearchParams(yield* Effect.promise(() => test.requests[2].text()))
       expect(Object.fromEntries(refresh)).toMatchObject({ grant_type: "refresh_token", refresh_token: "refresh" })
-      test.replies.push(Response.json({ message: "Conversation complete" }, { status: 400 }))
+      test.replies.push(Response.json({ message: "Conversation complete", error: {} }, { status: 400 }))
       expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
       expect(test.requests[3].headers.get("authorization")).toBe("Bearer renewed")
       expect(
