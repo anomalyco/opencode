@@ -125,7 +125,7 @@ export function ShellTab(props: { sessionID: string }) {
                   backgroundColor={
                     active() ? theme.background.action.primary.focused : theme.background.action.primary.default
                   }
-                  onMouseOver={() => setStore("selected", index())}
+                  onMouseMove={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
                     open()
