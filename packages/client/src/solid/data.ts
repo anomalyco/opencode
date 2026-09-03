@@ -52,7 +52,7 @@ import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-
 
 export type DataSessionStatus = "idle" | "running"
 type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
-type SessionMove = Omit<OpenCodeEventMap["session.moved"]["data"], "sessionID">
+type SessionPlacementEvent = OpenCodeEventMap["session.moved" | "worktree.resolved"]
 
 export type CreateDataInput = {
   readonly api: () => OpenCodeClient
@@ -214,8 +214,8 @@ export function createData(config: CreateDataInput) {
   )
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
-  // Keep only moves observed during each metadata read, including not-yet-loaded family members.
-  const sessionMoves = new Set<Map<string, SessionMove>>()
+  // Placement facts observed during a metadata read must compose in order, even for uncached family members.
+  const sessionPlacements = new Set<SessionPlacementEvent[]>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -552,7 +552,20 @@ export function createData(config: CreateDataInput) {
     )
   }
 
+  function adoptionTarget(
+    info: Pick<SessionInfo, "projectID" | "location">,
+    event: OpenCodeEventMap["worktree.resolved"]["data"],
+  ) {
+    const directory = event.adopted?.includes(info.projectID)
+      ? store.project.info[info.projectID]?.canonical
+      : info.location.directory
+    if (!directory) return
+    return { projectID: info.projectID, directory, workspaceID: info.location.workspaceID }
+  }
+
   function handleEvent(event: OpenCodeEvent) {
+    if (event.type === "session.moved" || event.type === "worktree.resolved")
+      sessionPlacements.forEach((events) => events.push(event))
     switch (event.type) {
       case "server.connected": {
         const updates = new Map<string, DataSessionStatus | undefined>()
@@ -654,13 +667,6 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.moved": {
-        sessionMoves.forEach((moves) => {
-          moves.set(event.data.sessionID, {
-            location: { ...event.data.location },
-            projectID: event.data.projectID,
-            subpath: event.data.subpath,
-          })
-        })
         const current = store.session.info[event.data.sessionID]
         if (current) {
           const previous = {
@@ -685,22 +691,14 @@ export function createData(config: CreateDataInput) {
       }
       case "worktree.resolved": {
         for (const [sessionID, info] of Object.entries(store.session.info)) {
-          const explicit = event.data.adopted?.includes(info.projectID)
-          const directory = explicit ? store.project.info[info.projectID]?.canonical : info.location.directory
-          if (!directory) {
+          const target = adoptionTarget(info, event.data)
+          if (!target) {
             if (info.location.workspaceID) continue
             result.session.invalidate(sessionID)
             void result.session.sync(sessionID)
             continue
           }
-          const adopted = Worktree.adopt(
-            {
-              projectID: info.projectID,
-              directory,
-              workspaceID: info.location.workspaceID,
-            },
-            event.data,
-          )
+          const adopted = Worktree.adopt(target, event.data)
           if (!adopted) continue
           setStore("session", "info", sessionID, "projectID", adopted.projectID)
           setStore("session", "info", sessionID, "subpath", adopted.subpath)
@@ -1492,34 +1490,58 @@ export function createData(config: CreateDataInput) {
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, () => {
-          const moves = new Map<string, SessionMove>()
-          sessionMoves.add(moves)
-          return Promise.all([
-            api().session.get({ sessionID }),
-            options?.children
-              ? api()
-                  .session.list({ parentID: sessionID, order: "desc" })
-                  .then((response) => response.data)
-              : [],
-          ])
-            .then(([info, children]) => {
-              const sessions = [info, ...children]
-              batch(() => {
-                setStore(
-                  "session",
-                  "info",
-                  produce((draft) => {
-                    // Publish once: even a transient old location can redirect the UI.
-                    for (const session of sessions) draft[session.id] = { ...session, ...moves.get(session.id) }
-                  }),
-                )
-                for (const session of sessions) {
-                  sync.complete(`session:${session.id}`)
-                  registerSession(session.id)
-                }
-              })
+          const placements: SessionPlacementEvent[] = []
+          sessionPlacements.add(placements)
+          const load = async (): Promise<void> => {
+            const [info, children] = await Promise.all([
+              api().session.get({ sessionID }),
+              options?.children
+                ? api()
+                    .session.list({ parentID: sessionID, order: "desc" })
+                    .then((response) => response.data)
+                : [],
+            ])
+            const sessions = [info, ...children].map((session) =>
+              placements.reduce<SessionInfo | undefined>((info, event) => {
+                if (!info) return
+                if (event.type === "session.moved")
+                  return event.data.sessionID === info.id
+                    ? {
+                        ...info,
+                        location: { ...event.data.location },
+                        projectID: event.data.projectID,
+                        subpath: event.data.subpath,
+                      }
+                    : info
+                const target = adoptionTarget(info, event.data)
+                if (!target && !info.location.workspaceID) return
+                const adopted = target && Worktree.adopt(target, event.data)
+                return adopted ? { ...info, ...adopted } : info
+              }, session),
+            )
+            const resolved = sessions.filter((session) => session !== undefined)
+            if (resolved.length !== sessions.length) {
+              // Explicit adoption needs the directory project's canonical path to derive subpath.
+              // Without it, read after the observed facts instead of guessing or publishing an old identity.
+              placements.length = 0
+              return load()
+            }
+            batch(() => {
+              setStore(
+                "session",
+                "info",
+                produce((draft) => {
+                  // Publish once: even a transient old location can redirect the UI.
+                  for (const session of resolved) draft[session.id] = session
+                }),
+              )
+              for (const session of resolved) {
+                sync.complete(`session:${session.id}`)
+                registerSession(session.id)
+              }
             })
-            .finally(() => sessionMoves.delete(moves))
+          }
+          return load().finally(() => sessionPlacements.delete(placements))
         })
       },
       invalidate(sessionID: string) {

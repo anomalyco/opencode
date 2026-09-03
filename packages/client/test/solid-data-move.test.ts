@@ -50,6 +50,251 @@ for (const children of [false, true]) {
   }
 }
 
+test.each([false, true])(
+  "later repository resolution supersedes an earlier move overlay (cached: %s)",
+  async (cached) => {
+    const resolved = {
+      ...session(),
+      location: { directory: "/repo/app" },
+      projectID: "git-project",
+      subpath: "app",
+    }
+    // This GET is processed after resolution, not serialized before the move.
+    const setup = fixture([session()], async (_response, index) =>
+      Response.json(index === 0 ? { data: resolved } : { data: [], cursor: {} }),
+    )
+    try {
+      if (cached) setup.data.session.remember({ ...session(), location: { directory: "/original" } })
+      const read = setup.data.session.sync("ses_move", { children: true })
+      await setup.requested.promise
+      setup.move("ses_move", 2, { projectID: "directory-project", location: { directory: "/repo/app" } })
+      setup.emit({
+        id: "evt_resolved",
+        type: "worktree.resolved",
+        created: 3,
+        durable: { aggregateID: "git-project", seq: 1, version: 1 },
+        data: { projectID: "git-project", previous: "directory-project", directory: "/repo" },
+      })
+      if (cached) {
+        expect(setup.data.session.get("ses_move")?.projectID).toBe("git-project")
+        expect(setup.data.session.get("ses_move")?.subpath).toBe("app")
+      }
+      setup.release.resolve()
+      await read
+      expect(setup.data.session.get("ses_move")?.projectID).toBe("git-project")
+      expect(setup.data.session.get("ses_move")?.subpath).toBe("app")
+    } finally {
+      setup.release.resolve()
+      setup.dispose()
+    }
+  },
+)
+
+for (const cached of [false, true]) {
+  for (const order of ["adoption", "move-adoption", "adoption-move", "move-adoption-move"]) {
+    test(`family placement facts compose in order (${order}, cached: ${cached})`, async () => {
+      const sessions = [
+        { ...session(), projectID: "directory-project", location: { directory: "/repo/app" } },
+        { ...session("ses_child", "ses_move"), projectID: "directory-project", location: { directory: "/repo/ui" } },
+        session("ses_sibling", "ses_move"),
+      ]
+      const setup = fixture(sessions.map((info) => ({ ...info, title: "Fresh title", cost: 42 })))
+      try {
+        if (cached) sessions.forEach(setup.data.session.remember)
+        const read = setup.data.session.sync("ses_move", { children: true })
+        await setup.requested.promise
+        if (order.startsWith("move")) {
+          setup.move("ses_move", 2, { projectID: "directory-project", location: { directory: "/repo/app" } })
+          setup.move("ses_child", 2, { projectID: "directory-project", location: { directory: "/repo/ui" } })
+        }
+        setup.emit({
+          id: "evt_resolved",
+          type: "worktree.resolved",
+          created: 3,
+          durable: { aggregateID: "git-project", seq: 1, version: 1 },
+          data: { projectID: "git-project", previous: "directory-project", directory: "/repo" },
+        })
+        if (order.endsWith("move")) {
+          setup.move("ses_move", 4, { projectID: "last-project", location: { directory: "/last" } })
+          setup.move("ses_child", 4, { projectID: "last-project", location: { directory: "/last/ui" }, subpath: "ui" })
+        }
+        setup.release.resolve()
+        await read
+        expect(setup.data.session.get("ses_move")).toMatchObject({
+          projectID: order.endsWith("move") ? "last-project" : "git-project",
+          location: { directory: order.endsWith("move") ? "/last" : "/repo/app" },
+          title: "Fresh title",
+          cost: 42,
+        })
+        expect(setup.data.session.get("ses_move")?.subpath).toBe(order.endsWith("move") ? undefined : "app")
+        expect(setup.data.session.get("ses_child")).toMatchObject({
+          projectID: order.endsWith("move") ? "last-project" : "git-project",
+          location: { directory: order.endsWith("move") ? "/last/ui" : "/repo/ui" },
+          subpath: "ui",
+          title: "Fresh title",
+          cost: 42,
+        })
+        expect(setup.data.session.get("ses_sibling")?.projectID).toBe("project-original")
+        expect(setup.data.session.family("ses_move").toSorted()).toEqual(["ses_child", "ses_move", "ses_sibling"])
+        expect(setup.requests).toHaveLength(2)
+      } finally {
+        setup.release.resolve()
+        setup.dispose()
+      }
+    })
+  }
+}
+
+test.each([false, true])(
+  "pending adoption respects canonical project paths and workspaces (cached: %s)",
+  async (cached) => {
+    const sessions = [session(), session("ses_local", "ses_move"), session("ses_remote", "ses_move")]
+    const setup = fixture(sessions)
+    try {
+      if (cached) sessions.forEach(setup.data.session.remember)
+      setup.emit({
+        id: "evt_project",
+        type: "project.updated",
+        created: 1,
+        data: { id: "directory-project", canonical: "/repo/ui", time: { created: 1, updated: 1 }, sandboxes: [] },
+      })
+      const read = setup.data.session.sync("ses_move", { children: true })
+      await setup.requested.promise
+      setup.move("ses_local", 2, { projectID: "directory-project", location: { directory: "/shortcut" } })
+      setup.move("ses_remote", 2, {
+        projectID: "directory-project",
+        location: { directory: "/shortcut", workspaceID: "remote-workspace" },
+        subpath: "remote-path",
+      })
+      setup.emit({
+        id: "evt_resolved",
+        type: "worktree.resolved",
+        created: 3,
+        durable: { aggregateID: "git-project", seq: 1, version: 1 },
+        data: {
+          projectID: "git-project",
+          previous: "unrelated-project",
+          directory: "/repo",
+          adopted: ["directory-project"],
+        },
+      })
+      setup.release.resolve()
+      await read
+      expect(setup.data.session.get("ses_local")).toMatchObject({
+        projectID: "git-project",
+        location: { directory: "/shortcut" },
+        subpath: "ui",
+      })
+      expect(setup.data.session.get("ses_remote")).toMatchObject({
+        projectID: "directory-project",
+        location: { directory: "/shortcut", workspaceID: "remote-workspace" },
+        subpath: "remote-path",
+      })
+      expect(setup.data.session.get("ses_move")?.projectID).toBe("project-original")
+    } finally {
+      setup.release.resolve()
+      setup.dispose()
+    }
+  },
+)
+
+test.each([false, true])(
+  "revalidates missing canonical paths only for local adoption (workspace: %s)",
+  async (workspace) => {
+    const setup = fixture([session()], async () =>
+      Response.json({
+        data: { ...session(), projectID: "git-project", location: { directory: "/shortcut" }, subpath: "ui" },
+      }),
+    )
+    try {
+      const read = setup.data.session.sync("ses_move")
+      await setup.requested.promise
+      setup.move("ses_move", 2, {
+        projectID: "directory-project",
+        location: { directory: "/shortcut", workspaceID: workspace ? "remote-workspace" : undefined },
+      })
+      setup.emit({
+        id: "evt_resolved",
+        type: "worktree.resolved",
+        created: 3,
+        durable: { aggregateID: "git-project", seq: 1, version: 1 },
+        data: {
+          projectID: "git-project",
+          previous: "unrelated-project",
+          directory: "/repo",
+          adopted: ["directory-project"],
+        },
+      })
+      setup.release.resolve()
+      await read
+      expect(setup.data.session.get("ses_move")?.projectID).toBe(workspace ? "directory-project" : "git-project")
+      expect(setup.data.session.get("ses_move")?.subpath).toBe(workspace ? undefined : "ui")
+      expect(setup.requests).toHaveLength(workspace ? 1 : 2)
+    } finally {
+      setup.release.resolve()
+      setup.dispose()
+    }
+  },
+)
+
+test.each([false, true])(
+  "a missing-canonical family refresh observes later moves and releases failed reads (failed: %s)",
+  async (failed) => {
+    const requested = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const parent = { ...session(), projectID: "git-project", location: { directory: "/shortcut" }, subpath: "ui" }
+    const child = {
+      ...session("ses_child", "ses_move"),
+      projectID: "git-project",
+      location: { directory: "/child" },
+      subpath: "child",
+    }
+    const setup = fixture([session(), session("ses_child", "ses_move")], async (response, index) => {
+      if (index < 2) return response
+      const refreshed = Response.json(index % 2 === 0 ? { data: parent } : { data: [child], cursor: {} })
+      if (index === 2) {
+        requested.resolve()
+        await release.promise
+        if (failed) return Response.json({ message: "offline" }, { status: 503 })
+      }
+      return refreshed
+    })
+    try {
+      const read = setup.data.session.sync("ses_move", { children: true })
+      await setup.requested.promise
+      setup.move("ses_move", 2, { projectID: "directory-project", location: { directory: "/shortcut" } })
+      setup.emit({
+        id: "evt_resolved",
+        type: "worktree.resolved",
+        created: 3,
+        durable: { aggregateID: "git-project", seq: 1, version: 1 },
+        data: {
+          projectID: "git-project",
+          previous: "unrelated-project",
+          directory: "/repo",
+          adopted: ["directory-project"],
+        },
+      })
+      setup.release.resolve()
+      await requested.promise
+      expect(setup.data.session.get("ses_move")).toBeUndefined()
+      setup.move("ses_child", 4, { projectID: "last-project", location: { directory: "/last" } })
+      release.resolve()
+      await (failed ? expect(read).rejects.toThrow() : read)
+      if (failed) await setup.data.session.sync("ses_move", { children: true })
+      expect(setup.data.session.get("ses_move")?.projectID).toBe("git-project")
+      expect(setup.data.session.get("ses_move")?.subpath).toBe("ui")
+      expect(setup.data.session.get("ses_child")?.location.directory).toBe(failed ? "/child" : "/last")
+      expect(setup.data.session.get("ses_child")?.projectID).toBe(failed ? "git-project" : "last-project")
+      expect(setup.requests).toHaveLength(failed ? 6 : 4)
+    } finally {
+      release.resolve()
+      setup.release.resolve()
+      setup.dispose()
+    }
+  },
+)
+
 test.each([false, true])("preserves each family member's latest move (cached: %s)", async (cached) => {
   const sessions = [session(), session("ses_child", "ses_move"), session("ses_sibling", "ses_move")]
   const setup = fixture(sessions)
@@ -234,6 +479,7 @@ function fixture(sessions: SessionInfo[], respond?: (response: Response, index: 
     createComputed(() => locations.push(data.session.get("ses_move")?.location.directory))
     return {
       data,
+      emit,
       locations,
       move(
         sessionID: string,
