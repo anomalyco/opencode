@@ -75,6 +75,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
         {
           command: "stash.delete",
           title: "delete",
+          variant: "destructive",
           onTrigger: (option) => {
             if (toDelete() === option.value) {
               stash.remove(option.value)

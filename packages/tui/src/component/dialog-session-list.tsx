@@ -255,6 +255,7 @@ export function DialogSessionList() {
         {
           command: "session.delete",
           title: "delete",
+          variant: "destructive",
           onTrigger: (option: { value: string }) => {
             if (toDelete() !== option.value) {
               setToDelete(option.value)
