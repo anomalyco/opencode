@@ -1,6 +1,16 @@
 export * as SessionCompaction from "./compaction.js"
 
-import { LLMClient, LLMEvent, LLMRequest, Message, type ContentPart } from "@opencode-ai/ai"
+import {
+  AIError,
+  InvalidProviderOutputError,
+  UnknownProviderError,
+  isContextOverflowFailure,
+  LLMClient,
+  LLMEvent,
+  LLMRequest,
+  Message,
+  type ContentPart,
+} from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/schema/agent"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
@@ -12,6 +22,7 @@ import type { SessionContext } from "./context.js"
 import type { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
 import type { SessionRunnerModel } from "./runner/model.js"
+import { SessionRunnerRetry } from "./runner/retry.js"
 import { SessionSchema } from "./schema.js"
 import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
@@ -405,13 +416,16 @@ export const layer = Layer.effect(
           ],
         },
       })
-      // Ignored tool calls never enter the follow-up history or need fabricated results.
-      for (let attempt = 0; attempt < 2; attempt++) {
+      const retry = yield* SessionRunnerRetry.policy(context.session.id)
+      // Keep transient retries separate from the one template correction.
+      let corrected = false
+      while (true) {
         chunks.length = 0
         providerState = undefined
-        yield* llm
+        failure = undefined
+        const retried = yield* llm
           .stream(
-            attempt === 0
+            !corrected
               ? prepared.request
               : LLMRequest.update(prepared.request, {
                   messages: [
@@ -445,13 +459,51 @@ export const layer = Layer.effect(
                 const step = SessionUsage.record(event.usage, context.model.cost)
                 usage = usage ? SessionUsage.add(usage, step) : step
               }
+              if (LLMEvent.is.finish(event)) {
+                if (event.reason.normalized === "length")
+                  failure = { type: "compaction.failed", message: "Compaction summary reached the output token limit" }
+                if (event.reason.normalized === "content-filter")
+                  failure = {
+                    type: "provider.content-filter",
+                    message: "Compaction summary was blocked by the provider",
+                  }
+                if (event.reason.normalized === "unknown")
+                  return Effect.fail(
+                    new AIError({
+                      reason: new InvalidProviderOutputError({
+                        message: "The provider response ended with an unknown finish reason.",
+                        classification: "incomplete-stream",
+                      }),
+                    }),
+                  )
+                if (event.reason.normalized === "error")
+                  return Effect.fail(
+                    new AIError({ reason: new UnknownProviderError({ message: "Compaction generation failed" }) }),
+                  )
+              }
               return Effect.void
             }),
-            Effect.catchTag("AI.Error", (error) =>
-              Effect.sync(() => {
-                failure = toSessionError(error)
-              }),
-            ),
+            Effect.matchEffect({
+              onSuccess: () => Effect.succeed(false),
+              onFailure: (cause) =>
+                Effect.gen(function* () {
+                  failure = toSessionError(cause)
+                  if (isContextOverflowFailure(cause)) return false
+                  const decision = yield* retry({
+                    cause,
+                    error: failure,
+                    agent: Agent.ID.make("compaction"),
+                    model: context.model.ref,
+                    hook: prepared.retry,
+                    retry:
+                      SessionRunnerRetry.isRetryable(cause) ||
+                      (cause.reason._tag === "Transport" && cause.reason.operation === "read"),
+                  })
+                  if (!decision.retry) return false
+                  yield* Effect.sleep(decision.delay)
+                  return true
+                }),
+            }),
             Effect.onInterrupt(() =>
               recordUsage.pipe(
                 Effect.andThen(
@@ -467,7 +519,10 @@ export const layer = Layer.effect(
               ),
             ),
           )
-        if (failure || hasSummarySection(chunks.join(""))) break
+        if (retried) continue
+        if (failure || hasSummarySection(chunks.join("")) || corrected) break
+        // Ignored output never enters the correction request or needs fabricated tool results.
+        corrected = true
       }
       yield* recordUsage
       const summary = chunks.join("")

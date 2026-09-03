@@ -88,6 +88,14 @@ summary must contain at least one heading from the requested template, such as
 to fill in the template correctly. A second invalid response fails compaction.
 Provider-hosted tools remain subject to the selected provider's behavior.
 
+Compaction uses the normal session retry defaults and `session.retry` hook:
+
+- Transient provider failures and interrupted streams restart the summary from
+  scratch, with up to four retries, exponential backoff, jitter, and `Retry-After`.
+- The template correction does not consume or reset that retry allowance.
+- Output-token-limit stops fail compaction instead of saving a truncated summary.
+- Cancellation stops generation or backoff immediately, leaving prior context intact.
+
 The summary records the objective, requirements, decisions, completed and active
 work, blockers, next moves, relevant files, and additional context.
 
