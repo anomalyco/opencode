@@ -116,6 +116,113 @@ describe("createCatalogFetcher", () => {
     expect(result.entries.length).toBeGreaterThan(0)
   })
 
+  test("treats non-ok source responses as fetch failures, serving stale cache", async () => {
+    const okFetch: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(ECOSYSTEM_HTML)
+      if (url.includes("awesome-opencode")) return new Response(AWESOME_MD)
+      if (url.startsWith("https://registry.npmjs.org/")) return new Response("nf", { status: 404 })
+      if (url.startsWith("https://api.npmjs.org/")) return json({ downloads: 1 })
+      throw new Error("unexpected")
+    }
+    const f1 = createCatalogFetcher({ fetchImpl: okFetch, cacheDir: dir })
+    await f1.fetchCatalog()
+
+    const eco404: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response("<html>404</html>", { status: 404 })
+      if (url.includes("awesome-opencode")) return new Response(AWESOME_MD)
+      throw new Error("unexpected")
+    }
+    const f2 = createCatalogFetcher({ fetchImpl: eco404, cacheDir: dir })
+    const ecoResult = await f2.fetchCatalog()
+    expect(ecoResult.stale).toBe(true)
+    expect(ecoResult.entries.length).toBeGreaterThan(0)
+
+    const awesome500: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(ECOSYSTEM_HTML)
+      if (url.includes("awesome-opencode")) return new Response("boom", { status: 500 })
+      throw new Error("unexpected")
+    }
+    const f2b = createCatalogFetcher({ fetchImpl: awesome500, cacheDir: dir })
+    const awesomeResult = await f2b.fetchCatalog()
+    expect(awesomeResult.stale).toBe(true)
+  })
+
+  test("parses awesome README details/summary format with repo links", async () => {
+    const awesomeDetails = `
+<div id="plugins"></div>
+
+<details open>
+<summary><strong>🧩 PLUGINS</strong></summary>
+
+<details>
+  <summary><b>@scope/opencode-arise</b> <img src="https://badgen.net/x" height="14"/> - <i>Orchestrator harness</i></summary>
+  <blockquote>
+    A lightweight orchestrator layer.
+    <a href="https://github.com/scope/opencode-arise">🔗 <b>View Repository</b></a>
+  </blockquote>
+</details>
+
+<details>
+  <summary><b>Wakatime Plugin</b> - <i>Track usage</i></summary>
+  <blockquote>
+    <a href="https://github.com/angristan/opencode-wakatime">🔗 <b>View Repository</b></a>
+  </blockquote>
+</details>
+
+</details>
+
+<div id="themes"></div>
+`
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(ECOSYSTEM_HTML)
+      if (url.includes("awesome-opencode")) return new Response(awesomeDetails)
+      if (url.startsWith("https://registry.npmjs.org/")) return new Response("nf", { status: 404 })
+      throw new Error("unexpected fetch: " + url)
+    }
+    const f = createCatalogFetcher({ fetchImpl, cacheDir: dir })
+    const result = await f.fetchCatalog()
+    const arise = result.entries.find((e) => e.name === "@scope/opencode-arise")!
+    expect(arise.source).toBe("awesome")
+    expect(arise.repository).toBe("https://github.com/scope/opencode-arise")
+    expect(arise.description).toBe("Orchestrator harness")
+    const wakatime = result.entries.find((e) => e.name === "Wakatime Plugin")!
+    expect(wakatime.source).toBe("awesome")
+    expect(wakatime.repository).toBe("https://github.com/angristan/opencode-wakatime")
+    expect(result.entries.every((e) => !e.onNpm)).toBe(true)
+  })
+
+  test("maps tree/blob URLs to last path segment for npm fallback, strips inline tags in descriptions", async () => {
+    const treeHtml = `
+<table>
+  <tr><td><a href="https://github.com/daytona/integrations/tree/main/packages/opencode-plugin">Daytona Integration</a></td><td>Run sessions in Daytona sandboxes</td></tr>
+  <tr><td><a href="https://github.com/willytop8/OpenCode-goal-plugin">opencode-goal-plugin</a></td><td>Session-scoped <code dir="auto">/goal</code> workflow</td></tr>
+</table>`
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(treeHtml)
+      if (url.includes("awesome-opencode")) return new Response("")
+      if (url.startsWith("https://registry.npmjs.org/opencode-plugin"))
+        return json(npmPackument("opencode-plugin", "1.0.0", "Run sessions in Daytona sandboxes"))
+      if (url.startsWith("https://registry.npmjs.org/")) return new Response("nf", { status: 404 })
+      if (url.startsWith("https://api.npmjs.org/")) return json({ downloads: 7 })
+      throw new Error("unexpected fetch: " + url)
+    }
+    const f = createCatalogFetcher({ fetchImpl, cacheDir: dir })
+    const result = await f.fetchCatalog()
+    // Display name has a space (not npm-ish), so the tree slug "opencode-plugin"
+    // must be used instead of the repo slug "integrations".
+    const daytona = result.entries.find((e) => e.name === "opencode-plugin")!
+    expect(daytona.onNpm).toBe(true)
+    expect(daytona.version).toBe("1.0.0")
+    // Inline <code> markup in the description cell must not drop the row.
+    const goal = result.entries.find((e) => e.name === "opencode-goal-plugin")!
+    expect(goal.description).toBe("Session-scoped /goal workflow")
+  })
+
   test("fresh cache (under TTL) is served without network", async () => {
     let networkCalls = 0
     const fetchImpl: typeof fetch = async (input) => {

@@ -35,18 +35,44 @@ export function createCatalogFetcher(deps: {
   const parseEcosystem = (html: string): RawEntry[] => {
     const out: RawEntry[] = []
     // The docs page renders plugins in tables: [name](link) — description.
-    // Match anchor + following description cell.
-    const rowRe = /<td>\s*<a href="([^"]+)">([^<]+)<\/a>\s*<\/td>\s*<td>([^<]*)<\/td>/g
+    // Match anchor + following description cell (may contain inline markup like <code>).
+    const rowRe = /<td>\s*<a href="([^"]+)">([^<]+)<\/a>\s*<\/td>\s*<td>([\s\S]*?)<\/td>/g
     let m: RegExpExecArray | null
     while ((m = rowRe.exec(html))) {
       const name = m[2].trim()
       if (!name || name === "Name") continue
-      out.push({ name, description: decodeEntities(m[3].trim()), url: m[1], source: "ecosystem" })
+      out.push({ name, description: decodeEntities(stripTags(m[3].trim())), url: m[1], source: "ecosystem" })
     }
     return out
   }
 
   const parseAwesome = (md: string): RawEntry[] => {
+    // Live README uses <details>/<summary> blocks under <div id="plugins">.
+    const scope = md.match(/<div id="plugins">[\s\S]*?(?=<div id="|$)/)?.[0]
+    if (scope) {
+      const out: RawEntry[] = []
+      const sumRe = /<summary><b>([^<]+)<\/b>([\s\S]*?)<\/summary>/g
+      const hits: { name: string; desc?: string; end: number }[] = []
+      let m: RegExpExecArray | null
+      while ((m = sumRe.exec(scope))) {
+        hits.push({
+          name: m[1].trim(),
+          desc: m[2].match(/<i>([^<]*)<\/i>/)?.[1]?.trim(),
+          end: m.index + m[0].length,
+        })
+      }
+      for (let i = 0; i < hits.length; i++) {
+        // Search for the repository link between this summary and the next one.
+        const nextStart = i + 1 < hits.length ? scope.indexOf("<summary><b>", hits[i].end) : scope.length
+        const chunk = scope.slice(hits[i].end, nextStart === -1 ? scope.length : nextStart)
+        const url = chunk.match(/href="(https:\/\/github\.com\/[^"]+)"/)?.[1]
+        if (hits[i].name && hits[i].name.toLowerCase() !== "name") {
+          out.push({ name: hits[i].name, description: hits[i].desc, url, source: "awesome" })
+        }
+      }
+      if (out.length) return out
+    }
+    // Fallback: markdown bullet list under a "## Plugins" heading.
     const out: RawEntry[] = []
     const inSection = md.match(/##\s*Plugins[\s\S]*?(?=\n##\s|\*$)/)
     const body = inSection?.[0] ?? md
@@ -60,6 +86,12 @@ export function createCatalogFetcher(deps: {
     return out
   }
 
+  const stripTags = (s: string) =>
+    s
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+
   const decodeEntities = (s: string) =>
     s
       .replace(/&amp;/g, "&")
@@ -71,8 +103,16 @@ export function createCatalogFetcher(deps: {
   const npmName = (entry: RawEntry): string | undefined => {
     // Prefer npm-looking names; try slug of name first, then repo name from URL.
     const candidates = [entry.name.trim()]
-    const repo = entry.url?.match(/github\.com\/[^/]+\/([^/#?]+)/)?.[1]
-    if (repo) candidates.push(decodeURIComponent(repo))
+    // For deep links like .../tree/main/packages/opencode-plugin the repo slug
+    // ("integrations") is misleading — the last path segment is the package.
+    const deep = entry.url?.match(/github\.com\/[^/]+\/[^/]+\/(?:tree|blob)\/[^/]+\/(.+?)(?:\/)?(?:[?#].*)?$/)?.[1]
+    if (deep) {
+      const last = deep.split("/").filter(Boolean).pop() ?? deep
+      candidates.push(decodeURIComponent(last.replace(/\.git$/, "")))
+    } else {
+      const repo = entry.url?.match(/github\.com\/[^/]+\/([^/#?]+)/)?.[1]
+      if (repo) candidates.push(decodeURIComponent(repo.replace(/\.git$/, "")))
+    }
     return candidates.find((c) => /^[a-z@][\w./@-]*$/i.test(c)) ?? candidates[0]
   }
 
@@ -94,8 +134,14 @@ export function createCatalogFetcher(deps: {
 
   async function fetchFresh(): Promise<CatalogResult> {
     const [ecoRes, awesomeRes] = await Promise.all([
-      doFetch(ECOSYSTEM_URL).then((r) => r.text()),
-      doFetch(AWESOME_URL).then((r) => r.text()).catch(() => ""),
+      doFetch(ECOSYSTEM_URL).then((r) => {
+        if (!r.ok) throw new Error(`ecosystem source returned ${r.status}`)
+        return r.text()
+      }),
+      doFetch(AWESOME_URL).then((r) => {
+        if (!r.ok) throw new Error(`awesome source returned ${r.status}`)
+        return r.text()
+      }),
     ])
     const raw = [...parseEcosystem(ecoRes), ...parseAwesome(awesomeRes)]
 
