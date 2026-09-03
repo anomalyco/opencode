@@ -139,13 +139,17 @@ test(
       expect((yield* host.next).data).toMatchObject({ type: "cancel", requestID: call.input.requestID })
       expect(yield* host.rpc.command(call.input, options).pipe(Effect.flip)).toMatchObject({ type: "unavailable" })
       yield* host.rpc.result({ ...call.input, outcome: { type: "failure", code: "late", message: "late" } }, options)
+      const replaced = yield* host.command({ type: "tabs.list" })
+      const replacement = yield* host.attach("replacement")
+      expect((yield* Fiber.join(replaced.pending).pipe(Effect.flip)).message).toContain("connection closed")
+      yield* Fiber.join(attached.lifetime)
       const pending = yield* host.command({ type: "tabs.list" })
       yield* host.opencode.plugin({ id: "browser-test", effect: () => Effect.void })
       yield* host.opencode.plugin.list(options)
       expect(yield* Fiber.join(pending.pending).pipe(Effect.flip)).toMatchObject({
         message: expect.stringContaining("connection closed"),
       })
-      yield* Fiber.join(attached.lifetime)
+      yield* Fiber.join(replacement.lifetime)
     }).pipe(Effect.scoped, Effect.runPromise),
   15_000,
 )
