@@ -31,7 +31,9 @@ export function createSessionBrowser(session: SessionModel) {
       !server.health?.incompatible &&
       !state.unsupported,
   )
-  const browserTabs = createMemo(() => state.browser?.tabs.filter((tab) => session.layout.tabs().all().includes(sessionBrowserTab(tab.id))) ?? [])
+  const browserTabs = createMemo(
+    () => state.browser?.tabs.filter((tab) => session.layout.tabs().all().includes(sessionBrowserTab(tab.id))) ?? [],
+  )
   const opened = () => state.registration !== undefined && browserTabs().length > 0
   const focus = (tabID: Browser.TabID) => {
     session.layout.view().reviewPanel.open()
@@ -133,7 +135,8 @@ export function createSessionBrowser(session: SessionModel) {
     tabs: browserTabs,
     active: () =>
       browserTabs().find((tab) => sessionBrowserTab(tab.id) === session.layout.tabs().active()) ??
-      browserTabs().find((tab) => tab.id === state.browser?.focusedTabID) ?? browserTabs()[0],
+      browserTabs().find((tab) => tab.id === state.browser?.focusedTabID) ??
+      browserTabs()[0],
     error: () => state.error,
     registration: () => state.registration,
     close: (tabID: Browser.TabID) => session.layout.tabs().close(sessionBrowserTab(tabID)),
