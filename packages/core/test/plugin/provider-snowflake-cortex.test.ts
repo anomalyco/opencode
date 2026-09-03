@@ -1,7 +1,12 @@
+import { LLM } from "@opencode-ai/ai"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schedule } from "effect"
+import { Headers } from "effect/unstable/http"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { SnowflakeCortexPlugin, cortexFetch } from "@opencode-ai/core/plugin/provider/snowflake-cortex"
@@ -168,6 +173,159 @@ describe("SnowflakeCortexPlugin", () => {
         expect(result.options.includeUsage).toBe(true)
       }),
     ),
+  )
+})
+
+describe("SnowflakeCortexPlugin browser OAuth", () => {
+  const integrationID = Integration.ID.make("snowflake-cortex")
+  const methodID = Integration.MethodID.make("browser")
+
+  const connect = Effect.fn(function* (answer: Record<string, string>) {
+    const integrations = yield* Integration.Service
+    const attempt = yield* integrations.oauth.connect({ integrationID, methodID, answer })
+    return { attempt, url: new URL(attempt.url) }
+  })
+
+  const settled = Effect.fn(function* (attemptID: Integration.AttemptID) {
+    const integrations = yield* Integration.Service
+    const status = yield* integrations.oauth.status({ integrationID, attemptID })
+    if (status.status === "pending") return yield* Effect.fail(new Error("Snowflake authorization pending"))
+    return status
+  })
+
+  it.effect("registers the browser login method with account and role prompts", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const integrations = yield* Integration.Service
+      expect((yield* integrations.get(integrationID))?.methods).toEqual([
+        {
+          id: methodID,
+          type: "oauth",
+          label: "Login with Snowflake (External Browser)",
+          form: [
+            {
+              type: "string",
+              key: "account",
+              title: "Snowflake account identifier",
+              placeholder: "myorg-myaccount",
+              required: true,
+            },
+            { type: "string", key: "role", title: "Snowflake role (optional)", placeholder: "PUBLIC" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("builds an account-specific PKCE authorize URL with a loopback redirect", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const { attempt, url } = yield* connect({ account: "myorg-myaccount" })
+      expect(attempt.mode).toBe("auto")
+      expect(url.origin).toBe("https://myorg-myaccount.snowflakecomputing.com")
+      expect(url.pathname).toBe("/oauth/authorize")
+      expect(url.searchParams.get("client_id")).toBe("LOCAL_APPLICATION")
+      expect(url.searchParams.get("response_type")).toBe("code")
+      expect(url.searchParams.get("scope")).toBe("refresh_token")
+      expect(url.searchParams.get("code_challenge_method")).toBe("S256")
+      expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      expect(url.searchParams.get("state")).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      const redirect = new URL(url.searchParams.get("redirect_uri") ?? "")
+      expect(redirect.hostname).toBe("127.0.0.1")
+      expect(redirect.pathname).toBe("/")
+      expect(Number(redirect.port)).toBeGreaterThan(0)
+    }),
+  )
+
+  it.effect("normalizes account URLs and encodes roles outside the identifier charset", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const plain = yield* connect({ account: "https://myorg-myaccount.snowflakecomputing.com/", role: "ANALYST" })
+      expect(plain.url.origin).toBe("https://myorg-myaccount.snowflakecomputing.com")
+      expect(plain.url.searchParams.get("scope")).toBe("refresh_token session:role:ANALYST")
+      const quoted = yield* connect({ account: "myorg-myaccount", role: "My Role" })
+      expect(quoted.url.searchParams.get("scope")).toBe("refresh_token session:role-encoded:My%20Role")
+    }),
+  )
+
+  it.effect("rejects an account identifier that normalizes to nothing", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const integrations = yield* Integration.Service
+      const exit = yield* integrations.oauth
+        .connect({ integrationID, methodID, answer: { account: "https://.snowflakecomputing.com" } })
+        .pipe(Effect.exit)
+      expect(exit._tag).toBe("Failure")
+    }),
+  )
+
+  it.effect("resolves the catalog account template and bearer token from the OAuth credential", () =>
+    withEnv({ SNOWFLAKE_ACCOUNT: undefined }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          Model.Info.make({
+            ...Model.Info.default(Provider.ID.make("snowflake-cortex"), Model.ID.make("claude-sonnet-4-6")),
+            modelID: Model.ID.make("claude-sonnet-4-6"),
+            package: Provider.aisdk("@ai-sdk/openai-compatible"),
+            settings: { baseURL: "https://${SNOWFLAKE_ACCOUNT}.snowflakecomputing.com/api/v2/cortex/v1" },
+          }),
+          Credential.OAuth.make({
+            type: "oauth",
+            methodID,
+            access: "oauth-access",
+            refresh: "oauth-refresh",
+            expires: Date.now() + 600_000,
+            metadata: {
+              account: "myorg-myaccount",
+              baseURL: "https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/v1",
+            },
+          }),
+        )
+        expect(resolved.route.endpoint.baseURL).toBe("https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/v1")
+        const headers = yield* resolved.route.auth.apply({
+          request: LLM.request({ model: resolved, prompt: "Hello" }),
+          method: "POST",
+          url: "https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/v1/chat/completions",
+          body: "{}",
+          headers: Headers.empty,
+        })
+        expect(headers.authorization).toBe("Bearer oauth-access")
+      }),
+    ),
+  )
+
+  it.live("fails the attempt when the loopback callback reports a provider error", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const { attempt, url } = yield* connect({ account: "myorg-myaccount" })
+      const redirect = new URL(url.searchParams.get("redirect_uri") ?? "")
+      redirect.searchParams.set("error", "access_denied")
+      redirect.searchParams.set("error_description", "User denied access")
+      redirect.searchParams.set("state", url.searchParams.get("state") ?? "")
+      const response = yield* Effect.promise(() => fetch(redirect))
+      expect(response.status).toBe(400)
+      expect(yield* Effect.promise(() => response.text())).toContain("User denied access")
+      const status = yield* settled(attempt.attemptID).pipe(
+        Effect.retry({ times: 1500, schedule: Schedule.spaced("1 millis") }),
+      )
+      expect(status).toMatchObject({ status: "failed", message: "User denied access" })
+    }),
+  )
+
+  it.live("rejects a loopback callback whose state does not match", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const { attempt, url } = yield* connect({ account: "myorg-myaccount" })
+      const redirect = new URL(url.searchParams.get("redirect_uri") ?? "")
+      redirect.searchParams.set("code", "forged")
+      redirect.searchParams.set("state", "wrong")
+      const response = yield* Effect.promise(() => fetch(redirect))
+      expect(response.status).toBe(400)
+      const status = yield* settled(attempt.attemptID).pipe(
+        Effect.retry({ times: 1500, schedule: Schedule.spaced("1 millis") }),
+      )
+      expect(status).toMatchObject({ status: "failed", message: "Invalid OAuth state" })
+    }),
   )
 })
 
