@@ -136,6 +136,12 @@ const layer = Layer.effect(
                     { discard: true },
                   )
                   for (const definition of definitions.slice(prefix)) {
+                    const slot = previous.get(definition.id)
+                    // Reordering healthy registrations does not authorize retrying a failed revision.
+                    if (slot?.loaded?.quarantined && slot.plugin.revision === definition.revision) {
+                      active.set(definition.id, { ...slot, plugin: definition })
+                      continue
+                    }
                     const result = yield* load(definition)
                     if (result.loaded !== undefined) {
                       active.set(definition.id, {
@@ -146,7 +152,7 @@ const layer = Layer.effect(
                     }
                     active.set(definition.id, { plugin: definition, error: result.error })
 
-                    const fallback = previous.get(definition.id)?.loaded
+                    const fallback = slot?.loaded
                     if (!fallback || fallback.quarantined) continue
                     const restored = yield* load(fallback.plugin)
                     if (restored.loaded !== undefined) {

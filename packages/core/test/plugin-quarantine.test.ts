@@ -92,7 +92,7 @@ it.live("does not restore a queued quarantined generation when its replacement f
       effect: (ctx) =>
         Effect.gen(function* () {
           loads.push(revision)
-          if (revision === "2") return yield* Effect.die("setup failed")
+          if (revision === "2") yield* Effect.die("setup failed")
           yield* ctx.command.transform((editor) => {
             editor.add({ name: "replacement", execute: () => Effect.void })
             if (fail) throw new Error("replay failed")
@@ -108,6 +108,56 @@ it.live("does not restore a queued quarantined generation when its replacement f
     expect((yield* plugins.list())[0]?.state.status).toBe("failed")
     expect(yield* commands.get("replacement")).toBeUndefined()
   }),
+)
+
+Array.of("pending", "reported").forEach((status) =>
+  it.live(`preserves ${status} quarantine when an earlier plugin changes`, () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const commands = yield* Command.Service
+      const loads: string[] = []
+      let fail = true
+      const generation = (id: string, revision: string): Plugin.Generation => ({
+        id,
+        revision,
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            loads.push(`${id}@${revision}`)
+            yield* ctx.command.transform((editor) => {
+              editor.add({ name: id, execute: () => Effect.void })
+              if (id === "broken" && fail) throw new Error("broken failed")
+            })
+          }),
+      })
+      const broken = generation("broken", "1")
+      const later = generation("later", "1")
+      yield* plugins.activate([generation("earlier", "1"), broken, later])
+      if (status === "reported") yield* plugins.awaitActivation
+      fail = false
+      yield* plugins.activate([generation("earlier", "2"), broken, later])
+      yield* plugins.awaitActivation
+      expect(loads).toEqual(["earlier@1", "broken@1", "later@1", "earlier@2", "later@1"])
+      const failed = (yield* plugins.list())[1]?.state
+      expect(failed).toMatchObject({ status: "failed", ref: expect.stringMatching(/^err_/) })
+      expect((yield* commands.list()).map((entry) => entry.name)).toEqual(["earlier", "later"])
+
+      // Reordering and removing other plugins must preserve the same failure too.
+      yield* plugins.activate([later, broken, generation("earlier", "2")])
+      yield* plugins.awaitActivation
+      expect((yield* plugins.list())[1]?.state).toEqual(failed)
+      expect((yield* commands.list()).map((entry) => entry.name)).toEqual(["later", "earlier"])
+      yield* plugins.activate([broken, later])
+      yield* plugins.awaitActivation
+      expect((yield* plugins.list())[0]?.state).toEqual(failed)
+      expect(loads.filter((entry) => entry === "broken@1")).toHaveLength(1)
+
+      yield* plugins.activate([generation("broken", "2"), later])
+      yield* plugins.awaitActivation
+      expect((yield* plugins.list())[0]?.state).toEqual({ status: "active" })
+      expect(yield* commands.get("broken")).toBeDefined()
+      expect(loads.filter((entry) => entry === "broken@2")).toHaveLength(1)
+    }),
+  ),
 )
 
 it.live("continues quarantine processing and cleanup after a plugin update observer fails", () =>
