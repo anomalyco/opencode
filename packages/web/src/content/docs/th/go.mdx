@@ -63,6 +63,7 @@ OpenCode Go ทำงานเหมือนกับผู้ให้บร�
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([เฉพาะบางภูมิภาค](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([เฉพาะบางภูมิภาค](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
@@ -78,6 +79,18 @@ OpenCode Go ทำงานเหมือนกับผู้ให้บร�
 รายชื่อโมเดลอาจมีการเปลี่ยนแปลงเมื่อเราทำการทดสอบและเพิ่มโมเดลใหม่ๆ
 
 ---
+
+## ใช้งานได้ที่ไหน?
+
+OpenCode Go ออกแบบมาเพื่อใช้กับ [OpenCode](https://opencode.ai) และเอเจนต์เขียนโค้ดยอดนิยมอื่นๆ ที่สร้างคำขอในลักษณะเดียวกัน
+
+ระบบจะตรวจสอบการรับส่งข้อมูลเพื่อค้นหาการใช้งานในทางที่ผิดซึ่งส่งผลกระทบต่อประสบการณ์ของผู้ใช้รายอื่น
+
+เพื่อให้แน่ใจว่าบัญชีของคุณจะไม่ถูกตั้งค่าสถานะ โปรดตรวจสอบว่าเครื่องมือที่คุณใช้
+
+1\. ไม่สร้างการรับส่งข้อมูลที่เป็นการใช้งานในทางที่ผิด  
+2\. ระบุตัวตนอย่างถูกต้อง (ไม่ใช้ข้อมูลระบุตัวแทนผู้ใช้แบบกว้างเกินไป)  
+3\. มีส่วนหัว `x-opencode-session` เพื่อให้เราสามารถปรับการแคชพรอมต์ให้เหมาะสมได้
 
 ## Usage limits
 
@@ -107,6 +120,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | MiMo-V2.5-Pro                | 3,250                  | 8,150               | 16,300            |
 | MiniMax M3                   | 3,200                  | 8,000               | 16,000            |
 | MiniMax M2.7                 | 3,400                  | 8,500               | 17,000            |
+| Muse Spark 1.3 Contributor   | 45,300                 | 113,300             | 226,600           |
 | Muse Spark 1.2 Contributor   | 45,300                 | 113,300             | 226,600           |
 | Qwen3.8 Max                  | 160                    | 400                 | 810               |
 | Qwen3.8 Flash                | 5,400                  | 13,500              | 27,000            |
@@ -133,6 +147,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 - DeepSeek V4 Flash Vision Exp — 410 input, 71,300 cached, 310 output tokens ต่อ request
 - MiniMax M3 — 510 input, 56,000 cached, 190 output tokens ต่อ request
 - MiniMax M2.7 — 300 input, 55,000 cached, 125 output tokens ต่อ request
+- Muse Spark 1.3 Contributor — 620 input, 71,400 cached, 300 output tokens ต่อ request
 - Muse Spark 1.2 Contributor — 620 input, 71,400 cached, 300 output tokens ต่อ request
 - Qwen3.8 Max — 420 input, 66,000 cached, 200 output tokens ต่อ request
 - Qwen3.8 Flash — 600 input, 58,000 cached, 200 output tokens ต่อ request
@@ -165,6 +180,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60   |
 | MiniMax M2.7                            | $0.30  | $1.20  | $0.06       | $0.375       | $60   |
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | $60   |
+| Muse Spark 1.3 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60   |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60   |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | $15   |
 | Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | $30   |
@@ -238,6 +254,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -284,6 +301,7 @@ https://opencode.ai/zen/go/v1/models
 | Qwen3.6 Plus                 | ไม่นำไปใช้  | 0 วัน              |
 | MiniMax M3                   | ไม่นำไปใช้  | 0 วัน              |
 | MiniMax M2.7                 | ไม่นำไปใช้  | 0 วัน              |
+| Muse Spark 1.3 Contributor   | ใช่         | ไม่ใช่ ZDR         |
 | Muse Spark 1.2 Contributor   | ใช่         | ไม่ใช่ ZDR         |
 | DeepSeek V4 Pro              | ไม่นำไปใช้  | 0 วัน              |
 | DeepSeek V4 Flash            | ไม่นำไปใช้  | 0 วัน              |
@@ -293,6 +311,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.6:** ZDR ปิดใช้งานฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ ซึ่งรวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API [ดูข้อมูลเพิ่มเติม](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)
 - **GPT 5.6 Luna:** ระบบจะสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับการใช้งานฟีเจอร์ API ทั้งหมด และเก็บรักษาไว้นานสูงสุด 30 วัน [ดูข้อมูลเพิ่มเติม](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)
+- **Muse Spark 1.3 Contributor:** ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต การให้บริการจำกัดเฉพาะภูมิภาคที่ได้รับอนุญาตตาม[นโยบายการใช้งานตามพื้นที่ทางภูมิศาสตร์](https://ai.developer.meta.com/legal/geographic-use-policy)ของ Meta [ดูข้อมูลเพิ่มเติม](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)
 - **Muse Spark 1.2 Contributor:** ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต การให้บริการจำกัดเฉพาะภูมิภาคที่ได้รับอนุญาตตาม[นโยบายการใช้งานตามพื้นที่ทางภูมิศาสตร์](https://ai.developer.meta.com/legal/geographic-use-policy)ของ Meta [ดูข้อมูลเพิ่มเติม](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)
 - **DeepSeek V4 Flash:** ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 31 สิงหาคม 2026
 

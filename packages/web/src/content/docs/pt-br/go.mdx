@@ -73,6 +73,7 @@ A lista atual de modelos inclui:
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([regiões limitadas](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([regiões limitadas](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
@@ -88,6 +89,18 @@ A lista atual de modelos inclui:
 A lista de modelos pode mudar conforme testamos e adicionamos novos.
 
 ---
+
+## Onde posso usá-lo?
+
+O OpenCode Go foi projetado para ser usado com o [OpenCode](https://opencode.ai) e outros agentes de programação populares que geram tipos de requisições semelhantes.
+
+O tráfego é monitorado para detectar tráfego abusivo que prejudique a experiência de outros usuários.
+
+Para evitar que sua conta seja sinalizada, verifique se a ferramenta que você está usando
+
+1\. não gera tráfego abusivo  
+2\. se identifica corretamente (sem user agents genéricos)  
+3\. inclui o header `x-opencode-session` para que possamos otimizar o cache de prompts
 
 ## Limites de uso
 
@@ -117,6 +130,7 @@ A tabela abaixo fornece uma contagem estimada de requisições com base nos padr
 | MiMo-V2.5-Pro                | 3,250                   | 8,150                  | 16,300              |
 | MiniMax M3                   | 3,200                   | 8,000                  | 16,000              |
 | MiniMax M2.7                 | 3,400                   | 8,500                  | 17,000              |
+| Muse Spark 1.3 Contributor   | 45,300                  | 113,300                | 226,600             |
 | Muse Spark 1.2 Contributor   | 45,300                  | 113,300                | 226,600             |
 | Qwen3.8 Max                  | 160                     | 400                    | 810                 |
 | Qwen3.8 Flash                | 5,400                   | 13,500                 | 27,000              |
@@ -143,6 +157,7 @@ As estimativas se baseiam nos padrões de requisições observados:
 - DeepSeek V4 Flash Vision Exp — 410 tokens de entrada, 71.300 em cache, 310 tokens de saída por requisição
 - MiniMax M3 — 510 tokens de entrada, 56.000 em cache, 190 tokens de saída por requisição
 - MiniMax M2.7 — 300 tokens de entrada, 55.000 em cache, 125 tokens de saída por requisição
+- Muse Spark 1.3 Contributor — 620 tokens de entrada, 71.400 em cache, 300 tokens de saída por requisição
 - Muse Spark 1.2 Contributor — 620 tokens de entrada, 71.400 em cache, 300 tokens de saída por requisição
 - Qwen3.8 Max — 420 tokens de entrada, 66.000 em cache, 200 tokens de saída por requisição
 - Qwen3.8 Flash — 600 tokens de entrada, 58.000 em cache, 200 tokens de saída por requisição
@@ -175,6 +190,7 @@ As estimativas também se baseiam nos seguintes preços por 1M tokens e no uso m
 | MiniMax M3                              | $0.30   | $1.20  | $0.06            | -                | $60 |
 | MiniMax M2.7                            | $0.30   | $1.20  | $0.06            | $0.375           | $60 |
 | MiniMax M2.5                            | $0.30   | $1.20  | $0.06            | $0.375           | $60 |
+| Muse Spark 1.3 Contributor              | $0.10   | $0.20  | $0.002           | -                | $60 |
 | Muse Spark 1.2 Contributor              | $0.10   | $0.20  | $0.002           | -                | $60 |
 | Qwen3.8 Max                             | $2.00   | $6.00  | $0.25            | $2.50            | $15 |
 | Qwen3.8 Flash                           | $0.15   | $0.47  | $0.016           | $0.20            | $30 |
@@ -250,6 +266,7 @@ Você também pode acessar os modelos do Go através dos seguintes endpoints de 
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -298,6 +315,7 @@ https://opencode.ai/zen/go/v1/models
 | Qwen3.6 Plus                 | Não usado              | 0 dias            |
 | MiniMax M3                   | Não usado              | 0 dias            |
 | MiniMax M2.7                 | Não usado              | 0 dias            |
+| Muse Spark 1.3 Contributor   | Sim                    | Não é ZDR         |
 | Muse Spark 1.2 Contributor   | Sim                    | Não é ZDR         |
 | DeepSeek V4 Pro              | Não usado              | 0 dias            |
 | DeepSeek V4 Flash            | Não usado              | 0 dias            |
@@ -307,6 +325,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.6:** O ZDR desativa recursos importantes da API que dependem de dados armazenados, incluindo a Responses API com estado, Files and Collections e a Batch API. [Saiba mais](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Logs de monitoramento de abuso são gerados para todo uso de recursos da API e retidos por até 30 dias. [Saiba mais](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Muse Spark 1.3 Contributor:** Preços de tokens com grandes descontos em troca da permissão para usar seus prompts e respostas geradas para treinar futuros modelos da Meta. A disponibilidade é limitada às regiões permitidas pela [Política de Uso Geográfico](https://ai.developer.meta.com/legal/geographic-use-policy) da Meta. [Saiba mais](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Preços de tokens com grandes descontos em troca da permissão para usar seus prompts e respostas geradas para treinar futuros modelos da Meta. A disponibilidade é limitada às regiões permitidas pela [Política de Uso Geográfico](https://ai.developer.meta.com/legal/geographic-use-policy) da Meta. [Saiba mais](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek V4 Flash:** O acordo de ZDR é renovado mensalmente. O acordo atual é válido até 31 de agosto de 2026.
 

@@ -63,6 +63,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([مناطق محدودة](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([مناطق محدودة](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
@@ -78,6 +79,18 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 قد تتغير قائمة النماذج مع استمرارنا في اختبار نماذج جديدة وإضافتها.
 
 ---
+
+## أين يمكنني استخدامه؟
+
+صُمّم OpenCode Go للاستخدام مع [OpenCode](https://opencode.ai) وغيره من وكلاء البرمجة الشائعين الذين ينشئون أنواعًا مماثلة من الطلبات.
+
+تتم مراقبة حركة المرور لرصد الاستخدام المسيء الذي يؤدي إلى تدهور تجربة المستخدمين الآخرين.
+
+لتجنب وضع علامة على حسابك، تأكد من أن الأداة التي تستخدمها
+
+1\. لا تنشئ حركة مرور مسيئة  
+2\. تعرّف عن نفسها بشكل صحيح (من دون معرّفات وكيل مستخدم عامة)  
+3\. تتضمن ترويسة `x-opencode-session` حتى نتمكن من تحسين التخزين المؤقت للمطالبات
 
 ## حدود الاستخدام
 
@@ -107,6 +120,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | MiMo-V2.5-Pro                | 3,250               | 8,150              | 16,300           |
 | MiniMax M3                   | 3,200               | 8,000              | 16,000           |
 | MiniMax M2.7                 | 3,400               | 8,500              | 17,000           |
+| Muse Spark 1.3 Contributor   | 45,300              | 113,300            | 226,600          |
 | Muse Spark 1.2 Contributor   | 45,300              | 113,300            | 226,600          |
 | Qwen3.8 Max                  | 160                 | 400                | 810              |
 | Qwen3.8 Flash                | 5,400               | 13,500             | 27,000           |
@@ -133,6 +147,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 - DeepSeek V4 Flash Vision Exp — ‏410 input، و71,300 cached، و310 output tokens لكل طلب
 - MiniMax M3 — ‏510 input، و56,000 cached، و190 output tokens لكل طلب
 - MiniMax M2.7 — ‏300 input، و55,000 cached، و125 output tokens لكل طلب
+- Muse Spark 1.3 Contributor — ‏620 input، و71,400 cached، و300 output tokens لكل طلب
 - Muse Spark 1.2 Contributor — ‏620 input، و71,400 cached، و300 output tokens لكل طلب
 - Qwen3.8 Max — ‏420 input، و66,000 cached، و200 output tokens لكل طلب
 - Qwen3.8 Flash — ‏600 input، و58,000 cached، و200 output tokens لكل طلب
@@ -165,6 +180,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | MiniMax M3                              | $0.30   | $1.20   | $0.06           | -               | $60       |
 | MiniMax M2.7                            | $0.30   | $1.20   | $0.06           | $0.375          | $60       |
 | MiniMax M2.5                            | $0.30   | $1.20   | $0.06           | $0.375          | $60       |
+| Muse Spark 1.3 Contributor              | $0.10   | $0.20   | $0.002          | -               | $60       |
 | Muse Spark 1.2 Contributor              | $0.10   | $0.20   | $0.002          | -               | $60       |
 | Qwen3.8 Max                             | $2.00   | $6.00   | $0.25           | $2.50           | $15       |
 | Qwen3.8 Flash                           | $0.15   | $0.47   | $0.016          | $0.20           | $30       |
@@ -238,6 +254,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -284,6 +301,7 @@ https://opencode.ai/zen/go/v1/models
 | Qwen3.6 Plus                 | غير مستخدَمة  | 0 أيام             |
 | MiniMax M3                   | غير مستخدَمة  | 0 أيام             |
 | MiniMax M2.7                 | غير مستخدَمة  | 0 أيام             |
+| Muse Spark 1.3 Contributor   | نعم           | ليست ZDR           |
 | Muse Spark 1.2 Contributor   | نعم           | ليست ZDR           |
 | DeepSeek V4 Pro              | غير مستخدَمة  | 0 أيام             |
 | DeepSeek V4 Flash            | غير مستخدَمة  | 0 أيام             |
@@ -293,6 +311,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.6:** تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API. [اعرف المزيد](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا. [اعرف المزيد](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Muse Spark 1.3 Contributor:** أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية. يقتصر التوفر على المناطق التي تسمح بها [سياسة الاستخدام الجغرافي](https://ai.developer.meta.com/legal/geographic-use-policy) الخاصة بـ Meta. [اعرف المزيد](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية. يقتصر التوفر على المناطق التي تسمح بها [سياسة الاستخدام الجغرافي](https://ai.developer.meta.com/legal/geographic-use-policy) الخاصة بـ Meta. [اعرف المزيد](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek V4 Flash:** تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أغسطس 2026.
 
