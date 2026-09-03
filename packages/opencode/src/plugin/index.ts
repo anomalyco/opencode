@@ -19,6 +19,7 @@ import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
+import { RhoaiMaasAuthPlugin } from "./rhoai-maas"
 import { XaiAuthPlugin } from "./xai"
 import { CerebrasPlugin } from "./cerebras"
 import { SnowflakeCortexAuthPlugin } from "./snowflake-cortex"
@@ -79,6 +80,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     CloudflareAIGatewayAuthPlugin,
     AzureAuthPlugin,
     DigitalOceanAuthPlugin,
+    RhoaiMaasAuthPlugin,
     SnowflakeCortexAuthPlugin,
     XaiAuthPlugin,
     CerebrasPlugin,
