@@ -10,9 +10,14 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createResource } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
+
+export const HomeServersSchema = Schema.Struct({
+  collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
+})
 
 export function createHomeProjectsController(home: HomeController) {
   const platform = usePlatform()
@@ -22,10 +27,7 @@ export function createHomeProjectsController(home: HomeController) {
   const openSettings = useSettingsCommand()
   const serverManagement = useServerActionsController()
   const global = useGlobal()
-  const [_state, setState, _, ready] = persisted(
-    Persist.global("home.servers"),
-    createStore({ collapsed: {} as Record<string, boolean> }),
-  )
+  const [_state, setState, _, ready] = persisted(Persist.global("home.servers"), HomeServersSchema, { collapsed: {} })
   const [state] = createResource(
     () => ready.promise ?? Promise.resolve(),
     (promise) => promise.then(() => _state),

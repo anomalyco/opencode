@@ -17,6 +17,8 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
+import { AsyncIteratorSymbol, IteratorSymbol } from "../src/interpreter/model.js"
+import { invokeObjectMethod } from "../src/stdlib/object.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
@@ -822,6 +824,174 @@ describe("stdlib integration", () => {
       `),
     ).toEqual({ target: { a: 1, b: 2 }, result: { a: 1, b: 2 }, same: true })
     expect(await value(`try { Object.assign(null, { a: 1 }); return false } catch { return true }`)).toBe(true)
+  })
+
+  test("Object.assign ignores non-enumerable supported symbols without reading them", () => {
+    const target = {}
+    const reads: Array<boolean> = []
+    const source = Object.defineProperty({}, IteratorSymbol, {
+      get() {
+        reads.push(true)
+        return target
+      },
+    })
+    expect(invokeObjectMethod("assign", [target, source], { type: "CallExpression" })).toBe(target)
+    expect(reads).toEqual([])
+    expect(Object.hasOwn(target, IteratorSymbol)).toBe(false)
+  })
+
+  test("Object.assign ignores nested non-enumerable supported symbols during cycle checks", () => {
+    const target = {}
+    const reads: Array<boolean> = []
+    const nested = Object.defineProperty({}, IteratorSymbol, {
+      get() {
+        reads.push(true)
+        return target
+      },
+    })
+    expect(invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression" })).toBe(target)
+    expect(reads).toEqual([])
+    expect(target).toEqual({ nested })
+  })
+
+  test("Object.assign rejects cycles through supported symbols on nested arrays", () => {
+    const target = {}
+    const nested = Object.defineProperty([], IteratorSymbol, { enumerable: true, value: target })
+    expect(() => invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression" })).toThrow(
+      "Object.assign result contains a circular value.",
+    )
+    expect(Object.hasOwn(target, "nested")).toBe(false)
+  })
+
+  test("Object.assign cycle checks traverse sparse keys lazily", () => {
+    const target = {}
+    const reads: Array<boolean> = []
+    const nested = Object.defineProperties([], {
+      4294967294: { enumerable: true, value: target },
+      later: {
+        enumerable: true,
+        get() {
+          reads.push(true)
+          return null
+        },
+      },
+    })
+    expect(() => invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression" })).toThrow(
+      "Object.assign result contains a circular value.",
+    )
+    expect(reads).toEqual([])
+  })
+
+  test("Object.assign stops after a supported symbol write fails", () => {
+    const previous = () => ({ done: true })
+    const target = Object.defineProperty({}, IteratorSymbol, { value: previous })
+    const reads: Array<boolean> = []
+    const source = Object.defineProperties(
+      {},
+      {
+        [IteratorSymbol]: { enumerable: true, value: () => ({ done: false }) },
+        [AsyncIteratorSymbol]: {
+          enumerable: true,
+          get() {
+            reads.push(true)
+            return () => ({ done: true })
+          },
+        },
+      },
+    )
+    expect(() => invokeObjectMethod("assign", [target, source], { type: "CallExpression" })).toThrow(
+      "Object.assign could not assign property",
+    )
+    expect(Reflect.get(target, IteratorSymbol)).toBe(previous)
+    expect(reads).toEqual([])
+  })
+
+  test("Object.assign rejects direct and nested cycles", async () => {
+    expect(
+      await value(`
+        const target = { kept: true }
+        try { Object.assign(target, { self: target }) } catch { return target }
+        return null
+      `),
+    ).toEqual({ kept: true })
+    expect(
+      await value(`
+        const target = { kept: true }
+        const nested = { target }
+        try { Object.assign(target, { nested }) } catch { return target }
+        return null
+      `),
+    ).toEqual({ kept: true })
+    expect(
+      await value(`
+        const target = {}
+        const source = {}
+        source[Symbol.iterator] = target
+        try { Object.assign(target, source) } catch { return Object.hasOwn(target, Symbol.iterator) }
+        return true
+      `),
+    ).toBe(false)
+    expect(
+      await value(`
+        const target = {}
+        const nested = {}
+        nested[Symbol.iterator] = target
+        try { Object.assign(target, { nested }) } catch { return Object.hasOwn(target, "nested") }
+        return true
+      `),
+    ).toBe(false)
+  })
+
+  test("Object.assign preserves mutations before a circular field", async () => {
+    expect(
+      await value(`
+        const target = {}
+        try { Object.assign(target, { before: 1, cycle: { target }, after: 2 }) } catch { return target }
+        return null
+      `),
+    ).toEqual({ before: 1 })
+    expect(
+      await value(`
+        const target = {}
+        const marker = {}
+        const source = {}
+        source[Symbol.iterator] = marker
+        source[Symbol.asyncIterator] = target
+        try { Object.assign(target, source) } catch {
+          return [target[Symbol.iterator] === marker, Object.hasOwn(target, Symbol.asyncIterator)]
+        }
+        return null
+      `),
+    ).toEqual([true, false])
+  })
+
+  test("Object.assign preserves target identity and acyclic shared aliases", async () => {
+    expect(
+      await value(`
+        const shared = { count: 1 }
+        const target = {}
+        const result = Object.assign(target, { left: shared, right: shared })
+        result.left.count = 2
+        return [result === target, result.left === shared, result.left === result.right, shared.count]
+      `),
+    ).toEqual([true, true, true, 2])
+  })
+
+  test("Object.assign traverses shared aliases once", () => {
+    const reads: Array<boolean> = []
+    const shared = Object.defineProperty({}, "value", {
+      enumerable: true,
+      get() {
+        reads.push(true)
+        return 1
+      },
+    })
+    const target = {}
+    expect(invokeObjectMethod("assign", [target, { left: shared, right: shared }], { type: "CallExpression" })).toBe(
+      target,
+    )
+    expect(target).toEqual({ left: shared, right: shared })
+    expect(reads).toEqual([true])
   })
 
   test("assignment resolves and reads its left side before evaluating the right side", async () => {

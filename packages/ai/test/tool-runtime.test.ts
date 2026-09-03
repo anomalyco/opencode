@@ -442,6 +442,33 @@ describe("LLMClient tools", () => {
     }),
   )
 
+  it.effect("projects malformed tagged dynamic output as opaque JSON", () =>
+    Effect.gen(function* () {
+      const malformed = { type: "content", value: [{ type: "text" }] }
+      const dynamic = Tool.make({
+        description: "Return caller-defined JSON.",
+        jsonSchema: { type: "object", properties: {} },
+        execute: () => Effect.succeed(malformed),
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { dynamic },
+        LLMEvent.toolCall({ id: "call_1", name: "dynamic", input: {} }),
+      )
+
+      expect(dispatched.result).toEqual({ type: "json", value: malformed })
+      expect(dispatched.output).toEqual({ structured: malformed, content: [] })
+      expect(dispatched.events).toEqual([
+        LLMEvent.toolResult({
+          id: "call_1",
+          name: "dynamic",
+          result: { type: "json", value: malformed },
+          output: { structured: malformed, content: [] },
+        }),
+      ])
+    }),
+  )
+
   it.effect("executes tool calls for one step without looping by default", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([

@@ -18,36 +18,71 @@ const PROBE = "original"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-// The v2 review pane's diff data is workspace-scoped: switching between session
-// tabs in the same workspace must update its parameters reactively instead of
-// tearing the pane down and remounting it (which flickers).
-test("keeps the v2 review pane mounted when switching session tabs in a workspace", async ({ page }) => {
+// The review pane's data is workspace-scoped, but visibility belongs to each
+// session tab. Switching tabs must keep the pane mounted without opening it.
+test("keeps review visibility per tab and the pane mounted across tab switches", async ({ page }) => {
   await setup(page)
 
   await page.goto(sessionHref(sessionA))
   await expectSessionTitle(page, titleA)
 
   await page.getByRole("button", { name: "Toggle review" }).click()
+  await expect
+    .poll(() =>
+      page
+        .locator('[data-slot="session-chat-panel"]')
+        .evaluate((element) => getComputedStyle(element).transitionDuration),
+    )
+    .toContain("0.24s")
   const reviewTab = page.locator("#session-side-panel-review-tab")
   const reviewTabPanel = page.locator("#session-side-panel-review-tabpanel")
+  const chatPanel = page.locator('[data-slot="session-chat-panel"]')
   await expect(reviewTab).toHaveAttribute("aria-controls", "session-side-panel-review-tabpanel")
   await expect(reviewTabPanel).toHaveAttribute("id", "session-side-panel-review-tabpanel")
   const review = page.locator('#review-panel [data-component="session-review-v2"]')
   await expectAppVisible(review)
+  await expect(chatPanel).toHaveCSS("width", "580px")
   await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   await writeProbe(page)
 
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
-  await expectAppVisible(review)
-  await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
+  await expect(review).toBeHidden()
+  await expect
+    .poll(() =>
+      page
+        .locator('[data-slot="session-chat-panel"]')
+        .evaluate((element) => getComputedStyle(element).transitionDuration),
+    )
+    .toBe("0s")
   expect(await readProbe(page)).toBe(PROBE)
+
+  await page.getByRole("button", { name: "Toggle review" }).click()
+  await expectAppVisible(review)
+  await expect(chatPanel).toHaveCSS("width", "520px")
 
   await switchTab(page, titleA)
   await expectSessionTitle(page, titleA)
   await expectAppVisible(review)
+  await expect(chatPanel).toHaveCSS("width", "580px")
   await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   expect(await readProbe(page)).toBe(PROBE)
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ key }) => {
+          const panes = JSON.parse(localStorage.getItem("opencode.window.browser.dat:tabs.panes") ?? "{}")
+          return panes[key]?.review
+        },
+        { key: `${server}\n${sessionHref(sessionA)}` },
+      ),
+    )
+    .toBe(true)
+  await page.reload()
+  await expectSessionTitle(page, titleA)
+  await expectAppVisible(review)
+  await expect(chatPanel).toHaveCSS("width", "580px")
 
   const viewport = page.locator('#review-panel [data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
   await viewport.hover()
@@ -102,7 +137,7 @@ async function setup(page: Page) {
   })
 
   await page.addInitScript(
-    ({ directory, server, sessions }) => {
+    ({ directory, server, sessions, panes }) => {
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -114,8 +149,19 @@ async function setup(page: Page) {
         "opencode.window.browser.dat:tabs",
         JSON.stringify(sessions.map((sessionId: string) => ({ type: "session", server, sessionId }))),
       )
+      if (!localStorage.getItem("opencode.window.browser.dat:tabs.panes")) {
+        localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify(panes))
+      }
     },
-    { directory, server, sessions: [sessionA, sessionB] },
+    {
+      directory,
+      server,
+      sessions: [sessionA, sessionB],
+      panes: {
+        [`${server}\n${sessionHref(sessionA)}`]: { sessionWidth: 580 },
+        [`${server}\n${sessionHref(sessionB)}`]: { sessionWidth: 520 },
+      },
+    },
   )
 }
 

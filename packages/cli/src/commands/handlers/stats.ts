@@ -1,5 +1,7 @@
 import { ClientError, OpenCode, type SessionStatsInfo } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/effect/service"
+import { TokenUsage } from "@opencode-ai/schema/token-usage"
+import { activityCalendar } from "@opencode-ai/util/activity-calendar"
 import { Effect, Option } from "effect"
 import { EOL } from "node:os"
 import { Commands } from "../commands"
@@ -91,7 +93,7 @@ type RenderOptions = {
 const colors = terminalPalette()
 
 export function renderStats(stats: SessionStatsInfo, options: RenderOptions) {
-  const totalTokens = tokenTotal(stats.tokens)
+  const totalTokens = TokenUsage.total(stats.tokens)
   const toolTotals = stats.tools.mode === "none" ? undefined : stats.tools.totals
   const terminalTools = toolTotals ? toolTotals.succeeded + toolTotals.failed : 0
   const toolRate = !toolTotals || terminalTools === 0 ? undefined : (toolTotals.succeeded / terminalTools) * 100
@@ -167,43 +169,23 @@ function renderActivity(
   color: boolean,
   width: number,
 ) {
-  const values = new Map(activity.map((day) => [day.date, day.steps]))
-  const rangeStart = dateOrdinal(new Date(from))
-  const rangeEnd = dateOrdinal(new Date(to - 1))
-  const end = new Date(to - 1)
-  end.setHours(12, 0, 0, 0)
-  end.setDate(end.getDate() + (7 - mondayIndex(end) - 1))
-  const start = new Date(from)
-  start.setHours(12, 0, 0, 0)
-  start.setDate(start.getDate() - mondayIndex(start))
-  const maxWeeks = Math.max(1, Math.min(53, width - 4))
-  const totalWeeks = Math.floor((dateOrdinal(end) - dateOrdinal(start)) / 7) + 1
-  const latest = new Date(end)
-  latest.setDate(latest.getDate() - (maxWeeks - 1) * 7)
-  if (start < latest) start.setTime(latest.getTime())
-
-  const active = [...values.values()].filter((value) => value > 0)
-  const levels = [...new Set(active)].sort((a, b) => a - b)
-  const weekStarts = Array.from({ length: Math.floor((dateOrdinal(end) - dateOrdinal(start)) / 7) + 1 }, (_, week) => {
-    const date = new Date(start)
-    date.setDate(date.getDate() + week * 7)
-    return date
-  })
-  const weeks = weekStarts.map((week) =>
-    Array.from({ length: 7 }, (_, day) => {
-      const date = new Date(week)
-      date.setDate(date.getDate() + day)
-      const ordinal = dateOrdinal(date)
-      if (ordinal < rangeStart || ordinal > rangeEnd) return " "
-      return activityGlyph(values.get(dateKey(date)) ?? 0, levels, color)
-    }),
-  )
+  const calendar = activityCalendar({ activity, from, to, maxWeeks: width - 4 })
+  const months = calendar.months
+    .map((month, index) =>
+      (index === calendar.months.length - 1 || month.label.length <= month.span ? month.label : "").padEnd(month.span),
+    )
+    .join("")
+    .trimEnd()
   const weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
   return [
-    style(totalWeeks > maxWeeks ? `activity · last ${maxWeeks} weeks` : "activity", `1;${colors.primary}`, color),
-    `   ${style(monthLabels(weekStarts), "2", color)}`,
+    style(
+      calendar.clipped ? `activity · last ${calendar.weeks.length} weeks` : "activity",
+      `1;${colors.primary}`,
+      color,
+    ),
+    `   ${style(months, "2", color)}`,
     ...weekdays.flatMap((label, day) => [
-      `${style(label, "2", color)} ${weeks.map((week) => week[day]).join("")}`,
+      `${style(label, "2", color)} ${calendar.weeks.map((week) => (week[day].level < 0 ? " " : paintActivity(week[day].level, color))).join("")}`,
       ...(day === weekdays.length - 1 ? [] : [""]),
     ]),
     "",
@@ -238,7 +220,7 @@ function renderModels(stats: SessionStatsInfo, limit: number, width: number) {
           `${item.model.providerID}/${item.model.id}${item.model.variant ? `#${item.model.variant}` : ""}`,
           width,
         ),
-        `  ${formatNumber(tokenTotal(item.tokens))} tokens · ${formatNumber(item.steps)} steps · $${item.cost.toFixed(2)}`,
+        `  ${formatNumber(TokenUsage.total(item.tokens))} tokens · ${formatNumber(item.steps)} steps · $${item.cost.toFixed(2)}`,
       ]),
       ...(more > 0 ? ["", `+${more.toLocaleString("en-US")} more model${more === 1 ? "" : "s"}`] : []),
     ]
@@ -248,7 +230,7 @@ function renderModels(stats: SessionStatsInfo, limit: number, width: number) {
     ...models.map((item) =>
       tableRow(
         `${item.model.providerID}/${item.model.id}${item.model.variant ? `#${item.model.variant}` : ""}`,
-        formatNumber(tokenTotal(item.tokens)),
+        formatNumber(TokenUsage.total(item.tokens)),
         formatNumber(item.steps),
         `$${item.cost.toFixed(2)}`,
       ),
@@ -310,10 +292,6 @@ function truncate(value: string, width: number) {
   return value.length <= width ? value : value.slice(0, width - 1) + "…"
 }
 
-function tokenTotal(tokens: SessionStatsInfo["tokens"]) {
-  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
-}
-
 function formatNumber(value: number) {
   if (value >= 1_000_000_000) return `${trimDecimal(value / 1_000_000_000)}b`
   if (value >= 1_000_000) return `${trimDecimal(value / 1_000_000)}m`
@@ -342,13 +320,6 @@ function style(value: string, code: string, color: boolean) {
   return color ? `\x1b[${code}m${value}\x1b[0m` : value
 }
 
-function activityGlyph(value: number, levels: number[], color: boolean) {
-  if (value === 0) return paintActivity(0, color)
-  const index = levels.indexOf(value)
-  const level = Math.max(1, Math.ceil(((index + 1) / levels.length) * 4))
-  return paintActivity(level, color)
-}
-
 function paintActivity(level: number, color: boolean) {
   const glyph = ["·", "░", "▒", "▓", "█"][level]
   if (!color) return glyph
@@ -369,40 +340,4 @@ function terminalPalette() {
       activity: ["38;2;117;99;87", "38;2;161;125;102", "38;2;206;152;116", "38;2;250;178;131"],
     }
   return { primary: "36", activity: ["2;36", "36", "1;36", "1;96"] }
-}
-
-function monthLabels(weeks: Date[]) {
-  const line: string[] = []
-  weeks.reduce((previous, week, index) => {
-    const middle = new Date(week)
-    middle.setDate(middle.getDate() + 3)
-    const month = middle.getMonth()
-    if (month === previous) return previous
-    Intl.DateTimeFormat("en-US", { month: "short" })
-      .format(middle)
-      .split("")
-      .forEach((character, offset) => {
-        line[index + offset] = character
-      })
-    return month
-  }, -1)
-  return Array.from({ length: Math.max(weeks.length, line.length) }, (_, index) => line[index] ?? " ")
-    .join("")
-    .trimEnd()
-}
-
-function mondayIndex(date: Date) {
-  return (date.getDay() + 6) % 7
-}
-
-function dateKey(date: Date) {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-")
-}
-
-function dateOrdinal(date: Date) {
-  return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000)
 }

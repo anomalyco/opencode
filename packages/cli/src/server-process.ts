@@ -4,10 +4,11 @@ import { NodeServices } from "@effect/platform-node"
 import { Service, type DiscoverOptions } from "@opencode-ai/client/effect/service"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
-import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
-import { Effect, Option, Redacted, Schedule, Schema } from "effect"
+import { spawn } from "node:child_process"
+import { Deferred, Effect, Option, Redacted, Schedule, Schema } from "effect"
 import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
@@ -30,12 +31,13 @@ export const run = Effect.fnUntraced(function* (options: Options) {
   return yield* processEffect(options).pipe(
     Effect.provide(Updater.layer),
     Effect.provide(
-      LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), [
-        [
-          Global.node,
-          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+      LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {
+        replacements: [
+          Global.node.replace(
+            Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+          ),
         ],
-      ]),
+      }),
     ),
     Effect.provide(NodeServices.layer),
   )
@@ -52,7 +54,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         )
   const global = yield* Global.Service
   if (options.mode === "service") yield* Effect.sync(() => process.chdir(global.home))
-  return yield* Effect.scoped(
+  const replacement = yield* Deferred.make<PersistentPty.Handoff | null>()
+  const next = yield* Effect.scoped(
     Effect.gen(function* () {
       const foreground = options.mode === "default"
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
@@ -63,7 +66,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         serviceOptions !== undefined && port !== undefined
           ? yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
-      if (incumbent !== undefined) return
+      if (incumbent !== undefined) return Option.none<PersistentPty.Handoff | null>()
       const { start } = yield* Effect.promise(() => import("@opencode-ai/server/process"))
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.
@@ -83,7 +86,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const server = yield* start(
         {
           app: {
-            name: process.env.OPENCODE_CLIENT ?? "cli",
+            name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
             version: OPENCODE_VERSION,
             channel: OPENCODE_CHANNEL,
           },
@@ -160,19 +163,62 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           )
         }),
       )
-      if (server === undefined) return
+      if (server === undefined) return Option.none<PersistentPty.Handoff | null>()
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)
       const updater = yield* Updater.Service
-      yield* updater.check().pipe(Effect.schedule(Schedule.spaced("10 minutes")), Effect.forkScoped)
+      yield* updater
+        .monitor({
+          url,
+          password,
+          managed: options.mode === "service",
+          notify: server.updateAvailable,
+          restart: (handoff) => Deferred.succeed(replacement, handoff).pipe(Effect.asVoid),
+        })
+        .pipe(Effect.forkScoped)
       return yield* options.mode === "service"
-        ? server.shutdown
+        ? Effect.raceFirst(
+            server.shutdown.pipe(Effect.as(Option.none<PersistentPty.Handoff | null>())),
+            Deferred.await(replacement).pipe(Effect.map(Option.some)),
+          )
         : options.mode === "stdio"
-          ? waitForStdinClose()
+          ? waitForStdinClose().pipe(Effect.as(Option.none<PersistentPty.Handoff | null>()))
           : Effect.never
     }).pipe(Effect.annotateLogs({ role: "server" })),
   )
+  if (Option.isNone(next)) return
+  yield* spawnReplacement(next.value)
+})
+
+const spawnReplacement = Effect.fnUntraced(function* (handoff: PersistentPty.Handoff | null) {
+  const options = yield* ServiceConfig.options()
+  const [command, ...args] = options.command
+  if (!command) return yield* Effect.fail(new Error("Failed to resolve CLI command for restart"))
+  // We do not monitor the replacement after spawn. A managed TUI
+  // recovers with Service.ensure if startup fails; a future client
+  // restart signal could coordinate that recovery instead.
+  yield* Effect.tryPromise({
+    try: () =>
+      new Promise<void>((resolve, reject) => {
+        const child = spawn(command, args, {
+          detached: true,
+          stdio: "ignore",
+          windowsHide: true,
+          env: {
+            ...process.env,
+            ...options.env,
+            OPENCODE_PTY_HANDOFF: handoff ? JSON.stringify(handoff) : undefined,
+          },
+        })
+        child.once("spawn", () => {
+          child.unref()
+          resolve()
+        })
+        child.once("error", reject)
+      }),
+    catch: (cause) => new Error("Failed to start replacement server", { cause }),
+  })
 })
 
 const recognizeIncumbent = Effect.fnUntraced(function* (options: DiscoverOptions, hostname: string, port: number) {

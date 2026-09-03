@@ -117,8 +117,11 @@ export default Plugin.define({
 
 ## Transforms
 
-Transforms are a central pattern in the plugin API and modify how OpenCode works. Plugins register
-transforms and each builds on the changes made before it.
+Transforms are synchronous edits to OpenCode's domain state, and each builds on earlier registrations.
+Registry reads such as `ctx.catalog.model.list()` reflect every registration so far, including during plugin setup;
+startup batching only coalesces update notifications and never delays what a read returns. Resource status APIs still
+report the state of running resources: a registered definition does not mean its connection or other resource work has
+completed.
 
 Say we have a plugin that adds one model to the catalog.
 
@@ -134,9 +137,15 @@ export default Plugin.define({
         model.cost = [{ input: 2, output: 12, cache: { read: 0.2, write: 2 } }]
       })
     })
+
+    const models = await ctx.catalog.model.list() // Includes the model registered above.
   },
 })
 ```
+
+Any registration, removal, or `reload()` marks the registry changed; the next read rebuilds it by replaying every
+active transform in registration order onto a fresh value. Keep transforms cheap and repeatable. A value you have
+already read is never modified by later rebuilds.
 
 A later plugin can enforce a maximum output price across every model, including models added by earlier plugins.
 
@@ -159,8 +168,8 @@ export default Plugin.define({
 })
 ```
 
-Now say the first plugin dynamically fetches can fetch its model list from a
-dynamic source. It can call `reload` when that list changes.
+Captured inputs are not watched automatically. Load external data before the synchronous callback, then call
+`reload()` after those inputs change.
 
 ```ts title="plugins/models/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
@@ -206,15 +215,15 @@ const build = await ctx.agent.get({ agentID: "build" })
 Register a transform to inspect, update, remove, or select the default agent.
 
 ```ts
-await ctx.agent.transform((draft) => {
-  const agents = draft.list()
-  const build = draft.get("build")
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
 
-  draft.default("build")
-  draft.update("build", (agent) => {
+  editor.default("build")
+  editor.update("build", (agent) => {
     agent.description = "Builds features and fixes bugs"
   })
-  draft.remove("legacy")
+  editor.remove("legacy")
 })
 ```
 
@@ -232,11 +241,11 @@ Schema: [`Agent.Info`](/api#schema-Agent.Info)
 interface AgentContext {
   list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
   get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
-  transform(callback: (draft: AgentDraft) => void): Promise<Registration>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface AgentDraft {
+interface AgentEditor {
   list(): readonly AgentInfo[]
   get(id: string): AgentInfo | undefined
   default(id: string | undefined): void
@@ -300,11 +309,11 @@ interface CatalogContext {
     list(input?: ModelListInput, requestOptions?: RequestOptions): Promise<ModelListOutput>
     default(input?: ModelDefaultInput, requestOptions?: RequestOptions): Promise<ModelDefaultOutput>
   }
-  transform(callback: (draft: CatalogDraft) => void): Promise<Registration>
+  transform(callback: (editor: CatalogEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface CatalogDraft {
+interface CatalogEditor {
   provider: {
     list(): readonly CatalogProviderRecord[]
     get(providerID: string): CatalogProviderRecord | undefined
@@ -339,8 +348,8 @@ const commands = await ctx.command.list()
 Register commands with a transform. The executor receives the session, prompt attachments, and requested delivery mode.
 
 ```ts
-await ctx.command.transform((draft) => {
-  draft.add({
+await ctx.command.transform((editor) => {
+  editor.add({
     name: "security-review",
     description: "Review changes for security issues",
     execute: async ({ sessionID, prompt, delivery }) => {
@@ -369,11 +378,11 @@ Schemas: [`Command.Info`](/api#schema-Command.Info),
 ```ts
 interface CommandContext {
   list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
-  transform(callback: (draft: CommandDraft) => void): Promise<Registration>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface CommandDraft {
+interface CommandEditor {
   add(definition: CommandDefinition): void
 }
 
@@ -430,22 +439,22 @@ await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt
 Register a transform to inspect integrations and manage their authentication methods.
 
 ```ts
-await ctx.integration.transform((draft) => {
-  const integrations = draft.list()
-  const acme = draft.get("acme")
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
 
-  draft.update("acme", (integration) => {
+  editor.update("acme", (integration) => {
     integration.name = "Acme"
   })
-  draft.method.update({
+  editor.method.update({
     integrationID: "acme",
     method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
   })
 
-  const methods = draft.method.list("acme")
+  const methods = editor.method.list("acme")
   const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
-  if (legacy) draft.method.remove("acme", legacy)
-  draft.remove("legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
 })
 ```
 
@@ -487,7 +496,7 @@ interface IntegrationContext {
     ): Promise<IntegrationCommandStatusOutput>
     cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
   }
-  transform(callback: (draft: IntegrationDraft) => void): Promise<Registration>
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
   reload(): Promise<void>
   connection: {
     active(integrationID: string): Promise<ConnectionInfo | undefined>
@@ -495,7 +504,7 @@ interface IntegrationContext {
   }
 }
 
-interface IntegrationDraft {
+interface IntegrationEditor {
   list(): readonly IntegrationRef[]
   get(id: string): IntegrationRef | undefined
   update(id: string, update: (integration: IntegrationRef) => void): void
@@ -516,18 +525,18 @@ List MCP servers and their current connection state.
 const servers = await ctx.mcp.list()
 ```
 
-Plugins manage MCP servers only through transforms. Use `draft.set` to add or replace a server, `draft.update` to
-change its configuration, and `draft.remove` to remove it. Inspect configuration with `draft.list` and `draft.get`.
+Plugins manage MCP servers only through transforms. Use `editor.set` to add or replace a server, `editor.update` to
+change its configuration, and `editor.remove` to remove it. Inspect configuration with `editor.list` and `editor.get`.
 
 ```ts
-await ctx.mcp.transform((draft) => {
-  const servers = draft.list()
-  const docs = draft.get("docs")
-  draft.set("docs", { type: "remote", url: "https://mcp.example.com" })
-  draft.update("docs", (server) => {
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
     server.disabled = false
   })
-  draft.remove("legacy")
+  editor.remove("legacy")
 })
 ```
 
@@ -548,11 +557,11 @@ Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api
 ```ts
 interface MCPContext {
   list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
-  transform(callback: (draft: MCPDraft) => void): Promise<Registration>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface MCPDraft {
+interface MCPEditor {
   list(): readonly (readonly [string, McpServerConfig])[]
   get(name: string): McpServerConfig | undefined
   set(name: string, config: McpServerConfig): void
@@ -587,14 +596,16 @@ Read the references available at a location.
 const references = await ctx.reference.list()
 ```
 
-Register a transform to inspect, add, or remove local and Git references.
+Register a transform to inspect, add, or remove local and Git references. `get(name)` returns the current configured source,
+or `undefined` when the name is absent.
 
 ```ts
-await ctx.reference.transform((draft) => {
-  const references = draft.list()
-  draft.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
-  draft.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
-  draft.remove("legacy")
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
+  editor.remove("legacy")
 })
 ```
 
@@ -612,12 +623,13 @@ Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource
 ```ts
 interface ReferenceContext {
   list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
-  transform(callback: (draft: ReferenceDraft) => void): Promise<Registration>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface ReferenceDraft {
+interface ReferenceEditor {
   list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
   add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
   remove(name: string): void
 }
@@ -708,22 +720,24 @@ Read the skills available at a location.
 const skills = await ctx.skill.list()
 ```
 
-Register a transform to inspect, add, update, or remove skills.
+Register a transform to inspect, add, update, or remove skills. `get(id)` returns the current editor entry, or `undefined`
+when the skill is absent.
 
 ```ts
-await ctx.skill.transform((draft) => {
-  const skills = draft.list()
-  draft.add({
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
     id: "review",
     name: "Review",
     description: "Review the current changes",
     location: "/workspace/.opencode/skills/review.md",
     content: "Review the current changes for correctness and missing tests.",
   })
-  draft.update("review", (skill) => {
+  const review = editor.get("review")
+  editor.update("review", (skill) => {
     skill.autoinvoke = true
   })
-  draft.remove("legacy")
+  editor.remove("legacy")
 })
 ```
 
@@ -740,12 +754,13 @@ Schema: [`Skill.Info`](/api#schema-Skill.Info)
 ```ts
 interface SkillContext {
   list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
-  transform(callback: (draft: SkillDraft) => void): Promise<Registration>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface SkillDraft {
+interface SkillEditor {
   list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
   add(skill: SkillInfo): void
   update(id: string, update: (skill: SkillInfo) => void): void
   remove(id: string): void
@@ -793,13 +808,16 @@ interface StorageScanResult {
 
 ### Tools
 
-Register, update, and remove tools with a transform. The callback is synchronous, including in Promise plugins; load external
-data before registering or reloading. OpenCode replays active transforms in registration order on a fresh draft.
-For the same effective tool name, a later valid registration overrides an earlier one.
+Register, update, and remove tools with a synchronous transform, including in Promise plugins. Load external data
+before registering or reloading. A later valid registration overrides the same effective tool name.
 
 ```ts
-const registration = await ctx.tool.transform((draft) => {
-  draft.add({
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
+  editor.add({
     name: "greeting",
     description: "Create a greeting",
     input: {
@@ -824,7 +842,7 @@ changing their order; it does not rerun plugin setup.
 await ctx.tool.reload()
 ```
 
-Use `list()` and `get()` to inspect tools currently in the draft. Tools have an `id` containing their effective name,
+Use `list()` and `get()` to inspect tools currently in the editor. Tools have an `id` containing their effective name,
 and `get()` returns `undefined` when that ID is not present. Use `update` and `remove` with the effective tool name,
 including its namespace (`acme_greeting` above). Dots in
 namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
@@ -832,11 +850,11 @@ namespaces and unsupported characters in tool names become `_`. Missing names ar
 them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
 
 ```ts
-await ctx.tool.transform((draft) => {
-  draft.update("acme_greeting", (tool) => {
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
     tool.description = "Greet the user by name"
   })
-  draft.remove("acme_obsolete")
+  editor.remove("acme_obsolete")
 })
 ```
 
@@ -850,9 +868,10 @@ definition it overrode. Disposal is idempotent, and unloading the plugin also di
 await registration.dispose()
 ```
 
-Each model request captures a tool snapshot. Reload and disposal affect future snapshots, not the definitions or
-executors already captured by an existing request. Executors that close over mutable plugin data still observe
-that data; capture a value inside the transform when it must remain tied to that definition.
+Each model request captures a stable, executable tool snapshot. Later transforms, reloads, and disposal affect future
+snapshots, not the definitions, Code Mode namespace descriptions, or executors already captured. Executors that close
+over mutable plugin data still observe that data; capture a value inside the transform when it must remain tied to
+that definition.
 
 #### Reference
 
@@ -861,13 +880,14 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 
 ```ts
 interface ToolContext {
-  transform(callback: (draft: ToolDraft) => void): Promise<Registration>
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface ToolDraft {
+interface ToolEditor {
   list(): readonly (ToolInfo & { readonly id: string })[]
   get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
   add(tool: ToolInfo): void
   update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
   remove(id: string): void
@@ -886,11 +906,11 @@ const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
 ```
 
 Register a location-scoped VCS provider with a transform. A provider matching the detected repository type is selected
-automatically; use `draft.default.set` to select a different provider.
+automatically; use `editor.default.set` to select a different provider.
 
 ```ts
-await ctx.vcs.transform((draft) => {
-  draft.add({
+await ctx.vcs.transform((editor) => {
+  editor.add({
     id: "custom",
     name: "Custom VCS",
     info: async () => ({ branch: { current: "feature", default: "main" } }),
@@ -898,7 +918,7 @@ await ctx.vcs.transform((draft) => {
     status: async (scope, { signal }) => readStatus(scope.worktree, signal),
     diff: async (input, { signal }) => readDiff(input, signal),
   })
-  draft.default.set("custom")
+  editor.default.set("custom")
 })
 ```
 
@@ -917,11 +937,11 @@ interface VcsContext {
   branches(input?: VcsBranchesInput, requestOptions?: RequestOptions): Promise<VcsBranchesOutput>
   status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
   diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
-  transform(callback: (draft: VcsDraft) => void): Promise<Registration>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface VcsDraft {
+interface VcsEditor {
   add(definition: VcsDefinition): void
   default: {
     get(): string | undefined
@@ -942,8 +962,8 @@ const results = await ctx.websearch.query({ query: "OpenCode plugins", providerI
 Register a provider and select the default provider with a transform.
 
 ```ts
-await ctx.websearch.transform((draft) => {
-  draft.add({
+await ctx.websearch.transform((editor) => {
+  editor.add({
     id: "internal",
     name: "Internal search",
     execute: async ({ query }, { signal }) => {
@@ -952,14 +972,14 @@ await ctx.websearch.transform((draft) => {
       return [{ url: result.url, title: result.title, content: result.content, time: {} }]
     },
   })
-  draft.default.set("internal")
+  editor.default.set("internal")
 })
 ```
 
 Disable websearch by selecting `false`, or reload providers after external state changes.
 
 ```ts
-await ctx.websearch.transform((draft) => draft.default.set(false))
+await ctx.websearch.transform((editor) => editor.default.set(false))
 await ctx.websearch.reload()
 ```
 
@@ -971,11 +991,11 @@ Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Res
 interface WebSearchContext {
   providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
   query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
-  transform(callback: (draft: WebSearchDraft) => void): Promise<Registration>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface WebSearchDraft {
+interface WebSearchEditor {
   add(provider: WebSearchDefinition): void
   default: {
     get(): string | false | undefined
@@ -1010,15 +1030,22 @@ interface EventContext {
 
 ## Hooks
 
-Hooks intercept live operations. Multiple plugins can register the same hook; OpenCode runs them in plugin order so
-later hooks see earlier changes.
+Hooks intercept live operations. Register a hook on its domain and dispose the
+returned registration when it is no longer needed.
 
 ```ts
 const registration = await ctx.session.hook("context", () => {})
 await registration.dispose()
 ```
 
+Multiple plugins can register the same hook. OpenCode runs them in plugin order,
+so later hooks see changes made by earlier hooks.
+
 ### Sessions
+
+Session hooks intercept prompt admission, model calls, native HTTP, and retries.
+
+#### Prompt admission
 
 Intercept incoming user prompts before attachment and skill resolution and durable inbox admission:
 
@@ -1032,20 +1059,35 @@ await ctx.session.hook("prompt", (event) => {
 })
 ```
 
-The hook receives an owned, mutable draft with `text`, `files`, agent mentions (`agents`), and selected `skills`, plus
-`metadata` and `delivery` (`"steer"` by default, or `"queue"`). Files and skills added by hooks use the normal resolution
-and validation path. If you rewrite text, update or remove attachment `mention` offsets that no longer match it. Agent
-mentions do not switch the session's active agent. Session and message IDs are readonly and cannot redirect admission.
+The hook receives an owned, mutable draft:
 
-Hooks run in registration order after the session's location plugins are ready. Edits become the canonical persisted user
-input; unlike `context`, `prompt` does not run on each model call. Commands that submit through `session.prompt` also run
-this hook. Synthetic messages, shell messages, and compaction/move controls do not. Prompt hooks cannot be scoped by model
-provider because admission is separate from model resolution. Use an unscoped registration.
+- `prompt` contains `text`, `files`, agent mentions in `agents`, and selected `skills`.
+- `metadata` contains application-defined admission metadata.
+- `delivery` is `"steer"` by default and can be changed to `"queue"`.
+- Session and message IDs are readonly; a hook cannot redirect admission.
 
-Retries of an ID already pending or delivered return the original admission without rerunning hooks or resolving the
-retried payload. Concurrent submissions can run hooks more than once before either admission commits, but only the first
-successful admission wins. Keep hooks retry-safe; they are not an exactly-once side-effect boundary. A failed or interrupted
-preparation admits no prompt. This hook transforms input and does not expose a typed rejection API.
+Files and skills added by a hook follow the normal resolution and validation
+path. When rewriting text, update or remove attachment `mention` offsets that no
+longer match. Agent mentions do not switch the session's active agent.
+
+Prompt hooks run under these conditions:
+
+- Hooks run in registration order after the session's location plugins are ready.
+- Commands that submit through `session.prompt` run the hook.
+- Synthetic messages, shell messages, compaction controls, and move controls do not.
+- The hook runs once during admission, not before every model call.
+- Provider scoping is unavailable because model resolution happens after admission.
+
+Edits become the canonical persisted user input. If preparation fails or is
+interrupted, OpenCode does not admit the prompt.
+
+Keep prompt hooks retry-safe. They are not an exactly-once side-effect boundary:
+
+- Retrying an ID already pending or delivered returns the original admission without rerunning hooks.
+- Concurrent submissions can run hooks more than once, but only the first successful admission wins.
+- Prompt hooks transform input and do not expose a typed rejection API.
+
+#### Model context
 
 Modify assembled system instructions, messages, tools, generation settings, or provider options immediately before model
 dispatch.
@@ -1059,15 +1101,23 @@ await ctx.session.hook("context", (event) => {
 })
 ```
 
-`generation` and `providerOptions` start as empty request-override objects for each context hook invocation, not resolved
-model settings. Hooks run in registration order and see earlier hooks' overrides. During compilation, request overrides
-take precedence over model defaults, which take precedence over route defaults. Provider option records merge recursively;
-arrays and scalar values replace earlier values. Deleting an override or setting it to `undefined` falls back to defaults;
-it does not remove a configured default. This precedence applies to semantic generation and provider options; explicit raw
-HTTP body overlays are applied after protocol lowering and can override the resulting fields.
+Context changes affect only the outgoing model call, not persisted history or
+configuration. The hook runs again for subsequent calls such as tool-driven
+continuations, transient session generation, and compaction, but not for title requests.
 
-These changes affect only the outgoing model call, not persisted session history or configuration. Context hooks also run
-for subsequent calls such as tool-driven continuations, but do not run for title or compaction requests.
+Compaction context hooks receive the selected session agent. Its model-request
+and HTTP hooks retain the `compaction` agent identity for provider-specific handling.
+
+Request overrides follow these rules:
+
+- `generation` and `providerOptions` start empty for each model call; they do not contain resolved model settings.
+- Hooks run in registration order and see overrides made by earlier hooks.
+- Request overrides take precedence over model defaults, which take precedence over route defaults.
+- Provider option objects merge recursively; arrays and scalar values replace earlier values.
+- Deleting an override or setting it to `undefined` falls back to configured defaults rather than removing them.
+- Raw HTTP body overlays apply after protocol lowering and can override the resulting fields.
+
+#### Provider options
 
 Provider options use the selected protocol's semantic option names, not raw HTTP body fields. Scope provider-specific
 settings to the matching provider. For example, OpenAI Responses uses `reasoningEffort`:
@@ -1082,8 +1132,12 @@ await ctx.session.hook(
 )
 ```
 
-`maxTokens` is the semantic output-token limit. Generation settings are supported only where the selected protocol and
-model support them; for example, Gemini supports `topK`, while OpenAI Responses does not expose it.
+Generation options depend on the selected protocol and model:
+
+- `maxTokens` is the semantic output-token limit.
+- Gemini supports `topK`; OpenAI Responses does not expose it.
+
+#### Model request
 
 Modify model request settings and optionally scope the hook to one provider.
 
@@ -1096,6 +1150,8 @@ await ctx.session.hook(
   { providerID: "anthropic" },
 )
 ```
+
+#### Native HTTP
 
 Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
 it.
@@ -1112,6 +1168,8 @@ await ctx.session.hook("http.response", (event) => {
   })
 })
 ```
+
+#### Retry policy
 
 Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
 classifies the failure and proposes its policy, but before any retry is scheduled. It does not expose how OpenCode
@@ -1131,13 +1189,18 @@ await ctx.session.hook("retry", (event) => {
 })
 ```
 
-The initial `decision` is OpenCode's policy, so hooks may make a normally terminal provider failure retryable or veto a
-proposed retry. Multiple hooks run in registration order and later hooks see the current decision. The built-in maximum
-attempt count remains a hard limit. `attempt` is the physical attempt being proposed; the initial request is attempt `1`,
-so the first retry is attempt `2`. Invalid delays (`NaN`, infinity, or negative values) fall back to the computed delay.
-Context-overflow recovery remains separate because it compacts the conversation instead of retrying the same request.
+Retry hooks can change OpenCode's initial `decision` by making a terminal failure
+retryable or vetoing a proposed retry.
 
-#### Reference
+Retry decisions follow these rules:
+
+- Multiple hooks run in registration order, and later hooks see the current decision.
+- The built-in maximum attempt count remains a hard limit.
+- `attempt` is the physical attempt under consideration. The initial request is `1`, so the first retry is `2`.
+- Invalid delays such as `NaN`, infinity, or negative values fall back to the computed delay.
+- Context-overflow recovery is separate because it compacts the conversation instead of retrying the same request.
+
+#### Session reference
 
 ```ts
 import type { SessionPrompt } from "@opencode-ai/plugin/promise/session"
@@ -1193,9 +1256,8 @@ interface SessionHookContext {
 
 ### Permissions
 
-Review permission decisions after configured rules are evaluated and before an action runs or a permission prompt is
-published. Hooks run for `allow` and `ask` decisions. An explicit configured `deny` is final and does not invoke the
-hook.
+Review permission decisions after configured rules are evaluated and before an
+action runs or a permission prompt is published.
 
 ```ts
 await ctx.permission.hook("evaluate", async (event) => {
@@ -1213,8 +1275,12 @@ await ctx.permission.hook("evaluate", async (event) => {
 })
 ```
 
-The hook may set `effect` to `allow`, `ask`, or `deny`. When set, `message` is included in an escalated permission
-request or used as the denial reason.
+Permission hooks follow these rules:
+
+- Hooks run for `allow` and `ask` decisions.
+- An explicit configured `deny` is final and does not invoke the hook.
+- A hook may change `effect` to `allow`, `ask`, or `deny`.
+- `message` appears in an escalated permission request or becomes the denial reason.
 
 #### Reference
 
@@ -1293,115 +1359,6 @@ interface ToolHookContext {
 }
 ```
 
-## RPC
-
-Expose typed methods and custom events through a shared RPC definition. Keep
-the contract in a browser-safe module, separate from plugin setup and server code.
-`Rpc.define` is synchronous and independent of Promise or Effect execution.
-
-```ts title="src/rpc.ts"
-import { Rpc } from "@opencode-ai/plugin/rpc"
-import { z } from "zod"
-
-export const Acme = Rpc.define({
-  id: "acme",
-  methods: {
-    search: {
-      input: z.object({ query: z.string() }),
-      output: z.object({ text: z.string() }),
-      errors: {
-        not_found: z.object({ query: z.string() }),
-      },
-    },
-  },
-  events: {
-    updated: {
-      schema: z.object({ itemID: z.string(), text: z.string() }),
-    },
-  },
-})
-```
-
-Promise plugin contracts accept Standard Schema such as Zod or plain JSON Schema.
-Standard Schema infers types; plain JSON Schema uses `unknown` while still
-validating at runtime. Effect Schema is supported only by the Effect plugin and
-client APIs. Use Standard or JSON Schema when both API styles consume a contract.
-Every method declares `input` and `output` and may declare an `errors` map.
-Error keys become literal error `type` values, while each schema validates and
-transforms that error's `data`. Names starting with `rpc.` are reserved for
-framework failures. Schemas own parsing, transformations, and Effect encoding.
-RPC does not add a second generic JSON validation pass.
-
-Custom event schemas must produce JSON objects. Scalars, arrays, `null`, and
-`undefined` are not valid event data. Plain JSON Schema event definitions are
-checked at emission even though they do not infer a TypeScript payload type.
-
-Plain JSON Schema is interpreted as Draft 2020-12 and delegated directly to
-Effect's JSON Schema importer and decoder. Use Standard Schema when another
-dialect or parser is required.
-
-Use `{}` for an empty event payload; only omitted method input/output represents
-no value.
-
-Register the implementation inside `setup`:
-
-```ts title="src/index.ts"
-import { Plugin } from "@opencode-ai/plugin"
-import { Acme } from "./rpc.js"
-
-export default Plugin.define({
-  id: "acme-plugin",
-  async setup(ctx) {
-    const registration = await ctx.rpc.register(Acme, {
-      search: async ({ query }, context) => {
-        const text = await findText(query, { signal: context.signal })
-        if (!text) return context.error("not_found", "Result not found", { query })
-        return { text }
-      },
-    })
-
-    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
-  },
-})
-```
-
-Promise handlers receive a general second context argument with `signal` and a
-typed `error(type, message, data)` constructor. They may return or throw the
-constructed error; both reject callers with `{ type, message, data? }`. RPC IDs
-are independent of plugin IDs. One plugin can implement several RPCs, and later registrations override earlier ones
-at the same location. Disposal or unload removes only that registration and
-reveals the previous implementation. In-flight calls retain their original handler.
-
-Other server plugins can obtain a handle without implementing the RPC:
-
-```ts
-const acme = ctx.rpc(Acme)
-const result = await acme.search({ query: "hello" })
-
-const unsubscribe = acme.events.on("updated", (event) => {
-  console.log(event.type, event.location.directory, event.data.text)
-})
-```
-
-Handles are immediate; each call finds the current registration. Server-plugin
-handles call and subscribe within their own location and cannot override it.
-`events.subscribe("updated")` returns an async iterable; `events.on` is a
-callback convenience returning unsubscribe. Plugin unload closes its subscriptions.
-
-Event keys are local names. Subscribers see normal prefixed types such as
-`rpc.acme.updated`, with `id`, `created`, direct `data`, required `location`, and optional
-`metadata`. Events publish through the normal ephemeral Bus path.
-
-Subscriptions remain live-only: there is no plugin log/replay API yet, and events
-while disconnected are missed. The method name `events` is reserved for the
-subclient's event API.
-
-External [clients](/build/client#plugin-rpc) use `client.rpc(Acme)` and receive
-that RPC's events across all locations. The native `/api/event` stream and
-typed subclients observe the same direct `rpc.<rpcID>.<event>` envelope.
-Neither importing the contract nor constructing a handle loads the server implementation.
-Configure the plugin on the server separately.
-
 ## Publish
 
 A package plugin uses the same default export as a local plugin. A minimal
@@ -1422,8 +1379,9 @@ manifest is:
 }
 ```
 
-The `./rpc` export is optional; include it when publishing a shared RPC contract
-for other plugins and clients to import without loading your implementation.
+The `./rpc` export is optional; include it when publishing a shared
+[RPC contract](/build/plugins/rpc) for other plugins and clients to import
+without loading your implementation.
 
 Use versions compatible with the OpenCode release you target and test the
 installed package, not only a workspace-linked copy. Because the plugin API is

@@ -1,5 +1,33 @@
 import { expect, story } from "../../storybook/playwright/story"
 
+story("raises the docked composer only in dark mode", async ({ mount, page }) => {
+  const component = await mount("opencode-composer-flow--empty-draft")
+  const composer = component.locator('[data-component="composer"]')
+
+  await page.locator("html").evaluate((root) => root.setAttribute("data-color-scheme", "light"))
+  await expect(composer).toHaveCSS("background-color", "rgb(255, 255, 255)")
+
+  await page.locator("html").evaluate((root) => root.setAttribute("data-color-scheme", "dark"))
+  await expect(composer).toHaveCSS("background-color", "rgb(36, 36, 36)")
+})
+
+story("centers add menu shortcuts in a consistent column", async ({ mount, page }) => {
+  const component = await mount("opencode-composer-flow--empty-draft")
+  await component.locator('[data-action="composer-attach"]').click()
+
+  const shortcuts = page.locator('[role="menu"] [data-slot="menu-v2-item-shortcut"]')
+  await expect(shortcuts).toHaveCount(4)
+  const boxes = await shortcuts.evaluateAll((items) =>
+    items.map((item) => {
+      const box = item.getBoundingClientRect()
+      return { width: box.width, center: box.left + box.width / 2 }
+    }),
+  )
+
+  expect(new Set(boxes.map((box) => box.width)).size).toBe(1)
+  expect(new Set(boxes.map((box) => box.center)).size).toBe(1)
+})
+
 for (const draft of ["empty-draft", "multiline-draft", "mixed-attachments"]) {
   story(`select all stays inside the composer with ${draft}`, async ({ mount, page }) => {
     const component = await mount(`opencode-composer-flow--${draft}`)

@@ -16,9 +16,11 @@ import { Bus } from "../bus.js"
 import { Integration } from "../integration.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
+import { LocationServiceMap } from "../location-service-map.js"
 import { Model } from "../model.js"
 import { Mcp } from "../mcp/index.js"
-import { PluginRuntime } from "./runtime.js"
+import { Session } from "../session.js"
+import { PersistentPty } from "../persistent-pty.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
 import { Rpc } from "../rpc.js"
@@ -32,6 +34,7 @@ import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 type RpcEvent = Event.Payload & {
@@ -40,7 +43,10 @@ type RpcEvent = Event.Payload & {
   readonly data: Readonly<Record<string, unknown>>
 }
 const isRpcEvent = (event: Event.Payload): event is RpcEvent => event.type.startsWith("rpc.")
-export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, pluginID: string = "test") {
+export const make = Effect.fn("PluginHost.make")(function* (
+  plugin: Pick<Interface, "list">,
+  pluginID: string = "test",
+) {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
   const aisdk = yield* AISDK.Service
@@ -60,7 +66,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const generate = yield* Generate.Service
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
-  const runtime = yield* PluginRuntime.Service
+  const sessions = yield* Session.Service
+  const persistentPty = yield* PersistentPty.Service
+  const locations = yield* LocationServiceMap.Service
   const locationInfo = () =>
     new Location.Info({
       directory: location.directory,
@@ -80,7 +88,23 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const response = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
 
-  return {
+  const listAgents = Effect.fn("PluginHost.listAgents")((ref: Location.Ref) =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const agents = yield* Agent.Service
+      return {
+        location: new Location.Info({
+          directory: location.directory,
+          workspaceID: location.workspaceID,
+          project: location.project,
+        }),
+        data: yield* agents.list(),
+      }
+    }).pipe(Effect.provide(locations.get(ref)), Effect.orDie),
+  )
+
+  // Keep the instance graph's inferred types independent of Session handles.
+  const context: Plugin.Context = {
     app,
     location: locationInfo(),
     options: {},
@@ -90,7 +114,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
         const ref = locationRef(input)
         const output =
           ref && !isCurrentLocation(ref)
-            ? runtime.location.agent.list(ref).pipe(
+            ? listAgents(ref).pipe(
                 Effect.map((result) => ({
                   ...result,
                   data: result.data.find((agent) => agent.id === input.agentID),
@@ -107,18 +131,18 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       },
       list: (input) => {
         const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.agent.list(ref)
+        if (ref && !isCurrentLocation(ref)) return listAgents(ref)
         return response(agents.list())
       },
       reload: agents.reload,
       transform: (callback) =>
-        agents.transform((draft) => {
+        agents.transform((editor) => {
           callback({
-            list: () => mutable(draft.list()),
-            get: (id) => mutable(draft.get(Agent.ID.make(id))),
-            default: (id) => draft.default(id === undefined ? undefined : Agent.ID.make(id)),
-            update: (id, update) => draft.update(Agent.ID.make(id), update),
-            remove: (id) => draft.remove(Agent.ID.make(id)),
+            list: () => mutable(editor.list()),
+            get: (id) => mutable(editor.get(Agent.ID.make(id))),
+            default: (id) => editor.default(id === undefined ? undefined : Agent.ID.make(id)),
+            update: (id, update) => editor.update(Agent.ID.make(id), update),
+            remove: (id) => editor.remove(Agent.ID.make(id)),
           })
         }),
     },
@@ -172,24 +196,25 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       },
       reload: catalog.reload,
       transform: (callback) =>
-        catalog.transform((draft) => {
+        catalog.transform((editor) => {
           callback({
             provider: {
-              list: () => mutable(draft.provider.list()),
-              get: (id) => mutable(draft.provider.get(Provider.ID.make(id))),
-              update: (id, update) => draft.provider.update(Provider.ID.make(id), update),
-              remove: (id) => draft.provider.remove(Provider.ID.make(id)),
+              list: () => mutable(editor.provider.list()),
+              get: (id) => mutable(editor.provider.get(Provider.ID.make(id))),
+              update: (id, update) => editor.provider.update(Provider.ID.make(id), update),
+              remove: (id) => editor.provider.remove(Provider.ID.make(id)),
             },
             model: {
               get: (providerID, modelID) =>
-                mutable(draft.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))),
+                mutable(editor.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))),
               update: (providerID, modelID, update) =>
-                draft.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
-              remove: (providerID, modelID) => draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+                editor.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
+              remove: (providerID, modelID) =>
+                editor.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
               default: {
-                get: draft.model.default.get,
+                get: editor.model.default.get,
                 set: (providerID, modelID) =>
-                  draft.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
+                  editor.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
               },
             },
           })
@@ -206,13 +231,14 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           .subscribe()
           .pipe(
             Stream.filter(
-              (event): event is EventManifest.ServerEvent | RpcEvent => EventManifest.isServer(event) || isRpcEvent(event),
+              (event): event is EventManifest.ServerEvent | RpcEvent =>
+                EventManifest.isServer(event) || isRpcEvent(event),
             ),
           ),
     },
     experimental: {
       terminal: {
-        read: (input) => runtime.persistentPty.read(input.sessionID, input.lines),
+        read: (input) => persistentPty.read(input.sessionID, input.lines),
       },
     },
     generate: {
@@ -290,17 +316,17 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           ),
       },
       transform: (callback) =>
-        integration.transform((draft) => {
+        integration.transform((editor) => {
           callback({
-            list: () => mutable(draft.list()),
-            get: (id) => mutable(draft.get(Integration.ID.make(id))),
-            update: (id, update) => draft.update(Integration.ID.make(id), update),
-            remove: (id) => draft.remove(Integration.ID.make(id)),
+            list: () => mutable(editor.list()),
+            get: (id) => mutable(editor.get(Integration.ID.make(id))),
+            update: (id, update) => editor.update(Integration.ID.make(id), update),
+            remove: (id) => editor.remove(Integration.ID.make(id)),
             method: {
-              list: (id) => draft.method.list(Integration.ID.make(id)),
-              update: (input) => draft.method.update(methodImplementation(input)),
+              list: (id) => editor.method.list(Integration.ID.make(id)),
+              update: (input) => editor.method.update(methodImplementation(input)),
               remove: (id, method) =>
-                draft.method.remove(Integration.ID.make(id), Schema.decodeUnknownSync(Integration.Method)(method)),
+                editor.method.remove(Integration.ID.make(id), Schema.decodeUnknownSync(Integration.Method)(method)),
             },
           })
         }),
@@ -308,18 +334,30 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     mcp: {
       list: (input) => {
         const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.list(ref)
+        if (ref && !isCurrentLocation(ref))
+          return Effect.gen(function* () {
+            const location = yield* Location.Service
+            const mcp = yield* Mcp.Service
+            return {
+              location: new Location.Info({
+                directory: location.directory,
+                workspaceID: location.workspaceID,
+                project: location.project,
+              }),
+              data: yield* mcp.servers(),
+            }
+          }).pipe(Effect.provide(locations.get(ref)))
         return response(mcp.servers())
       },
       reload: mcp.reload,
       transform: (callback) =>
-        mcp.transform((draft) => {
+        mcp.transform((editor) => {
           callback({
-            list: () => draft.list().map(([name, config]) => [name, mutable(config)]),
-            get: (name) => mutable(draft.get(name)),
-            set: (name, config) => draft.set(name, Schema.decodeUnknownSync(ServerConfig)(config)),
-            update: draft.update,
-            remove: draft.remove,
+            list: () => editor.list().map(([name, config]) => [name, mutable(config)]),
+            get: (name) => mutable(editor.get(name)),
+            set: (name, config) => editor.set(name, Schema.decodeUnknownSync(ServerConfig)(config)),
+            update: editor.update,
+            remove: editor.remove,
           })
         }),
     },
@@ -354,11 +392,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       list: () => response(reference.list()),
       reload: reference.reload,
       transform: (callback) =>
-        reference.transform((draft) => {
+        reference.transform((editor) => {
           callback({
-            add: (name, source) => draft.add(name, Schema.decodeUnknownSync(Reference.Source)(source)),
-            remove: draft.remove,
-            list: draft.list,
+            add: (name, source) => editor.add(name, Schema.decodeUnknownSync(Reference.Source)(source)),
+            remove: editor.remove,
+            list: editor.list,
+            get: editor.get,
           })
         }),
     },
@@ -366,12 +405,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       list: () => response(skill.list()),
       reload: skill.reload,
       transform: (callback) =>
-        skill.transform((draft) => {
+        skill.transform((editor) => {
           callback({
-            list: () => mutable(draft.list()),
-            add: (value) => draft.add(Schema.decodeUnknownSync(Skill.Info)(value)),
-            update: draft.update,
-            remove: draft.remove,
+            list: () => mutable(editor.list()),
+            get: editor.get,
+            add: (value) => editor.add(Schema.decodeUnknownSync(Skill.Info)(value)),
+            update: editor.update,
+            remove: editor.remove,
           })
         }),
     },
@@ -404,18 +444,18 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
         ),
       reload: websearch.reload,
       transform: (callback) =>
-        websearch.transform((draft) => {
+        websearch.transform((editor) => {
           callback({
             add: (definition) =>
-              draft.add({
+              editor.add({
                 id: WebSearch.ID.make(definition.id),
                 name: definition.name,
                 execute: definition.execute,
               }),
             default: {
-              get: draft.default.get,
+              get: editor.default.get,
               set: (selection) =>
-                draft.default.set(
+                editor.default.set(
                   selection === false || selection === "random" ? selection : WebSearch.ID.make(selection),
                 ),
             },
@@ -425,7 +465,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     session: {
       hook: (name, callback, options) => hooks.register("session", name, callback, options),
       create: (input) =>
-        runtime.session.create({
+        sessions.create({
           id: input?.id,
           title: input?.title,
           agent: input?.agent,
@@ -433,24 +473,50 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           location:
             input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
         }),
-      get: (input) => runtime.session.get(input.sessionID),
-      switchAgent: runtime.session.switchAgent,
-      switchModel: runtime.session.switchModel,
-      prompt: runtime.session.prompt,
-      generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
-      command: runtime.session.command,
-      rename: runtime.session.rename,
-      move: runtime.session.move,
-      synthetic: runtime.session.synthetic,
+      get: (input) => sessions.get(input.sessionID),
+      switchAgent: sessions.switchAgent,
+      switchModel: sessions.switchModel,
+      prompt: sessions.prompt,
+      generate: (input) => sessions.generate(input).pipe(Effect.map((text) => ({ text }))),
+      command: sessions.command,
+      rename: sessions.rename,
+      move: sessions.move,
+      synthetic: sessions.synthetic,
       interrupt: (input) =>
-        runtime.session
+        sessions
           .interrupt(input.sessionID, { continue: input.continue })
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
-      wait: (input) => runtime.session.wait(input.sessionID),
-      context: (input) => runtime.session.context(input.sessionID),
+      wait: (input) => sessions.wait(input.sessionID),
+      context: (input) => sessions.context(input.sessionID),
     },
-  } satisfies Plugin.Context
+  }
+  return context
 })
+
+export const requirements = LayerNode.group([
+  App.node,
+  Agent.node,
+  AISDK.node,
+  Catalog.node,
+  Command.node,
+  Bus.node,
+  Integration.node,
+  KV.node,
+  Mcp.node,
+  Location.node,
+  Reference.node,
+  Rpc.node,
+  Skill.node,
+  Tool.node,
+  Vcs.node,
+  WebSearch.node,
+  Generate.node,
+  Permission.node,
+  PluginHooks.node,
+  Session.node,
+  PersistentPty.node,
+  LocationServiceMap.node,
+])
 
 export function storage(kv: KV.Interface, pluginID: string): Plugin.Context["storage"] {
   const namespace = `plugin:${pluginID

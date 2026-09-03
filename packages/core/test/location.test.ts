@@ -23,7 +23,7 @@ const projectLayer = Layer.succeed(
       }),
   }),
 )
-const it = testEffect(AppNodeBuilder.build(Location.boundNode(ref), [[Project.node, projectLayer]]))
+const it = testEffect(AppNodeBuilder.build(Location.boundNode(ref), [Project.node.replace(projectLayer)]))
 
 describe("Location", () => {
   it.effect("resolves the current project and vcs information", () =>

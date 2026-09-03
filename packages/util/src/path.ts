@@ -1,8 +1,8 @@
 export function getFilename(path: string | undefined) {
   if (!path) return ""
   const trimmed = path.replace(/[/\\]+$/, "")
-  const parts = trimmed.split(/[/\\]/)
-  return parts[parts.length - 1] ?? ""
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"))
+  return trimmed.slice(index + 1)
 }
 
 export function getDirectory(path: string | undefined) {

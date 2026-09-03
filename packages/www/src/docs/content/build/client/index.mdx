@@ -133,7 +133,7 @@ and end that listener. Native and typed subscriptions receive the same normal
 do not replay missed events.
 
 The server plugin must be configured and implement the RPC; importing a
-definition does not register it. See [plugin RPC](/build/plugins#rpc) for the
+definition does not register it. See [plugin RPC](/build/plugins/rpc) for the
 definition and registration API. Any HTTP client can also invoke the generic
 `POST /api/rpc/{rpcID}/{method}` route with `{ "input": ... }` and receive
 `{ "output": ... }`. Omitted input/output fields represent no value.

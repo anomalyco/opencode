@@ -10,7 +10,6 @@ import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
 
 const DebugBar = lazy(() => import("@/shell/debug/debug-bar").then((module) => ({ default: module.DebugBar })))
-const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
 
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
@@ -23,6 +22,7 @@ export default function Layout(props: ParentProps) {
     tabsMount: undefined as HTMLElement | undefined,
   })
   const verticalTabs = () => preferences.appearance.tabLayout() === "vertical" && !mobile()
+  const bottomTitlebar = () => mobile() && preferences.general.mobileTitlebarPosition() === "bottom"
 
   const update: TitlebarUpdate = {
     get version() {
@@ -41,15 +41,13 @@ export default function Layout(props: ParentProps) {
       <div
         class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
         style={{
-          "padding-top": "env(safe-area-inset-top, 0px)",
-          "padding-bottom": "env(safe-area-inset-bottom, 0px)",
           // Native Windows chrome supplies the gap; retain paint clearance for the panels' outer outlines.
-          "--shell-top-inset":
-            platform.platform === "desktop" &&
-            platform.os === "windows" &&
-            !(mobile() && preferences.general.mobileTitlebarPosition() === "bottom")
+          "--shell-top-inset": bottomTitlebar()
+            ? "max(0px, calc(8px - env(safe-area-inset-top, 0px)))"
+            : platform.platform === "desktop" && platform.os === "windows"
               ? "1px"
               : "8px",
+          "--shell-bottom-inset": bottomTitlebar() ? "8px" : "max(0px, calc(8px - env(safe-area-inset-bottom, 0px)))",
         }}
       >
         <Titlebar
@@ -66,8 +64,11 @@ export default function Layout(props: ParentProps) {
             <aside
               ref={(element) => setState("tabsMount", element)}
               data-slot="vertical-tabs-sidebar"
-              class="relative flex min-h-0 shrink-0 flex-col bg-v2-background-bg-deep px-2.5 pb-2 pt-[var(--shell-top-inset,8px)]"
-              style={{ width: `${state.tabsWidth}px` }}
+              class="relative flex h-full min-h-0 shrink-0 flex-col bg-v2-background-bg-deep px-2.5 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
+              style={{
+                width: `${state.tabsWidth}px`,
+                "padding-bottom": "max(8px, env(safe-area-inset-bottom, 0px))",
+              }}
             >
               <ResizeHandle
                 class="-end-2"
@@ -80,20 +81,18 @@ export default function Layout(props: ParentProps) {
             </aside>
           </Show>
           {/* Size containment collapses percentage-height descendants in WebKit. */}
-          <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content">
-            <div
-              class="flex size-full min-h-0 min-w-0 flex-col"
-              hidden={settings.store.open}
-              inert={settings.store.open}
-              aria-hidden={settings.store.open}
-            >
+          <main
+            class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
+            style={{
+              "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
+              "padding-bottom": bottomTitlebar() || settings.active() ? "0px" : "env(safe-area-inset-bottom, 0px)",
+              "--settings-bottom-inset": bottomTitlebar() ? "40px" : "env(safe-area-inset-bottom, 0px)",
+              "--settings-top-inset": mobile() && !bottomTitlebar() ? "0px" : "var(--shell-top-inset, 8px)",
+            }}
+          >
+            <div class="flex size-full min-h-0 min-w-0 flex-col">
               <Suspense>{props.children}</Suspense>
             </div>
-            <Show when={settings.store.open}>
-              <Suspense>
-                <SettingsScreen defaultValue={settings.store.tab} />
-              </Suspense>
-            </Show>
           </main>
         </div>
         <Show when={import.meta.env.DEV && state.debugTools}>

@@ -7,10 +7,11 @@ import type { Tool } from "@opencode-ai/schema/tool"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
+import { Job } from "../../job.js"
 import { LocationMutation } from "../../location-mutation.js"
 import { Permission } from "../../permission.js"
-import { PluginRuntime } from "../../plugin/runtime.js"
 import { NonNegativeInt } from "../../schema.js"
+import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
@@ -99,7 +100,8 @@ const backgroundResult = (shellID: string, file: string) => ({
 export const Plugin = {
   id: "opencode.tool.shell",
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
-    const runtime = yield* PluginRuntime.Service
+    const sessions = yield* Session.Service
+    const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
     const environment = yield* Environment.Service
     const mutation = yield* LocationMutation.Service
@@ -167,7 +169,7 @@ export const Plugin = {
         command: string,
         settled: Deferred.Deferred<Output>,
       ) {
-        const info = (yield* runtime.job.wait({ id })).info
+        const info = (yield* jobs.wait({ id })).info
         if (!info || info.status === "running") return
         const output = info.status === "completed" ? yield* Deferred.await(settled) : undefined
         const text = output
@@ -175,7 +177,7 @@ export const Plugin = {
           : info.status === "error"
             ? (info.error ?? "Command failed")
             : "Command cancelled"
-        yield* runtime.session.synthetic({
+        yield* sessions.synthetic({
           ...(info.notificationID ? { id: info.notificationID } : {}),
           sessionID,
           description: command,
@@ -188,14 +190,14 @@ export const Plugin = {
             output,
           }),
         })
-        if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
+        if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
       },
       Effect.forkIn(scope, { startImmediately: true }),
     )
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description: description(),
@@ -237,7 +239,7 @@ export const Plugin = {
                 Effect.map((output) => resultMessages(output).join("\n\n")),
                 Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
               )
-              const job = yield* runtime.job.start({
+              const job = yield* jobs.start({
                 // CodeMode children share a tool-call ID, but each shell must own its job.
                 id: info.id,
                 type: name,
@@ -253,14 +255,14 @@ export const Plugin = {
               })
 
               if (input.background === true) {
-                yield* runtime.job.background(job.id)
+                yield* jobs.background(job.id)
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                 return backgroundResult(info.id, info.file)
               }
 
-              const result = yield* runtime.job
+              const result = yield* jobs
                 .block({ id: job.id, sessionID: context.sessionID })
-                .pipe(Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)))
+                .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)

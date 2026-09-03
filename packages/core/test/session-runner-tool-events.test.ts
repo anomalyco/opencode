@@ -132,7 +132,7 @@ test("provider-executed success derives content and retains provider result stat
 
 testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
-    [Bus.node, Bus.configured({ persist: true })],
+    Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 ).effect("commits a hosted tool result when cancellation races with the aggregate lock", () =>
   Effect.gen(function* () {

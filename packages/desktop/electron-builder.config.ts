@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import { stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -45,6 +46,7 @@ export function macSignOptions(options: CustomMacSignOptions): CustomMacSignOpti
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
+  if (raw === "latest") return "prod"
   return "dev"
 })()
 
@@ -84,16 +86,21 @@ const getBase = (appId: string): Configuration => ({
     "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
     "!**/node_modules/js-yaml/bin{,/**/*}",
   ],
-  extraResources:
-    channel !== "prod"
-      ? [
-          {
-            from: "resources/",
-            to: "",
-            filter: ["opencode-cli*"],
-          },
-        ]
-      : [],
+  extraResources: [
+    {
+      from: "resources/",
+      to: "",
+      filter: ["opencode-cli", "opencode-cli.exe"],
+    },
+  ],
+  afterPack: async (context) => {
+    const cli = path.join(
+      context.packager.getResourcesDir(context.appOutDir),
+      context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli",
+    )
+    const file = await stat(cli)
+    if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
+  },
   mac: {
     category: "public.app-category.developer-tools",
     icon: `resources/icons/icon.icns`,
@@ -124,6 +131,7 @@ const getBase = (appId: string): Configuration => ({
     verifyUpdateCodeSignature: false,
   },
   nsis: {
+    include: path.join(packageDir, "resources", "windows", "installer.nsh"),
     oneClick: true,
     perMachine: false,
     installerIcon: `resources/icons/icon.ico`,

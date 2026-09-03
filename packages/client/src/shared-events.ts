@@ -3,7 +3,7 @@ export * as SharedEvents from "./shared-events.js"
 export function make<A extends { readonly type: string }>(connect: (signal: AbortSignal) => AsyncIterable<A>) {
   type Completion = { readonly error: unknown } | Record<string, never>
   type Subscriber = {
-    push: (value: A) => Promise<void>
+    push: (value: A) => void
     finish: (completion: Completion) => void
   }
   type Connection = {
@@ -13,7 +13,7 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
   }
 
   let current: Connection | undefined
-  const delivered = Promise.resolve()
+  const capacity = 4_096
 
   function stop(connection: Connection) {
     connection.connected = undefined
@@ -31,7 +31,7 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
         const item = await iterator.next()
         if (item.done || connection.controller.signal.aborted) break
         if (item.value.type === "server.connected") connection.connected = item.value
-        await Promise.all(Array.from(connection.subscribers, (subscriber) => subscriber.push(item.value)))
+        connection.subscribers.forEach((subscriber) => subscriber.push(item.value))
       }
     } catch (error) {
       completion = { error }
@@ -51,17 +51,16 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
       return {
         [Symbol.asyncIterator]() {
           const pending: ReturnType<typeof Promise.withResolvers<IteratorResult<A>>>[] = []
+          const queued: A[] = []
           let started = false
           let completion: Completion | undefined
           let connection: Connection | undefined
-          const queued: A[] = []
 
-          function finish(result: Completion, discard = false) {
+          function finish(result: Completion, discard = true) {
             completion = result
             if (discard) queued.length = 0
             options?.signal?.removeEventListener("abort", abort)
             if (connection?.subscribers.delete(subscriber) && !connection.subscribers.size) stop(connection)
-            if (queued.length) return
             pending.splice(0).forEach((request) => {
               if ("error" in result) request.reject(result.error)
               else request.resolve({ done: true, value: undefined })
@@ -69,20 +68,25 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
           }
 
           function abort() {
-            finish({}, true)
+            finish({})
           }
 
           const subscriber: Subscriber = {
-            finish,
+            finish(result) {
+              finish(result, false)
+            },
             push(value) {
-              if (completion) return delivered
+              if (completion) return
               const request = pending.shift()
               if (request) {
                 request.resolve({ done: false, value })
-                return delivered
+                return
+              }
+              if (queued.length === capacity) {
+                finish({ error: new Error(`Event subscriber exceeded its ${capacity}-event capacity`) })
+                return
               }
               queued.push(value)
-              return delivered
             },
           }
 
@@ -121,7 +125,7 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
               return request.promise
             },
             return(): Promise<IteratorResult<A>> {
-              finish({}, true)
+              finish({})
               return Promise.resolve({ done: true, value: undefined })
             },
           }

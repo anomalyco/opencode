@@ -609,18 +609,27 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
 }
 
 const step = (state: ParserState, event: GeminiEvent) => {
-  if (ProviderShared.isRecord(event.error) && typeof event.error.message === "string") {
+  if (ProviderShared.isRecord(event.error)) {
     const body = ProviderShared.encodeJson(event)
     return Effect.fail(
       new AIError({
         reason: classifyProviderFailure({
-          message: event.error.message,
+          message:
+            typeof event.error.message === "string" && event.error.message.length > 0
+              ? event.error.message
+              : typeof event.error.status === "string" && event.error.status.length > 0
+                ? event.error.status
+                : "Gemini provider error",
           status: typeof event.error.code === "number" ? event.error.code : undefined,
           rawBody: body,
         }),
       }),
     )
   }
+  if ("error" in event)
+    return Effect.fail(
+      ProviderShared.eventError(state.route, `Invalid ${state.route} stream event`, ProviderShared.encodeJson(event)),
+    )
   const nextState = {
     ...state,
     promptFeedback: event.promptFeedback ?? state.promptFeedback,

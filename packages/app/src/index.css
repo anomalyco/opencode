@@ -32,6 +32,11 @@
   }
 }
 
+/* iOS can report navigator.standalone without matching display-mode. */
+#root[data-standalone="true"] {
+  height: 100vh;
+}
+
 @layer components {
   [data-slot="session-side-panel-presence"][data-opened="true"] {
     animation: terminal-panel-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);

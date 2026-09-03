@@ -6,7 +6,7 @@ import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } fr
 import { Config } from "@opencode-ai/core/config"
 import { ConfigLocationWatcherPlugin } from "@opencode-ai/core/config/plugin/location-watcher"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { makeLocationNode, type LocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -16,6 +16,7 @@ import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Document, Event, Info, type Entry } from "@opencode-ai/schema/config"
 import { Location } from "@opencode-ai/core/location"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
@@ -29,11 +30,6 @@ const describeNative = process.env.CI ? describe.skip : describe
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.node])))
 
 const configLayer = Config.testLayer()
-const pluginNode = makeLocationNode({
-  service: PluginSupervisor.Service,
-  layer: Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void })),
-  deps: [],
-})
 
 function withNative(native: Watcher.NativeInterface) {
   return Effect.provide(Watcher.layer().pipe(Layer.provide(Layer.succeed(Watcher.Native, native))))
@@ -129,19 +125,21 @@ function provide(
   vcs?: Location.Interface["vcs"],
   watcher?: Layer.Layer<Watcher.Service>,
   config: Layer.Layer<Config.Service> = configLayer,
-  plugins: LocationNode<PluginSupervisor.Service> = pluginNode,
+  plugins?: LayerNode.Replacement,
+  replacements: LayerNode.Replacements = [],
 ) {
   const locationLayer = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) }, { vcs })),
   )
   const built = AppNodeBuilder.build(
-    LayerNode.group([LocationWatcher.node, LocationWatcherPolicy.node, Bus.node, Config.node]),
+    LayerNode.group([PluginSupervisor.node, LocationWatcher.node, LocationWatcherPolicy.node, Bus.node, Config.node]),
     [
-      [Config.node, config],
-      [Location.node, locationLayer],
-      [PluginSupervisor.node, plugins],
-      ...(watcher ? ([[Watcher.node, watcher]] as const) : []),
+      Config.node.replace(config),
+      Location.node.replace(locationLayer),
+      plugins ?? PluginSupervisor.node.replace(Layer.empty),
+      ...(watcher ? ([Watcher.node.replace(watcher)] as const) : []),
+      ...replacements,
     ],
   )
   return Effect.provide(built)
@@ -154,7 +152,8 @@ function withTmp<A, E, R>(
     init?: (directory: string) => Promise<void>
     watcher?: Layer.Layer<Watcher.Service>
     config?: Layer.Layer<Config.Service>
-    plugins?: LocationNode<PluginSupervisor.Service>
+    plugins?: LayerNode.Replacement
+    replacements?: LayerNode.Replacements
   },
 ) {
   return Effect.acquireRelease(
@@ -177,7 +176,16 @@ function withTmp<A, E, R>(
     ({ tmp }) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   ).pipe(
     Effect.flatMap(({ tmp, vcs }) =>
-      f(tmp.path, vcs).pipe(provide(tmp.path, vcs, options?.watcher, options?.config ?? configLayer, options?.plugins)),
+      f(tmp.path, vcs).pipe(
+        provide(
+          tmp.path,
+          vcs,
+          options?.watcher,
+          options?.config ?? configLayer,
+          options?.plugins,
+          options?.replacements,
+        ),
+      ),
     ),
   )
 }
@@ -298,6 +306,64 @@ describe("LocationWatcher subscriptions", () => {
     })
   })
 
+  it.live("uses the policy changed while target discovery was suspended", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const discovering = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const subscribed = yield* Deferred.make<void>()
+      const subscriptions: Watcher.WatchInput[] = []
+      let released = 0
+      yield* withTmp(
+        (directory) =>
+          Effect.gen(function* () {
+            const policy = yield* LocationWatcherPolicy.Service
+            yield* Deferred.await(discovering)
+            const update = yield* policy
+              .transform((editor) => editor.add([".hg"]))
+              .pipe(Effect.forkScoped({ startImmediately: true }))
+            expect(policy.current()).toEqual([".hg"])
+            yield* Deferred.succeed(release, undefined)
+            const registration = yield* Fiber.join(update)
+            expect(subscriptions).toEqual([])
+
+            yield* registration.dispose
+            yield* Deferred.await(subscribed)
+            yield* policy.reload()
+            expect(subscriptions).toEqual([{ path: path.join(directory, ".hg", "branch"), type: "file" }])
+            expect(released).toBe(0)
+          }),
+        {
+          vcs: "hg",
+          replacements: [
+            Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
+            FSUtil.node.replace(
+              Layer.succeed(FSUtil.Service, {
+                ...fs,
+                realPath: (target) =>
+                  Deferred.succeed(discovering, undefined).pipe(
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.andThen(fs.realPath(target)),
+                  ),
+              }),
+            ),
+          ],
+          watcher: Layer.succeed(
+            Watcher.Service,
+            Watcher.Service.of({
+              subscribe: (input) =>
+                Effect.sync(() => subscriptions.push(input)).pipe(
+                  Effect.andThen(Deferred.succeed(subscribed, undefined)),
+                  Effect.as(Stream.never.pipe(Stream.ensuring(Effect.sync(() => released++)))),
+                ),
+            }),
+          ),
+        },
+      )
+      expect(released).toBe(1)
+    }),
+  )
+
   it.live("does not start before configured policy is ready", () => {
     const subscriptions: Watcher.WatchInput[] = []
     const watcher = Layer.succeed(
@@ -307,13 +373,11 @@ describe("LocationWatcher subscriptions", () => {
       }),
     )
     const plugins = makeLocationNode({
-      service: PluginSupervisor.Service,
-      layer: Layer.effect(
-        PluginSupervisor.Service,
+      name: "test/watcher-plugins",
+      layer: Layer.effectDiscard(
         Effect.gen(function* () {
           const policy = yield* LocationWatcherPolicy.Service
-          yield* policy.transform((draft) => draft.add([".git"]))
-          return PluginSupervisor.Service.of({ flush: Effect.void })
+          yield* policy.transform((editor) => editor.add([".git"]))
         }),
       ),
       deps: [LocationWatcherPolicy.node],
@@ -325,7 +389,7 @@ describe("LocationWatcher subscriptions", () => {
           yield* Effect.sleep("50 millis")
           expect(subscriptions).toEqual([])
         }),
-      { vcs: "git", watcher, plugins },
+      { vcs: "git", watcher, plugins: PluginSupervisor.node.replace(plugins) },
     )
   })
 })

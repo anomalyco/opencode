@@ -171,13 +171,17 @@ export const Plugin = define({
       (effect, ..._args: [file?: string]) => lock.withPermit(effect),
     )
 
-    yield* Stream.fromPubSub(changes).pipe(
+    // Editor saves arrive as bursts of watcher events; settle before rescanning once. Subscribe
+    // before debouncing so no update slips through while the debounce starts its pull.
+    const updates = yield* PubSub.subscribe(changes)
+    yield* Stream.fromSubscription(updates).pipe(
+      Stream.debounce("100 millis"),
       Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(ctx.skill.reload()))),
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* refresh()
-    yield* ctx.skill.transform((draft) => {
-      for (const skill of loaded.skills) draft.add(skill)
+    yield* ctx.skill.transform((editor) => {
+      for (const skill of loaded.skills) editor.add(skill)
     })
     yield* ctx.event.subscribe().pipe(
       Stream.filter((event) => event.type === "config.updated"),

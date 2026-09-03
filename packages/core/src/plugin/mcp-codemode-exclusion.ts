@@ -9,8 +9,8 @@ const urls = [/^https:\/\/executor\.sh\/[^/]+\/mcp$/]
 export const Plugin = define({
   id: "opencode.mcp.codemode.exclusion",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.mcp.transform((draft) => {
-      for (const [, server] of draft.list()) {
+    yield* ctx.mcp.transform((editor) => {
+      for (const [, server] of editor.list()) {
         if (server.codemode !== undefined) continue
         if (server.type === "local") {
           if (server.command[0] === "executor" && server.command[1] === "mcp") server.codemode = false

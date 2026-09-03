@@ -1,10 +1,11 @@
-import { Database } from "@opencode-ai/core/database/database"
+import { Instance } from "@opencode-ai/core/instance/service"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { Session } from "@opencode-ai/core/session"
 import { InvalidRequestError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
 import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
-import { requestRef, sessionRef, type LocationServices } from "../location"
+import { requestRef, sessionInfo, type LocationServices } from "../location"
 
 export class FormLocationMiddleware extends HttpApiMiddleware.Service<
   FormLocationMiddleware,
@@ -16,7 +17,8 @@ export class FormLocationMiddleware extends HttpApiMiddleware.Service<
 export const formLocationLayer = Layer.effect(
   FormLocationMiddleware,
   Effect.gen(function* () {
-    const database = yield* Database.Service
+    const sessions = yield* Session.Service
+    const instances = yield* Instance.Service
     const locations = yield* LocationServiceMap.Service
 
     return FormLocationMiddleware.of((effect) =>
@@ -30,8 +32,8 @@ export const formLocationLayer = Layer.effect(
           return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))))
         }
 
-        const ref = yield* sessionRef(database, route.params.sessionID)
-        return yield* effect.pipe(Effect.provide(locations.get(ref)))
+        const session = yield* sessionInfo(sessions, route.params.sessionID)
+        return yield* effect.pipe(instances.provide(session))
       }),
     )
   }),

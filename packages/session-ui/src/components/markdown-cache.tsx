@@ -1,7 +1,7 @@
 import { checksum } from "@opencode-ai/util/encode"
 import { parseSmallMarkdown } from "@opencode-ai/ui/context/marked-base"
 import DOMPurify from "dompurify"
-import { parseMarkdown } from "./markdown-worker"
+import { MarkdownWorkerDisposedError, parseMarkdown } from "./markdown-worker"
 import { localImagePath } from "./markdown-image"
 
 export type MarkdownCacheEntry = {
@@ -12,7 +12,10 @@ export type MarkdownCacheEntry = {
 
 const max = 200
 const cache = new Map<string, MarkdownCacheEntry>()
-const pending = new Map<string, { raw: string; promise: Promise<MarkdownCacheEntry> }>()
+const pending = new Map<
+  string,
+  { raw: string; promise: Promise<MarkdownCacheEntry>; controller: AbortController; consumers: Set<symbol> }
+>()
 // Mermaid registers hooks on the shared instance that overwrite link attributes.
 const purifier = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 const config = {
@@ -67,11 +70,12 @@ export function touchCachedMarkdown(key: string, value: MarkdownCacheEntry) {
   cache.delete(first)
 }
 
-export async function preloadMarkdown(text: string, cacheKey: string) {
+export async function preloadMarkdown(text: string, cacheKey: string, signal?: AbortSignal) {
+  if (signal?.aborted) throw new MarkdownWorkerDisposedError()
   const block = { raw: text, src: text }
   const key = `${cacheKey}:0:full`
   if (getReadyMarkdown(block, key)) return
-  await renderCachedMarkdown(block, key)
+  await renderCachedMarkdown(block, key, signal)
 }
 
 export function getReadyMarkdown(block: { raw: string; src: string }, key?: string) {
@@ -98,7 +102,8 @@ export function getReadyMarkdown(block: { raw: string; src: string }, key?: stri
   }
 }
 
-export async function renderCachedMarkdown(block: { raw: string; src: string }, key?: string) {
+export async function renderCachedMarkdown(block: { raw: string; src: string }, key?: string, signal?: AbortSignal) {
+  if (signal?.aborted) throw new MarkdownWorkerDisposedError()
   const cached = key ? getCachedMarkdown(key) : undefined
   if (key && cached?.raw === block.raw) {
     pending.delete(key)
@@ -106,9 +111,31 @@ export async function renderCachedMarkdown(block: { raw: string; src: string }, 
     return cached
   }
   const current = key ? pending.get(key) : undefined
-  if (current?.raw === block.raw) return current.promise
-  const promise = parseMarkdown(block.src)
+  const job = current?.raw === block.raw ? current : startMarkdown(block, key)
+  const consumer = Symbol()
+  job.consumers.add(consumer)
+  return new Promise<MarkdownCacheEntry>((resolve, reject) => {
+    const release = () => {
+      signal?.removeEventListener("abort", abort)
+      // A disposed consumer must not cancel another consumer's shared parse.
+      if (!job.consumers.delete(consumer) || job.consumers.size > 0) return
+      job.controller.abort()
+      if (key && pending.get(key) === job) pending.delete(key)
+    }
+    const abort = () => {
+      release()
+      reject(new MarkdownWorkerDisposedError())
+    }
+    signal?.addEventListener("abort", abort, { once: true })
+    void job.promise.then(resolve, reject).finally(release)
+  })
+}
+
+function startMarkdown(block: { raw: string; src: string }, key?: string) {
+  const controller = new AbortController()
+  const promise = parseMarkdown(block.src, controller.signal)
     .then((html) => {
+      if (controller.signal.aborted) throw new MarkdownWorkerDisposedError()
       const hash = checksum(block.raw)
       const result = { raw: block.raw, hash: hash ?? "", html: sanitizeMarkdown(html) }
       if (key && hash && pending.get(key)?.promise === promise) touchCachedMarkdown(key, result)
@@ -117,6 +144,7 @@ export async function renderCachedMarkdown(block: { raw: string; src: string }, 
     .finally(() => {
       if (key && pending.get(key)?.promise === promise) pending.delete(key)
     })
-  if (key) pending.set(key, { raw: block.raw, promise })
-  return promise
+  const job = { raw: block.raw, promise, controller, consumers: new Set<symbol>() }
+  if (key) pending.set(key, job)
+  return job
 }

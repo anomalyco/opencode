@@ -1,7 +1,7 @@
 export * as DatabaseMigration from "./migration.js"
 
 import { sql } from "drizzle-orm"
-import { Effect, Semaphore } from "effect"
+import { Effect } from "effect"
 import { supportsForeignKeyToggle } from "#sqlite"
 import type { EffectDrizzleSqlite } from "./drizzle.js"
 import { migrations } from "./migration.gen.js"
@@ -10,7 +10,6 @@ import { Global } from "@opencode-ai/util/global"
 
 type Database = EffectDrizzleSqlite.EffectSQLiteDatabase
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
-const lock = Semaphore.makeUnsafe(1)
 
 export type Migration = {
   id: string
@@ -18,38 +17,38 @@ export type Migration = {
   up: (tx: Transaction) => Effect.Effect<void, unknown, Global.Service>
 }
 
+// Not serialized here: the Database layer holds a lock scoped to the database
+// it is bootstrapping, since two instances over one file must not race.
 export function apply(db: Database) {
-  return lock.withPermit(
-    Effect.gen(function* () {
-      // OpenCode owns the unprefixed table namespace. Embedders sharing this
-      // database may own underscore-prefixed tables, which bootstrap ignores.
-      const tables = yield* db.all<{ name: string }>(
-        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND substr(name, 1, 1) <> '_'`,
-      )
-      if (tables.some((table) => table.name === "session" || table.name === "session_v2"))
-        return yield* applyOnly(db, migrations)
-      if (tables.length > 0) return yield* Effect.die(new Error("Database is not empty and has no session table"))
-      const started = Date.now()
-      yield* Effect.logInfo("database schema bootstrap started", { migrations: migrations.length })
-      yield* db.transaction((tx) =>
-        Effect.gen(function* () {
-          yield* schema.up(tx)
-          yield* tx.run(
-            sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
-          )
-          yield* Effect.forEach(migrations, (migration) =>
-            tx.run(
-              sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
-            ),
-          )
-        }),
-      )
-      yield* Effect.logInfo("database schema bootstrap completed", {
-        migrations: migrations.length,
-        durationMs: Date.now() - started,
-      })
-    }),
-  )
+  return Effect.gen(function* () {
+    // OpenCode owns the unprefixed table namespace. Embedders sharing this
+    // database may own underscore-prefixed tables, which bootstrap ignores.
+    const tables = yield* db.all<{ name: string }>(
+      sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND substr(name, 1, 1) <> '_'`,
+    )
+    if (tables.some((table) => table.name === "session" || table.name === "session_v2"))
+      return yield* applyOnly(db, migrations)
+    if (tables.length > 0) return yield* Effect.die(new Error("Database is not empty and has no session table"))
+    const started = Date.now()
+    yield* Effect.logInfo("database schema bootstrap started", { migrations: migrations.length })
+    yield* db.transaction((tx) =>
+      Effect.gen(function* () {
+        yield* schema.up(tx)
+        yield* tx.run(
+          sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
+        )
+        yield* Effect.forEach(migrations, (migration) =>
+          tx.run(
+            sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
+          ),
+        )
+      }),
+    )
+    yield* Effect.logInfo("database schema bootstrap completed", {
+      migrations: migrations.length,
+      durationMs: Date.now() - started,
+    })
+  })
 }
 
 export function applyOnly(db: Database, input: Migration[]) {

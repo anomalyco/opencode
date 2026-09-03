@@ -240,10 +240,13 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   ) => {
     const capture = (readable: NodeChildProcess.ChildProcess["stdout"], name: string) => {
       if (!readable) return Stream.empty
+      // Bun resumes stdio on exit; retain bytes before the lazy Effect reader attaches.
+      const buffer = new PassThrough()
+      readable.on("error", (cause) => buffer.destroy(toError(cause)))
+      readable.pipe(buffer)
       return NodeStream.fromReadable({
-        evaluate: () => readable,
+        evaluate: () => buffer,
         onError: (cause) => toPlatformError(`fromReadable(${name})`, toError(cause), command),
-        closeOnDone: false,
       }).pipe(
         Stream.interruptWhen(Deferred.await(stopOutput)),
         Stream.ensuring(
@@ -318,7 +321,8 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
 
   const discard = (readable: NodeChildProcess.ChildProcess["stdout"]) => {
     if (!readable || readable.destroyed) return
-    // read() also drains while a backpressured Effect adapter still has a readable listener.
+    readable.unpipe()
+    // Discard descendant output without refilling a capture buffer that is no longer consumed.
     const drain = () => {
       while (readable.read() !== null) {}
     }

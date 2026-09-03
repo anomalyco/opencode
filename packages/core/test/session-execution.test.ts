@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
+import { Instance } from "@opencode-ai/core/instance/service"
 import { Job } from "@opencode-ai/core/job"
 import { KV } from "@opencode-ai/core/kv"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
@@ -1371,7 +1372,10 @@ function buildExecution(
         Layer.provide(Layer.succeed(Bus.Service, bus)),
         Layer.provide(Layer.succeed(SessionStore.Service, store)),
         Layer.provide(Layer.succeed(Job.Service, jobs)),
-        Layer.provide(locations),
+        // Do not reuse the outer harness's selector with its already-captured Location map.
+        Layer.provide(
+          AppNodeBuilder.build(Instance.node, [LocationServiceMap.node.replace(locations)]).pipe(Layer.fresh),
+        ),
       ),
       scope,
     )

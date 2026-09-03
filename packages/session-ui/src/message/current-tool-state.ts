@@ -29,6 +29,42 @@ export function currentToolError(tool: SessionMessageAssistantTool) {
   return tool.state.error.message
 }
 
+export function currentToolFailed(tool: SessionMessageAssistantTool) {
+  return (
+    tool.state.status === "error" ||
+    (tool.name === "execute" && executeToolFailed(currentToolMetadata(tool))) ||
+    (tool.name === "shell" && tool.state.status === "completed" && shellResultFailed(currentToolMetadata(tool)))
+  )
+}
+
+export function shellResultFailed(metadata: Record<string, unknown>) {
+  // Shell completion reports the process outcome in metadata, not the tool status.
+  return metadata.timeout === true || (typeof metadata.exit === "number" && metadata.exit !== 0)
+}
+
+export function executeToolFailed(metadata: Record<string, unknown>) {
+  // Code Mode can report failed nested calls in a completed tool result.
+  const calls = metadata.toolCalls
+  return (
+    metadata.error === true ||
+    (Array.isArray(calls) &&
+      calls.some(
+        (call) =>
+          call !== null &&
+          typeof call === "object" &&
+          !Array.isArray(call) &&
+          "status" in call &&
+          call.status === "error",
+      ))
+  )
+}
+
+export function currentToolHasLoadedFiles(tool: SessionMessageAssistantTool) {
+  if (tool.name !== "read" || tool.state.status !== "completed") return false
+  const loaded = tool.state.metadata?.loaded
+  return Array.isArray(loaded) && loaded.some((path) => typeof path === "string")
+}
+
 export function currentContentDefaultOpen(
   content: SessionMessageAssistant["content"][number],
   shellExpanded: boolean,

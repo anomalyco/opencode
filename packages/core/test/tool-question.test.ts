@@ -66,9 +66,9 @@ const questionToolNode = makeLocationNode({
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Tool.node, questionToolNode]), [
-    [Permission.node, permission],
-    [Form.node, form],
-    [Image.node, imagePassthrough],
+    Permission.node.replace(permission),
+    Form.node.replace(form),
+    Image.node.replace(imagePassthrough),
   ]),
 )
 

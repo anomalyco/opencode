@@ -11,13 +11,13 @@ export const Plugin = define({
     const bus = yield* Bus.Service
     const wellknown = yield* WellKnown.Service
     yield* wellknown.entries().pipe(Effect.orDie)
-    yield* ctx.integration.transform((draft) => {
+    yield* ctx.integration.transform((editor) => {
       wellknown.snapshot().forEach((entry) => {
         if (!entry.manifest.auth) return
-        draft.update(entry.integrationID, (integration) => {
+        editor.update(entry.integrationID, (integration) => {
           integration.name = new URL(entry.origin).hostname
         })
-        draft.method.update({
+        editor.method.update({
           integrationID: entry.integrationID,
           method: {
             id: "login",

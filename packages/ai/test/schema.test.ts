@@ -21,6 +21,7 @@ import {
   QuotaExceededError,
   RateLimitError,
   RouteID,
+  ToolResultValue,
   TransportError,
   UnknownProviderError,
   Usage,
@@ -80,6 +81,37 @@ describe("llm schema", () => {
   test("content part tagged union exposes guards", () => {
     expect(ContentPart.guards.text({ type: "text", text: "hi" })).toBe(true)
     expect(ContentPart.guards.media({ type: "text", text: "hi" })).toBe(false)
+  })
+})
+
+describe("ToolResultValue", () => {
+  test("uses the canonical schema guard", () => {
+    const cases: ReadonlyArray<{ readonly value: unknown; readonly expected: boolean }> = [
+      { value: { type: "json", value: { ok: true } }, expected: true },
+      { value: { type: "text", value: "done" }, expected: true },
+      { value: { type: "error", value: "failed" }, expected: true },
+      { value: { type: "content", value: [{ type: "text", text: "done" }] }, expected: true },
+      { value: { type: "content", value: [{ type: "text" }] }, expected: false },
+      { value: { type: "content", value: "done" }, expected: false },
+      { value: { type: "json" }, expected: false },
+      { value: { type: "unknown", value: "done" }, expected: false },
+    ]
+
+    for (const item of cases) {
+      expect(Schema.is(ToolResultValue)(item.value)).toBe(item.expected)
+      expect(ToolResultValue.is(item.value)).toBe(item.expected)
+    }
+  })
+
+  test("accepts canonical results with extra fields", () => {
+    expect(ToolResultValue.is({ type: "json", value: { ok: true }, metadata: { source: "tool" } })).toBe(true)
+    expect(
+      ToolResultValue.is({
+        type: "content",
+        value: [{ type: "file", uri: "https://example.test/result.txt", mime: "text/plain", checksum: "abc" }],
+        metadata: { source: "tool" },
+      }),
+    ).toBe(true)
   })
 })
 

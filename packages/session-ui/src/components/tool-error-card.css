@@ -123,10 +123,13 @@
     position: absolute;
     top: 0;
     right: 0;
-    opacity: 0;
-    pointer-events: none;
     transition: opacity 0.15s ease;
     will-change: opacity;
+
+    @media (hover: hover) {
+      opacity: 0;
+      pointer-events: none;
+    }
   }
 
   &:hover [data-slot="tool-error-card-copy"],

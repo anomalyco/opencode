@@ -47,7 +47,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Deploy update service
-        if: github.ref_name == 'v2' || github.ref_name == 'beta'
+        if: github.ref_name == 'v2'
         working-directory: packages/updates
         run: bun run deploy
         env:
@@ -417,7 +417,6 @@ jobs:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name == 'beta'
         with:
           name: opencode-preview-cli
           path: packages/cli/dist
@@ -480,7 +479,7 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
-          OPENCODE_CLI_DIST: ${{ (github.ref_name == 'beta' && format('{0}/packages/cli/dist', github.workspace)) || '' }}
+          OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
       - name: Build
         run: bun run build

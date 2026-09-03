@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url"
+import type { Page } from "@playwright/test"
 import { expect, story } from "../../storybook/playwright/story"
 
 const png = Buffer.from(
@@ -129,6 +130,14 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown.getByRole("heading")).toHaveText("Completed response")
   await expect(markdown.locator("script, [onerror], [href^='javascript:']")).toHaveCount(0)
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveText("src/file.ts")
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
+    "color",
+    await resolvedColor(page, "--v2-text-text-code-path"),
+  )
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
+    "background-color",
+    await resolvedColor(page, "--v2-background-bg-code-path"),
+  )
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute("target", "_blank")
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute(
     "rel",
@@ -153,6 +162,30 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
 })
 
+async function resolvedColor(page: Page, token: string) {
+  return page.evaluate((token) => {
+    const probe = document.createElement("span")
+    probe.style.color = `var(${token})`
+    document.body.append(probe)
+    const color = getComputedStyle(probe).color
+    probe.remove()
+    return color
+  }, token)
+}
+
+story("keeps inline code backgrounds 18px tall", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "`value` and `src/file.ts`" })
+  }, fixture)
+  const code = page.getByTestId("markdown-fixture").locator(":not(pre) > code")
+  await expect(code).toHaveCount(2)
+  await expect(code.nth(1)).toHaveAttribute("data-inline-code-kind", "path")
+  expect(
+    await code.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height)),
+  ).toEqual([18, 18])
+})
+
 story("shares in-flight Markdown rendering without overwriting a reclaimed cache entry", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, renderCachedMarkdown } = await import(fixture)
@@ -171,6 +204,104 @@ story("shares in-flight Markdown rendering without overwriting a reclaimed cache
   }, fixture)
   expect(result).toMatchObject({ shared: true, cached: true })
   expect(result.html).toContain("<strong>Shared result</strong>")
+})
+
+story("settles an abandoned parse and permits immediate cache-key reuse", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { getCachedMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(fixture)
+    const controller = new AbortController()
+    const raw = "```typescript\nconst abandoned = true\n```"
+    const pending = renderCachedMarkdown({ raw, src: raw }, "released", controller.signal).catch(
+      (error: unknown) => error instanceof MarkdownWorkerDisposedError,
+    )
+    controller.abort()
+    const rejected = await pending
+    const empty = getCachedMarkdown("released") === undefined
+    const replacement = "```typescript\nconst replacement = true\n```"
+    const rendered = await renderCachedMarkdown({ raw: replacement, src: replacement }, "released")
+    return { rejected, empty, cached: getCachedMarkdown("released") === rendered, html: rendered.html }
+  }, fixture)
+  expect(result).toMatchObject({ rejected: true, empty: true, cached: true })
+  expect(result.html).toContain("replacement")
+  expect(result.html).not.toContain("abandoned")
+})
+
+for (const owned of [true, false]) {
+  story(
+    `preserves a shared parse for ${owned ? "another mounted consumer" : "an explicit preload"}`,
+    async ({ page }) => {
+      const result = await page.evaluate(
+        async ({ fixture, owned }) => {
+          const { getCachedMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(fixture)
+          const first = new AbortController()
+          const second = new AbortController()
+          const raw = "```typescript\nconst shared = true\n```"
+          const pending = renderCachedMarkdown({ raw, src: raw }, "shared-lifetime", first.signal).catch(
+            (error: unknown) => error instanceof MarkdownWorkerDisposedError,
+          )
+          let complete = false
+          const survivor = renderCachedMarkdown(
+            { raw, src: raw },
+            "shared-lifetime",
+            owned ? second.signal : undefined,
+          ).then((value: { html: string }) => {
+            complete = true
+            return value
+          })
+          first.abort()
+          const rejected = await pending
+          const independent = !complete
+          const rendered = await survivor
+          second.abort()
+          return {
+            rejected,
+            independent,
+            cached: getCachedMarkdown("shared-lifetime") === rendered,
+            html: rendered.html,
+          }
+        },
+        { fixture, owned },
+      )
+      expect(result).toMatchObject({ rejected: true, independent: true, cached: true })
+      expect(result.html).toContain("shared")
+    },
+  )
+}
+
+story("does not admit an already disposed Markdown consumer", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { getCachedMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(fixture)
+    const controller = new AbortController()
+    controller.abort()
+    const raw = "```typescript\nconst ignored = true\n```"
+    const rejected = await renderCachedMarkdown({ raw, src: raw }, "already-disposed", controller.signal).then(
+      () => false,
+      (error: unknown) => error instanceof MarkdownWorkerDisposedError,
+    )
+    return { rejected, empty: getCachedMarkdown("already-disposed") === undefined }
+  }, fixture)
+  expect(result).toEqual({ rejected: true, empty: true })
+})
+
+story("releases a timeline preload without cancelling a mounted shared consumer", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { getCachedMarkdown, preloadMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(
+      fixture
+    )
+    const controller = new AbortController()
+    const raw = "```typescript\nconst preloaded = true\n```"
+    const preload = preloadMarkdown(raw, "timeline-preload", controller.signal).then(
+      () => false,
+      (error: unknown) => error instanceof MarkdownWorkerDisposedError,
+    )
+    const mounted = renderCachedMarkdown({ raw, src: raw }, "timeline-preload:0:full")
+    controller.abort()
+    const rejected = await preload
+    const rendered = await mounted
+    return { rejected, cached: getCachedMarkdown("timeline-preload:0:full") === rendered, html: rendered.html }
+  }, fixture)
+  expect(result).toMatchObject({ rejected: true, cached: true })
+  expect(result.html).toContain("preloaded")
 })
 
 story("keeps a reopened cached answer recent under cache pressure", async ({ page }) => {

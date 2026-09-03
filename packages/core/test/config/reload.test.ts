@@ -39,8 +39,8 @@ describe("config plugin reloads", () => {
       const plugins = yield* Plugin.Service
       const references = yield* Reference.Service
       const host = yield* PluginHost.make(plugins)
-      yield* references.transform((draft) =>
-        draft.add(
+      yield* references.transform((editor) =>
+        editor.add(
           "external",
           Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/references/external") }),
         ),

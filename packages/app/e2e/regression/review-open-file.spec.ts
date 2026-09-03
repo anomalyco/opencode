@@ -61,7 +61,7 @@ test("opens and searches project files inline", async ({ page }) => {
     pageMessages: () => ({ items: [] }),
   })
   await page.addInitScript(
-    ({ directory, server, sessionID }) => {
+    ({ directory, server, sessionID, tabKey }) => {
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -69,10 +69,8 @@ test("opens and searches project files inline", async ({ page }) => {
           lastProject: { local: directory },
         }),
       )
-      localStorage.setItem(
-        "opencode.global.dat:layout",
-        JSON.stringify({ review: { diffStyle: "split", panelOpened: true } }),
-      )
+      localStorage.setItem("opencode.global.dat:layout", JSON.stringify({ review: { diffStyle: "split" } }))
+      localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify({ [tabKey]: { review: true } }))
       localStorage.setItem(
         "opencode.global.dat:review-panel-v2",
         JSON.stringify({ sidebarOpened: false, sidebarWidth: 240, expandMode: "collapse" }),
@@ -82,7 +80,7 @@ test("opens and searches project files inline", async ({ page }) => {
         JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
       )
     },
-    { directory, server, sessionID },
+    { directory, server, sessionID, tabKey: `${server}\n/server/${base64Encode(server)}/session/${sessionID}` },
   )
 
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
@@ -95,11 +93,18 @@ test("opens and searches project files inline", async ({ page }) => {
   await contextButton.click()
   await expect(panel.getByRole("tab", { name: "Context", selected: true })).toBeVisible()
   await panel.getByRole("button", { name: "Open file" }).click()
-  await expect(panel.getByRole("tab", { name: "Open file", selected: true })).toBeVisible()
+  const openFileTab = panel.getByRole("tab", { name: "Open file" })
+  const openFileTabClose = openFileTab.locator("..").getByRole("button", { name: "Close tab" })
+  await expect(openFileTab).toHaveAttribute("data-selected", "")
+  await expect(openFileTab.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-file-tree")
+  await expect(openFileTab.getByText("Open file", { exact: true }).locator("..")).not.toHaveClass(/italic/)
+  await expect(openFileTabClose).toHaveAttribute("data-variant", "ghost-muted")
+  await expect(openFileTabClose).toHaveCSS("opacity", "1")
   await expect(sidebarToggle).toBeDisabled()
   await expect(sidebar).toBeVisible()
   await contextButton.click()
   await expect(panel.getByRole("tab", { name: "Context", selected: true })).toBeVisible()
+  await expect(openFileTabClose).toHaveCSS("opacity", "0")
   await expect(sidebar).toBeHidden()
   await panel.getByRole("button", { name: "Open file" }).click()
   const filter = panel.getByRole("combobox", { name: "Filter files" })

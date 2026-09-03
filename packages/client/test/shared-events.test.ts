@@ -141,6 +141,60 @@ test("a slow consumer does not stall other subscribers", async () => {
   await events.connections[0].closed
 })
 
+test("an idle consumer does not stall events for an active consumer", async () => {
+  const events = source()
+  const shared = SharedEvents.make(events.connect)
+  const idle = shared.subscribe()[Symbol.asyncIterator]()
+  const active = shared.subscribe()[Symbol.asyncIterator]()
+  const connected = [idle.next(), active.next()]
+  events.connections[0].push({ type: "server.connected" })
+  await Promise.all(connected)
+
+  for (const event of [
+    { type: "session.updated", value: 1 },
+    { type: "session.updated", value: 2 },
+  ]) {
+    const next = active.next()
+    events.connections[0].push(event)
+    expect(
+      await Promise.race([next, Bun.sleep(1_000).then(() => ({ done: true as const, value: { type: "timeout" } }))]),
+    ).toEqual({ done: false, value: event })
+  }
+
+  await idle.return!()
+  await active.return!()
+  await events.connections[0].closed
+})
+
+test("an idle consumer fails instead of buffering events without bound", async () => {
+  const events = source()
+  const idle = SharedEvents.make(events.connect).subscribe()[Symbol.asyncIterator]()
+  const connected = idle.next()
+  events.connections[0].push({ type: "server.connected" })
+  await connected
+
+  Array.from({ length: 4_097 }, (_, value) => events.connections[0].push({ type: "session.updated", value }))
+  await events.connections[0].closed
+  await expect(idle.next()).rejects.toThrow("Event subscriber exceeded its 4096-event capacity")
+})
+
+test("source completion preserves events already buffered for an idle consumer", async () => {
+  const events = source()
+  const idle = SharedEvents.make(events.connect).subscribe()[Symbol.asyncIterator]()
+  const connected = idle.next()
+  events.connections[0].push({ type: "server.connected" })
+  await connected
+  events.connections[0].push({ type: "session.updated", value: 1 })
+  events.connections[0].push({ type: "session.updated", value: 2 })
+  events.connections[0].close()
+  await events.connections[0].closed
+  await Bun.sleep(0)
+
+  expect(await idle.next()).toEqual({ done: false, value: { type: "session.updated", value: 1 } })
+  expect(await idle.next()).toEqual({ done: false, value: { type: "session.updated", value: 2 } })
+  expect(await idle.next()).toEqual({ done: true, value: undefined })
+})
+
 test("late consumers receive the latest connection marker but no business event replay", async () => {
   const events = source()
   const shared = SharedEvents.make(events.connect)

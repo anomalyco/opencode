@@ -7,7 +7,12 @@ import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
-import { loadHomeSessionIndex, mergeHomeSessionIndex, retainHomeSessions } from "@/home/sessions/index"
+import {
+  HOME_SESSION_LIMIT,
+  loadHomeSessionIndex,
+  mergeHomeSessionIndex,
+  retainHomeSessions,
+} from "@/home/sessions/index"
 import type { LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -25,8 +30,7 @@ import { buildHomeSessionRecords, type HomeSessionRecord } from "./records"
 
 export type { HomeSessionRecord } from "./records"
 
-const HOME_SESSION_LIMIT = 64
-// Keep the large immutable result opaque so Solid Query does not recursively unwrap every session on mount.
+// Keep the immutable result opaque so Solid Query does not recursively unwrap every session on mount.
 const selectSessions = (sessions: SessionInfo[]) => () => sessions
 export type HomeSessionGroup = {
   id: "today" | "yesterday" | "older"

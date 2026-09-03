@@ -4,6 +4,7 @@ import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
 import { useNavigate } from "@solidjs/router"
 import { createMemo, Show, type ParentProps } from "solid-js"
 import { useServer } from "@/runtime/server/current"
+import { useLanguage } from "@/runtime/i18n/language"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/shell/layout/helpers"
 import { getProjectAvatarVariant } from "@/shell/state/layout"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
@@ -27,6 +28,8 @@ export function SessionTitleHeader(props: ParentProps) {
 export function SessionIdentityHeader(props: { sessionID: string; session?: SessionInfo }) {
   const server = useServer()
   const tabs = useTabs()
+  const language = useLanguage()
+  const pending = createMemo(() => tabs.pendingSession(server.key, props.sessionID))
   const settings = useSettings()
   const navigate = useNavigate()
   const tab = createMemo(() =>
@@ -54,10 +57,18 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   const parentTitle = createMemo(() => {
     const id = parentID()
     const current = tab()
-    return sessionTitle(parent()?.title ?? (current?.type === "session" && current.sessionId === id ? info()?.title : undefined))
+    return sessionTitle(
+      parent()?.title ?? (current?.type === "session" && current.sessionId === id ? info()?.title : undefined),
+    )
   })
-  const directory = createMemo(() => props.session?.location.directory ?? info()?.directory)
-  const title = createMemo(() => sessionTitle(props.session?.title ?? (parentID() ? undefined : info()?.title)))
+  const directory = createMemo(
+    () => props.session?.location.directory ?? pending()?.draft.directory ?? info()?.directory,
+  )
+  const title = createMemo(() =>
+    pending()
+      ? language.t("command.session.new")
+      : sessionTitle(props.session?.title ?? (parentID() ? undefined : info()?.title)),
+  )
   const project = createMemo(() => {
     const projects = server.ctx.projects.list()
     if (props.session) return projectForSession(props.session, projects)
@@ -70,7 +81,7 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   })
   const showProjectIcon = () =>
     import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && settings.general.showProjectIcon() && !!directory()
-  const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), directory() ?? ""))
+  const workspaceSession = createMemo(() => !!pending() || isWorkspaceDirectory(project(), directory() ?? ""))
   const navigateParent = () => {
     const id = parentID()
     const current = tab()

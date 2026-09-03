@@ -8,7 +8,6 @@ import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/schema/location"
@@ -20,9 +19,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionPrompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionRevert } from "@opencode-ai/core/session/revert"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
@@ -30,7 +27,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Image } from "@opencode-ai/core/image"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Skill } from "@opencode-ai/core/skill"
@@ -69,62 +66,36 @@ const locations = makeGlobalNode({
   layer: Layer.effect(
     LocationServiceMap.Service,
     Effect.gen(function* () {
-      const database = yield* Database.Service
       const bus = yield* Bus.Service
-      const fs = yield* FSUtil.Service
-      const shared = Layer.mergeAll(
-        Layer.succeed(Database.Service, database),
-        Layer.succeed(Bus.Service, bus),
-        Layer.succeed(FSUtil.Service, fs),
-      )
       return yield* LayerMap.make(
         (_ref: Location.Ref) =>
-          // These operations resolve Location services lazily and must wait for plugin-projected state.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          Layer.suspend(() => {
-            let ready = false
-            return Layer.merge(SessionRevert.layer, SessionPrompt.layer).pipe(
-              Layer.provideMerge(
-                Layer.mergeAll(
-                  LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), [
-                    [Bus.node, Layer.succeed(Bus.Service, bus)],
-                  ]),
-                  Layer.mock(Image.Service, {
-                    normalize: (_resource, content) =>
-                      ready
-                        ? Effect.succeed(
-                            content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content,
-                          )
-                        : Effect.die(new Error("Image service used before plugins were ready")),
-                  }),
-                  Layer.mock(Snapshot.Service, {
-                    capture: () =>
-                      ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
-                    restore: () =>
-                      ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
-                  }),
-                  Layer.succeed(
-                    PluginSupervisor.Service,
-                    PluginSupervisor.Service.of({ flush: Effect.sync(() => (ready = true)) }),
-                  ),
-                ),
-              ),
-              Layer.provide(shared),
-              Layer.fresh,
-            )
-          }) as unknown as Layer.Layer<LocationServices>,
+          Layer.mergeAll(
+            LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
+              replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
+            }),
+            Layer.mock(Image.Service, {
+              normalize: (_resource, content) =>
+                Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
+            }),
+            Layer.mock(Snapshot.Service, {
+              capture: () => Effect.undefined,
+              restore: () => Effect.void,
+            }),
+            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
+          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices>,
       )
     }),
   ),
-  deps: [Database.node, Bus.node, FSUtil.node],
+  deps: [Bus.node],
 })
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [SessionExecution.node, execution],
-      [LocationServiceMap.node, locations],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      SessionExecution.node.replace(execution),
+      LocationServiceMap.node.replace(locations),
     ],
   ),
 )
@@ -1082,31 +1053,6 @@ describe("Session.prompt", () => {
           message.type === "user" || message.type === "synthetic" ? message.text : message.type,
         ),
       ).toEqual(["First prompt", "Background completion", "Second prompt"])
-    }),
-  )
-})
-
-describe("Session.revert", () => {
-  it.effect("waits for location plugins before staging", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const { db } = yield* Database.Service
-      const session = yield* Session.Service
-      yield* db.insert(SessionMessageTable).values(assistantRow(messageID, 0)).run().pipe(Effect.orDie)
-      yield* session.revert.stage({ sessionID, messageID })
-    }),
-  )
-
-  it.effect("waits for location plugins before clearing", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
-        sessionID,
-        revert: { messageID, snapshot: Snapshot.ID.make("tree"), files: [] },
-      })
-      yield* session.revert.clear(sessionID)
     }),
   )
 })

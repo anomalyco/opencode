@@ -24,7 +24,6 @@ import {
 
 export const Plugin = define({
   id: "opencode.vcs.hg",
-  vcs: { id: "hg", markers: [".hg"] },
   effect: Effect.fn("VcsHgPlugin")(function* (ctx) {
     const location = yield* Location.Service
     if (location.vcs?.type !== "hg") return
@@ -36,8 +35,8 @@ export const Plugin = define({
       worktree: location.project.directory,
     })
 
-    yield* ctx.vcs.transform((draft) => {
-      draft.add({
+    yield* ctx.vcs.transform((editor) => {
+      editor.add({
         id: "hg",
         name: "Mercurial",
         info: () => adapter.info(),

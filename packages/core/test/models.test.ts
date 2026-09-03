@@ -182,9 +182,9 @@ const buildLayer = (state: Ref.Ref<MockState>, cache: MockCache, options: Models
   // every test would reuse the cachedInvalidateWithTTL state from the first run.
   Layer.fresh(
     AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Bus.node]), [
-      [ModelsDev.node, ModelsDev.configured(options)],
-      [LayerNodePlatform.httpClient, Layer.succeed(HttpClient.HttpClient, makeMockClient(state))],
-      [KV.node, makeMockKV(cache)],
+      ModelsDev.node.replace(ModelsDev.configured(options)),
+      LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
+      KV.node.replace(makeMockKV(cache)),
     ]),
   )
 
@@ -312,9 +312,9 @@ describe("ModelsDev Service", () => {
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
       const layer = Layer.fresh(
         AppNodeBuilder.build(ModelsDev.node, [
-          [ModelsDev.node, ModelsDev.configured({ fetch: true, snapshot: false })],
-          [LayerNodePlatform.httpClient, Layer.succeed(HttpClient.HttpClient, makeMockClient(state))],
-          [KV.node, makeFailingWriteKV(cache)],
+          ModelsDev.node.replace(ModelsDev.configured({ fetch: true, snapshot: false })),
+          LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
+          KV.node.replace(makeFailingWriteKV(cache)),
         ]),
       )
       const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(layer))

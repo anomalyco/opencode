@@ -245,9 +245,9 @@ export const OpenAIPlugin = define({
           : undefined
     })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update(browser(ctx.app))
-      draft.method.update(headless(ctx.app))
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update(browser(ctx.app))
+      editor.method.update(headless(ctx.app))
     })
     yield* load()
     yield* ctx.catalog.transform((evt) => {

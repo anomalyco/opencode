@@ -26,7 +26,7 @@ Unsupported syntax returns an `UnsupportedSyntax` diagnostic with a source locat
 ## Quick Start
 
 ```ts
-import { CodeMode, Tool } from "@opencode-ai/codemode"
+import { CodeMode, Namespace, Tool } from "@opencode-ai/codemode"
 import { Effect, Schema } from "effect"
 
 const lookupOrder = Tool.make({
@@ -60,9 +60,22 @@ only shape the model-visible signature. Without `output`, the signature uses `Pr
 
 Descriptions and schemas are model-visible contracts. Authorization belongs in `execute`.
 
-Dots in tool names create namespaces: `{ "issues.list": tool }` and `{ issues: { list: tool } }` both expose
-`tools.issues.list(...)`. Other characters use bracket notation, such as
-`tools.context7["resolve-library-id"](...)`.
+Nested records are the shorthand for ordinary namespaces. Use `Namespace.make` when a namespace needs a description:
+
+```ts
+const runtime = CodeMode.make({
+  tools: {
+    orders: Namespace.make({
+      description: "Purchases, fulfillment, and shipment tracking",
+      tools: { lookup: lookupOrder },
+    }),
+  },
+})
+```
+
+Namespace descriptions are optional and participate in search matching for every descendant tool. Names still come
+from record keys, so the wrapper does not repeat `orders`. Dots in keys create nested paths; other characters use
+bracket notation, such as `tools.context7["resolve-library-id"](...)`.
 
 ### `CodeMode.execute` and `CodeMode.make`
 
@@ -150,7 +163,7 @@ and `CodeMode.toolExpression(path)` supply the exact callable forms.
 
 The synchronous `search(...)` built-in is always available. It supports exact-path lookup, namespace-scoped search,
 empty-query browsing, and pagination, and returns callable paths with full signatures. Search counts toward
-`maxToolCalls`.
+`maxToolCalls`. Search also matches descriptions from enclosing `Namespace` values.
 
 ## Execution Limits
 

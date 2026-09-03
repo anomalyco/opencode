@@ -95,8 +95,7 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (specifie
   const root = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? specifier)
   const installed = yield* npm.add(root).pipe(Effect.mapError((cause) => new LoadError({ package: specifier, cause })))
   const entrypoint = yield* Effect.try({
-    try: () =>
-      specifier === root && installed.entrypoint ? installed.entrypoint : resolveModule(specifier, installed.directory),
+    try: () => resolveModule(specifier, installed.directory),
     catch: (cause) => new LoadError({ package: specifier, cause }),
   })
   return yield* importPackage(specifier, entrypoint)

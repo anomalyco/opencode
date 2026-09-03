@@ -4,7 +4,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { TextInput } from "@opencode-ai/ui/text-input"
-import type { ReasoningMode } from "@opencode-ai/session-ui/timeline/projection"
+import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useUpdaterAction } from "@/shell/updates/action"
@@ -184,34 +184,6 @@ const FollowUpBehaviorSetting: Component = () => {
   )
 }
 
-const ReasoningModeSetting: Component = () => {
-  const language = useLanguage()
-  const settings = useSettings()
-  const options = createMemo((): { value: ReasoningMode; label: string }[] => [
-    { value: "hidden", label: language.t("settings.general.row.reasoningMode.hidden") },
-    { value: "compact", label: language.t("settings.general.row.reasoningMode.compact") },
-    { value: "full", label: language.t("settings.general.row.reasoningMode.full") },
-  ])
-
-  return (
-    <SettingsRow
-      title={language.t("settings.general.row.reasoningMode.title")}
-      description={language.t("settings.general.row.reasoningMode.description")}
-    >
-      <Select
-        data-action="settings-reasoning-mode"
-        options={options()}
-        current={options().find((option) => option.value === settings.general.reasoningMode())}
-        value={(option) => option.value}
-        label={(option) => option.label}
-        placement="bottom-end"
-        gutter={6}
-        onSelect={(option) => option && settings.general.setReasoningMode(option.value)}
-      />
-    </SettingsRow>
-  )
-}
-
 const AppearanceSection: Component<{ controller: AppearanceSettingsController }> = (props) => {
   const language = useLanguage()
   return (
@@ -360,29 +332,19 @@ export const SettingsGeneral: Component<{
         <TerminalPlacementSetting />
         <FollowUpBehaviorSetting />
 
-        <ReasoningModeSetting />
-
         <SettingsRow
-          title={language.t("settings.general.row.shellToolPartsExpanded.title")}
-          description={language.t("settings.general.row.shellToolPartsExpanded.description")}
+          title={language.t("session.review.wrapLines")}
+          description={language.t("settings.general.row.mobileDiffWrap.description")}
         >
-          <div data-action="settings-feed-shell-tool-parts-expanded">
+          <div data-action="settings-mobile-diff-wrap">
             <Switch
-              checked={settings.general.shellToolPartsExpanded()}
-              onChange={(checked) => settings.general.setShellToolPartsExpanded(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.editToolPartsExpanded.title")}
-          description={language.t("settings.general.row.editToolPartsExpanded.description")}
-        >
-          <div data-action="settings-feed-edit-tool-parts-expanded">
-            <Switch
-              checked={settings.general.editToolPartsExpanded()}
-              onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
-            />
+              aria-label={language.t("session.review.wrapLines")}
+              checked={settings.general.mobileDiffWrap()}
+              onChange={settings.general.setMobileDiffWrap}
+              hideLabel
+            >
+              {language.t("session.review.wrapLines")}
+            </Switch>
           </div>
         </SettingsRow>
 
@@ -568,6 +530,18 @@ export const SettingsGeneral: Component<{
       </div>
       <div class="settings-tab-body">
         <GeneralSection />
+
+        <section class="settings-section" aria-label={language.t("settings.timeline.title")}>
+          <h3 class="settings-section-title">{language.t("settings.timeline.title")}</h3>
+          <SettingsList>
+            <div class="py-5">
+              <TimelineDetailControl
+                value={settings.general.timelineDetail()}
+                onChange={settings.general.setTimelineDetail}
+              />
+            </div>
+          </SettingsList>
+        </section>
 
         <Show when={desktop()}>
           <UpdatesSection />

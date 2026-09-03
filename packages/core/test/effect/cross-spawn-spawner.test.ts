@@ -147,6 +147,20 @@ describe("cross-spawn spawner", () => {
   })
 
   describe("stderr", () => {
+    fx.live(
+      "captures both streams across backpressure",
+      Effect.gen(function* () {
+        const handle = yield* js(
+          'process.stdout.write("o".repeat(256 * 1024)); process.stderr.write("e".repeat(256 * 1024))',
+        )
+        const output = yield* Effect.all([decodeByteStream(handle.stdout), decodeByteStream(handle.stderr)], {
+          concurrency: "unbounded",
+        })
+        expect(output).toEqual(["o".repeat(256 * 1024), "e".repeat(256 * 1024)])
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+    )
+
     fx.effect(
       "captures stderr output",
       Effect.gen(function* () {
@@ -197,6 +211,30 @@ describe("cross-spawn spawner", () => {
         expect(all).toBe("hello from stderr")
       }),
     )
+  })
+
+  describe("delayed output consumption", () => {
+    for (const combined of [false, true]) {
+      fx.live(
+        `retains ${combined ? "combined" : "separate"} output after process completion`,
+        Effect.gen(function* () {
+          const handle = yield* js(
+            'require("node:fs").writeSync(1, "stdout\\n"); require("node:fs").writeSync(2, "stderr\\n")',
+          )
+          expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+          if (combined) {
+            const output = yield* decodeByteStream(handle.all)
+            expect(output).toContain("stdout")
+            expect(output).toContain("stderr")
+            return
+          }
+          const output = yield* Effect.all([decodeByteStream(handle.stdout), decodeByteStream(handle.stderr)], {
+            concurrency: "unbounded",
+          })
+          expect(output).toEqual(["stdout", "stderr"])
+        }),
+      )
+    }
   })
 
   describe("stdin", () => {

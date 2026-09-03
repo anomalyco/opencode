@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { EmbeddedTerminalRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
+import { EmbeddedTerminalRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -239,7 +239,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: {},
         log: () => {},
@@ -315,7 +315,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
@@ -389,7 +389,7 @@ test("session title generated while an untitled session is loading remains visib
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
@@ -490,6 +490,241 @@ test("automatic rename refreshes the displayed title before settling, even witho
   }
 })
 
+test.each([80, 120])("completes custom Markdown and ordinary fences in a session at width %s", async (width) => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_markdown",
+    title: "Markdown fixture",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "fixture", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 2 },
+  }
+  const initial =
+    "```mermaid\ngraph LR\n  A[DiagramStart] --> B[DiagramEnd]\n```\n\n```latex\nx^2\n```\n\n```text\ninitial"
+  await using setup = await createAppFixture({
+    width,
+    height: 55,
+    state: state.path,
+    config: { animations: false, tabs: { enabled: false }, session: { sidebar: "hide" } },
+    args: { sessionID: session.id },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            {
+              id: "msg_markdown",
+              type: "assistant",
+              agent: session.agent,
+              model: session.model,
+              time: { created: 2 },
+              content: [{ type: "text", text: initial }],
+            },
+            {
+              id: "msg_compaction",
+              type: "compaction",
+              time: { created: 1 },
+              status: "completed",
+              reason: "manual",
+              summary: "```latex\ny^2\n```",
+              recent: "msg_markdown",
+            },
+          ],
+          cursor: {},
+        })
+      if (
+        url.pathname === `/api/session/${session.id}/inbox` ||
+        url.pathname === `/api/session/${session.id}/permission`
+      )
+        return json({ data: [] })
+      return undefined
+    },
+  })
+  const streaming = await setup.waitForFrame(
+    (frame) =>
+      frame.includes("initial") &&
+      frame.includes("DiagramStart") &&
+      frame.includes("DiagramEnd") &&
+      frame.includes("x\u00b2") &&
+      frame.includes("y\u00b2"),
+  )
+  expect(streaming).toContain("Compaction")
+  expect(streaming).not.toContain("initial final")
+  expect(streaming).not.toContain("MARKDOWN_END")
+
+  // Queue final text and completion together to exercise TextPart's reactive property order.
+  setup.events.emit({
+    id: "evt_markdown_text_ended",
+    created: 3,
+    type: "session.text.ended",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: {
+      sessionID: session.id,
+      assistantMessageID: "msg_markdown",
+      ordinal: 0,
+      text: `${initial} final\n\`\`\`\n\nMARKDOWN_END`,
+    },
+  })
+  setup.events.emit({
+    id: "evt_markdown_step_ended",
+    created: 4,
+    type: "session.step.ended",
+    durable: { aggregateID: session.id, seq: 2, version: 1 },
+    data: {
+      sessionID: session.id,
+      assistantMessageID: "msg_markdown",
+      finish: "stop",
+      cost: 0,
+      tokens: session.tokens,
+    },
+  })
+  const frame = await setup.waitForFrame(
+    (frame) => frame.includes("MARKDOWN_END") && frame.includes("initial final") && frame.includes("2ms"),
+  )
+  expect(frame).toContain("DiagramStart")
+  expect(frame).toContain("DiagramEnd")
+  expect(frame).toContain("x\u00b2")
+  expect(frame).toContain("y\u00b2")
+  expect(frame).toContain("initial final")
+  expect(frame).not.toContain("graph LR")
+  expect(frame).not.toContain("x^2")
+  expect(frame).not.toContain("y^2")
+  expect(frame).not.toContain("```")
+})
+
+test("keeps assistant footer metrics current after prepend, same-length refresh, and revert", async () => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_footer",
+    title: "Footer fixture",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "fixture", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 100, updated: 5000 },
+  }
+  let refresh = false
+  await using setup = await createAppFixture({
+    width: 100,
+    height: 40,
+    state: state.path,
+    config: { animations: false, tabs: { enabled: false }, session: { sidebar: "hide", tps: true } },
+    args: { sessionID: session.id },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`) {
+        if (url.searchParams.get("cursor") === "older")
+          return json({
+            data: [
+              {
+                id: "msg_0001",
+                type: "system",
+                text: "Earlier instructions",
+                description: "Prepended instructions",
+                time: { created: 200 },
+              },
+              { id: "msg_0000", type: "user", text: "Prepended input", time: { created: 100 } },
+            ],
+            cursor: {},
+          })
+        return json({
+          data: [
+            ...(refresh
+              ? [
+                  {
+                    id: "msg_0005",
+                    type: "assistant",
+                    agent: session.agent,
+                    model: session.model,
+                    time: { created: 7000, streamed: 8000, completed: 9000 },
+                    finish: "stop",
+                    cost: 0,
+                    tokens: { ...session.tokens, output: 50 },
+                    content: [{ type: "text", text: "Later answer" }],
+                  },
+                  { id: "msg_0004", type: "user", text: "Later input", time: { created: 6000 } },
+                ]
+              : []),
+            {
+              id: "msg_0003",
+              type: "assistant",
+              agent: session.agent,
+              model: session.model,
+              time: { created: 2000, streamed: 3000, completed: 5000 },
+              finish: "stop",
+              cost: 0,
+              tokens: { ...session.tokens, output: 20 },
+              content: [{ type: "text", text: "Original answer" }],
+            },
+            { id: "msg_0002", type: "user", text: "Current input", time: { created: 1000 } },
+          ],
+          cursor: { next: "older" },
+        })
+      }
+      if (
+        url.pathname === `/api/session/${session.id}/inbox` ||
+        url.pathname === `/api/session/${session.id}/permission`
+      )
+        return json({ data: [] })
+      return undefined
+    },
+  })
+
+  const initial = await setup.waitForFrame((frame) => frame.includes("Original answer") && frame.includes("20.0 tok/s"))
+  expect(initial).toContain("Current input")
+  expect(initial).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(initial).not.toContain("Prepended input")
+
+  setup.mockInput.pressKey("g", { ctrl: true })
+  const prepended = await setup.waitForFrame(
+    (frame) =>
+      frame.includes("Prepended input") &&
+      frame.includes("Prepended instructions") &&
+      frame.includes("Original answer") &&
+      frame.includes("20.0 tok/s") &&
+      !frame.includes("Loading session history…"),
+  )
+  expect(prepended).toContain("Current input")
+  expect(prepended).toContain("Original answer")
+  expect(prepended).toContain("4.0s \u00b7 20.0 tok/s")
+
+  // Refresh the latest page: length stays four, but the retained assistant moves from index three to one.
+  refresh = true
+  setup.events.disconnect()
+  const refreshed = await setup.waitForFrame(
+    (frame) =>
+      frame.includes("Later input") &&
+      frame.includes("Later answer") &&
+      !frame.includes("Prepended input") &&
+      !frame.includes("Prepended instructions"),
+    { maxPasses: 120 },
+  )
+  expect(refreshed).toContain("Current input")
+  expect(refreshed).toContain("Original answer")
+  expect(refreshed).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(refreshed).toContain("3.0s \u00b7 50.0 tok/s")
+
+  setup.events.emit({
+    id: "evt_footer_reverted",
+    created: 10000,
+    type: "session.revert.committed",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: { sessionID: session.id, to: "msg_0004" },
+  })
+  const reverted = await setup.waitForFrame(
+    (frame) => frame.includes("Original answer") && !frame.includes("Later input") && !frame.includes("Later answer"),
+  )
+  expect(reverted).toContain("Current input")
+  expect(reverted).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(reverted).not.toContain("50.0 tok/s")
+})
+
 test("session startup prompt is submitted exactly once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const events = createEventStream()
@@ -540,7 +775,7 @@ test("session startup prompt is submitted exactly once", async () => {
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy", prompt: "RESUME_READY" },
         log: () => {},
@@ -684,66 +919,6 @@ test("error investigations repeatedly seed editable home drafts without creating
 
   setup.mockInput.pressKey("c", { ctrl: true })
   await setup.waitForFrame((frame) => !frame.includes("Beta initialization failed"))
-})
-
-test("shows jump to latest after scrolling one line above the final message", async () => {
-  const session = {
-    id: "dummy",
-    title: "Demo session",
-    projectID: "project",
-    location: { directory },
-    agent: "build",
-    model: { providerID: "provider", id: "model" },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 0, updated: 0 },
-  }
-  const messages = Array.from({ length: 8 }, (_, index) => ({
-    id: `message-${index}`,
-    type: "user",
-    text: index === 7 ? "Final visible message" : `Earlier message ${index}`,
-    time: { created: index },
-  }))
-  await using setup = await createAppFixture({
-    width: 80,
-    height: 20,
-    config: { animations: false, keybinds: { "session.line.up": "f6", "session.line.down": "f7" } },
-    args: { sessionID: "dummy" },
-    fetch: (url) => {
-      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-      if (url.pathname === "/api/session/dummy") return json({ data: session })
-      if (url.pathname === "/api/session/dummy/message") return json({ data: messages.toReversed(), cursor: {} })
-      if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
-      if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
-    },
-  })
-
-  await setup.waitForFrame((frame) => frame.includes("Final visible message"))
-  const findScrollBox = (root: Renderable): ScrollBoxRenderable | undefined =>
-    root instanceof ScrollBoxRenderable && root.getRenderable("message-7")
-      ? root
-      : root.getChildren().map(findScrollBox).find(Boolean)
-  const scroll = findScrollBox(setup.renderer.root)
-  expect(scroll).toBeDefined()
-  if (!scroll) throw new Error("session transcript scrollbox was not found")
-  const maximum = () => Math.max(0, scroll.scrollHeight - scroll.viewport.height)
-
-  expect(scroll.scrollTop).toBe(maximum())
-  const initial = setup.captureCharFrame().split("\n")
-  expect(initial.find((line) => line.includes("Jump to latest"))).toBeUndefined()
-  expect(initial[initial.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
-
-  setup.mockInput.pressKey("F6")
-  const clipped = (await setup.waitForFrame((frame) => frame.includes("Jump to latest"))).split("\n")
-  expect(scroll.scrollTop).toBe(maximum() - 1)
-  expect(clipped.find((line) => line.includes("Jump to latest"))).toBeDefined()
-  expect(clipped[clipped.findIndex((line) => line.includes("Final visible message")) + 1]).not.toContain("┃")
-
-  setup.mockInput.pressKey("F7")
-  const restored = (await setup.waitForFrame((frame) => !frame.includes("Jump to latest"))).split("\n")
-  expect(scroll.scrollTop).toBe(maximum())
-  expect(restored.find((line) => line.includes("Jump to latest"))).toBeUndefined()
-  expect(restored[restored.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
 })
 
 test("completed user shell output replaces a partial live read when the final read fails", async () => {
@@ -1134,7 +1309,7 @@ test.each(["manual", "select"] as const)(
             }),
             update: async () => ({}),
           },
-          packages: { resolve: async () => undefined },
+          packages: { prepare: async () => ({ directory: "" }) },
           args: { sessionID: session.id },
           terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
           log: () => {},
@@ -1220,7 +1395,7 @@ async function createAppFixture(
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: { get: async () => input.config ?? { animations: false }, update: async () => ({}) },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
       args: input.args ?? {},
       log: () => {},

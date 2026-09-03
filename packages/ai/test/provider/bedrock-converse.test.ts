@@ -631,7 +631,42 @@ describe("Bedrock Converse route", () => {
       )
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
+      expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+    }),
+  )
+
+  it.effect("retains metadata usage that arrives before messageStop", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
+        ["messageStop", { stopReason: "end_turn" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+    }),
+  )
+
+  it.effect("rejects metadata-only streams as incomplete with HTTP context", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(eventStreamBody(["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }])),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        classification: "incomplete-stream",
+        http: {
+          status: 200,
+          headers: { "content-type": "application/vnd.amazon.eventstream" },
+        },
+      })
     }),
   )
 

@@ -17,7 +17,7 @@ const context = {
 }
 
 const createCodeMode = (tools: ReadonlyMap<string, Info>) =>
-  CodeModeTool.create(tools, (_, tool, input, context) => execute(tool, input, context))
+  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context))
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(

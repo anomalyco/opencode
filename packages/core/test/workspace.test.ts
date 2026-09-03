@@ -41,7 +41,7 @@ const driver = WorkspaceDriver.make({
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Workspace.configured({ idleThreshold: "5 minutes", pollInterval: "1 minute" })]),
-    [[WorkspaceDriver.node, WorkspaceDriver.registryNode({ fake: driver, other: driver })]],
+    [WorkspaceDriver.node.replace(WorkspaceDriver.registryNode({ fake: driver, other: driver }))],
   ),
 )
 

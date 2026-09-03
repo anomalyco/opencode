@@ -6,7 +6,7 @@ import "./icon.css"
 const icons = {
   edit: {
     viewBox: "0 0 16 16",
-    body: `<path d="M13.5555 8.21534V13.5556H2.44434L2.44434 2.4445H7.78462M6.88878 9.11119C6.88878 9.11119 8.96327 9.0367 9.69678 8.3032L14.0301 3.96986C14.5824 3.4176 14.5824 2.52213 14.0301 1.96986C13.4778 1.4176 12.5824 1.4176 12.0301 1.96986L7.69678 6.3032C7.00513 6.99484 6.88878 9.11119 6.88878 9.11119Z" stroke="currentColor"/>`,
+    body: `<path d="M13.5556 8.21529V13.5556H2.44446L2.44446 2.44445H7.78474M6.00002 8.16216V10H7.83786L14 3.83784L12.1622 2L6.00002 8.16216Z" stroke="currentColor"/>`,
   },
   "folder-add-left": {
     viewBox: "0 0 16 16",
@@ -134,7 +134,7 @@ const icons = {
   },
   "window-analytics": {
     viewBox: "0 0 16 16",
-    body: `<g transform="translate(1 2)"><path d="M7 4H11M7 8H11M0.5 0.5V11.5H13.5V0.5H0.5ZM3.5 3.5H4.5V4.5H3.5V3.5ZM3.5 7.5H4.5V8.5H3.5V7.5Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/></g>`,
+    body: `<path d="M14.5 9.8333V13.5H1.5V2.5H7.1667M9.5 2.5V7.5H14.5V2.5H9.5Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>`,
   },
   trash: {
     viewBox: "0 0 20 20",

@@ -22,10 +22,7 @@ const execution = Layer.mock(SessionExecution.Service, {
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
-    [
-      [Project.node, globalProjectNode],
-      [SessionExecution.node, execution],
-    ],
+    [Project.node.replace(globalProjectNode), SessionExecution.node.replace(execution)],
   ),
 )
 

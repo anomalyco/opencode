@@ -126,9 +126,12 @@
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     cursor: pointer;
-    opacity: 0;
     transition: opacity 0.15s ease;
     margin-left: 4px;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
   }
 
   [data-component="session-turn-diffs-group"]:hover [data-slot="session-turn-diffs-toggle"] {

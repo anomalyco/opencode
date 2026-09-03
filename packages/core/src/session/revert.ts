@@ -1,10 +1,10 @@
 export * as SessionRevert from "./revert.js"
 
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
-import { PluginSupervisor } from "../plugin/supervisor-service.js"
+import { Instance } from "../instance/service.js"
 import { RelativePath } from "../schema.js"
 import { Snapshot } from "../snapshot.js"
 import { SessionEvent } from "./event.js"
@@ -20,25 +20,17 @@ interface BoundaryInput {
   readonly messageID: SessionMessage.ID
 }
 
-export interface Interface {
-  readonly stage: (input: {
-    readonly session: SessionSchema.Info
-    readonly messageID: SessionMessage.ID
-    readonly files?: boolean
-  }) => Effect.Effect<SessionSchema.Revert, MessageNotFoundError | Snapshot.Error>
-  readonly clear: (session: SessionSchema.Info) => Effect.Effect<void, Snapshot.Error>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRevert") {}
-
-export const make = Effect.fn("SessionRevert.make")(function* () {
+export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
+  session: SessionSchema.Info
+  messageID: SessionMessage.ID
+  files?: boolean
+}) {
+  const instances = yield* Instance.Service
   const database = yield* Database.Service
   const bus = yield* Bus.Service
-  const plugins = yield* PluginSupervisor.Service
-  const snapshot = yield* Snapshot.Service
 
-  const stage: Interface["stage"] = Effect.fn("SessionRevert.stage")(function* (input) {
-    yield* plugins.flush
+  return yield* Effect.gen(function* () {
+    const snapshot = yield* Snapshot.Service
     const original = input.session.revert?.snapshot
       ? Snapshot.ID.make(input.session.revert.snapshot)
       : yield* snapshot.capture()
@@ -63,10 +55,14 @@ export const make = Effect.fn("SessionRevert.make")(function* () {
       revert,
     })
     return revert
-  })
+  }).pipe(instances.provide(input.session))
+})
 
-  const clear: Interface["clear"] = Effect.fn("SessionRevert.clear")(function* (session) {
-    yield* plugins.flush
+export const clear = Effect.fn("SessionRevert.clear")(function* (session: SessionSchema.Info) {
+  const instances = yield* Instance.Service
+  const bus = yield* Bus.Service
+  yield* Effect.gen(function* () {
+    const snapshot = yield* Snapshot.Service
     if (!session.revert) return
     const original = session.revert.snapshot ? Snapshot.ID.make(session.revert.snapshot) : undefined
     if (original)
@@ -76,12 +72,8 @@ export const make = Effect.fn("SessionRevert.make")(function* () {
     yield* bus.publish(SessionEvent.RevertEvent.Cleared, {
       sessionID: session.id,
     })
-  })
-
-  return { stage, clear }
+  }).pipe(instances.provide(session))
 })
-
-export const layer = Layer.effect(Service, make())
 
 export const commit = Effect.fn("SessionRevert.commit")(function* (bus: Bus.Interface, session: SessionSchema.Info) {
   if (!session.revert) return

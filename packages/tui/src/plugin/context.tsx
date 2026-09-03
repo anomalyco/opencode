@@ -15,9 +15,10 @@ import {
 } from "solid-js"
 import path from "path"
 import { readFile, stat } from "fs/promises"
-import { fileURLToPath, pathToFileURL } from "url"
+import { fileURLToPath } from "url"
 import type { Page } from "@opencode-ai/plugin/tui/context"
 import { Hash } from "@opencode-ai/util/hash"
+import { Host } from "@opencode-ai/plugin/host"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
 import { isDeepEqual } from "remeda"
@@ -30,11 +31,11 @@ import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
 import { createSourceWatcher } from "./watch"
-import { discoverTuiPlugins, freshSpecifier, localSource, tuiEntrypoint } from "./discovery"
+import { discoverPluginTargets, freshSpecifier, localSource } from "./discovery"
 import { isMissingPath } from "../util/config-directories"
 
-export interface PackageResolver {
-  readonly resolve: (spec: string, install?: boolean) => Promise<string | undefined>
+export interface PackageSource {
+  readonly prepare: (spec: string, install?: boolean) => Promise<Host.Target>
 }
 
 type State =
@@ -93,7 +94,7 @@ export function combineMarkdownRenderers(
   return createMarkdownCodeBlockRenderer(renderers)
 }
 
-export function PluginProvider(props: ParentProps<{ packages: PackageResolver; directories: string[] }>) {
+export function PluginProvider(props: ParentProps<{ packages: PackageSource; directories: string[] }>) {
   const host = usePluginHost()
   const config = useConfig()
   const lifecycle = useTuiLifecycle()
@@ -265,19 +266,17 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const reconcile = async () => {
     await Promise.all(props.directories.map(watcher.wait))
     const entries = [
-      ...(await discoverTuiPlugins(props.directories)).map((entry) => ({
+      ...(await discoverPluginTargets(props.directories)).map((entry) => ({
         entry,
         install: true,
-        server: false,
-        discovered: true,
+        optional: true,
       })),
       ...serverPlugins().map((plugin) => ({
-        entry: plugin.source.type === "package" ? plugin.source.package : path.dirname(plugin.source.path),
+        entry: plugin.source.type === "package" ? plugin.source.target : path.dirname(plugin.source.path),
         install: false,
-        server: true,
-        discovered: false,
+        optional: true,
       })),
-      ...(config.data.plugins ?? []).map((entry) => ({ entry, install: true, server: false, discovered: false })),
+      ...(config.data.plugins ?? []).map((entry) => ({ entry, install: true, optional: false })),
     ]
 
     // Resolve: fold entries into one desired generation. A source that fails
@@ -304,7 +303,6 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       const local = localSource(target, directory)
       if (
         local &&
-        !source.discovered &&
         (await stat(local).then(
           (info) => info.isFile(),
           (error) => (isMissingPath(error) ? false : Promise.reject(error)),
@@ -324,7 +322,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
             }),
           )
       if (resolved.status === "unsupported") {
-        if (source.server) continue
+        if (source.optional) continue
         failures.push({ target, status: "unsupported" })
         continue
       }
@@ -598,7 +596,7 @@ async function resolvePlugin(
   local: URL | undefined,
   options: Readonly<Record<string, any>> | undefined,
   previous: Registration | undefined,
-  packages: PackageResolver,
+  packages: PackageSource,
   install: boolean,
   sourceGeneration: (entrypoint: string) => Promise<number>,
 ) {
@@ -606,7 +604,8 @@ async function resolvePlugin(
   // version needs no re-resolution (which could otherwise hit npm).
   if (!local && previous && sameOptions(previous.options, options))
     return { status: "unchanged" as const, plugin: previous.plugin, version: previous.version }
-  const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec, install)
+  const target = local ? { directory: fileURLToPath(local) } : await packages.prepare(spec, install)
+  const entrypoint = Host.resolve(target).tui
   if (!entrypoint) return { status: "unsupported" as const }
   // Content remains stable across the several mtimes one save may expose to
   // filesystem watchers, while the generation keeps reverted modules fresh.
@@ -615,7 +614,7 @@ async function resolvePlugin(
     const version = generation === undefined ? entrypoint : freshSpecifier(entrypoint, generation)
     if (previous && previous.version === version && sameOptions(previous.options, options))
       return { status: "unchanged" as const, plugin: previous.plugin, version }
-    const mod: { readonly default?: unknown } = await import(version)
+    const mod = await Host.load(version)
     if (generation !== undefined) {
       const observed = await sourceGeneration(entrypoint)
       // In-place saves can change the file between hashing and import. Retry
@@ -625,7 +624,8 @@ async function resolvePlugin(
         continue
       }
     }
-    if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
+    if (typeof mod !== "object" || mod === null || !("default" in mod) || !isPlugin(mod.default))
+      throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
     return { status: "loaded" as const, plugin: mod.default, version }
   }
 }
@@ -669,14 +669,6 @@ function sameGeneration(
 
 function snapshotOptions(options: Registration["options"]) {
   return options ? structuredClone(unwrap(options)) : undefined
-}
-
-async function resolveLocal(url: URL) {
-  const info = await stat(url)
-  if (info.isFile()) return url.href
-  if (!info.isDirectory()) return
-  const entrypoint = await tuiEntrypoint(fileURLToPath(url))
-  return entrypoint ? pathToFileURL(entrypoint).href : undefined
 }
 
 function isPlugin(value: unknown): value is Plugin.Definition {

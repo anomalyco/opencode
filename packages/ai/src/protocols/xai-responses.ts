@@ -4,6 +4,7 @@ import type { LLMRequest } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
+import { ResponsesCompaction } from "./utils/responses-compaction.js"
 
 const ADAPTER = "xai-responses"
 const NAME = "xAI Responses"
@@ -36,15 +37,19 @@ const XAIResponsesBody = Schema.Struct({
   stream: Schema.Literal(true),
 })
 
-const extension = {
+const adapter = {
   id: ADAPTER,
   name: NAME,
-  lowerHostedToolItem: (item: unknown) => (Schema.is(XAIResponsesHostedToolItem)(item) ? item : undefined),
-} satisfies OpenResponses.Extension
+  restoreHostedToolItem: (item: unknown) => (Schema.is(XAIResponsesHostedToolItem)(item) ? item : undefined),
+} satisfies OpenResponses.ProviderAdapter
 
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(XAIResponsesBody))
 const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LLMRequest) {
-  return yield* decodeBody(yield* OpenResponses.fromRequestWithExtension(request, extension))
+  if (request.providerOptions?.contextManagement !== undefined)
+    return yield* ProviderShared.invalidRequest(
+      "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
+    )
+  return yield* decodeBody(yield* OpenResponses.fromRequestWithAdapter(request, adapter))
 })
 
 const HOSTED_TOOLS = {
@@ -64,7 +69,8 @@ const HOSTED_TOOLS = {
 
 // Grok speaks the standard Responses reasoning dialect (`reasoning_summary_text.*`,
 // handled by the baseline); only its hosted tool vocabulary differs.
-const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
+const step = (state: OpenResponses.ParserState, input: OpenResponses.Event) => {
+  const event = OpenResponses.normalize(state, input)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
   return OpenResponses.step(state, event)
@@ -78,10 +84,12 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: OpenResponses.protocol.stream.event,
-    initial: (request) => OpenResponses.initial(request, extension),
+    initial: (request) => OpenResponses.initial(request, adapter),
     step,
     terminal: OpenResponses.terminal,
   },
 })
+
+export const compact = ResponsesCompaction.make(adapter)
 
 export * as XAIResponses from "./xai-responses.js"
