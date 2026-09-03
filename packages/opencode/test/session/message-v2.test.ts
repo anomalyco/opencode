@@ -319,6 +319,44 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("includes local attachment paths in model context", async () => {
+    const messageID = "m-user"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "file",
+            mime: "image/jpeg",
+            filename: "IMG_3480.JPG",
+            url: "data:image/jpeg;base64,AAAA",
+            source: {
+              type: "file",
+              path: "/workspace/IMG_3480.JPG",
+              text: { value: "[Image 1]", start: 0, end: 9 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached file: /workspace/IMG_3480.JPG" },
+          {
+            type: "file",
+            mediaType: "image/jpeg",
+            filename: "IMG_3480.JPG",
+            data: "data:image/jpeg;base64,AAAA",
+          },
+        ],
+      },
+    ])
+  })
+
   test("converts assistant tool completion into tool-call + tool-result messages with attachments", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
