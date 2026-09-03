@@ -151,7 +151,7 @@ const request = Effect.fn("BrowserConnection.request")(function* (
   const requestID = crypto.randomUUID()
   const pending = yield* Deferred.make<Browser.Result, Tool.Error>()
   const command =
-    action.type === "files.upload" || action.type === "files.drop"
+    (action.type === "files.upload" || action.type === "files.drop") && !inspection.inspect
       ? { ...action, paths: files.map((file) => file.name) }
       : action
   browser.pending.set(requestID, {
