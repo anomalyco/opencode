@@ -82,6 +82,7 @@ Vous pouvez également accéder à nos modèles via les points de terminaison AP
 | Claude Sonnet 4.6               | claude-sonnet-4-6               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.5               | claude-sonnet-4-5               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5                | claude-haiku-4-5                | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Gemini 3.8 Flash                | gemini-3.8-flash                | `https://opencode.ai/zen/v1/models/gemini-3.8-flash`      | `@ai-sdk/google`            |
 | Gemini 3.7 Flash                | gemini-3.7-flash                | `https://opencode.ai/zen/v1/models/gemini-3.7-flash`      | `@ai-sdk/google`            |
 | Gemini 3.6 Flash                | gemini-3.6-flash                | `https://opencode.ai/zen/v1/models/gemini-3.6-flash`      | `@ai-sdk/google`            |
 | Gemini 3.5 Flash                | gemini-3.5-flash                | `https://opencode.ai/zen/v1/models/gemini-3.5-flash`      | `@ai-sdk/google`            |
@@ -113,6 +114,7 @@ Vous pouvez également accéder à nos modèles via les points de terminaison AP
 | Ling 3.0 Flash Fin Free         | ling-3.0-flash-fin-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Lightning Free     | nemotron-3.5-lightning-free     | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Muse Spark 1.3 Contributor Free | muse-spark-1.3-contributor-free | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor Free | muse-spark-1.2-contributor-free | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 
 Le [model id](/docs/config/#models) dans votre configuration OpenCode utilise le format `opencode/<model-id>`. Par exemple, pour GPT 5.5, vous utiliseriez `opencode/gpt-5.5` dans votre configuration.
@@ -140,6 +142,7 @@ Nous prenons en charge un modèle de paiement à l'utilisation. Vous trouverez c
 | Ling 3.0 Flash Fin Free           | Free   | Free    | Free        | -            |
 | Nemotron 3 Ultra Free             | Free   | Free    | Free        | -            |
 | Nemotron 3.5 Lightning Free       | Free   | Free    | Free        | -            |
+| Muse Spark 1.3 Contributor Free   | Free   | Free    | Free        | -            |
 | Muse Spark 1.2 Contributor Free   | Free   | Free    | Free        | -            |
 | MiniMax M3                        | $0.30  | $1.20   | $0.06       | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | -            |
@@ -171,6 +174,7 @@ Nous prenons en charge un modèle de paiement à l'utilisation. Vous trouverez c
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00  | $0.30       | $3.75        |
 | Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50  | $0.60       | $7.50        |
 | Claude Haiku 4.5                  | $1.00  | $5.00   | $0.10       | $1.25        |
+| Gemini 3.8 Flash                  | $1.50  | $7.50   | $0.15       | -            |
 | Gemini 3.7 Flash                  | $1.50  | $7.50   | $0.15       | -            |
 | Gemini 3.6 Flash                  | $1.50  | $7.50   | $0.15       | -            |
 | Gemini 3.5 Flash                  | $1.50  | $9.00   | $0.15       | -            |
@@ -227,6 +231,7 @@ Les modèles gratuits :
 - Nemotron 3 Ultra Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
 - Nemotron 3.5 Lightning Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
 - Big Pickle est un modèle stealth gratuit sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
+- Muse Spark 1.3 Contributor Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
 - Muse Spark 1.2 Contributor Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
 
 <a href={email}>Contactez-nous</a> si vous avez des questions.
@@ -285,6 +290,7 @@ Tous nos modèles sont hébergés aux US. Nos fournisseurs suivent une politique
 - Nemotron 3.5 Lightning Free (endpoints NVIDIA gratuits) : Réservé à un usage d'essai — n'envoyez pas de données personnelles ou confidentielles. Votre utilisation est journalisée à des fins de sécurité et pour améliorer les produits et services de NVIDIA. Les données de session journalisées à des fins d'amélioration ne sont pas liées à votre identité ni à un quelconque identifiant persistant. Pour plus d'informations sur nos pratiques de traitement des données, consultez notre [Politique de confidentialité](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). En interagissant avec cet endpoint, vous consentez à notre collecte, à notre enregistrement et à notre utilisation de ces informations ainsi qu'aux [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
 - OpenAI APIs : Les requêtes sont conservées pendant 30 jours conformément à [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs : Les requêtes sont conservées pendant 30 jours conformément à [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
+- Muse Spark 1.3 Contributor Free : Tarification des tokens fortement réduite en échange de l'autorisation d'utiliser vos prompts et complétions pour entraîner les futurs modèles Meta. [En savoir plus](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - Muse Spark 1.2 Contributor Free : Tarification des tokens fortement réduite en échange de l'autorisation d'utiliser vos prompts et complétions pour entraîner les futurs modèles Meta. [En savoir plus](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 
 ---
