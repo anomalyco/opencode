@@ -107,7 +107,6 @@ type Store = {
     messageCursor: Record<string, string | undefined>
     messageLoading: Record<string, boolean>
     pending: Record<string, SessionInboxInfo[]>
-    input: Record<string, string[]>
     permission: Record<string, PermissionRequest[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormWithLocation[]>
@@ -198,7 +197,6 @@ export function createData(config: CreateDataInput) {
       messageCursor: {},
       messageLoading: {},
       pending: {},
-      input: {},
       permission: {},
       form: {},
     },
@@ -230,13 +228,6 @@ export function createData(config: CreateDataInput) {
         "pending",
         sessionID,
         (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inboxID),
-      )
-    if (store.session.input[sessionID]?.includes(inboxID))
-      setStore(
-        "session",
-        "input",
-        sessionID,
-        (store.session.input[sessionID] ?? []).filter((id) => id !== inboxID),
       )
   }
 
@@ -335,8 +326,8 @@ export function createData(config: CreateDataInput) {
     return request
   }
 
-  // Upsert an admitted inbox item into pending, input, and (for user and
-  // synthetic items) the visible transcript. Used by the inbox.enqueued
+  // Upsert an admitted inbox item into pending and (for user and synthetic
+  // items) the visible transcript. Used by the inbox.enqueued
   // handler and by optimistic admission; the upsert is what reconciles
   // the durable echo with an optimistic placeholder — the durable payload and
   // times replace the client's guess.
@@ -351,8 +342,6 @@ export function createData(config: CreateDataInput) {
         at < 0 ? [...pending, item] : pending.map((entry, index) => (index === at ? item : entry)),
       )
       if (item.type === "compaction") return
-      const input = store.session.input[item.sessionID] ?? []
-      if (!input.includes(item.id)) setStore("session", "input", item.sessionID, [...input, item.id])
       materializeInboxMessage(item)
     })
   }
@@ -524,12 +513,8 @@ export function createData(config: CreateDataInput) {
         delete draft.messageCursor[sessionID]
         delete draft.messageLoading[sessionID]
         delete draft.pending[sessionID]
-        delete draft.input[sessionID]
         if (messages.length) draft.message[sessionID] = messages
-        if (pending.length) {
-          draft.pending[sessionID] = pending
-          draft.input[sessionID] = pending.filter((item) => item.type !== "compaction").map((item) => item.id)
-        }
+        if (pending.length) draft.pending[sessionID] = pending
       }),
     )
   }
@@ -553,7 +538,6 @@ export function createData(config: CreateDataInput) {
         delete draft.messageCursor[sessionID]
         delete draft.messageLoading[sessionID]
         delete draft.pending[sessionID]
-        delete draft.input[sessionID]
         delete draft.permission[sessionID]
         delete draft.form[sessionID]
         for (const [rootID, family] of Object.entries(draft.family)) {
@@ -714,7 +698,7 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.inbox.delivered": {
-        const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inboxID) ?? false
+        const admitted = result.session.input.has(event.data.sessionID, event.data.inboxID)
         removePending(event.data.sessionID, event.data.inboxID)
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.inboxID)
@@ -1027,11 +1011,12 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID]) {
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         }
+        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
         setStore(
           "session",
-          "input",
+          "pending",
           event.data.sessionID,
-          (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.to),
+          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
         )
         message.update(event.data.sessionID, (draft, index) => {
           const position = draft.findIndex((item) => item.id >= event.data.to)
@@ -1308,12 +1293,17 @@ export function createData(config: CreateDataInput) {
       status(sessionID: string) {
         return store.session.active[sessionID] ?? "idle"
       },
+      // Inputs are the pending user and synthetic items; compactions are control items.
       input: {
         list(sessionID: string) {
-          return store.session.input[sessionID] ?? []
+          return (store.session.pending[sessionID] ?? []).flatMap((item) =>
+            item.type === "compaction" ? [] : [item.id],
+          )
         },
         has(sessionID: string, inboxID: string) {
-          return store.session.input[sessionID]?.includes(inboxID) ?? false
+          return (
+            store.session.pending[sessionID]?.some((item) => item.id === inboxID && item.type !== "compaction") ?? false
+          )
         },
       },
       pending: {
@@ -1337,12 +1327,6 @@ export function createData(config: CreateDataInput) {
             const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
             batch(() => {
               setStore("session", "pending", sessionID, reconcile(merged))
-              setStore(
-                "session",
-                "input",
-                sessionID,
-                reconcile(merged.filter((item) => item.type !== "compaction").map((item) => item.id)),
-              )
               merged.forEach(materializeInboxMessage)
             })
           })
