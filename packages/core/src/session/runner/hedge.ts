@@ -17,10 +17,20 @@ const HEDGES = [
   "tends to",
   "seems to",
   "appears to",
+  "assuming that",
+  "let's assume",
+  "lets assume",
+  "suppose that",
+  "hypothetically",
 ]
 
+const stripNonProse = (text: string) =>
+  text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]*`/g, " ")
+    .replace(/^>.*$/gm, " ")
+
 export const containsHedge = (text: string): boolean => {
-  const lower = text.toLowerCase()
-  for (const phrase of HEDGES) if (lower.includes(phrase)) return true
-  return false
+  const prose = stripNonProse(text).toLowerCase()
+  return HEDGES.some((phrase) => prose.includes(phrase))
 }

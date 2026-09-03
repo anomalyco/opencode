@@ -279,7 +279,12 @@ const layer = Layer.effect(
           },
         },
         providerOptions: { openai: { promptCacheKey } },
-        system: [agent.info?.system, system.baseline, ReflectionState.getReflectionText(session.id)]
+        system: [
+          agent.info?.system,
+          system.baseline,
+          ReflectionState.getReflectionText(session.id),
+          ReflectionState.consumeSteerGuidanceText(session.id),
+        ]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
@@ -317,7 +322,7 @@ const layer = Layer.effect(
             const projectionMsgs = [
               ...toLLMMessages(recentMsgs, projectionModel.value),
               Message.user(
-                "You are about to act. Given the current state, identify any risks, contradictions, or missing context in the planned approach in 1-2 sentences. Consider if you have thoroughly researched the necessary files. If the approach is sound and safe, output exactly 'Proceed.'",
+                "You are about to act. In 1-2 sentences, evaluate the deductive soundness of your next action: verify that all preconditions hold, necessary files have been checked, and no contradictions exist with past observations or tool errors. If sound, output exactly 'Proceed.' Otherwise, state the missing premise or risk.",
               ),
             ]
             const preReq = LLM.request({
@@ -339,14 +344,10 @@ const layer = Layer.effect(
             )
             if (!preFailed && preChunks.length > 0) {
               const projection = preChunks.join("").trim()
-              if (!/^proceed/i.test(projection) && projection.length > 20) {
-                const steerID = SessionMessage.ID.create()
-                yield* SessionInput.admit(db, events, {
-                  id: steerID,
-                  sessionID: session.id,
-                  prompt: Prompt.fromUserMessage({ text: `[Pre-action check]\n${projection}` }),
-                  delivery: "steer",
-                }).pipe(Effect.option)
+              const cleanProceed = /^proceed\.?$/i.test(projection)
+              const hasAdversarialRisk = /\b(however|but|risk|caution|warning|contradiction|missing|error|broken|fail)\b/i.test(projection)
+              if ((!cleanProceed || hasAdversarialRisk) && projection.length > 20) {
+                ReflectionState.addSteer(session.id, `[Pre-action check]\n${projection}`)
                 return yield* Effect.die(continueAfterCompaction(currentStep))
               }
             }
@@ -419,7 +420,7 @@ const layer = Layer.effect(
                     if (Option.isNone(whyResult)) return
                     if (whyResult.value.steered) {
                       needsContinuation = true
-                      ReflectionState.clear(session.id)
+                      ReflectionState.clearDirection(session.id)
                     } else if (whyResult.value.converged) {
                       const prev = ReflectionState.get(session.id)
                       ReflectionState.set(session.id, {
@@ -591,7 +592,6 @@ const layer = Layer.effect(
       let iterates = 0
       let steered = false
       let projection = ""
-      let lastMessageID: SessionMessage.ID | undefined
       let extensionsDetected = 0
       let currentBaselineSeq = startBaselineSeq
       while (iterates < maxReflectionBudget) {
@@ -619,7 +619,7 @@ const layer = Layer.effect(
         const projectionMsgs = [
           ...toLLMMessages(lastMsgs, model.value),
           Message.user(
-            `Forward-project 3-5 steps from the reasoning above. Identify negative consequences, contradictions, or risks. Specifically consider if previous commands failed or threw errors that are being ignored. If none, output exactly "No issues projected."`,
+            `Forward-project 3-5 steps from the reasoning above to test for logical validity and safety. Act as an adversarial verifier: attempt to construct a minimal counter-model or failure scenario (e.g. unhandled command failure, invalid state transition, or broken invariant). If a failure scenario exists, describe it in 1-2 sentences. If no contradiction or risk exists, output exactly "No issues projected."`,
           ),
         ]
         const req = LLM.request({
@@ -641,7 +641,9 @@ const layer = Layer.effect(
         )
         if (failed || chunks.length === 0) break
         projection = chunks.join("").trim()
-        const converged = /no issues?|no negative/i.test(projection) || projection.length < 40
+        const claimsNoIssues = /no issues?|no negative/i.test(projection)
+        const hasAdversarialRisk = /\b(however|but|except|risk|contradiction|failure|warning|error|broken|flaw)\b/i.test(projection)
+        const converged = (claimsNoIssues && !hasAdversarialRisk) || (projection.length < 40 && !hasAdversarialRisk)
         if (converged) {
           yield* publishCycle(
             "then",
@@ -653,17 +655,11 @@ const layer = Layer.effect(
           )
           return converge(false, iterates, projection, extensionsDetected, approxTcaTolerance > 0 ? 0 : undefined)
         }
-        const messageID = SessionMessage.ID.create()
-        yield* SessionInput.admit(db, events, {
-          id: messageID,
-          sessionID,
-          prompt: Prompt.fromUserMessage({ text: `[Then Loop forward check]\n${projection}` }),
-          delivery: "steer",
-        }).pipe(Effect.option)
-        lastMessageID = messageID
+        ReflectionState.addSteer(sessionID, `[Then Loop forward check]\n${projection}`)
         steered = true
+        break
       }
-      yield* publishCycle("then", sessionID, false, true, lastMessageID, { iterates, epsilon: approxTcaTolerance })
+      yield* publishCycle("then", sessionID, false, true, undefined, { iterates, epsilon: approxTcaTolerance })
       return converge(steered, iterates, projection, extensionsDetected)
     })
 
@@ -709,7 +705,6 @@ const layer = Layer.effect(
       let iterates = 0
       let steered = false
       let reflection = ""
-      let lastMessageID: SessionMessage.ID | undefined
       let extensionsDetected = 0
       let currentBaselineSeq = startBaselineSeq
       while (iterates < maxReflectionBudget) {
@@ -735,7 +730,7 @@ const layer = Layer.effect(
         const reflectionMsgs = [
           ...toLLMMessages(lastMsgs, model.value),
           Message.user(
-            `Reflect on whether the most recent tool result changes your goal. Check specifically if the last command returned an error code or stack trace that requires shifting focus to debugging. If the goal changes, state the new goal in one sentence. Otherwise output exactly "Goal unchanged."`,
+            `Reflect on the most recent tool result against the active goal premises. Determine if the result refutes your assumptions (e.g. non-zero exit code, error trace, missing resource, unexpected output) requiring a shift to a new or debugging sub-goal. If the goal changes, state the new sub-goal in one sentence. If all premises hold, output exactly "Goal unchanged."`,
           ),
         ]
         const req = LLM.request({
@@ -757,7 +752,9 @@ const layer = Layer.effect(
         )
         if (failed || chunks.length === 0) break
         reflection = chunks.join("").trim()
-        const converged = /goal unchanged|goal is unchanged/i.test(reflection) || reflection.length < 20
+        const claimsUnchanged = /goal unchanged|goal is unchanged/i.test(reflection)
+        const hasGoalShift = /\b(however|but|shift|switch|modify|instead|update|error|fail|debug|broken)\b/i.test(reflection)
+        const converged = (claimsUnchanged && !hasGoalShift) || (reflection.length < 20 && !hasGoalShift)
         if (converged) {
           yield* publishCycle(
             "why",
@@ -769,17 +766,11 @@ const layer = Layer.effect(
           )
           return converge(false, iterates, reflection, extensionsDetected, approxTcaTolerance > 0 ? 0 : undefined)
         }
-        const messageID = SessionMessage.ID.create()
-        yield* SessionInput.admit(db, events, {
-          id: messageID,
-          sessionID,
-          prompt: Prompt.fromUserMessage({ text: `[Why Loop reflection]\n${reflection}` }),
-          delivery: "steer",
-        }).pipe(Effect.option)
-        lastMessageID = messageID
+        ReflectionState.addSteer(sessionID, `[Why Loop reflection]\n${reflection}`)
         steered = true
+        break
       }
-      yield* publishCycle("why", sessionID, false, true, lastMessageID, { iterates, epsilon: approxTcaTolerance })
+      yield* publishCycle("why", sessionID, false, true, undefined, { iterates, epsilon: approxTcaTolerance })
       return converge(steered, iterates, reflection, extensionsDetected)
     })
 
@@ -787,7 +778,8 @@ const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
     }) {
-      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+      const hasSteer =
+        (yield* SessionInput.hasPending(db, input.sessionID, "steer")) || ReflectionState.hasSteers(input.sessionID)
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
@@ -809,13 +801,13 @@ const layer = Layer.effect(
                 thenLoopBudget--
                 needsContinuation = true
                 step = 1
-                ReflectionState.clear(input.sessionID)
+                ReflectionState.clearDirection(input.sessionID)
                 if (thenResult.extensionsDetected > 0) {
                   const extendedWhy = yield* whyLoop(input.sessionID)
                   if (extendedWhy.steered) {
                     needsContinuation = true
                     step = 1
-                    ReflectionState.clear(input.sessionID)
+                    ReflectionState.clearDirection(input.sessionID)
                   } else if (extendedWhy.converged) {
                     const prev = ReflectionState.get(input.sessionID)
                     ReflectionState.set(input.sessionID, {
@@ -835,10 +827,15 @@ const layer = Layer.effect(
                 })
               }
             }
-            if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+            if (!needsContinuation)
+              needsContinuation =
+                (yield* SessionInput.hasPending(db, input.sessionID, "steer")) ||
+                ReflectionState.hasSteers(input.sessionID)
           }
         }
-        shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
+        shouldRun =
+          (yield* SessionInput.hasPending(db, input.sessionID, "queue")) ||
+          ReflectionState.hasSteers(input.sessionID)
         promotion = shouldRun ? "queue" : undefined
       }
     })

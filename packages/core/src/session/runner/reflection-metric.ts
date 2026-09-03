@@ -24,7 +24,42 @@ export const jaccard = (a: ReadonlySet<string>, b: ReadonlySet<string>): number 
   return intersection / union
 }
 
-export const rho = (a: string, b: string): number => 1 - jaccard(tokensOf(a), tokensOf(b))
+const NEGATION_TOKENS = new Set([
+  "not",
+  "no",
+  "never",
+  "neither",
+  "cannot",
+  "cant",
+  "wont",
+  "stop",
+  "abort",
+  "failed",
+  "failure",
+  "contradiction",
+  "conflict",
+  "invalid",
+])
+
+export const hasPolarityDivergence = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => {
+  const negA = Array.from(a).filter((t) => NEGATION_TOKENS.has(t)).length
+  const negB = Array.from(b).filter((t) => NEGATION_TOKENS.has(t)).length
+  return (negA > 0 && negB === 0) || (negB > 0 && negA === 0)
+}
+
+export const rho = (a: string, b: string): number => {
+  const tokensA = tokensOf(a)
+  const tokensB = tokensOf(b)
+  const base = 1 - jaccard(tokensA, tokensB)
+  if (hasPolarityDivergence(tokensA, tokensB)) return Math.max(base, 0.5)
+  return base
+}
+
+export const isContradiction = (a: string, b: string): boolean => {
+  const tokensA = tokensOf(a)
+  const tokensB = tokensOf(b)
+  return jaccard(tokensA, tokensB) > 0.4 && hasPolarityDivergence(tokensA, tokensB)
+}
 
 export const objectiveGap = (initialPrompt: string, muR: string, tauR: string): number =>
   Math.abs(rho(tauR, initialPrompt) - rho(muR, initialPrompt))
