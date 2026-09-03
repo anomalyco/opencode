@@ -7,6 +7,7 @@ export interface ReferenceEditor {
   add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
   remove(name: string): void
   list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
 }
 
 export interface ReferenceDomain extends ReferenceApi<unknown> {

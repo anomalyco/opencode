@@ -596,13 +596,15 @@ Read the references available at a location.
 const references = await ctx.reference.list()
 ```
 
-Register a transform to inspect, add, or remove local and Git references.
+Register a transform to inspect, add, or remove local and Git references. `get(name)` returns the current configured source,
+or `undefined` when the name is absent.
 
 ```ts
 await ctx.reference.transform((editor) => {
   const references = editor.list()
   editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
   editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
   editor.remove("legacy")
 })
 ```
@@ -627,6 +629,7 @@ interface ReferenceContext {
 
 interface ReferenceEditor {
   list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
   add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
   remove(name: string): void
 }

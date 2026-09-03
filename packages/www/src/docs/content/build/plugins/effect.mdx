@@ -644,7 +644,8 @@ effect: (ctx) =>
   }),
 ```
 
-Add or remove local and Git references, then reload after external state changes.
+Add or remove local and Git references, then reload after external state changes. `get(name)` returns the current configured
+source, or `undefined` when the name is absent.
 
 ```ts
 effect: (ctx) =>
@@ -653,6 +654,7 @@ effect: (ctx) =>
     yield* reference.transform((editor) => {
       editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
       editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+      const handbook = editor.get("handbook")
       editor.remove("legacy")
     })
     yield* reference.reload()
@@ -667,6 +669,7 @@ interface ReferenceEditor {
   add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
   remove(name: string): void
   list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
 }
 
 interface ReferenceDomain extends ReferenceApi<unknown> {

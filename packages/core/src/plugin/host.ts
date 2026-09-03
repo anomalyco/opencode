@@ -397,6 +397,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
             add: (name, source) => editor.add(name, Schema.decodeUnknownSync(Reference.Source)(source)),
             remove: editor.remove,
             list: editor.list,
+            get: editor.get,
           })
         }),
     },
