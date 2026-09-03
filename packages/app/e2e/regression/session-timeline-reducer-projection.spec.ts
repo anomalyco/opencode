@@ -173,7 +173,7 @@ test("keeps failed search calls and their error cards inside the collapsed stack
   await expect(glob.locator('[data-component="tool-error-card-icon"]')).toBeVisible()
   await expect(glob.locator('[data-component="tool-error-card-icon"] use')).toHaveAttribute(
     "href",
-    "#opencode-v2-icon-circle-exclamation",
+    "#opencode-v2-icon-outline-hexagonal-warning",
   )
   await expect
     .poll(() =>
