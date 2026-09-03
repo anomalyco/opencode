@@ -98,6 +98,13 @@ describe("mutateConfig", () => {
     const { changed } = await mutateConfig(target, { kind: "add", name: "a" })
     expect(changed).toBe(false)
   })
+  test("consecutive add of same entry reports unchanged on second call", async () => {
+    const target = await writeTarget("opencode.json", `{"plugin":["a"]}`)
+    const first = await mutateConfig(target, { kind: "add", name: "b", entry: ["b", { opt: 1 }] })
+    expect(first.changed).toBe(true)
+    const second = await mutateConfig(target, { kind: "add", name: "b", entry: ["b", { opt: 1 }] })
+    expect(second.changed).toBe(false)
+  })
   test("remove keeps other entries and tuple options", async () => {
     const target = await writeTarget("opencode.json", `{"plugin":["a",["b",{x:1}]]}`)
     const { changed } = await mutateConfig(target, { kind: "remove", name: "b" })

@@ -1,7 +1,7 @@
 import { homedir } from "node:os"
-import { readFile, rename, stat, writeFile } from "node:fs/promises"
+import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { existsSync } from "node:fs"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 
@@ -47,13 +47,11 @@ export function parsePluginEntries(value: unknown): PluginEntry[] {
 function isTupleEntry(item: unknown): boolean {
   // Tuple form: [name, options] with at least a name and an options object;
   // extra slots beyond the options are ignored, options must be a plain object.
+  // Empty options ({}) are valid — jsonc's parse() attaches no source marker,
+  // so there is no way to distinguish an intentionally-empty options object.
   if (!Array.isArray(item) || item.length < 2 || typeof item[0] !== "string") return false
   const opts = item[1]
   if (opts === null || typeof opts !== "object" || Array.isArray(opts)) return false
-  // A parsed object with zero enumerable own properties but a non-trivial
-  // source marker means jsonc swallowed an unreadable options body (e.g.
-  // bare keys the scanner dropped) — treat that as junk.
-  if (Object.keys(opts as object).length === 0 && (opts as any).source !== undefined) return false
   return true
 }
 
@@ -220,7 +218,16 @@ async function writeConfig(
     }
   }
 
-  const tmpPath = join(dirname(target.path), `.${Date.now()}.opencode-tmp`)
-  await writeFile(tmpPath, content)
-  await rename(tmpPath, target.path)
+  const tmpPath = join(dirname(target.path), `.${Date.now()}-${randomUUID()}.opencode-tmp`)
+  try {
+    await writeFile(tmpPath, content)
+    await rename(tmpPath, target.path)
+  } catch (error) {
+    await unlink(tmpPath).catch(() => {})
+    throw error
+  }
+  // lastRead now holds the pre-write content hash; refresh it so the next
+  // mutateConfig sees the post-write state and stays idempotent instead of
+  // reporting a byte-identical rewrite as a change.
+  lastRead.set(target.path, { hash: hashRaw(content), plugins })
 }
