@@ -307,13 +307,60 @@ describe("session.message-v2.toModelMessage", () => {
         content: [
           { type: "text", text: "hello" },
           {
+            type: "text",
+            text: "[Attached image/png: img.png] (message: m-user, part: prt_p3)",
+          },
+          { type: "text", text: "What did we do so far?" },
+          { type: "text", text: "The following tool was executed by the user" },
+        ],
+      },
+    ])
+
+    // explicit position check: placeholder sits between the text parts
+    const result = await MessageV2.toModelMessages(input, model)
+    const parts = result[0].content
+    expect(parts[0]).toEqual({ type: "text", text: "hello" })
+    expect(parts[1].text).toContain("(message: m-user, part: prt_p3)")
+    expect(parts[2]).toEqual({ type: "text", text: "What did we do so far?" })
+  })
+
+  test("keeps file parts when the model supports the media modality", async () => {
+    const imageModel: Provider.Model = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+        },
+      },
+    }
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-user"),
+        parts: [
+          {
+            ...basePart("m-user", "p1"),
+            type: "file",
+            mime: "image/png",
+            filename: "img.png",
+            url: "https://example.com/img.png",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, imageModel)).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          {
             type: "file",
             mediaType: "image/png",
             filename: "img.png",
             data: "https://example.com/img.png",
           },
-          { type: "text", text: "What did we do so far?" },
-          { type: "text", text: "The following tool was executed by the user" },
         ],
       },
     ])
