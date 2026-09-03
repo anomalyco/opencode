@@ -335,10 +335,15 @@ test("reflows held tabs when the pointer leaves the strip", async () => {
       (frame) => !frame.includes("First") && items().length === 3 && Array.from(frame.split("\n")[0] ?? "")[22] === "✕",
     )
 
+    // The matching held frame may still have a follow-up Solid render scheduled.
     await app.renderOnce()
-    const held = app.captureCharFrame().split("\n")[0] ?? ""
+    const heldThird = (app.captureCharFrame().split("\n")[0] ?? "").indexOf("Third")
+    expect(heldThird).toBeGreaterThanOrEqual(0)
     await app.mockMouse.moveTo(0, 1)
-    await app.waitForFrame((frame) => (frame.split("\n")[0] ?? "").indexOf("Third") < held.indexOf("Third"))
+    await app.waitForFrame((frame) => {
+      const reflowedThird = (frame.split("\n")[0] ?? "").indexOf("Third")
+      return reflowedThird >= 0 && reflowedThird < heldThird
+    })
     await app.mockMouse.moveTo(20, 0)
     await app.waitForFrame((frame) => Array.from(frame.split("\n")[0] ?? "")[20] === "✕")
     expect(Array.from(app.captureCharFrame().split("\n")[0] ?? "")[22]).not.toBe("✕")
