@@ -9,8 +9,8 @@ const it = testEffect(Layer.empty)
 it.effect("checks immediately and every 10 minutes", () =>
   Effect.gen(function* () {
     const updates = yield* Queue.unbounded<string>()
-    yield* Updater.watchUpdates({
-      inspect: () => Effect.succeed({ action: "upgrade", version: "2.0.0" }),
+    yield* Updater.monitorUpdates({
+      inspect: () => Effect.succeed("2.0.0"),
       notify: (version) => Queue.offer(updates, version).pipe(Effect.asVoid),
     }).pipe(Effect.forkScoped)
 
@@ -23,8 +23,8 @@ it.effect("checks immediately and every 10 minutes", () =>
 it.effect("does not notify when no update is available", () =>
   Effect.gen(function* () {
     const updates = yield* Queue.unbounded<string>()
-    yield* Updater.watchUpdates({
-      inspect: () => Effect.succeed({ action: "none" }),
+    yield* Updater.monitorUpdates({
+      inspect: () => Effect.succeed(undefined),
       notify: (version) => Queue.offer(updates, version).pipe(Effect.asVoid),
     }).pipe(Effect.forkScoped)
 

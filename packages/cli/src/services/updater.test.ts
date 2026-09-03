@@ -6,7 +6,7 @@ describe("updater", () => {
   test("reads update policy from JSONC", () => {
     expect(decodePolicy('{ // preference\n "update": "notify",\n}')).toBe("notify")
     expect(decodePolicy('{ "update": "disable" }')).toBe("disable")
-    expect(decodePolicy('{ "update": "auto" }')).toBeUndefined()
+    expect(decodePolicy('{ "update": "auto" }')).toBe("notify")
     expect(decodePolicy('{ "update": "invalid" }')).toBeUndefined()
   })
 

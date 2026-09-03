@@ -13,6 +13,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Credential } from "@opencode-ai/core/credential"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { ConfigNormalize } from "@opencode-ai/core/config/normalize"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Bus } from "@opencode-ai/core/bus"
 import { Global } from "@opencode-ai/util/global"
@@ -622,6 +623,14 @@ describe("Config", () => {
     expect(ConfigMigrateV1.migrate({ autoupdate: "notify" }).update).toBe("notify")
     expect(ConfigMigrateV1.migrate({ autoupdate: true }).update).toBe("notify")
     expect(ConfigMigrateV1.migrate({}).update).toBeUndefined()
+  })
+
+  test("normalizes the previous native auto update policy", () => {
+    expect(ConfigNormalize.normalize({ update: "auto" })).toEqual({
+      type: "normalized",
+      encoded: { update: "notify" },
+      diagnostics: [],
+    })
   })
 
   test("migrates v1 provider lists to policies", () => {

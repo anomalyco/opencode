@@ -83,9 +83,9 @@ export default Runtime.handler(Commands, (input) =>
         update: (update) => runPromise(config.update(update)),
       },
       updater: {
-        watch: (notify, signal) =>
+        monitor: (notify, signal) =>
           runPromise(
-            updater.watch((version) => Effect.sync(() => notify(version))),
+            updater.monitor((version) => Effect.sync(() => notify(version))),
             { signal },
           ),
         apply: (version) => runPromise(updater.apply(version)),

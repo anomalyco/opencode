@@ -1,5 +1,4 @@
 import { expect } from "bun:test"
-import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 import { Effect } from "effect"
 import { HttpServer, HttpServerError, HttpServerResponse } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"

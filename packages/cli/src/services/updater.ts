@@ -5,30 +5,28 @@ import { Context, Duration, Effect, FileSystem, Layer, Schedule } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
-import { action, parseReleaseVersion, type Action, type Policy } from "./updater-action"
+import { action, parseReleaseVersion, type Policy } from "./updater-action"
 
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
 export type Method = (typeof methods)[number]
 
 export interface Interface {
-  readonly watch: (notify: (version: string) => Effect.Effect<void>) => Effect.Effect<void>
+  readonly monitor: (notify: (version: string) => Effect.Effect<void>) => Effect.Effect<void>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
 }
 
-type Inspection = { readonly action: "none" } | { readonly action: Exclude<Action, "none">; readonly version: string }
-
-export const watchUpdates = Effect.fnUntraced(function* (input: {
-  readonly inspect: () => Effect.Effect<Inspection, Error>
+export const monitorUpdates = Effect.fnUntraced(function* (input: {
+  readonly inspect: () => Effect.Effect<string | undefined, Error>
   readonly notify: (version: string) => Effect.Effect<void>
   readonly interval?: Duration.Input
 }) {
   const check = Effect.gen(function* () {
-    const result = yield* input.inspect()
-    if (result.action !== "none") yield* input.notify(result.version)
-  }).pipe(Effect.catchCause((cause) => Effect.logWarning("automatic update check failed", { cause })))
+    const version = yield* input.inspect()
+    if (version !== undefined) yield* input.notify(version)
+  }).pipe(Effect.catch((error) => Effect.logWarning("update check failed", { error })))
   return yield* check.pipe(Effect.repeat(Schedule.spaced(input.interval ?? "10 minutes")))
 })
 
@@ -43,6 +41,7 @@ export function decodePolicy(text: string): Policy | undefined {
   if ("update" in input) {
     const value = input.update
     if (value === "disable" || value === "notify") return value
+    if (value === "auto") return "notify"
     return
   }
   if (!("autoupdate" in input)) return
@@ -183,19 +182,19 @@ const make = Effect.gen(function* () {
     return yield* Effect.fail(new Error(result.stderr.trim() || `Failed to update with ${method}`))
   })
 
-  const inspect = Effect.fnUntraced(function* (): Effect.fn.Return<Inspection, Error> {
+  const inspect = Effect.fnUntraced(function* () {
     if (OPENCODE_LOCAL || ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")) {
       yield* Effect.logInfo("update check skipped", {
         reason: OPENCODE_LOCAL ? "local-install" : "disabled",
         version: OPENCODE_VERSION,
         channel: OPENCODE_CHANNEL,
       })
-      return { action: "none" }
+      return undefined
     }
     const policy = yield* readPolicy()
     if (policy === "disable") {
       yield* Effect.logInfo("update check skipped", { reason: "policy-disabled" })
-      return { action: "none" }
+      return undefined
     }
 
     const version = yield* latest()
@@ -206,16 +205,16 @@ const make = Effect.gen(function* () {
     const next = action(OPENCODE_VERSION, version, policy)
     if (next === "none") {
       yield* Effect.logInfo("update check done", { action: "up-to-date" })
-      return { action: "none" }
+      return undefined
     }
     yield* Effect.logInfo("OpenCode update available", { current: OPENCODE_VERSION, latest: version })
-    return { action: next, version }
+    return version
   })
 
   const install = Effect.fnUntraced(function* (version: string) {
     const detected = yield* method()
     if (!detected) {
-      yield* Effect.logWarning("automatic update skipped: installation method not found")
+      yield* Effect.logWarning("update skipped: installation method not found")
       return false
     }
     yield* upgrade(detected, version)
@@ -227,9 +226,9 @@ const make = Effect.gen(function* () {
     if (!(yield* install(version))) return yield* Effect.fail(new Error("Installation method not found"))
   })
 
-  const watch = (notify: (version: string) => Effect.Effect<void>) => watchUpdates({ inspect, notify })
+  const monitor = (notify: (version: string) => Effect.Effect<void>) => monitorUpdates({ inspect, notify })
 
-  return Service.of({ watch, apply, method, latest, upgrade })
+  return Service.of({ monitor, apply, method, latest, upgrade })
 })
 
 export const layer = Layer.effect(Service, make)

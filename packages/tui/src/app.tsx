@@ -186,7 +186,7 @@ export type TuiInput = {
   args: Args
   config: Config.Interface
   updater?: {
-    watch: (notify: (version: string) => void, signal: AbortSignal) => Promise<void>
+    monitor: (notify: (version: string) => void, signal: AbortSignal) => Promise<void>
     apply: (version: string) => Promise<void>
   }
   packages: PackageSource
@@ -511,9 +511,19 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
     void markUpdateNotification((draft) => {
       draft.versions = [...draft.versions, version].slice(-100)
     }).catch((error) => log.error("failed to persist update notification", { error }))
-    dialog.replace(() => (
-      <DialogUpdate version={version} install={() => updater.apply(version)} restart={client.restart} />
-    ))
+    const key = `update:${version}`
+    dialog.replace(
+      () => (
+        <DialogUpdate
+          dialogKey={key}
+          version={version}
+          install={() => updater.apply(version)}
+          restart={client.restart}
+        />
+      ),
+      undefined,
+      { key },
+    )
     dialog.setCentered(true)
   }
   onMount(() => {
@@ -521,8 +531,8 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
     if (!updater) return
     const controller = new AbortController()
     onCleanup(() => controller.abort())
-    void updater.watch(showUpdate, controller.signal).catch((error) => {
-      if (!controller.signal.aborted) log.error("update watch failed", { error })
+    void updater.monitor(showUpdate, controller.signal).catch((error) => {
+      if (!controller.signal.aborted) log.error("update monitor failed", { error })
     })
   })
   const tabsResize = createPaneResize({
