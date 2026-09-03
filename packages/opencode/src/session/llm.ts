@@ -385,6 +385,7 @@ const live: Layer.Layer<
 )
 
 export const hasToolCalls = LLMRequestPrep.hasToolCalls
+export const systemMessages = LLMRequestPrep.systemMessages
 
 export const node = LayerNode.make({
   service: Service,

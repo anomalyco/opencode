@@ -173,6 +173,43 @@ describe("session.llm.hasToolCalls", () => {
   })
 })
 
+describe("session.llm.systemMessages", () => {
+  test("returns no message for an empty system array", () => {
+    expect(LLM.systemMessages([])).toEqual([])
+  })
+
+  test("returns no message when every entry is empty", () => {
+    expect(LLM.systemMessages(["", ""])).toEqual([])
+  })
+
+  test("wraps a single entry in one system message", () => {
+    expect(LLM.systemMessages(["You are a helpful assistant."])).toEqual([
+      { role: "system", content: "You are a helpful assistant." },
+    ])
+  })
+
+  test("joins multiple entries into exactly one system message", () => {
+    // Regression test: request.ts used to emit one chat message per array
+    // entry, so a plugin pushing onto `output.system` via the
+    // experimental.chat.system.transform hook produced a second leading
+    // system-role message. Some providers reject a second system message
+    // outright even though it's still ahead of the user turn (observed
+    // against a self-hosted Qwen3/vLLM backend, which errors with "System
+    // message must be at the beginning"). Every entry must collapse into a
+    // single message so plugin authors don't each have to defend against
+    // this themselves.
+    const messages = LLM.systemMessages(["base prompt", "plugin-added content"])
+    expect(messages).toHaveLength(1)
+    expect(messages).toEqual([{ role: "system", content: "base prompt\nplugin-added content" }])
+  })
+
+  test("skips empty entries when joining", () => {
+    expect(LLM.systemMessages(["base prompt", "", "plugin-added content"])).toEqual([
+      { role: "system", content: "base prompt\nplugin-added content" },
+    ])
+  })
+})
+
 describe("session.llm.ai-sdk adapter", () => {
   type AISDKAdapterEvent = Parameters<typeof LLMAISDK.toLLMEvents>[1]
 

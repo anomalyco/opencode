@@ -98,18 +98,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
   if (isOpenaiOauth) options.instructions = system.join("\n")
 
-  const messages =
-    isOpenaiOauth || input.isWorkflow
-      ? input.messages
-      : [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...input.messages,
-        ]
+  const messages = isOpenaiOauth || input.isWorkflow ? input.messages : [...systemMessages(system), ...input.messages]
 
   const params = yield* input.plugin.trigger(
     "chat.params",
@@ -211,6 +200,24 @@ function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission"
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+}
+
+// Joins every entry of `system` into a single leading system message instead
+// of emitting one chat message per array entry. `system` accumulates content
+// from multiple sources — the base agent/provider prompt, session-level
+// system text, and whatever plugins add via the `experimental.chat.system.
+// transform` hook (which is allowed to `push` onto the array, see
+// packages/plugin/src/index.ts) — and providers vary on whether they accept
+// more than one leading system-role message. Some don't: a chat template that
+// requires exactly one leading system message (observed against a
+// self-hosted Qwen3/vLLM backend) rejects the request outright the moment a
+// second system-role message appears, even though it's still ahead of the
+// user turn. Joining here means plugin authors don't each have to
+// defensively merge into a single array entry themselves to stay compatible
+// with strict backends.
+export function systemMessages(system: string[]): ModelMessage[] {
+  const content = system.filter((x) => x).join("\n")
+  return content ? [{ role: "system", content }] : []
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {
