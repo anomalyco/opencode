@@ -931,6 +931,7 @@ export const dict: Record<string, string> = {
   "settings.plugins.installed.disable": "অক্ষম করুন",
   "settings.plugins.installed.enable": "সক্ষম করুন",
   "settings.plugins.installed.uninstall": "আনইনস্টল করুন",
+  "settings.plugins.installed.uninstallBody": "{{scope}} থেকে {{name}} আনইনস্টল করবেন? এটি কনফিগ ফাইল থেকে সরিয়ে ফেলা হবে।",
   "settings.plugins.installed.recentlyRemoved": "সম্প্রতি সরানো",
   "settings.plugins.installed.openConfig": "কনফিগ খুলুন",
   "settings.plugins.errors.parseFailed": "{{path}} পড়া যায়নি — প্লাগইন ব্যবস্থাপনার জন্য ফাইলটি ঠিক করুন বা সরান।",

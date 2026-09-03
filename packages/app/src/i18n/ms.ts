@@ -932,6 +932,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Lumpuhkan",
   "settings.plugins.installed.enable": "Aktifkan",
   "settings.plugins.installed.uninstall": "Nyahpasang",
+  "settings.plugins.installed.uninstallBody": "Nyahpasang {{name}} dari {{scope}}? Entri akan dibuang daripada fail konfigurasi.",
   "settings.plugins.installed.recentlyRemoved": "Baru-baru ini dibuang",
   "settings.plugins.installed.openConfig": "Buka konfigurasi",
   "settings.plugins.errors.parseFailed": "Tidak dapat membaca {{path}} — betulkan atau buang fail untuk mengurus plugin di sana.",

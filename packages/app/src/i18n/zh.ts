@@ -903,6 +903,7 @@ export const dict = {
   "settings.plugins.installed.disable": "停用",
   "settings.plugins.installed.enable": "启用",
   "settings.plugins.installed.uninstall": "卸载",
+  "settings.plugins.installed.uninstallBody": "从{{scope}}卸载{{name}}？该条目将从配置文件中移除。",
   "settings.plugins.installed.recentlyRemoved": "最近移除",
   "settings.plugins.installed.openConfig": "打开配置",
   "settings.plugins.errors.parseFailed": "无法读取 {{path}} — 请修复或删除该文件以管理其中的插件。",

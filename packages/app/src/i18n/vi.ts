@@ -944,6 +944,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Vô hiệu hóa",
   "settings.plugins.installed.enable": "Kích hoạt",
   "settings.plugins.installed.uninstall": "Gỡ cài đặt",
+  "settings.plugins.installed.uninstallBody": "Gỡ cài đặt {{name}} khỏi {{scope}}? Mục này sẽ bị xóa khỏi tệp cấu hình.",
   "settings.plugins.installed.recentlyRemoved": "Gần đây đã xóa",
   "settings.plugins.installed.openConfig": "Mở cấu hình",
   "settings.plugins.errors.parseFailed": "Không thể đọc {{path}} — sửa hoặc xóa tệp để quản lý plugin tại đó.",

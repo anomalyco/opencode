@@ -929,6 +929,7 @@ export const dict: Record<string, string> = {
   "settings.plugins.installed.disable": "අක්‍රීතිකරන්න",
   "settings.plugins.installed.enable": "සක්‍රීතිකරන්න",
   "settings.plugins.installed.uninstall": "අස්ථාපනය කරන්න",
+  "settings.plugins.installed.uninstallBody": "{{scope}} වෙතින් {{name}} අස්ථාපනය කරන්නද? එය වින්‍යාස ගොනුවෙන් ඉවත් කරනු ලැබේ.",
   "settings.plugins.installed.recentlyRemoved": "මෑතකදී ඉවත් කළ",
   "settings.plugins.installed.openConfig": "වින්‍යාසය විවෘත කරන්න",
   "settings.plugins.errors.parseFailed": "{{path}} කියවිය නොහැක — ප්ලගින කළමනාකරණයට ගොනුව හදන්න හෝ ඉවත් කරන්න.",

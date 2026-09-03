@@ -117,7 +117,7 @@ export const DialogSettings: Component<{
         </TabsV2.Content>
         <Show when={platform.platform === "desktop" && platform.plugins}>
           <TabsV2.Content value="plugins" class="settings-v2-panel">
-            <SettingsPluginsV2 sessionID={props.sessionID} />
+            <SettingsPluginsV2 />
           </TabsV2.Content>
         </Show>
       </TabsV2>

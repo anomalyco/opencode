@@ -930,6 +930,7 @@ export const dict = {
   "settings.plugins.installed.disable": "غیرفعال‌سازی",
   "settings.plugins.installed.enable": "فعال‌سازی",
   "settings.plugins.installed.uninstall": "حذف نصب",
+  "settings.plugins.installed.uninstallBody": "آیا {{name}} از {{scope}} حذف نصب شود؟ از فایل پیکربندی حذف خواهد شد.",
   "settings.plugins.installed.recentlyRemoved": "به‌تازگی حذف‌شده",
   "settings.plugins.installed.openConfig": "باز کردن پیکربندی",
   "settings.plugins.errors.parseFailed": "خواندن {{path}} ممکن نیست — برای مدیریت افزونه‌ها فایل را اصلاح یا حذف کنید.",

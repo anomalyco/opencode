@@ -932,6 +932,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Gera óvirkið",
   "settings.plugins.installed.enable": "Gera virkið",
   "settings.plugins.installed.uninstall": "Avrinda uppseting",
+  "settings.plugins.installed.uninstallBody": "Avinnsett {{name}} úr {{scope}}? Tað verður strikað úr samansetandi fíluni.",
   "settings.plugins.installed.recentlyRemoved": "Nýliga avtikið",
   "settings.plugins.installed.openConfig": "Lat uppseting upp",
   "settings.plugins.errors.parseFailed": "Kann ikki lesa {{path}} — rætta ella takfða fíla fyri at kanna íviðkanir har.",

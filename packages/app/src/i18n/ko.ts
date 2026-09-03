@@ -601,6 +601,7 @@ export const dict = {
   "settings.plugins.installed.disable": "비활성화",
   "settings.plugins.installed.enable": "활성화",
   "settings.plugins.installed.uninstall": "제거",
+  "settings.plugins.installed.uninstallBody": "{{scope}}에서 {{name}}을(를) 제거하시겠습니까? 설정 파일에서 삭제됩니다.",
   "settings.plugins.installed.recentlyRemoved": "최근 제거됨",
   "settings.plugins.installed.openConfig": "설정 열기",
   "settings.plugins.errors.parseFailed": "{{path}}을(를) 읽을 수 없습니다 — 플러그인을 관리하려면 파일을 수정하거나 제거하세요.",

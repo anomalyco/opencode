@@ -1025,6 +1025,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Вимкнути",
   "settings.plugins.installed.enable": "Увімкнути",
   "settings.plugins.installed.uninstall": "Видалити",
+  "settings.plugins.installed.uninstallBody": "Видалити {{name}} зі {{scope}}? Запис буде видалено з файлу конфігурації.",
   "settings.plugins.installed.recentlyRemoved": "Нещодавно видалені",
   "settings.plugins.installed.openConfig": "Відкрити конфігурацію",
   "settings.plugins.errors.parseFailed": "Не вдалося прочитати {{path}} — виправте або видаліть файл, щоб керувати плагінами.",

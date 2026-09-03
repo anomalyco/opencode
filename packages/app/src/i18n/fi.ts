@@ -832,6 +832,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Poista käytöstä",
   "settings.plugins.installed.enable": "Ota käyttöön",
   "settings.plugins.installed.uninstall": "Poista asennus",
+  "settings.plugins.installed.uninstallBody": "Poistetaanko {{name}} asennus kohteesta {{scope}}? Se poistetaan asetustiedostosta.",
   "settings.plugins.installed.recentlyRemoved": "Äskettäin poistetut",
   "settings.plugins.installed.openConfig": "Avaa määritys",
   "settings.plugins.errors.parseFailed": "{{path}} ei voi lukea — korjaa tai poista tiedosto hallitaksesi liitännäisiä siellä.",

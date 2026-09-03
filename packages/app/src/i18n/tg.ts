@@ -936,6 +936,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Хомӯш кардан",
   "settings.plugins.installed.enable": "Фаъол кардан",
   "settings.plugins.installed.uninstall": "Тоза кардан",
+  "settings.plugins.installed.uninstallBody": "{{name}}-ро аз {{scope}} тоза кардан? Впис аз файли танзимот нест карда мешавад.",
   "settings.plugins.installed.recentlyRemoved": "Ба назарӣ тоза шуда",
   "settings.plugins.installed.openConfig": "Кушодани конфигуратсия",
   "settings.plugins.errors.parseFailed": "Хондани {{path}} имконнопазир аст — барои идораи плагинҳо файлро ислоҳ ё тоза кунед.",

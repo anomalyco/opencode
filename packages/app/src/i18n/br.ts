@@ -855,6 +855,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Diweredekaat",
   "settings.plugins.installed.enable": "Gweredekaat",
   "settings.plugins.installed.uninstall": "Distaliañ",
+  "settings.plugins.installed.uninstallBody": "Díñstalañ {{name}} eus {{scope}}? Dilamet e vo diwar ar restr kefluniañ.",
   "settings.plugins.installed.recentlyRemoved": "Dilammet nevez zo",
   "settings.plugins.installed.openConfig": "Digeriñ ar c'hefluniadur",
   "settings.plugins.errors.parseFailed": "Dibosupl eo lenn {{path}} — reizhit pe dilammit ar restr evit mererezh ar pelestradurioù.",

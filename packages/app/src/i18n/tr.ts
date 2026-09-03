@@ -923,6 +923,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Devre dışı bırak",
   "settings.plugins.installed.enable": "Etkinleştir",
   "settings.plugins.installed.uninstall": "Kaldır",
+  "settings.plugins.installed.uninstallBody": "{{name}} {{scope}} kaynağından kaldırılsın mı? Yapılandırma dosyasından silinecek.",
   "settings.plugins.installed.recentlyRemoved": "Son kaldırılanlar",
   "settings.plugins.installed.openConfig": "Yapılandırmayı aç",
   "settings.plugins.errors.parseFailed": "{{path}} okunamıyor — eklentileri orada yönetmek için dosyayı düzeltin veya kaldırın.",

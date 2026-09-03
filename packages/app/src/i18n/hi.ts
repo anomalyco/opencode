@@ -941,6 +941,7 @@ export const dict = {
   "settings.plugins.installed.disable": "अक्षम करें",
   "settings.plugins.installed.enable": "सक्षम करें",
   "settings.plugins.installed.uninstall": "अनइंस्टॉल करें",
+  "settings.plugins.installed.uninstallBody": "{{scope}} से {{name}} को अनइंस्टॉल करें? यह कॉन्फ़िग फ़ाइल से हटा दिया जाएगा।",
   "settings.plugins.installed.recentlyRemoved": "हाल ही में हटाए गए",
   "settings.plugins.installed.openConfig": "कॉन्फ़िग खोलें",
   "settings.plugins.errors.parseFailed": "{{path}} पढ़ा नहीं जा सका — प्लगइन प्रबंधित करने के लिए फ़ाइल ठीक करें या हटाएँ।",

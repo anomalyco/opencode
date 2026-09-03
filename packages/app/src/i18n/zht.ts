@@ -897,6 +897,7 @@ export const dict = {
   "settings.plugins.installed.disable": "停用",
   "settings.plugins.installed.enable": "啟用",
   "settings.plugins.installed.uninstall": "解除安裝",
+  "settings.plugins.installed.uninstallBody": "從{{scope}}解除安裝{{name}}？該條目將從設定檔中移除。",
   "settings.plugins.installed.recentlyRemoved": "最近移除",
   "settings.plugins.installed.openConfig": "開啟設定",
   "settings.plugins.errors.parseFailed": "無法讀取 {{path}} — 請修正或刪除該檔案以管理其中的外掛。",

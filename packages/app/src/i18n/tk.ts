@@ -933,6 +933,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Öçürip goý",
   "settings.plugins.installed.enable": "Işjeňleşdir",
   "settings.plugins.installed.uninstall": "Aýry",
+  "settings.plugins.installed.uninstallBody": "{{name}}, {{scope}}-dan aýrylsynmy? Sazlama faýlyndan aýrylar.",
   "settings.plugins.installed.recentlyRemoved": "Soň aýrylan",
   "settings.plugins.installed.openConfig": "Konfigurasiýany aç",
   "settings.plugins.errors.parseFailed": "{{path}} okalmady — pleginleri dolandyrmak üçin faýly düzediň ýa-da aýryň",

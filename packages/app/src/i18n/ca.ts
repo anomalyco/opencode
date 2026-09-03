@@ -942,6 +942,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Desactiva",
   "settings.plugins.installed.enable": "Activa",
   "settings.plugins.installed.uninstall": "Desinstal·la",
+  "settings.plugins.installed.uninstallBody": "Voleu desinstal·lar {{name}} de {{scope}}? S'eliminarà del fitxer de configuració.",
   "settings.plugins.installed.recentlyRemoved": "Eliminats recentment",
   "settings.plugins.installed.openConfig": "Obre la configuració",
   "settings.plugins.errors.parseFailed": "No es pot llegir {{path}} — corregeix o elimina el fitxer per gestionar-hi complements.",

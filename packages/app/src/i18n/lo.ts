@@ -927,6 +927,7 @@ export const dict = {
   "settings.plugins.installed.disable": "ປິດການໃຊ້",
   "settings.plugins.installed.enable": "ເປີດໃຊ້ງານ",
   "settings.plugins.installed.uninstall": "ຖອນການຕິດຕັ້ງ",
+  "settings.plugins.installed.uninstallBody": "ຖອນການຕິດຕັ້ງ {{name}} ຈາກ {{scope}}? ລາວຈະຖືກລຶບອອກຈາກໄຟລ໌ການຕັ້ງຄ່າ.",
   "settings.plugins.installed.recentlyRemoved": "ກວ່ານນີ້ລຶບອອກ",
   "settings.plugins.installed.openConfig": "ເປີດການຕັ້ງຄ່າ",
   "settings.plugins.errors.parseFailed": "ອ່ານ {{path}} ບໍ່ໄດ້ — ແກ້ໄຂ ຫຼື ລຶບໄຟລ໌ເພື່ອຈັດການປລັກອິນຢູ່ບ່ອນນັ້ນ",

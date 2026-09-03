@@ -914,6 +914,7 @@ export const dict = {
   "settings.plugins.installed.disable": "አሰናክል",
   "settings.plugins.installed.enable": "አንቃቅ",
   "settings.plugins.installed.uninstall": "አራግፍ",
+  "settings.plugins.installed.uninstallBody": "ከ{{scope}} {{name}}ን ይለቀቅ? ከውቅር ፋይሉ ይሻሸጋል።",
   "settings.plugins.installed.recentlyRemoved": "በቅርቡ የተወገዱ",
   "settings.plugins.installed.openConfig": "ውቅር ነገር ክፈፍ",
   "settings.plugins.errors.parseFailed": "{{path}}ን ማንበብ አልተቻለም — ተሰኪዎችን ለማስተዳደር ፋይሉን ያስተካክሉ ወይም ያስወግዱ።",

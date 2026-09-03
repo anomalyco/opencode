@@ -940,6 +940,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Идэвхгүй болгох",
   "settings.plugins.installed.enable": "Идэвхжүүлэх",
   "settings.plugins.installed.uninstall": "Устгах",
+  "settings.plugins.installed.uninstallBody": "{{scope}}-ээс {{name}}-г устгах уу? Тохиргооны файлаас хасагдах болно.",
   "settings.plugins.installed.recentlyRemoved": "Саяхан хасагдсан",
   "settings.plugins.installed.openConfig": "Тохиргоо нээх",
   "settings.plugins.errors.parseFailed": "{{path}}-г уншиж чадсангүй — плагинуудыг удирдахын тулд файлыг засаад эсвэл устгана уу.",

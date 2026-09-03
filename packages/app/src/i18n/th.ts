@@ -905,6 +905,7 @@ export const dict = {
   "settings.plugins.installed.disable": "ปิดใช้งาน",
   "settings.plugins.installed.enable": "เปิดใช้งาน",
   "settings.plugins.installed.uninstall": "ถอนการติดตั้ง",
+  "settings.plugins.installed.uninstallBody": "ถอนการติดตั้ง {{name}} จาก {{scope}}? รายการจะถูกลบออกจากไฟล์การตั้งค่า",
   "settings.plugins.installed.recentlyRemoved": "เพิ่งถูกลบ",
   "settings.plugins.installed.openConfig": "เปิดคอนฟิก",
   "settings.plugins.errors.parseFailed": "อ่าน {{path}} ไม่ได้ — แก้ไขหรือลบไฟล์เพื่อจัดการปลั๊กอินที่นั่น",

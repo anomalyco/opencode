@@ -174,7 +174,7 @@ export function createCatalogFetcher(deps: {
           const versionMeta = latest ? pack.versions?.[latest] : undefined
           entries.push({
             ...base,
-            name: candidate || entry.name,
+            name: candidate,
             onNpm: true,
             version: latest,
             description: (versionMeta?.description as string | undefined) ?? base.description,

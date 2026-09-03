@@ -781,6 +781,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Deaktiver",
   "settings.plugins.installed.enable": "Aktiver",
   "settings.plugins.installed.uninstall": "Avinstaller",
+  "settings.plugins.installed.uninstallBody": "Avinstaller {{name}} fra {{scope}}? Oppføringen fjernes fra konfigurasjonsfilen.",
   "settings.plugins.installed.recentlyRemoved": "Nylig fjernet",
   "settings.plugins.installed.openConfig": "Åpne konfig",
   "settings.plugins.errors.parseFailed": "Kan ikke lese {{path}} — fiks eller fjern filen for å administrere pluginer der.",

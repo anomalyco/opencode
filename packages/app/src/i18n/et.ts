@@ -929,6 +929,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Keela",
   "settings.plugins.installed.enable": "Luba",
   "settings.plugins.installed.uninstall": "Eemalda paigaldus",
+  "settings.plugins.installed.uninstallBody": "Kas eemaldada paigaldus: {{name}} asukohast {{scope}}? See eemaldatakse seadistuste failist.",
   "settings.plugins.installed.recentlyRemoved": "Hiljuti eemaldatud",
   "settings.plugins.installed.openConfig": "Ava konfiguratsioon",
   "settings.plugins.errors.parseFailed": "{{path}} ei saa lugeda — halda pluginaid, parandades või eemaldades faili.",

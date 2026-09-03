@@ -937,6 +937,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Dezactivează",
   "settings.plugins.installed.enable": "Activează",
   "settings.plugins.installed.uninstall": "Dezinstalează",
+  "settings.plugins.installed.uninstallBody": "Dezinstalați {{name}} din {{scope}}? Va fi eliminat din fișierul de configurare.",
   "settings.plugins.installed.recentlyRemoved": "Eliminate recent",
   "settings.plugins.installed.openConfig": "Deschide configurația",
   "settings.plugins.errors.parseFailed": "Nu se poate citi {{path}} — repară sau elimină fișierul pentru a gestiona pluginurile acolo.",

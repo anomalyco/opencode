@@ -938,6 +938,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Atspējot",
   "settings.plugins.installed.enable": "Iespējot",
   "settings.plugins.installed.uninstall": "Noņemt",
+  "settings.plugins.installed.uninstallBody": "Noņemt {{name}} no {{scope}}? Tas tiks noņemts no konfigurācijas faila.",
   "settings.plugins.installed.recentlyRemoved": "Nesen noņemtie",
   "settings.plugins.installed.openConfig": "Atvērt konfigurāciju",
   "settings.plugins.errors.parseFailed": "Nevar nolasīt {{path}} — labojiet vai noņemiet failu, lai pārvaldītu spraudņus.",

@@ -945,6 +945,7 @@ export const dict = {
   "settings.plugins.installed.disable": "ပိတ်",
   "settings.plugins.installed.enable": "ဖွင့်",
   "settings.plugins.installed.uninstall": "ဖြုတ်",
+  "settings.plugins.installed.uninstallBody": "{{scope}}မှ {{name}} ကို ဖြုတ်မလား။ ပြင်ဆင်ချက်ဖိုင်မှ ဖယ်ရှားခံရမည်။",
   "settings.plugins.installed.recentlyRemoved": "လတ်တလော ဖယ်ရှားခံရသည်များ",
   "settings.plugins.installed.openConfig": "config ဖွင့်",
   "settings.plugins.errors.parseFailed": "{{path}} ကို မဖတ်နိုင် — ပလပ်ဂင်များ စီမံရန် ဖိုင်ကို ပြင် သို့မဟုတ် ဖျက်ပါ",

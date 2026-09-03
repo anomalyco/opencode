@@ -28,6 +28,8 @@ export type PluginConfigsPayload = {
   project: PluginEntry[]
   recentlyRemoved: RecentlyRemoved[]
   paths: { global: string; project: string | null }
+  /** Present when a scope's config file exists but could not be parsed. */
+  errors?: { scope: "global" | "project"; path: string; message: string }[]
 }
 
 export type PluginManagerPlatform = {

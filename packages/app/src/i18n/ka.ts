@@ -932,6 +932,7 @@ export const dict = {
   "settings.plugins.installed.disable": "გამორთვა",
   "settings.plugins.installed.enable": "ჩართვა",
   "settings.plugins.installed.uninstall": "ინსტალაციის მოხსნა",
+  "settings.plugins.installed.uninstallBody": "წავშალოთ {{name}} {{scope}}-დან? ის ამოიშლება კონფიგურაციის ფაილიდან.",
   "settings.plugins.installed.recentlyRemoved": "ბოლოს წაშლილი",
   "settings.plugins.installed.openConfig": "კონფიგურაციის გახსნა",
   "settings.plugins.errors.parseFailed": "{{path}}-ის წაკითხვა ვერ მოხერხდა — პლაგინების მართვისთვის შეასწორეთ ან წააშალეთ ფაილი.",

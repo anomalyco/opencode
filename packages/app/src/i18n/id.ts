@@ -1011,6 +1011,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Nonaktifkan",
   "settings.plugins.installed.enable": "Aktifkan",
   "settings.plugins.installed.uninstall": "Copot",
+  "settings.plugins.installed.uninstallBody": "Copot {{name}} dari {{scope}}? Entri akan dihapus dari file konfigurasi.",
   "settings.plugins.installed.recentlyRemoved": "Baru dihapus",
   "settings.plugins.installed.openConfig": "Buka konfigurasi",
   "settings.plugins.errors.parseFailed": "Tidak dapat membaca {{path}} — perbaiki atau hapus berkas untuk mengelola plugin di sana.",

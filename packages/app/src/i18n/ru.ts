@@ -920,6 +920,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Отключить",
   "settings.plugins.installed.enable": "Включить",
   "settings.plugins.installed.uninstall": "Удалить",
+  "settings.plugins.installed.uninstallBody": "Удалить {{name}} из {{scope}}? Запись будет удалена из файла конфигурации.",
   "settings.plugins.installed.recentlyRemoved": "Недавно удалённые",
   "settings.plugins.installed.openConfig": "Открыть конфигурацию",
   "settings.plugins.errors.parseFailed": "Не удалось прочитать {{path}} — исправьте или удалите файл, чтобы управлять плагинами.",

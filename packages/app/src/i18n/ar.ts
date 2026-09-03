@@ -852,6 +852,7 @@ export const dict = {
   "settings.plugins.installed.disable": "تعطيل",
   "settings.plugins.installed.enable": "تفعيل",
   "settings.plugins.installed.uninstall": "إزالة التثبيت",
+  "settings.plugins.installed.uninstallBody": "هل تريد إزالة تثبيت {{name}} من {{scope}}؟ ستتم إزالته من ملف الإعدادات.",
   "settings.plugins.installed.recentlyRemoved": "أزيلت حديثًا",
   "settings.plugins.installed.openConfig": "فتح الإعدادات",
   "settings.plugins.errors.parseFailed": "تعذّر قراءة {{path}} — صحّح الملف أو احذفه لإدارة الإضافات هناك.",

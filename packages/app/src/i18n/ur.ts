@@ -942,6 +942,7 @@ export const dict = {
   "settings.plugins.installed.disable": " غیر فعال کریں",
   "settings.plugins.installed.enable": "فعال کریں",
   "settings.plugins.installed.uninstall": "اَن انسٹال کریں",
+  "settings.plugins.installed.uninstallBody": "کیا {{scope}} سے {{name}} اَن انسٹال کریں؟ یہ کنفیگ فائل سے ہٹا دیا جائے گا۔",
   "settings.plugins.installed.recentlyRemoved": "حال ہی میں ہٹائے گئے",
   "settings.plugins.installed.openConfig": "کنفیگ کھولیں",
   "settings.plugins.errors.parseFailed": "{{path}} پڑھا نہیں جا سکا — پلگ انز کے انتظام کے لیے فائل ٹھیک کریں یا ہٹائیں۔",

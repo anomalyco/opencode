@@ -943,6 +943,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Απενεργοποίηση",
   "settings.plugins.installed.enable": "Ενεργοποίηση",
   "settings.plugins.installed.uninstall": "Απεγκατάσταση",
+  "settings.plugins.installed.uninstallBody": "Να γίνει απεγκατάσταση του {{name}} από {{scope}}; Θα αφαιρεθεί από το αρχείο ρυθμίσεων.",
   "settings.plugins.installed.recentlyRemoved": "Πρόσφατα αφαιρεθέντα",
   "settings.plugins.installed.openConfig": "Άνοιγμα ρυθμίσεων",
   "settings.plugins.errors.parseFailed": "Δεν είναι δυνατή η ανάγνωση του {{path}} — διορθώστε ή αφαιρέστε το αρχείο για διαχείριση πρόσθετων.",

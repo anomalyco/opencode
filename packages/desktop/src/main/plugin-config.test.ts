@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, mock } from "bun:test"
 import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -146,5 +146,40 @@ describe("mutateConfig", () => {
     expect(first.plugins).toEqual(["a"])
     const data = JSON.parse(await readFile(target.path, "utf8"))
     expect(data.plugin).toContain("intruder")
+  })
+
+  test("conflict: unrelated plugin added on disk between internal read and write throws", async () => {
+    const target = await writeTarget("opencode.json", `{"plugin":["a"],"model":"m"}`)
+    // No prior caller read: mutateConfig's own readConfig IS the "before"
+    // snapshot. Another writer lands between that read and the pre-write
+    // re-read. Mock node:fs/promises so that after mutateConfig's first
+    // internal read of this path, a concurrent write lands adding an
+    // unrelated plugin; the pre-write re-read then sees divergent content.
+    const fs = "node:fs/promises"
+    const targetPath = target.path
+    let injected = false
+    mock.module(fs, () => {
+      const actual = require(fs)
+      const readFile = async (p: any, ...rest: any[]) => {
+        const raw = await actual.readFile(p, ...rest)
+        if (p === targetPath && !injected && String(raw).includes(`"plugin"`)) {
+          injected = true
+          await actual.writeFile(targetPath, `{"plugin":["a","unrelated"],"model":"m"}`)
+        }
+        return raw
+      }
+      const patched = { ...actual, readFile }
+      return { ...patched, default: patched }
+    })
+    try {
+      const { mutateConfig: mutated } = await import("./plugin-config")
+      await expect(mutated(target, { kind: "add", name: "b" })).rejects.toThrow(/Config changed while editing/)
+      const data = JSON.parse(await readFile(targetPath, "utf8"))
+      // The concurrent writer's entry must survive — no silent clobber.
+      expect(data.plugin).toEqual(["a", "unrelated"])
+      expect(data.model).toBe("m")
+    } finally {
+      mock.restore()
+    }
   })
 })

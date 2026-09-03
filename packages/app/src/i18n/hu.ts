@@ -941,6 +941,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Letiltás",
   "settings.plugins.installed.enable": "Engedélyezés",
   "settings.plugins.installed.uninstall": "Eltávolítás",
+  "settings.plugins.installed.uninstallBody": "Eltávolítja a(z) {{name}} elemet innen: {{scope}}? El lesz távolítva a konfigurációs fájlból.",
   "settings.plugins.installed.recentlyRemoved": "Nemrég eltávolítva",
   "settings.plugins.installed.openConfig": "Konfiguráció megnyitása",
   "settings.plugins.errors.parseFailed": "A(z) {{path}} nem olvasható — a pluginok kezeléséhez javítsd vagy távolítsd el a fájlt.",

@@ -930,6 +930,7 @@ export const dict = {
   "settings.plugins.installed.disable": "បិទ",
   "settings.plugins.installed.enable": "បើក",
   "settings.plugins.installed.uninstall": "លុបការដំឡើង",
+  "settings.plugins.installed.uninstallBody": "លុបការដំឡើង {{name}} ពី {{scope}}? វានឹងត្រូវបានដកចេញពីឯកសារកំណត់រចនាសម្ព័ន្ធ។",
   "settings.plugins.installed.recentlyRemoved": "ទើបលុបថ្មីនេះ",
   "settings.plugins.installed.openConfig": "បើកការកំណត់",
   "settings.plugins.errors.parseFailed": "មិនអាចអាន {{path}} បានទេ — កែ ឬលុបឯកសារដើម្បីគ្រប់គ្រងប្លាកអ៊ីននៅទីនោះ។",

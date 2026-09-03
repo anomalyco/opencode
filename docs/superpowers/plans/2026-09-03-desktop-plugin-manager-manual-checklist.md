@@ -105,13 +105,15 @@ session** include exact repro steps for a human to run.
 
 ### 7. Uninstall removes entry with no recently-removed record
 
-**Status: PASS (unit-verified; GUI confirmation pending)**
+**Status: PASS (unit-verified; GUI confirmation pending; confirmation dialog added in final review wave)**
 
 - Unit-verified: `registerPluginManager > remove without forget drops the record
   entirely (uninstall)` passes.
-- Component: Uninstall button calls `remove(..., remember=false)`.
-- GUI repro: install a plugin; Installed → Uninstall → entry gone, no "Recently
-  removed" chip appears.
+- Component: Uninstall opens a confirmation dialog
+  (`settings.plugins.installed.uninstall` + `uninstallBody`, name and scope
+  interpolated); confirming calls `remove(..., remember=false)`.
+- GUI repro: install a plugin; Installed → Uninstall → confirm dialog appears →
+  confirm → entry gone, no "Recently removed" chip appears.
 
 ### 8. Offline: cached/stale banner or error state; Installed view still functional
 
@@ -131,13 +133,19 @@ session** include exact repro steps for a human to run.
 
 ### 9. Corrupt config file: writes refused, error surfaces file path
 
-**Status: PASS (unit-verified; GUI confirmation pending)**
+**Status: PASS (unit-verified; GUI confirmation pending; error surfacing fixed in final review wave)**
 
 - Unit-verified in `plugin-config.test.ts`:
   - `mutateConfig > refuses to write on parse failure`
   - `readConfig > throws ConfigParseError with path on bad content`
-- Component surfaces `settings.plugins.errors.parseFailed` with the file path in the
-  Installed view (`plugins.tsx`, `configsError` rendering).
+- Unit-verified in `plugin-manager.test.ts`:
+  - `read-configs surfaces parse errors as structured entries with the file path`
+  - `read-configs omits errors when all configs parse`
+- Implementation: `plugins:read-configs` no longer swallows `ConfigParseError`; it
+  returns structured `errors: {scope, path, message}` entries in the payload
+  (`plugin-manager.ts`), typed in `plugins-types.ts`, and the renderer shows
+  `settings.plugins.errors.parseFailed` with the file path in the Installed view
+  (`plugins.tsx`, `configsError` rendering) next to the Open-config provenance rows.
 - GUI repro: put invalid content in `<dir>/opencode.json` (e.g. `{ "plugin": [ }`);
   open Installed view → error names the file path; install attempts targeting that file
   are refused and the file is unchanged.

@@ -65,11 +65,16 @@ export function serializeEntries(entries: PluginEntry[]): unknown {
 
 // Prefer an existing .jsonc sibling (comments allowed); fall back to the
 // .json path, which is also the create-path when nothing exists yet.
+// Resolution mirrors core (packages/core/src/global.ts): XDG_CONFIG_HOME when
+// set, else ~/.config. Core also accepts config.json, but for v1 the manager
+// only manages opencode.json* — the create-path writes opencode.json.
 export function resolveGlobalConfig(): ConfigTarget {
-  const base = join(homedir(), ".config", "opencode")
-  const jsonc = join(base, "opencode.jsonc")
+  const xdg = process.env.XDG_CONFIG_HOME
+  const base = xdg && xdg.trim() !== "" ? xdg : join(homedir(), ".config")
+  const dir = join(base, "opencode")
+  const jsonc = join(dir, "opencode.jsonc")
   if (existsSync(jsonc)) return { path: jsonc, jsonc: true }
-  return { path: join(base, "opencode.json"), jsonc: false }
+  return { path: join(dir, "opencode.json"), jsonc: false }
 }
 
 export function resolveProjectConfig(dir: string): ConfigTarget {
@@ -181,6 +186,38 @@ async function writeConfig(
   plugins: PluginEntry[],
   mutation: Mutation,
 ) {
+  // Conflict guard per the plan: re-read right before computing content. Two
+  // checks against the same re-read:
+  // 1. Presence flip — the named entry's presence changed against the
+  //    mutation's intent (remove: someone deleted it concurrently; add:
+  //    someone installed it concurrently).
+  // 2. Full-content compare — ANY other change (unrelated plugin entries or
+  //    non-plugin keys) means the mutation would clobber concurrent edits.
+  // Either way, throw instead of silently overwriting. If the re-read equals
+  // the snapshot byte-for-byte, applying to `before` is safe.
+  if (before.raw !== "") {
+    const current = await readConfig(target)
+    const afterExisting = current.plugins.find((entry) => entryName(entry) === mutation.name)
+    if (mutation.kind === "remove" && afterExisting === undefined) {
+      throw new Error(`Config changed while editing: ${target.path}`)
+    }
+    if (mutation.kind === "add" && afterExisting !== undefined && !entriesEqual(afterExisting, mutation.entry ?? mutation.name)) {
+      throw new Error(`Config changed while editing: ${target.path}`)
+    }
+    if (current.raw !== before.raw) {
+      const pluginsChanged =
+        JSON.stringify(serializeEntries(current.plugins)) !== JSON.stringify(serializeEntries(before.plugins))
+      const beforeRest = { ...(before.data as Record<string, unknown>) }
+      delete beforeRest.plugin
+      const currentRest = { ...(current.data as Record<string, unknown>) }
+      delete currentRest.plugin
+      const restChanged = JSON.stringify(currentRest) !== JSON.stringify(beforeRest)
+      if (pluginsChanged || restChanged) {
+        throw new Error(`Config changed while editing: ${target.path}`)
+      }
+    }
+  }
+
   const data = { ...(before.data as Record<string, unknown>), plugin: serializeEntries(plugins) }
   let content: string
 
@@ -201,21 +238,6 @@ async function writeConfig(
   const verify = isJsonc(target) ? tolerantJsoncParse(content) : parseLoose(content)
   if (!verify || typeof verify !== "object") {
     throw new ConfigParseError(target.path)
-  }
-
-  // Conflict guard per the plan: re-read right before writing; only surface a
-  // conflict when the named entry's presence flipped against the mutation's
-  // intent (remove: someone deleted it concurrently; add: someone installed it
-  // concurrently). Matches the plan's re-read strategy.
-  if (before.raw !== "") {
-    const after = await readConfig(target)
-    const afterExisting = after.plugins.find((entry) => entryName(entry) === mutation.name)
-    if (mutation.kind === "remove" && afterExisting === undefined) {
-      throw new Error(`Config changed while editing: ${target.path}`)
-    }
-    if (mutation.kind === "add" && afterExisting !== undefined && !entriesEqual(afterExisting, mutation.entry ?? mutation.name)) {
-      throw new Error(`Config changed while editing: ${target.path}`)
-    }
   }
 
   const tmpPath = join(dirname(target.path), `.${Date.now()}-${randomUUID()}.opencode-tmp`)

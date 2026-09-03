@@ -936,6 +936,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Онемогући",
   "settings.plugins.installed.enable": "Омогући",
   "settings.plugins.installed.uninstall": "Деинсталирај",
+  "settings.plugins.installed.uninstallBody": "Деинсталирати {{name}} из {{scope}}? Упис ће бити уклоњен из конфигурационе датотеке.",
   "settings.plugins.installed.recentlyRemoved": "Недавно уклоњено",
   "settings.plugins.installed.openConfig": "Отвори конфигурацију",
   "settings.plugins.errors.parseFailed": "Није могуће читати {{path}} — исправите или уклоните датотеку за управљање додацима.",

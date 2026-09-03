@@ -860,6 +860,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Désactiver",
   "settings.plugins.installed.enable": "Activer",
   "settings.plugins.installed.uninstall": "Désinstaller",
+  "settings.plugins.installed.uninstallBody": "Désinstaller {{name}} de {{scope}} ? Il sera retiré du fichier de configuration.",
   "settings.plugins.installed.recentlyRemoved": "Récemment supprimées",
   "settings.plugins.installed.openConfig": "Ouvrir la config",
   "settings.plugins.errors.parseFailed": "Impossible de lire {{path}} — corrigez ou supprimez le fichier pour gérer les extensions.",

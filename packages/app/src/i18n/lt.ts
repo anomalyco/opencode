@@ -947,6 +947,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Išjungti",
   "settings.plugins.installed.enable": "Įjungti",
   "settings.plugins.installed.uninstall": "Šalinti",
+  "settings.plugins.installed.uninstallBody": "Šalinti {{name}} iš {{scope}}? Jis bus pašalintas iš konfigūracijos failo.",
   "settings.plugins.installed.recentlyRemoved": "Paskutinįkart pašalinta",
   "settings.plugins.installed.openConfig": "Atidaryti konfigūraciją",
   "settings.plugins.errors.parseFailed": "Nepavyko perskaityti {{path}} — pataisykite arba pašalinkite failą, kad valdytumėte įskiepius.",

@@ -840,6 +840,7 @@ export const dict = {
   "settings.plugins.installed.disable": "無効化",
   "settings.plugins.installed.enable": "有効化",
   "settings.plugins.installed.uninstall": "アンインストール",
+  "settings.plugins.installed.uninstallBody": "{{scope}}から{{name}}をアンインストールしますか？設定ファイルから削除されます。",
   "settings.plugins.installed.recentlyRemoved": "最近削除した項目",
   "settings.plugins.installed.openConfig": "設定を開く",
   "settings.plugins.errors.parseFailed": "{{path}} を読み取れません — プラグインを管理するにはファイルを修正または削除してください。",

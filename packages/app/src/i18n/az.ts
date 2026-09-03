@@ -942,6 +942,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Söndür",
   "settings.plugins.installed.enable": "Yandır",
   "settings.plugins.installed.uninstall": "Silmə",
+  "settings.plugins.installed.uninstallBody": "{{name}} {{scope}} hesabından silinsin? Konfiqurasiya faylından çıxarılacaq.",
   "settings.plugins.installed.recentlyRemoved": "Yaxın zamanda silinənlər",
   "settings.plugins.installed.openConfig": "Konfiqurasiyanı aç",
   "settings.plugins.errors.parseFailed": "{{path}} oxuna bilmir — plaqinləri idarə etmək üçün faylı düzəldin və ya silin.",

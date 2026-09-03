@@ -940,6 +940,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Oʻchirish",
   "settings.plugins.installed.enable": "Yoqish",
   "settings.plugins.installed.uninstall": "Olib tashlash",
+  "settings.plugins.installed.uninstallBody": "{{name}} {{scope}} dan olib tashlansinmi? Konfiguratsiya faylidan o'chiriladi.",
   "settings.plugins.installed.recentlyRemoved": "Yaqinda olib tashlangan",
   "settings.plugins.installed.openConfig": "Konfiguratsiyani ochish",
   "settings.plugins.errors.parseFailed": "{{path}} oʻqilmadi — plaginlarni boshqarish uchun faylni tuzating yoki olib tashlang.",

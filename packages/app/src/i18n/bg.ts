@@ -939,6 +939,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Деактивиране",
   "settings.plugins.installed.enable": "Активиране",
   "settings.plugins.installed.uninstall": "Деинсталиране",
+  "settings.plugins.installed.uninstallBody": "Да се деинсталира ли {{name}} от {{scope}}? Ще бъде премахнат от конфигурационния файл.",
   "settings.plugins.installed.recentlyRemoved": "Наскоро премахнати",
   "settings.plugins.installed.openConfig": "Отваряне на конфигурацията",
   "settings.plugins.errors.parseFailed": "{{path}} не може да бъде прочетен — поправете или премахнете файла, за да управлявате приставки там.",

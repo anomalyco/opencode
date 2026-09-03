@@ -939,6 +939,7 @@ export const dict = {
   "settings.plugins.installed.disable": "ਬੰਦ ਕਰੋ",
   "settings.plugins.installed.enable": "ਚਾਲੂ ਕਰੋ",
   "settings.plugins.installed.uninstall": "ਅਣਇੰਸਟਾਲ ਕਰੋ",
+  "settings.plugins.installed.uninstallBody": "{{scope}} ਤੋਂ {{name}} ਅਣਇੰਸਟਾਲ ਕਰਨਾ ਹੈ? ਇਹ ਸੰਰਚਨਾ ਫ਼ਾਈਲ ਤੋਂ ਹਟਾ ਦਿੱਤਾ ਜਾਵੇਗਾ।",
   "settings.plugins.installed.recentlyRemoved": "ਹਾਲ ਹੀ ਵਿੱਚ ਹਟਾਏ ਗਏ",
   "settings.plugins.installed.openConfig": "ਕੌਂਫਿਗ ਖੋਲ੍ਹੋ",
   "settings.plugins.errors.parseFailed": "{{path}} ਪੜ੍ਹਿਆ ਨਹੀਂ ਜਾ ਸਕਦਾ — ਪਲੱਗਇਨ ਪ੍ਰਬੰਧਨ ਲਈ ਫਾਈਲ ਠੀਕ ਕਰੋ ਜਾਂ ਹਟਾਓ",

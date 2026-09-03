@@ -948,6 +948,7 @@ export const dict: Record<string, string> = {
   "settings.plugins.installed.disable": "ལས་མེད་བཟོ།",
   "settings.plugins.installed.enable": "ལས་སྒྲུབ།",
   "settings.plugins.installed.uninstall": "བཙུགས་བཤོལ།",
+  "settings.plugins.installed.uninstallBody": "{{scope}} ལས་ {{name}} ཡང་འཇུག་བཤོལ་འབད་ནི་ཨིན་ན་? སྒྲིག་སྒྲིག་ཡིག་ཚུད་ལས་རྩ་ཆགས་གཏང་འི་ཨིན།",
   "settings.plugins.installed.recentlyRemoved": "ད་རིས་བཤོལ་བཏང་ཡོད་པ།",
   "settings.plugins.installed.openConfig": "ཀང་ཕིག་ཁ་ཕྱེ།",
   "settings.plugins.errors.parseFailed": "{{path}} ལྷག་མ་ཚུགས — པལ་ག་ཨིན་འགོ་འདྲེན་ལས་ ཡིག་སྣོད་བཟོ་བཅོས་རྡུང་ ཡང་ན་བཤོལ།",

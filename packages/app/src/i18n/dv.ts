@@ -947,6 +947,7 @@ export const dict = {
   "settings.plugins.installed.disable": "ފައިސާރަކުރާ",
   "settings.plugins.installed.enable": "އެކްޓިވް",
   "settings.plugins.installed.uninstall": "އެންސްޓޯލް",
+  "settings.plugins.installed.uninstallBody": "{{scope}} އިން {{name}} އަންސްޓޯލް ކުރޭތޯ؟ ކޮންފިގް ފައިލުން ފޮހެލެވޭނެއެވެ.",
   "settings.plugins.installed.recentlyRemoved": "އެކަށީގަނޑު ފުރައިފައި",
   "settings.plugins.installed.openConfig": "ކޮނފިގް ހުޅުއާ",
   "settings.plugins.errors.parseFailed": "{{path}} ވެސް ވަޒަކުރެން ނުވޭނީ — އެ ފާއްދަ އަން ބަދަލު ދިނުމަށް އަދި ފައިލް އަދި ފުރައި",

@@ -937,6 +937,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Onemogoči",
   "settings.plugins.installed.enable": "Omogoči",
   "settings.plugins.installed.uninstall": "Odstrani",
+  "settings.plugins.installed.uninstallBody": "Odstranim {{name}} iz {{scope}}? Vpis bo odstranjen iz konfiguracijske datoteke.",
   "settings.plugins.installed.recentlyRemoved": "Nedavno odstranjeno",
   "settings.plugins.installed.openConfig": "Odpri konfiguracijo",
   "settings.plugins.errors.parseFailed": "Ni mogoče brati {{path}} — za upravljanje vtičnikov popravite ali odstranite datoteko.",

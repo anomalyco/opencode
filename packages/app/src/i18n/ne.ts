@@ -932,6 +932,7 @@ export const dict: Record<string, string> = {
   "settings.plugins.installed.disable": "अक्षम",
   "settings.plugins.installed.enable": "सक्षम",
   "settings.plugins.installed.uninstall": "स्थापना हटाउनुहोस्",
+  "settings.plugins.installed.uninstallBody": "{{scope}} बाट {{name}} स्थापना हटाउनुहुन्छ? यो कन्फिग फाइलबाट हटाइनेछ।",
   "settings.plugins.installed.recentlyRemoved": "हालसालै हटाइएका",
   "settings.plugins.installed.openConfig": "कन्फिग खोल्नुहोस्",
   "settings.plugins.errors.parseFailed": "{{path}} पढ्न सकिएन — प्लगइनहरू व्यवस्थापन गर्न फाइल मिलाउनुहोस् वा हटाउनुहोस्।",

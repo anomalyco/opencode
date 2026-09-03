@@ -41,7 +41,7 @@ const EMPTY_CONFIGS: PluginConfigsPayload = {
 
 const EMPTY_CATALOG = { entries: [], fetchedAt: 0, stale: false }
 
-export const SettingsPluginsV2: Component<{ sessionID?: string }> = () => {
+export const SettingsPluginsV2: Component<{}> = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -82,7 +82,12 @@ export const SettingsPluginsV2: Component<{ sessionID?: string }> = () => {
     if (!manager) return EMPTY_CONFIGS
     setConfigsError(undefined)
     try {
-      return await manager.readConfigs(dir)
+      const payload = await manager.readConfigs(dir)
+      // Parse failures arrive as structured entries (scope, path, message);
+      // surface the first so the UI can offer the Open-config action.
+      const first = payload.errors?.[0]
+      setConfigsError(first ? first.path : undefined)
+      return payload
     } catch (error) {
       const path = (error as { path?: unknown })?.path
       setConfigsError(
@@ -148,9 +153,40 @@ export const SettingsPluginsV2: Component<{ sessionID?: string }> = () => {
     try {
       await manager.remove(name, scope, remember, projectDir())
       void configsActions.refetch()
+    } catch {
+      // Surface the failure; refetch in case the removal partially succeeded.
+      showToast({ description: language.t("common.requestFailed"), variant: "error" })
+      void configsActions.refetch()
     } finally {
       setBusy(false)
     }
+  }
+
+  const confirmUninstall = (name: string, scope: Scope) => {
+    dialog.push(() => (
+      <Dialog>
+        <DialogHeader>
+          <DialogTitleGroup
+            title={language.t("settings.plugins.installed.uninstall")}
+            description={language.t("settings.plugins.installed.uninstallBody", { name, scope })}
+          />
+        </DialogHeader>
+        <DialogFooter>
+          <ButtonV2 variant="neutral" onClick={() => dialog.close()}>
+            {language.t("settings.plugins.install.cancel")}
+          </ButtonV2>
+          <ButtonV2
+            variant="danger"
+            onClick={() => {
+              dialog.close()
+              void remove(name, scope, false)
+            }}
+          >
+            {language.t("settings.plugins.installed.uninstall")}
+          </ButtonV2>
+        </DialogFooter>
+      </Dialog>
+    ))
   }
 
   const openConfig = (path: string) => {
@@ -246,9 +282,11 @@ export const SettingsPluginsV2: Component<{ sessionID?: string }> = () => {
                           ? language.t("settings.plugins.detail.copied")
                           : language.t("settings.plugins.detail.copy")}
                       </ButtonV2>
-                      <ButtonV2 size="normal" variant="neutral" onClick={() => openInstall(entry.name)}>
-                        {language.t("settings.plugins.detail.install")}
-                      </ButtonV2>
+                      <Show when={entry.onNpm}>
+                        <ButtonV2 size="normal" variant="neutral" onClick={() => openInstall(entry.name)}>
+                          {language.t("settings.plugins.detail.install")}
+                        </ButtonV2>
+                      </Show>
                     </div>
                   </SettingsRowV2>
                 )}
@@ -323,7 +361,7 @@ export const SettingsPluginsV2: Component<{ sessionID?: string }> = () => {
                         size="normal"
                         variant="ghost-muted"
                         disabled={busy()}
-                        onClick={() => void remove(entryName(item.entry), item.scope, false)}
+                        onClick={() => confirmUninstall(entryName(item.entry), item.scope)}
                       >
                         {language.t("settings.plugins.installed.uninstall")}
                       </ButtonV2>
@@ -388,6 +426,11 @@ const DialogInstallPlugin: Component<{
       })
       props.onInstalled()
       dialog.close()
+    } catch {
+      // Surface the failure and keep the dialog usable; refetch in case the
+      // install partially succeeded before the error.
+      showToast({ description: language.t("common.requestFailed"), variant: "error" })
+      props.onInstalled()
     } finally {
       setBusy(false)
     }

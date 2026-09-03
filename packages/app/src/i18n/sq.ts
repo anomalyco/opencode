@@ -936,6 +936,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Çaktivizo",
   "settings.plugins.installed.enable": "Aktivizo",
   "settings.plugins.installed.uninstall": "Çinstalo",
+  "settings.plugins.installed.uninstallBody": "Të çinstalohet {{name}} nga {{scope}}? Hyrja do të hiqet nga skedari i konfigurimit.",
   "settings.plugins.installed.recentlyRemoved": "Të hequra së fundi",
   "settings.plugins.installed.openConfig": "Hap konfigurimin",
   "settings.plugins.errors.parseFailed": "Nuk mund të lexohet {{path}} — rregulloje ose fshije skedarin për të menaxhuar shtojcat aty.",

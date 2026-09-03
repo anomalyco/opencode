@@ -942,6 +942,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Uitschakelen",
   "settings.plugins.installed.enable": "Inschakelen",
   "settings.plugins.installed.uninstall": "Verwijderen",
+  "settings.plugins.installed.uninstallBody": "{{name}} van {{scope}} verwijderen? De invoer wordt uit het configuratiebestand verwijderd.",
   "settings.plugins.installed.recentlyRemoved": "Onlangs verwijderd",
   "settings.plugins.installed.openConfig": "Configuratie openen",
   "settings.plugins.errors.parseFailed": "Kan {{path}} niet lezen — repareer of verwijder het bestand om plugins daar te beheren.",

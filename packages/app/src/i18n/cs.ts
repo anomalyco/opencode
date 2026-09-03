@@ -938,6 +938,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Zakázat",
   "settings.plugins.installed.enable": "Povolit",
   "settings.plugins.installed.uninstall": "Odinstalovat",
+  "settings.plugins.installed.uninstallBody": "Odinstalovat {{name}} z {{scope}}? Bude odebrán z konfiguračního souboru.",
   "settings.plugins.installed.recentlyRemoved": "Nedávno odstraněné",
   "settings.plugins.installed.openConfig": "Otevřít konfiguraci",
   "settings.plugins.errors.parseFailed": "Nelze číst {{path}} — opravte nebo odstraňte soubor, chcete-li tam spravovat pluginy.",

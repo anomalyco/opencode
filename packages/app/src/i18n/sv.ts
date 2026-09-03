@@ -938,6 +938,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Inaktivera",
   "settings.plugins.installed.enable": "Aktivera",
   "settings.plugins.installed.uninstall": "Avinstallera",
+  "settings.plugins.installed.uninstallBody": "Avinstallera {{name}} från {{scope}}? Den tas bort från konfigurationsfilen.",
   "settings.plugins.installed.recentlyRemoved": "Nyligen borttagna",
   "settings.plugins.installed.openConfig": "Öppna konfiguration",
   "settings.plugins.errors.parseFailed": "Kan inte läsa {{path}} — åtgärda eller ta bort filen för att hantera plugin där.",

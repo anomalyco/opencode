@@ -935,6 +935,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Gera óvirkt",
   "settings.plugins.installed.enable": "Virkja",
   "settings.plugins.installed.uninstall": "Fjarlægja uppsetningu",
+  "settings.plugins.installed.uninstallBody": "Fjarlægja uppsetningu á {{name}} úr {{scope}}? Það verður fjarlægt úr stillingarskránni.",
   "settings.plugins.installed.recentlyRemoved": "Nýlega fjarlægt",
   "settings.plugins.installed.openConfig": "Opna stillingar",
   "settings.plugins.errors.parseFailed": "Get ekki lesið {{path}} — lagaðu eða fjarlægðu skrána til að stjórna viðbótum þar.",

@@ -940,6 +940,7 @@ export const dict = {
   "settings.plugins.installed.disable": "Անջատել",
   "settings.plugins.installed.enable": "Միացնել",
   "settings.plugins.installed.uninstall": "Հեռացնել",
+  "settings.plugins.installed.uninstallBody": "Հեռացնե՞լ {{name}}-ը {{scope}}-ից: Այն կհեռացվի կազմաձևման ֆայլից:",
   "settings.plugins.installed.recentlyRemoved": "Վերջերս հեռացված",
   "settings.plugins.installed.openConfig": "Բացել կոնֆիգը",
   "settings.plugins.errors.parseFailed": "Չհաջողվեց կարդալ {{path}}-ը — ուղղեք կամ հեռացրեք ֆայլը՝ հավելումները կառավարելու համար։",
