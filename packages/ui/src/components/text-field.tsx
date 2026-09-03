@@ -1,5 +1,5 @@
 import { TextField as Kobalte } from "@kobalte/core/text-field"
-import { createSignal, Show, splitProps } from "solid-js"
+import { createEffect, createSignal, Show, splitProps } from "solid-js"
 import type { ComponentProps } from "solid-js"
 import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
@@ -54,6 +54,18 @@ export function TextField(props: TextFieldProps) {
     "multiline",
   ])
   const [copied, setCopied] = createSignal(false)
+  let inputRef: HTMLInputElement | HTMLTextAreaElement | undefined
+
+  // Kobalte treats a `value` prop as controlled and writes the current value back
+  // into the input synchronously during `onInput`. When the reactive update from
+  // `onChange` hasn't propagated yet (observed on Windows/Electron) this discards
+  // the keystroke. We keep the field uncontrolled inside Kobalte and sync the
+  // external controlled value here so typed text is never lost.
+  createEffect(() => {
+    if (local.value === undefined) return
+    const el = inputRef
+    if (el && el.value !== local.value) el.value = local.value
+  })
 
   const label = () => {
     if (copied()) return i18n.t("ui.textField.copied")
@@ -83,8 +95,7 @@ export function TextField(props: TextFieldProps) {
       data-component="input"
       data-variant={local.variant || "normal"}
       name={local.name}
-      defaultValue={local.defaultValue}
-      value={local.value}
+      defaultValue={local.value ?? local.defaultValue}
       onChange={local.onChange}
       onKeyDown={local.onKeyDown}
       onClick={handleClick}
@@ -101,9 +112,26 @@ export function TextField(props: TextFieldProps) {
       <div data-slot="input-wrapper">
         <Show
           when={local.multiline}
-          fallback={<Kobalte.Input {...others} data-slot="input-input" class={local.class} />}
+          fallback={
+            <Kobalte.Input
+              {...others}
+              data-slot="input-input"
+              class={local.class}
+              ref={(el: HTMLInputElement) => {
+                inputRef = el
+              }}
+            />
+          }
         >
-          <Kobalte.TextArea {...others} autoResize data-slot="input-input" class={local.class} />
+          <Kobalte.TextArea
+            {...others}
+            autoResize
+            data-slot="input-input"
+            class={local.class}
+            ref={(el: HTMLTextAreaElement) => {
+              inputRef = el
+            }}
+          />
         </Show>
         <Show when={local.copyable}>
           <Tooltip value={label()} placement="top" gutter={4} forceOpen={copied()} skipDelayDuration={0}>
