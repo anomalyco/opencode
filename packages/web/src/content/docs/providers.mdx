@@ -2540,6 +2540,48 @@ OpenCode refreshes the OAuth access token automatically. Any Grok or X Premium p
 
 ---
 
+### ZeroSignal
+
+You can configure opencode to use [ZeroSignal](https://zerosignal.ai), a private, pay-per-use inference network. Its `zs-proxy` daemon runs on your machine and exposes the network as an OpenAI-compatible API (default endpoint `http://127.0.0.1:9376/v1`). Every request is encrypted end to end and paid from your ZeroSignal wallet, so there is no API key to manage; the proxy ignores the `Authorization` header.
+
+:::tip
+ZeroSignal can automatically configure itself for OpenCode. Run `zs-proxy connect opencode` and the proxy merges the provider below into your `opencode.jsonc`, seeded with the live model catalog, context limits, and prices. See the [ZeroSignal opencode guide](https://docs.zerosignal.ai/using-the-proxy/guides/opencode) for details.
+:::
+
+```json title="opencode.json" "zerosignal" {5, 6, 8, 10-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "zerosignal": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "ZeroSignal",
+      "options": {
+        "baseURL": "http://127.0.0.1:9376/v1"
+      },
+      "models": {
+        "moonshotai/kimi-k2.7-code": {
+          "name": "Kimi K2.7 Code",
+          "limit": {
+            "context": 262144,
+            "output": 235929
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+In this example:
+
+- `zerosignal` is the custom provider ID. This can be any string you want.
+- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
+- `name` is the display name for the provider in the UI.
+- `options.baseURL` is the endpoint of the local proxy. Change the port if you started `zs-proxy` with `--port`.
+- `models` is a map of model IDs to their configurations. Each ID must match the `id` returned by `GET /v1/models`. Run `curl http://127.0.0.1:9376/v1/models` to list the models currently served on the network together with their context windows and prices.
+
+---
+
 ## Custom provider
 
 To add any **OpenAI-compatible** provider that's not listed in the `/connect` command:
