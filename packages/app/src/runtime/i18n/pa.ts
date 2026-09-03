@@ -139,6 +139,7 @@ export const dict = {
   "command.language.cycle": "اگلی بولی ورتو",
   "command.language.set": "بولی ورتو: {{language}}",
   "command.session.new": "نواں سیشن",
+  "command.session.import": "سیشن درآمد کرو",
   "command.file.open": "فائل کھولو",
   "command.tab.close": "ٹیب بند کرو",
   "command.tab.reopenClosed": "بند ٹیب دوبارہ کھولو",

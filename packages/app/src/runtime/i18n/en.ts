@@ -100,6 +100,7 @@ export const dict = {
   "command.session.fork.description": "Create a new session from a previous message",
   "command.session.export": "Export session",
   "command.session.export.description": "Export the full session transcript as JSON",
+  "command.session.import": "Import session",
   "command.session.copyID": "Copy Session ID",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
