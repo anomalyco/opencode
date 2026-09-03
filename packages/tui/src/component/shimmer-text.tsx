@@ -96,7 +96,7 @@ declare module "@opentui/solid" {
   }
 }
 
-type Props = JSX.IntrinsicElements["text"] & { shimmer: RGBA }
+type Props = Omit<JSX.IntrinsicElements["text"], "ref"> & { shimmer: RGBA }
 
 export function ShimmerText(props: Props) {
   const [local, text] = splitProps(props, ["shimmer"])
