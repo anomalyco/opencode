@@ -30,7 +30,9 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     if (action.type === "network.get" && "request" in output && output.request.url !== url)
       yield* authorize("browser", [output.request.url])
     if (response.files.length && !("files" in output))
-      return yield* new Tool.Error({ message: "Browser returned unexpected files for this operation." })
+      return yield* new Tool.Error({
+        message: `Browser returned unexpected files for browser.${operation.name}; no files were exported. Check desktop/server plugin compatibility and report the invalid response. Do not repeat the action to repair a protocol error.`,
+      })
     return yield* exportResult(output, response.files)
   })
 
@@ -77,7 +79,21 @@ function permissionCheck(
         metadata: { type: action.type, ...(tab ? { tabID: tab.id } : {}) },
         source: { type: "tool", messageID: tool.messageID, id: tool.id },
       })
-      .pipe(Effect.mapError((error) => new Tool.Error({ message: "Browser permission check failed.", error })))
+      .pipe(
+        Effect.mapError((error) => {
+          const feedback = Schema.decodeUnknownOption(Schema.Struct({ feedback: Schema.String }))(error)
+          const detail =
+            feedback._tag === "Some"
+              ? `User feedback: ${feedback.value.feedback}`
+              : error instanceof Error
+                ? error.message
+                : String(error)
+          return new Tool.Error({
+            message: `[browser.permission_denied] Permission "${name}" was not granted for browser.${action.type}. Do not retry through another tool or change the target to bypass this decision. Follow the user's feedback or ask for an approved action. ${detail}`,
+            error,
+          })
+        }),
+      )
 }
 
 function prepareUploads(action: Browser.Action, directory: string, authorize: ReturnType<typeof permissionCheck>) {
