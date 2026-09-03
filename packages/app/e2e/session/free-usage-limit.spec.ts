@@ -46,6 +46,7 @@ test("free limit opens only for the current session and continues to Go connecti
 }, info) => {
   const other = "ses_free_limit_other"
   const timeline = await setupTimeline(page, { sessions: [session(), session({ id: other })], reducedMotion: true })
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
   const dialog = page.getByRole("dialog", { name: title })
 
   await fail(page, timeline, 1, { sessionID: other })
@@ -88,6 +89,7 @@ test("free limit respects the existing 24-hour suppression window", async ({ pag
     { preference, now },
   )
   const timeline = await setupTimeline(page)
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
   await fail(page, timeline, 1)
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await page.clock.setFixedTime(now + 2 * 60 * 60 * 1000)
@@ -97,6 +99,7 @@ test("free limit respects the existing 24-hour suppression window", async ({ pag
 
 test("do not show again persists beyond the free limit suppression window", async ({ page }) => {
   const timeline = await setupTimeline(page)
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
   const dialog = page.getByRole("dialog", { name: title })
   await fail(page, timeline, 1)
   await dialog.getByRole("button", { name: "Don't show again" }).click()
@@ -115,6 +118,7 @@ test("free limit uses localized copy on mobile", async ({ page }, info) => {
     locale: "de",
     reducedMotion: true,
   })
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
   await fail(page, timeline, 1)
   const dialog = page.getByRole("dialog", { name: "Kostenloses Limit erreicht" })
   await expect(dialog).toBeVisible()
