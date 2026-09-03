@@ -117,10 +117,15 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
   return { persisted, contextHook, toolHook, files: Environment.makeFiles(driver), planAgent }
 })
 
-const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => ({
+const request = (
+  agent: Agent.ID,
+  messages: Array<Message>,
+  purpose: SessionContext["purpose"] = "session",
+): SessionContext => ({
   sessionID,
   agent,
   model: { id: Model.ID.make("test-model"), providerID: Provider.ID.make("test") },
+  purpose,
   system: [],
   messages,
   tools: {},
@@ -240,6 +245,17 @@ describe("plan plugin reminders", () => {
       yield* contextHook(request(plan, messages))
       expect(messages).toHaveLength(2)
       expect(persisted).toHaveLength(1)
+    }),
+  )
+
+  it.effect("does not reconcile reminders for auxiliary requests", () =>
+    Effect.gen(function* () {
+      const { enter } = yield* reminders
+      const { persisted, contextHook } = yield* run()
+      const messages = [Message.user(enter)]
+      yield* contextHook(request(build, messages, "title"))
+      expect(messages).toHaveLength(1)
+      expect(persisted).toHaveLength(0)
     }),
   )
 })

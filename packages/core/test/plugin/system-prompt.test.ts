@@ -25,10 +25,15 @@ const makeHost = Effect.gen(function* () {
   return yield* PluginHost.make(plugins)
 })
 
-const context = (id: string, system = fallback): SessionHooks["context"] => ({
+const context = (
+  id: string,
+  system = fallback,
+  purpose: SessionHooks["context"]["purpose"] = "session",
+): SessionHooks["context"] => ({
   sessionID: Session.ID.make("ses_system_prompt"),
   agent: Agent.ID.make("build"),
   model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make(id) }),
+  purpose,
   system: [SystemPart.make(system)],
   messages: [],
   tools: {},
@@ -168,6 +173,19 @@ describe("SystemPromptPlugin", () => {
       yield* hooks.trigger("session", "context", event)
 
       expect(event.system.map((part) => part.text)).toEqual(["Custom agent prompt"])
+    }),
+  )
+
+  it.effect("preserves title request prompts", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
+      yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
+      const title = context("gpt-5", fallback, "title")
+
+      yield* hooks.trigger("session", "context", title)
+
+      expect(title.system[0]?.text).toBe(fallback)
     }),
   )
 

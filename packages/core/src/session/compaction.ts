@@ -385,6 +385,7 @@ export const layer = Layer.effect(
         messages: history.messages,
       })
       const prepared = yield* input.prepare({
+        purpose: "compaction",
         scope: {
           session: context.session,
           agentID: Agent.ID.make("compaction"),

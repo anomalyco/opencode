@@ -45,6 +45,7 @@ function make(
     effect: Effect.fn(`SystemPromptPlugin.${id}`)(function* (ctx) {
       yield* ctx.session.hook("context", (event) =>
         Effect.gen(function* () {
+          if (event.purpose === "title") return
           if ((yield* ctx.agent.get({ agentID: event.agent })).data.system) return
           const system = event.system[0]
           if (!system) return

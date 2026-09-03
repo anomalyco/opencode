@@ -94,10 +94,12 @@ await ctx.aisdk.hook("language", (event) => {
 })
 ```
 
-Session context is mutable immediately before provider dispatch:
+Session context is mutable immediately before provider dispatch. The purpose identifies whether the request belongs to
+the session loop, direct generation, title generation, or compaction:
 
 ```ts
 await ctx.session.hook("context", (event) => {
+  if (event.purpose !== "session") return
   event.tools.read.description = "Read a file using narrow line ranges."
   delete event.tools.write
 })

@@ -18,10 +18,14 @@ export interface SessionPrompt {
   delivery: SessionInbox.Delivery
 }
 
+export type SessionContextPurpose = "session" | "generate" | "title" | "compaction"
+
 export interface SessionContext {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  /** Identifies the operation preparing this model context. */
+  readonly purpose: SessionContextPurpose
   system: Array<SystemPart>
   messages: Array<Message>
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>

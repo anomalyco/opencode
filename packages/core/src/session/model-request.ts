@@ -59,6 +59,7 @@ export interface Prepared {
 }
 
 interface PrepareInput {
+  readonly purpose: PluginHooks.Domains["session"]["context"]["purpose"]
   readonly scope: {
     readonly session: SessionSchema.Info
     readonly agentID: Agent.ID
@@ -73,11 +74,6 @@ interface PrepareInput {
     readonly messages: Array<Message>
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
-  /**
-   * Session context hooks shape the agent conversation. Standalone requests
-   * such as titles opt out; compaction uses the selected Session context.
-   */
-  readonly contextHooks?: false
   /** Stateful Session WebSocket channels require an explicit durable-runner opt-in. */
   readonly webSocket?: "session"
 }
@@ -305,13 +301,14 @@ export const layer = Layer.effect(
         sessionID: session.id,
         agent: input.scope.contextAgentID ?? input.scope.agentID,
         model: resolved.ref,
+        purpose: input.purpose,
         system: input.transcript.system,
         messages: input.transcript.messages,
         tools: definitions,
         generation: {},
         providerOptions: {},
       }
-      if (input.contextHooks !== false) yield* hooks.trigger("session", "context", context)
+      yield* hooks.trigger("session", "context", context)
       // Match each surviving entry back to its tool, by recognizing a moved definition or
       // by key. Identity wins so a definition moved onto another tool's name still executes
       // the tool it describes. Entries matching neither were invented by a hook and dropped.

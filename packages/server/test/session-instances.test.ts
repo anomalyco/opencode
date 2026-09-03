@@ -41,6 +41,7 @@ it.live(
       const boots: Session.ID[] = []
       const executed: Session.ID[] = []
       const commands: Session.ID[] = []
+      const purposes: string[] = []
       const llm = yield* TestLLM.Test.pipe(Effect.provide(TestLLM.testLayer()))
       const model = SessionRunnerModel.resolved(
         LanguageModel.make({ id: "instance-model", provider: "test", route: OpenAIChat.route }),
@@ -94,6 +95,7 @@ it.live(
                             )
                             yield* ctx.session.hook("context", (event) =>
                               Effect.sync(() => {
+                                purposes.push(event.purpose)
                                 event.generation.temperature = config.temperature
                               }),
                             )
@@ -221,6 +223,7 @@ it.live(
         ])
       }
       expect(commands).toEqual([first.id, second.id])
+      expect(purposes).toEqual(["session", "session", "session", "session", "generate", "generate"])
       expect(
         (yield* llm.requests()).map((request) => ({
           temperature: request.generation?.temperature,

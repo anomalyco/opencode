@@ -272,7 +272,13 @@ it.effect("falls back to the primary model when the small model fails", () =>
     yield* prompt(sessionID, "Fall back when title generation fails")
 
     const attempted: Model.Ref[] = []
+    const purposes: string[] = []
     const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        purposes.push(event.purpose)
+      }),
+    )
     yield* hooks.register("session", "model.request", (event) =>
       Effect.sync(() => {
         attempted.push(event.model)
@@ -283,6 +289,7 @@ it.effect("falls back to the primary model when the small model fails", () =>
     yield* title.generate(sessionID)
 
     expect(requests.map((request) => String(request.model.id))).toEqual(["title-small", "title-model"])
+    expect(purposes).toEqual(["title", "title"])
     expect(attempted.map((model) => String(model.variant))).toEqual(["low", "high"])
     const store = yield* SessionStore.Service
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")

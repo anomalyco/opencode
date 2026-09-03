@@ -88,12 +88,14 @@ yield *
 
 Hooks run sequentially in registration order. Later hooks observe mutations made by earlier hooks.
 
-Session context is mutable immediately before provider dispatch:
+Session context is mutable immediately before provider dispatch. The purpose identifies whether the request belongs to
+the session loop, direct generation, title generation, or compaction:
 
 ```ts
 yield *
   ctx.session.hook("context", (event) =>
     Effect.sync(() => {
+      if (event.purpose !== "session") return
       event.tools.read.description = "Read a file using narrow line ranges."
       delete event.tools.write
     }),

@@ -56,6 +56,7 @@ export const Plugin = define({
     // Compaction and committed reverts can strip reminders while the session's agent stays
     // put. Reconcile per request, appending near the tail so the cached prefix stays warm.
     yield* ctx.session.hook("context", (event) => {
+      if (event.purpose === "title") return Effect.void
       const reminder = lastReminder(event.messages, enterReminder)
       const missing = event.agent === plan && reminder !== enterReminder
       const stale = event.agent !== plan && reminder === enterReminder

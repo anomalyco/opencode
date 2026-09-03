@@ -64,12 +64,12 @@ export const layer = Layer.effect(
           : Effect.void,
       )
       const prepared = yield* context.prepare({
+        purpose: "title",
         scope: { session: input.session, agentID: input.agent.id, model: input.model },
         transcript: {
           system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],
           messages: [Message.user(input.text)],
         },
-        contextHooks: false,
       })
       yield* llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) => {

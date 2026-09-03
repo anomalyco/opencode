@@ -7,6 +7,7 @@ import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -83,6 +84,7 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
+      PluginHooks.node,
       SessionCompaction.node,
       SessionModelRequest.node,
     ]),
@@ -353,6 +355,13 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         time: { created: DateTime.makeUnsafe(2) },
       }),
     ]
+    const purposes: string[] = []
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        purposes.push(event.purpose)
+      }),
+    )
 
     const delta = yield* bus
       .subscribe(SessionEvent.Compaction.Delta)
@@ -372,6 +381,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     ])
 
     expect(requests).toHaveLength(1)
+    expect(purposes).toEqual(["compaction"])
     expect(requests[0]?.promptCacheKey).toBe(sessionID)
     expect(requests[0]?.http?.headers).toEqual({
       "x-session-affinity": sessionID,

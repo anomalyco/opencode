@@ -17,6 +17,7 @@ import { Location } from "@opencode-ai/core/location"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { ID } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Provider } from "@opencode-ai/core/provider"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -132,6 +133,7 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
       Agent.node,
+      PluginHooks.node,
       InstructionBuiltIns.node,
       SessionContext.node,
       llmClient,
@@ -309,12 +311,20 @@ it.effect(
       })
       instruction = "Changed context"
       const before = yield* durableState(db, sessionID)
+      const purposes: string[] = []
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          purposes.push(event.purpose)
+        }),
+      )
 
       const result = yield* SessionGenerate.generate({ session, prompt: "Summarize privately" }).pipe(
         Effect.provideService(Instance.Service, instances),
       )
 
       expect(result).toBe("Transient answer")
+      expect(purposes).toEqual(["generate"])
       expect(requests).toHaveLength(1)
       expect(requests[0]?.model).toBe(model)
       expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
