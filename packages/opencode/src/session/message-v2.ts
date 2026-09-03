@@ -31,7 +31,7 @@ import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
-import { isMedia } from "@/util/media"
+import { isMedia, isVideoAttachment } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
@@ -145,6 +145,17 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   // Only apply this workaround if the model actually supports that media input -
   // otherwise unsupportedParts() will turn it into a user-visible error.
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
+    // Video is far less uniformly carried in tool results than images/PDFs:
+    // only providers proven to accept inline video keep it there. Everything
+    // else extracts it into a user message, where unsupportedParts() gates it
+    // on the model's declared video capability.
+    if (isVideoAttachment(attachment.mime)) {
+      if (model.api.npm === "@ai-sdk/google") {
+        const id = model.api.id.toLowerCase()
+        return id.includes("gemini-3") && !id.includes("gemini-2")
+      }
+      return false
+    }
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
