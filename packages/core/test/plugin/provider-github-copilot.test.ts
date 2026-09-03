@@ -122,7 +122,7 @@ describe("GithubCopilotPlugin", () => {
       expect(requests[0]?.has("x-api-key")).toBe(false)
       expect(requests[0]?.get("x-initiator")).toBe("user")
       expect(requests[0]?.get("copilot-vision-request")).toBe("true")
-      expect(requests[0]?.get("x-github-api-version")).toBe("2026-06-01")
+      expect(requests[0]?.get("x-github-api-version")).toBe("2026-08-01")
       expect(requests[0]?.get("user-agent")).toBe("opencode/beta/1.2.3/test")
     }),
   )
@@ -145,7 +145,7 @@ describe("GithubCopilotPlugin", () => {
       expect(event.request.headers.has("x-api-key")).toBe(false)
       expect(event.request.headers.get("x-initiator")).toBe("user")
       expect(event.request.headers.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14")
-      expect(event.request.headers.get("x-github-api-version")).toBe("2026-06-01")
+      expect(event.request.headers.get("x-github-api-version")).toBe("2026-08-01")
     }),
   )
 
