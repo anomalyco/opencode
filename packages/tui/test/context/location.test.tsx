@@ -16,6 +16,8 @@ test.each([
   { endpoint: "agent", reconnect: false },
   { endpoint: "agent", reconnect: true },
 ])("a late failure cannot replace the new sync's state (%o)", async ({ endpoint, reconnect }) => {
+  // Keep the held lookup separate from the client's launch-directory preload.
+  const source = `${directory}/old`
   const requested = Promise.withResolvers<void>()
   const response = Promise.withResolvers<Response>()
   const events = createEventStream()
@@ -24,7 +26,7 @@ test.each([
   const calls = createFetch((url) => {
     if (url.pathname === "/api/event") connections++
     const target = url.searchParams.get("location[directory]") ?? directory
-    if (target === directory && url.pathname === `/api/${endpoint}` && ++requests === 1) {
+    if (target === source && url.pathname === `/api/${endpoint}` && ++requests === 1) {
       requested.resolve()
       return response.promise
     }
@@ -41,7 +43,7 @@ test.each([
     location = useLocation()
     data = useData()
     toast = useToast()
-    location.set({ directory })
+    location.set({ directory: source })
     createEffect(() => {
       // Connection status changes before the buffered server.connected event is published.
       // Deliver the old HTTP failure in that gap, not after an arbitrary timer.
@@ -66,7 +68,7 @@ test.each([
   app.renderer.start()
   try {
     await requested.promise
-    const target = reconnect ? directory : "/other"
+    const target = reconnect ? source : "/other"
     if (reconnect) {
       events.disconnect()
       await app.waitFor(() => connections > 1, { maxPasses: 120 })
