@@ -408,7 +408,6 @@ export type NormalizedEvent = Event & { readonly item?: OutputItem | null }
 export interface ProviderAdapter {
   readonly id: string
   readonly name: string
-  readonly toolNamespaceHistory?: boolean
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
     readonly media: ProviderShared.NormalizedMedia
@@ -811,10 +810,7 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const projected =
-    adapter.toolNamespaceHistory === true
-      ? { request, tools: yield* ProviderShared.requireFlatTools(adapter.name, request.tools) }
-      : ProviderShared.flattenToolRequest(request)
+  const projected = ProviderShared.flattenToolRequest(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
     ...(yield* lowerConversation(projected.request, adapter)),

@@ -283,16 +283,6 @@ export const unsupportedOperation = (input: {
     }),
   })
 
-export const requireFlatTools = Effect.fn("ProviderShared.requireFlatTools")(function* (
-  protocol: string,
-  tools: ReadonlyArray<ToolEntry>,
-) {
-  return yield* Effect.forEach(tools, (tool): Effect.Effect<ToolDefinition, AIError> => {
-    if (tool.type === "namespace") return Effect.fail(invalidRequest(`${protocol} does not support tool namespaces`))
-    return Effect.succeed(tool)
-  })
-})
-
 export const flattenToolRequest = (request: LLMRequest) => {
   const flatten = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string>): ReadonlyArray<ToolDefinition> =>
     tools.flatMap((tool) => {

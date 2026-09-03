@@ -117,7 +117,6 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 const adapter = {
   id: ADAPTER,
   name: NAME,
-  toolNamespaceHistory: true,
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
