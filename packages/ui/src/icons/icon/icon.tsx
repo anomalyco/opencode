@@ -152,6 +152,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M13.5555 6.66656V2.44434H9.33326M13.5555 2.44434L7.99993 7.99989M13.5555 9.33324V13.5555C13.5555 13.5555 12.7599 13.5555 11.7777 13.5555H2.44438C2.44438 13.5555 2.44438 12.7599 2.44438 11.7777V4.22213C2.44438 3.2399 2.44434 2.44435 2.44434 2.44435H6.66661" stroke="currentColor"/>`,
   },
+  "outline-arrow-to-corner-top-right": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M2 8.5V2H14V14H8M5 5.66667H10.3333V11M3.66797 12.333L9.94292 6.05806" stroke="currentColor" stroke-linecap="square"/>`,
+  },
   "outline-share": {
     viewBox: "0 0 16 16",
     body: `<path d="M13.5554 10.4445V13.5556C13.5554 13.5556 12.7599 13.5556 11.7777 13.5556H4.22211C3.23989 13.5556 2.44434 13.5556 2.44434 13.5556V10.4445M4.88878 5.55557L7.99989 2.44446L11.111 5.55557M7.99989 2.44446L7.99989 9.11112" stroke="currentColor"/>`,
@@ -187,10 +191,18 @@ function getIcon(name: IconName) {
   return { body, viewBox: additionalIconViewBox(name as keyof typeof additionalIcons) }
 }
 
+function spriteContent() {
+  return Array.from(new Set<IconName>([...Object.keys(additionalIcons), ...Object.keys(icons)] as IconName[]))
+    .map((name) => `<symbol id="${symbol(name)}" viewBox="${getIcon(name).viewBox}">${getIcon(name).body}</symbol>`)
+    .join("")
+}
+
 function ensureSprite() {
   if (spriteInserted) return
   if (typeof document === "undefined") return
-  if (document.getElementById(spriteID)) {
+  const existing = document.getElementById(spriteID)
+  if (existing) {
+    existing.innerHTML = spriteContent()
     spriteInserted = true
     return
   }
@@ -202,9 +214,7 @@ function ensureSprite() {
   svg.setAttribute("height", "0")
   svg.style.position = "absolute"
   svg.style.overflow = "hidden"
-  svg.innerHTML = Array.from(new Set<IconName>([...Object.keys(additionalIcons), ...Object.keys(icons)] as IconName[]))
-    .map((name) => `<symbol id="${symbol(name)}" viewBox="${getIcon(name).viewBox}">${getIcon(name).body}</symbol>`)
-    .join("")
+  svg.innerHTML = spriteContent()
   document.body.insertBefore(svg, document.body.firstChild)
   spriteInserted = true
 }

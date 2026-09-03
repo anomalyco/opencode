@@ -15,6 +15,7 @@ const names = [
   "magnifying-glass",
   "menu",
   "monitor",
+  "outline-arrow-to-corner-top-right",
   "outline-copy",
   "outline-dots",
   "plus",
