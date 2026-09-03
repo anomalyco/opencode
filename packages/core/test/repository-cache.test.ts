@@ -2,7 +2,7 @@ import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Clock, Duration, Effect, Layer, Schema } from "effect"
+import { Clock, Duration, Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
 import { Repository } from "@opencode-ai/core/repository"
@@ -35,7 +35,7 @@ describe("RepositoryCache", () => {
           expect((yield* cache.ensure({ reference: fixture.reference, refresh: "daily" })).status).toBe("cached")
           expect(yield* read(path.join(initial.localPath, "README.md"))).toBe("one\n")
           const yesterday = (yield* Clock.currentTimeMillis) - Duration.toMillis(Duration.days(1))
-          yield* kv.set(`repository-cache:${initial.localPath}`, { attemptedAt: yesterday, refreshedAt: yesterday })
+          yield* kv.set(`repository-cache:${initial.localPath}`, { attemptedAt: yesterday })
         }).pipe(Effect.provide(cacheLayer(fixture.root)))
 
         const results = yield* Effect.all(
@@ -61,7 +61,30 @@ describe("RepositoryCache", () => {
     ),
   )
 
-  it.live("throttles failed refresh attempts without marking them successful", () =>
+  it.live("honors legacy attempt records while allowing forced refreshes", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const cache = yield* RepositoryCache.Service
+        const kv = yield* KV.Service
+        const initial = yield* cache.ensure({ reference: fixture.reference, refresh: "daily" })
+        yield* Effect.promise(() => commit(fixture.source, "two\n", "advance main"))
+
+        // Persisted records from older versions include an unused success timestamp.
+        yield* kv.set(`repository-cache:${initial.localPath}`, {
+          attemptedAt: yield* Clock.currentTimeMillis,
+          refreshedAt: 0,
+        })
+        expect((yield* cache.ensure({ reference: fixture.reference, refresh: "daily" })).status).toBe("cached")
+        expect(yield* read(path.join(initial.localPath, "README.md"))).toBe("one\n")
+
+        expect((yield* cache.ensure({ reference: fixture.reference, refresh: true })).status).toBe("refreshed")
+        expect(yield* read(path.join(initial.localPath, "README.md"))).toBe("two\n")
+        expect((yield* cache.ensure({ reference: fixture.reference, refresh: "daily" })).status).toBe("cached")
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+
+  it.live("throttles failed refresh attempts until the next interval", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {
         const cache = yield* RepositoryCache.Service
@@ -69,31 +92,23 @@ describe("RepositoryCache", () => {
         const initial = yield* cache.ensure({ reference: fixture.reference, refresh: "daily" })
         const key = `repository-cache:${initial.localPath}`
         const yesterday = (yield* Clock.currentTimeMillis) - Duration.toMillis(Duration.days(1))
-        yield* kv.set(key, { attemptedAt: yesterday, refreshedAt: yesterday })
+        yield* kv.set(key, { attemptedAt: yesterday })
         yield* Effect.promise(() =>
           fs.rename(path.join(fixture.root, "origin.git"), path.join(fixture.root, "offline.git")),
         )
 
         const error = yield* Effect.flip(cache.ensure({ reference: fixture.reference, refresh: "daily" }))
         expect(error).toBeInstanceOf(RepositoryCache.FetchFailedError)
-        const stored = yield* kv.get(key)
-        const stamp = Schema.decodeUnknownSync(
-          Schema.Struct({ attemptedAt: Schema.Number, refreshedAt: Schema.Number }),
-        )(stored)
-        expect(stamp.attemptedAt).toBeGreaterThan(yesterday)
-        expect(stamp.refreshedAt).toBe(yesterday)
         expect((yield* cache.ensure({ reference: fixture.reference, refresh: "daily" })).status).toBe("cached")
-        expect(yield* kv.get(key)).toEqual(stored)
         expect(yield* read(path.join(initial.localPath, "README.md"))).toBe("one\n")
 
         yield* Effect.promise(async () => {
           await fs.rename(path.join(fixture.root, "offline.git"), path.join(fixture.root, "origin.git"))
           await commit(fixture.source, "two\n", "advance main")
         })
-        yield* kv.set(key, { attemptedAt: yesterday, refreshedAt: yesterday })
+        yield* kv.set(key, { attemptedAt: yesterday })
         expect((yield* cache.ensure({ reference: fixture.reference, refresh: "daily" })).status).toBe("refreshed")
         expect(yield* read(path.join(initial.localPath, "README.md"))).toBe("two\n")
-        expect(yield* kv.get(key)).not.toEqual(stored)
       }).pipe(Effect.provide(cacheLayer(fixture.root))),
     ),
   )
@@ -157,13 +172,13 @@ describe("RepositoryCache", () => {
     withRemote((fixture) =>
       Effect.gen(function* () {
         const cache = yield* RepositoryCache.Service
-        const initial = yield* cache.ensure({ reference: fixture.reference })
+        const initial = yield* cache.ensure({ reference: fixture.reference, refresh: "daily" })
         yield* Effect.promise(async () => {
           await git(initial.localPath, "config", "remote.origin.url", "https://github.com/other/repo.git")
           await fs.writeFile(path.join(initial.localPath, "stale.txt"), "stale")
         })
 
-        const replaced = yield* cache.ensure({ reference: fixture.reference })
+        const replaced = yield* cache.ensure({ reference: fixture.reference, refresh: "daily" })
 
         expect(replaced.status).toBe("cloned")
         expect(yield* exists(path.join(replaced.localPath, "stale.txt"))).toBe(false)
