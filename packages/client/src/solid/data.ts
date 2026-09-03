@@ -1180,8 +1180,8 @@ export function createData(config: CreateDataInput) {
         }))
         break
       case "reference.updated":
-        result.location.reference.invalidate()
-        void result.location.reference.sync()
+        result.location.reference.invalidate(location)
+        void result.location.reference.sync(location)
         break
       case "integration.updated":
         result.location.integration.invalidate(location)
