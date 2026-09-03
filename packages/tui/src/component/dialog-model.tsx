@@ -116,6 +116,29 @@ export function DialogModel(props: { providerID?: string }) {
         )
       : []
 
+    // Unconnected providers (e.g. commandcode-goplan pre-login): one row per
+    // provider that delegates to the existing connect flow, then lands back
+    // on model selection for that provider.
+    const connectOptions = pipe(
+      sync.data.provider_next.all,
+      filter((provider) => !sync.data.provider.some((item) => item.id === provider.id)),
+      sortBy((provider) => (provider.name ?? provider.id).toLowerCase()),
+      map((provider) => ({
+        value: { providerID: provider.id, modelID: "" },
+        title: provider.name ?? provider.id,
+        description: "Not connected — select to connect",
+        category: "Connect",
+        async onSelect() {
+          const flow = providers().find((option) => option.value === provider.id)
+          if (!flow || typeof flow.onSelect !== "function") {
+            dialog.replace(() => <DialogProvider />)
+            return
+          }
+          await flow.onSelect()
+        },
+      })),
+    )
+
     if (needle) {
       return [
         ...sortModelOptions(
@@ -123,10 +146,11 @@ export function DialogModel(props: { providerID?: string }) {
           false,
         ),
         ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
+        ...fuzzysort.go(needle, connectOptions, { keys: ["title"] }).map((x) => x.obj),
       ]
     }
 
-    return [...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
+    return [...favoriteOptions, ...recentOptions, ...providerOptions, ...connectOptions, ...popularProviders]
   })
 
   const provider = createMemo(() =>
