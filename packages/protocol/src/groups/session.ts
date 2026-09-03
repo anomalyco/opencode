@@ -188,7 +188,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     .add(
       HttpApiEndpoint.post("session.import", "/api/session/import", {
         payload: Schema.Struct({
-          ...SessionTransfer.Data.fields,
+          ...SessionTransfer.Import.fields,
           location: Location.Ref.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),

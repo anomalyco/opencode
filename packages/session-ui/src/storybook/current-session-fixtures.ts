@@ -996,6 +996,7 @@ export const compactionDocument = document([
     type: "compaction",
     status: "completed",
     reason: "auto",
+    model: STORY_MODEL,
     summary: "The Session timeline now consumes current nested assistant content.",
     recent: "Add deterministic stories and verify Storybook.",
     time: { created: STORY_TIME + 63_000 },

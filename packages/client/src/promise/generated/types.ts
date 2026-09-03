@@ -138,17 +138,6 @@ export type SessionMessageCompactionRunning = {
   recent: string
 }
 
-export type SessionMessageCompactionCompleted = {
-  type: "compaction"
-  id: string
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  status: "completed"
-  reason: "auto" | "manual"
-  summary: string
-  recent: string
-}
-
 export type SessionActive = { type: "running" }
 
 export type SessionInboxDelivery = "steer" | "queue"
@@ -521,6 +510,19 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
+export type SessionMessageCompactionCompleted = {
+  type: "compaction"
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  status: "completed"
+  reason: "auto" | "manual"
+  model: ModelRef
+  providerState?: SessionMessageProviderState
+  summary: string
+  recent: string
+}
+
 export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
@@ -807,16 +809,6 @@ export type SessionCompactionStarted = {
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { sessionID: string; reason: "auto" | "manual"; recent: string; inputID?: string }
-}
-
-export type SessionCompactionEnded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.compaction.ended"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; reason: "auto" | "manual"; text: string; recent: string }
 }
 
 export type SessionCompactionFailed = {
@@ -1348,6 +1340,23 @@ export type SessionToolCalled = {
     input: { [x: string]: any }
     executed: boolean
     state?: SessionMessageProviderState1
+  }
+}
+
+export type SessionCompactionEnded = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.compaction.ended"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    reason: "auto" | "manual"
+    model: ModelRef
+    providerState?: SessionMessageProviderState1
+    text: string
+    recent: string
   }
 }
 
@@ -3063,6 +3072,8 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
+              readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
             }
@@ -3076,6 +3087,18 @@ export type SessionImportInput = {
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
             }
         )
+      | {
+          readonly type: "compaction"
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly time: { readonly created: number }
+          readonly status: "completed"
+          readonly reason: "auto" | "manual"
+          readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          readonly providerState?: { readonly [x: string]: JsonValue }
+          readonly summary: string
+          readonly recent: string
+        }
     >
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["info"]
@@ -3340,6 +3363,8 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
+              readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
             }
@@ -3353,6 +3378,18 @@ export type SessionImportInput = {
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
             }
         )
+      | {
+          readonly type: "compaction"
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly time: { readonly created: number }
+          readonly status: "completed"
+          readonly reason: "auto" | "manual"
+          readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          readonly providerState?: { readonly [x: string]: JsonValue }
+          readonly summary: string
+          readonly recent: string
+        }
     >
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["messages"]
@@ -3617,6 +3654,8 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
+              readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
             }
@@ -3630,6 +3669,18 @@ export type SessionImportInput = {
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
             }
         )
+      | {
+          readonly type: "compaction"
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly time: { readonly created: number }
+          readonly status: "completed"
+          readonly reason: "auto" | "manual"
+          readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          readonly providerState?: { readonly [x: string]: JsonValue }
+          readonly summary: string
+          readonly recent: string
+        }
     >
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["location"]

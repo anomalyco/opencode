@@ -3,6 +3,7 @@ export * as SessionTransfer from "./transfer.js"
 import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Skill } from "@opencode-ai/schema/skill"
+import { Model } from "@opencode-ai/schema/model"
 import { eq } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { map } from "effect/Array"
@@ -36,7 +37,7 @@ export interface Interface {
     sanitize?: boolean
   }) => Effect.Effect<Data, Session.NotFoundError | Session.MessageDecodeError>
   readonly import: (input: {
-    data: Data
+    data: SessionTransfer.Import
     location: Location.Ref
   }) => Effect.Effect<Session.Info, ImportConflictError | Session.NotFoundError>
 }
@@ -73,8 +74,26 @@ const layer = Layer.effect(
         if (input.data.info.parentID) yield* sessions.get(input.data.info.parentID)
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
-        const messages = input.data.messages.filter(isSettled).map((message, index) => {
-          const encoded = encodeMessage(message)
+        const settled = input.data.messages.filter(isSettled)
+        const models = settled.flatMap((message, index) =>
+          message.type === "assistant" || message.type === "model-switched" ? [{ model: message.model, index }] : [],
+        )
+        const messages = settled.map((message, index) => {
+          const encoded = encodeMessage(
+            message.type === "compaction" && message.status === "completed"
+              ? {
+                  ...message,
+                  model:
+                    message.model ??
+                    models.findLast((entry) => entry.index < index)?.model ??
+                    models.find((entry) => entry.index > index)?.model ??
+                    input.data.info.model ??
+                    Model.Ref.parse("unknown/unknown"),
+                  // An inferred model cannot authenticate provider state from an old export.
+                  providerState: message.model ? message.providerState : undefined,
+                }
+              : message,
+          )
           const { id: _, type, ...data } = encoded
           return {
             id: message.id,
@@ -160,7 +179,7 @@ export const node = makeGlobalNode({
   deps: [App.node, Bus.node, Database.node, Project.node, Session.node],
 })
 
-function isSettled(message: SessionMessage.Info) {
+function isSettled(message: SessionTransfer.Import["messages"][number]) {
   if (message.type === "assistant") return message.time.completed !== undefined
   if (message.type === "shell" || message.type === "compaction") return message.status !== "running"
   return true
@@ -296,6 +315,9 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
       metadata: meta,
       summary: redact("compaction-summary", message.id, message.summary),
       recent: redact("compaction-recent", message.id, message.recent),
+      ...(message.status === "completed"
+        ? { providerState: metadata("compaction-provider-state", message.id, message.providerState) }
+        : {}),
     }
   }
   return { ...message, metadata: meta }

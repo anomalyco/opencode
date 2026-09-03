@@ -110,6 +110,7 @@ test("renders a compaction summary while it streams and after completion", async
     compactionEnded({
       sessionID,
       reason: "manual",
+      model: { id: "model", providerID: "provider" },
       text: "## Checkpoint\n\nFinal implementation details.",
       recent: "",
     }),

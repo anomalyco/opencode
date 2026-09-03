@@ -147,6 +147,8 @@ describe("toLLMMessages", () => {
           type: "compaction",
           status: "completed",
           reason: "auto",
+          model,
+          providerState: { responseId: "storage-only" },
           summary: "Earlier work",
           recent: "Recent work",
           time: { created },

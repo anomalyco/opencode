@@ -250,6 +250,9 @@ export const CompactionCompleted = Schema.Struct({
   ...CompactionBase,
   status: Schema.tag("completed"),
   reason: Schema.Literals(["auto", "manual"]),
+  /** Producing model. Historical checkpoints may contain a best-effort backfill. */
+  model: Model.Ref,
+  providerState: ProviderState.pipe(optional),
   summary: Schema.String,
   recent: Schema.String,
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })

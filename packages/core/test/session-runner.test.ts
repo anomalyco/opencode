@@ -2177,6 +2177,9 @@ describe("SessionRunnerLLM", () => {
         expect(compact.system.map((part) => part.text)).toContain("Review the project carefully.")
         expect(requestAgents[2]).toBe(Agent.ID.make("compaction"))
         expect(s.executions).toEqual(["x".repeat(4_000)])
+        expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
+          model: { id: s.currentModel.id, providerID: s.currentModel.provider, variant },
+        })
 
         // Compare wire content without the cache breakpoints that move to the new final message.
         const before = yield* compileRequest(LLMRequest.update(normal, { cache: "none" }))
@@ -2241,6 +2244,54 @@ describe("SessionRunnerLLM", () => {
         },
       )
     }
+  }
+
+  for (const state of [true, false]) {
+    scenario(`compaction retains only accepted response state (state=${state})`, function* (s) {
+      // Provider aliases use the route's metadata namespace, not the catalog provider ID.
+      s.currentModel = LanguageModel.make({
+        id: "gpt-5",
+        provider: "alias",
+        route: OpenAIResponses.route,
+      })
+      yield* s.llm.push(TestLLM.text("Earlier answer", "state-history"))
+      yield* s.runPrompt("Earlier question")
+      const rejected = { responseId: "rejected-response" }
+      const accepted = { responseId: "accepted-response", opaque: { value: "provider-data" } }
+      const key = OpenAIResponses.route.providerMetadataKey ?? s.currentModel.provider
+      yield* s.llm.push(
+        TestLLM.complete(
+          { reason: { normalized: "stop" }, providerMetadata: { [key]: rejected } },
+          LLMEvent.textDelta({ id: "invalid", text: "Not a summary" }),
+        ),
+        TestLLM.complete(
+          {
+            reason: { normalized: "stop" },
+            providerMetadata: state ? { [key]: accepted, unrelated: { ignored: true } } : undefined,
+          },
+          LLMEvent.textDelta({ id: "summary", text: "## Objective\n- Accepted summary" }),
+        ),
+      )
+      const compact = yield* s.session.compact({ sessionID })
+      yield* s.resume
+      const checkpoint = (yield* s.messages).find((message) => message.id === compact.id)
+      expect(checkpoint).toMatchObject({
+        status: "completed",
+        model: { providerID: "alias", id: "gpt-5" },
+        summary: "## Objective\n- Accepted summary",
+      })
+      if (checkpoint?.type !== "compaction" || checkpoint.status !== "completed")
+        return yield* Effect.die("Missing completed checkpoint")
+      expect(checkpoint.providerState).toEqual(state ? accepted : undefined)
+      const event = yield* s.db
+        .select({ data: EventTable.data })
+        .from(EventTable)
+        .where(sql`${EventTable.type} = 'session.compaction.ended.1'`)
+        .get()
+        .pipe(Effect.orDie)
+      expect(event?.data.model).toEqual(checkpoint.model)
+      expect(event?.data.providerState).toEqual(state ? accepted : undefined)
+    })
   }
 
   scenario("preserves typed provider failures from manual compaction", function* (s) {
@@ -2648,6 +2699,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.bus.publish(SessionEvent.Compaction.Ended, {
       sessionID,
       reason: "manual",
+      model: Model.Ref.parse(`${s.currentModel.provider}/${s.currentModel.id}`),
       text: "summary",
       recent: "",
     })

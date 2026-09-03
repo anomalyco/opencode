@@ -14,6 +14,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import type { Database as SQLiteDatabase } from "bun:sqlite"
 import { Project } from "@opencode-ai/schema/project"
+import compactionModelMigration from "./migration/20260902000000_compaction_model.js"
 
 export type SourceMessage = {
   readonly id: string
@@ -305,6 +306,7 @@ export function transformSession(input: TransformInput): TransformResult {
                 type: "compaction",
                 status: "completed",
                 reason: compaction.auto ? "auto" : "manual",
+                model: { id: summary.value.modelID, providerID: summary.value.providerID },
                 summary: summaryText,
                 recent: serializeRecent(tail, byMessage),
                 time: { created: item.row.time_created },
@@ -712,7 +714,7 @@ function importNextDatabase(
   db: Database.Interface["db"],
   sourcePath: string | undefined,
   onProgress: (completed: number) => void,
-): Effect.Effect<void, unknown> {
+): Effect.Effect<void, unknown, Global.Service> {
   if (!sourcePath || !existsSync(sourcePath)) return Effect.void
   return Effect.scoped(
     Effect.gen(function* () {
@@ -813,6 +815,8 @@ function importNextDatabase(
         onProgress(index + 1)
         yield* Effect.yieldNow
       }
+      // This source is imported after normal database migrations have already run.
+      yield* db.transaction((tx) => compactionModelMigration.up(tx))
       source.run("COMMIT")
     }),
   )

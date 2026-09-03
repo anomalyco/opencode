@@ -415,6 +415,8 @@ describe("SessionProjector", () => {
       yield* bus.publish(SessionEvent.Compaction.Ended, {
         sessionID,
         reason: "manual",
+        model,
+        providerState: { responseId: "summary-response" },
         text: "summary",
         recent: "recent context",
       })
@@ -455,6 +457,8 @@ describe("SessionProjector", () => {
         time: { completed: DateTime.makeUnsafe(0) },
       })
       expect(messages.find((message) => message.type === "compaction")).toMatchObject({
+        model,
+        providerState: { responseId: "summary-response" },
         summary: "summary",
         recent: "recent context",
       })
@@ -465,6 +469,25 @@ describe("SessionProjector", () => {
         model,
         time_updated: DateTime.toEpochMillis(created),
       })
+    }),
+  )
+
+  it.effect("replays a compaction completion with its model and provider state", () =>
+    Effect.gen(function* () {
+      yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      yield* bus.replay({
+        id: Event.ID.create(),
+        created: 1,
+        aggregateID: sessionID,
+        seq: 0,
+        type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1),
+        data: { sessionID, reason: "manual", model, providerState: { opaque: "state" }, text: "summary", recent: "" },
+      })
+      expect(yield* store.context(sessionID)).toMatchObject([
+        { type: "compaction", status: "completed", model, providerState: { opaque: "state" } },
+      ])
     }),
   )
 

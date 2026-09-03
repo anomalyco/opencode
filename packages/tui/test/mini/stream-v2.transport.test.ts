@@ -120,7 +120,7 @@ function compaction(status: "running" | "completed", summary: string): SessionMe
     time: { created: 1 },
   }
   if (status === "running") return { ...message, status }
-  return { ...message, status }
+  return { ...message, status, model: { id: "model", providerID: "provider" } }
 }
 
 function form(id: string, sessionID: string, title = id): FormInfo {
@@ -536,7 +536,13 @@ describe("V2 mini transport", () => {
       created: 3,
       type: "session.compaction.ended",
       durable: durable("ses_1", 3),
-      data: { sessionID: "ses_1", reason: "auto", text: "Transport", recent: "" },
+      data: {
+        sessionID: "ses_1",
+        reason: "auto",
+        model: { id: "model", providerID: "provider" },
+        text: "Transport",
+        recent: "",
+      },
     })
 
     while (!ui.commits.some((commit) => commit.phase === "final")) await Bun.sleep(0)

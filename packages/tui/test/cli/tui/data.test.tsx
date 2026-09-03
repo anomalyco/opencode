@@ -1514,7 +1514,13 @@ test("tracks session status from active sessions and execution events", async ()
       created: 3,
       type: "session.compaction.ended",
       durable: durable("session-manual", 4),
-      data: { sessionID: "session-manual", reason: "manual", text: "Streamed summary", recent: "recent" },
+      data: {
+        sessionID: "session-manual",
+        reason: "manual",
+        model: { id: "model", providerID: "provider" },
+        text: "Streamed summary",
+        recent: "recent",
+      },
     })
     await wait(() => {
       const message = data.session.message.get("session-manual", "message-compaction")
@@ -1557,7 +1563,13 @@ test("tracks session status from active sessions and execution events", async ()
       created: 0,
       type: "session.compaction.ended",
       durable: durable("session-live", 5),
-      data: { sessionID: "session-live", reason: "auto", text: "Live summary", recent: "recent" },
+      data: {
+        sessionID: "session-live",
+        reason: "auto",
+        model: { id: "model", providerID: "provider" },
+        text: "Live summary",
+        recent: "recent",
+      },
     })
     await wait(() => {
       const message = data.session.message.get("session-live", "msg_compaction_started")
@@ -1696,7 +1708,13 @@ test("restores queued compaction from durable pending input", async () => {
       created: 3,
       type: "session.compaction.ended",
       durable: durable(sessionID, 7),
-      data: { sessionID, reason: "manual", text: "Summary", recent: "" },
+      data: {
+        sessionID,
+        reason: "manual",
+        model: { id: "model", providerID: "provider" },
+        text: "Summary",
+        recent: "",
+      },
     })
     expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-compaction-later"])
 

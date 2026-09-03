@@ -49,6 +49,7 @@ describe("util.session", () => {
       type: "compaction",
       status: "completed",
       reason: "manual",
+      model: { id: "model", providerID: "provider" },
       summary: "Current state",
       recent: "",
       time: { created: 0 },

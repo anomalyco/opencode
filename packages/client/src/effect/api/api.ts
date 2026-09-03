@@ -215,7 +215,30 @@ export type SessionCreateOperation<E = never> = (input?: SessionCreateInput) => 
 
 export type SessionImportInput = {
   readonly info: Session.Info
-  readonly messages: ReadonlyArray<SessionMessage.Info>
+  readonly messages: ReadonlyArray<
+    | SessionMessage.AgentSelected
+    | SessionMessage.ModelSelected
+    | SessionMessage.LocationSwitched
+    | SessionMessage.User
+    | SessionMessage.Synthetic
+    | SessionMessage.System
+    | SessionMessage.Skill
+    | SessionMessage.Shell
+    | SessionMessage.Assistant
+    | SessionMessage.Compaction
+    | {
+        readonly type: "compaction"
+        readonly id: SessionMessage.ID
+        readonly metadata?: { readonly [x: string]: unknown } | undefined
+        readonly time: { readonly created: DateTime.Utc }
+        readonly status: "completed"
+        readonly reason: "auto" | "manual"
+        readonly model?: Model.Ref | undefined
+        readonly providerState?: SessionMessage.ProviderState | undefined
+        readonly summary: string
+        readonly recent: string
+      }
+  >
   readonly location?: Location.Ref | undefined
 }
 export type SessionImportOutput = Session.Info
@@ -965,6 +988,8 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
+            readonly model: Model.Ref
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly text: string
             readonly recent: string
           }

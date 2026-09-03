@@ -263,6 +263,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
       type: "compaction",
       status: "completed",
       reason: "auto",
+      model: resolved.ref,
       summary: "x".repeat(400_000),
       recent: "",
       time: { created: 0, completed: 0 },
