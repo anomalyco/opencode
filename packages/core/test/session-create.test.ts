@@ -232,7 +232,7 @@ describe("Session.create", () => {
         ).toMatchObject({
           time_created: before.time_created,
           time_updated: before.time_updated,
-          time_suspended: before.time_suspended,
+          execution_claimed_at: before.execution_claimed_at,
           resume_attempts: before.resume_attempts,
         })
         // Repeated resolution announces the directory's identity exactly once.

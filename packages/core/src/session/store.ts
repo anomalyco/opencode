@@ -191,7 +191,7 @@ const layer = Layer.effect(
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
+          .where(and(isNotNull(SessionTable.execution_claimed_at), isNull(SessionTable.parent_id)))
           .all()
           .pipe(
             Effect.orDie,
@@ -205,15 +205,15 @@ const layer = Layer.effect(
         // pinned so session ordering only moves on real changes.
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: Date.now(), time_updated: sql`${SessionTable.time_updated}` })
-          .where(and(eq(SessionTable.id, sessionID), isNull(SessionTable.time_suspended)))
+          .set({ execution_claimed_at: Date.now(), time_updated: sql`${SessionTable.time_updated}` })
+          .where(and(eq(SessionTable.id, sessionID), isNull(SessionTable.execution_claimed_at)))
           .run()
           .pipe(Effect.orDie)
       }),
       release: Effect.fn("SessionStore.release")(function* (sessionID) {
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .set({ execution_claimed_at: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
           .where(eq(SessionTable.id, sessionID))
           .run()
           .pipe(Effect.orDie)
@@ -221,10 +221,10 @@ const layer = Layer.effect(
       releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
         db
           .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .set({ execution_claimed_at: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
           .where(
             and(
-              isNotNull(SessionTable.time_suspended),
+              isNotNull(SessionTable.execution_claimed_at),
               isNotNull(SessionTable.parent_id),
               recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
             ),

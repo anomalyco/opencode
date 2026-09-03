@@ -772,7 +772,7 @@ function importNextDatabase(
                   path, title, version, share_url, summary_additions, summary_deletions, summary_files,
                   summary_diffs, metadata, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read,
                   tokens_cache_write, revert, permission, agent, model, time_created, time_updated, time_compacting,
-                  time_archived, time_suspended
+                  time_archived, execution_claimed_at
                 ) VALUES (
                   ${session.id}, ${projectID}, ${session.workspace_id}, ${session.parent_id},
                   ${session.fork_session_id}, ${session.fork_boundary}, ${session.slug}, ${session.directory},
