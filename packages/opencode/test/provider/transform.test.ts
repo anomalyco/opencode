@@ -938,6 +938,21 @@ describe("ProviderTransform.providerOptions", () => {
           ).toEqual({ [sdk.key]: { [sdk.option]: { type: "enabled", budgetTokens: 4000 } } })
         })
 
+        test.each(["claude-fable-5-1", "claude-opus-5"])("honors explicit binding controls for %s", (id) => {
+          const model = claude(sdk.npm, id)
+          const options = Object.freeze({
+            [sdk.option]: Object.freeze({ type: "adaptive", blockBinding: false }),
+          })
+          expect(ProviderTransform.providerOptions(model, options)).toEqual({
+            [sdk.key]: { [sdk.option]: { type: "adaptive" } },
+          })
+          expect(ProviderTransform.providerOptions(model, { [sdk.option]: { blockBinding: false } })).toEqual({
+            [sdk.key]: {},
+          })
+          const custom = { [sdk.option]: { type: "adaptive", blockBinding: { prefixMismatchBehavior: "error" } } }
+          expect(ProviderTransform.providerOptions(model, custom)).toEqual({ [sdk.key]: custom })
+        })
+
         test.each([
           ["claude-opus-5", "default"],
           ["claude-opus-5", "high"],
