@@ -363,24 +363,29 @@ describe("ModelResolver", () => {
     return withConfigEnv({}, () =>
       Effect.gen(function* () {
         const resolver = yield* ModelResolver.Service
-        yield* Effect.forEach(selections, (selection) =>
-          Effect.gen(function* () {
-            const resolved = yield* resolver.resolveModel(selection)
-            const headers = yield* resolved.model.route.auth.apply({
-              request: LLM.request({ model: resolved.model, prompt: "Hello" }),
-              method: "POST",
-              url: resolved.model.route.endpoint.baseURL ?? "",
-              body: "{}",
-              headers: Headers.fromInput(resolved.model.route.defaults.headers),
-            })
+        yield* Effect.forEach(
+          selections.flatMap((selection) =>
+            ([undefined, "summary", "provider"] as const).map((compaction) => ({ ...selection, compaction })),
+          ),
+          (selection) =>
+            Effect.gen(function* () {
+              const resolved = yield* resolver.resolveModel(selection)
+              const headers = yield* resolved.model.route.auth.apply({
+                request: LLM.request({ model: resolved.model, prompt: "Hello" }),
+                method: "POST",
+                url: resolved.model.route.endpoint.baseURL ?? "",
+                body: "{}",
+                headers: Headers.fromInput(resolved.model.route.defaults.headers),
+              })
 
-            expect(resolved.limit).toEqual(selection.limit)
-            expect(resolved.ref.providerID).toBe(selection.providerID)
-            expect(String(resolved.model.provider)).toBe(selection.canonical ?? selection.providerID)
-            expect(headers["cf-access-token"]).toBe("access-token")
-            expect(headers.authorization).toBeUndefined()
-            expect(headers["x-goog-api-key"]).toBeUndefined()
-          }),
+              expect(resolved.limit).toEqual(selection.limit)
+              expect(resolved.compaction).toBe(selection.compaction)
+              expect(resolved.ref.providerID).toBe(selection.providerID)
+              expect(String(resolved.model.provider)).toBe(selection.canonical ?? selection.providerID)
+              expect(headers["cf-access-token"]).toBe("access-token")
+              expect(headers.authorization).toBeUndefined()
+              expect(headers["x-goog-api-key"]).toBeUndefined()
+            }),
         )
       }).pipe(Effect.provide(layer)),
     )

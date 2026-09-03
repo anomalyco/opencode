@@ -136,6 +136,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
             Object.assign(model, structuredClone(base ?? model))
             if (config.family !== undefined) model.family = config.family
             if (config.name !== undefined) model.name = config.name
+            if (config.compaction !== undefined) model.compaction = config.compaction
             if (config.modelID !== undefined) model.modelID = config.modelID
             if (config.compatibility !== undefined)
               model.compatibility = { ...model.compatibility, ...config.compatibility }

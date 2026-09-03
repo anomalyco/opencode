@@ -252,6 +252,14 @@ export const CompactionCompleted = Schema.Struct({
   reason: Schema.Literals(["auto", "manual"]),
   model: Model.Ref.pipe(optional),
   providerState: ProviderState.pipe(optional),
+  /** Complete provider replacement window, JSON-encoded by the owning AI codec. */
+  replacement: Schema.Array(Schema.Json).pipe(optional),
+  /** Runtime identity, since a catalog alias can resolve to a different deployment or protocol. */
+  replacementModel: Schema.Struct({
+    provider: Schema.String,
+    id: Schema.String,
+    route: Schema.String,
+  }).pipe(optional),
   summary: Schema.String,
   recent: Schema.String,
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })

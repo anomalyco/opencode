@@ -3,7 +3,7 @@ export * as SessionCompaction from "./compaction.js"
 import { LLMClient, LLMEvent, LLMRequest, Message, type ContentPart } from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/schema/agent"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Context, Effect, Layer, Stream } from "effect"
+import { Context, Effect, Layer, Result, Schema, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform.js"
@@ -17,7 +17,7 @@ import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
 import { SessionUsage } from "./usage.js"
 import { State } from "../state.js"
-import { toLLMMessages } from "./runner/to-llm-message.js"
+import { CompactionReplacement, toLLMMessages } from "./runner/to-llm-message.js"
 import type { AgentNotFoundError } from "./error.js"
 import type { Instructions } from "../instructions/index.js"
 
@@ -136,7 +136,7 @@ export const estimateTokens = (input: RequiredInput) => {
   const last = input.messages[index]
   // Keep the anchor's local tool results: they are not covered by its provider usage.
   const added = SessionModelRequest.unsupportedParts(
-    toLLMMessages(input.messages.slice(Math.max(0, index)), input.resolved.ref),
+    toLLMMessages(input.messages.slice(Math.max(0, index)), input.resolved.ref, undefined, input.resolved.model),
     input.resolved.capabilities,
   )
     .filter((message) => message.role !== "assistant" || message.id !== last?.id)
@@ -348,14 +348,17 @@ export const layer = Layer.effect(
     })
     const execute = Effect.fn("SessionCompaction.execute")(function* (input: ExecuteInput) {
       const context = input.context
-      const history = splitHistory(context.messages, state.get().tokens)
-      if (!history)
+      const native = context.model.compaction === "provider"
+      const split = splitHistory(context.messages, state.get().tokens)
+      if (!split)
         return yield* failed({
           sessionID: context.session.id,
           reason: input.reason,
           error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
           inputID: input.inputID,
         })
+      // The provider returns the entire next window; do not prune it or append a second retained tail.
+      const history = native ? { messages: context.messages, recent: "" } : split
       if (!input.started)
         yield* bus.publish(SessionEvent.Compaction.Started, {
           sessionID: context.session.id,
@@ -368,6 +371,7 @@ export const layer = Layer.effect(
       let failure: SessionError.Error | undefined
       let usage: SessionUsage.Recorded | undefined
       let providerState: SessionMessage.ProviderState | undefined
+      let replacement: SessionMessage.CompactionCompleted["replacement"]
       const recordUsage = Effect.suspend(() =>
         usage
           ? bus.publish(SessionEvent.UsageRecorded, {
@@ -376,6 +380,18 @@ export const layer = Layer.effect(
               ...usage,
             })
           : Effect.void,
+      )
+      const interrupted = recordUsage.pipe(
+        Effect.andThen(
+          input.reason === "auto"
+            ? failed({
+                sessionID: context.session.id,
+                reason: input.reason,
+                error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+                inputID: input.inputID,
+              }).pipe(Effect.asVoid)
+            : Effect.void,
+        ),
       )
       const transcript = SessionModelRequest.baseTranscript({
         agent: context.agent.info,
@@ -397,14 +413,62 @@ export const layer = Layer.effect(
           messages: [
             ...transcript.messages,
             ...(input.instructionUpdate ? [Message.system(input.instructionUpdate)] : []),
-            Message.user(
-              buildPrompt(
-                history.messages.some((message) => message.type === "compaction" && message.status === "completed"),
-              ),
-            ),
+            ...(native
+              ? []
+              : [
+                  Message.user(
+                    buildPrompt(
+                      history.messages.some(
+                        (message) => message.type === "compaction" && message.status === "completed",
+                      ),
+                    ),
+                  ),
+                ]),
           ],
         },
       })
+      let request = prepared.request
+      if (native) {
+        if (!LLMClient.canCompact(request))
+          return yield* failed({
+            sessionID: context.session.id,
+            reason: input.reason,
+            error: {
+              type: "compaction.unavailable",
+              message: "The selected model route does not support provider compaction",
+            },
+            inputID: input.inputID,
+          })
+        const result = yield* llm.compact(request, prepared.options).pipe(
+          Effect.result,
+          Effect.onInterrupt(() => interrupted),
+        )
+        if (Result.isFailure(result))
+          return yield* failed({
+            sessionID: context.session.id,
+            reason: input.reason,
+            error: toSessionError(result.failure),
+            inputID: input.inputID,
+          })
+        usage = SessionUsage.record(result.success.usage, context.model.cost)
+        const encoded = yield* Schema.encodeEffect(CompactionReplacement)(result.success.replacement).pipe(
+          Effect.result,
+        )
+        if (Result.isFailure(encoded)) {
+          yield* recordUsage
+          return yield* failed({
+            sessionID: context.session.id,
+            reason: input.reason,
+            error: { type: "compaction.failed", message: "Provider compaction returned an invalid replacement window" },
+            inputID: input.inputID,
+          })
+        }
+        replacement = encoded.success
+        // Keep the readable UI and a portable model-switch fallback, but resume from the provider window.
+        request = LLMRequest.update(request, {
+          messages: [...result.success.replacement, Message.user(buildPrompt(false))],
+        })
+      }
       // Ignored tool calls never enter the follow-up history or need fabricated results.
       for (let attempt = 0; attempt < 2; attempt++) {
         chunks.length = 0
@@ -412,10 +476,10 @@ export const layer = Layer.effect(
         yield* llm
           .stream(
             attempt === 0
-              ? prepared.request
-              : LLMRequest.update(prepared.request, {
+              ? request
+              : LLMRequest.update(request, {
                   messages: [
-                    ...prepared.request.messages,
+                    ...request.messages,
                     Message.user(
                       "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template.",
                     ),
@@ -438,10 +502,12 @@ export const layer = Layer.effect(
                 })
               }
               if (LLMEvent.is.stepFinish(event)) {
-                providerState =
-                  event.providerMetadata?.[
-                    context.model.model.route.providerMetadataKey ?? context.model.model.provider
-                  ]
+                // The display summary is not part of a native checkpoint's continuation chain.
+                if (!native)
+                  providerState =
+                    event.providerMetadata?.[
+                      context.model.model.route.providerMetadataKey ?? context.model.model.provider
+                    ]
                 const step = SessionUsage.record(event.usage, context.model.cost)
                 usage = usage ? SessionUsage.add(usage, step) : step
               }
@@ -452,20 +518,7 @@ export const layer = Layer.effect(
                 failure = toSessionError(error)
               }),
             ),
-            Effect.onInterrupt(() =>
-              recordUsage.pipe(
-                Effect.andThen(
-                  input.reason === "auto"
-                    ? failed({
-                        sessionID: context.session.id,
-                        reason: input.reason,
-                        error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
-                        inputID: input.inputID,
-                      }).pipe(Effect.asVoid)
-                    : Effect.void,
-                ),
-              ),
-            ),
+            Effect.onInterrupt(() => interrupted),
           )
         if (failure || hasSummarySection(chunks.join(""))) break
       }
@@ -490,6 +543,10 @@ export const layer = Layer.effect(
         reason: input.reason,
         model: context.model.ref,
         providerState,
+        replacement,
+        replacementModel: replacement
+          ? { provider: request.model.provider, id: request.model.id, route: request.model.route.id }
+          : undefined,
         text: summary,
         recent: history.recent,
       })

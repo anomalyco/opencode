@@ -967,6 +967,10 @@ export type SessionLogOutput =
             readonly reason: "auto" | "manual"
             readonly model?: Model.Ref | undefined
             readonly providerState?: SessionMessage.ProviderState | undefined
+            readonly replacement?: ReadonlyArray<Schema.Json> | undefined
+            readonly replacementModel?:
+              | { readonly provider: string; readonly id: string; readonly route: string }
+              | undefined
             readonly text: string
             readonly recent: string
           }

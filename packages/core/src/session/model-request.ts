@@ -100,7 +100,7 @@ export const baseTranscript = (input: {
     ]
       .filter((part) => part.length > 0)
       .map(SystemPart.make),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey, input.model.model),
   }
 }
 

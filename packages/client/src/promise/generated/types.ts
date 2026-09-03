@@ -179,6 +179,8 @@ export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: nu
 
 export type SessionInterruptResponse = { interrupted: boolean }
 
+export type ModelCompaction = "summary" | "provider"
+
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
 export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
@@ -519,6 +521,8 @@ export type SessionMessageCompactionCompleted = {
   reason: "auto" | "manual"
   model?: ModelRef
   providerState?: SessionMessageProviderState
+  replacement?: Array<JsonValue>
+  replacementModel?: { provider: string; id: string; route: string }
   summary: string
   recent: string
 }
@@ -1355,6 +1359,8 @@ export type SessionCompactionEnded = {
     reason: "auto" | "manual"
     model?: ModelRef
     providerState?: SessionMessageProviderState1
+    replacement?: Array<JsonValue>
+    replacementModel?: { provider: string; id: string; route: string }
     text: string
     recent: string
   }
@@ -1820,6 +1826,7 @@ export type ModelInfo = {
   canonical?: string
   family?: string
   name: string
+  compaction?: ModelCompaction
   compatibility?: ModelCompatibility
   package?: string
   settings?: { [x: string]: any }
@@ -2008,6 +2015,7 @@ export type ConfigEntry =
                 modelID?: string
                 family?: string
                 name?: string
+                compaction?: ModelCompaction
                 compatibility?: ModelCompatibility
                 package?: string
                 settings?: { [x: string]: JsonValue }
@@ -3075,6 +3083,8 @@ export type SessionImportInput = {
               readonly reason: "auto" | "manual"
               readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
               readonly providerState?: { readonly [x: string]: JsonValue }
+              readonly replacement?: ReadonlyArray<JsonValue>
+              readonly replacementModel?: { readonly provider: string; readonly id: string; readonly route: string }
               readonly summary: string
               readonly recent: string
             }
@@ -3354,6 +3364,8 @@ export type SessionImportInput = {
               readonly reason: "auto" | "manual"
               readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
               readonly providerState?: { readonly [x: string]: JsonValue }
+              readonly replacement?: ReadonlyArray<JsonValue>
+              readonly replacementModel?: { readonly provider: string; readonly id: string; readonly route: string }
               readonly summary: string
               readonly recent: string
             }
@@ -3633,6 +3645,8 @@ export type SessionImportInput = {
               readonly reason: "auto" | "manual"
               readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
               readonly providerState?: { readonly [x: string]: JsonValue }
+              readonly replacement?: ReadonlyArray<JsonValue>
+              readonly replacementModel?: { readonly provider: string; readonly id: string; readonly route: string }
               readonly summary: string
               readonly recent: string
             }

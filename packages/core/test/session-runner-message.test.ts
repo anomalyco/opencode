@@ -1,16 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { Message } from "@opencode-ai/ai"
+import { CompactionPart, LanguageModel, Message, ProviderID } from "@opencode-ai/ai"
+import { OpenAIChat, OpenAIResponses } from "@opencode-ai/ai/protocols"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { AgentAttachment, Base64, FileAttachment, SkillAttachment } from "@opencode-ai/schema/prompt"
 import { Skill } from "@opencode-ai/schema/skill"
-import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
+import { CompactionReplacement, toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { Agent } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
 import { Location } from "@opencode-ai/schema/location"
 import { AbsolutePath } from "@opencode-ai/schema/schema"
-import { DateTime } from "effect"
+import { DateTime, Schema } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 
@@ -18,8 +19,131 @@ const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
 const build = Agent.defaultID
+const runtime = LanguageModel.make({ id: "api-model", provider: "provider", route: OpenAIResponses.route })
+const replacementModel = { provider: runtime.provider, id: runtime.id, route: runtime.route.id }
 
 describe("toLLMMessages", () => {
+  test("replays the entire native replacement and subsequent messages after JSON persistence", () => {
+    const replacement = [
+      Message.make({
+        role: "user",
+        providerMetadata: { openai: { itemId: "retained", type: "message", status: "completed" } },
+        content: [
+          { type: "text", text: "Retained context" },
+          {
+            type: "media",
+            mediaType: "image/png",
+            data: "https://example.com/image.png",
+            providerMetadata: { openai: { detail: "high" } },
+          },
+        ],
+      }),
+      Message.assistant(
+        CompactionPart.make({ provider: ProviderID.make("provider"), id: "cmp_1", encrypted: "opaque-state" }),
+      ),
+      Message.make({
+        role: "assistant",
+        providerMetadata: { openai: { itemId: "retained_assistant", phase: "commentary" } },
+        content: [
+          {
+            type: "reasoning",
+            text: "Retained reasoning",
+            providerMetadata: { openai: { reasoningEncryptedContent: "reasoning-state" } },
+          },
+        ],
+      }),
+    ]
+    const checkpoint = SessionMessage.CompactionCompleted.make({
+      id: id("native-checkpoint"),
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
+      model,
+      summary: "Portable summary",
+      recent: "",
+      replacement: Schema.encodeSync(CompactionReplacement)(replacement),
+      replacementModel,
+      time: { created },
+    })
+    const codec = Schema.fromJsonString(SessionMessage.CompactionCompleted)
+    const persisted = Schema.decodeSync(codec)(Schema.encodeSync(codec)(checkpoint))
+    const user = SessionMessage.User.make({ id: id("after-native"), type: "user", text: "Continue", time: { created } })
+
+    expect(toLLMMessages([persisted, user], model, "openai", runtime)).toEqual([
+      ...replacement,
+      Message.make({ id: user.id, role: "user", content: user.text, metadata: {} }),
+    ])
+  })
+
+  test("normalizes undefined provider metadata while persisting the complete replacement", () => {
+    const message = Message.make({
+      role: "user",
+      content: "Retained input",
+      providerMetadata: { openai: { itemId: "retained", status: "completed", phase: undefined } },
+    })
+    const encoded = Schema.encodeSync(CompactionReplacement)([message])
+    expect(encoded).toEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "Retained input" }],
+        providerMetadata: { openai: { itemId: "retained", status: "completed" } },
+      },
+    ])
+    expect(Schema.decodeUnknownSync(CompactionReplacement)(encoded)[0].content).toEqual(message.content)
+  })
+
+  for (const scenario of [
+    "model",
+    "provider",
+    "missing-model",
+    "malformed",
+    "empty",
+    "missing-runtime",
+    "api-model",
+    "api-provider",
+    "route",
+  ] as const) {
+    test(`uses the portable summary for a ${scenario} native checkpoint mismatch`, () => {
+      const replacement = Schema.encodeSync(CompactionReplacement)([
+        Message.assistant(CompactionPart.make({ provider: ProviderID.make("provider"), encrypted: "opaque-state" })),
+      ])
+      const checkpoint = SessionMessage.CompactionCompleted.make({
+        id: id(`native-${scenario}`),
+        type: "compaction",
+        status: "completed",
+        reason: "manual",
+        model: scenario === "missing-model" ? undefined : model,
+        replacementModel: scenario === "missing-runtime" ? undefined : replacementModel,
+        summary: "Portable summary",
+        recent: "Recent context",
+        time: { created },
+        replacement:
+          scenario === "malformed"
+            ? [{ role: "assistant", content: [{ type: "compaction", encrypted: 123 }] }]
+            : scenario === "empty"
+              ? []
+              : replacement,
+      })
+      const selected =
+        scenario === "model"
+          ? { ...model, id: Model.ID.make("other-model") }
+          : scenario === "provider"
+            ? { ...model, providerID: Provider.ID.make("other-provider") }
+            : model
+      const active = LanguageModel.make({
+        id: scenario === "api-model" ? "other-api-model" : runtime.id,
+        provider: scenario === "api-provider" ? "other-api-provider" : runtime.provider,
+        route: scenario === "route" ? OpenAIChat.route : runtime.route,
+      })
+      const actual = toLLMMessages([checkpoint], selected, "openai", active)
+
+      expect(actual).toEqual(toLLMMessages([{ ...checkpoint, replacement: undefined }], selected))
+      expect(JSON.stringify(actual)).toContain("Portable summary")
+      expect(JSON.stringify(actual)).toContain("Recent context")
+      expect(JSON.stringify(actual)).not.toContain("opaque-state")
+    })
+  }
+
   test("background user shells enter model context only through their completion notification", () => {
     const shell = SessionMessage.Shell.make({
       id: id("background-shell"),

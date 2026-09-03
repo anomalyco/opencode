@@ -1059,6 +1059,8 @@ export function createData(config: CreateDataInput) {
               reason: event.data.reason,
               model: event.data.model,
               providerState: event.data.providerState,
+              replacement: event.data.replacement,
+              replacementModel: event.data.replacementModel,
               summary: event.data.text,
               recent: event.data.recent,
             })
@@ -1071,6 +1073,8 @@ export function createData(config: CreateDataInput) {
             reason: event.data.reason,
             model: event.data.model,
             providerState: event.data.providerState,
+            replacement: event.data.replacement,
+            replacementModel: event.data.replacementModel,
             summary: event.data.text,
             recent: event.data.recent,
             time: { created: event.created },

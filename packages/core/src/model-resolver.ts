@@ -69,6 +69,8 @@ export interface Resolved {
   readonly cost: Info["cost"]
   /** Catalog token limits used by Core for context management. */
   readonly limit: Info["limit"]
+  /** When omitted, use OpenCode summary compaction. */
+  readonly compaction?: Info["compaction"]
 }
 
 export interface Interface {
@@ -296,6 +298,7 @@ export const layer = Layer.effect(
         capabilities: selected.capabilities,
         cost: selected.cost,
         limit: selected.limit,
+        compaction: runtimeInfo.compaction,
       }
     })
     return Service.of({

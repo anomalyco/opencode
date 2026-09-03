@@ -1,4 +1,11 @@
-import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
+import {
+  Message,
+  ToolCallPart,
+  ToolResultPart,
+  type ContentPart,
+  type LanguageModel,
+  type ProviderMetadata,
+} from "@opencode-ai/ai"
 import type { Model } from "@opencode-ai/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
@@ -6,6 +13,13 @@ import { SessionMessage } from "../message.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
+
+// The AI JSON codec also omits undefined values inside opaque provider metadata.
+export const CompactionReplacement = Schema.fromJsonString(Schema.Array(Schema.Json)).pipe(
+  Schema.flip,
+  Schema.decodeTo(Schema.fromJsonString(Schema.Array(Message).check(Schema.isMinLength(1)))),
+)
+const decodeReplacement = Schema.decodeUnknownOption(CompactionReplacement)
 
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
@@ -221,7 +235,12 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Info,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  runtime?: LanguageModel,
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -274,6 +293,19 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       return assistant(message, model, providerMetadataKey)
     case "compaction":
       if (message.status !== "completed") return []
+      if (
+        message.replacement !== undefined &&
+        message.model?.providerID === model.providerID &&
+        message.model.id === model.id &&
+        runtime?.route.compact !== undefined &&
+        message.replacementModel?.provider === runtime.provider &&
+        message.replacementModel.id === runtime.id &&
+        message.replacementModel.route === runtime.route.id
+      ) {
+        const replacement = decodeReplacement(message.replacement)
+        if (Option.isSome(replacement)) return [...replacement.value]
+      }
+      // Other models and unrecognized checkpoint formats use the portable summary.
       return [
         Message.make({
           id: message.id,
@@ -300,4 +332,5 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+  runtime?: LanguageModel,
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey, runtime))

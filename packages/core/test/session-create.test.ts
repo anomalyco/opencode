@@ -578,6 +578,41 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("copies native checkpoints into forks and removes them when reverting before the checkpoint", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const store = yield* SessionStore.Service
+      const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+      const parent = yield* session.create({ location, model })
+      yield* session.prompt({ sessionID: parent.id, text: "Original conversation", resume: false })
+      yield* SessionInbox.promote(database.db, bus, parent.id, "steer")
+      const replacementModel = { provider: "provider", id: "upstream-model", route: "openai-responses" }
+      const replacement = [
+        { role: "user", content: [{ type: "text", text: "Retained input" }] },
+        { role: "assistant", content: [{ type: "compaction", provider: "provider", encrypted: "opaque-checkpoint" }] },
+      ]
+      yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: parent.id, reason: "manual", recent: "" })
+      yield* bus.publish(SessionEvent.Compaction.Ended, {
+        sessionID: parent.id,
+        reason: "manual",
+        model,
+        replacement,
+        replacementModel,
+        text: "## Objective\n- Portable summary",
+        recent: "",
+      })
+      const fork = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+      const context = yield* store.context(fork.id)
+      expect(context).toMatchObject([{ type: "compaction", status: "completed", model, replacement, replacementModel }])
+
+      yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID: fork.id, to: context[0].id })
+      expect(yield* store.context(fork.id)).toMatchObject([{ type: "user", text: "Original conversation" }])
+      expect(yield* store.context(parent.id)).toMatchObject([{ type: "compaction", replacement }])
+    }),
+  )
+
   it.effect("replays a fork with stable projected identities", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -1244,6 +1279,9 @@ describe("SessionTransfer", () => {
       const completedCompactionID = SessionMessage.ID.create()
       const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
       const providerState = { responseId: "summary-response" }
+      const replacement = [
+        { role: "assistant", content: [{ type: "compaction", provider: "provider", encrypted: "opaque-checkpoint" }] },
+      ]
 
       yield* transfer.import({
         data: {
@@ -1300,6 +1338,7 @@ describe("SessionTransfer", () => {
               reason: "manual",
               model,
               providerState,
+              replacement,
               summary: "summary",
               recent: "recent",
               time: { created: DateTime.makeUnsafe(9) },
@@ -1316,11 +1355,18 @@ describe("SessionTransfer", () => {
         completedCompactionID,
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
-      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ model, providerState })
-      expect((yield* transfer.export({ sessionID, sanitize: true })).messages.at(-1)).toMatchObject({
+      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({
+        model,
+        providerState,
+        replacement,
+      })
+      const sanitized = yield* transfer.export({ sessionID, sanitize: true })
+      expect(sanitized.messages.at(-1)).toMatchObject({
         model,
         providerState: { redacted: `compaction-provider-state:${completedCompactionID}` },
       })
+      expect(JSON.parse(JSON.stringify(sanitized)).messages.at(-1)).not.toHaveProperty("replacement")
+      expect(JSON.stringify(sanitized)).not.toContain("opaque-checkpoint")
     }),
   )
 

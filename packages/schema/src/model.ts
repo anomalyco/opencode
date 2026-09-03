@@ -41,6 +41,9 @@ export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
+export const Compaction = Schema.Literals(["summary", "provider"]).annotate({ identifier: "Model.Compaction" })
+export type Compaction = typeof Compaction.Type
+
 export type ReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 export const ReasoningField: Schema.Codec<ReasoningField> = Schema.Union([
   Schema.Literals(["reasoning", "reasoning_content", "reasoning_text"]),
@@ -104,6 +107,8 @@ export const Info = Schema.Struct({
   canonical: Provider.ID.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String,
+  /** When omitted, use OpenCode summary compaction. */
+  compaction: Compaction.pipe(optional),
   compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
   ...Provider.Overlays,
