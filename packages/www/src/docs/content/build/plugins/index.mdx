@@ -717,7 +717,8 @@ Read the skills available at a location.
 const skills = await ctx.skill.list()
 ```
 
-Register a transform to inspect, add, update, or remove skills.
+Register a transform to inspect, add, update, or remove skills. `get(id)` returns the current editor entry, or `undefined`
+when the skill is absent.
 
 ```ts
 await ctx.skill.transform((editor) => {
@@ -729,6 +730,7 @@ await ctx.skill.transform((editor) => {
     location: "/workspace/.opencode/skills/review.md",
     content: "Review the current changes for correctness and missing tests.",
   })
+  const review = editor.get("review")
   editor.update("review", (skill) => {
     skill.autoinvoke = true
   })
@@ -755,6 +757,7 @@ interface SkillContext {
 
 interface SkillEditor {
   list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
   add(skill: SkillInfo): void
   update(id: string, update: (skill: SkillInfo) => void): void
   remove(id: string): void

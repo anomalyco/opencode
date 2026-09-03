@@ -407,6 +407,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
         skill.transform((editor) => {
           callback({
             list: () => mutable(editor.list()),
+            get: editor.get,
             add: (value) => editor.add(Schema.decodeUnknownSync(Skill.Info)(value)),
             update: editor.update,
             remove: editor.remove,

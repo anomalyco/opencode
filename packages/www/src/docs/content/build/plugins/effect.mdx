@@ -747,7 +747,8 @@ effect: (ctx) =>
   }),
 ```
 
-Transform and reload skills. Use the re-exported Effect schema constructors for branded values.
+Transform and reload skills. Use the re-exported Effect schema constructors for branded values. `get(id)` returns the
+current editor entry, or `undefined` when the skill is absent.
 
 ```ts
 effect: (ctx) =>
@@ -761,6 +762,7 @@ effect: (ctx) =>
         location: "/workspace/.opencode/skills/review.md",
         content: "Review the current changes for correctness and missing tests.",
       }))
+      const review = editor.get("review")
       editor.update("review", (item) => (item.autoinvoke = true))
       editor.remove("legacy")
     })
@@ -773,6 +775,7 @@ Schema: [`Skill.Info`](/api#schema-Skill.Info).
 ```ts
 interface SkillEditor {
   list(): readonly Types.DeepMutable<Skill.Info>[]
+  get(id: string): Types.DeepMutable<Skill.Info> | undefined
   add(skill: Skill.Info): void
   update(id: string, update: (skill: Types.DeepMutable<Skill.Info>) => void): void
   remove(id: string): void
