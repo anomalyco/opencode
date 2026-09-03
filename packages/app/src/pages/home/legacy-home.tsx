@@ -2,6 +2,7 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { type ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -11,7 +12,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useNavigate } from "@solidjs/router"
 import { DateTime } from "luxon"
-import { createMemo, For, Match, Switch } from "solid-js"
+import { createMemo, createResource, For, Match, Show, Switch } from "solid-js"
 
 export function LegacyHome() {
   const sync = useServerSync()
@@ -21,6 +22,8 @@ export function LegacyHome() {
   const global = useGlobal()
   const server = useServer()
   const language = useLanguage()
+  const platform = usePlatform()
+  const [modLoader] = createResource(() => platform.mods?.status())
   const homedir = createMemo(() => sync().data.path.home)
   const serverUnreachable = createMemo(() => global.servers.health[server.key]?.healthy === false)
   const recent = createMemo(() => {
@@ -68,6 +71,9 @@ export function LegacyHome() {
   return (
     <div class="mx-auto mt-55 w-full md:w-auto px-4">
       <Logo class="md:w-xl opacity-12" />
+      <Show when={modLoader()?.enabled}>
+        <div class="mt-2 text-center text-12-medium text-text-weak">Mod Loader v{modLoader()!.version}</div>
+      </Show>
       <Button
         size="large"
         variant="ghost"

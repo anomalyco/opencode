@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show, type Accessor, type JSX } from "solid-js"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -31,9 +31,16 @@ export const SidebarContent = (props: {
   helpLabel: Accessor<string>
   onOpenHelp: () => void
   renderPanel: () => JSX.Element
+  renderModItems?: (actions: {
+    active: Accessor<{ modID: string; panelID: string } | undefined>
+    open: (modID: string, panelID: string) => void
+    close: () => void
+  }) => JSX.Element
+  renderModPanel?: (panel: { modID: string; panelID: string }) => JSX.Element
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
+  const [modPanel, setModPanel] = createSignal<{ modID: string; panelID: string }>()
   let panel: HTMLDivElement | undefined
 
   createEffect(() => {
@@ -66,6 +73,11 @@ export const SidebarContent = (props: {
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>
+              {props.renderModItems?.({
+                active: modPanel,
+                open: (modID, panelID) => setModPanel({ modID, panelID }),
+                close: () => setModPanel(),
+              })}
               <Tooltip
                 placement={placement()}
                 value={
@@ -118,7 +130,9 @@ export const SidebarContent = (props: {
         classList={{ "flex-1 flex h-full min-h-0 min-w-0 overflow-hidden": true, "pointer-events-none": !expanded() }}
         aria-hidden={!expanded()}
       >
-        {props.renderPanel()}
+        <Show when={modPanel()} keyed fallback={props.renderPanel()}>
+          {(item) => props.renderModPanel?.(item)}
+        </Show>
       </div>
     </div>
   )

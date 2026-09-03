@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, globalShortcut } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
@@ -49,6 +49,7 @@ import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
+import { createModManager, registerModProtocol } from "./mods"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -270,6 +271,14 @@ const main = Effect.gen(function* () {
   )
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
+  const mods = createModManager(app.getVersion())
+  yield* Effect.promise(() => mods.reload())
+  registerModProtocol(mods)
+  globalShortcut.register("CommandOrControl+Shift+Alt+M", () => {
+    mods.setSafeMode(!mods.safeMode())
+    BrowserWindow.getAllWindows().forEach((win) => win.webContents.reload())
+  })
+  app.once("will-quit", () => globalShortcut.unregister("CommandOrControl+Shift+Alt+M"))
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)
   const menuDeps = {
@@ -310,6 +319,7 @@ const main = Effect.gen(function* () {
     setNativeTranslations: (bundle) => {
       if (setNativeTranslations(bundle)) createMenu(menuDeps)
     },
+    mods,
   })
   registerWslIpcHandlers(wslServers)
   void updater.start()
@@ -378,6 +388,8 @@ const main = Effect.gen(function* () {
     const { listener, health } = yield* Effect.promise(() =>
       spawnLocalServer(hostname, port, password, {
         userDataPath: app.getPath("userData"),
+        modPlugins: mods.serverEntries(),
+        shareProductionDatabase: mods.shareProductionDatabase(),
         onStdout: (message) => writeLog("server", "stdout", { message }),
         onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
         onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),

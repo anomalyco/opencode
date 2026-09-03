@@ -1,0 +1,16 @@
+{
+  "id": "share-production-chats",
+  "name": "Share production chats",
+  "version": "0.1.0",
+  "description": "Lets a development Desktop install use the production session database.",
+  "engines": {
+    "opencode": "^1.18.0"
+  },
+  "permissions": ["server.database"],
+  "entry": "index.html",
+  "contributes": {
+    "database": {
+      "source": "production"
+    }
+  }
+}

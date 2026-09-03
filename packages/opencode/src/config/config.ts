@@ -489,6 +489,24 @@ const layer = Layer.effect(
           yield* Effect.logDebug("loaded custom config from OPENCODE_CONFIG_CONTENT")
         }
 
+        const desktopModPlugins = (() => {
+          try {
+            const value = JSON.parse(process.env.OPENCODE_DESKTOP_MOD_PLUGINS ?? "")
+            if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) return []
+            return value
+          } catch {
+            return []
+          }
+        })()
+        if (desktopModPlugins.length) {
+          yield* mergePluginOrigins(
+            "OPENCODE_DESKTOP_MOD_PLUGINS",
+            desktopModPlugins.map((spec) => pathToFileURL(spec).href),
+            "global",
+          )
+          yield* Effect.logDebug("loaded desktop MOD plugins", { count: desktopModPlugins.length })
+        }
+
         const activeAccount = Option.getOrUndefined(
           yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
         )
