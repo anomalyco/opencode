@@ -227,11 +227,6 @@
   width: 100%;
   margin-top: 24px;
 
-  [data-component="markdown"] {
-    font-size: 13px;
-    line-height: var(--line-height-base);
-  }
-
   [data-slot="text-part-body"] {
     margin-top: 0;
   }
