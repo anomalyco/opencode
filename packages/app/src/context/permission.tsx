@@ -117,14 +117,13 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     onCleanup(() => states.forEach((value) => value.dispose()))
 
-    let lastSelected: PermissionState | undefined
     const selected = () => {
+      const list = global.servers.list()
       const key = activeServer()
-      if (global.servers.list().some((conn) => ServerConnection.key(conn) === key)) {
-        lastSelected = ensure(key)
-      }
-      if (lastSelected) return lastSelected
-      return ensure(server.key)
+      if (list.some((conn) => ServerConnection.key(conn) === key)) return ensure(key)
+      const conn = list.find((conn) => ServerConnection.key(conn) === server.key) ?? list[0]
+      if (!conn) throw new Error("Permission server not found")
+      return ensure(ServerConnection.key(conn))
     }
     const activeDirectory = createMemo(() => {
       const directory = decode64(params.dir)
