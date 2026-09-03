@@ -254,6 +254,87 @@ describe("RuntimeFlags", () => {
     }),
   )
 
+  it.effect("experimentalLengthNudge defaults to false", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+
+      expect(flags.experimentalLengthNudge).toBe(false)
+    }),
+  )
+
+  it.effect("experimentalLengthNudge reads OPENCODE_EXPERIMENTAL_LENGTH_NUDGE", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(
+        Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_LENGTH_NUDGE: "true" })),
+      )
+
+      expect(flags.experimentalLengthNudge).toBe(true)
+    }),
+  )
+
+  it.effect("experimentalLengthNudge inherits OPENCODE_EXPERIMENTAL", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(
+        Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL: "true" })),
+      )
+
+      expect(flags.experimentalLengthNudge).toBe(true)
+    }),
+  )
+
+  for (const input of [
+    { name: "absent", config: {}, expected: undefined },
+    {
+      name: "valid positive integer",
+      config: { OPENCODE_EXPERIMENTAL_LENGTH_NUDGE_MAX: "5" },
+      expected: 5,
+    },
+    {
+      name: "invalid string",
+      config: { OPENCODE_EXPERIMENTAL_LENGTH_NUDGE_MAX: "nope" },
+      expected: undefined,
+    },
+    { name: "zero", config: { OPENCODE_EXPERIMENTAL_LENGTH_NUDGE_MAX: "0" }, expected: undefined },
+    {
+      name: "negative",
+      config: { OPENCODE_EXPERIMENTAL_LENGTH_NUDGE_MAX: "-1" },
+      expected: undefined,
+    },
+    {
+      name: "non-integer",
+      config: { OPENCODE_EXPERIMENTAL_LENGTH_NUDGE_MAX: "1.5" },
+      expected: undefined,
+    },
+  ]) {
+    it.effect(`parses lengthNudgeMax from config: ${input.name}`, () =>
+      Effect.gen(function* () {
+        const flags = yield* readFlags.pipe(Effect.provide(fromConfig(input.config)))
+
+        expect(flags.lengthNudgeMax).toBe(input.expected)
+      }),
+    )
+  }
+
+  it.effect("lengthNudgePrompt defaults to the standard nudge text", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+
+      expect(flags.lengthNudgePrompt).toBe(
+        "Your previous response was cut off by the output token limit before it finished. Continue the task from where you stopped. Do not repeat work that is already complete.",
+      )
+    }),
+  )
+
+  it.effect("lengthNudgePrompt reads OPENCODE_EXPERIMENTAL_LENGTH_NUDGE_PROMPT", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(
+        Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_LENGTH_NUDGE_PROMPT: "Keep going." })),
+      )
+
+      expect(flags.lengthNudgePrompt).toBe("Keep going.")
+    }),
+  )
+
   for (const input of [
     { name: "absent", config: {}, expected: undefined },
     {
