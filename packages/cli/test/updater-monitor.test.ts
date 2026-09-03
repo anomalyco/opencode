@@ -6,7 +6,7 @@ import { Updater } from "../src/services/updater"
 
 const it = testEffect(Layer.empty)
 
-it.effect("checks after 10 minutes and every 10 minutes after that", () =>
+it.effect("checks after 90 seconds and every 10 minutes after that", () =>
   Effect.gen(function* () {
     const updates = yield* Queue.unbounded<string>()
     yield* Updater.monitorUpdates({
@@ -16,7 +16,9 @@ it.effect("checks after 10 minutes and every 10 minutes after that", () =>
 
     yield* Effect.yieldNow
     expect(yield* Queue.size(updates)).toBe(0)
-    yield* TestClock.adjust("10 minutes")
+    yield* TestClock.adjust("89 seconds")
+    expect(yield* Queue.size(updates)).toBe(0)
+    yield* TestClock.adjust("1 second")
     expect(yield* Queue.take(updates)).toBe("2.0.0")
     yield* Effect.yieldNow
     yield* TestClock.adjust("10 minutes")

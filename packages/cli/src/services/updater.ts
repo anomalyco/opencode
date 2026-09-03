@@ -21,14 +21,16 @@ export interface Interface {
 export const monitorUpdates = Effect.fnUntraced(function* (input: {
   readonly inspect: () => Effect.Effect<string | undefined, Error>
   readonly notify: (version: string) => Effect.Effect<void>
+  readonly initialDelay?: Duration.Input
   readonly interval?: Duration.Input
 }) {
   const interval = input.interval ?? "10 minutes"
+  const initialDelay = input.initialDelay ?? "90 seconds"
   const check = Effect.gen(function* () {
     const version = yield* input.inspect()
     if (version !== undefined) yield* input.notify(version)
   }).pipe(Effect.catch((error) => Effect.logWarning("update check failed", { error })))
-  return yield* check.pipe(Effect.repeat(Schedule.spaced(interval)), Effect.delay(interval))
+  return yield* check.pipe(Effect.repeat(Schedule.spaced(interval)), Effect.delay(initialDelay))
 })
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
