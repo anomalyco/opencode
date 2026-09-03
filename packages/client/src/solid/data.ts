@@ -137,14 +137,14 @@ function formRequestOptions(sessionID: string, ref?: LocationRef) {
 }
 
 function createSync() {
-  type Pending = { promise: Promise<void>; invalidated: boolean }
+  type Pending = { promise: Promise<void>; invalidated: boolean; current?: () => boolean }
   const state = new Map<string, true | Pending>()
-  const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
-    const entry: Pending = { promise: Promise.resolve(), invalidated: false }
+  const start = (key: string, load: () => Promise<void>, current?: () => boolean, wait?: Promise<void>) => {
+    const entry: Pending = { promise: Promise.resolve(), invalidated: false, current }
     state.set(key, entry)
     entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
       .then(() => {
-        if (state.get(key) === entry && !entry.invalidated) state.set(key, true)
+        if (state.get(key) === entry && !entry.invalidated && current?.() !== false) state.set(key, true)
       })
       .finally(() => {
         if (state.get(key) === entry) state.delete(key)
@@ -152,12 +152,12 @@ function createSync() {
     return entry.promise
   }
   return {
-    run(key: string, load: () => Promise<void>) {
+    run(key: string, load: () => Promise<void>, current?: () => boolean) {
       const active = state.get(key)
       if (active === true) return Promise.resolve()
-      if (!active) return start(key, load)
+      if (!active) return start(key, load, current)
       if (!active.invalidated) return active.promise
-      return start(key, load, active.promise)
+      return start(key, load, current, active.promise)
     },
     complete(key: string) {
       if (state.has(key)) return
@@ -170,17 +170,21 @@ function createSync() {
       const active = state.get(key)
       return active !== undefined && active !== true
     },
+    // Reports whether the key held loaded or in-flight state, so event handlers can refresh
+    // only data a consumer has actually loaded.
     invalidate(key?: string) {
       if (key) {
         const active = state.get(key)
         if (active === true) state.delete(key)
         if (active !== undefined && active !== true) active.invalidated = true
-        return
+        // An obsolete pending catalog must not admit a fresh event-driven load after release.
+        return active !== undefined && (active === true || active.current?.() !== false)
       }
       state.forEach((active, current) => {
         if (active === true) state.delete(current)
         if (active !== true) active.invalidated = true
       })
+      return true
     },
   }
 }
@@ -213,6 +217,8 @@ export function createData(config: CreateDataInput) {
   )
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
+  const holds = new Map<string, number>()
+  const locationGeneration = new Map<string, number>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -1095,13 +1101,14 @@ export function createData(config: CreateDataInput) {
         return
     }
 
+    // Event-driven refreshes reload only catalogs a consumer has loaded or is loading. Released
+    // locations keep light metadata; their catalogs reload when a consumer next syncs them.
     if (event.type === "credential.updated" || event.type === "credential.switched") {
       Object.keys(store.location).forEach((key) => {
         const ref = JSON.parse(key) as [string, string | null]
         const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
         if (event.type === "credential.updated") {
-          result.location.integration.invalidate(location)
-          void result.location.integration.sync(location)
+          if (result.location.integration.invalidate(location)) void result.location.integration.sync(location)
           return
         }
         setStore("location", key, (data) => ({
@@ -1118,9 +1125,8 @@ export function createData(config: CreateDataInput) {
             }
           }),
         }))
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+        if (result.location.model.invalidate(location)) void result.location.model.sync(location)
+        if (result.location.provider.invalidate(location)) void result.location.provider.sync(location)
       })
       return
     }
@@ -1129,21 +1135,17 @@ export function createData(config: CreateDataInput) {
     const location = event.location
     switch (event.type) {
       case "catalog.updated":
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+        if (result.location.model.invalidate(location)) void result.location.model.sync(location)
+        if (result.location.provider.invalidate(location)) void result.location.provider.sync(location)
         break
       case "agent.updated":
-        result.location.agent.invalidate(location)
-        void result.location.agent.sync(location)
+        if (result.location.agent.invalidate(location)) void result.location.agent.sync(location)
         break
       case "command.updated":
-        result.location.command.invalidate(location)
-        void result.location.command.sync(location)
+        if (result.location.command.invalidate(location)) void result.location.command.sync(location)
         break
       case "skill.updated":
-        result.location.skill.invalidate(location)
-        void result.location.skill.sync(location)
+        if (result.location.skill.invalidate(location)) void result.location.skill.sync(location)
         break
       case "vcs.branch.updated":
         setStore("location", locationKey(location), (data) => ({
@@ -1184,14 +1186,9 @@ export function createData(config: CreateDataInput) {
         void result.location.reference.sync(location)
         break
       case "integration.updated":
-        result.location.integration.invalidate(location)
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        void Promise.all([
-          result.location.integration.sync(location),
-          result.location.model.sync(location),
-          result.location.provider.sync(location),
-        ])
+        if (result.location.integration.invalidate(location)) void result.location.integration.sync(location)
+        if (result.location.model.invalidate(location)) void result.location.model.sync(location)
+        if (result.location.provider.invalidate(location)) void result.location.provider.sync(location)
         break
       case "config.updated":
       case "websearch.updated":
@@ -1200,14 +1197,18 @@ export function createData(config: CreateDataInput) {
       // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
       // so the mcp list syncs here rather than off integration.updated.
       case "mcp.status.changed":
-        result.location.mcp.server.invalidate(location)
-        void result.location.mcp.server.sync(location)
+        if (result.location.mcp.server.invalidate(location)) void result.location.mcp.server.sync(location)
         break
       case "mcp.resources.changed":
-        result.location.mcp.resource.invalidate(location)
-        void result.location.mcp.resource.sync(location)
+        if (result.location.mcp.resource.invalidate(location)) void result.location.mcp.resource.sync(location)
         break
     }
+  }
+
+  function locationCurrent(ref: LocationRef) {
+    const key = locationKey(ref)
+    const generation = locationGeneration.get(key)
+    return () => locationGeneration.get(key) === generation
   }
 
   // A cached per-location catalog. `sync` loads once per invalidation, keyed by the
@@ -1224,12 +1225,20 @@ export function createData(config: CreateDataInput) {
       sync: (ref?: LocationRef) => {
         const location = ref ?? defaultLocation()
         const id = locationKey(location)
-        return sync.run(`location.${field}:${id}`, async () => {
-          const response = await load(locationQuery(location))
-          const key = locationKey(response.location)
-          publish(key, response.data)
-          if (options?.alias && key !== id) publish(id, response.data)
-        })
+        // Capture before sync.run can queue the callback behind an earlier read.
+        const current = field === "vcs" || field === "shell" ? undefined : locationCurrent(location)
+        return sync.run(
+          `location.${field}:${id}`,
+          async () => {
+            if (current?.() === false) return
+            const response = await load(locationQuery(location))
+            if (current?.() === false) return
+            const key = locationKey(response.location)
+            publish(key, response.data)
+            if (options?.alias && key !== id) publish(id, response.data)
+          },
+          current,
+        )
       },
       invalidate: (ref?: LocationRef) => sync.invalidate(`location.${field}:${locationKey(ref ?? defaultLocation())}`),
     }
@@ -1746,7 +1755,9 @@ export function createData(config: CreateDataInput) {
         })
       },
       async sync(ref?: LocationRef) {
+        const current = locationCurrent(ref ?? defaultLocation())
         await result.location.syncInfo(ref)
+        if (!current()) return
         const location = ref ?? defaultLocation()
         await Promise.all([
           result.location.vcs.sync(location),
@@ -1778,6 +1789,53 @@ export function createData(config: CreateDataInput) {
         result.location.skill.invalidate(location)
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
+      },
+      // Catalogs stay resident while a consumer holds the location. Releasing the last hold drops
+      // the loaded catalogs and their sync state so the next consumer reloads them. Light metadata
+      // (info, vcs, running shells) and the default location stay resident.
+      retain(location: LocationRef) {
+        // Session movement can mutate a caller's Solid store proxy in place.
+        const ref = { directory: location.directory, workspaceID: location.workspaceID }
+        const key = locationKey(ref)
+        holds.set(key, (holds.get(key) ?? 0) + 1)
+        let released = false
+        return () => {
+          if (released) return
+          released = true
+          const next = (holds.get(key) ?? 1) - 1
+          if (next > 0) {
+            holds.set(key, next)
+            return
+          }
+          holds.delete(key)
+          // Route swaps and draft promotion release and re-acquire within one update, so the drop
+          // waits for the current task; a new hold by then keeps the catalogs.
+          queueMicrotask(() => {
+            if (holds.has(key) || key === locationKey(defaultLocation())) return
+            locationGeneration.set(key, (locationGeneration.get(key) ?? 0) + 1)
+            result.location.agent.invalidate(ref)
+            result.location.command.invalidate(ref)
+            result.location.integration.invalidate(ref)
+            result.location.mcp.server.invalidate(ref)
+            result.location.mcp.resource.invalidate(ref)
+            result.location.model.invalidate(ref)
+            result.location.provider.invalidate(ref)
+            result.location.reference.invalidate(ref)
+            result.location.skill.invalidate(ref)
+            if (!store.location[key]) return
+            setStore("location", key, {
+              agent: undefined,
+              command: undefined,
+              integration: undefined,
+              mcpServer: undefined,
+              mcpResource: undefined,
+              model: undefined,
+              provider: undefined,
+              reference: undefined,
+              skill: undefined,
+            })
+          })
+        }
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),

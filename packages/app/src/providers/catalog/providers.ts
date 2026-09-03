@@ -2,7 +2,7 @@ import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { normalizeProviderList } from "@/runtime/server/global-sync/utils"
 import { Iterable, pipe } from "effect"
-import { createEffect, createMemo, type Accessor } from "solid-js"
+import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import type { ProviderListResponse } from "@/runtime/server/types"
 import { useIntegrations } from "./integrations"
 import { popularProviders } from "./order"
@@ -19,6 +19,11 @@ export function useProviders(directory: Accessor<string | undefined>) {
     return dir ? { directory: dir } : undefined
   }
 
+  createEffect(() => {
+    const ref = location()
+    if (!ref) return
+    onCleanup(data.location.retain(ref))
+  })
   createEffect(() => {
     if (sdk.connection.status() !== "connected") return
     const ref = location()

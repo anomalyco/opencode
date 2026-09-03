@@ -67,8 +67,8 @@ test("switches the selected account with enter and keeps the reactive account ma
     const frame = fixture.app.captureCharFrame()
     expect(frame.indexOf("Personal")).toBeLessThan(frame.indexOf("Work"))
     expect(fixture.reads.integration).toBe(1)
-    expect(fixture.reads.model).toBeGreaterThan(0)
-    expect(fixture.reads.provider).toBeGreaterThan(0)
+    expect(fixture.reads.model).toBeGreaterThan(1)
+    expect(fixture.reads.provider).toBeGreaterThan(1)
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -82,8 +82,8 @@ test("does not refetch when selecting the already-active account", async () => {
     fixture.app.mockInput.pressEnter()
 
     expect(fixture.requests).toEqual([])
-    expect(fixture.reads.model).toBe(0)
-    expect(fixture.reads.provider).toBe(0)
+    expect(fixture.reads.model).toBe(1)
+    expect(fixture.reads.provider).toBe(1)
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -130,8 +130,8 @@ test("requires delete confirmation and preserves the account manager when anothe
 
     expect(fixture.requests).toEqual([{ method: "DELETE", path: "/api/credential/cred_work" }])
     expect(fixture.accounts).toEqual([{ type: "credential", id: "cred_personal", label: "Personal" }])
-    expect(fixture.reads.model).toBe(0)
-    expect(fixture.reads.provider).toBe(0)
+    expect(fixture.reads.model).toBe(1)
+    expect(fixture.reads.provider).toBe(1)
     expect(fixture.app.captureCharFrame()).toContain("Add account")
     expect(fixture.app.captureCharFrame()).toContain("Personal")
   } finally {
@@ -319,9 +319,13 @@ async function renderIntegration(activeLocation?: LocationRef) {
     const location = useLocation()
     onMount(() => {
       location.set(activeLocation)
-      void data.location.integration
-        .sync(activeLocation)
-        .then(() => dialog.replace(() => <DialogIntegration integrationID="openai" autoConnect />))
+      // The TUI syncs the current location's catalogs before the account manager can open;
+      // credential events refresh only catalogs that are loaded.
+      void Promise.all([
+        data.location.integration.sync(activeLocation),
+        data.location.model.sync(activeLocation),
+        data.location.provider.sync(activeLocation),
+      ]).then(() => dialog.replace(() => <DialogIntegration integrationID="openai" autoConnect />))
     })
     return null
   }

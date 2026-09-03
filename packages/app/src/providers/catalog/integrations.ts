@@ -1,11 +1,16 @@
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
-import { createEffect, type Accessor } from "solid-js"
+import { createEffect, onCleanup, type Accessor } from "solid-js"
 
 export function useIntegrations(directory: Accessor<string | undefined>) {
   const serverSDK = useServerSDK()
   const data = useData()
 
+  createEffect(() => {
+    const value = directory()
+    if (!value) return
+    onCleanup(data.location.retain({ directory: value }))
+  })
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
     const value = directory()

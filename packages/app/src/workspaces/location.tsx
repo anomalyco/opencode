@@ -29,6 +29,10 @@ const context = createSimpleContext({
     const current = createMemo(() => data.location.info(ref()))
 
     createEffect(() => {
+      onCleanup(data.location.retain(ref()))
+    })
+
+    createEffect(() => {
       const location = ref()
       let stale = false
       onCleanup(() => {

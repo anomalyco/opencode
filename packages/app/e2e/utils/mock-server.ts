@@ -10,6 +10,11 @@ export interface MockServerConfig {
   integrationMethods?: Record<string, unknown[]>
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
   directory: string
+  // Directories served as their own locations. Requests for other directories resolve to `directory`.
+  directories?: string[]
+  agents?: unknown[]
+  commands?: unknown[]
+  skills?: unknown[]
   project: unknown
   sessions: ({ id: string } & Record<string, unknown>)[]
   pageMessages: (
@@ -207,22 +212,11 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
       )
       .handleAll({
         health: () => Effect.succeed({ healthy: true, version: "2.0.0", pid: 1 }),
-        reference: () =>
+        reference: (ctx) => Effect.succeed({ location: location(config, ctx.request), data: [] }),
+        agent: (ctx) =>
           Effect.succeed({
-            location: {
-              directory: config.directory,
-              project: {
-                id: (config.project as { id?: string }).id,
-                directory: config.directory,
-                canonical: config.directory,
-              },
-            },
-            data: [],
-          }),
-        agent: () =>
-          Effect.succeed({
-            location: location(config),
-            data: [
+            location: location(config, ctx.request),
+            data: config.agents ?? [
               {
                 id: "build",
                 name: "Build",
@@ -233,14 +227,19 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
               },
             ],
           }),
-        provider: () => Effect.succeed({ location: location(config), data: currentProviders(providerConfig(config)) }),
-        model: () => Effect.succeed({ location: location(config), data: currentModels(providerConfig(config)) }),
-        modelDefault: () =>
-          Effect.succeed({ location: location(config), data: currentDefaultModel(providerConfig(config)) }),
-        integrationList: () => Effect.succeed({ location: location(config), data: [] }),
+        provider: (ctx) =>
+          Effect.succeed({ location: location(config, ctx.request), data: currentProviders(providerConfig(config)) }),
+        model: (ctx) =>
+          Effect.succeed({ location: location(config, ctx.request), data: currentModels(providerConfig(config)) }),
+        modelDefault: (ctx) =>
+          Effect.succeed({
+            location: location(config, ctx.request),
+            data: currentDefaultModel(providerConfig(config)),
+          }),
+        integrationList: (ctx) => Effect.succeed({ location: location(config, ctx.request), data: [] }),
         integrationGet: (ctx) =>
           Effect.succeed({
-            location: location(config),
+            location: location(config, ctx.request),
             data: {
               id: ctx.params.integrationID,
               name: ctx.params.integrationID,
@@ -253,11 +252,12 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             Effect.andThen(noContent),
           ),
         credentialRemove: () => noContent,
-        command: () => Effect.succeed({ location: location(config), data: [] }),
-        skill: () => Effect.succeed({ location: location(config), data: [] }),
-        plugin: () => Effect.succeed({ location: location(config), data: [] }),
-        mcp: () => Effect.succeed({ location: location(config), data: [] }),
-        mcpResource: () => Effect.succeed({ location: location(config), data: { resources: [], templates: [] } }),
+        command: (ctx) => Effect.succeed({ location: location(config, ctx.request), data: config.commands ?? [] }),
+        skill: (ctx) => Effect.succeed({ location: location(config, ctx.request), data: config.skills ?? [] }),
+        plugin: (ctx) => Effect.succeed({ location: location(config, ctx.request), data: [] }),
+        mcp: (ctx) => Effect.succeed({ location: location(config, ctx.request), data: [] }),
+        mcpResource: (ctx) =>
+          Effect.succeed({ location: location(config, ctx.request), data: { resources: [], templates: [] } }),
         projectList: () => {
           const project = config.project as typeof config.project & { canonical?: string; worktree?: string }
           return Effect.succeed([{ ...project, canonical: project.canonical ?? project.worktree ?? config.directory }])
@@ -286,27 +286,31 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         },
         worktreeRemove: () => noContent,
         worktreeRefresh: () => noContent,
-        location: () => Effect.succeed(location(config)),
-        permissionRequests: () =>
+        location: (ctx) => Effect.succeed(location(config, ctx.request)),
+        permissionRequests: (ctx) =>
           Effect.succeed({
-            location: location(config),
+            location: location(config, ctx.request),
             data: (typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])).map(
               currentPermission,
             ),
           }),
-        formRequests: () =>
+        formRequests: (ctx) =>
           Effect.succeed({
-            location: location(config),
+            location: location(config, ctx.request),
             data: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
           }),
-        vcs: () =>
-          Effect.succeed({ location: location(config), data: { branch: { current: "main", default: "main" } } }),
-        vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
-        vcsBranches: () => Effect.succeed({ location: location(config), data: config.vcsBranches ?? ["main"] }),
-        vcsDiff: () => Effect.succeed({ location: location(config), data: config.vcsDiff ?? [] }),
+        vcs: (ctx) =>
+          Effect.succeed({
+            location: location(config, ctx.request),
+            data: { branch: { current: "main", default: "main" } },
+          }),
+        vcsStatus: (ctx) => Effect.succeed({ location: location(config, ctx.request), data: [] }),
+        vcsBranches: (ctx) =>
+          Effect.succeed({ location: location(config, ctx.request), data: config.vcsBranches ?? ["main"] }),
+        vcsDiff: (ctx) => Effect.succeed({ location: location(config, ctx.request), data: config.vcsDiff ?? [] }),
         fsList: (ctx) =>
           Effect.promise(() => Promise.resolve(config.fileList?.(ctx.query.path ?? ""))).pipe(
-            Effect.map((data) => ({ location: location(config), data })),
+            Effect.map((data) => ({ location: location(config, ctx.request), data })),
           ),
         fsFind: (ctx) =>
           Effect.promise(() =>
@@ -315,7 +319,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             ),
           ).pipe(
             Effect.map((entries) => ({
-              location: location(config),
+              location: location(config, ctx.request),
               data: Array.isArray(entries)
                 ? entries.map((entry) =>
                     typeof entry === "string"
@@ -331,9 +335,9 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
                 : entries,
             })),
           ),
-        shell: () => Effect.succeed({ location: location(config), data: [] }),
-        ptyConnectToken: () =>
-          Effect.succeed({ location: location(config), data: { ticket: "e2e-ticket", expires_in: 60 } }),
+        shell: (ctx) => Effect.succeed({ location: location(config, ctx.request), data: [] }),
+        ptyConnectToken: (ctx) =>
+          Effect.succeed({ location: location(config, ctx.request), data: { ticket: "e2e-ticket", expires_in: 60 } }),
         sessionList: (ctx) => {
           const sessions = config.sessions
             .filter((session) => {
@@ -500,10 +504,12 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
   )
 }
 
-function location(config: MockServerConfig) {
+function location(config: MockServerConfig, request?: { url: string }) {
+  const requested = request ? new URL(request.url, "http://localhost").searchParams.get("location[directory]") : null
+  const directory = requested !== null && config.directories?.includes(requested) ? requested : config.directory
   return {
-    directory: config.directory,
-    project: { id: (config.project as { id?: string }).id, directory: config.directory, canonical: config.directory },
+    directory,
+    project: { id: (config.project as { id?: string }).id, directory, canonical: directory },
   }
 }
 

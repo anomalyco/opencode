@@ -13,6 +13,8 @@ import { createServerNotificationState } from "@/shell/notifications/notificatio
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
 import { ModelState } from "./persistence"
+import { createLocationResidency } from "./residency"
+import { useTabs } from "@/shell/tabs/tabs"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -145,6 +147,8 @@ function createServerController(
   const sync = createServerSyncContext(sdk, data)
   createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey })
+  const tabs = useTabs()
+  createLocationResidency({ key: connKey, tabs: () => tabs.store, data })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
