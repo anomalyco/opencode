@@ -1035,7 +1035,7 @@ body {
             gap: 3px 8px;
           }
 
-          &[data-model="muse-spark-1.2-contributor"] {
+          &[data-model="muse-spark-1.3-contributor"] {
             transform: translateY(11px);
 
             [data-regions] {

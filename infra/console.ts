@@ -221,6 +221,15 @@ const STRIPE_PUBLISHABLE_KEY = new sst.Secret("STRIPE_PUBLISHABLE_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
 })
+// Preview branches have independent databases; do not send their workspaces to shared dev.
+const migrationDomain =
+  $app.stage === "production" ? "opencode.ai" : $app.stage === "dev" ? "dev.opencode.ai" : undefined
+const consoleMigration = new sst.Linkable("ConsoleMigration", {
+  properties: {
+    consoleUrl: migrationDomain ? `https://${migrationDomain}/console` : "",
+    inferenceUrl: migrationDomain ? `https://${migrationDomain}/inference` : "",
+  },
+})
 const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
   properties: { value: stripeWebhook.secret },
 })
@@ -255,6 +264,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     SECRET.UpstashRedisRestUrl,
     SECRET.UpstashRedisRestToken,
     AUTH_API_URL,
+    consoleMigration,
     STRIPE_WEBHOOK_SECRET,
     SECRET.SupportApiKey,
     DISCORD_INCIDENT_WEBHOOK_URL,
