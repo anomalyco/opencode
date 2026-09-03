@@ -114,6 +114,14 @@ async function main() {
     visited.add(name)
     return Schema.decodeUnknownSync(operation.output)(JSON.parse(result.output)) as Output<Name>
   }
+  async function fails(name: Browser.Method, input: object, expected: RegExp) {
+    const result = await rpc.execute(
+      { sessionID: session.id, code: `return await tools.browser.${name}(${JSON.stringify(input)})` },
+      { location },
+    )
+    assert.equal(result.error, true, `Expected browser.${name} to fail`)
+    assert.match(result.output, expected)
+  }
   try {
     await pane.register(win, "suite", {
       sessionID: session.id,
@@ -123,6 +131,13 @@ async function main() {
     const second = await call("tabs.open", { url: `${fixture}/other`, focus: false })
     assert.equal((await call("tabs.list", {})).tabs.length, 2)
     const tabID = first.id
+    await fails("trace.stop", { tabID }, /browser\.trace\.start/)
+    await fails("cpu.stop", { tabID }, /browser\.cpu\.start/)
+    await fails("evaluate", { tabID, frameID: "missing-frame", script: "1" }, /browser\.frames/)
+    await fails("press", { tabID, key: "ControlOrMeta+A" }, /Supported modifiers are Alt, Control, Meta, and Shift/)
+    await fails("wait", { tabID, condition: "text" }, /requires non-empty text/)
+    await fails("wait", { tabID, condition: "text", text: "not-on-the-page", timeoutMs: 1 }, /check text\/frameID/)
+    await fails("files.get", { tabID, fileID: `file_${crypto.randomUUID()}` }, /not a server path or request ID/)
     await call("evaluate", {
       tabID,
       script: `(async () => {
@@ -144,6 +159,10 @@ async function main() {
       return Browser.Ref.make(match)
     }
     await call("fill", { tabID, ref: ref("Name"), text: "remote browser" })
+    await fails("fill", { tabID, ref: ref("Apply"), text: "wrong target" }, /choose a textbox/)
+    await fails("select", { tabID, ref: ref("Color"), values: ["missing-option"] }, /values are not visible labels/)
+    await fails("click", { tabID, ref: "e999999999" }, /tab's newest snapshot/)
+    await fails("screenshot", { tabID, ref: ref("Name"), fullPage: true }, /Remove the other argument/)
     await call("hover", { tabID, ref: ref("Apply") })
     await call("click", { tabID, ref: ref("Apply") })
     assert.equal(
@@ -202,6 +221,7 @@ async function main() {
     )
     const found = await call("find", { tabID, text: "Apply" })
     assert(found.content.includes("Apply"))
+    await fails("screenshot", { tabID }, /Screenshot needs a visible tab/)
     await call("tabs.focus", { tabID })
     const screenshot = await call("screenshot", { tabID, fullPage: true, maxWidth: 1000 })
     const screenshotBytes = await rpc.read({ path: screenshot.files[0].path }, { location })
@@ -217,6 +237,7 @@ async function main() {
     assert(network.requests.length)
     const detail = await call("network.get", { tabID, id: network.requests[0].id, includeBody: true })
     assert.equal(detail.responseBody.state, "text")
+    await fails("network.get", { tabID, id: "unknown-request" }, /Do not reload or resend/)
     const upload = await rpc.write({ text: "server upload bytes" }, { location })
     const fileSnap = await call("snapshot", { tabID })
     const input = fileSnap.content
@@ -271,6 +292,8 @@ async function main() {
     await call("back", { tabID })
     await call("forward", { tabID })
     await call("trace.start", { tabID, durationMs: 30_000 })
+    await fails("trace.start", { tabID }, /browser\.trace\.stop/)
+    await fails("trace.start", { tabID: second.id }, /do not stop or replace another tab's recording/)
     await call("reload", { tabID })
     await call("evaluate", {
       tabID,
@@ -280,6 +303,7 @@ async function main() {
     const traceAnalysis = await call("trace.analyze", { tabID, fileID: trace.files[0].id })
     assert(traceAnalysis.metrics[0].value > 0)
     await call("cpu.start", { tabID })
+    await fails("cpu.start", { tabID }, /browser\.cpu\.stop/)
     await call("evaluate", { tabID, script: "Array.from({length:100000},(_,i)=>Math.sqrt(i)).reduce((a,b)=>a+b,0)" })
     const cpu = await call("cpu.stop", { tabID })
     await call("cpu.analyze", { tabID, fileID: cpu.files[0].id })
@@ -289,6 +313,11 @@ async function main() {
     const query = await call("heap.query", { tabID, fileID: heapID, name: "Object", limit: 3 })
     assert(query.nodes.length)
     await call("heap.object", { tabID, fileID: heapID, id: query.nodes[0].id })
+    await fails(
+      "heap.object",
+      { tabID, fileID: heapID, id: Number.MAX_SAFE_INTEGER },
+      /Object IDs cannot be reused across snapshots/,
+    )
     assert.equal((await call("heap.compare", { tabID, before: heapID, after: heapID })).classes.length, 0)
     const audit = await call("lighthouse", { tabID })
     assert(audit.scores.some((score) => score.id === "accessibility"))

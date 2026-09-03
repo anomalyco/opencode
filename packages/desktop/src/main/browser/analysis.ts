@@ -40,7 +40,12 @@ const Heap = Schema.Struct({
 })
 
 export function analyzeTrace(value: unknown, limit = 100) {
-  const trace = Schema.decodeUnknownSync(Trace)(value)
+  const decoded = Schema.decodeUnknownOption(Trace)(value)
+  if (decoded._tag === "None")
+    throw new Error(
+      "Selected file is not a Chromium performance trace. Use a fileID returned by browser.trace.stop for this tab; CPU profiles and heap snapshots use their own analysis tools.",
+    )
+  const trace = decoded.value
   const events = new Map<string, { name: string; count: number; totalMs: number; maxMs: number }>()
   const longTasks: number[] = []
   trace.traceEvents.forEach((event) => {
@@ -74,7 +79,12 @@ export function analyzeTrace(value: unknown, limit = 100) {
 }
 
 export function analyzeCpu(value: unknown, limit = 100) {
-  const profile = Schema.decodeUnknownSync(Cpu)(value)
+  const decoded = Schema.decodeUnknownOption(Cpu)(value)
+  if (decoded._tag === "None")
+    throw new Error(
+      "Selected file is not a CPU profile. Use a fileID returned by browser.cpu.stop for this tab, not a trace or heap snapshot.",
+    )
+  const profile = decoded.value
   const times = new Map<number, number>()
   profile.samples?.forEach((id, index) =>
     times.set(id, (times.get(id) ?? 0) + (profile.timeDeltas?.[index] ?? 0) / 1000),
@@ -95,7 +105,12 @@ export function analyzeCpu(value: unknown, limit = 100) {
 }
 
 export function parseHeap(value: unknown) {
-  const heap = Schema.decodeUnknownSync(Heap)(value)
+  const decoded = Schema.decodeUnknownOption(Heap)(value)
+  if (decoded._tag === "None")
+    throw new Error(
+      "Selected file is not a V8 heap snapshot. Use a fileID returned by browser.heap.snapshot for this tab, not a trace or CPU profile.",
+    )
+  const heap = decoded.value
   const fields = heap.snapshot.meta.node_fields
   const edgeFields = heap.snapshot.meta.edge_fields
   const width = fields.length
@@ -117,10 +132,15 @@ export function parseHeap(value: unknown) {
     heap.nodes.length % width ||
     heap.edges.length % edgeWidth
   )
-    throw new Error("Unsupported heap snapshot layout.")
+    throw new Error(
+      "Heap snapshot layout is unsupported or incomplete. Use a complete capture from browser.heap.snapshot; if this tool produced it, report a parser/Chromium compatibility issue instead of repeatedly capturing the same heap.",
+    )
   const types = heap.snapshot.meta.node_types[indexes.type]
   const edgeTypes = heap.snapshot.meta.edge_types[indexes.edgeType]
-  if (!Array.isArray(types) || !Array.isArray(edgeTypes)) throw new Error("Unsupported heap snapshot types.")
+  if (!Array.isArray(types) || !Array.isArray(edgeTypes))
+    throw new Error(
+      "Heap snapshot type tables are unsupported. Use a complete capture from browser.heap.snapshot and report the compatibility issue if it persists.",
+    )
   const node = (offset: number) => ({
     id: heap.nodes[offset + indexes.id],
     name: (heap.strings[heap.nodes[offset + indexes.name]] ?? "").slice(0, 100_000),
@@ -161,7 +181,10 @@ export function parseHeap(value: unknown) {
     },
     object(id: number, limit = 100) {
       const target = heap.nodes.findIndex((value, index) => index % width === indexes.id && value === id) - indexes.id
-      if (target < 0) throw new Error("Object ID was not found in this heap snapshot.")
+      if (target < 0)
+        throw new Error(
+          "Object ID was not found in this heap snapshot. Call browser.heap.query with the same tabID and fileID, then copy an exact returned object id. Object IDs cannot be reused across snapshots.",
+        )
       const references: { name: string; node: ReturnType<typeof node> }[] = []
       const retainers: { name: string; node: ReturnType<typeof node> }[] = []
       let edgeOffset = 0

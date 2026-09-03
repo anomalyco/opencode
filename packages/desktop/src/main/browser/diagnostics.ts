@@ -187,7 +187,10 @@ export function createDiagnostics(cdp: Cdp) {
     },
     async get(input: Extract<Browser.Action, { type: "network.get" }>) {
       const request = requests.get(input.id)
-      if (!request) throw new Error("Request is no longer retained in this tab. Call browser.network.list.")
+      if (!request)
+        throw new Error(
+          "Request ID is no longer retained in this tab or belongs to another tab. Call browser.network.list({tabID}) and copy a current id into browser.network.get with the same tabID. Do not reload or resend a request just to inspect it.",
+        )
       const max = input.maxBodyChars ?? 20_000
       const text = (value: string): Browser.Body => ({
         state: "text",

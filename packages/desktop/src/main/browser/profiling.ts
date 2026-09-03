@@ -1,7 +1,6 @@
 import type { WebContents } from "electron"
 import { Browser } from "@opencode-ai/plugin-browser/rpc"
 import { gzipSync, gunzipSync } from "node:zlib"
-import { readFile } from "node:fs/promises"
 import { Schema } from "effect"
 import type { Cdp } from "./cdp"
 import type { BrowserFiles } from "./files"
@@ -28,14 +27,26 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
     | undefined
   let takingHeap = false
   const json = async (id: Browser.FileID) => {
-    const file = files.get(id)
-    const data = await readFile(file.path)
-    return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
-      (file.name.endsWith(".gz") ? gunzipSync(data, { maxOutputLength: 128 * 1024 * 1024 }) : data).toString("utf8"),
-    )
+    const file = await files.transfer(id)
+    try {
+      const data = Buffer.from(file.data)
+      return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
+        (file.name.endsWith(".gz") ? gunzipSync(data, { maxOutputLength: 128 * 1024 * 1024 }) : data).toString("utf8"),
+      )
+    } catch (error) {
+      throw new Error(
+        "Selected file cannot be decoded as a JSON capture, or expands beyond the 128 MiB analysis limit. Call browser.files.list({tabID}) and choose the fileID from the matching trace, CPU, or heap capture, not a screenshot/download. Do not retry the same invalid file.",
+        { cause: error },
+      )
+    }
   }
   const stopCpu = () => {
-    if (!cpu) return Promise.reject(new Error("No CPU profile has been started in this tab."))
+    if (!cpu)
+      return Promise.reject(
+        new Error(
+          "No CPU profile has been started in this tab. Call browser.cpu.start({tabID}), perform the interaction to inspect, then browser.cpu.stop({tabID}).",
+        ),
+      )
     if (cpu.result) return cpu.result
     clearTimeout(cpu.timer)
     cpu.result = cdp.send("Profiler.stop").then(async ({ profile }) => ({
@@ -46,7 +57,12 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
   }
   return {
     async startTrace(durationMs = 10_000) {
-      if (recording) throw new Error("Another performance trace is active. Do not stop another tab's recording.")
+      if (recording)
+        throw new Error(
+          recording.owner === contents
+            ? "A performance trace is already active in this tab. Use browser.trace.stop({tabID}) to finish it before starting another."
+            : "Another tab owns the active performance trace. Wait for its owner to finish; do not stop or replace another tab's recording.",
+        )
       const complete = Promise.withResolvers<{ stream?: string; dataLossOccurred: boolean }>()
       const off = cdp.on("Tracing.tracingComplete", (event) => complete.resolve(event))
       const owner = {
@@ -61,7 +77,12 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
             const durationMs = performance.now() - owner.started
             const deadline = Promise.withResolvers<never>()
             const timeout = setTimeout(
-              () => deadline.reject(new Error("Chromium did not finish flushing the trace within 10 seconds.")),
+              () =>
+                deadline.reject(
+                  new Error(
+                    "Chromium did not finish flushing the trace within 10 seconds. No complete export is confirmed. Check browser.files.list({tabID}); do not start another recording until the current trace has finished or the user resolves the failure.",
+                  ),
+                ),
               10_000,
             )
             try {
@@ -69,7 +90,10 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
                 cdp.send("Tracing.end").then(() => complete.promise),
                 deadline.promise,
               ])
-              if (!result.stream) throw new Error("Chromium did not return a trace stream.")
+              if (!result.stream)
+                throw new Error(
+                  "Chromium stopped tracing without returning a trace stream. No export is available. Check desktop/plugin compatibility and report the failure; repeating trace.stop cannot recover a missing stream.",
+                )
               const chunks: Buffer[] = []
               let bytes = 0
               try {
@@ -77,7 +101,10 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
                   const part = await cdp.send("IO.read", { handle: result.stream, size: 256 * 1024 })
                   const buffer = Buffer.from(part.data, part.base64Encoded ? "base64" : "utf8")
                   bytes += buffer.byteLength
-                  if (bytes > 64 * 1024 * 1024) throw new Error("Trace exceeded its 64 MiB local capture limit.")
+                  if (bytes > 64 * 1024 * 1024)
+                    throw new Error(
+                      "Trace exceeded its 64 MiB desktop capture limit. Record a shorter interaction with a smaller durationMs in browser.trace.start; do not repeat the same recording unchanged.",
+                    )
                   chunks.push(buffer)
                   if (part.eof) break
                 }
@@ -148,10 +175,17 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
     stopTrace() {
       if (recording?.owner === contents) return recording.finish()
       if (trace) return trace
-      return Promise.reject(new Error("This tab has no performance trace to stop."))
+      return Promise.reject(
+        new Error(
+          "This tab has no performance trace to stop. Call browser.trace.start({tabID}), perform the interaction to inspect, then browser.trace.stop({tabID}).",
+        ),
+      )
     },
     async startCpu() {
-      if (cpu && !cpu.result) throw new Error("A CPU profile is already active in this tab.")
+      if (cpu && !cpu.result)
+        throw new Error(
+          "A CPU profile is already active in this tab. Use browser.cpu.stop({tabID}) before starting another profile.",
+        )
       await cdp.send("Profiler.enable")
       await cdp.send("Profiler.start")
       cpu = { started: Date.now() }
@@ -161,7 +195,10 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
     },
     stopCpu,
     async heap() {
-      if (takingHeap) throw new Error("A heap snapshot is already being captured in this tab.")
+      if (takingHeap)
+        throw new Error(
+          "A heap snapshot is already being captured in this tab. Await that call before taking another; do not capture the same tab's heaps in parallel.",
+        )
       takingHeap = true
       const chunks: string[] = []
       let size = 0
@@ -178,7 +215,10 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
         takingHeap = false
         off()
       }
-      if (overflow) throw new Error("Heap snapshot exceeded the 128 MiB local capture limit.")
+      if (overflow)
+        throw new Error(
+          "Heap snapshot exceeded the 128 MiB desktop capture limit. Use a smaller page/test case or ask the user to inspect the heap with desktop developer tools; this tool has no size override.",
+        )
       return files.save("heap.heapsnapshot.gz", "application/gzip", gzipSync(chunks.join("")))
     },
     async analyze(

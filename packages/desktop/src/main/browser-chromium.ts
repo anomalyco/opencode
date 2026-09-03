@@ -230,21 +230,37 @@ export function createBrowserPage(
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
       abortError(signal)
-      if (closed) throw new Error("Browser tab was closed.")
+      if (closed)
+        throw new Error(
+          "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
+        )
       if (
         command.generation !== undefined &&
         command.generation !== generation &&
         !retainedOperations.has(command.action.type)
       )
-        throw new Error("The document changed. Take a new snapshot and retry deliberately.")
+        throw new Error(
+          "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
+        )
       if (dialog && command.action.type !== "dialog")
-        throw new Error("A JavaScript dialog is open. Use browser.dialog before continuing.")
+        throw new Error(
+          'A JavaScript dialog is open. Inspect it with browser.dialog({tabID,action:"get"}), then explicitly accept or dismiss it before continuing.',
+        )
       const modal = Promise.withResolvers<never>()
       const cancelled = Promise.withResolvers<never>()
-      const cancel = () => cancelled.reject(new Error("Browser operation was cancelled."))
+      const cancel = () =>
+        cancelled.reject(
+          new Error(
+            "Browser operation was cancelled. Inspect the tab before deciding to repeat an action; cancellation does not undo changes already made.",
+          ),
+        )
       signal.addEventListener("abort", cancel, { once: true })
       const reject = () =>
-        modal.reject(new Error("A JavaScript dialog opened. Use browser.dialog to accept or dismiss it."))
+        modal.reject(
+          new Error(
+            'A JavaScript dialog opened while the action was running. Inspect it with browser.dialog({tabID,action:"get"}) and accept or dismiss it. Do not repeat the original action just to close the dialog.',
+          ),
+        )
       if (command.action.type !== "dialog") dialogs.add(reject)
       try {
         return await Promise.race([execute(command.action, command.files, signal), modal.promise, cancelled.promise])
@@ -274,7 +290,9 @@ export function createBrowserPage(
     const result = (value: unknown, attached: Browser.File[] = []): Browser.Result => {
       const json = Schema.decodeUnknownSync(Schema.Json)(value)
       if (JSON.stringify(json).length > 512_000)
-        throw new Error("Result is too large. Request fewer entries or a smaller snapshot.")
+        throw new Error(
+          "Browser result exceeds 512000 JSON characters. Request fewer entries, reduce snapshot depth, or return only selected fields from the evaluation script. Repeating the same request will not reduce its output.",
+        )
       return { value: json, files: attached }
     }
     switch (action.type) {
@@ -309,7 +327,10 @@ export function createBrowserPage(
         return result({ tab: state(), ...(await snapshot(action)) })
       case "evaluate": {
         const context = action.frameID ? contexts.get(action.frameID) : undefined
-        if (action.frameID && !context) throw new Error("Frame context is unavailable. Call browser.frames again.")
+        if (action.frameID && !context)
+          throw new Error(
+            "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID to target the main frame.",
+          )
         const value = await cdp.send(
           "Runtime.evaluate",
           {
@@ -322,7 +343,9 @@ export function createBrowserPage(
           context?.sessionID,
         )
         if (value.exceptionDetails)
-          throw new Error(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text)
+          throw new Error(
+            `Page JavaScript threw an exception. Check the script and frameID; inspect the page before repeating code with side effects. Details: ${(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).slice(0, 800)}`,
+          )
         abortError(signal)
         return result({ tab: state(), value: value.result.value ?? null })
       }
@@ -408,12 +431,18 @@ export function createBrowserPage(
         break
       }
       case "wait": {
-        if (action.condition !== "load" && !action.text) throw new Error("text is required for a text/textGone wait.")
+        if (action.condition !== "load" && !action.text)
+          throw new Error(
+            'browser.wait requires non-empty text for condition "text" or "textGone". Use condition "load" without text to wait for loading.',
+          )
         await waitFor(
           async () => {
             if (action.condition === "load") return !contents.isLoading()
             const context = action.frameID ? contexts.get(action.frameID) : undefined
-            if (action.frameID && !context) throw new Error("Frame context is unavailable.")
+            if (action.frameID && !context)
+              throw new Error(
+                "Frame context is unavailable. Call browser.frames({tabID}) and use a frameID from this tab.",
+              )
             const value = await cdp.send(
               "Runtime.evaluate",
               {
@@ -427,11 +456,19 @@ export function createBrowserPage(
           },
           signal,
           action.timeoutMs,
-        )
+        ).catch((error) => {
+          if (signal.aborted) throw error
+          throw new Error(
+            `browser.wait did not satisfy condition ${JSON.stringify(action.condition)} within ${action.timeoutMs ?? 10_000} ms. Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        })
         break
       }
       case "screenshot": {
-        if (action.ref && action.fullPage) throw new Error("Choose an element ref or fullPage, not both.")
+        if (action.ref && action.fullPage)
+          throw new Error(
+            "Choose either ref for an element screenshot or fullPage:true for the whole page. Remove the other argument before retrying.",
+          )
         await waitFor(() => view.getVisible() && win.isVisible() && !win.isMinimized(), signal, 3_000).catch(
           (error) => {
             if (signal.aborted) throw error
@@ -458,7 +495,10 @@ export function createBrowserPage(
               }
         const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
         const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
-        if (bounds.width <= 0 || bounds.height <= 0) throw new Error("Element or page has no visible screenshot area.")
+        if (bounds.width <= 0 || bounds.height <= 0)
+          throw new Error(
+            "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
+          )
         if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
           throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
         const format = action.format ?? "png"
@@ -473,7 +513,10 @@ export function createBrowserPage(
       }
       case "dialog": {
         if (action.action !== "get") {
-          if (!dialog) throw new Error("This tab has no JavaScript dialog.")
+          if (!dialog)
+            throw new Error(
+              'This tab has no JavaScript dialog to handle. browser.dialog({tabID,action:"get"}) returns null when none is open; continue without accepting or dismissing one.',
+            )
           await cdp.send("Page.handleJavaScriptDialog", {
             accept: action.action === "accept",
             promptText: action.promptText,
@@ -484,7 +527,10 @@ export function createBrowserPage(
       }
       case "files.upload":
       case "files.drop": {
-        if (!transfers.length) throw new Error("Upload did not include file bytes from the server.")
+        if (!transfers.length)
+          throw new Error(
+            "Upload command has no file bytes. Supply server-local paths to browser.files.upload/drop; do not call the desktop RPC directly with desktop paths. If paths were supplied, report a client/server transfer mismatch.",
+          )
         const local = await Promise.all(
           transfers.map(async (file) => files.get(await files.save(file.name, file.mime, file.data)).path),
         )
@@ -546,7 +592,9 @@ export function createBrowserPage(
         )
       }
       default:
-        throw new Error("Tab management is handled by the browser session, not a page.")
+        throw new Error(
+          "This operation was routed to a page instead of the tab manager. Report a desktop/plugin routing mismatch; changing tab IDs or repeating the operation will not fix it.",
+        )
     }
     abortError(signal)
     return result(state())
@@ -554,7 +602,10 @@ export function createBrowserPage(
 
   function target(ref: Browser.Ref): Element {
     const value = refs.get(ref.replace(/^@/, ""))
-    if (!value) throw new Error("Element ref is stale or belongs to another tab. Take a new snapshot.")
+    if (!value)
+      throw new Error(
+        "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from that tab's newest snapshot. Do not reuse refs after navigation or a newer snapshot.",
+      )
     return value
   }
 
@@ -587,7 +638,10 @@ export function createBrowserPage(
   async function call(element: Element, functionDeclaration: string, args: unknown[] = []) {
     const object = await cdp.send("DOM.resolveNode", { backendNodeId: element.backendID }, element.sessionID)
     const objectId = object.object.objectId
-    if (!objectId) throw new Error("Element is no longer available.")
+    if (!objectId)
+      throw new Error(
+        "Element is no longer available. Call browser.snapshot({tabID}) and use a fresh ref; the page may have replaced the element.",
+      )
     try {
       const result = await cdp.send(
         "Runtime.callFunctionOn",
@@ -672,9 +726,12 @@ export function createBrowserPage(
   async function fill(element: Element, value: string) {
     const editable = await call(
       element,
-      "function() { return (this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement || this.isContentEditable) && !this.disabled && !this.readOnly; }",
+      "function() { const input = this instanceof HTMLInputElement && !['file','checkbox','radio','button','submit','reset','image','hidden','range','color'].includes(this.type); return (input || this instanceof HTMLTextAreaElement || this.isContentEditable) && !this.disabled && !this.readOnly; }",
     )
-    if (!editable) throw new Error("Element is not an editable field.")
+    if (!editable)
+      throw new Error(
+        "Target is not an enabled editable text field. Take a fresh snapshot and choose a textbox; use browser.select for dropdowns, browser.check for checkboxes/radios, or browser.files.upload for file inputs.",
+      )
     await cdp.send("DOM.focus", { backendNodeId: element.backendID }, element.sessionID)
     await key(process.platform === "darwin" ? "Meta+A" : "Control+A")
     await key("Backspace")
@@ -684,7 +741,7 @@ export function createBrowserPage(
   async function select(element: Element, values: readonly string[]) {
     await call(
       element,
-      `function(values) { if (!(this instanceof HTMLSelectElement) || this.disabled) throw new Error('Element is not an enabled select.'); if (!this.multiple && values.length !== 1) throw new Error('Select accepts one value.'); for (const value of values) if (!Array.from(this.options).some(option => option.value === value && !option.disabled)) throw new Error('Option value was not found.'); for (const option of this.options) option.selected = values.includes(option.value); this.dispatchEvent(new Event('input',{bubbles:true})); this.dispatchEvent(new Event('change',{bubbles:true})); }`,
+      `function(values) { if (!(this instanceof HTMLSelectElement) || this.disabled) throw new Error('Target is not an enabled HTML select. Take a fresh snapshot and choose an enabled dropdown ref.'); if (!this.multiple && values.length !== 1) throw new Error('This dropdown accepts exactly one value; pass a one-item values array.'); for (const value of values) if (!Array.from(this.options).some(option => option.value === value && !option.disabled)) throw new Error('Option value was not found or is disabled. Inspect option values with browser.evaluate before retrying browser.select; values are not visible labels.'); for (const option of this.options) option.selected = values.includes(option.value); this.dispatchEvent(new Event('input',{bubbles:true})); this.dispatchEvent(new Event('change',{bubbles:true})); }`,
       [values],
     )
   }
@@ -692,20 +749,29 @@ export function createBrowserPage(
   async function check(element: Element, checked: boolean) {
     const current = await call(
       element,
-      "function() { if (!(this instanceof HTMLInputElement) || !['checkbox','radio'].includes(this.type) || this.disabled) throw new Error('Element is not an enabled checkbox or radio.'); return this.checked; }",
+      "function(checked) { if (!(this instanceof HTMLInputElement) || !['checkbox','radio'].includes(this.type) || this.disabled) throw new Error('Target is not an enabled checkbox or radio. Take a fresh snapshot and choose the correct ref.'); if (this.type === 'radio' && this.checked && !checked) throw new Error('A selected radio cannot be cleared by clicking it. Select a different radio in its group instead.'); return this.checked; }",
+      [checked],
     )
     if (current !== checked) await click(element)
     if ((await call(element, "function() { return this.checked; }")) !== checked)
-      throw new Error("Element did not reach the requested checked state.")
+      throw new Error(
+        "The page did not keep the requested checked state. Inspect the current snapshot and page validation before retrying; do not blindly toggle the control again.",
+      )
   }
 
   async function key(chord: string) {
-    if (!chord) throw new Error("A key or key chord is required.")
+    if (!chord)
+      throw new Error(
+        "A key is required. Use a named key such as Enter or ArrowDown, a single character, or a chord such as Control+A.",
+      )
     const parts = (chord.endsWith("+") ? chord.slice(0, -1) : chord).split("+")
     const key = parts.pop() || "+"
     const modifiers = parts.reduce((mask, key) => {
       const bit = { Alt: 1, Control: 2, Meta: 4, Shift: 8 }[key]
-      if (!bit) throw new Error(`Unknown key modifier: ${key}`)
+      if (!bit)
+        throw new Error(
+          `Unknown key modifier ${JSON.stringify(key)}. Supported modifiers are Alt, Control, Meta, and Shift; for example Control+A. Use Meta for macOS command shortcuts.`,
+        )
       return mask | bit
     }, 0)
     const codes: Record<string, number> = {
@@ -731,7 +797,10 @@ export function createBrowserPage(
         : /^F([1-9]|1[0-2])$/.test(key)
           ? 111 + Number(key.slice(1))
           : undefined)
-    if (code === undefined) throw new Error(`Unknown key: ${key}`)
+    if (code === undefined)
+      throw new Error(
+        `Unknown key ${JSON.stringify(key)}. Use Enter, Tab, Escape, Backspace, Delete, ArrowUp/Down/Left/Right, PageUp/Down, Home, End, Space, F1–F12, or one character. Use browser.fill for text.`,
+      )
     const params = {
       key: key === "Space" ? " " : key,
       windowsVirtualKeyCode: code,
@@ -747,13 +816,18 @@ export function createBrowserPage(
     const selected = action.type === "snapshot" && action.ref ? target(action.ref) : undefined
     const frameID = selected?.frameID ?? action.frameID ?? tree[0]?.id
     if (!frameID || !tree.some((frame) => frame.id === frameID))
-      throw new Error("Frame is unavailable. Call browser.frames again.")
+      throw new Error(
+        "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
+      )
     const sessionID = sessions.get(frameID)
     const depth = action.type === "snapshot" ? (action.depth ?? 8) : 8
     const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID, depth }, sessionID)
     const nodes = new Map(ax.nodes.map((node) => [node.nodeId, node]))
     const root = selected ? ax.nodes.find((node) => node.backendDOMNodeId === selected.backendID) : ax.nodes[0]
-    if (!root) throw new Error("Element is absent from the accessibility snapshot.")
+    if (!root)
+      throw new Error(
+        "Element is absent from this frame's accessibility snapshot. Retry browser.snapshot with the same tabID and no ref to refresh the frame, then choose a returned ref.",
+      )
     refs.clear()
     const lines: string[] = []
     let truncated = false

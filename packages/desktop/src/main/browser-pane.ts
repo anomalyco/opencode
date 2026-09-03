@@ -8,6 +8,7 @@ import { Deferred, Effect, ManagedRuntime, Queue, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
 import { createBrowserPage, destinationOrigin, type BrowserPage } from "./browser-chromium"
+import { browserFailure } from "./browser/errors"
 import { emitIpcEvent } from "./ipc-events"
 
 type Entry = {
@@ -125,11 +126,7 @@ export function createBrowserPane() {
                         })
                         const outcome: Browser.Outcome = await execute(entry, command, abort.signal).then(
                           (result) => ({ type: "success" as const, result }),
-                          (error: unknown) => ({
-                            type: "failure" as const,
-                            code: "operation_failed",
-                            message: (error instanceof Error ? error.message : String(error)).slice(0, 1_024),
-                          }),
+                          (error: unknown) => browserFailure(command.action, error),
                         )
                         Queue.offerUnsafe(
                           outbound,
@@ -244,7 +241,10 @@ export function createBrowserPane() {
 
   async function closePage(entry: Entry, tabID: Browser.TabID, error?: string) {
     const page = entry.pages.get(tabID)
-    if (!page) throw new Error("Browser tab is unavailable.")
+    if (!page)
+      throw new Error(
+        "This tab is no longer available. Call browser.tabs.list({}) and use an existing tabID from this session.",
+      )
     const focused = entry.focusedTabID === tabID
     entry.requests.forEach((request) => {
       if (request.tabID === tabID) request.abort.abort()
@@ -307,7 +307,10 @@ export function createBrowserPane() {
       tabs: Array.from(entry.pages.values(), (page) => page.state()),
       focusedTabID: entry.focusedTabID,
     })
-    if (signal.aborted) throw new Error("Browser request was cancelled.")
+    if (signal.aborted)
+      throw new Error(
+        "Browser request was cancelled. Do not repeat a mutating action until you have inspected its outcome.",
+      )
     if (action.type === "tabs.list") return { value: state(), files: [] }
     if (action.type === "tabs.open") {
       const page = create(entry)
@@ -321,7 +324,10 @@ export function createBrowserPane() {
       return { value: page.state(), files: [] }
     }
     const page = entry.pages.get(action.tabID)
-    if (!page) throw new Error("Browser tab is unavailable. Call browser.tabs.list.")
+    if (!page)
+      throw new Error(
+        "Browser tab is unavailable. Call browser.tabs.list({}) and use an existing tabID from this session; a closed tab is not replaced automatically.",
+      )
     if (action.type === "tabs.focus") {
       focus(entry, action.tabID)
       return { value: page.state(), files: [] }
