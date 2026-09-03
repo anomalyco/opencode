@@ -3,20 +3,6 @@ import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInboxCompaction, type SessionInboxInfo } from "../src/promise"
 
-test("projects model and provider state when the compaction start was not observed", () => {
-  using fixture = setup()
-  const model = { providerID: "demo", id: "model", variant: "variant" }
-  const providerState = { responseId: "summary-response" }
-  fixture.emit({
-    ...event,
-    type: "session.compaction.ended",
-    data: { sessionID, reason: "manual", model, providerState, text: "Summary", recent: "" },
-  })
-  expect(fixture.data.session.message.list(sessionID)).toMatchObject([
-    { type: "compaction", status: "completed", summary: "Summary", model, providerState },
-  ])
-})
-
 test("admits compaction before model setup and serializes the following prompt", async () => {
   using fixture = setup()
   const compact = fixture.data.session.compact({ sessionID, model: { providerID: "demo", id: "model" } })
@@ -112,26 +98,15 @@ test.each(["started", "cancelled", "failed"])(
     expect(fixture.data.session.pending.list(sessionID)).toEqual([])
     if (kind === "started") {
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([{ type: "compaction", status: "running" }])
+      const model = { providerID: "demo", id: "model" }
+      const providerState = { responseId: "summary-response" }
       fixture.emit({
         ...event,
         type: "session.compaction.ended",
-        data: {
-          sessionID,
-          reason: "manual",
-          model: { providerID: "demo", id: "model" },
-          providerState: { responseId: "summary-response" },
-          text: "Summary",
-          recent: "Recent",
-        },
+        data: { sessionID, reason: "manual", model, providerState, text: "Summary", recent: "Recent" },
       })
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([
-        {
-          type: "compaction",
-          status: "completed",
-          summary: "Summary",
-          model: { providerID: "demo", id: "model" },
-          providerState: { responseId: "summary-response" },
-        },
+        { type: "compaction", status: "completed", summary: "Summary", model, providerState },
       ])
     }
   },

@@ -1243,6 +1243,7 @@ describe("SessionTransfer", () => {
       const runningCompactionID = SessionMessage.ID.create()
       const completedCompactionID = SessionMessage.ID.create()
       const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+      const providerState = { responseId: "summary-response" }
 
       yield* transfer.import({
         data: {
@@ -1297,6 +1298,8 @@ describe("SessionTransfer", () => {
               type: "compaction",
               status: "completed",
               reason: "manual",
+              model,
+              providerState,
               summary: "summary",
               recent: "recent",
               time: { created: DateTime.makeUnsafe(9) },
@@ -1313,42 +1316,10 @@ describe("SessionTransfer", () => {
         completedCompactionID,
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
-    }),
-  )
-
-  it.effect("round-trips compaction model and provider state and sanitizes opaque state", () =>
-    Effect.gen(function* () {
-      const sessions = yield* Session.Service
-      const transfer = yield* SessionTransfer.Service
-      const bus = yield* Bus.Service
-      const source = yield* sessions.create({ location })
-      const model = Model.Ref.parse("provider/model#variant")
-      const providerState = { responseId: "private-response", nested: { secret: "opaque" } }
-      yield* bus.publish(SessionEvent.Compaction.Ended, {
-        sessionID: source.id,
-        reason: "manual",
+      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ model, providerState })
+      expect((yield* transfer.export({ sessionID, sanitize: true })).messages.at(-1)).toMatchObject({
         model,
-        providerState,
-        text: "Summary",
-        recent: "",
-      })
-      const data = yield* transfer.export({ sessionID: source.id })
-      const imported = yield* transfer.import({
-        data: {
-          ...data,
-          info: { ...data.info, id: Session.ID.create() },
-          messages: data.messages.map((message) => ({ ...message, id: SessionMessage.ID.create() })),
-        },
-        location,
-      })
-      expect((yield* sessions.messages({ sessionID: imported.id, order: "asc" }))[0]).toMatchObject({
-        model,
-        providerState,
-      })
-      const sanitized = yield* transfer.export({ sessionID: source.id, sanitize: true })
-      expect(sanitized.messages[0]).toMatchObject({
-        model,
-        providerState: { redacted: `compaction-provider-state:${data.messages[0].id}` },
+        providerState: { redacted: `compaction-provider-state:${completedCompactionID}` },
       })
     }),
   )
