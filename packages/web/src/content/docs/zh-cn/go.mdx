@@ -80,6 +80,18 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 
 ---
 
+## 可以在哪里使用？
+
+OpenCode Go 适用于 [OpenCode](https://opencode.ai) 以及其他会产生类似请求的主流编程 Agent。
+
+我们会监控流量，以识别影响其他用户体验的滥用行为。
+
+为避免你的账户被标记为异常，请确保你使用的工具：
+
+1\. 不产生滥用流量  
+2\. 明确标识自身（不要使用过于笼统的 user agent 标识）  
+3\. 包含 `x-opencode-session` 请求头，以便我们优化提示词缓存
+
 ## 使用限制
 
 OpenCode Go 包含以下限制：

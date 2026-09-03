@@ -91,7 +91,7 @@ const getData = query(async () => {
     cacheRatio: stats.cacheRatio.Go,
     sessionCost: stats.sessionCost.Go,
     retention: stats.retention,
-    country: stats.country["2M"],
+    country: stats.country,
   } satisfies StatsHomePageData
 }, "getStatsHomeData")
 

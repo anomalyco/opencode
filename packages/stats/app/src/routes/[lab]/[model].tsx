@@ -52,7 +52,7 @@ type ModelPageCatalog = {
   labs: { id: string; name: string }[]
   labModels: ModelCatalogOption[]
 }
-type StatsModelPageData = Omit<StatsModelData, "country"> & { country: CountryEntry[] }
+type StatsModelPageData = StatsModelData
 type ModelPageData = { catalog: ModelPageCatalog; stats: StatsModelPageData | null }
 
 const countryNumericIds = new Map(
@@ -75,7 +75,7 @@ const getModelPageData = query(async (labParam: string, modelParam: string) => {
           .find((item) => item.id === (entry?.lab ?? providerSlug(labParam)))
           ?.models.map((item) => ({ id: item.id, lab: item.lab, slug: item.slug, name: item.name })) ?? [],
     },
-    stats: stats ? { ...stats, country: stats.country["2M"] } : null,
+    stats,
   } satisfies ModelPageData
 }, "getStatsModelPageData")
 

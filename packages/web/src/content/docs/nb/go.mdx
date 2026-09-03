@@ -90,6 +90,18 @@ Listen over modeller kan endres etter hvert som vi tester og legger til nye.
 
 ---
 
+## Hvor kan jeg bruke det?
+
+OpenCode Go er utviklet for bruk med [OpenCode](https://opencode.ai) og andre populære kodeagenter som genererer lignende typer forespørsler.
+
+Trafikken overvåkes for misbruk som forringer opplevelsen for andre brukere.
+
+For å sikre at kontoen din ikke blir flagget, må du sørge for at verktøyet du bruker,
+
+1\. ikke genererer misbrukstrafikk  
+2\. identifiserer seg korrekt (ingen generiske User-Agent-identifikatorer)  
+3\. inkluderer `x-opencode-session`-headeren, slik at vi kan optimalisere promptbufring
+
 ## Bruksgrenser
 
 OpenCode Go inkluderer følgende grenser:
