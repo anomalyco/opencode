@@ -587,6 +587,8 @@ export namespace Compaction {
       reason: Started.data.fields.reason,
       model: SessionMessage.CompactionCompleted.fields.model,
       providerState: SessionMessage.CompactionCompleted.fields.providerState,
+      replacement: SessionMessage.CompactionCompleted.fields.replacement,
+      replacementModel: SessionMessage.CompactionCompleted.fields.replacementModel,
       text: Schema.String,
       recent: Schema.String,
     },

@@ -412,6 +412,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               reason: event.data.reason,
               model: event.data.model,
               providerState: event.data.providerState,
+              replacement: event.data.replacement,
+              replacementModel: event.data.replacementModel,
               summary: event.data.text,
               recent: event.data.recent,
             })
@@ -426,6 +428,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               reason: event.data.reason,
               model: event.data.model,
               providerState: event.data.providerState,
+              replacement: event.data.replacement,
+              replacementModel: event.data.replacementModel,
               summary: event.data.text,
               recent: event.data.recent,
               time: { created },

@@ -2,7 +2,7 @@ export * as ConfigProvider from "./provider.js"
 
 import { Schema } from "effect"
 import { Money } from "../money.js"
-import { Capabilities, Compatibility, Family, ID, VariantID } from "../model.js"
+import { Capabilities, Compaction, Compatibility, Family, ID, VariantID } from "../model.js"
 import { Provider } from "../provider.js"
 import { optional } from "../schema.js"
 
@@ -44,6 +44,7 @@ class Model extends Schema.Class<Model>("Config.Model")({
   modelID: ID.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String.pipe(optional),
+  compaction: Compaction.pipe(optional),
   compatibility: Compatibility.pipe(optional),
   package: Schema.String.pipe(optional),
   ...Overlays,

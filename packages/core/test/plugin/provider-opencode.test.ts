@@ -227,6 +227,7 @@ describe("OpencodePlugin", () => {
                         modelID: "api-model",
                         name: "Remote Model",
                         family: "remote",
+                        compaction: "provider",
                         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
                         settings: {
                           apiKey: "model-secret",
@@ -320,6 +321,7 @@ describe("OpencodePlugin", () => {
             canonical: "openai",
             name: "Remote Model",
             family: "remote",
+            compaction: "provider",
             capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
             cost: [{ input: 1, output: 2, cache: { read: 0.1, write: 0 } }],
             limit: { context: 1000, output: 100 },
@@ -330,6 +332,7 @@ describe("OpencodePlugin", () => {
           expect(model.settings).toEqual({ baseURL: `${server.url.origin}/v1`, custom: "value", temperature: 0.5 })
           const override = required(yield* catalog.model.get(Provider.ID.make("remote"), Model.ID.make("override")))
           expect(override.package).toBe(Provider.aisdk("@ai-sdk/anthropic"))
+          expect(override.compaction).toBeUndefined()
           expect(override.settings?.baseURL).toBe(`${server.url.origin}/anthropic`)
           expect(model.variants).toEqual([
             {

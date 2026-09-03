@@ -83,6 +83,46 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.capabilities).toEqual({ tools: true, input: ["text", "image"], output: ["text"] })
       expect(model.limit).toEqual({ context: 200_000, output: 32_000 })
+      expect(model.compaction).toBeUndefined()
+      expect(Schema.encodeSync(Model.Info)(model)).not.toHaveProperty("compaction")
+    }),
+  )
+
+  for (const compaction of ["summary", "provider"] as const) {
+    it.effect(`configures ${compaction} compaction without changing other models`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        const providerID = Provider.ID.make("custom")
+        yield* catalog.transform((editor) => {
+          for (const id of ["inherited", "overridden"])
+            editor.model.update(providerID, Model.ID.make(id), (model) => {
+              model.compaction = "provider"
+            })
+        })
+        yield* addPlugin([
+          new Document({
+            type: "document",
+            info: decode({
+              providers: {
+                custom: {
+                  models: { inherited: {}, overridden: { compaction }, fresh: { compaction }, unchanged: {} },
+                },
+              },
+            }),
+          }),
+        ])
+
+        expect((yield* catalog.model.get(providerID, Model.ID.make("inherited")))?.compaction).toBe("provider")
+        expect((yield* catalog.model.get(providerID, Model.ID.make("overridden")))?.compaction).toBe(compaction)
+        expect((yield* catalog.model.get(providerID, Model.ID.make("fresh")))?.compaction).toBe(compaction)
+        expect((yield* catalog.model.get(providerID, Model.ID.make("unchanged")))?.compaction).toBeUndefined()
+      }),
+    )
+  }
+
+  it.effect("rejects unknown model compaction strategies", () =>
+    Effect.sync(() => {
+      expect(() => decode({ providers: { custom: { models: { chat: { compaction: "unknown" } } } } })).toThrow()
     }),
   )
 

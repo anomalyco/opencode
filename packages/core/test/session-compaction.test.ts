@@ -1,6 +1,18 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
-import { OpenAIChat } from "@opencode-ai/ai/protocols"
+import {
+  AIError,
+  CompactionPart,
+  CompactionResponse,
+  InvalidProviderOutputError,
+  LLMEvent,
+  LanguageModel,
+  Message,
+  ToolDefinition,
+  Usage,
+  type LLMRequest,
+} from "@opencode-ai/ai"
+import { LLMClient } from "@opencode-ai/ai/route"
+import { OpenAIChat, OpenAIResponses } from "@opencode-ai/ai/protocols"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -13,6 +25,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { CompactionReplacement, toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Session } from "@opencode-ai/core/session"
@@ -27,6 +40,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Shell } from "@opencode-ai/schema/shell"
+import { Base64, FileAttachment } from "@opencode-ai/schema/prompt"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -76,19 +90,21 @@ const resolved = SessionRunnerModel.resolved(model, {
   cost,
   limit: { context: 200_000, output: 32_000 },
 })
-const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      SessionProjector.node,
-      SessionStore.node,
-      SessionCompaction.node,
-      SessionModelRequest.node,
-    ]),
-    [Bus.node.replace(Bus.configured({ persist: true })), llmClient.replace(client)],
-  ),
-)
+const compactionTests = (layer: typeof client) =>
+  testEffect(
+    AppNodeBuilder.build(
+      LayerNode.group([
+        Database.node,
+        Bus.node,
+        SessionProjector.node,
+        SessionStore.node,
+        SessionCompaction.node,
+        SessionModelRequest.node,
+      ]),
+      [Bus.node.replace(Bus.configured({ persist: true })), llmClient.replace(layer)],
+    ),
+  )
+const it = compactionTests(client)
 
 test("compaction prompt preserves detailed work state and relevant files", () => {
   const prompt = SessionCompaction.buildPrompt(false)
@@ -490,4 +506,259 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.promptCacheKey).toBe(rootID)
   }),
+)
+
+const nativeResolved = {
+  ...resolved,
+  compaction: "provider" as const,
+  model: LanguageModel.make({ id: model.id, provider: model.provider, route: OpenAIResponses.route }),
+}
+const replacement = [
+  Message.make({
+    role: "user",
+    providerMetadata: { openai: { itemId: "retained_user", type: "message", status: "completed" } },
+    content: [
+      { type: "text", text: "Retained request" },
+      {
+        type: "media",
+        data: "https://example.com/image.png",
+        mediaType: "image/png",
+        providerMetadata: { openai: { detail: "high" } },
+      },
+    ],
+  }),
+  Message.assistant(
+    CompactionPart.make({ provider: model.provider, id: "cmp_native", encrypted: "opaque-checkpoint" }),
+  ),
+  Message.make({
+    role: "assistant",
+    providerMetadata: { openai: { itemId: "retained_assistant", phase: "commentary" } },
+    content: [{ type: "text", text: "Retained response" }],
+  }),
+]
+const compacted = new CompactionResponse({
+  replacement,
+  usage: new Usage({ inputTokens: 100, nonCachedInputTokens: 100, outputTokens: 10, reasoningTokens: 2 }),
+})
+
+for (const reason of ["auto", "manual"] as const) {
+  const calls: Array<{ type: string; request: LLMRequest }> = []
+  compactionTests(
+    Layer.mock(LLMClient.Service)({
+      compact: (request) =>
+        Effect.sync(() => {
+          calls.push({ type: "compact", request })
+          return compacted
+        }),
+      stream: (request) => {
+        calls.push({ type: "summary", request })
+        return Stream.make(
+          LLMEvent.textDelta({ id: "summary", text: "## Objective\n- portable summary" }),
+          LLMEvent.stepFinish({
+            index: 0,
+            reason: { normalized: "stop" },
+            providerMetadata: { openai: { responseId: "display-only-response" } },
+            usage: {
+              inputTokens: 15,
+              outputTokens: 6,
+              nonCachedInputTokens: 10,
+              cacheReadInputTokens: 3,
+              cacheWriteInputTokens: 2,
+              reasoningTokens: 2,
+            },
+          }),
+          LLMEvent.finish({ reason: { normalized: "stop" } }),
+        )
+      },
+    }),
+  ).effect(
+    `${reason} provider compaction preserves structured history and commits the whole replacement with combined usage`,
+    () =>
+      Effect.gen(function* () {
+        const compaction = yield* SessionCompaction.Service
+        const modelRequests = yield* SessionModelRequest.Service
+        const store = yield* SessionStore.Service
+        const session = yield* insertSession(Session.ID.make(`ses_native_${reason}`))
+        const messages = [
+          SessionMessage.User.make({
+            id: SessionMessage.ID.create(),
+            type: "user",
+            text: "Original request",
+            time: { created: DateTime.makeUnsafe(0) },
+          }),
+          SessionMessage.Assistant.make({
+            id: SessionMessage.ID.create(),
+            type: "assistant",
+            agent: Agent.defaultID,
+            model: nativeResolved.ref,
+            content: [
+              SessionMessage.AssistantTool.make({
+                type: "tool",
+                id: "read_image",
+                name: "read",
+                providerState: { itemId: "fc_read" },
+                state: {
+                  status: "completed",
+                  input: { path: "image.png" },
+                  content: [
+                    { type: "text", text: "x".repeat(4_001) },
+                    { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png" },
+                  ],
+                },
+                time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
+              }),
+            ],
+            time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
+          }),
+          SessionMessage.User.make({
+            id: SessionMessage.ID.create(),
+            type: "user",
+            text: "Newest request",
+            files: [
+              FileAttachment.make({ data: Base64.make("aGVsbG8="), mime: "image/png", source: { type: "inline" } }),
+            ],
+            time: { created: DateTime.makeUnsafe(2) },
+          }),
+        ]
+        const context = {
+          ...loaded(session, messages),
+          model: nativeResolved,
+          tools: {
+            definitions: [
+              ToolDefinition.make({ name: "read", description: "Read files", inputSchema: { type: "object" } }),
+            ],
+            execute: () => Effect.die("Compaction must not execute tools"),
+          },
+        }
+        const outcome =
+          reason === "auto"
+            ? yield* compaction.compact({ context, prepare: modelRequests.prepare })
+            : yield* compaction.compactManual({
+                session,
+                messages,
+                inputID: SessionMessage.ID.create(),
+                resolveContext: () => Effect.succeed(context),
+                prepare: modelRequests.prepare,
+              })
+        expect(outcome).toEqual({ status: "completed" })
+        expect(calls.map((call) => call.type)).toEqual(["compact", "summary"])
+        expect(calls[0]?.request.messages).toEqual(
+          toLLMMessages(messages, nativeResolved.ref, "openai", nativeResolved.model),
+        )
+        expect(calls[0]?.request.tools.map((tool) => tool.name)).toEqual(["read"])
+        expect(calls[0]?.request.system.some((part) => part.text.includes("Session instructions"))).toBe(true)
+        expect(calls[1]?.request.messages).toEqual([...replacement, Message.user(SessionCompaction.buildPrompt(false))])
+
+        const history = yield* store.context(session.id)
+        expect(history).toHaveLength(1)
+        expect(history[0]).toMatchObject({
+          type: "compaction",
+          status: "completed",
+          reason,
+          model: nativeResolved.ref,
+          summary: "## Objective\n- portable summary",
+          recent: "",
+          replacement: Schema.encodeSync(CompactionReplacement)(replacement),
+        })
+        expect(history[0]).not.toHaveProperty("providerState")
+        expect(toLLMMessages(history, nativeResolved.ref, "openai", nativeResolved.model)).toEqual(replacement)
+        const stored = yield* store.get(session.id)
+        expect(stored?.cost).toBeCloseTo(0.0001433, 10)
+        expect(stored?.tokens).toEqual({ input: 110, output: 12, reasoning: 4, cache: { read: 3, write: 2 } })
+      }),
+  )
+}
+
+for (const failure of ["unsupported", "compact", "summary"] as const) {
+  const calls: string[] = []
+  compactionTests(
+    Layer.mock(LLMClient.Service)({
+      compact: () =>
+        Effect.suspend(() => {
+          calls.push("compact")
+          return failure === "compact"
+            ? Effect.fail(new AIError({ reason: new InvalidProviderOutputError({ message: "Compaction rejected" }) }))
+            : Effect.succeed(compacted)
+        }),
+      stream: () => {
+        calls.push("summary")
+        return Stream.make(LLMEvent.textDelta({ id: "summary", text: "Not a checkpoint template" }))
+      },
+    }),
+  ).effect(`provider ${failure} failure retains the prior checkpoint without committing a replacement`, () =>
+    Effect.gen(function* () {
+      const compaction = yield* SessionCompaction.Service
+      const modelRequests = yield* SessionModelRequest.Service
+      const store = yield* SessionStore.Service
+      const bus = yield* Bus.Service
+      const session = yield* insertSession(Session.ID.make(`ses_native_failure_${failure}`))
+      yield* bus.publish(SessionEvent.Compaction.Ended, {
+        sessionID: session.id,
+        reason: "auto",
+        text: "## Objective\n- prior summary",
+        recent: "",
+      })
+      yield* bus.publish(SessionEvent.Synthetic, { sessionID: session.id, text: "New work must survive failure" })
+      const previous = yield* store.context(session.id)
+      const outcome = yield* compaction.compact({
+        context: {
+          ...loaded(session, previous),
+          model: failure === "unsupported" ? { ...resolved, compaction: "provider" } : nativeResolved,
+        },
+        prepare: modelRequests.prepare,
+      })
+      expect(outcome.status).toBe("failed")
+      expect(calls).toEqual(
+        failure === "unsupported" ? [] : failure === "compact" ? ["compact"] : ["compact", "summary", "summary"],
+      )
+      const history = yield* store.context(session.id)
+      expect(history.slice(0, previous.length)).toEqual(previous)
+      expect(history.at(-1)).toMatchObject({ type: "compaction", status: "failed" })
+      expect(history.filter((message) => message.type === "compaction" && message.status === "completed")).toHaveLength(
+        1,
+      )
+      expect(history.every((message) => !("replacement" in message))).toBe(true)
+      if (failure === "summary") expect((yield* store.get(session.id))?.tokens.input).toBe(100)
+    }),
+  )
+}
+
+compactionTests(
+  Layer.mock(LLMClient.Service)({
+    compact: () => Effect.succeed(compacted),
+    stream: () => Stream.concat(Stream.make(LLMEvent.textDelta({ id: "summary", text: "## Objective" })), Stream.never),
+  }),
+).effect(
+  "interrupted native summary retains prior history and records compact usage without committing replacement",
+  () =>
+    Effect.gen(function* () {
+      const compaction = yield* SessionCompaction.Service
+      const modelRequests = yield* SessionModelRequest.Service
+      const store = yield* SessionStore.Service
+      const bus = yield* Bus.Service
+      const session = yield* insertSession(Session.ID.make("ses_native_interrupted"))
+      yield* bus.publish(SessionEvent.Synthetic, { sessionID: session.id, text: "Keep this work" })
+      const messages = yield* store.context(session.id)
+      const delta = yield* bus
+        .subscribe(SessionEvent.Compaction.Delta)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+      const fiber = yield* compaction
+        .compact({
+          context: { ...loaded(session, messages), model: nativeResolved },
+          prepare: modelRequests.prepare,
+        })
+        .pipe(Effect.forkScoped)
+      yield* Fiber.join(delta)
+      yield* Fiber.interrupt(fiber)
+      const history = yield* store.context(session.id)
+      expect(history[0]).toEqual(messages[0])
+      expect(history.at(-1)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        error: { type: "compaction.interrupted" },
+      })
+      expect(history.every((message) => !("replacement" in message))).toBe(true)
+      expect((yield* store.get(session.id))?.tokens.input).toBe(100)
+    }),
 )

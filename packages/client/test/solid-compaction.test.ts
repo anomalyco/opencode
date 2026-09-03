@@ -100,13 +100,34 @@ test.each(["started", "cancelled", "failed"])(
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([{ type: "compaction", status: "running" }])
       const model = { providerID: "demo", id: "model" }
       const providerState = { responseId: "summary-response" }
+      const replacementModel = { provider: "openai", id: "upstream-model", route: "openai-responses" }
+      const replacement = [
+        { role: "assistant", content: [{ type: "compaction", provider: "demo", encrypted: "opaque" }] },
+      ]
       fixture.emit({
         ...event,
         type: "session.compaction.ended",
-        data: { sessionID, reason: "manual", model, providerState, text: "Summary", recent: "Recent" },
+        data: {
+          sessionID,
+          reason: "manual",
+          model,
+          providerState,
+          replacement,
+          replacementModel,
+          text: "Summary",
+          recent: "Recent",
+        },
       })
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([
-        { type: "compaction", status: "completed", summary: "Summary", model, providerState },
+        {
+          type: "compaction",
+          status: "completed",
+          summary: "Summary",
+          model,
+          providerState,
+          replacement,
+          replacementModel,
+        },
       ])
     }
   },
