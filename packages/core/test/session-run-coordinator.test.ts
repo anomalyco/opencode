@@ -139,6 +139,34 @@ describe("SessionRunCoordinator", () => {
     }),
   )
 
+  for (const where of ["drain", "settlement"]) {
+    it.effect(`preserves ${where} defects combined with user interruption`, () =>
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const defect = new Error(`${where} failed`)
+        const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
+          drain: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.ensuring(where === "drain" ? Effect.die(defect) : Effect.void),
+            ),
+          settled: () => (where === "settlement" ? Effect.die(defect) : Effect.void),
+        })
+        const joining = yield* coordinator.run("session").pipe(Effect.forkChild)
+        yield* Deferred.await(started)
+        yield* coordinator.interrupt("session", "user")
+        const exit = yield* Fiber.await(joining)
+        expect(Exit.isFailure(exit)).toBeTrue()
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasInterrupts(exit.cause)).toBeTrue()
+          expect(Cause.hasDies(exit.cause)).toBeTrue()
+          expect(Cause.pretty(exit.cause)).toContain(defect.message)
+        }
+        expect(yield* coordinator.active).toEqual(new Set())
+      }),
+    )
+  }
+
   it.effect("cleans active executions when its scope closes", () =>
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>()

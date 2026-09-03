@@ -286,7 +286,7 @@ describe("Session.shell", () => {
     )
   }
 
-  // Any external kill is a user stop: stopping keeps the captured output readable, removal forgets it.
+  // Stop preserves the terminal and capture; removal only tells us that the result is unavailable.
   for (const outcome of [
     {
       status: "killed",
@@ -297,11 +297,11 @@ describe("Session.shell", () => {
       output: "killed started",
     },
     {
-      status: "killed",
+      status: "unavailable",
       via: "remove",
       end: (shell: Shell.Interface, id: ID) => shell.remove(id),
-      state: "stopped",
-      text: "Command stopped by user. Do not restart it unless the user asks.",
+      state: "error",
+      text: "Shell command output is no longer available.",
       output: "Shell command output is no longer available.",
     },
     {
@@ -313,7 +313,7 @@ describe("Session.shell", () => {
       output: "timeout started",
     },
   ]) {
-    it.live(`records a  shell via  and admits its completion without waking the model`, () =>
+    it.live(`records a ${outcome.status} shell via ${outcome.via} without waking the model`, () =>
       Effect.gen(function* () {
         const fixture = yield* setup
         const command = yield* launch(fixture, outcome.status)
@@ -368,6 +368,48 @@ describe("Session.shell", () => {
         status: "killed",
         output: expect.stringContaining("early"),
       })
+    }),
+  )
+
+  const posix = process.platform === "win32" ? it.live.skip : it.live
+  posix("finishes an accepted stop despite caller interruption and joins overlapping stops", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const started = yield* fixture.shell.create({
+        shell: "/bin/sh",
+        command: 'trap "" TERM; printf ready; while :; do sleep 60; done',
+        timeout: 0,
+      })
+      const pid = started.pid
+      if (pid === undefined) return yield* Effect.die("Expected shell process ID")
+      yield* Effect.addFinalizer(() =>
+        Effect.try(() => process.kill(-pid, "SIGKILL")).pipe(
+          Effect.ignore,
+          Effect.andThen(fixture.shell.remove(started.id).pipe(Effect.ignore)),
+        ),
+      )
+      yield* fixture.shell
+        .output(started.id)
+        .pipe(
+          Effect.repeat({ until: (page) => page.size > 0, schedule: Schedule.spaced("5 millis") }),
+          Effect.timeout("5 seconds"),
+        )
+      const first = yield* fixture.shell.stop(started.id).pipe(Effect.forkScoped)
+      yield* fixture.shell
+        .get(started.id)
+        .pipe(
+          Effect.repeat({ until: (info) => info.status === "killed", schedule: Schedule.spaced("1 millis") }),
+          Effect.timeout("5 seconds"),
+        )
+      const second = yield* fixture.shell.stop(started.id).pipe(Effect.forkScoped({ startImmediately: true }))
+      // SIGTERM is ignored, so both stops must wait for escalation and capture completion.
+      expect(second.pollUnsafe()).toBeUndefined()
+      yield* Fiber.interrupt(first)
+      const terminal = yield* fixture.shell.wait(started.id).pipe(Effect.timeout("5 seconds"))
+      expect(terminal.status).toBe("killed")
+      expect(yield* Fiber.join(second)).toEqual(terminal)
+      expect(yield* fixture.shell.result(started)).toMatchObject({ capture: { output: "ready", truncated: false } })
+      expect(yield* Effect.try(() => process.kill(pid, 0)).pipe(Effect.result)).toMatchObject({ _tag: "Failure" })
     }),
   )
 

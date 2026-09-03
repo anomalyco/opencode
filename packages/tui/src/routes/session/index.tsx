@@ -2347,6 +2347,7 @@ function RevertMessage(props: {
 
 function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "shell" }> }) {
   const error = createMemo(() => {
+    if (props.message.status === "unavailable") return "Command result is no longer available"
     if (props.message.status === "timeout") return "Command timed out"
     if (props.message.exit !== undefined && props.message.exit !== 0)
       return `Command exited with code ${props.message.exit}`

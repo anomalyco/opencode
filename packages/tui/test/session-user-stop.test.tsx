@@ -14,7 +14,7 @@ test.each([
   { mode: "light" as const, width: 50 },
 ])("renders user stops neutrally while the parent is idle ($mode, $width columns)", async ({ mode, width }) => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width, height: 48, useThread: false })
+  const setup = await createTestRenderer({ width, height: 56, useThread: false })
   setup.renderer.start()
   const session = {
     id: "session-user-stop",
@@ -35,6 +35,14 @@ test.each([
       status: "killed",
       metadata: { background: true },
       output: { output: "user shell output", cursor: 17, size: 17, truncated: false },
+      time: { created: 0, completed: 1 },
+    },
+    {
+      id: "message-unavailable-shell",
+      type: "shell",
+      shellID: "shell-unavailable",
+      command: "echo expired",
+      status: "unavailable",
       time: { created: 0, completed: 1 },
     },
     {
@@ -126,7 +134,7 @@ test.each([
         get: async () => ({ animations: false, tabs: { enabled: false }, theme: { name: "opencode", mode } }),
         update: async () => ({}),
       },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode, complete: () => {} }),
       args: { sessionID: session.id },
       log: () => {},
@@ -141,6 +149,7 @@ test.each([
     expect(frame).not.toContain("Do not restart it")
     expect(frame).toContain("Partial shell output")
     expect(frame).toContain("user shell output")
+    expect(frame).toContain("Command result is no longer available")
     expect(frame).not.toContain("Command cancelled")
     expect(frame).toContain("\u21b3 Explore Subagent")
     expect(frame).not.toContain("\u2713 Explore Subagent")

@@ -9,7 +9,7 @@ export const stopped = "Subagent stopped by user. Do not restart it unless the u
 
 /**
  * How one child execution ended, as the parent's job saw it. Shutdown never settles here: it
- * interrupts the joining run so the job stays `running` and restart resumes the child.
+ * interrupts the joining run so its durable marker stays `running` and restart resumes the child.
  */
 export const Outcome = Schema.Union([
   Schema.Struct({

@@ -33,6 +33,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Permission } from "@opencode-ai/core/permission"
 import { SubagentOutcome } from "@opencode-ai/core/session/subagent-outcome"
+import { SubagentJob } from "@opencode-ai/core/session/subagent-job"
 import { SubagentTool } from "@opencode-ai/core/tool/plugin/subagent"
 import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
@@ -194,6 +195,12 @@ const hangingChild = Effect.fn(function* (title: string, callID: string, input?:
   const llm = yield* TestLLM.Test
   yield* llm.push(TestLLM.hangAfter())
   const running = yield* Deferred.make<Session.ID>()
+  const jobs = yield* Job.Service
+  const bus = yield* Bus.Service
+  const launches: Array<Job.Info | undefined> = []
+  yield* bus.project(SessionEvent.Execution.Started, (event) =>
+    jobs.get(event.data.sessionID).pipe(Effect.tap((job) => Effect.sync(() => void launches.push(job)))),
+  )
   const call = yield* executeTool(registry, {
     sessionID: parent.id,
     ...toolIdentity,
@@ -207,7 +214,8 @@ const hangingChild = Effect.fn(function* (title: string, callID: string, input?:
   }).pipe(Effect.forkScoped)
   const childID = yield* Deferred.await(running)
   yield* llm.wait(1)
-  const jobs = yield* Job.Service
+  // Both foreground and background new children have a Job before execution begins.
+  expect(launches).toMatchObject([{ id: childID, status: "running" }])
   yield* jobs
     .get(childID)
     .pipe(
@@ -218,6 +226,42 @@ const hangingChild = Effect.fn(function* (title: string, callID: string, input?:
 })
 
 describe("SubagentTool", () => {
+  completionIt.live("uses the original job metadata when a joining call backgrounds the child", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const sessions = yield* Session.Service
+      const jobs = yield* Job.Service
+      const subagents = yield* SubagentJob.make
+      const parent = yield* sessions.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+        model: parentModel,
+      })
+      const child = yield* sessions.create({ parentID: parent.id, model: childModel })
+      const completed = yield* Deferred.make<Job.Outcome>()
+      const recovery = {
+        kind: "subagent" as const,
+        parentSessionID: parent.id,
+        childSessionID: child.id,
+        agent: "reviewer",
+        description: "Original review",
+      }
+      yield* jobs.start({ id: child.id, type: "subagent", recovery, run: Deferred.await(completed) })
+      const joined = yield* subagents.start({ ...recovery, agent: "explorer", description: "Follow-up review" })
+      expect(joined.recovery).toEqual(recovery)
+      yield* subagents.background(child.id)
+      expect(yield* jobs.pendingBackground).toMatchObject([{ recovery }])
+      // A stopped result keeps the notice pending, making the actual live admission inspectable.
+      yield* Deferred.succeed(completed, { kind: "subagent", status: "interrupted" })
+      yield* jobs.pendingBackground.pipe(
+        Effect.repeat({ until: (pending) => pending.length === 0, schedule: Schedule.spaced("5 millis") }),
+        Effect.timeout("5 seconds"),
+      )
+      expect(yield* sessions.inbox(parent.id)).toMatchObject([
+        { payload: { description: recovery.description, metadata: { agent: recovery.agent, state: "stopped" } } },
+      ])
+    }),
+  )
+
   completionIt.live("answers a user stop of a foreground child as a stopped result the parent can continue", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service

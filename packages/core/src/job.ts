@@ -38,6 +38,8 @@ const Background = Schema.Struct({
   ]),
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
   result: Schema.optionalKey(Outcome),
+  // Read-only compatibility with markers written before typed outcomes. Never reconstruct facts from this text.
+  output: Schema.optionalKey(Schema.String),
   error: Schema.optionalKey(Schema.String),
 })
 
@@ -45,7 +47,7 @@ export type Background = typeof Background.Type
 export type Recovery = Background["recovery"]
 export type Status = Background["status"]
 /** One job's terminal facts, shared by live Info and the durable background marker. */
-export type Terminal = Pick<Background, "status" | "result" | "error">
+export type Terminal = Pick<Background, "status" | "result" | "output" | "error">
 
 const decodeBackground = Schema.decodeUnknownResult(Background)
 const backgroundPrefix = "job.background/"
@@ -61,6 +63,7 @@ export type Info = {
   error?: string
   metadata?: Record<string, unknown>
   notificationID?: SessionMessage.ID
+  recovery?: Recovery
 }
 
 type Active = {
@@ -70,7 +73,6 @@ type Active = {
   scope: Scope.Closeable
   blockingSessions: Map<SessionSchema.ID, number>
   isBackgrounded: boolean
-  recovery?: Recovery
 }
 
 type State = {
@@ -185,11 +187,11 @@ export const make = Effect.gen(function* () {
   }
 
   const persistBackground = Effect.fnUntraced(function* (job: Active) {
-    if (!job.recovery || !job.info.notificationID) return
+    if (!job.info.recovery || !job.info.notificationID) return
     yield* kv.set(`${backgroundPrefix}${job.info.notificationID}`, {
       id: job.info.id,
       notificationID: job.info.notificationID,
-      recovery: job.recovery,
+      recovery: job.info.recovery,
       status: job.info.status,
       ...(job.info.result !== undefined ? { result: job.info.result } : {}),
       ...(job.info.error !== undefined ? { error: job.info.error } : {}),
@@ -261,6 +263,7 @@ export const make = Effect.gen(function* () {
                 status: "running" as const,
                 started_at,
                 metadata: input.metadata,
+                recovery: input.recovery,
                 ...(input.notificationID ? { notificationID: input.notificationID } : {}),
               },
               done,
@@ -268,7 +271,6 @@ export const make = Effect.gen(function* () {
               scope,
               blockingSessions: new Map<SessionSchema.ID, number>(),
               isBackgrounded: false,
-              recovery: input.recovery,
             }
             return [{ info: snapshot(job), scope }, new Map(jobs).set(id, job)]
           }),
@@ -337,7 +339,7 @@ export const make = Effect.gen(function* () {
       blockingSessions: new Map<SessionSchema.ID, number>(),
       info: {
         ...job.info,
-        ...(job.recovery ? { notificationID: job.info.notificationID ?? SessionMessage.ID.create() } : {}),
+        ...(job.info.recovery ? { notificationID: job.info.notificationID ?? SessionMessage.ID.create() } : {}),
       },
     }
     yield* persistBackground(next)
@@ -350,7 +352,7 @@ export const make = Effect.gen(function* () {
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
         const job = jobs.get(id)
         // Recoverable work may finish before the caller backgrounds it.
-        if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
+        if (!job || (job.info.status !== "running" && !job.info.recovery)) return [{}, jobs]
         if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
         const next = yield* markBackground(job)
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]

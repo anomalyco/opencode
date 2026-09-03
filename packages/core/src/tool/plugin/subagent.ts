@@ -166,8 +166,8 @@ export const Plugin = {
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              // Standard prompt admission outside the job: Job.start joining a running child skips
-              // its run effect, and the default wake starts an idle child or steers a running one.
+              // A new child starts only through its Job. Existing children still need the prompt's
+              // wake: joining an active Job skips run, but new input must still steer the child.
               yield* sessions
                 .prompt({
                   sessionID: child.id,
@@ -175,7 +175,7 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
-                  ...(background && existing === undefined ? { resume: false } : {}),
+                  ...(existing === undefined ? { resume: false } : {}),
                 })
                 .pipe(
                   Effect.mapError(
@@ -193,7 +193,7 @@ export const Plugin = {
               yield* subagents.start(recovery)
 
               if (background) {
-                yield* subagents.background(recovery)
+                yield* subagents.background(child.id)
                 return backgroundResult(child.id)
               }
 
@@ -205,7 +205,7 @@ export const Plugin = {
                 ),
               )
               if (result?.type === "backgrounded") {
-                yield* subagents.notify(recovery, result.info.started_at)
+                yield* subagents.notify(result.info)
                 return backgroundResult(child.id)
               }
               // Failure surfaces keep the sessionID visible so the model can continue the child.

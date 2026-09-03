@@ -73,16 +73,10 @@ const Output = Schema.Struct({
 
 type Output = typeof Output.Type
 
-const notice = (output: Output) => {
-  if (output.status === "running") return BACKGROUND_INSTRUCTION
-  if (output.status === "stopped") return ShellResult.stopped
-  return ShellResult.notice({ status: output.timeout ? "timeout" : "exited", exit: output.exit })
-}
-
-const toolResult = (output: Output) => {
+const toolResult = (output: Output, notice: string) => {
   return {
     output,
-    content: [output.output, notice(output)].map((text) => ({ type: "text" as const, text })),
+    content: [output.output, notice].map((text) => ({ type: "text" as const, text })),
     metadata: {
       status: output.status,
       truncated: output.truncated,
@@ -93,20 +87,26 @@ const toolResult = (output: Output) => {
   }
 }
 
-const completedResult = (outcome: ShellResult.Outcome): Output => ({
-  output: outcome.output,
-  truncated: outcome.truncated,
-  ...(outcome.exit !== undefined ? { exit: outcome.exit } : {}),
-  ...(outcome.status === "timeout" ? { timeout: true } : {}),
-  status: outcome.status === "killed" ? "stopped" : "completed",
-})
+const completedResult = (outcome: ShellResult.Outcome) =>
+  toolResult(
+    {
+      output: outcome.output,
+      ...ShellResult.metadata(outcome),
+      status: outcome.status === "killed" ? "stopped" : "completed",
+    },
+    ShellResult.notice(outcome),
+  )
 
-const backgroundResult = (shellID: string, file: string): Output => ({
-  output: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${file}`,
-  shellID,
-  truncated: false,
-  status: "running",
-})
+const backgroundResult = (shellID: string, file: string) =>
+  toolResult(
+    {
+      output: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${file}`,
+      shellID,
+      truncated: false,
+      status: "running",
+    },
+    BACKGROUND_INSTRUCTION,
+  )
 
 export const Plugin = {
   id: "opencode.tool.shell",
@@ -173,10 +173,10 @@ export const Plugin = {
     })
 
     const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(
-      function* (recovery: Extract<Job.Recovery, { kind: "shell" }>) {
-        const info = (yield* jobs.wait({ id: recovery.shellID })).info
-        if (!info || info.status === "running") return
-        yield* BackgroundNotice.deliver(sessions, jobs, { ...info, recovery })
+      function* (id: string) {
+        const info = (yield* jobs.wait({ id })).info
+        if (!info?.recovery || info.status === "running") return
+        yield* BackgroundNotice.deliver(sessions, jobs, { ...info, recovery: info.recovery })
       },
       Effect.forkIn(scope, { startImmediately: true }),
     )
@@ -240,7 +240,7 @@ export const Plugin = {
 
               if (input.background === true) {
                 yield* jobs.background(job.id)
-                yield* notifyWhenDone(recovery)
+                yield* notifyWhenDone(job.id)
                 return backgroundResult(info.id, info.file)
               }
 
@@ -249,15 +249,16 @@ export const Plugin = {
                 .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0).pipe(Effect.ignore)
-                yield* notifyWhenDone(recovery)
+                yield* notifyWhenDone(job.id)
                 return backgroundResult(info.id, info.file)
               }
               if (result?.info.status === "error")
                 return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
               if (result?.info.result?.kind !== "shell") return yield* Effect.fail(new Error("Command cancelled"))
+              if (result.info.result.status === "unavailable")
+                return yield* Effect.fail(new Error(ShellResult.unavailable.output))
               return completedResult(result.info.result)
             }).pipe(
-              Effect.map(toolResult),
               Effect.mapError(
                 (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
               ),

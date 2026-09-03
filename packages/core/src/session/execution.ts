@@ -48,7 +48,7 @@ type InterruptReason = "user" | "shutdown"
 
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
-  if (Cause.hasInterrupts(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
+  if (Cause.hasInterruptsOnly(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
   const failure = Cause.squash(exit.cause)
   if (failure instanceof UserInterruptedError) return { type: "interrupted" as const, reason: "user" as const }
   return { type: "failed" as const, error: toSessionError(failure) }

@@ -121,7 +121,7 @@ export const make = <Key, E, Reason = never>(options: {
       else executions.delete(key)
       const ended: Effect.Effect<Terminal<Reason>, E> = Exit.isSuccess(exit)
         ? Effect.succeed({ type: "succeeded" })
-        : Cause.hasInterrupts(exit.cause)
+        : Cause.hasInterruptsOnly(exit.cause)
           ? Effect.succeed({ type: "interrupted", reason: execution.interruptionReason })
           : Effect.failCause(exit.cause)
       Deferred.doneUnsafe(execution.done, ended)

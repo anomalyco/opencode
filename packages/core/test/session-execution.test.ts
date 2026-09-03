@@ -56,6 +56,11 @@ describe("SessionExecution lifecycle", () => {
     })
   })
 
+  test("does not classify interruption mixed with a defect as a user stop", () => {
+    const exit = Effect.runSyncExit(Effect.interrupt.pipe(Effect.ensuring(Effect.die(new Error("cleanup failed")))))
+    expect(SessionExecution.terminal(exit, "user")).toMatchObject({ type: "failed" })
+  })
+
   it.effect("the sweep only lists claimed top-level Sessions", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -589,6 +594,56 @@ describe("SessionRestart background recovery", () => {
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
+
+  for (const kind of ["shell", "subagent"] as const) {
+    it.effect(`replays a pre-outcome ${kind} completion without losing its saved text`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const kv = yield* KV.Service
+        const parent = Session.ID.make(`ses_legacy_${kind}_parent`)
+        const child = Session.ID.make(`ses_legacy_${kind}_child`)
+        const notificationID = SessionMessage.ID.make(`msg_legacy_${kind}`)
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], { parent_id: parent })
+        // Literal old writer format: no typed result and no inferred exit/capture metadata.
+        const output = kind === "shell" ? "saved output\n\nCommand exited with code 7." : "The saved child answer."
+        yield* kv.set(`job.background/${notificationID}`, {
+          id: kind === "shell" ? "sh_legacy" : child,
+          notificationID,
+          recovery:
+            kind === "shell"
+              ? { kind, sessionID: parent, shellID: "sh_legacy", command: "exit 7" }
+              : { kind, parentSessionID: parent, childSessionID: child, agent: "reviewer", description: "Review" },
+          status: "completed",
+          output,
+        })
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const jobs = yield* Job.make.pipe(Scope.provide(scope))
+        const drained: Session.ID[] = []
+        const context = yield* buildExecution(
+          scope,
+          ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
+          undefined,
+          jobs,
+        )
+        yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+        yield* Context.get(context, SessionExecution.Service).awaitIdle(parent)
+        const inbox = yield* SessionInbox.list(database.db, parent)
+        expect(drained).toEqual([parent])
+        expect(inbox).toMatchObject([
+          {
+            id: notificationID,
+            type: "synthetic",
+            payload: { text: expect.stringContaining(output), metadata: { state: "completed" } },
+          },
+        ])
+        expect(inbox[0]).not.toHaveProperty("payload.metadata.exit")
+        expect(inbox[0]).not.toHaveProperty("payload.metadata.truncated")
+        expect(yield* jobs.pendingBackground).toEqual([])
+      }),
+    )
+  }
 
   for (const delivered of [false, true]) {
     it.effect(`does not duplicate a shell notification already ${delivered ? "delivered" : "admitted"}`, () =>

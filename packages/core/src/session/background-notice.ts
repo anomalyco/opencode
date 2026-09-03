@@ -46,14 +46,16 @@ function state(input: Job.Terminal, stopped: boolean): ShellResult.State {
 
 function shell(input: Input, recovery: Extract<Job.Recovery, { kind: "shell" }>) {
   const outcome = input.result?.kind === "shell" ? input.result : undefined
-  const ended = state(input, outcome?.status === "killed")
+  const ended = outcome ? ShellResult.state(outcome) : state(input, false)
   const text = outcome
     ? ShellResult.text(outcome)
-    : input.status === "error"
-      ? (input.error ?? "Command failed")
-      : input.status === "running"
-        ? "Command cancelled because the server restarted"
-        : "Command cancelled"
+    : input.status === "completed"
+      ? (input.output ?? "Command completed")
+      : input.status === "error"
+        ? (input.error ?? "Command failed")
+        : input.status === "running"
+          ? "Command cancelled because the server restarted"
+          : "Command cancelled"
   return {
     state: ended,
     ...ShellResult.notification({
@@ -74,9 +76,11 @@ function subagent(input: Input, recovery: Extract<Job.Recovery, { kind: "subagen
     ? outcome.status === "completed"
       ? outcome.text
       : SubagentOutcome.stopped
-    : input.status === "error"
-      ? (input.error ?? "Subagent failed")
-      : "Subagent cancelled"
+    : input.status === "completed"
+      ? (input.output ?? "Subagent completed without a text response.")
+      : input.status === "error"
+        ? (input.error ?? "Subagent failed")
+        : "Subagent cancelled"
   return {
     state: ended,
     text: `<subagent sessionID="${recovery.childSessionID}" state="${ended}" description="${recovery.description}">\n${text}\n</subagent>`,

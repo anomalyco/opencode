@@ -18333,6 +18333,12 @@
             "type": "string",
             "enum": ["auto", "manual"]
           },
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "providerState": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_5"
+          },
           "summary": {
             "type": "string"
           },
@@ -18560,6 +18566,9 @@
       "Session.Message.ProviderState_4": {
         "type": "object"
       },
+      "Session.Message.ProviderState_5": {
+        "type": "object"
+      },
       "Session.Message.Shell": {
         "type": "object",
         "properties": {
@@ -18596,7 +18605,7 @@
           },
           "status": {
             "type": "string",
-            "enum": ["running", "exited", "timeout", "killed"]
+            "enum": ["running", "exited", "timeout", "killed", "unavailable"]
           },
           "exit": {
             "anyOf": [
@@ -19317,7 +19326,7 @@
           },
           "status": {
             "type": "string",
-            "enum": ["running", "exited", "timeout", "killed"]
+            "enum": ["running", "exited", "timeout", "killed", "unavailable"]
           },
           "command": {
             "type": "string"
