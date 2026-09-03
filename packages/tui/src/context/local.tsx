@@ -10,6 +10,7 @@ import { useClient } from "./client"
 import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
 import {
+  availableModelVariant,
   createModelPreferenceRepository,
   cycleModelVariant,
   modelPreferenceKey,
@@ -221,7 +222,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (route.data.type === "session") return sessionSelection(route.data.sessionID)
         const model = newSessionModel()
         if (!model) return
-        return { ...model, variant: normalizeModelVariant(preferences.variant[modelPreferenceKey(model)]) }
+        const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
+        return {
+          ...model,
+          variant: availableModelVariant(
+            preferences.variant[modelPreferenceKey(model)],
+            info?.variants?.map((item) => item.id) ?? [],
+          ),
+        }
       })
 
       const currentModel = createMemo(() => {
@@ -262,13 +270,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (route.data.type === "session") {
           const sessionID = route.data.sessionID
           const current = sessionSelection(sessionID)
-          const preferred = normalizeModelVariant(
+          const preferred =
             current?.providerID === model.providerID && current.modelID === model.modelID
               ? current.variant
-              : preferences.variant[modelPreferenceKey(model)],
-          )
+              : preferences.variant[modelPreferenceKey(model)]
           const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
-          const variant = preferred && info?.variants?.some((item) => item.id === preferred) ? preferred : undefined
+          const variant = availableModelVariant(preferred, info?.variants?.map((item) => item.id) ?? [])
           setSessionDraft(sessionID, { ...model, variant })
           return true
         }

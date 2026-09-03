@@ -39,6 +39,11 @@ export function normalizeModelVariant(value: string | undefined) {
   return value === "default" ? undefined : value
 }
 
+export function availableModelVariant(value: string | undefined, variants: string[]) {
+  const variant = normalizeModelVariant(value)
+  return variant && variants.includes(variant) ? variant : undefined
+}
+
 export function modelPreferenceKey(model: ModelPreferenceModel) {
   return `${model.providerID}/${model.modelID}`
 }
