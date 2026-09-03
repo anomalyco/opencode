@@ -237,6 +237,109 @@ test.each([false, true])(
   },
 )
 
+test.each([false, true])("a later complete move avoids re-reading unknown adoption (family: %s)", async (children) => {
+  const setup = fixture(
+    [{ ...session(), title: "Fresh title", cost: 40 }, session("ses_child", "ses_move")],
+    async (response, index) =>
+      index < (children ? 2 : 1) ? response : Response.json({ message: "network unavailable" }, { status: 503 }),
+  )
+  try {
+    const read = setup.data.session.sync("ses_move", { children })
+    await setup.requested.promise
+    setup.move("ses_move", 2, { projectID: "directory-project", location: { directory: "/shortcut" } })
+    setup.emit({
+      id: "evt_resolved",
+      type: "worktree.resolved",
+      created: 3,
+      durable: { aggregateID: "git-project", seq: 1, version: 1 },
+      data: { previous: "other-project", projectID: "git-project", directory: "/repo", adopted: ["directory-project"] },
+    })
+    setup.move("ses_move", 4, { projectID: "final-project", location: { directory: "/final/src" }, subpath: "src" })
+    setup.release.resolve()
+    await read
+    expect(setup.data.session.get("ses_move")).toMatchObject({
+      location: { directory: "/final/src" },
+      projectID: "final-project",
+      subpath: "src",
+      title: "Fresh title",
+      cost: 40,
+    })
+    expect(setup.data.session.get("ses_move")?.location.workspaceID).toBeUndefined()
+    expect(setup.requests).toHaveLength(children ? 2 : 1)
+  } finally {
+    setup.release.resolve()
+    setup.dispose()
+  }
+})
+
+test.each(["other-session", "known-adoption", "unknown-adoption"])(
+  "unknown placement is superseded only by a complete same-session move (%s)",
+  async (mode) => {
+    const parent = {
+      ...session(),
+      projectID: "resolved-project",
+      location: { directory: mode === "other-session" ? "/shortcut" : "/final/src" },
+      subpath: "src",
+    }
+    const child = {
+      ...session("ses_child", "ses_move"),
+      projectID: "final-project",
+      location: { directory: "/final/src" },
+      subpath: "src",
+    }
+    const setup = fixture([session(), session("ses_child", "ses_move")], async (response, index) => {
+      if (index < 2) return response
+      if (mode === "known-adoption") return Response.json({ message: "unnecessary request" }, { status: 503 })
+      return Response.json(index % 2 === 0 ? { data: parent } : { data: [child], cursor: {} })
+    })
+    try {
+      const read = setup.data.session.sync("ses_move", { children: true })
+      await setup.requested.promise
+      setup.move("ses_move", 2, { projectID: "directory-project", location: { directory: "/shortcut" } })
+      setup.emit({
+        id: "evt_resolved",
+        type: "worktree.resolved",
+        created: 3,
+        durable: { aggregateID: "resolved-project", seq: 1, version: 1 },
+        data: {
+          previous: "other-project",
+          projectID: "resolved-project",
+          directory: "/repo",
+          adopted: ["directory-project"],
+        },
+      })
+      setup.move(mode === "other-session" ? "ses_child" : "ses_move", 4, {
+        projectID: "final-project",
+        location: { directory: "/final/src" },
+        subpath: "src",
+      })
+      if (mode !== "other-session")
+        setup.emit({
+          id: "evt_final_resolved",
+          type: "worktree.resolved",
+          created: 5,
+          durable: { aggregateID: "resolved-project", seq: 2, version: 1 },
+          data: {
+            previous: "final-project",
+            projectID: "resolved-project",
+            directory: "/final",
+            adopted: mode === "unknown-adoption" ? ["final-project"] : undefined,
+          },
+        })
+      setup.release.resolve()
+      await read
+      expect(setup.data.session.get("ses_move")?.projectID).toBe("resolved-project")
+      expect(setup.data.session.get("ses_move")?.subpath).toBe("src")
+      expect(setup.data.session.get("ses_move")?.location).toEqual(parent.location)
+      if (mode === "other-session") expect(setup.data.session.get("ses_child")?.projectID).toBe("final-project")
+      expect(setup.requests).toHaveLength(mode === "known-adoption" ? 2 : 4)
+    } finally {
+      setup.release.resolve()
+      setup.dispose()
+    }
+  },
+)
+
 test.each([false, true])(
   "a missing-canonical family refresh observes later moves and releases failed reads (failed: %s)",
   async (failed) => {

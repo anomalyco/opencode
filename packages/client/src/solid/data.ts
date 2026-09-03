@@ -1503,16 +1503,17 @@ export function createData(config: CreateDataInput) {
             ])
             const sessions = [info, ...children].map((session) =>
               placements.reduce<SessionInfo | undefined>((info, event) => {
-                if (!info) return
+                // A complete move supersedes even an earlier adoption whose placement was unresolved.
                 if (event.type === "session.moved")
-                  return event.data.sessionID === info.id
+                  return event.data.sessionID === session.id
                     ? {
-                        ...info,
+                        ...session,
                         location: { ...event.data.location },
                         projectID: event.data.projectID,
                         subpath: event.data.subpath,
                       }
                     : info
+                if (!info) return
                 const target = adoptionTarget(info, event.data)
                 if (!target && !info.location.workspaceID) return
                 const adopted = target && Worktree.adopt(target, event.data)
