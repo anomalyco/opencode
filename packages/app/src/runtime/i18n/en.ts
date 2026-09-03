@@ -931,6 +931,7 @@ export const dict = {
   "settings.desktop.wsl.title": "WSL integration",
   "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
   "dialog.server.authenticate.title": "Authenticate",
+  "project.settings.title": "Edit project",
   "project.settings.general.description": "Manage project name and appearance",
   "project.settings.scripts": "Scripts",
   "project.settings.scripts.description": "Configure scripts for this project",

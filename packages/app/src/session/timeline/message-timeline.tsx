@@ -10,7 +10,6 @@ import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { Menu } from "@opencode-ai/ui/menu"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
 import type { Project } from "@/runtime/server/types"
 import { getFilename } from "@opencode-ai/util/path"
@@ -31,7 +30,7 @@ import { displayName, getProjectAvatarSource, projectForSession } from "@/shell/
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { useCommand } from "@/shell/commands/command"
 import { useSettings } from "@/settings/model"
-import { SessionTitleHeader } from "../session-identity-header"
+import { SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeader } from "@/session/header/session-header"
 import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 
@@ -385,7 +384,6 @@ function MessageTimelineView(
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
   const showProjectIcon = () => import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && settings.general.showProjectIcon()
   const avatarProject = createMemo(() => {
-    if (!showProjectIcon()) return
     const session = props.session.data.info()
     if (!session) return
     return projectForSession(session, server.ctx.projects.list())
@@ -670,36 +668,13 @@ function MessageTimelineView(
           <SessionTitleHeader>
             <div class="h-12 w-full flex items-center justify-between gap-2">
               <div class="flex items-center gap-1 min-w-0 flex-1">
-                <div class="flex items-center min-w-0 flex-1 w-full">
-                  <Show
-                    when={workspaceSession()}
-                    fallback={
-                      <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
-                        <Show when={showProjectIcon()} fallback={<Icon name="monitor" />}>
-                          {projectAvatar()}
-                        </Show>
-                      </span>
-                    }
-                  >
-                    <Tooltip
-                      placement="bottom-start"
-                      value={sessionDirectory()}
-                      contentClass="max-w-[calc(100vw-32px)] break-all"
-                    >
-                      <span
-                        tabIndex={0}
-                        aria-label={sessionDirectory()}
-                        classList={{
-                          "flex size-6 shrink-0 items-center justify-center": true,
-                          "text-v2-icon-icon-accent": !showProjectIcon(),
-                        }}
-                      >
-                        <Show when={showProjectIcon()} fallback={<Icon name="workspace-isolated" />}>
-                          {projectAvatar()}
-                        </Show>
-                      </span>
-                    </Tooltip>
-                  </Show>
+                <div class="flex items-center gap-0.5 min-w-0 flex-1 w-full">
+                  <SessionProjectMenu
+                    project={avatarProject()}
+                    directory={sessionDirectory()}
+                    workspace={workspaceSession()}
+                    showProjectIcon={showProjectIcon()}
+                  />
                   <Show when={parentID()}>
                     <button
                       type="button"
@@ -723,7 +698,7 @@ function MessageTimelineView(
                       fallback={
                         <h1
                           data-slot="session-title-child"
-                          class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover"
+                          class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-1 py-1 hover:bg-v2-overlay-simple-overlay-hover"
                           onClick={openTitleEditor}
                         >
                           {childTitle()}
@@ -738,7 +713,7 @@ function MessageTimelineView(
                         dir="auto"
                         value={title.draft}
                         disabled={props.pending.rename()}
-                        class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content self-start rounded-[6px] px-2 py-1"
+                        class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content rounded-[6px] px-1 py-1"
                         style={{
                           "--inline-input-shadow": "none",
                           "text-align": "start",
@@ -765,7 +740,7 @@ function MessageTimelineView(
                     {(id) => (
                       <Menu
                         gutter={6}
-                        placement="bottom-end"
+                        placement="bottom-start"
                         open={title.menuOpen}
                         onOpenChange={(open) => setTitle("menuOpen", open)}
                       >
@@ -780,7 +755,8 @@ function MessageTimelineView(
                         />
                         <Menu.Portal>
                           <Menu.Content
-                            style={{ "min-width": "160px" }}
+                            class="session-options-menu w-max"
+                            style={{ "min-width": "0" }}
                             onCloseAutoFocus={(event) => {
                               if (!title.pendingRename) return
                               event.preventDefault()
