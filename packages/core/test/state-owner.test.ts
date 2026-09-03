@@ -28,6 +28,7 @@ it.effect("detaches every registration of a failed owner and refreshes every aff
     })
     yield* first.transform((editor) => editor.values.push("healthy"))
     const registration = yield* first.transform((editor) => editor.values.push("owned")).pipe(owned)
+    yield* first.transform((editor) => editor.values.push("also owned")).pipe(owned)
     yield* second
       .transform((editor) => {
         calls++
@@ -42,13 +43,14 @@ it.effect("detaches every registration of a failed owner and refreshes every aff
 
     expect(first.get().values).toEqual(["healthy"])
     expect(second.get().values).toEqual([])
-    expect(before.values).toEqual(["healthy", "owned"])
+    expect(before.values).toEqual(["healthy", "owned", "also owned"])
     expect(failures).toHaveLength(1)
     expect(failures[0]?.state).toBe("second")
     expect(calls).toBe(2)
 
     notices.length = 0
-    yield* State.batch(refresh)
+    // The owner deduplicates its domain notifications without relying on an outer batch.
+    yield* refresh
     expect(notices.toSorted()).toEqual(["first", "second"])
     yield* registration.dispose
     expect(notices).toHaveLength(2)

@@ -155,7 +155,7 @@ export interface Interface<State, Editor> extends Transformable<Editor> {
 
 export function create<State, Editor>(options: Options<State, Editor>): Interface<State, Editor> {
   let state = options.initial()
-  const transforms: { run: TransformCallback<Editor>; owner: Owner | undefined }[] = []
+  const transforms = new Set<{ run: TransformCallback<Editor>; owner: Owner | undefined }>()
   let dirty = false
   let closed = false
   let version = 0
@@ -225,9 +225,7 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
           const transform = { run: update, owner }
           const registration: OwnedRegistration = {
             remove: () => {
-              const index = transforms.indexOf(transform)
-              if (index < 0) return false
-              transforms.splice(index, 1)
+              if (!transforms.delete(transform)) return false
               owner?.registrations.delete(registration)
               invalidate()
               return true
@@ -235,7 +233,7 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
             notify: changed,
           }
           const dispose = Effect.uninterruptible(Effect.suspend(() => (registration.remove() ? changed : Effect.void)))
-          transforms.push(transform)
+          transforms.add(transform)
           owner?.registrations.add(registration)
           yield* Scope.addFinalizer(scope, dispose)
           yield* changed

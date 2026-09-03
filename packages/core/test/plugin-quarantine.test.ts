@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Deferred, Effect, Exit } from "effect"
+import { Deferred, Effect, Exit, Fiber } from "effect"
 import { Bus } from "@opencode-ai/core/bus"
 import { Command } from "@opencode-ai/core/command"
 import { Plugin } from "@opencode-ai/core/plugin"
@@ -15,7 +15,6 @@ Array.of("reload", "teardown").forEach((boundary) =>
       const commands = yield* Command.Service
       const entered = yield* Deferred.make<void>()
       const escape = yield* Deferred.make<void>()
-      const activated = yield* Deferred.make<void>()
       const cleaned = yield* Deferred.make<void>()
       let fail = false
       yield* plugins.activate([
@@ -48,7 +47,7 @@ Array.of("reload", "teardown").forEach((boundary) =>
         },
       ])
       fail = true
-      yield* (boundary === "reload" ? commands.reload() : Effect.void).pipe(
+      const activation = yield* (boundary === "reload" ? commands.reload() : Effect.void).pipe(
         Effect.andThen(
           plugins.activate([
             {
@@ -63,14 +62,13 @@ Array.of("reload", "teardown").forEach((boundary) =>
             },
           ]),
         ),
-        Effect.andThen(Deferred.succeed(activated, undefined)),
         Effect.forkChild({ startImmediately: true }),
       )
       yield* Deferred.await(entered)
-      const result = yield* Deferred.await(activated).pipe(Effect.timeout("250 millis"), Effect.exit)
+      const result = yield* Fiber.join(activation).pipe(Effect.timeout("250 millis"), Effect.exit)
       // Allow teardown to finish even if activation incorrectly joins the old finalizer.
       yield* Deferred.succeed(escape, undefined)
-      yield* Deferred.await(activated)
+      yield* Fiber.join(activation)
       yield* plugins.awaitActivation
       yield* Deferred.await(cleaned)
       expect(Exit.isSuccess(result)).toBe(true)
@@ -206,7 +204,6 @@ it.live("settles readiness before shutdown joins a quarantined plugin's finalize
     const commands = yield* Command.Service
     const entered = yield* Deferred.make<void>()
     const escape = yield* Deferred.make<void>()
-    const closed = yield* Deferred.make<void>()
     let fail = false
     yield* plugins.activate([
       {
@@ -227,18 +224,14 @@ it.live("settles readiness before shutdown joins a quarantined plugin's finalize
       },
     ])
     fail = true
-    yield* commands
+    const shutdown = yield* commands
       .reload()
-      .pipe(
-        Effect.andThen(plugins.close(Exit.void)),
-        Effect.andThen(Deferred.succeed(closed, undefined)),
-        Effect.forkChild({ startImmediately: true }),
-      )
+      .pipe(Effect.andThen(plugins.close(Exit.void)), Effect.forkChild({ startImmediately: true }))
     yield* Deferred.await(entered)
-    const result = yield* Deferred.await(closed).pipe(Effect.timeout("250 millis"), Effect.exit)
+    const result = yield* Fiber.join(shutdown).pipe(Effect.timeout("250 millis"), Effect.exit)
     // Release the fixture even on the old implementation, rather than hanging test teardown.
     yield* Deferred.succeed(escape, undefined)
-    yield* Deferred.await(closed)
+    yield* Fiber.join(shutdown)
     expect(Exit.isSuccess(result)).toBe(true)
     const release = yield* plugins.hold()
     yield* plugins.awaitActivation
