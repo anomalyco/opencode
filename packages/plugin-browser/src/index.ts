@@ -110,7 +110,7 @@ export default Plugin.define({
           if (!browser)
             return yield* new Tool.Error({
               message:
-                "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app, enable Browser pane, and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
+                "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app, enable the experimental browser setting, and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
             })
           const tab = "tabID" in action ? browser.state.tabs.find((tab) => tab.id === action.tabID) : undefined
           if ("tabID" in action && !tab)
@@ -172,7 +172,16 @@ export default Plugin.define({
             )
           const value = result.files.length
             ? {
-                ...requireObject(result.value),
+                ...(yield* Schema.decodeUnknownEffect(Schema.JsonObject)(result.value).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new Tool.Error({
+                        message:
+                          "Browser returned malformed file output. Check desktop/server plugin compatibility and report the invalid response; do not repeat the capture to repair a protocol error.",
+                        error,
+                      }),
+                  ),
+                )),
                 files: result.files.map((file) => ({
                   id: file.id,
                   name: file.name,
@@ -244,15 +253,6 @@ export default Plugin.define({
       )
     }),
 })
-
-function requireObject(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Tool.Error({
-      message:
-        "Browser returned malformed file output. Check desktop/server plugin compatibility and report the invalid response; do not repeat the capture to repair a protocol error.",
-    })
-  return value as Record<string, unknown>
-}
 
 function normalizeAction(action: Browser.Action): Browser.Action {
   if (action.type !== "navigate" && action.type !== "tabs.open") return action
