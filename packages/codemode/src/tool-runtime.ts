@@ -141,7 +141,8 @@ const copyBounded = (
     value === undefined ||
     typeof value === "string" ||
     typeof value === "boolean" ||
-    typeof value === "number"
+    typeof value === "number" ||
+    typeof value === "bigint"
   ) {
     return value
   }
@@ -248,11 +249,12 @@ const copyBounded = (
 // "json" mirrors JSON.stringify (undefined object values drop, undefined array elements become
 // null, a bare undefined passes through): use it wherever data leaves as JSON, like tool
 // arguments and stringify-style formatting. "nullify" turns every undefined, including a bare
-// one, into null: use it for program results, where the consumer must never see undefined.
+// one, into null and bigint values into precise decimal strings: use it for final program results.
 export type CopyOutMode = "json" | "nullify"
 
 export const copyOut = (value: unknown, mode: CopyOutMode): unknown => {
   if (value === undefined && mode === "nullify") return null
+  if (typeof value === "bigint" && mode === "nullify") return value.toString()
   if (typeof value === "number" && !Number.isFinite(value)) {
     return null
   }

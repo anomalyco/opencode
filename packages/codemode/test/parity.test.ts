@@ -307,6 +307,16 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
   })
 })
 
+describe("copyOut bigint handling per boundary mode", () => {
+  test("preserves native bigint tool arguments but stringifies final result values", () => {
+    expect(ToolRuntime.copyOut(9007199254740993n, "json")).toBe(9007199254740993n)
+    expect(ToolRuntime.copyOut(9007199254740993n, "nullify")).toBe("9007199254740993")
+    expect(ToolRuntime.copyOut({ value: [9007199254740993n] }, "nullify")).toStrictEqual({
+      value: ["9007199254740993"],
+    })
+  })
+})
+
 describe("copyOut undefined handling per boundary mode", () => {
   test("json mode mirrors JSON.stringify for undefined", () => {
     expect(ToolRuntime.copyOut({ q: undefined, keep: 1 }, "json")).toStrictEqual({ keep: 1 })

@@ -62,6 +62,30 @@ describe("pretty signature rendering", () => {
     expect(outputTypeScript(lookupOrder)).toBe("{ status: string }")
   })
 
+  test("renders native bigint schemas accurately in tool inputs and decoded outputs", () => {
+    const native = Tool.make({
+      description: "Double an exact integer",
+      input: Schema.Struct({ value: Schema.BigInt, values: Schema.Array(Schema.BigInt) }),
+      output: Schema.BigInt,
+      execute: ({ value }) => Effect.succeed(value * 2n),
+    })
+    const decoded = Tool.make({
+      description: "Look up an exact integer",
+      input: Schema.Struct({ encoded: Schema.BigIntFromString }),
+      output: Schema.Struct({ value: Schema.BigIntFromString }),
+      execute: () => Effect.succeed({ value: "9007199254740993" }),
+    })
+
+    expect(inputTypeScript(native)).toBe("{ value: bigint; values: Array<bigint> }")
+    expect(outputTypeScript(native)).toBe("bigint")
+    expect(inputTypeScript(decoded)).toBe("{ encoded: string }")
+    expect(outputTypeScript(decoded)).toBe("{ value: bigint }")
+    expect(CodeMode.make({ tools: { native, decoded } }).catalog().map((item) => item.signature)).toStrictEqual([
+      "tools.decoded(input: {\n  encoded: string,\n}): Promise<{\n  value: bigint,\n}>",
+      "tools.native(input: {\n  value: bigint,\n  values: Array<bigint>,\n}): Promise<bigint>",
+    ])
+  })
+
   test("nested objects recurse with increasing indent and their own JSDoc", () => {
     const pretty = jsonSchemaToTypeScript(
       {

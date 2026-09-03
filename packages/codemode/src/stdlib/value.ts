@@ -89,6 +89,12 @@ export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node
   const value = boundedData(raw, `${ref.name} input`)
   if (ref.name === "Number") return coerceToNumber(value)
   if (ref.name === "Boolean") return Boolean(value)
+  if (ref.name === "BigInt") {
+    if (typeof value !== "string" && typeof value !== "number" && typeof value !== "bigint" && typeof value !== "boolean") {
+      throw new InterpreterRuntimeError("BigInt expects a string, integer, bigint, or boolean.", node).as("TypeError")
+    }
+    return BigInt(value)
+  }
   if (ref.name === "isFinite") return Number.isFinite(coerceToNumber(value))
   if (ref.name === "isNaN") return Number.isNaN(coerceToNumber(value))
   if (ref.name === "parseInt") {
