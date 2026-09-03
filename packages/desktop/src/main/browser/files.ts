@@ -6,7 +6,7 @@ import path from "node:path"
 
 export type BrowserFiles = ReturnType<typeof createBrowserFiles>
 
-export function createBrowserFiles() {
+export function createBrowserFiles(source: () => readonly string[]) {
   const directory = path.join(tmpdir(), `opencode-browser-client-${crypto.randomUUID()}`)
   const files = new Map<
     Browser.FileID,
@@ -17,14 +17,15 @@ export function createBrowserFiles() {
       bytes: number
       state: "pending" | "completed" | "failed"
       path: string
+      resources: readonly string[]
     }
   >()
   const ready = mkdir(directory, { recursive: true })
   return {
     directory,
     ready,
-    list: () => Array.from(files.values()).map(({ path: _path, ...file }) => file),
-    add(name: string, mime: string) {
+    list: () => Array.from(files.values()).map(({ path: _path, resources: _resources, ...file }) => file),
+    add(name: string, mime: string, resources = source()) {
       const id = Browser.FileID.make(`file_${crypto.randomUUID()}`)
       const target = path.join(directory, id)
       // setSavePath must run during Electron's synchronous will-download callback.
@@ -36,17 +37,18 @@ export function createBrowserFiles() {
         bytes: 0,
         state: "pending" as "pending" | "completed" | "failed",
         path: path.join(target, name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "file"),
+        resources: [...new Set(resources)].sort(),
       }
       files.set(id, file)
       return file
     },
-    async save(name: string, mime: string, data: Uint8Array) {
+    async save(name: string, mime: string, data: Uint8Array, resources = source()) {
       if (data.byteLength > Browser.MAX_FILE_BYTES)
         throw new Error(
           "Capture exceeds the 5 MiB transfer limit. Reduce screenshot maxWidth/quality or trace duration; for a heap snapshot, use a smaller page/test case. Do not retry an identical capture.",
         )
       await ready
-      const file = this.add(name, mime)
+      const file = this.add(name, mime, resources)
       await writeFile(file.path, data).catch((error: unknown) => {
         file.state = "failed"
         throw new Error(
@@ -74,8 +76,12 @@ export function createBrowserFiles() {
         )
       return file
     },
-    async transfer(id: Browser.FileID): Promise<Browser.File> {
+    async transfer(id: Browser.FileID, authorized?: readonly string[]): Promise<Browser.File> {
       const file = this.get(id)
+      if (authorized && file.resources.some((url) => !authorized.includes(url)))
+        throw new Error(
+          "Capture source changed before export. Inspect the tab and request the file again to check its source permissions; no bytes were exported.",
+        )
       if (
         (
           await stat(file.path).catch((error: unknown) => {
