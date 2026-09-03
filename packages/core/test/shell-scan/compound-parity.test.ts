@@ -68,6 +68,7 @@ const loops = values.flatMap((value) =>
           `for value (${value}); do scan_probe "$value"; done`,
           `for value (${value})\ndo scan_probe "$value"; done`,
           `for value (${value}) # ignored\ndo scan_probe "$value"; done`,
+          `for value (${value}) \\\ndo scan_probe "$value"; done`,
         ]
       : []),
   ].map((source) => ({ source, equivalent: `for value in ${value}; do scan_probe "$value"; done` })),

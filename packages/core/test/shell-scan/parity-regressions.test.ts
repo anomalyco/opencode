@@ -46,6 +46,18 @@ describe("legacy-accepted shell syntax regressions", () => {
 
   for (const shell of ["bash", "zsh"]) {
     test.each(
+      ["probe()", "probe \\\n()", "function \\\nprobe()", "function probe \\\n()"].flatMap((head) =>
+        [" \\\n", " \\\n # ignored ) }\n", "# ignored \\\n"].flatMap((gap) =>
+          contexts.map((context) => context(`${head}${gap}{ scan_probe; }; probe`)),
+        ),
+      ),
+    )(`${shell} preserves line continuations at function boundaries: %s`, async (source) => {
+      const legacy = await Effect.runPromise(ShellParse.scan(source, shell, "/workspace"))
+      expect(legacy.commands.some((command) => command.resource === "scan_probe")).toBe(true)
+      expect(await Effect.runPromise(ShellParse.scanPortable(source, shell, "/workspace"))).toEqual(legacy)
+    })
+
+    test.each(
       ["probe()", "function probe", "function probe()"].flatMap((head) =>
         [" # ignored ) }\n", "\n# ignored ) }\n\n", " # first\n# second\n"].flatMap((gap) =>
           contexts.map((context) => context(`${head}${gap}{ scan_probe; }; probe`)),
@@ -74,6 +86,8 @@ describe("legacy-accepted shell syntax regressions", () => {
         "function probe.name { scan_probe; }; probe.name",
         "probe:name() if true; then scan_probe; fi; probe:name",
         "probe()# ignored ) }\n{ scan_probe; }; probe",
+        "probe \\\n() \\\n{ scan_probe; }; probe",
+        "function \\\nprobe() # ignored \\\n{ scan_probe; }; probe",
         ...(shell === "bash" ? conditions : ["() { scan_probe; }"]),
       ])(`${shell} really executes the extracted command: %s`, (source) => {
       if (!executable) throw new Error(`${shell} is unavailable`)

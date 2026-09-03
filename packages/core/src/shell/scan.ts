@@ -149,6 +149,7 @@ function scanBash(input: string, depth: number, budget: { remaining: number }): 
     const char = input[index]
     if (!wordStarted) wordStart = index
     if (!quote && !wordStarted) {
+      if (char === " " || char === "\t") continue
       const structure = structures.at(-1)
       const token = /^[A-Za-z_][A-Za-z0-9_]*(?=[ \t\n;()<>]|$)/.exec(input.slice(index))?.[0]
       if (structure?.kind === "case" && structure.phase === "header" && token === "in") {
@@ -175,7 +176,7 @@ function scanBash(input: string, depth: number, budget: { remaining: number }): 
         commands.push(...nestedCommands.splice(0))
         // Zsh permits a sublist or brace group directly after the value list, without do/done.
         structure.phase = "do"
-        if (!/^(?:[ \t\n;]|#[^\n]*(?:\n|$))*do(?=[ \t\n;]|$)/.test(input.slice(values.end + 1))) structures.pop()
+        if (!/^(?:[ \t\n;]|\\\n|#[^\n]*(?:\n|$))*do(?=[ \t\n;]|$)/.test(input.slice(values.end + 1))) structures.pop()
         index = values.end
         segment = index + 1
         continue
@@ -550,7 +551,7 @@ type BashExpansion = { source: string; end: number; substitutions?: string[] }
 function bashFunctionHead(input: string, start: number) {
   // Share recognition with delimiter scanning so case patterns in function bodies do not close the outer group.
   // Names need not be variable identifiers. Zsh permits anonymous functions, including in an if condition.
-  return /^(?!if[ \t]*\()(?:function[ \t]+[A-Za-z_][A-Za-z0-9_.:-]*(?:[ \t]*\([ \t]*\))?|(?:[A-Za-z_][A-Za-z0-9_.:-]*[ \t]*)?\([ \t]*\))(?:[ \t\n]|#[^\n]*(?:\n|$))*(?=[{(]|\[\[(?=[ \t\n])|(?:if|while|until|for|select|case)[ \t\n])/.exec(
+  return /^(?!if(?:[ \t]|\\\n)*\()(?:function[ \t]+(?:\\\n[ \t]*)*[A-Za-z_][A-Za-z0-9_.:-]*(?:(?:[ \t]|\\\n)*\([ \t]*\))?|(?:[A-Za-z_][A-Za-z0-9_.:-]*(?:[ \t]|\\\n)*)?\([ \t]*\))(?:[ \t\n]|\\\n|#[^\n]*(?:\n|$))*(?=[{(]|\[\[(?=[ \t\n])|(?:if|while|until|for|select|case)[ \t\n])/.exec(
     input.slice(start),
   )?.[0]
 }
@@ -563,6 +564,7 @@ function bashDelimited(input: string, start: number, depth: number): BashExpansi
   let commandStart = true
   for (let index = start + 1; index < input.length; index++) {
     const char = input[index]
+    if (char === " " || char === "\t") continue
     if (char === "\\") {
       if (input[index + 1] !== "\n") commandStart = false
       index++
