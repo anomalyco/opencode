@@ -91,7 +91,7 @@ export function DialogUpdate(props: {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-          Update
+          Update available
         </text>
         <text fg={theme.text.subdued} onMouseUp={close}>
           esc
@@ -101,15 +101,14 @@ export function DialogUpdate(props: {
         <Switch>
           <Match when={state().type === "ready"}>
             <text fg={theme.text.subdued}>
-              Update to v{props.version}? It will be applied in the background
-              {props.restart ? " and active sessions will be restarted." : "."}
+              An update is available. Applying will restart the server and active sessions will be resumed.
             </text>
           </Match>
           <Match when={state().type === "installing"}>
-            <Spinner>Installing OpenCode {props.version}…</Spinner>
+            <Spinner shimmer={theme.text.default}>Installing OpenCode {props.version}…</Spinner>
           </Match>
           <Match when={state().type === "restarting"}>
-            <Spinner>Restarting the background service…</Spinner>
+            <Spinner shimmer={theme.text.default}>Restarting the background service…</Spinner>
           </Match>
           <Match when={state().type === "failed"}>
             <text fg={theme.text.feedback.error.default}>{failure()}</text>
