@@ -1,12 +1,13 @@
 export * as InstructionContext from "./instruction-context"
 
-import { Array, Effect, Layer, Schema } from "effect"
+import { Array, Effect, Layer, Option, Schema } from "effect"
 import { isAbsolute, join, relative, sep } from "path"
 import { FSUtil } from "./fs-util"
 import { Flag } from "./flag/flag"
 import { Global } from "./global"
 import { Location } from "./location"
 import { AbsolutePath } from "./schema"
+import { Config } from "./config"
 import { SystemContext } from "./system-context/index"
 import { SystemContextRegistry } from "./system-context/registry"
 import { makeLocationNode } from "./effect/app-node"
@@ -18,6 +19,7 @@ class File extends Schema.Class<File>("InstructionContext.File")({
 
 const Files = Schema.Array(File)
 const key = SystemContext.Key.make("core/instructions")
+const customKey = SystemContext.Key.make("core/custom-instructions")
 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -25,6 +27,27 @@ const layer = Layer.effectDiscard(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const registry = yield* SystemContextRegistry.Service
+
+    const customSource = (value: string) =>
+      SystemContext.make({
+        key: customKey,
+        codec: Schema.toCodecJson(Schema.String),
+        load: Effect.succeed(value),
+        baseline: renderCustom,
+        update: (_previous, current) => renderCustom(current),
+        removed: () => "Previously loaded custom instructions no longer apply.",
+      })
+
+    const observeCustom = Effect.fn("InstructionContext.observeCustom")(function* () {
+      const config = yield* Effect.serviceOption(Config.Service)
+      if (Option.isNone(config)) return undefined
+      const entries = yield* config.value.entries().pipe(Effect.catch(() => Effect.succeed([] as Config.Entry[])))
+      const parts = entries
+        .flatMap((entry) => (entry.type === "document" ? [entry.info.customInstructions?.trim()] : []))
+        .filter((part): part is string => Boolean(part))
+      if (parts.length === 0) return undefined
+      return parts.join("\n\n")
+    })
 
     const source = (value: ReadonlyArray<File> | SystemContext.Unavailable) =>
       SystemContext.make({
@@ -87,6 +110,15 @@ const layer = Layer.effectDiscard(
         Effect.catchDefect(() => Effect.succeed(source(SystemContext.unavailable))),
       ),
     })
+
+    yield* registry.register({
+      key: customKey,
+      load: observeCustom().pipe(
+        Effect.map((text) => (text === undefined ? SystemContext.empty : customSource(text))),
+        Effect.catch(() => Effect.succeed(SystemContext.empty)),
+        Effect.catchDefect(() => Effect.succeed(SystemContext.empty)),
+      ),
+    })
   }),
 )
 
@@ -95,6 +127,10 @@ export const node = makeLocationNode({
   layer,
   deps: [FSUtil.node, Global.node, Location.node, SystemContextRegistry.node],
 })
+
+function renderCustom(text: string) {
+  return [`<custom_instructions>`, text, `</custom_instructions>`].join("\n")
+}
 
 function render(files: ReadonlyArray<File>) {
   return files.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n")
