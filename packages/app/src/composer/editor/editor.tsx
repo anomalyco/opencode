@@ -13,6 +13,7 @@ import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { AttachmentCard } from "@opencode-ai/session-ui/attachment-card"
 import { CommentCard } from "@opencode-ai/session-ui/comment-card"
 import { typeLabel } from "@opencode-ai/session-ui/message-file"
+import { visibleAddMenuCommands } from "../suggestions/add-menu"
 import { Skill } from "@opencode-ai/schema/skill"
 import type {
   ComposerAttachment,
@@ -243,13 +244,23 @@ export function ComposerEditor(props: ComposerEditorProps) {
               keybind={props.attachKeybind ?? ["Mod", "U"]}
               attachLabel={i18n.t("ui.promptInput.attachments")}
               attachShortcut={props.attachShortcut ?? "Mod+U"}
+              attachDescription={i18n.t("ui.promptInput.addMenu.attachDescription")}
               commandsLabel={i18n.t("ui.promptInput.commands")}
+              commands={props.controller.commands()}
               contextLabel={i18n.t("ui.promptInput.context")}
+              contextFilesLabel={i18n.t("ui.promptInput.addMenu.contextFiles")}
+              contextFilesDescription={i18n.t("ui.promptInput.addMenu.contextFilesDescription")}
+              contextAgentsLabel={i18n.t("ui.promptInput.addMenu.contextAgents")}
+              contextAgentsDescription={i18n.t("ui.promptInput.addMenu.contextAgentsDescription")}
+              contextResourcesLabel={i18n.t("ui.promptInput.addMenu.contextResources")}
+              contextResourcesDescription={i18n.t("ui.promptInput.addMenu.contextResourcesDescription")}
               shellLabel={i18n.t("ui.promptInput.shell")}
+              shellDescription={i18n.t("ui.promptInput.addMenu.shellDescription")}
               onAttach={props.controller.attach}
               onCommands={props.controller.openCommands}
               onContext={props.controller.openContext}
               onShell={props.controller.openShell}
+              onSelectCommand={(item) => props.controller.selectCommand(item)}
             />
             <Show when={view.agent} keyed>
               {(control) => (
@@ -525,14 +536,29 @@ export function ComposerEditorAddMenu(props: {
   keybind?: string[]
   attachLabel: string
   attachShortcut?: string
+  attachDescription?: string
   commandsLabel: string
+  commands?: ComposerSuggestion[]
   contextLabel: string
+  contextFilesLabel?: string
+  contextFilesDescription?: string
+  contextAgentsLabel?: string
+  contextAgentsDescription?: string
+  contextResourcesLabel?: string
+  contextResourcesDescription?: string
   shellLabel: string
+  shellDescription?: string
   onAttach: () => void
   onCommands: () => void
   onContext: () => void
   onShell: () => void
+  onSelectCommand?: (item: ComposerSuggestion) => void
 }) {
+  const visibleCommands = createMemo(() => visibleAddMenuCommands(props.commands ?? []))
+  const selectCommand = (command: ComposerSuggestion) => {
+    if (props.onSelectCommand) props.onSelectCommand(command)
+    else props.onCommands()
+  }
   return (
     <Tooltip
       placement="top"
@@ -557,21 +583,85 @@ export function ComposerEditorAddMenu(props: {
         <Menu.Portal>
           <Menu.Content
             class="[&_[data-slot=menu-v2-item-shortcut]]:w-8 [&_[data-slot=menu-v2-item-shortcut]]:justify-center"
-            style={{ "min-width": "180px" }}
+            style={{ "min-width": "280px", "max-height": "320px", "overflow-y": "auto" }}
           >
-            <Menu.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
-              {props.attachLabel}
-            </Menu.Item>
+            <Menu.Group>
+              <Menu.GroupLabel>{props.attachLabel}</Menu.GroupLabel>
+              <Menu.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
+                <Icon name="folder-add-left" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">{props.attachLabel}</span>
+                <Show when={props.attachDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.attachDescription}</span>
+                </Show>
+              </Menu.Item>
+            </Menu.Group>
             <Menu.Separator />
-            <Menu.Item onSelect={props.onCommands} shortcut="/">
-              {props.commandsLabel}
-            </Menu.Item>
-            <Menu.Item onSelect={props.onContext} shortcut="@">
-              {props.contextLabel}
-            </Menu.Item>
-            <Menu.Item onSelect={props.onShell} shortcut="!">
-              {props.shellLabel}
-            </Menu.Item>
+            <Menu.Group>
+              <Menu.GroupLabel>{props.commandsLabel}</Menu.GroupLabel>
+              <Show
+                when={visibleCommands().length > 0}
+                fallback={
+                  <Menu.Item onSelect={props.onCommands} shortcut="/">
+                    <Icon name="menu" size="small" class="shrink-0" />
+                    <span class="shrink-0 text-v2-text-text-base">{props.commandsLabel}</span>
+                  </Menu.Item>
+                }
+              >
+                <For each={visibleCommands()}>
+                  {(command) => (
+                    <Menu.Item onSelect={() => selectCommand(command)} shortcut={command.keybind?.join("+")}>
+                      <Icon name="menu" size="small" class="shrink-0" />
+                      <span class="shrink-0 text-v2-text-text-base">{command.label}</span>
+                      <Show when={command.description}>
+                        <span class="min-w-0 truncate text-v2-text-text-muted">{command.description}</span>
+                      </Show>
+                    </Menu.Item>
+                  )}
+                </For>
+              </Show>
+            </Menu.Group>
+            <Menu.Separator />
+            <Menu.Group>
+              <Menu.GroupLabel>{props.contextLabel}</Menu.GroupLabel>
+              <Menu.Item onSelect={props.onContext} shortcut="@">
+                <Icon name="folder" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">
+                  {props.contextFilesLabel ?? props.contextLabel}
+                </span>
+                <Show when={props.contextFilesDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.contextFilesDescription}</span>
+                </Show>
+              </Menu.Item>
+              <Menu.Item onSelect={props.onContext} shortcut="@">
+                <Icon name="branch" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">
+                  {props.contextAgentsLabel ?? props.contextLabel}
+                </span>
+                <Show when={props.contextAgentsDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.contextAgentsDescription}</span>
+                </Show>
+              </Menu.Item>
+              <Menu.Item onSelect={props.onContext} shortcut="@">
+                <Icon name="filetree" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">
+                  {props.contextResourcesLabel ?? props.contextLabel}
+                </span>
+                <Show when={props.contextResourcesDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.contextResourcesDescription}</span>
+                </Show>
+              </Menu.Item>
+            </Menu.Group>
+            <Menu.Separator />
+            <Menu.Group>
+              <Menu.GroupLabel>{props.shellLabel}</Menu.GroupLabel>
+              <Menu.Item onSelect={props.onShell} shortcut="!">
+                <Icon name="monitor" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">{props.shellLabel}</span>
+                <Show when={props.shellDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.shellDescription}</span>
+                </Show>
+              </Menu.Item>
+            </Menu.Group>
           </Menu.Content>
         </Menu.Portal>
       </Menu>
