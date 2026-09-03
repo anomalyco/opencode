@@ -4,6 +4,11 @@
 // here. The queue drains one turn at a time; ordinary prompts waiting behind
 // an active ordinary turn are exposed for edit/removal until they begin.
 //
+// Codex-like delivery: Enter queues behind the active turn, Ctrl+Enter steers
+// by preempting it. A steered prompt never enters the `queued` UI mirror;
+// it jumps to the front of the internal queue, aborts the active turn, and
+// drains immediately. When idle, steer behaves like a normal submit.
+//
 // The queue also handles /exit, /quit, and /new commands, empty-prompt rejection,
 // and tracks per-turn wall-clock duration for the footer status line.
 //
@@ -276,14 +281,17 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     }
 
     const active = state.active
-    if (
-      active &&
-      active.mode !== "shell" &&
-      !active.command &&
-      prompt.mode !== "shell" &&
-      !prompt.command &&
-      !isNewCommand(prompt.text)
-    ) {
+    const ordinaryActive = active && active.mode !== "shell" && !active.command
+    const ordinaryPrompt =
+      prompt.mode !== "shell" && !prompt.command && !isNewCommand(prompt.text)
+    if (ordinaryActive && ordinaryPrompt) {
+      if (prompt.steer) {
+        state.queue.unshift(prompt)
+        syncQueue()
+        state.ctrl?.abort()
+        drain()
+        return
+      }
       const queued: FooterQueuedPrompt = {
         messageID: MessageID.ascending(),
         partID: PartID.ascending(),
