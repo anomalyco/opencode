@@ -1,0 +1,249 @@
+import { expect } from "bun:test"
+import { LLM, LLMRequest, Message } from "@opencode-ai/ai"
+import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
+import { configure } from "@opencode-ai/ai/providers/openai"
+import { SessionModelTransport } from "../src/session/model-transport"
+import { WebSocketConstructor } from "../src/effect/websocket-constructor"
+import { Session } from "@opencode-ai/schema/session"
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+import { testEffect } from "./lib/effect"
+
+const runtime = Layer.mergeAll(
+  LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.provide(FetchHttpClient.layer)),
+  SessionModelTransport.layer.pipe(Layer.provide(WebSocketConstructor.layer)),
+)
+const it = testEffect(runtime)
+const sessionID = Session.ID.make("ses_checkpoint_transport")
+const checkpoint = { type: "compaction", encrypted_content: "opaque" }
+type Mode =
+  | "success"
+  | "missing"
+  | "multiple"
+  | "incomplete"
+  | "disconnect"
+  | "cancel"
+  | "rejected"
+  | "ambiguous"
+  | "fallback"
+
+const fixture = (mode: Mode) =>
+  Effect.gen(function* () {
+    const seen = yield* Deferred.make<void>()
+    const requests: Array<Record<string, unknown>> = []
+    const headers: Array<Record<string, string>> = []
+    const http: Array<Record<string, unknown>> = []
+    let opens = 0
+    let closes = 0
+    let socket: Bun.ServerWebSocket<undefined> | undefined
+    const server = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          hostname: "127.0.0.1",
+          port: 0,
+          async fetch(request, server) {
+            headers.push(Object.fromEntries(request.headers))
+            if (request.headers.get("upgrade") === "websocket") {
+              if (mode === "fallback" && opens > 0) return new Response("rejected upgrade", { status: 426 })
+              if (server.upgrade(request)) return
+              return new Response("upgrade required", { status: 426 })
+            }
+            http.push(Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(await request.json()))
+            return new Response(
+              `data: ${JSON.stringify({
+                type: "response.completed",
+                response: {
+                  id: "resp_http",
+                  output: [checkpoint],
+                  usage: { input_tokens: 70, output_tokens: 7 },
+                },
+              })}\n\n`,
+              { headers: { "content-type": "text/event-stream", "x-response": "http" } },
+            )
+          },
+          websocket: {
+            open(value) {
+              socket = value
+              opens++
+            },
+            close() {
+              closes++
+            },
+            message(socket, message) {
+              const body = JSON.parse(message.toString())
+              requests.push(body)
+              const id = `resp_${requests.length}`
+              const send = (event: unknown) => socket.send(JSON.stringify(event))
+              if (body.input.at(-1)?.type !== "compaction_trigger") {
+                const item = {
+                  type: "message",
+                  id: `msg_${requests.length}`,
+                  role: "assistant",
+                  content: [{ type: "output_text", text: "Hello" }],
+                }
+                send({ type: "response.created", response: { id } })
+                send({ type: "response.output_item.added", output_index: 0, item })
+                send({ type: "response.output_text.delta", item_id: item.id, delta: "Hello" })
+                send({ type: "response.output_item.done", output_index: 0, item })
+                send({ type: "response.completed", response: { id, output: [item] } })
+                return
+              }
+              if (mode === "ambiguous") {
+                socket.close()
+                return
+              }
+              if (mode === "rejected") {
+                send({ type: "error", error: { code: "previous_response_not_found", message: "missing baseline" } })
+                return
+              }
+              send({ type: "response.created", response: { id } })
+              if (mode !== "missing") send({ type: "response.output_item.done", output_index: 0, item: checkpoint })
+              Deferred.doneUnsafe(seen, Effect.void)
+              if (mode === "cancel") return
+              if (mode === "disconnect") {
+                socket.close()
+                return
+              }
+              send({
+                type: mode === "incomplete" ? "response.incomplete" : "response.completed",
+                response: {
+                  id,
+                  output:
+                    mode === "missing"
+                      ? []
+                      : mode === "multiple"
+                        ? [checkpoint, { ...checkpoint, encrypted_content: "second" }]
+                        : [checkpoint],
+                  usage: { input_tokens: 100, output_tokens: 10 },
+                },
+              })
+            },
+          },
+        }),
+      ),
+      (server) => Effect.promise(() => server.stop(true)),
+    )
+    return {
+      requests,
+      headers,
+      http,
+      seen,
+      opens: () => opens,
+      closes: () => closes,
+      disconnect: () => socket?.close(),
+      request: LLM.request({
+        model: configure({
+          apiKey: "fixture",
+          baseURL: server.url.toString(),
+          headers: { "chatgpt-account-id": "account", "x-codex-beta-features": "remote_compaction_v2" },
+          providerOptions: { parallelToolCalls: true },
+        }).responses("fixture"),
+        prompt: "First",
+        promptCacheKey: "session-key",
+      }),
+    }
+  })
+
+it.live("trigger reuses the append baseline and clears it before the next generation", () =>
+  Effect.gen(function* () {
+    const server = yield* fixture("success")
+    const transport = yield* SessionModelTransport.Service
+    const webSocket = transport.bind(sessionID)
+    const first = yield* LLMClient.generate(server.request, { webSocket })
+    const compacted = yield* LLMClient.compact(
+      LLMRequest.update(server.request, {
+        messages: [...server.request.messages, first.message],
+      }),
+      { mechanism: "trigger", webSocket },
+    )
+    expect(server.requests[1]).toMatchObject({
+      previous_response_id: "resp_1",
+      input: [{ type: "compaction_trigger" }],
+    })
+    expect(compacted.responseID).toBe("resp_2")
+    expect(compacted.usage).toMatchObject({ inputTokens: 100, outputTokens: 10 })
+    expect(compacted.checkpoint.encrypted).toBe("opaque")
+    const messages = [Message.assistant(compacted.checkpoint), Message.user("Continue")]
+    yield* LLMClient.generate(LLMRequest.update(server.request, { messages }), { webSocket })
+    expect(server.requests[2]?.previous_response_id).toBeUndefined()
+    expect(server.requests[2]?.input).toMatchObject([
+      { type: "compaction", encrypted_content: "opaque" },
+      { role: "user", content: [{ type: "input_text", text: "Continue" }] },
+    ])
+    expect(server.requests[1]?.stream).toBeUndefined()
+    expect(server.requests[1]?.store).toBe(false)
+    expect(server.headers[0]).toMatchObject({
+      authorization: "Bearer fixture",
+      "chatgpt-account-id": "account",
+      "x-codex-beta-features": "remote_compaction_v2",
+    })
+    expect(server.opens()).toBe(1)
+    expect(server.http).toHaveLength(0)
+  }),
+)
+
+for (const mode of ["missing", "multiple", "incomplete", "disconnect", "rejected", "ambiguous"] as const) {
+  it.live(`trigger ${mode} does not retry, fall back, or commit a continuation checkpoint`, () =>
+    Effect.gen(function* () {
+      const server = yield* fixture(mode)
+      const transport = yield* SessionModelTransport.Service
+      const webSocket = transport.bind(sessionID)
+      const first = yield* LLMClient.generate(server.request, { webSocket })
+      const input = LLMRequest.update(server.request, { messages: [...server.request.messages, first.message] })
+      const error = yield* LLMClient.compact(input, { mechanism: "trigger", webSocket }).pipe(Effect.flip)
+      expect(error.reason._tag).toBe(
+        ["disconnect", "ambiguous", "rejected"].includes(mode) ? "Transport" : "InvalidProviderOutput",
+      )
+      if (mode === "rejected") expect(error.reason).toMatchObject({ delivery: "rejected", recovery: "retry-full" })
+      if (mode === "ambiguous") expect(error.reason).toMatchObject({ delivery: "ambiguous" })
+      expect(server.requests).toHaveLength(2)
+      expect(server.http).toHaveLength(0)
+      yield* LLMClient.generate(input, { webSocket })
+      expect(server.requests[2]?.previous_response_id).toBeUndefined()
+      expect(server.requests[2]?.input).toHaveLength(2)
+    }),
+  )
+}
+
+it.live("cancelled trigger closes its connection without returning the partial checkpoint", () =>
+  Effect.gen(function* () {
+    const server = yield* fixture("cancel")
+    const transport = yield* SessionModelTransport.Service
+    const webSocket = transport.bind(sessionID)
+    const running = yield* LLMClient.compact(server.request, { mechanism: "trigger", webSocket }).pipe(
+      Effect.forkChild(),
+    )
+    yield* Deferred.await(server.seen)
+    yield* Fiber.interrupt(running)
+    yield* LLMClient.generate(server.request, { webSocket })
+    expect(server.requests).toHaveLength(2)
+    expect(server.opens()).toBe(2)
+    expect(server.requests[1]?.previous_response_id).toBeUndefined()
+    expect(server.http).toHaveLength(0)
+  }),
+)
+
+it.live("trigger recovers over SSE with complete input after the old socket closes and reconnect is rejected", () =>
+  Effect.gen(function* () {
+    const server = yield* fixture("fallback")
+    const transport = yield* SessionModelTransport.Service
+    const webSocket = transport.bind(sessionID)
+    const first = yield* LLMClient.generate(server.request, { webSocket })
+    server.disconnect()
+    // Let the real close event reach the connector before the next send.
+    yield* Effect.sleep("20 millis")
+    const result = yield* LLMClient.compact(
+      LLMRequest.update(server.request, {
+        messages: [...server.request.messages, first.message],
+      }),
+      { mechanism: "trigger", webSocket },
+    )
+    expect(result.responseID).toBe("resp_http")
+    expect(result.usage).toMatchObject({ inputTokens: 70, outputTokens: 7 })
+    expect(server.http).toHaveLength(1)
+    expect(server.http[0]?.previous_response_id).toBeUndefined()
+    expect(server.http[0]?.stream).toBe(true)
+    expect(server.http[0]?.input).toHaveLength(3)
+    expect(server.requests).toHaveLength(1)
+  }),
+)

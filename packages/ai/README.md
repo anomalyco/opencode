@@ -247,6 +247,8 @@ it does not repair or truncate them.
 
 For explicit compaction, script a `CompactionResponse` through `push`, `always`, or `serve`. Its `replacement` contains the next context window, including retained user messages. The client returns that result and usage directly, with the same lazy request recording and gates. Generation and compaction reject fixtures for the wrong operation instead of converting between response shapes.
 
+For `compact(request, { mechanism: "trigger" })`, script a `CompactionCheckpointResponse` instead. It carries `checkpoint`, `responseID`, and optional `usage`. Endpoint and trigger calls reject each other's fixtures; both share the same queue, gates, lazy recording, and fallback controls.
+
 The published legacy `Service`, `layer`, `clientLayer`, and module-level controls remain available as adapters
 over the same implementation, including the legacy live `requests` array. New tests should use `Test` and
 `testLayer`.
@@ -259,7 +261,7 @@ This is different from prompt caching, server-side history storage, or truncatio
 
 ### Explicit compaction
 
-`LLMClient.compact(request)` is the caller-controlled operation for OpenAI, Azure, and xAI Responses. It performs exactly one HTTP call to `/responses/compact`, using the selected route's endpoint, credentials, query, and HTTP middleware. It returns a `CompactionResponse` with `replacement: Message[]` and optional `usage`, not a normal generation response.
+`LLMClient.compact(request)` (equivalently, `{ mechanism: "endpoint" }`) is the caller-controlled operation for OpenAI, Azure, and xAI Responses. It performs exactly one HTTP call to `/responses/compact`, using the selected route's endpoint, credentials, query, and HTTP middleware. It returns a `CompactionResponse` with `replacement: Message[]` and optional `usage`, not a normal generation response. This mechanism does not accept a WebSocket executor.
 
 Prefer this operation, where supported, when the application owns compaction policy and durable context updates.
 
@@ -278,6 +280,41 @@ The selected model carries explicit-compaction capability through request constr
 Generation-only body overlays such as `stream` and `store` are not sent to the compact endpoint. Supported compact controls such as service tier and prompt-cache settings preserve request defaults and HTTP-overlay precedence. Retained image and file detail settings survive serialization and replay.
 
 The input must still fit the model's context window. Explicit compaction is not an overflow-recovery operation. Anthropic does not expose this operation in this package; its in-band compaction remains available below. Compatible routes do not inherit an explicit compact endpoint simply because they use a Responses protocol.
+
+### Streamed checkpoint compaction
+
+OpenAI Responses also exposes a separate, explicitly selected mechanism:
+
+```ts
+const result =
+  yield *
+  LLMClient.compact(request, {
+    mechanism: "trigger",
+    webSocket, // Optional: without it, the request uses HTTP/SSE.
+  })
+
+result.checkpoint // Successful encrypted CompactionPart.
+result.responseID
+result.usage
+```
+
+This appends a native `compaction_trigger` control item to the full input and sends a normal Responses request. It follows the [Codex V2 request shape](https://github.com/openai/codex/blob/728cb12/codex-rs/core/src/compact_remote_v2_attempt.rs), with tools and instructions retained, `stream: true`, `store: false`, and parallel tool calls enabled. It removes normal-answer text/output-format controls, forced tool choices, output-token/tool-call limits, and automatic `context_management`. Body overlays cannot replace `input` or supply `previous_response_id`/`conversation`; the complete canonical history is required for safe stateless replay. Session/cache identifiers, auth, headers, query parameters, service tier, and supported prompt-cache settings are preserved.
+
+Only a successful `response.completed` with a response ID and exactly one logical encrypted checkpoint succeeds. Repeated item events are correlated by ID/output slot, including ID-less checkpoints. Other output is ignored, not returned as assistant text or dispatched as tools. Failed, incomplete, malformed, and interrupted responses return errors rather than partial checkpoints.
+
+The result is **not a replacement window**. The caller selects retained history, combines it with `result.checkpoint`, and durably installs it before continuing. The operation does not choose a retention budget, prune messages, or modify the original request.
+
+The supplied WebSocket executor can reuse a compatible append baseline for the compaction request. On completion the protocol supplies no continuation checkpoint, clearing the old baseline so the next generation sends the newly installed window in full. Validation occurs before transport completion is acknowledged. There is no operation-level retry or fallback to `/responses/compact`; existing safe transport fallback may use SSE, with full history and no connection-local response ID.
+
+Trigger support is separate from endpoint support. Only the OpenAI Responses route advertises it; Azure, xAI, Chat, and compatible Responses routes do not inherit it. Untyped calls still fail before sending: missing route capabilities return `UnsupportedOperation`, while unknown mechanism names and invalid inputs return `InvalidRequest`. Dynamic callers must narrow for the selected mechanism:
+
+```ts
+if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
+  const result = yield * LLMClient.compact(request, { mechanism: "trigger" })
+}
+```
+
+This capability describes protocol implementation, **not universal availability on OpenAI API deployments**. The host application owns subscription/deployment eligibility, OAuth, endpoint selection, and deployment-specific headers. Local protocol/socket tests do not establish live provider support.
 
 ### Advanced: in-band compaction
 
