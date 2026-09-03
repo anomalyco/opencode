@@ -5,7 +5,7 @@ import { Browser } from "@opencode-ai/schema/browser"
 // Files cross machines as bytes. Only this endpoint interprets its local paths.
 export async function read(paths: readonly string[], directory: string): Promise<Browser.File[]> {
   const { open } = await import("node:fs/promises")
-  const { resolve, basename } = await import("node:path")
+  const { resolve, basename, extname } = await import("node:path")
   const files = await Promise.all(
     paths.map(async (input) => {
       const file = await open(resolve(directory, input), "r")
@@ -13,13 +13,11 @@ export async function read(paths: readonly string[], directory: string): Promise
         const stat = await file.stat()
         if (!stat.isFile() || stat.size > Browser.MAX_FILE_BYTES)
           throw new Error("Upload must be a file no larger than 5 MiB.")
-        const data = new Uint8Array(Number(stat.size))
-        const { bytesRead } = await file.read(data, 0, data.length, 0)
         return {
           id: Browser.FileID.make(`file_${crypto.randomUUID()}`),
           name: basename(input),
-          mime: "application/octet-stream",
-          data: data.subarray(0, bytesRead),
+          mime: types[extname(input).toLowerCase()] ?? "application/octet-stream",
+          data: new Uint8Array(await file.readFile()),
         }
       } finally {
         await file.close()
@@ -29,6 +27,22 @@ export async function read(paths: readonly string[], directory: string): Promise
   if (files.reduce((size, file) => size + file.data.byteLength, 0) > Browser.MAX_FILE_BYTES)
     throw new Error("File transfer exceeds 5 MiB total.")
   return files
+}
+
+const types: Record<string, string> = {
+  ".txt": "text/plain",
+  ".csv": "text/csv",
+  ".json": "application/json",
+  ".html": "text/html",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".pdf": "application/pdf",
+  ".zip": "application/zip",
+  ".gz": "application/gzip",
 }
 
 export async function save(files: readonly Browser.File[]): Promise<Browser.FileInfo[]> {
