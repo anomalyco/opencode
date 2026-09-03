@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, on, onCleanup } from "solid-js"
-import type { Browser } from "@opencode-ai/schema/browser"
+import type { Browser } from "@opencode-ai/plugin-browser/rpc"
 import { createStore, reconcile } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { BrowserPaneCommand, BrowserPaneRegistration, BrowserPaneState } from "@/runtime/platform/browser-pane"
