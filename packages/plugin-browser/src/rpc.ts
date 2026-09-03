@@ -476,10 +476,15 @@ export const Action = Schema.Union(Operations.map((operation) => operation.actio
   identifier: "Browser.Action",
 })
 export type Action = typeof Action.Type
+// Metadata only: never page content, headers, bodies, or file bytes.
+export const Target = Schema.Struct({ resources: Schema.Array(text), key: text })
+export type Target = typeof Target.Type
 export const Command = Schema.Struct({
   action: Action,
   generation: optional(count),
   files: Schema.Array(File),
+  inspect: optional(Schema.Boolean),
+  target: optional(Target),
 }).annotate({ identifier: "Browser.Command" })
 export interface Command extends Schema.Schema.Type<typeof Command> {}
 export const Result = Schema.Struct({ value: Schema.Json, files: Schema.Array(File) }).annotate({
@@ -497,7 +502,7 @@ const attachment = { sessionID: Session.ID, connectionID: Schema.String }
 const request = { ...attachment, requestID: Schema.String }
 const errors = { unavailable: Schema.Struct({}) }
 export const Control = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("attached"), connectionID: Schema.String, version: Schema.Literal(2) }),
+  Schema.Struct({ type: Schema.Literal("attached"), connectionID: Schema.String, version: Schema.Literal(3) }),
   Schema.Struct({
     type: Schema.Literal("command"),
     connectionID: Schema.String,
@@ -511,7 +516,11 @@ export type Control = typeof Control.Type
 export const Definition = Rpc.define({
   id: "experimental.browser",
   methods: {
-    attach: { input: Schema.Struct({ ...attachment, version: Schema.Literal(2) }), output: Schema.Void, errors },
+    attach: {
+      input: Schema.Struct({ ...attachment, version: Schema.Literal(3) }),
+      output: Schema.Literals(["closed", "replaced"]),
+      errors,
+    },
     state: { input: Schema.Struct({ ...attachment, state: State }), output: Schema.Void, errors },
     command: { input: Schema.Struct(request), output: Command, errors },
     result: { input: Schema.Struct({ ...request, outcome: Outcome }), output: Schema.Void, errors },

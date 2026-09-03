@@ -95,8 +95,8 @@ const fixture = Effect.gen(function* () {
     context,
     attach: Effect.fn(function* (connectionID: string) {
       const input = { sessionID: session.id, connectionID }
-      const lifetime = yield* rpc.attach({ ...input, version: 2 }, { location }).pipe(Effect.forkScoped)
-      expect((yield* next).data).toEqual({ type: "attached", connectionID, version: 2 })
+      const lifetime = yield* rpc.attach({ ...input, version: 3 }, { location }).pipe(Effect.forkScoped)
+      expect((yield* next).data).toEqual({ type: "attached", connectionID, version: 3 })
       return { input, lifetime }
     }),
     command: Effect.fn(function* (action: Browser.Action) {
@@ -124,7 +124,7 @@ test(
       })
       const old = yield* host.attach("old")
       const attached = yield* host.attach("current")
-      yield* Fiber.join(old.lifetime)
+      expect(yield* Fiber.join(old.lifetime)).toBe("replaced")
       expect(yield* host.rpc.state({ ...old.input, state }, options).pipe(Effect.flip)).toMatchObject({
         type: "unavailable",
       })
