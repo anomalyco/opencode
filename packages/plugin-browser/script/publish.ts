@@ -23,7 +23,15 @@ try {
     JSON.stringify(
       {
         ...pkg,
-        exports: { ".": { import: "./dist/index.js", types: "./dist/index.d.ts" } },
+        exports: Object.fromEntries(
+          Object.entries(pkg.exports).map(([name, value]) => [
+            name,
+            {
+              import: value.replace("./src/", "./dist/").replace(/\.ts$/, ".js"),
+              types: value.replace("./src/", "./dist/").replace(/\.ts$/, ".d.ts"),
+            },
+          ]),
+        ),
       },
       null,
       2,

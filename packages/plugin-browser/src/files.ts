@@ -1,6 +1,6 @@
 export * as BrowserFiles from "./files.js"
 
-import { Browser } from "@opencode-ai/schema/browser"
+import { Browser } from "./rpc.js"
 
 // Files cross machines as bytes. Only this endpoint interprets its local paths.
 export async function read(paths: readonly string[], directory: string): Promise<Browser.File[]> {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Browser } from "../src/browser.js"
+import { Browser } from "../src/rpc.js"
 import { Schema } from "effect"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
