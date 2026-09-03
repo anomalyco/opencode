@@ -1,57 +1,35 @@
-import { useNavigate } from "@solidjs/router"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
-import { useTabs } from "@/context/tabs"
 import { errorMessage } from "@/pages/layout/helpers"
 import { useSessionKey } from "@/pages/session/session-layout"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { requireServerKey } from "@/utils/session-route"
 import { showToast } from "@/utils/toast"
 import { createSessionMutation } from "@/utils/session-mutation"
 
 export function useSessionArchive() {
   const language = useLanguage()
-  const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
+  const server = useServer()
   const serverSync = useServerSync()
-  const tabs = useTabs()
   const { params } = useSessionKey()
-
-  const navigateAfterRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
-    if (params.id !== sessionID) return
-    const href = (id: string) =>
-      params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id)
-    if (parentID) {
-      navigate(href(parentID))
-      return
-    }
-    if (nextSessionID) {
-      navigate(href(nextSessionID))
-      return
-    }
-    if (params.serverKey) {
-      tabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
-      return
-    }
-    navigate(`/${params.dir}/session`)
-  }
 
   const archive = async (sessionID: string) => {
     const session = sync().session.get(sessionID)
     if (!session) return
 
-    const sessions = sync().data.session ?? []
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-
     await createSessionMutation({ client: sdk().client, serverSync: serverSync() })
       .archive(session)
       .then(() => {
-        navigateAfterRemoval(sessionID, session.parentID, nextSession?.id)
-        notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [sessionID] })
+        notifySessionTabsRemoved({
+          server: params.serverKey ? requireServerKey(params.serverKey) : server.key,
+          directory: sdk().directory,
+          sessionIDs: [sessionID],
+        })
       })
       .catch((err) => {
         showToast({
@@ -61,5 +39,5 @@ export function useSessionArchive() {
       })
   }
 
-  return { archive, navigateAfterRemoval }
+  return { archive }
 }

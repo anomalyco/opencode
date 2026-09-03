@@ -15,6 +15,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useServerSync } from "@/context/server-sync"
+import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { Persist, persisted } from "@/utils/persist"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
@@ -869,18 +870,18 @@ export default function LegacyLayout(props: ParentProps) {
   }
 
   async function archiveSession(session: Session) {
-    if ((await serverSDK().protocol) !== "v1") return
-    const sessions = serverSync().peek(session.directory, { bootstrap: false })[0].session ?? []
-    const index = sessions.findIndex((s) => s.id === session.id)
-    const nextSession = sessions[index + 1] ?? sessions[index - 1]
-
-    await createSessionMutation({ client: serverSDK().client, serverSync: serverSync() }).archive(session)
-    if (session.id === params.id) {
-      if (nextSession) {
-        navigate(`/${params.dir}/session/${nextSession.id}`)
-      } else {
-        navigate(`/${params.dir}/session`)
-      }
+    try {
+      await createSessionMutation({ client: serverSDK().ensureDirSdkContext(session.directory).client, serverSync: serverSync() }).archive(session)
+      notifySessionTabsRemoved({
+        server: server.key,
+        directory: session.directory,
+        sessionIDs: [session.id],
+      })
+    } catch (cause) {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: errorMessage(cause, language.t("common.requestFailed")),
+      })
     }
   }
 

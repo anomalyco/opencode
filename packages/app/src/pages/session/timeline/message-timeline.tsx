@@ -63,6 +63,7 @@ import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useSessionArchive } from "@/pages/session/session-archive"
 import { useServerSDK } from "@/context/server-sdk"
+import { ServerConnection } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
@@ -809,10 +810,6 @@ export function MessageTimeline(props: {
     const session = sync().session.get(sessionID)
     if (!session) return false
 
-    const sessions = (sync().data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-
     const removed = await createSessionMutation({ client: sdk().client, serverSync: serverSync() })
       .delete(session)
       .catch((err) => {
@@ -825,8 +822,11 @@ export function MessageTimeline(props: {
 
     if (!removed) return false
 
-    sessionArchive.navigateAfterRemoval(sessionID, session.parentID, nextSession?.id)
-    notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [...removed] })
+    notifySessionTabsRemoved({
+      server: params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server),
+      directory: sdk().directory,
+      sessionIDs: [...removed],
+    })
     return true
   }
 
