@@ -113,7 +113,12 @@ File errors distinguish server-local upload paths from desktop capture files.
 Pending/failed downloads and unavailable response bodies are not empty files.
 Oversized output requires a smaller request or capture, not an identical retry.
 
-Browser actions use the existing permission engine for the target URL. Uploads
+Browser actions inspect target metadata before using the existing permission
+engine. Explicit frame/ref operations authorize their actual frame URLs, network
+details authorize the retained request URL before reading bodies, and retained
+files authorize their original source URLs even after navigation. The desktop
+rejects changed targets rather than executing an approval against new content.
+Uploads
 also check server-file read permissions and external-directory access against
 resolved paths. Network details check the request URL before returning data.
 These are action/disclosure checks, not a firewall for every page subresource
