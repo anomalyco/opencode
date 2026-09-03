@@ -19,6 +19,7 @@ export interface WebSocketServerFixture {
 }
 
 export interface WebSocketServerOptions {
+  readonly http?: (request: Request) => Response | Promise<Response>
   readonly upgrade?: (request: Request) => boolean
   readonly open?: (socket: Bun.ServerWebSocket<ConnectionData>) => void
   readonly message?: (socket: Bun.ServerWebSocket<ConnectionData>, message: string | Buffer) => void
@@ -34,6 +35,7 @@ export const makeWebSocketServer = (options: WebSocketServerOptions = {}) =>
         port: 0,
         fetch(request, server) {
           state.headers.push(Object.fromEntries(request.headers.entries()))
+          if (request.headers.get("upgrade") !== "websocket" && options.http) return options.http(request)
           if ((options.upgrade?.(request) ?? true) && server.upgrade(request, { data: { id: connection++ } }))
             return undefined
           return new Response("WebSocket upgrade required", {

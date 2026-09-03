@@ -8,6 +8,7 @@ import { Session } from "@opencode-ai/schema/session"
 import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { testEffect } from "./lib/effect"
+import { makeWebSocketServer } from "./lib/websocket-server"
 
 const runtime = Layer.mergeAll(
   LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.provide(FetchHttpClient.layer)),
@@ -31,110 +32,88 @@ const fixture = (mode: Mode) =>
   Effect.gen(function* () {
     const seen = yield* Deferred.make<void>()
     const requests: Array<Record<string, unknown>> = []
-    const headers: Array<Record<string, string>> = []
     const http: Array<Record<string, unknown>> = []
-    let opens = 0
-    let closes = 0
-    let socket: Bun.ServerWebSocket<undefined> | undefined
-    const server = yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        Bun.serve({
-          hostname: "127.0.0.1",
-          port: 0,
-          async fetch(request, server) {
-            headers.push(Object.fromEntries(request.headers))
-            if (request.headers.get("upgrade") === "websocket") {
-              if (mode === "fallback" && opens > 0) return new Response("rejected upgrade", { status: 426 })
-              if (server.upgrade(request)) return
-              return new Response("upgrade required", { status: 426 })
-            }
-            http.push(Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(await request.json()))
-            return new Response(
-              `data: ${JSON.stringify({
-                type: "response.completed",
-                response: {
-                  id: "resp_http",
-                  output: [checkpoint],
-                  usage: { input_tokens: 70, output_tokens: 7 },
-                },
-              })}\n\n`,
-              { headers: { "content-type": "text/event-stream", "x-response": "http" } },
-            )
+    let disconnect: (() => void) | undefined
+    const server = yield* makeWebSocketServer({
+      upgrade: () => mode !== "fallback" || disconnect === undefined,
+      async http(request) {
+        http.push(Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(await request.json()))
+        return new Response(
+          `data: ${JSON.stringify({
+            type: "response.completed",
+            response: {
+              id: "resp_http",
+              output: [checkpoint],
+              usage: { input_tokens: 70, output_tokens: 7 },
+            },
+          })}\n\n`,
+          { headers: { "content-type": "text/event-stream", "x-response": "http" } },
+        )
+      },
+      open(socket) {
+        disconnect = () => socket.close()
+      },
+      message(socket, message) {
+        const body = JSON.parse(message.toString())
+        requests.push(body)
+        const id = `resp_${requests.length}`
+        const send = (event: unknown) => socket.send(JSON.stringify(event))
+        if (body.input.at(-1)?.type !== "compaction_trigger") {
+          const item = {
+            type: "message",
+            id: `msg_${requests.length}`,
+            role: "assistant",
+            content: [{ type: "output_text", text: "Hello" }],
+          }
+          send({ type: "response.created", response: { id } })
+          send({ type: "response.output_item.added", output_index: 0, item })
+          send({ type: "response.output_text.delta", item_id: item.id, delta: "Hello" })
+          send({ type: "response.output_item.done", output_index: 0, item })
+          send({ type: "response.completed", response: { id, output: [item] } })
+          return
+        }
+        if (mode === "ambiguous") {
+          socket.close()
+          return
+        }
+        if (mode === "rejected") {
+          send({ type: "error", error: { code: "previous_response_not_found", message: "missing baseline" } })
+          return
+        }
+        send({ type: "response.created", response: { id } })
+        if (mode !== "missing") send({ type: "response.output_item.done", output_index: 0, item: checkpoint })
+        Deferred.doneUnsafe(seen, Effect.void)
+        if (mode === "cancel") return
+        if (mode === "disconnect") {
+          socket.close()
+          return
+        }
+        send({
+          type: mode === "incomplete" ? "response.incomplete" : "response.completed",
+          response: {
+            id,
+            output:
+              mode === "missing"
+                ? []
+                : mode === "multiple"
+                  ? [checkpoint, { ...checkpoint, encrypted_content: "second" }]
+                  : [checkpoint],
+            usage: { input_tokens: 100, output_tokens: 10 },
           },
-          websocket: {
-            open(value) {
-              socket = value
-              opens++
-            },
-            close() {
-              closes++
-            },
-            message(socket, message) {
-              const body = JSON.parse(message.toString())
-              requests.push(body)
-              const id = `resp_${requests.length}`
-              const send = (event: unknown) => socket.send(JSON.stringify(event))
-              if (body.input.at(-1)?.type !== "compaction_trigger") {
-                const item = {
-                  type: "message",
-                  id: `msg_${requests.length}`,
-                  role: "assistant",
-                  content: [{ type: "output_text", text: "Hello" }],
-                }
-                send({ type: "response.created", response: { id } })
-                send({ type: "response.output_item.added", output_index: 0, item })
-                send({ type: "response.output_text.delta", item_id: item.id, delta: "Hello" })
-                send({ type: "response.output_item.done", output_index: 0, item })
-                send({ type: "response.completed", response: { id, output: [item] } })
-                return
-              }
-              if (mode === "ambiguous") {
-                socket.close()
-                return
-              }
-              if (mode === "rejected") {
-                send({ type: "error", error: { code: "previous_response_not_found", message: "missing baseline" } })
-                return
-              }
-              send({ type: "response.created", response: { id } })
-              if (mode !== "missing") send({ type: "response.output_item.done", output_index: 0, item: checkpoint })
-              Deferred.doneUnsafe(seen, Effect.void)
-              if (mode === "cancel") return
-              if (mode === "disconnect") {
-                socket.close()
-                return
-              }
-              send({
-                type: mode === "incomplete" ? "response.incomplete" : "response.completed",
-                response: {
-                  id,
-                  output:
-                    mode === "missing"
-                      ? []
-                      : mode === "multiple"
-                        ? [checkpoint, { ...checkpoint, encrypted_content: "second" }]
-                        : [checkpoint],
-                  usage: { input_tokens: 100, output_tokens: 10 },
-                },
-              })
-            },
-          },
-        }),
-      ),
-      (server) => Effect.promise(() => server.stop(true)),
-    )
+        })
+      },
+    })
     return {
       requests,
-      headers,
+      headers: server.state.headers,
       http,
       seen,
-      opens: () => opens,
-      closes: () => closes,
-      disconnect: () => socket?.close(),
+      opens: () => server.state.opens,
+      disconnect: () => disconnect?.(),
       request: LLM.request({
         model: configure({
           apiKey: "fixture",
-          baseURL: server.url.toString(),
+          baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),
           headers: { "chatgpt-account-id": "account", "x-codex-beta-features": "remote_compaction_v2" },
           providerOptions: { parallelToolCalls: true },
         }).responses("fixture"),
