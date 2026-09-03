@@ -1531,6 +1531,98 @@ test("server plugin failures share one notice and use source names before an ID 
   expect(setup.captureCharFrame()).toContain("Open plugins")
 })
 
+test.each([44, 100])(
+  "retry countdown updates and clears with the retry lifecycle at width %s",
+  async (width) => {
+    await using state = await tmpdir()
+    const session = {
+      id: "ses_countdown",
+      projectID: "proj_test",
+      location: { directory },
+      title: "Retry countdown",
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1, updated: 1 },
+    }
+    const model = { id: "model", providerID: "provider" }
+    const error = { type: "provider.transport" as const, message: "Provider unavailable" }
+    await using setup = await createAppFixture({
+      width,
+      state: state.path,
+      args: { sessionID: session.id },
+      config: { animations: false, tabs: { enabled: false } },
+      fetch: (url) => {
+        if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+        if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+        if (url.pathname === `/api/session/${session.id}/message`)
+          return json({
+            data: [
+              {
+                id: "msg_countdown",
+                type: "assistant",
+                agent: "build",
+                model,
+                content: [],
+                error,
+                retry: { attempt: 2, at: Date.now() + 2_500, error },
+                time: { created: 1 },
+              },
+            ],
+            cursor: {},
+          })
+        if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+          return json({ data: [] })
+        return undefined
+      },
+    })
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 3s"))
+    expect(setup.captureCharFrame()).toContain("attempt 2")
+    expect(setup.captureCharFrame()).toContain("Provider unavailable")
+    expect(setup.captureCharFrame()).not.toContain("Error:")
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 2s"), { maxPasses: 200 })
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 1s"), { maxPasses: 200 })
+    await setup.waitForFrame((frame) => frame.includes("Retry due"), { maxPasses: 200 })
+    expect(setup.captureCharFrame()).not.toContain("in 0s")
+
+    setup.events.emit({
+      id: "evt_countdown_rescheduled",
+      created: 2,
+      type: "session.retry.scheduled",
+      durable: { aggregateID: session.id, seq: 1, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", attempt: 3, at: Date.now() + 10_500, error },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 11s") && frame.includes("attempt 3"))
+    setup.events.emit({
+      id: "evt_countdown_started",
+      created: 3,
+      type: "session.step.started",
+      durable: { aggregateID: session.id, seq: 2, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", agent: "build", model },
+    })
+    await setup.waitForFrame((frame) => !frame.includes("Retrying") && !frame.includes("Retry due"))
+
+    setup.events.emit({
+      id: "evt_countdown_expired",
+      created: 4,
+      type: "session.retry.scheduled",
+      durable: { aggregateID: session.id, seq: 3, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", attempt: 4, at: Date.now() - 1_000, error },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Retry due") && frame.includes("attempt 4"))
+    expect(setup.captureCharFrame()).not.toContain("in -")
+    setup.events.emit({
+      id: "evt_countdown_interrupted",
+      created: 5,
+      type: "session.execution.interrupted",
+      durable: { aggregateID: session.id, seq: 4, version: 1 },
+      data: { sessionID: session.id, reason: "shutdown" },
+    })
+    await setup.waitForFrame((frame) => !frame.includes("Retrying") && !frame.includes("Retry due"))
+  },
+  15_000,
+)
+
 async function createAppFixture(
   input: {
     width?: number
