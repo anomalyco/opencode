@@ -254,3 +254,36 @@ Only analyze code and suggest changes.
 :::tip
 Use pattern matching for commands with arguments. `"grep *"` allows `grep pattern file.txt`, while `"grep"` alone would block it. Commands like `git status` work for default behavior but require explicit permission (like `"git status *"`) when arguments are passed.
 :::
+
+### Fully Autonomous Agents (All Keys)
+
+When building an agent that should never prompt (a "YOLO"-style agent), **every** permission category must be explicitly allowed — including [`external_directory`](#external-directories), which defaults to `"ask"` and fires whenever a tool touches paths outside the working directory (for example `/tmp` or `/sys`).
+
+```markdown title="~/.config/opencode/agent/yolo.md"
+---
+description: Fully autonomous - zero permission prompts
+mode: primary
+permission:
+  read: allow
+  edit: allow
+  glob: allow
+  grep: allow
+  list: allow
+  bash: allow
+  webfetch: allow
+  websearch: allow
+  todowrite: allow
+  task: allow
+  external_directory: allow
+  question: allow
+  lsp: allow
+  doom_loop: allow
+  skill: allow
+---
+
+Execute tasks autonomously.
+```
+
+:::warning
+Partial `permission` blocks leave surprise prompts: any category you omit falls back to its default, and `external_directory` defaults to `"ask"`. If your autonomous agent still asks on external paths after allowing everything at the agent level, also add an explicit [`external_directory`](#external-directories) rule to the **global** `permission` config — built-in external-directory policies can take precedence over agent-level rules (see [#43669](https://github.com/anomalyco/opencode/issues/43669)).
+:::
