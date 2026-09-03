@@ -1231,20 +1231,15 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   if (item.type === "function_call") {
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
     const metadata = providerMetadata(state, { itemId: item.id })
-    const pending = state.tools[item.id]
-    const registered = pending !== undefined
-    const tools =
-      pending === undefined
-        ? ToolStream.start(state.tools, item.id, {
-            id: item.call_id,
-            name: item.name,
-            namespace: item.namespace,
-            providerMetadata: metadata,
-          })
-        : ToolStream.start(state.tools, item.id, {
-            ...pending,
-            namespace: pending.namespace ?? item.namespace,
-          })
+    const registered = state.tools[item.id] !== undefined
+    const tools = registered
+      ? state.tools
+      : ToolStream.start(state.tools, item.id, {
+          id: item.call_id,
+          name: item.name,
+          namespace: item.namespace,
+          providerMetadata: metadata,
+        })
     const result =
       item.arguments === undefined
         ? yield* ToolStream.finish(state.id, tools, item.id)

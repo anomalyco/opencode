@@ -2215,6 +2215,7 @@ describe("OpenAI Responses route", () => {
         type: "function_call",
         id: "fc_1",
         call_id: "call_1",
+        namespace: "crm",
         name: "lookup",
         arguments: "",
       }
@@ -2232,7 +2233,7 @@ describe("OpenAI Responses route", () => {
               {
                 type: "response.output_item.done",
                 output_index: 0,
-                item: { ...item, namespace: "crm", arguments: '{"id":"123"}' },
+                item: { ...item, arguments: '{"id":"123"}' },
               },
               { type: "response.completed", response: { id: "resp_1" } },
             ),
@@ -2242,13 +2243,11 @@ describe("OpenAI Responses route", () => {
 
       const toolEvents = response.events.filter((event) => event.type.startsWith("tool-"))
       expect(toolEvents).toEqual([
-        expect.objectContaining({ type: "tool-input-start", name: "lookup" }),
-        expect.objectContaining({ type: "tool-input-delta", name: "lookup" }),
+        expect.objectContaining({ type: "tool-input-start", name: "lookup", namespace: "crm" }),
+        expect.objectContaining({ type: "tool-input-delta", name: "lookup", namespace: "crm" }),
         expect.objectContaining({ type: "tool-input-end", name: "lookup", namespace: "crm" }),
         expect.objectContaining({ type: "tool-call", name: "lookup", namespace: "crm", input: { id: "123" } }),
       ])
-      expect(toolEvents[0]?.namespace).toBeUndefined()
-      expect(toolEvents[1]?.namespace).toBeUndefined()
       expect(response.message.content).toEqual([
         expect.objectContaining({ type: "tool-call", name: "lookup", namespace: "crm", input: { id: "123" } }),
       ])
