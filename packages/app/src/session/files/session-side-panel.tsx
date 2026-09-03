@@ -427,11 +427,15 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.List>
                         <div
-                          class="session-review-v2-open-in-app-slot shrink-0 flex items-center pr-3"
+                          data-slot="session-side-panel-actions"
+                          class="session-review-v2-open-in-app-slot h-12 self-start shrink-0 flex items-center gap-2 pe-3"
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
                           <OpenInAppButton directory={projectDirectory} />
+                          <Show when={reviewOpen()}>
+                            <div class="size-7 shrink-0" aria-hidden />
+                          </Show>
                         </div>
                       </div>
 

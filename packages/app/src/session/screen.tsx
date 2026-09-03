@@ -28,6 +28,7 @@ import { SessionContextTab } from "./files/session-context-tab"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
+import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 
 const SessionMobileFiles = lazy(async () => {
@@ -274,6 +275,12 @@ export function SessionScreen(props: { session: SessionModel }) {
     <>
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
+          {/* Both headers reserve a slot for this control, outside their width animations. */}
+          <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
+            <div class="absolute end-3 top-2.5 z-30" data-slot="session-review-toggle">
+              <SessionReviewToggle />
+            </div>
+          </Show>
           <div
             classList={{
               "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]":
