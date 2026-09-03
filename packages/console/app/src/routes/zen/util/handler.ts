@@ -49,6 +49,7 @@ import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { countryFromRequest, isModelCountryRestricted } from "~/lib/request-country"
 import { isPeakPricing } from "./pricing"
 import { prepareRequestBody } from "./requestBody"
+import { requiresGoTrainingConsent } from "./trainingConsent"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type PreparedBody = Awaited<ReturnType<typeof prepareRequestBody>>
@@ -122,12 +123,7 @@ export async function handler(
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
     const authInfo = await authenticate(modelInfo, zenApiKey)
-    if (
-      authInfo &&
-      opts.modelList === "lite" &&
-      modelInfo.id === "muse-spark-1.2-contributor" &&
-      !authInfo.allowTraining
-    )
+    if (authInfo && opts.modelList === "lite" && requiresGoTrainingConsent(modelInfo.id) && !authInfo.allowTraining)
       throw new DataPolicyError(
         t("zen.api.error.trainingNotAllowed", {
           consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
@@ -222,6 +218,7 @@ export async function handler(
             if (v === "$session") return headers.set(k, sessionId)
             if (v === "$model") return headers.set(k, model)
             if (v === "$request") return headers.set(k, requestId)
+            if (v === "$client") return headers.set(k, ocClient)
             if (v === "$project") return headers.set(k, projectId)
             if (v === "$workspace") {
               if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
@@ -233,12 +230,18 @@ export async function handler(
             }
             headers.set(k, v)
           })
+          if (isNewInference) {
+            headers.set("x-zen-model", model)
+          }
           headers.delete("host")
           headers.delete("content-length")
-          headers.delete("x-opencode-request")
-          if (!isNewInference) headers.delete("x-opencode-session")
-          headers.delete("x-opencode-project")
-          headers.delete("x-opencode-client")
+          if (!isNewInference) {
+            headers.delete("x-opencode-session")
+            headers.delete("x-opencode-project")
+            headers.delete("x-opencode-client")
+            headers.delete("x-opencode-request")
+            headers.delete("x-zen-model")
+          }
           return headers
         })(),
         body: reqBody,
@@ -1107,7 +1110,7 @@ export async function handler(
           enrichment: (() => {
             if (billingSource === "subscription") return { plan: "sub" }
             if (billingSource === "byok") return { plan: "byok" }
-            if (billingSource === "lite") return { plan: "lite" }
+            if (billingSource === "lite") return { plan: "lite", costMultiplier: modelInfo.costMultiplier }
             return undefined
           })(),
         }),

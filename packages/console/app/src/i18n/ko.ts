@@ -250,7 +250,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "다음 예외",
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
-  "go.banner.text": "Ox Alpha Free가 한정된 기간 동안 Go에서 제공됩니다",
+  "go.banner.text": "GLM-5.3-Flash 사용 한도가 한시적으로 2배 확대됩니다",
   "go.meta.description": "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
   "go.hero.body":
@@ -661,10 +661,18 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "몇 초",
   "workspace.lite.subscription.message": "현재 OpenCode Go를 구독 중입니다.",
   "workspace.lite.subscription.manage": "구독 관리",
-  "workspace.lite.subscription.rollingUsage": "롤링 사용량",
+  "workspace.lite.subscription.rollingUsage": "5시간 사용량",
+  "workspace.lite.subscription.rollingQuota": "5시간 할당량",
   "workspace.lite.subscription.weeklyUsage": "주간 사용량",
+  "workspace.lite.subscription.weeklyQuota": "주간 할당량",
   "workspace.lite.subscription.monthlyUsage": "월간 사용량",
+  "workspace.lite.subscription.monthlyQuota": "월간 할당량",
   "workspace.lite.subscription.resetsIn": "초기화까지 남은 시간:",
+  "workspace.lite.subscription.showDetails": "상세 정보 보기",
+  "workspace.lite.subscription.hideDetails": "상세 정보 숨기기",
+  "workspace.lite.subscription.model": "모델",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "합계",
   "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
   "workspace.lite.subscription.selectProvider":
     'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',

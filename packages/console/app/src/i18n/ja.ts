@@ -253,7 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下の例外",
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
-  "go.banner.text": "Ox Alpha Freeは期間限定でGoで利用できます",
+  "go.banner.text": "GLM-5.3-Flashの利用上限が期間限定で2倍に",
   "go.meta.description":
     "Goは月額$10で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
@@ -670,10 +670,18 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "数秒",
   "workspace.lite.subscription.message": "あなたは OpenCode Go を購読しています。",
   "workspace.lite.subscription.manage": "サブスクリプションの管理",
-  "workspace.lite.subscription.rollingUsage": "ローリング利用量",
+  "workspace.lite.subscription.rollingUsage": "5時間利用量",
+  "workspace.lite.subscription.rollingQuota": "5時間上限",
   "workspace.lite.subscription.weeklyUsage": "週間利用量",
+  "workspace.lite.subscription.weeklyQuota": "週間上限",
   "workspace.lite.subscription.monthlyUsage": "月間利用量",
+  "workspace.lite.subscription.monthlyQuota": "月間上限",
   "workspace.lite.subscription.resetsIn": "リセットまで",
+  "workspace.lite.subscription.showDetails": "詳細を表示",
+  "workspace.lite.subscription.hideDetails": "詳細を非表示",
+  "workspace.lite.subscription.model": "モデル",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "合計",
   "workspace.lite.subscription.useBalance": "利用限度額に達したら利用可能な残高を使用する",
   "workspace.lite.subscription.selectProvider":
     "Go モデルを使用するには、opencode の設定で「OpenCode Go」をプロバイダーとして選択してください。",

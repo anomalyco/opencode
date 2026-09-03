@@ -244,7 +244,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情況",
 
   "go.title": "OpenCode Go | 低成本全民編碼模型",
-  "go.banner.text": "Ox Alpha Free 限時加入 Go",
+  "go.banner.text": "GLM-5.3-Flash 限時享有 2 倍使用額度",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",
   "go.hero.body":
@@ -642,10 +642,18 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "幾秒",
   "workspace.lite.subscription.message": "您已訂閱 OpenCode Go。",
   "workspace.lite.subscription.manage": "管理訂閱",
-  "workspace.lite.subscription.rollingUsage": "滾動使用量",
+  "workspace.lite.subscription.rollingUsage": "5 小時使用量",
+  "workspace.lite.subscription.rollingQuota": "5 小時配額",
   "workspace.lite.subscription.weeklyUsage": "每週使用量",
+  "workspace.lite.subscription.weeklyQuota": "每週配額",
   "workspace.lite.subscription.monthlyUsage": "每月使用量",
+  "workspace.lite.subscription.monthlyQuota": "每月配額",
   "workspace.lite.subscription.resetsIn": "重置時間：",
+  "workspace.lite.subscription.showDetails": "顯示詳情",
+  "workspace.lite.subscription.hideDetails": "隱藏詳情",
+  "workspace.lite.subscription.model": "模型",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "總計",
   "workspace.lite.subscription.useBalance": "達到使用限制後使用您的可用餘額",
   "workspace.lite.subscription.selectProvider":
     "在您的 opencode 設定中選擇「OpenCode Go」作為提供商，即可使用 Go 模型。",

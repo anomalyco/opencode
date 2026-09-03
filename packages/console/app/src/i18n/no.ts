@@ -254,7 +254,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "følgende unntak",
 
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
-  "go.banner.text": "Ox Alpha Free er tilgjengelig på Go i en begrenset periode",
+  "go.banner.text": "GLM-5.3-Flash får 2x bruksgrense i en begrenset periode",
   "go.meta.description":
     "Go koster $10/måned, med sjenerøse bruksgrenser og pålitelig tilgang til ledende kodemodeller.",
   "go.hero.title": "Rimelige kodemodeller for alle",
@@ -670,10 +670,18 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "noen få sekunder",
   "workspace.lite.subscription.message": "Du abonnerer på OpenCode Go.",
   "workspace.lite.subscription.manage": "Administrer abonnement",
-  "workspace.lite.subscription.rollingUsage": "Løpende bruk",
+  "workspace.lite.subscription.rollingUsage": "5-timers bruk",
+  "workspace.lite.subscription.rollingQuota": "5-timers kvote",
   "workspace.lite.subscription.weeklyUsage": "Ukentlig bruk",
+  "workspace.lite.subscription.weeklyQuota": "Ukentlig kvote",
   "workspace.lite.subscription.monthlyUsage": "Månedlig bruk",
+  "workspace.lite.subscription.monthlyQuota": "Månedlig kvote",
   "workspace.lite.subscription.resetsIn": "Nullstilles om",
+  "workspace.lite.subscription.showDetails": "Vis detaljer",
+  "workspace.lite.subscription.hideDetails": "Skjul detaljer",
+  "workspace.lite.subscription.model": "Modell",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "Totalt",
   "workspace.lite.subscription.useBalance": "Bruk din tilgjengelige saldo etter å ha nådd bruksgrensene",
   "workspace.lite.subscription.selectProvider":
     'Velg "OpenCode Go" som leverandør i opencode-konfigurasjonen din for å bruke Go-modeller.',

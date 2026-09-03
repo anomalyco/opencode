@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/console-function",
-  "version": "1.18.21",
+  "version": "1.18.27",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
@@ -11,6 +11,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "@tsconfig/node22": "22.0.2",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "openai": "5.11.0",
     "typescript": "catalog:",

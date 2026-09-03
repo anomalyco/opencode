@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { buildStatsQueries, toGeoAggregate, toModelAggregate, toProviderAggregate } from "./inference"
+import {
+  buildRetentionQueries,
+  buildStatsQueries,
+  toGeoAggregate,
+  toModelAggregate,
+  toProviderAggregate,
+  toRetentionAggregate,
+} from "./inference"
 import { modelAuthor, normalizeInferenceModel, statModel, statProvider } from "./model-normalization"
 
 describe("inference stat normalization", () => {
@@ -43,14 +50,22 @@ describe("inference stat normalization", () => {
   })
 
   test("merges renamed models under their current name", () => {
-    expect(statModel("x-preview-f", "")).toBe("ox-alpha")
+    expect(statModel("deepseek-v4-flash-0731", "")).toBe("deepseek-v4-flash")
+    expect(statModel("deepseek-v4-flash-0731-free", "")).toBe("deepseek-v4-flash")
+    expect(statModel("deepseek-v4-flash-dsv4-flash-final-rnaovd", "")).toBe("deepseek-v4-flash")
+    expect(statModel("deepseek-v4-flash-vision-exp", "")).toBe("deepseek-v4-flash-vision-exp")
+    expect(statModel("x-preview-f", "")).toBe("glm-5.3-flash")
+    expect(statModel("ox-alpha", "")).toBe("glm-5.3-flash")
+    expect(statModel("ox-alpha-free", "")).toBe("glm-5.3-flash")
+    expect(statModel("big-pickle", "zhipuai/ox-alpha-free")).toBe("glm-5.3-flash")
     expect(statModel("xiaomi/mimo-v2.5", "")).toBe("mimo-v2.5")
-    expect(toModelAggregate(aggregate("x-preview-f", "openai"))).toMatchObject([
+    expect(toModelAggregate(aggregate("x-preview-f", "unknown"))).toMatchObject([
       {
-        provider: "openai",
-        model: "ox-alpha",
+        provider: "zhipu",
+        model: "glm-5.3-flash",
       },
     ])
+    expect(toProviderAggregate(aggregate("ox-alpha", "unknown"))).toMatchObject([{ provider: "zhipu" }])
   })
 
   test("model aggregates prefer provider.model and use normalized model", () => {
@@ -119,6 +134,11 @@ describe("inference stat normalization", () => {
     expect(queries[0]).toContain("COALESCE(NULLIF(lower(model_tier), ''), '') AS raw_tier")
     expect(queries[0]).toContain("WHEN lower(COALESCE(raw_tier, '')) = 'free'")
     expect(queries[0]).toContain("regexp_replace(NULLIF(route_model, ''), '^.*/', '')")
+    expect(queries[0]).toContain("= 'deepseek-v4-flash-0731' THEN 'deepseek-v4-flash'")
+    expect(queries[0]).toContain("= 'deepseek-v4-flash-dsv4-flash-final-rnaovd' THEN 'deepseek-v4-flash'")
+    expect(queries[0]).not.toContain("= 'deepseek-v4-flash-vision-exp' THEN 'deepseek-v4-flash'")
+    expect(queries[0]).toContain("= 'ox-alpha' THEN 'glm-5.3-flash'")
+    expect(queries[0]).toContain("= 'x-preview-f' THEN 'glm-5.3-flash'")
     expect(queries[0]).toContain("OR lower(raw_model) IN ('gpt-5-nano', 'grok-code', 'big-pickle')")
     expect(queries[0]).toContain("OR lower(raw_model) LIKE '%-free'")
     expect(queries[0]).toContain("THEN 'Free'")
@@ -154,6 +174,62 @@ describe("inference stat normalization", () => {
 
     expect(query).toContain("(source = 'inference-legacy' AND started_at < '2026-08-11T10:57:48.186Z')")
     expect(query).toContain("(source = 'inference' AND started_at >= '2026-08-11T10:57:48.186Z')")
+  })
+
+  test("builds complete week-over-week retention queries", () => {
+    const queries = buildRetentionQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-31T00:00:00.000Z"), {
+      namespace: "inference",
+      table: "generation",
+      dataset: "zen",
+    })
+
+    expect(queries).toHaveLength(1)
+    expect(queries[0]?.cohortDates).toEqual(["2026-08-10", "2026-08-17"])
+    expect(queries[0]?.query).toContain("AND product = 'go'")
+    expect(queries[0]?.query).toContain("COUNT(*) AS model_requests")
+    expect(queries[0]?.query).toContain("SUM(model_requests) AS total_requests")
+    expect(queries[0]?.query).toContain("MAX(model_requests) AS max_model_requests")
+    expect(queries[0]?.query).toContain("GROUP BY cohort_date, user_key")
+    expect(queries[0]?.query).toContain("INNER JOIN user_totals")
+    expect(queries[0]?.query).toContain("model_usage.model_requests = user_totals.max_model_requests")
+    expect(queries[0]?.query).toContain("user_totals.total_requests >= 10")
+    expect(queries[0]?.query).toContain(
+      "CAST(model_usage.model_requests AS double) / NULLIF(user_totals.total_requests, 0) >= 0.8",
+    )
+    expect(queries[0]?.query).not.toContain(" OVER (")
+    expect(queries[0]?.query).toContain("WHEN '2026-08-17' THEN '2026-08-10'")
+    expect(queries[0]?.query).toContain("WHEN '2026-08-24' THEN '2026-08-17'")
+    expect(queries[0]?.query).toContain("started_at >= '2026-08-10T00:00:00.000Z'")
+    expect(queries[0]?.query).toContain("started_at < '2026-08-31T00:00:00.000Z'")
+    expect(queries[0]?.query).toContain("LEFT JOIN returned ON primary_models.user_key = returned.user_key")
+    expect(queries[0]?.query).toContain("primary_models.cohort_date = returned.cohort_date")
+    expect(queries[0]?.query).toContain("'Go' AS tier")
+    expect(queries[0]?.query).toContain("COUNT(*) AS eligible_users")
+    expect(queries[0]?.query).toContain("LIMIT 10000")
+  })
+
+  test("maps retention query results", () => {
+    expect(
+      toRetentionAggregate({
+        cohort_date: "2026-08-10",
+        dataset: "zen",
+        tier: "all",
+        provider: "deepseek",
+        model: "deepseek-v4-flash-free",
+        eligible_users: "125",
+        retained_users: "74",
+      }),
+    ).toEqual([
+      {
+        cohortDate: "2026-08-10",
+        dataset: "zen",
+        tier: "all",
+        provider: "deepseek",
+        model: "deepseek-v4-flash",
+        eligibleUsers: 125,
+        retainedUsers: 74,
+      },
+    ])
   })
 })
 

@@ -71,6 +71,7 @@ Du kannst auch über die folgenden API-Endpunkte auf unsere Modelle zugreifen.
 | GPT 5                           | gpt-5                           | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | GPT 5 Codex                     | gpt-5-codex                     | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | GPT 5 Nano                      | gpt-5-nano                      | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Claude Fable 5.1                | claude-fable-5-1                | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Fable 5                  | claude-fable-5                  | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 5                   | claude-opus-5                   | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.8                 | claude-opus-4-8                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
@@ -81,6 +82,7 @@ Du kannst auch über die folgenden API-Endpunkte auf unsere Modelle zugreifen.
 | Claude Sonnet 4.6               | claude-sonnet-4-6               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.5               | claude-sonnet-4-5               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5                | claude-haiku-4-5                | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Gemini 3.8 Flash                | gemini-3.8-flash                | `https://opencode.ai/zen/v1/models/gemini-3.8-flash`      | `@ai-sdk/google`            |
 | Gemini 3.7 Flash                | gemini-3.7-flash                | `https://opencode.ai/zen/v1/models/gemini-3.7-flash`      | `@ai-sdk/google`            |
 | Gemini 3.6 Flash                | gemini-3.6-flash                | `https://opencode.ai/zen/v1/models/gemini-3.6-flash`      | `@ai-sdk/google`            |
 | Gemini 3.5 Flash                | gemini-3.5-flash                | `https://opencode.ai/zen/v1/models/gemini-3.5-flash`      | `@ai-sdk/google`            |
@@ -108,11 +110,11 @@ Du kannst auch über die folgenden API-Endpunkte auf unsere Modelle zugreifen.
 | Kimi K2.7 Code                  | kimi-k2.7-code                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Kimi K3                         | kimi-k3                         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                   | x-preview-f-free                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Hy3 Free                        | hy3-free                        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Ling 3.0 Flash Fin Free         | ling-3.0-flash-fin-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Lightning Free     | nemotron-3.5-lightning-free     | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Muse Spark 1.3 Contributor Free | muse-spark-1.3-contributor-free | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor Free | muse-spark-1.2-contributor-free | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 
 Die [Model-ID](/docs/config/#models) in deiner OpenCode-Konfiguration verwendet das Format `opencode/<model-id>`. Für GPT 5.5 würdest du zum Beispiel `opencode/gpt-5.5` in deiner Konfiguration verwenden.
@@ -136,11 +138,11 @@ Wir unterstützen ein Pay-as-you-go-Modell. Unten findest du die Preise **pro 1M
 | Model                             | Input  | Output  | Cached Read | Cached Write |
 | --------------------------------- | ------ | ------- | ----------- | ------------ |
 | Big Pickle                        | Free   | Free    | Free        | -            |
-| Ox Alpha Free                     | Free   | Free    | Free        | -            |
 | MiMo-V2.5 Free                    | Free   | Free    | Free        | -            |
-| Hy3 Free                          | Free   | Free    | Free        | -            |
+| Ling 3.0 Flash Fin Free           | Free   | Free    | Free        | -            |
 | Nemotron 3 Ultra Free             | Free   | Free    | Free        | -            |
 | Nemotron 3.5 Lightning Free       | Free   | Free    | Free        | -            |
+| Muse Spark 1.3 Contributor Free   | Free   | Free    | Free        | -            |
 | Muse Spark 1.2 Contributor Free   | Free   | Free    | Free        | -            |
 | MiniMax M3                        | $0.30  | $1.20   | $0.06       | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | -            |
@@ -160,6 +162,7 @@ Wir unterstützen ein Pay-as-you-go-Modell. Unten findest du die Preise **pro 1M
 | DeepSeek V4 Pro (Peak)            | $1.32  | $3.96   | $0.044      | -            |
 | DeepSeek V4 Flash (Off-Peak)      | $0.22  | $0.66   | $0.007      | -            |
 | DeepSeek V4 Flash (Peak)          | $0.44  | $1.32   | $0.014      | -            |
+| Claude Fable 5.1                  | $10.00 | $50.00  | $0.25       | $12.50       |
 | Claude Fable 5                    | $10.00 | $50.00  | $1.00       | $12.50       |
 | Claude Opus 5                     | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -171,6 +174,7 @@ Wir unterstützen ein Pay-as-you-go-Modell. Unten findest du die Preise **pro 1M
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00  | $0.30       | $3.75        |
 | Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50  | $0.60       | $7.50        |
 | Claude Haiku 4.5                  | $1.00  | $5.00   | $0.10       | $1.25        |
+| Gemini 3.8 Flash                  | $1.50  | $7.50   | $0.15       | -            |
 | Gemini 3.7 Flash                  | $1.50  | $7.50   | $0.15       | -            |
 | Gemini 3.6 Flash                  | $1.50  | $7.50   | $0.15       | -            |
 | Gemini 3.5 Flash                  | $1.50  | $9.00   | $0.15       | -            |
@@ -223,11 +227,11 @@ Kreditkartengebühren werden zum Selbstkostenpreis weitergegeben (4.4% + $0.30 p
 Die kostenlosen Modelle:
 
 - MiMo-V2.5 Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
-- Hy3 Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
+- Ling 3.0 Flash Fin Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 - Nemotron 3 Ultra Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 - Nemotron 3.5 Lightning Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 - Big Pickle ist ein Stealth-Modell, das für begrenzte Zeit kostenlos auf OpenCode verfügbar ist. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
-- Ox Alpha Free ist ein Stealth-Modell, das für begrenzte Zeit kostenlos auf OpenCode verfügbar ist. Der Anbieter befolgt eine Zero-Retention-Richtlinie und verwendet deine Daten nicht zum Trainieren von Modellen.
+- Muse Spark 1.3 Contributor Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 - Muse Spark 1.2 Contributor Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 
 <a href={email}>Kontaktiere uns</a>, wenn du Fragen hast.
@@ -281,11 +285,12 @@ Alle unsere Modelle werden in den USA gehostet. Unsere Provider folgen einer Zer
 
 - Big Pickle: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
 - MiMo-V2.5 Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
-- Hy3 Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
+- Ling 3.0 Flash Fin Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
 - Nemotron 3 Ultra Free (kostenlose NVIDIA-Endpunkte): Nur für Testzwecke — übermitteln Sie keine personenbezogenen oder vertraulichen Daten. Ihre Nutzung wird zu Sicherheitszwecken und zur Verbesserung der Produkte und Dienste von NVIDIA protokolliert. Die zu Verbesserungszwecken protokollierten Sitzungsdaten sind nicht mit Ihrer Identität oder einem dauerhaften Identifikator verknüpft. Weitere Informationen zu unseren Datenverarbeitungspraktiken finden Sie in unserer [Datenschutzrichtlinie](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Durch die Interaktion mit diesem Endpunkt stimmen Sie unserer Erhebung, Aufzeichnung und Nutzung solcher Informationen sowie den [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) zu.
 - Nemotron 3.5 Lightning Free (kostenlose NVIDIA-Endpunkte): Nur für Testzwecke — übermitteln Sie keine personenbezogenen oder vertraulichen Daten. Ihre Nutzung wird zu Sicherheitszwecken und zur Verbesserung der Produkte und Dienste von NVIDIA protokolliert. Die zu Verbesserungszwecken protokollierten Sitzungsdaten sind nicht mit Ihrer Identität oder einem dauerhaften Identifikator verknüpft. Weitere Informationen zu unseren Datenverarbeitungspraktiken finden Sie in unserer [Datenschutzrichtlinie](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Durch die Interaktion mit diesem Endpunkt stimmen Sie unserer Erhebung, Aufzeichnung und Nutzung solcher Informationen sowie den [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) zu.
 - OpenAI APIs: Anfragen werden in Übereinstimmung mit [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) 30 Tage lang gespeichert.
 - Anthropic APIs: Anfragen werden in Übereinstimmung mit [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) 30 Tage lang gespeichert.
+- Muse Spark 1.3 Contributor Free: Stark vergünstigte Token-Preise im Austausch für die Erlaubnis, deine Prompts und Completions zum Trainieren zukünftiger Meta-Modelle zu verwenden. [Mehr erfahren](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - Muse Spark 1.2 Contributor Free: Stark vergünstigte Token-Preise im Austausch für die Erlaubnis, deine Prompts und Completions zum Trainieren zukünftiger Meta-Modelle zu verwenden. [Mehr erfahren](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 
 ---

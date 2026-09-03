@@ -253,7 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
 
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
-  "go.banner.text": "Ox Alpha Free พร้อมใช้งานบน Go ในช่วงเวลาจำกัด",
+  "go.banner.text": "GLM-5.3-Flash เพิ่มโควตาการใช้งานเป็น 2 เท่าในช่วงเวลาจำกัด",
   "go.meta.description":
     "Go มีราคา $10/เดือน พร้อมขีดจำกัดการใช้งานที่เอื้อเฟื้อและการเข้าถึงโมเดลเขียนโค้ดชั้นนำอย่างเชื่อถือได้",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
@@ -667,10 +667,18 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "ไม่กี่วินาที",
   "workspace.lite.subscription.message": "คุณได้สมัครสมาชิก OpenCode Go แล้ว",
   "workspace.lite.subscription.manage": "จัดการการสมัครสมาชิก",
-  "workspace.lite.subscription.rollingUsage": "การใช้งานแบบหมุนเวียน",
+  "workspace.lite.subscription.rollingUsage": "การใช้งานใน 5 ชั่วโมง",
+  "workspace.lite.subscription.rollingQuota": "โควตา 5 ชั่วโมง",
   "workspace.lite.subscription.weeklyUsage": "การใช้งานรายสัปดาห์",
+  "workspace.lite.subscription.weeklyQuota": "โควตารายสัปดาห์",
   "workspace.lite.subscription.monthlyUsage": "การใช้งานรายเดือน",
+  "workspace.lite.subscription.monthlyQuota": "โควตารายเดือน",
   "workspace.lite.subscription.resetsIn": "รีเซ็ตใน",
+  "workspace.lite.subscription.showDetails": "แสดงรายละเอียด",
+  "workspace.lite.subscription.hideDetails": "ซ่อนรายละเอียด",
+  "workspace.lite.subscription.model": "โมเดล",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "รวม",
   "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
   "workspace.lite.subscription.selectProvider":
     'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
