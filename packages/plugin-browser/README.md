@@ -30,6 +30,11 @@ Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
 The source of truth for inputs, descriptions, and outputs is
 `Browser.Operations` in `@opencode-ai/plugin-browser/rpc`.
 
+The plugin entrypoint only composes its two owners: `connection.ts` manages
+desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.
+Server-local file IO stays in `files.ts`. The public `rpc.ts` entrypoint remains
+pure and does not load any of these runtime modules.
+
 ## RPC
 
 The plugin-owned contract is `@opencode-ai/plugin-browser/rpc`. This entrypoint
