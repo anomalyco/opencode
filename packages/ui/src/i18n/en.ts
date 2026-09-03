@@ -146,6 +146,7 @@ const source = {
   "ui.promptInput.chooseVariant": "Choose model variant",
   "ui.promptInput.send": "Send",
   "ui.promptInput.stop": "Stop",
+  "ui.promptInput.exitShell": "Exit",
   "ui.promptInput.steer": "Steer",
   "ui.promptInput.queue": "Queue",
   "ui.promptInput.steerHint": "Send without interrupting",

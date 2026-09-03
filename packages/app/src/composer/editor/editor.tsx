@@ -47,6 +47,7 @@ export type ComposerEditorProps = {
   attachKeybind?: string[]
   attachShortcut?: string
   alternateKeybind?: string[]
+  exitShellKeybind?: string[]
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -280,6 +281,24 @@ export function ComposerEditor(props: ComposerEditorProps) {
               controller={props.controller}
               keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
             />
+          </Show>
+          <Show when={state.mode === "shell"}>
+            <Button
+              data-action="composer-exit-shell"
+              type="button"
+              variant="ghost-faint"
+              size="small"
+              class="me-3 gap-1.5 px-1.5"
+              onClick={() => {
+                props.controller.dispatch({ type: "mode.normal" })
+                props.controller.restoreFocus()
+              }}
+            >
+              {i18n.t("ui.promptInput.exitShell")}
+              <span class="hidden sm:block">
+                <Keybind keys={props.exitShellKeybind ?? ["ESC"]} variant="neutral" />
+              </span>
+            </Button>
           </Show>
           <ComposerEditorSubmitButton
             mode={state.mode}
@@ -749,9 +768,9 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
             ref={setButton}
             data-action="composer-alternate-delivery"
             type="button"
-            variant="ghost-muted"
+            variant="ghost-faint"
             size="small"
-            class="me-3 gap-1.5 px-1.5 text-v2-text-text-muted ![font-weight:530] duration-150 motion-reduce:animate-none"
+            class="me-3 gap-1.5 px-1.5 ![font-weight:530] duration-150 motion-reduce:animate-none"
             classList={{
               "animate-in fade-in": presence.animate() && presence.show(),
               "animate-out fade-out fill-mode-forwards": presence.animate() && !presence.show(),
