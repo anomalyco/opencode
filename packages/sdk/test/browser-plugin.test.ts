@@ -247,9 +247,10 @@ test(
       const saved = Schema.decodeUnknownSync(Schema.Struct({ files: Schema.Array(Browser.FileInfo) }))(result.output)
         .files[0]
       yield* Effect.addFinalizer(() =>
-        Effect.promise(() => rm(path.dirname(saved.path), { recursive: true, force: true })),
+        Effect.promise(() => rm(path.dirname(path.dirname(saved.path)), { recursive: true, force: true })),
       )
       expect(saved.path).not.toStartWith(client.path)
+      expect(path.basename(saved.path)).toBe("screenshot.png")
       expect(Buffer.from(yield* Effect.promise(() => readFile(saved.path))).toString("base64")).toBe(png)
       expect(result.content).toContainEqual({
         type: "file",
