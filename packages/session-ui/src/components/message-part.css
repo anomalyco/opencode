@@ -227,6 +227,11 @@
   width: 100%;
   margin-top: 24px;
 
+  [data-component="markdown"] {
+    font-size: 13px;
+    line-height: var(--line-height-base);
+  }
+
   [data-slot="text-part-body"] {
     margin-top: 0;
   }
@@ -489,10 +494,10 @@
     gap: 8px;
     min-width: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
   }

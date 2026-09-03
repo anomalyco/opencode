@@ -10,7 +10,10 @@ story("keeps a manually collapsed tool collapsed when later assistant content st
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await timeline.getByRole("button", { name: "Stream sibling content" }).click()
-  await expect(timeline.getByText("Streaming added a later assistant text part.", { exact: true })).toBeVisible()
+  const content = timeline.getByText("Streaming added a later assistant text part.", { exact: true })
+  await expect(content).toBeVisible()
+  await expect(content).toHaveCSS("font-size", "13px")
+  await expect(content).toHaveCSS("line-height", "20px")
   await expect(tool).toHaveAttribute("data-regression-marker", "before-stream")
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await expect(tool.locator("xpath=ancestor::*[@data-timeline-row]")).toHaveAttribute(

@@ -59,7 +59,7 @@
     flex: 0 1 auto;
     min-width: 0;
     max-width: 100%;
-    font-size: 14px;
+    font-size: 13px;
   }
 
   [data-slot="basic-tool-tool-info-structured"] {
@@ -84,10 +84,10 @@
   [data-slot="basic-tool-tool-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-base);
 
@@ -109,10 +109,10 @@
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
 
@@ -155,10 +155,10 @@
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
   }
@@ -277,10 +277,10 @@
   [data-component="task-tool-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     text-transform: capitalize;
     color: var(--task-agent-color-fallback, var(--text-strong));
