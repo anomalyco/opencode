@@ -23,8 +23,8 @@ import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
-import { SessionStore } from "@opencode-ai/core/session/store"
 import { SubagentJob } from "@opencode-ai/core/session/subagent-job"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -384,10 +384,12 @@ describe("Subagent job results", () => {
         Effect.gen(function* () {
           const database = yield* Database.Service
           const jobs = yield* Job.Service
+          const store = yield* SessionStore.Service
           const parent = Session.ID.make("ses_result_parent")
           const child = Session.ID.make("ses_result_child")
           yield* seedSessions(database, [parent])
-          yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now() })
+          yield* seedSessions(database, [child], { parent_id: parent })
+          yield* store.claim(child)
           const data = {
             agent: Agent.ID.make("explore"),
             model: Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") }),
