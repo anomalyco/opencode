@@ -14,7 +14,7 @@ export const CredentialGroup = HttpApiGroup.make("server.credential")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.credential.update",
+          identifier: "credential.update",
           summary: "Update credential",
           description: "Update a stored credential label.",
         }),
@@ -29,7 +29,7 @@ export const CredentialGroup = HttpApiGroup.make("server.credential")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.credential.remove",
+          identifier: "credential.remove",
           summary: "Remove credential",
           description: "Remove a stored integration credential.",
         }),

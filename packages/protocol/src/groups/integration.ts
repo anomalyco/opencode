@@ -16,7 +16,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.list",
+          identifier: "integration.list",
           summary: "List integrations",
           description: "Retrieve available integrations and their authentication methods.",
         }),
@@ -31,7 +31,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.get",
+          identifier: "integration.get",
           summary: "Get integration",
           description: "Retrieve one integration and its authentication methods.",
         }),
@@ -51,7 +51,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.connect.key",
+          identifier: "integration.connect.key",
           summary: "Connect with key",
           description: "Run a key authentication method and store the resulting credential.",
         }),
@@ -72,7 +72,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.connect.oauth",
+          identifier: "integration.connect.oauth",
           summary: "Begin OAuth connection",
           description: "Start an OAuth attempt and return the authorization details.",
         }),
@@ -87,7 +87,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.attempt.status",
+          identifier: "integration.attempt.status",
           summary: "Get OAuth attempt status",
           description: "Poll the current status of an OAuth attempt.",
         }),
@@ -104,7 +104,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.attempt.complete",
+          identifier: "integration.attempt.complete",
           summary: "Complete OAuth connection",
           description: "Complete a code-based OAuth attempt and store the resulting credential.",
         }),
@@ -119,7 +119,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.attempt.cancel",
+          identifier: "integration.attempt.cancel",
           summary: "Cancel OAuth connection",
           description: "Cancel an OAuth attempt and release its resources.",
         }),

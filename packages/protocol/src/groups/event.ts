@@ -36,7 +36,7 @@ const make = <const Definitions extends ReadonlyArray<Definition>>(definitions: 
           success: HttpApiSchema.StreamSse({ data: EventSchema }),
         }).annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.event.subscribe",
+            identifier: "event.subscribe",
             summary: "Subscribe to events",
             description: "Subscribe to native event payloads for the server.",
           }),

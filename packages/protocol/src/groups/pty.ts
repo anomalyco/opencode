@@ -27,7 +27,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.pty.list",
+          identifier: "pty.list",
           summary: "List PTY sessions",
           description: "List PTY sessions for a location, including exited sessions retained until removal.",
         }),
@@ -42,7 +42,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.pty.create",
+          identifier: "pty.create",
           summary: "Create PTY session",
           description: "Create a pseudo-terminal session for a location.",
         }),
@@ -58,7 +58,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.pty.get",
+          identifier: "pty.get",
           summary: "Get PTY session",
           description: "Get one PTY session, including its exit code once exited.",
         }),
@@ -75,7 +75,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.pty.update",
+          identifier: "pty.update",
           summary: "Update PTY session",
           description: "Update the title or viewport size of one PTY session.",
         }),
@@ -91,7 +91,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.pty.remove",
+          identifier: "pty.remove",
           summary: "Remove PTY session",
           description: "Terminate and remove one PTY session.",
         }),
@@ -107,7 +107,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.pty.connectToken",
+          identifier: "pty.connectToken",
           summary: "Create PTY WebSocket token",
           description: "Create a short-lived single-use ticket for opening a PTY WebSocket connection.",
         }),
@@ -122,7 +122,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
       error: [ForbiddenError, PtyNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "v2.pty.connect",
+        identifier: "pty.connect",
         summary: "Connect to PTY session",
         description: "Establish a WebSocket connection streaming PTY output and accepting terminal input.",
         transform: (operation) => ({
