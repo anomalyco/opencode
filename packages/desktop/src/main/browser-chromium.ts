@@ -459,7 +459,7 @@ export function createBrowserPage(
         ).catch((error) => {
           if (signal.aborted) throw error
           throw new Error(
-            `browser.wait did not satisfy condition ${JSON.stringify(action.condition)} within ${action.timeoutMs ?? 10_000} ms. Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: ${error instanceof Error ? error.message : String(error)}`,
+            `browser.wait failed for condition ${JSON.stringify(action.condition)} (timeoutMs: ${action.timeoutMs ?? 10_000}). Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: ${error instanceof Error ? error.message : String(error)}`,
           )
         })
         break

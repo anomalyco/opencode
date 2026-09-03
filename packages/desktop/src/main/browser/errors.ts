@@ -2,13 +2,16 @@ import type { Browser } from "@opencode-ai/plugin-browser/rpc"
 
 export function protocolError(method: string, error: unknown) {
   const detail = message(error)
-  const recovery = /(?:node|object).*(?:not found|not exist)|(?:find|resolve).*(?:node|object)|detached/i.test(detail)
-    ? "The element may have detached. Call browser.snapshot({tabID}) and use a fresh ref from that tab."
-    : /context.*(?:destroyed|not found)|find.*context|session.*not found/i.test(detail)
-      ? "The document or frame changed. Call browser.frames({tabID}) and browser.snapshot({tabID}); use current frame IDs and refs."
-      : /wasn't found|method not found|not implemented|not allowed/i.test(detail)
-        ? "This Chromium target does not support or allow the operation. Check desktop/plugin compatibility and report it; do not retry unchanged or disable browser security."
-        : "Inspect browser.tabs.list({}) and the target tab before deciding to retry; a partially completed action is not automatically safe to repeat."
+  const recovery =
+    method === "DOM.setFileInputFiles" && /not.*file input/i.test(detail)
+      ? "Target is not a file input. Call browser.snapshot({tabID}) and choose an input[type=file] ref for browser.files.upload, or use browser.files.drop for a drop area."
+      : /(?:node|object).*(?:not found|not exist)|(?:find|resolve).*(?:node|object)|detached/i.test(detail)
+        ? "The element may have detached. Call browser.snapshot({tabID}) and use a fresh ref from that tab."
+        : /context.*(?:destroyed|not found)|find.*context|session.*not found/i.test(detail)
+          ? "The document or frame changed. Call browser.frames({tabID}) and browser.snapshot({tabID}); use current frame IDs and refs."
+          : /wasn't found|method not found|not implemented|not allowed/i.test(detail)
+            ? "This Chromium target does not support or allow the operation. Check desktop/plugin compatibility and report it; do not retry unchanged or disable browser security."
+            : "Inspect browser.tabs.list({}) and the target tab before deciding to retry; a partially completed action is not automatically safe to repeat."
   return new Error(`${recovery} Chromium command ${method} failed: ${detail}`, { cause: error })
 }
 
