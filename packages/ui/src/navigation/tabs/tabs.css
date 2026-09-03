@@ -555,7 +555,7 @@
     &[data-value="open-file"],
     &[data-value^="file://"]
     {
-      gap: 4px;
+      gap: 8px;
       padding-inline-end: 4px;
 
       [data-slot="tabs-trigger-close-button"] {
