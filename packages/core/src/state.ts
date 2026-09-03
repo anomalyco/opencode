@@ -41,6 +41,15 @@ export function batch<A, E, R>(effect: Effect.Effect<A, E, R>) {
   })
 }
 
+/**
+ * Runs an effect outside any ambient batch. Forked fibers inherit the batching
+ * context of their parent; a batch that has already committed would silently
+ * drop their reloads, so async plugin loads must opt out explicitly.
+ */
+export function unbatched<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  return Effect.provideService(effect, CurrentBatch, undefined)
+}
+
 export interface Options<State, DraftApi> {
   /** Creates the base value for initial state and every scoped-transform reload. */
   readonly initial: () => State
