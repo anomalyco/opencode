@@ -20,7 +20,7 @@ import { createApi, createEventStream, createFetch, directory } from "../fixture
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-async function renderUpsell(root: string, width = 100) {
+async function renderUpsell(root: string, width = 100, animations = true) {
   const events = createEventStream()
   const [session, setSession] = createSignal("ses_current")
   let dialog!: ReturnType<typeof useDialog>
@@ -43,7 +43,7 @@ async function renderUpsell(root: string, width = 100) {
       <TestTuiContexts paths={{ state: root }}>
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
-            <ConfigProvider config={createTuiResolvedConfig()}>
+            <ConfigProvider config={createTuiResolvedConfig({ animations })}>
               <ClientProvider api={createApi(createFetch(undefined, events).fetch)}>
                 <DataProvider directory={directory}>
                   <ThemeProvider mode={width === 40 ? "light" : "dark"} source={emptyThemeSource}>
@@ -102,10 +102,14 @@ async function renderUpsell(root: string, width = 100) {
   }
 }
 
-for (const width of [40, 100]) {
-  test(`server-wide free-limit event renders the Go offer at ${width} columns`, async () => {
+for (const [width, animations] of [
+  [40, true],
+  [100, true],
+  [100, false],
+] as const) {
+  test(`server-wide free-limit event renders the Go offer at ${width} columns with animations ${animations}`, async () => {
     await using temporary = await tmpdir()
-    await using setup = await renderUpsell(temporary.path, width)
+    await using setup = await renderUpsell(temporary.path, width, animations)
     await setup.fail()
 
     const frame = setup.app.captureCharFrame()
@@ -115,8 +119,21 @@ for (const width of [40, 100]) {
     expect(frame).not.toContain("Don'T")
     expect(frame.replace(/\s/g, "")).toContain("$5/month")
     expect(frame).toContain("https://opencode.ai/go")
+    expect(frame).toContain("▀")
     expect(frame.split("\n").find((line) => line.includes("Free limit reached"))).toContain("esc")
     expect(setup.dialog.stack).toHaveLength(1)
+  })
+}
+
+for (const shift of [false, true]) {
+  test(`${shift ? "Shift+Tab" : "Tab"} selects Don't show again`, async () => {
+    await using temporary = await tmpdir()
+    await using setup = await renderUpsell(temporary.path)
+    await setup.fail()
+    setup.app.mockInput.pressTab({ shift })
+    setup.app.mockInput.pressEnter()
+    await setup.app.waitFor(() => setup.dialog.stack.length === 0)
+    expect((await setup.persisted()).dontShowAgain).toBe(true)
   })
 }
 

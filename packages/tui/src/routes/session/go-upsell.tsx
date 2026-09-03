@@ -3,7 +3,7 @@ import open from "open"
 import { useData } from "../../context/data"
 import { useStorage } from "../../context/storage"
 import { useDialog } from "../../ui/dialog"
-import { DialogConfirm } from "../../ui/dialog-confirm"
+import { DialogGo } from "../../component/dialog-go"
 import { useToast } from "../../ui/toast"
 
 export function useGoUpsell(sessionID: Accessor<string>) {
@@ -24,14 +24,9 @@ export function useGoUpsell(sessionID: Accessor<string>) {
       let dontShowAgain = false
       dialog.replace(
         () => (
-          <DialogConfirm
-            title="Free limit reached"
-            message={
-              "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.\n\nhttps://opencode.ai/go"
-            }
-            label={{ confirm: "Subscribe", cancel: "Don't show again" }}
-            onConfirm={() => void open("https://opencode.ai/go").catch(toast.error)}
-            onCancel={() => {
+          <DialogGo
+            onSubscribe={() => void open("https://opencode.ai/go").catch(toast.error)}
+            onDismiss={() => {
               dontShowAgain = true
             }}
           />
