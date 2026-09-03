@@ -121,9 +121,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                         </a>
                       </Show>
                     </Show>
-                    <span data-slot="tool-error-card-dot" aria-hidden="true">
-                      ·
-                    </span>
                     <span data-slot="tool-error-card-summary">{summary()}</span>
                   </div>
                 </div>

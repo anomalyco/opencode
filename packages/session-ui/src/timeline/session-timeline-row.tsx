@@ -293,8 +293,10 @@ export function createSessionTimelineRowRenderer(input: {
   const notice = (message: SessionMessageInfo) => {
     if (message.type === "agent-switched")
       return {
-        label: i18n.t("ui.tool.agent.default"),
-        data: message.previous ? `${message.previous} → ${message.agent}` : message.agent,
+        label: i18n.t("ui.sessionTimeline.notice.agentChanged"),
+        data: message.previous
+          ? `${capitalizeAgent(message.previous)} → ${capitalizeAgent(message.agent)}`
+          : capitalizeAgent(message.agent),
       }
     if (message.type === "model-switched") return undefined
     if (message.type === "skill") return { label: i18n.t("ui.tool.skill"), data: message.name }
@@ -412,14 +414,18 @@ export function createSessionTimelineRowRenderer(input: {
                           data-slot="session-timeline-notice"
                           class={`w-full truncate ${props.grouped ? "py-1" : "pt-3 pb-1"} text-13-regular leading-text-compact text-text-weak ${inset()}`}
                         >
-                          <bdi dir="auto" class="text-13-medium">
+                          <bdi
+                            dir="auto"
+                            class="font-[530]"
+                            classList={{ "text-v2-text-text-faint": message()?.type === "agent-switched" }}
+                          >
                             {content().label}
                           </bdi>
                           <Show when={content().data}>
                             {(data) => (
-                              <span>
-                                {" "}
-                                · <bdi dir="auto">{data()}</bdi>
+                              <span classList={{ "ms-2": message()?.type === "agent-switched" }}>
+                                <Show when={message()?.type !== "agent-switched"}>{" · "}</Show>
+                                <bdi dir="auto">{data()}</bdi>
                               </span>
                             )}
                           </Show>
@@ -700,4 +706,8 @@ export function createSessionTimelineRowRenderer(input: {
   }
 
   return { Row }
+}
+
+function capitalizeAgent(agent: string) {
+  return agent.slice(0, 1).toUpperCase() + agent.slice(1)
 }

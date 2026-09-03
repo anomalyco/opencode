@@ -228,6 +228,7 @@ const source = {
   "ui.message.interrupted": "Interrupted",
   "ui.sessionTimeline.notice.model": "Model",
   "ui.sessionTimeline.notice.modelSwitched": "Switched to {{model}}",
+  "ui.sessionTimeline.notice.agentChanged": "Agent changed",
   "ui.sessionTimeline.notice.movedTo": "Moved to",
   "ui.sessionTimeline.notice.movedTooltip": "Session working directory changed",
   "ui.sessionTimeline.notice.failed": "{{actor}} failed",
