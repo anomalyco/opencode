@@ -19,6 +19,7 @@ import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
+import { ToolHeader } from "../components/tool-header"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
@@ -600,15 +601,7 @@ export function CurrentContextToolGroup(props: {
         onOpenChange={change}
         trigger={
           <div data-component="context-tool-group-trigger" aria-label={label().text}>
-            <span data-slot="context-tool-group-title">
-              <Show when={label().before}>
-                {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
-              </Show>
-              <span data-slot="basic-tool-tool-title">{label().title}</span>
-              <Show when={label().after}>
-                {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
-              </Show>
-            </span>
+            <ToolHeader title={label().title} prefix={label().before} suffix={label().after} />
           </div>
         }
       >
@@ -757,32 +750,22 @@ export function CurrentContextToolGroup(props: {
                           <div data-component="tool-trigger">
                             <div data-slot="basic-tool-tool-trigger-content">
                               <div data-slot="basic-tool-tool-info">
-                                <div data-slot="basic-tool-tool-info-structured">
-                                  <div data-slot="basic-tool-tool-info-main">
-                                    <span data-slot="basic-tool-tool-title">
-                                      <TextShimmer
-                                        text={trigger().title}
-                                        active={
-                                          tool().state.status === "streaming" || tool().state.status === "running"
-                                        }
-                                      />
-                                    </span>
-                                    <Show when={trigger().subtitle}>
-                                      {(subtitle) => <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}
+                                <ToolHeader
+                                  title={trigger().title}
+                                  subtitle={trigger().subtitle}
+                                  args={trigger().args}
+                                  active={tool().state.status === "streaming" || tool().state.status === "running"}
+                                  action={
+                                    <Show when={trigger().matches}>
+                                      {(matches) => (
+                                        <>
+                                          <span data-slot="context-tool-group-dot" />
+                                          <span data-slot="context-tool-group-matches">{matches()}</span>
+                                        </>
+                                      )}
                                     </Show>
-                                    <For each={trigger().args}>
-                                      {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
-                                    </For>
-                                  </div>
-                                  <Show when={trigger().matches}>
-                                    {(matches) => (
-                                      <>
-                                        <span data-slot="context-tool-group-dot" />
-                                        <span data-slot="context-tool-group-matches">{matches()}</span>
-                                      </>
-                                    )}
-                                  </Show>
-                                </div>
+                                  }
+                                />
                               </div>
                             </div>
                           </div>
@@ -1300,28 +1283,23 @@ ToolRegistry.register({
         {...props}
         hideDetails
         icon="window-cursor"
-        trigger={
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
-              </span>
-              <Show when={!pending() && url()}>
-                <a
-                  data-slot="basic-tool-tool-subtitle"
-                  class="webfetch-link"
-                  href={url()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <span data-slot="webfetch-link-text">{url()}</span>
-                  <Icon name="outline-square-arrow" class="webfetch-link-icon" />
-                </a>
-              </Show>
-            </div>
-          </div>
-        }
+        trigger={{
+          title: i18n.t("ui.tool.webfetch"),
+          subtitle: (
+            <Show when={!pending() && url()}>
+              <a
+                class="webfetch-link"
+                href={url()}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <span data-slot="webfetch-link-text">{url()}</span>
+                <Icon name="outline-square-arrow" class="webfetch-link-icon" />
+              </a>
+            </Show>
+          ),
+        }}
       />
     )
   },
@@ -1534,16 +1512,15 @@ ToolRegistry.register({
         compact
         allowOpenWhilePending
         trigger={(open) => (
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
-              </span>
+          <ToolHeader
+            title={i18n.t("ui.tool.execute")}
+            active={pending()}
+            subtitle={
               <Show when={!open() && code()}>
                 <ShellSubmessage text={code().split("\n")[0]} animate={sawPending} />
               </Show>
-            </div>
-          </div>
+            }
+          />
         )}
       >
         <ConsoleOutput copy={code()} variant="shell">
@@ -1623,25 +1600,20 @@ ToolRegistry.register({
         compact
         allowOpenWhilePending
         trigger={(open) => (
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
-              </span>
+          <ToolHeader
+            title={i18n.t("ui.tool.shell")}
+            active={pending()}
+            subtitle={
               <Show when={!open()}>
                 <Show
                   when={command()}
-                  fallback={
-                    <Show when={streaming()}>
-                      <span data-slot="basic-tool-tool-subtitle">{i18n.t("ui.tool.shell.writingCommand")}</span>
-                    </Show>
-                  }
+                  fallback={<Show when={streaming()}>{i18n.t("ui.tool.shell.writingCommand")}</Show>}
                 >
                   {(command) => <ShellSubmessage text={command()} animate={sawStreaming} />}
                 </Show>
               </Show>
-            </div>
-          </div>
+            }
+          />
         )}
       >
         <ConsoleOutput copy={command()} variant="shell">
@@ -1754,30 +1726,13 @@ ToolRegistry.register({
           icon="code-lines"
           rail={false}
           defer={props.deferContent !== false}
-          trigger={
-            <div data-component="edit-trigger">
-              <div data-slot="message-part-title-area">
-                <div data-slot="message-part-title">
-                  <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
-                  </span>
-                  <Show when={!pending()}>
-                    <span data-slot="message-part-title-filename">{filename()}</span>
-                  </Show>
-                </div>
-                <Show when={!pending() && inputPath().includes("/")}>
-                  <div data-slot="message-part-path">
-                    <span data-slot="message-part-directory">{displayDirectory(inputPath())}</span>
-                  </div>
-                </Show>
-              </div>
-              <div data-slot="message-part-actions">
-                <Show when={!pending() ? diff() : undefined}>
-                  {(diff) => <DiffChanges appearance="standard" changes={diff()} />}
-                </Show>
-              </div>
-            </div>
-          }
+          trigger={{
+            title: i18n.t("ui.messagePart.title.edit"),
+            subtitle: !pending() ? filename() : undefined,
+            subtitleDir: "ltr",
+            directory: !pending() && inputPath().includes("/") ? displayDirectory(inputPath()) : undefined,
+            action: <Show when={diff()}>{(diff) => <DiffChanges appearance="standard" changes={diff()} />}</Show>,
+          }}
         >
           <Show when={path()}>
             <ToolFileAccordion
@@ -1823,26 +1778,12 @@ ToolRegistry.register({
           icon="code-lines"
           rail={false}
           defer={props.deferContent !== false}
-          trigger={
-            <div data-component="write-trigger">
-              <div data-slot="message-part-title-area">
-                <div data-slot="message-part-title">
-                  <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
-                  </span>
-                  <Show when={!pending()}>
-                    <span data-slot="message-part-title-filename">{filename()}</span>
-                  </Show>
-                </div>
-                <Show when={!pending() && path().includes("/")}>
-                  <div data-slot="message-part-path">
-                    <span data-slot="message-part-directory">{displayDirectory(path())}</span>
-                  </div>
-                </Show>
-              </div>
-              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
-            </div>
-          }
+          trigger={{
+            title: i18n.t("ui.messagePart.title.write"),
+            subtitle: !pending() ? filename() : undefined,
+            subtitleDir: "ltr",
+            directory: !pending() && path().includes("/") ? displayDirectory(path()) : undefined,
+          }}
         >
           <Show when={content() && path()}>
             <ToolFileAccordion path={path()}>

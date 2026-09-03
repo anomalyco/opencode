@@ -1,6 +1,7 @@
 @layer theme, base, components, utilities;
 
 @import "../components/basic-tool.css" layer(components);
+@import "../components/tool-header.css" layer(components);
 @import "../components/file.css" layer(components);
 @import "../components/markdown.css" layer(components);
 @import "../components/message-part.css" layer(components);

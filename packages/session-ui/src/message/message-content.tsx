@@ -14,7 +14,6 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { BasicTool } from "../components/basic-tool"
 import { reasoningHeading } from "../timeline/projection"
 import { Card } from "@opencode-ai/ui/card"
@@ -534,30 +533,14 @@ export function AssistantReasoningContent(props: {
           props.onOpenChange?.(value)
           props.onContentRendered?.()
         }}
-        trigger={
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer
-                  text={i18n.t(props.streaming ? "ui.sessionTurn.status.thinking" : "ui.message.thought")}
-                  active={props.streaming}
-                />
-              </span>
-              <Show
-                when={props.streaming && !open()}
-                fallback={
-                  <Show when={!props.streaming && duration()}>
-                    {(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}
-                  </Show>
-                }
-              >
-                <span data-slot="basic-tool-tool-subtitle">
-                  <TextReveal text={heading()} />
-                </span>
-              </Show>
-            </div>
-          </div>
-        }
+        trigger={{
+          title: i18n.t(props.streaming ? "ui.sessionTurn.status.thinking" : "ui.message.thought"),
+          subtitle: (
+            <Show when={props.streaming && !open()} fallback={!props.streaming ? duration() : undefined}>
+              <TextReveal text={heading()} />
+            </Show>
+          ),
+        }}
       >
         <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
       </BasicTool>

@@ -1,7 +1,6 @@
 import {
   createEffect,
   createMemo,
-  For,
   Match,
   on,
   onCleanup,
@@ -16,17 +15,9 @@ import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import type { IconProps } from "@opencode-ai/ui/icon"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { ToolHeader, type ToolHeaderProps } from "./tool-header"
 
-export type TriggerTitle = {
-  title: string
-  titleClass?: string
-  subtitle?: string
-  subtitleClass?: string
-  args?: string[]
-  argsClass?: string
-  action?: JSX.Element
-}
+export type TriggerTitle = Omit<ToolHeaderProps, "active" | "onSubtitleClick">
 
 const isTriggerTitle = (val: unknown): val is TriggerTitle => {
   if (typeof val !== "object" || val === null) return false
@@ -216,54 +207,12 @@ export function BasicTool(props: BasicToolProps) {
           <Switch>
             <Match when={triggerTitle()}>
               {(title) => (
-                <div data-slot="basic-tool-tool-info-structured">
-                  <div data-slot="basic-tool-tool-info-main">
-                    <span
-                      data-slot="basic-tool-tool-title"
-                      classList={{
-                        [title().titleClass ?? ""]: !!title().titleClass,
-                      }}
-                    >
-                      <TextShimmer text={title().title} active={pending()} />
-                    </span>
-                    <Show when={!pending() || title().subtitle || title().args?.length}>
-                      <Show when={title().subtitle}>
-                        <span
-                          data-slot="basic-tool-tool-subtitle"
-                          classList={{
-                            [title().subtitleClass ?? ""]: !!title().subtitleClass,
-                            clickable: !!props.onSubtitleClick,
-                          }}
-                          onClick={(e) => {
-                            if (props.onSubtitleClick) {
-                              e.stopPropagation()
-                              props.onSubtitleClick()
-                            }
-                          }}
-                        >
-                          {title().subtitle}
-                        </span>
-                      </Show>
-                      <Show when={title().args?.length}>
-                        <For each={title().args}>
-                          {(arg) => (
-                            <span
-                              data-slot="basic-tool-tool-arg"
-                              classList={{
-                                [title().argsClass ?? ""]: !!title().argsClass,
-                              }}
-                            >
-                              {arg}
-                            </span>
-                          )}
-                        </For>
-                      </Show>
-                    </Show>
-                  </div>
-                  <Show when={!pending() && title().action}>
-                    <span data-slot="basic-tool-tool-action">{title().action}</span>
-                  </Show>
-                </div>
+                <ToolHeader
+                  {...title()}
+                  active={pending()}
+                  onSubtitleClick={props.onSubtitleClick}
+                  action={!pending() ? title().action : undefined}
+                />
               )}
             </Match>
             <Match when={true}>{triggerContent() as JSX.Element}</Match>

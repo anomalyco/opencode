@@ -83,21 +83,10 @@
 
   [data-slot="basic-tool-tool-title"] {
     flex-shrink: 0;
-    font-family: var(--font-family-sans);
-    font-size: 14px;
-    font-style: normal;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-base);
 
     &.capitalize {
       text-transform: capitalize;
-    }
-
-    &.agent-title {
-      color: var(--v2-text-text-base);
-      font-weight: var(--font-weight-medium);
     }
   }
 
@@ -107,13 +96,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: var(--font-family-sans);
-    font-variant-numeric: tabular-nums;
-    font-size: 14px;
-    font-style: normal;
-    font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
 
     &.clickable:not(.webfetch-link) {
@@ -153,13 +135,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: var(--font-family-sans);
-    font-variant-numeric: tabular-nums;
-    font-size: 14px;
-    font-style: normal;
-    font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
   }
 
@@ -180,23 +155,6 @@
   [data-component="tool-trigger"],
   [data-slot="basic-tool-tool-info-main"] {
     gap: 6px;
-  }
-
-  [data-slot="basic-tool-tool-title"] {
-    font-family: var(--v2-font-family-sans);
-    font-size: 13px;
-    font-weight: 530;
-    /* Keep compact text on the shared metric; solid 13px line boxes clip Inter descenders. */
-    line-height: var(--line-height-compact);
-    letter-spacing: -0.04px;
-  }
-
-  [data-slot="basic-tool-tool-subtitle"] {
-    font-family: var(--v2-font-family-sans);
-    font-size: 13px;
-    font-weight: 440;
-    line-height: var(--line-height-compact);
-    letter-spacing: -0.04px;
   }
 }
 
