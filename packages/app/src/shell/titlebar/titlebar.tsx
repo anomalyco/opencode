@@ -348,13 +348,20 @@ export function Titlebar(props: {
                   type="button"
                   data-action="vertical-tabs-home"
                   data-state={layout.route().type === "home" ? "pressed" : undefined}
-                  class="mb-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base"
+                  class="group mb-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base"
                   onClick={toggleHome}
                   aria-label={language.t("home.title")}
                   aria-pressed={layout.route().type === "home"}
                 >
                   <Icon name="grid-plus" />
-                  {language.t("home.title")}
+                  <span class="min-w-0 truncate">{language.t("home.title")}</span>
+                  <span
+                    class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                    dir="ltr"
+                    aria-hidden="true"
+                  >
+                    {command.keybind("home.toggle")}
+                  </span>
                 </button>
               </Show>
             )
@@ -646,12 +653,19 @@ export function Titlebar(props: {
                             <button
                               type="button"
                               data-action="vertical-tabs-new-session"
-                              class="flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
+                              class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
                               onClick={openNewTab}
                               aria-label={language.t("command.session.new")}
                             >
                               <Icon name="edit" />
-                              {language.t("command.session.new")}
+                              <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
+                              <span
+                                class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                                dir="ltr"
+                                aria-hidden="true"
+                              >
+                                {command.keybind("tab.new")}
+                              </span>
                             </button>
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />
                             <div class="flex min-h-0 flex-1 flex-col gap-1">
