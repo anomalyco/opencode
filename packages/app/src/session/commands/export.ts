@@ -1,5 +1,6 @@
 import type { SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
+import { fetchSessionMessages } from "./messages"
 
 export type SessionExportData = {
   info: SessionInfo
@@ -10,26 +11,12 @@ export async function fetchSessionExport(input: {
   sessionID: string
   api: Pick<ServerApi, "session" | "message">
 }): Promise<SessionExportData> {
-  const [info, first] = await Promise.all([
+  const [info, messages] = await Promise.all([
     input.api.session.get({ sessionID: input.sessionID }),
-    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }),
+    fetchSessionMessages(input),
   ])
-  const pages = [first]
 
-  while (pages.at(-1)?.cursor.next) {
-    pages.push(
-      await input.api.message.list({
-        sessionID: input.sessionID,
-        limit: 200,
-        cursor: pages.at(-1)!.cursor.next ?? undefined,
-      }),
-    )
-  }
-
-  return {
-    info,
-    messages: pages.flatMap((page) => page.data),
-  }
+  return { info, messages }
 }
 
 export function sessionExportFilename(session: { id: string; title?: string; slug?: string }) {

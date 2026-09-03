@@ -1,4 +1,4 @@
-import { Component, createMemo } from "solid-js"
+import { Component, createMemo, createResource, Show } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useData } from "@/runtime/server/current"
 import { useComposerState } from "@/composer/persistence"
@@ -13,11 +13,14 @@ import { extractPromptComments, extractPromptFromMessage } from "@/composer/prom
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServer } from "@/runtime/server/current"
 import { sessionHref } from "@/shell/routes/session"
+import { fetchSessionMessages, selectForkableUserMessages } from "./messages"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
 
 interface ForkableMessage {
   id: string
   text: string
   time: string
+  message: SessionMessageUser
 }
 
 function formatTime(date: Date): string {
@@ -35,24 +38,24 @@ export const DialogFork: Component = () => {
   const language = useLanguage()
   const server = useServer()
 
+  const [history] = createResource(
+    () => params.id,
+    (sessionID) => fetchSessionMessages({ sessionID, api: serverSDK.api }),
+  )
+
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
-    if (!sessionID) return []
+    const loaded = history()
+    if (!sessionID || !loaded) return []
 
-    const msgs = data.session.message.list(sessionID)
-    const result: ForkableMessage[] = []
-
-    for (const message of msgs) {
-      if (message.type !== "user" || !message.text) continue
-
-      result.push({
+    return selectForkableUserMessages(loaded, data.session.get(sessionID)?.revert?.messageID)
+      .map((message) => ({
         id: message.id,
         text: message.text.replace(/\n/g, " ").slice(0, 200),
         time: formatTime(new Date(message.time.created)),
-      })
-    }
-
-    return result.reverse()
+        message,
+      }))
+      .toReversed()
   })
 
   const handleSelect = (item: ForkableMessage | undefined) => {
@@ -60,9 +63,7 @@ export const DialogFork: Component = () => {
 
     const sessionID = params.id
     if (!sessionID) return
-    const message = data.session.message.get(sessionID, item.id)
-    if (message?.type !== "user") return
-    const restored = extractPromptFromMessage(message, {
+    const restored = extractPromptFromMessage(item.message, {
       directory: location().directory,
       attachmentName: language.t("common.attachment"),
     })
@@ -76,7 +77,7 @@ export const DialogFork: Component = () => {
         const target = prompt.capture({ dir, id: forked.id })
         target.set(restored)
         target.context.replaceComments(
-          extractPromptComments(message).map((comment) => ({
+          extractPromptComments(item.message).map((comment) => ({
             type: "file",
             path: comment.path,
             selection: comment.selection,
@@ -99,22 +100,27 @@ export const DialogFork: Component = () => {
         <DialogTitle>{language.t("command.session.fork")}</DialogTitle>
       </DialogHeader>
       <DialogBody>
-        <List
-          class="flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
-          search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
-          emptyMessage={language.t("dialog.fork.empty")}
-          key={(x) => x.id}
-          items={messages}
-          filterKeys={["text"]}
-          onSelect={handleSelect}
+        <Show
+          when={!history.loading}
+          fallback={<div class="flex-1 px-3 py-8 text-center text-text-weak">{language.t("common.loading")}</div>}
         >
-          {(item) => (
-            <div class="w-full flex items-center gap-2">
-              <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
-              <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
-            </div>
-          )}
-        </List>
+          <List
+            class="flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
+            search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
+            emptyMessage={language.t("dialog.fork.empty")}
+            key={(x) => x.id}
+            items={messages}
+            filterKeys={["text"]}
+            onSelect={handleSelect}
+          >
+            {(item) => (
+              <div class="w-full flex items-center gap-2">
+                <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
+                <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
+              </div>
+            )}
+          </List>
+        </Show>
       </DialogBody>
     </Dialog>
   )
