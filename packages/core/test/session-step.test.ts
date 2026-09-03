@@ -111,7 +111,7 @@ for (const fixture of [
             executeTool: () =>
               Effect.sync(() => {
                 executions++
-                return { content: "Completed tool" }
+                return { content: [{ type: "text", text: "Completed tool" }] }
               }),
           },
           retry: (_cause, _error, retry) =>

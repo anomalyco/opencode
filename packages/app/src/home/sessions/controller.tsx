@@ -7,7 +7,12 @@ import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
-import { loadHomeSessionIndex, mergeHomeSessionIndex, retainHomeSessions } from "@/home/sessions/index"
+import {
+  HOME_SESSION_LIMIT,
+  loadHomeSessionIndex,
+  mergeHomeSessionIndex,
+  retainHomeSessions,
+} from "@/home/sessions/index"
 import type { LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -16,7 +21,8 @@ import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { removedSessionIDs } from "@/session/session-domain"
 import { pathKey } from "@/workspaces/path-key"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { usePlatform } from "@/runtime/platform/platform"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
@@ -25,8 +31,7 @@ import { buildHomeSessionRecords, type HomeSessionRecord } from "./records"
 
 export type { HomeSessionRecord } from "./records"
 
-const HOME_SESSION_LIMIT = 64
-// Keep the large immutable result opaque so Solid Query does not recursively unwrap every session on mount.
+// Keep the immutable result opaque so Solid Query does not recursively unwrap every session on mount.
 const selectSessions = (sessions: SessionInfo[]) => () => sessions
 export type HomeSessionGroup = {
   id: "today" | "yesterday" | "older"
@@ -41,6 +46,7 @@ export function createHomeSessionsController(home: HomeController) {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
   const queryClient = useQueryClient()
   const projectDirectories = createMemo(() => {
     const selected = home.selection.value().directory
@@ -168,7 +174,7 @@ export function createHomeSessionsController(home: HomeController) {
     try {
       const data = await fetchSessionExport({ sessionID: session.id, api: ctx.sdk.api })
       const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      if (!(await saveSessionExport(filename, data, platform))) return
       showToast({
         variant: "success",
         icon: "circle-check",

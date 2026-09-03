@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
+import { createStore } from "solid-js/store"
 import { createSessionResolution } from "@/session/session-resolution"
 
 type Session = { id: string; directory: string }
@@ -34,9 +35,10 @@ function createFixture(initial: Record<string, Session> = {}) {
         },
       },
     },
-    settle(id: string) {
-      setCache({ ...cache(), [id]: sessionOf(id) })
+    settle(id: string, directory = `/dir/${id}`) {
+      setCache({ ...cache(), [id]: { id, directory } })
       deferred.get(id)?.resolve(undefined)
+      deferred.delete(id)
     },
     fail(id: string, error: unknown) {
       deferred.get(id)?.reject(error)
@@ -58,6 +60,38 @@ const flush = async () => {
   await Promise.resolve()
   await Promise.resolve()
 }
+
+test("refreshes the current session on reconnect while keeping cached content visible", async () => {
+  await createRoot(async (dispose) => {
+    const fixture = createFixture({ ses_a: sessionOf("ses_a") })
+    const [connection, setConnection] = createStore({ connected: false })
+    const current = createSessionResolution(
+      () => "ses_a",
+      () => fixture.sessions,
+      { connected: () => connection.connected },
+    )
+
+    expect(current()).toEqual(sessionOf("ses_a"))
+    expect(fixture.resolves).toEqual([])
+    await flush()
+    setConnection("connected", true)
+    expect(fixture.resolves).toEqual(["ses_a"])
+    fixture.settle("ses_a")
+    await flush()
+
+    setConnection("connected", false)
+    expect(current()).toEqual(sessionOf("ses_a"))
+    expect(fixture.resolves).toEqual(["ses_a"])
+    setConnection("connected", true)
+    expect(fixture.resolves).toEqual(["ses_a", "ses_a"])
+    expect(current()).toEqual(sessionOf("ses_a"))
+    expect(fixture.messages.syncs).toEqual(["ses_a", "ses_a"])
+    fixture.settle("ses_a", "/worktrees/moved")
+    await flush()
+    expect(current()?.directory).toBe("/worktrees/moved")
+    dispose()
+  })
+})
 
 test("starts metadata and messages in parallel once the route has a session ID", async () => {
   await createRoot(async (dispose) => {

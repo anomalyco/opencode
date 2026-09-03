@@ -306,6 +306,7 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
   const providerID = info.canonical ?? info.providerID
   const optionKey = providerOptionKey(packageName, providerID)
   const route: AnyRoute = {
+    compact: undefined,
     id: `ai-sdk:${packageName}`,
     provider: ProviderID.make(providerID),
     providerMetadataKey: optionKey,
@@ -330,7 +331,12 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     },
     body: {
       schema: Schema.Unknown,
-      from: (request) => Effect.succeed(callOptions(request, packageName, info.modelID ?? info.id, optionKey)),
+      from: (request) =>
+        Effect.try({
+          try: () => callOptions(request, packageName, info.modelID ?? info.id, optionKey),
+          catch: (cause) =>
+            cause instanceof AIError ? cause : ProviderShared.invalidRequest("Invalid AI SDK request", cause),
+        }),
     },
     with: () => route,
     model: (input) =>
@@ -515,6 +521,8 @@ function userPart(part: ContentPart): UserContent {
 
 function assistantPart(part: ContentPart): AssistantContent {
   switch (part.type) {
+    case "compaction":
+      throw ProviderShared.invalidRequest("AI SDK routes cannot replay native provider compaction state")
     case "text":
       return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":

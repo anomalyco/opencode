@@ -399,13 +399,14 @@ See [Models](/models) for the complete native model shape.
 
 ### Supported fields without direct native equivalents
 
-Most fields that keep the same shape, including `shell`, `model`, `default_agent`, `autoupdate`, `watcher`, `formatter`,
+Most fields that keep the same shape, including `shell`, `model`, `default_agent`, `watcher`, `formatter`,
 `lsp`, `instructions`, `enterprise`, and `tool_output`, require no migration.
 
 The V1 provider filters do not have one-to-one native V2 config fields, but their behavior remains supported:
 
 - `enabled_providers` becomes an internal deny-by-default provider policy followed by allows for the listed providers.
 - `disabled_providers` becomes internal deny policies for the listed providers.
+- `autoupdate` becomes `update`: `false` maps to `"disable"`, `"notify"` remains `"notify"`, and `true` maps to `"auto"`.
 - `small_model` becomes the `model` selection for the built-in `title` agent. Native V2 configuration should use
   `agents.title.model` instead.
 

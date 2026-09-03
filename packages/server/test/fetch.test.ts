@@ -355,7 +355,7 @@ it.live("serves the session view operation and missing-session error", () =>
   }),
 )
 
-it.live("routes pending requests by Session without loading an instance", () =>
+it.live("routes pending requests through the Session's instance", () =>
   Effect.gen(function* () {
     const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-pending-read-")))
     const handler = yield* ServerFetch.make({
@@ -407,7 +407,7 @@ it.live("routes pending requests by Session without loading an instance", () =>
     )
     expect(global.status).toBe(200)
     expect(yield* Effect.promise(() => global.json())).toEqual({ data: [] })
-    expect(yield* loaded()).toEqual([])
+    expect(yield* loaded()).toEqual([{ directory: process.cwd() }])
 
     const createdForm = yield* Effect.promise(() =>
       handler(

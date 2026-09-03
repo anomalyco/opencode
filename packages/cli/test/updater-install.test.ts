@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { Effect, FileSystem, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { existsSync } from "node:fs"
@@ -17,11 +17,29 @@ function fixture(
   respond: (command: ChildProcess.StandardCommand) => Partial<AppProcess.RunResult> & {
     error?: AppProcess.AppProcessError
   } = () => ({}),
+  name = "@opencode-ai/cli",
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
+    const executable = path.join(root, "package", "bin", "opencode")
+    yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
+    yield* fs.writeFileString(
+      path.join(root, "package", "package.json"),
+      JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
+    )
+    // The updater uses global fetch; scope this replacement to each install test.
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        spyOn(globalThis, "fetch").mockImplementation(
+          Object.assign(async () => Response.json({ version: "2.3.4", metadata: { package: name } }), {
+            preconnect: fetch.preconnect,
+          }),
+        ),
+      ),
+      (request) => Effect.sync(() => request.mockRestore()),
+    )
     const global = Global.make({
       home: path.join(root, "home"),
       data: path.join(root, "data"),
@@ -37,6 +55,10 @@ function fixture(
     const updater = yield* Updater.Service.pipe(
       Effect.provide(Updater.layer),
       Effect.provideService(Global.Service, global),
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        realPath: (input) => (input === process.execPath ? Effect.succeed(executable) : fs.realPath(input)),
+      }),
       Effect.provideService(
         AppProcess.Service,
         AppProcess.Service.of({
@@ -214,9 +236,12 @@ test("Node distribution honors the compile-time CLI name", async () => {
 if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-node") {
   it.live("Node distribution resolves the published npm package", () =>
     Effect.gen(function* () {
-      const test = yield* fixture((command) => ({
-        stdout: Buffer.from(command.command === "npm" ? "opencode-node@2.3.4" : ""),
-      }))
+      const test = yield* fixture(
+        (command) => ({
+          stdout: Buffer.from(command.command === "npm" ? "opencode-node@2.3.4" : ""),
+        }),
+        "opencode-node",
+      )
       expect(yield* test.updater.method()).toBe("npm")
       yield* test.updater.upgrade("npm", "v2.3.4")
       yield* test.updater.upgrade("pnpm", "v2.3.4")

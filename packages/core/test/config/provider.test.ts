@@ -92,11 +92,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("custom")
       const inheritedID = Model.ID.make("inherited")
       const overriddenID = Model.ID.make("overridden")
-      yield* catalog.transform((draft) => {
-        draft.model.update(providerID, inheritedID, (model) => {
+      yield* catalog.transform((editor) => {
+        editor.model.update(providerID, inheritedID, (model) => {
           model.capabilities = { tools: false, input: ["text"], output: ["text"] }
         })
-        draft.model.update(providerID, overriddenID, (model) => {
+        editor.model.update(providerID, overriddenID, (model) => {
           model.capabilities = { tools: false, input: ["text"], output: ["text"] }
         })
       })
@@ -273,8 +273,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.make("custom")
       const modelID = Model.ID.make("chat")
-      yield* catalog.transform((draft) => {
-        draft.model.update(providerID, modelID, (model) => {
+      yield* catalog.transform((editor) => {
+        editor.model.update(providerID, modelID, (model) => {
           model.package = "aisdk:@ai-sdk/anthropic"
           model.settings = { baseURL: "https://catalog.example/v1" }
           model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
@@ -480,11 +480,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
           }),
         ]
 
-        yield* catalog.transform((draft) => {
-          draft.provider.update(Provider.ID.anthropic, (provider) => {
+        yield* catalog.transform((editor) => {
+          editor.provider.update(Provider.ID.anthropic, (provider) => {
             provider.package = "aisdk:@ai-sdk/anthropic"
           })
-          draft.model.update(Provider.ID.anthropic, modelID, (model) => {
+          editor.model.update(Provider.ID.anthropic, modelID, (model) => {
             model.variants = [{ id: Model.VariantID.make("fast"), settings: { effort: "high" } }]
           })
         })

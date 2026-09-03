@@ -395,7 +395,7 @@ describe("ReadTool", () => {
         mime: "image/png",
       }
       const image = yield* Image.Service
-      yield* image.transform((draft) => draft.configure({ autoResize: false, maxWidth: 4 }))
+      yield* image.transform((editor) => editor.configure({ autoResize: false, maxWidth: 4 }))
       const registry = yield* Tool.Service
 
       expect(
@@ -429,7 +429,7 @@ describe("ReadTool", () => {
         mime: "image/png",
       }
       const image = yield* Image.Service
-      yield* image.transform((draft) => draft.configure({ maxWidth: 4 }))
+      yield* image.transform((editor) => editor.configure({ maxWidth: 4 }))
       const registry = yield* Tool.Service
       const result = yield* executeTool(registry, {
         sessionID,
@@ -471,15 +471,15 @@ describe("ReadTool", () => {
         [5, "="],
         [6, ""],
       ] as const) {
-        yield* image.transform((draft) => draft.configure({ maxWidth, maxBase64Bytes: 1_024 }))
+        yield* image.transform((editor) => editor.configure({ maxWidth, maxBase64Bytes: 1_024 }))
         const candidate = yield* image.normalize("wide.png", content)
         expect(candidate.mime).toBe("image/png")
         expect(candidate.content.match(/=*$/)?.[0]).toBe(padding)
 
-        yield* image.transform((draft) => draft.configure({ maxBase64Bytes: candidate.content.length }))
+        yield* image.transform((editor) => editor.configure({ maxBase64Bytes: candidate.content.length }))
         expect(yield* image.normalize("wide.png", content)).toEqual(candidate)
 
-        yield* image.transform((draft) => draft.configure({ maxBase64Bytes: candidate.content.length - 1 }))
+        yield* image.transform((editor) => editor.configure({ maxBase64Bytes: candidate.content.length - 1 }))
         const smaller = yield* image.normalize("wide.png", content)
         expect(smaller.mime).toBe("image/png")
         expect(smaller.content.length).toBeLessThan(candidate.content.length)
@@ -499,7 +499,7 @@ describe("ReadTool", () => {
         mime: "image/png",
       }
       const image = yield* Image.Service
-      yield* image.transform((draft) => draft.configure({ maxBase64Bytes: 1 }))
+      yield* image.transform((editor) => editor.configure({ maxBase64Bytes: 1 }))
       const registry = yield* Tool.Service
 
       expect(

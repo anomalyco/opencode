@@ -25,13 +25,7 @@ import { Skill } from "@opencode-ai/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
-import {
-  directoryAutocompleteExactValue,
-  directoryAutocompleteMatches,
-  directoryAutocompleteResultValue,
-  directoryAutocompleteSearch,
-  slashArgumentAutocomplete,
-} from "../../prompt/directory-completion"
+import { directoryAutocomplete, slashArgumentAutocomplete } from "../../prompt/directory-completion"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -343,20 +337,38 @@ export function Autocomplete(props: {
       if (referenceMatch())
         return { options: [], failed: false, mode: input.visible, query: input.query, resolved: true }
       const { lineRange, base } = parseFileLineRange(input.query ?? "")
-      const directorySearch =
-        input.visible === "directory"
-          ? directoryAutocompleteSearch(base, input.location?.directory ?? paths.cwd, paths.home)
-          : undefined
-
       const requestLocation = {
-        directory: directorySearch?.directory ?? input.location?.directory,
+        directory: input.location?.directory,
         workspace: input.location?.workspaceID ?? data.location.default().workspaceID,
       }
-      const result = await (
-        input.visible === "directory"
-          ? client.api.file.list({ location: requestLocation })
-          : client.api.file.find({ query: base, limit: 20, location: requestLocation })
-      ).then(
+      const width = props.anchor().width - 4
+      if (input.visible === "directory") {
+        const result = await directoryAutocomplete(
+          client.api.file,
+          { ...requestLocation, directory: requestLocation.directory ?? paths.cwd },
+          base,
+          paths.home,
+        ).catch(() => undefined)
+        if (!result)
+          return info.value?.mode === input.visible
+            ? { ...info.value, failed: true }
+            : { options: [], failed: true, mode: input.visible, query: input.query, resolved: false }
+        return {
+          options: result.map((item) => ({
+            display: Locale.truncateMiddle(item.value, width),
+            value: item.value,
+            isDirectory: true,
+            path: item.value,
+            absolute: item.absolute,
+            onSelect: () => insertDirectory(item.value),
+          })),
+          failed: false,
+          mode: input.visible,
+          query: input.query,
+          resolved: true,
+        }
+      }
+      const result = await client.api.file.find({ query: base, limit: 20, location: requestLocation }).then(
         (result) => result,
         () => undefined,
       )
@@ -368,38 +380,8 @@ export function Autocomplete(props: {
 
       const options: AutocompleteOption[] = []
 
-      const width = props.anchor().width - 4
-      const exact = directorySearch ? directoryAutocompleteExactValue(base, directorySearch) : undefined
-      if (exact) {
-        options.push({
-          display: Locale.truncateMiddle(exact, width),
-          value: exact,
-          isDirectory: true,
-          path: exact,
-          absolute: result.location.directory,
-          onSelect: () => insertDirectory(exact),
-        })
-      }
-      const entries =
-        input.visible === "directory"
-          ? result.data.filter(
-              (item) =>
-                item.type === "directory" && directoryAutocompleteMatches(item.path, directorySearch?.query ?? ""),
-            )
-          : result.data
       options.push(
-        ...entries.map((item): AutocompleteOption => {
-          if (input.visible === "directory") {
-            const directory = directorySearch ? directoryAutocompleteResultValue(item.path, directorySearch) : item.path
-            return {
-              display: Locale.truncateMiddle(directory, width),
-              value: directory,
-              isDirectory: true,
-              path: directory,
-              absolute: path.resolve(result.location.directory, item.path),
-              onSelect: () => insertDirectory(directory),
-            }
-          }
+        ...result.data.map((item): AutocompleteOption => {
           const { filename, part } = createFilePart(item, path.join(result.location.directory, item.path), lineRange)
           return {
             display: Locale.truncateMiddle(filename, width),

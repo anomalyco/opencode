@@ -78,9 +78,13 @@ for (const theme of ["light", "dark"] as const) {
         await expectToken(
           message,
           "background-color",
-          scenario.accent ? "--v2-background-bg-accent" : "--v2-state-bg-info",
+          scenario.accent ? "--v2-background-bg-accent" : theme === "light" ? "--v2-blue-100" : "--v2-blue-1200",
         )
-        await expectToken(message, "color", scenario.accent ? "--v2-text-text-contrast" : "--v2-text-text-accent")
+        await expectToken(
+          message,
+          "color",
+          scenario.accent ? "--v2-text-text-contrast" : theme === "light" ? "--v2-blue-700" : "--v2-blue-300",
+        )
       })
     }
 
@@ -134,8 +138,8 @@ for (const theme of ["light", "dark"] as const) {
       await expect(view.send).toBeDisabled()
       await expectBackground(view.send, "contrast")
       await page.getByRole("button", { name: "Local", exact: true }).click()
-      await page.getByRole("menuitem", { name: "New workspace", exact: true }).click()
-      await expect(page.getByRole("button", { name: "New workspace", exact: true })).toBeVisible()
+      await page.getByRole("menuitem", { name: "New worktree", exact: true }).click()
+      await expect(page.getByRole("button", { name: "New worktree", exact: true })).toBeVisible()
       await view.input.fill("Inspect this fixture workspace.")
       await expect(view.send).toBeEnabled()
       await expectBackground(view.send, "contrast")

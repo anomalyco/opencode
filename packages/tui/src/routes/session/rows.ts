@@ -35,7 +35,7 @@ export type SessionRow =
   | { type: "assistant-footer"; messageID: string }
   | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
 
-export type BackgroundToolTarget = { source: "shell" | "subagent"; id: string }
+export type BackgroundToolTarget = { source: "shell"; id: string }
 
 export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
   const data = useData()
@@ -419,23 +419,15 @@ export function backgroundToolRowIndex(
   const end = rows.findIndex((row) => row.type === "message" && row.messageID === beforeMessageID)
   return rows.slice(0, end === -1 ? rows.length : end).findLastIndex((row) => {
     if (row.type !== "part") return false
-    if (target.source === "shell" && row.ref.partID === target.id) return true
+    if (row.ref.partID === target.id) return true
     const message = byID.get(row.ref.messageID)
     if (message?.type !== "assistant") return false
     const part = resolvePart(message, row.ref.partID)
-    if (target.source === "shell")
-      return (
-        part?.type === "tool" &&
-        part.name.toLowerCase() === "shell" &&
-        part.state.status !== "streaming" &&
-        part.state.metadata?.shellID === target.id
-      )
     return (
       part?.type === "tool" &&
-      part.name.toLowerCase() === "subagent" &&
-      part.state.status === "completed" &&
-      part.state.metadata?.status === "running" &&
-      part.state.metadata.sessionID === target.id
+      part.name.toLowerCase() === "shell" &&
+      part.state.status !== "streaming" &&
+      part.state.metadata?.shellID === target.id
     )
   })
 }

@@ -19,6 +19,9 @@ export const Input = Schema.Struct({
   path: Schema.optionalKey(RelativePath).annotate({
     description: "Directory to search. Defaults to the current working directory.",
   }),
+  hidden: FileSystem.GlobInput.fields.hidden.annotate({
+    description: "Include hidden files and directories (default: false).",
+  }),
   limit: FileSystem.GlobInput.fields.limit.annotate({
     description: `Maximum number of matching files to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
   }),
@@ -49,8 +52,8 @@ export const Plugin = {
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description: 'Search file paths using a glob pattern (examples: "**/*.ts", "src/**/*.tsx").',
@@ -76,6 +79,7 @@ export const Plugin = {
                 metadata: {
                   root: searchPath ?? ".",
                   path: searchPath,
+                  hidden: input.hidden,
                   limit: input.limit,
                 },
                 sessionID: context.sessionID,
@@ -97,6 +101,7 @@ export const Plugin = {
                 .glob({
                   cwd: root,
                   pattern: input.pattern,
+                  hidden: input.hidden,
                   limit: limit + 1,
                 })
                 .pipe(

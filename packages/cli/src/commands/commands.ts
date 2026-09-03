@@ -199,6 +199,24 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             package: Argument.string("package").pipe(Argument.withDescription("npm registry or Git package specifier")),
           },
         }),
+        Spec.make("check", {
+          description: "Check package plugins for updates",
+          params: {
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Configured package target"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("update", {
+          description: "Update package plugins",
+          params: {
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Configured package target; omit to update all outdated plugins"),
+              Argument.optional,
+            ),
+          },
+        }),
         Spec.make("remove", {
           description: "Remove a plugin from global configuration",
           params: {

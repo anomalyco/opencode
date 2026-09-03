@@ -1,68 +1,20 @@
-import { createStore, reconcile } from "solid-js/store"
+import { reconcile, unwrap } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
+import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { ReasoningMode } from "@opencode-ai/session-ui/timeline/projection"
+import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode-ai/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
-export type WorkspaceDefaultDestination = "last-used" | "local" | "new"
-export type WorkspaceLastUsed = "local" | "workspace"
-export type TerminalPlacement = "side" | "bottom"
-export type FollowUpBehavior = "queue" | "steer"
-export type TabLayout = "horizontal" | "vertical"
-
-export interface NotificationSettings {
-  agent: boolean
-  permissions: boolean
-  errors: boolean
-}
-
-export interface SoundSettings {
-  agentEnabled: boolean
-  agent: string
-  permissionsEnabled: boolean
-  permissions: string
-  errorsEnabled: boolean
-  errors: string
-}
-
-export interface Settings {
-  general: {
-    autoSave: boolean
-    releaseNotes: boolean
-    showFileTree: boolean
-    showNavigation: boolean
-    showSearch: boolean
-    showStatus: boolean
-    showProjectIcon: boolean
-    showTerminal: boolean
-    reasoningMode: ReasoningMode
-    shellToolPartsExpanded: boolean
-    editToolPartsExpanded: boolean
-    showCustomAgents: boolean
-    mobileTitlebarPosition: "top" | "bottom"
-    mobileDiffWrap: boolean
-    terminalPlacement: TerminalPlacement
-    followUpBehavior: FollowUpBehavior
-  }
-  appearance: {
-    fontSize: number
-    mono: string
-    sans: string
-    terminal: string
-    tabLayout: TabLayout
-  }
-  keybinds: Record<string, string>
-  permissions: {
-    autoApprove: boolean
-  }
-  workspaces: {
-    defaultDestination: WorkspaceDefaultDestination
-    lastUsed: Record<string, WorkspaceLastUsed>
-  }
-  notifications: NotificationSettings
-  sounds: SoundSettings
-}
+export type Settings = typeof settingsSchema.Type
+export type WorkspaceDefaultDestination = Settings["workspaces"]["defaultDestination"]
+export type WorkspaceLastUsed = Settings["workspaces"]["lastUsed"][string]
+export type TerminalPlacement = Settings["general"]["terminalPlacement"]
+export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
+export type TabLayout = Settings["appearance"]["tabLayout"]
+export type NotificationSettings = Settings["notifications"]
+export type SoundSettings = Settings["sounds"]
 
 export const monoDefault = "IBM Plex Mono"
 export const sansDefault = "Inter"
@@ -116,7 +68,174 @@ export function terminalFontFamily(font: string | undefined) {
   return stack(font, terminalBase)
 }
 
-const defaultSettings: Settings = {
+const placementSchema = Schema.Literals(["separate", "grouped", "hidden"])
+const detailsSchema = Schema.Literals(["collapsed", "expanded"])
+const activitySchema = Persistence.struct({ placement: placementSchema, details: detailsSchema })
+const placementOnlySchema = Persistence.struct({ placement: placementSchema })
+
+const generalSchema = Persistence.struct({
+  autoSave: Schema.Boolean,
+  releaseNotes: Schema.Boolean,
+  showFileTree: Schema.Boolean,
+  showNavigation: Schema.Boolean,
+  showSearch: Schema.Boolean,
+  showStatus: Schema.Boolean,
+  showProjectIcon: Schema.Boolean,
+  showTerminal: Schema.Boolean,
+  timelineDetail: Persistence.struct({
+    shell: activitySchema,
+    edit: activitySchema,
+    thinking: activitySchema,
+    subagents: placementOnlySchema,
+    notices: placementOnlySchema,
+    tools: placementOnlySchema,
+  }),
+  showCustomAgents: Schema.Boolean,
+  mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
+  mobileDiffWrap: Schema.Boolean,
+  terminalPlacement: Schema.Literals(["side", "bottom"]),
+  followUpBehavior: Schema.Literals(["queue", "steer"]),
+})
+
+const appearanceSchema = Persistence.struct({
+  fontSize: Schema.Number,
+  mono: Schema.String,
+  sans: Schema.String,
+  terminal: Schema.String,
+  tabLayout: Schema.Literals(["horizontal", "vertical"]),
+  showProjectName: Schema.Boolean,
+})
+
+const permissionsSchema = Persistence.struct({
+  autoApprove: Schema.Boolean,
+})
+
+const workspacesSchema = Persistence.struct({
+  defaultDestination: Schema.Literals(["last-used", "local", "new"]),
+  lastUsed: Persistence.record(
+    Schema.Literals(["local", "workspace"]).pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
+  ),
+})
+
+const notificationsSchema = Persistence.struct({
+  agent: Schema.Boolean,
+  permissions: Schema.Boolean,
+  errors: Schema.Boolean,
+})
+
+const soundsSchema = Persistence.struct({
+  agentEnabled: Schema.Boolean,
+  agent: Schema.String,
+  permissionsEnabled: Schema.Boolean,
+  permissions: Schema.String,
+  errorsEnabled: Schema.Boolean,
+  errors: Schema.String,
+})
+
+export const settingsSchema = Persistence.struct({
+  general: generalSchema,
+  appearance: appearanceSchema,
+  keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
+  permissions: permissionsSchema,
+  workspaces: workspacesSchema,
+  notifications: notificationsSchema,
+  sounds: soundsSchema,
+})
+
+function storedTimelineCategory(category: TimelineCategory) {
+  return Persistence.optional(
+    Schema.Union([
+      Schema.Struct({
+        placement: Persistence.optional(placementSchema),
+        details: Persistence.optional(detailsSchema),
+      }),
+      Schema.Literals(["expanded", "collapsed", "hidden", "visible"]),
+    ]).pipe(
+      Schema.decode({
+        decode: SchemaGetter.transform((value) => {
+          if (typeof value !== "string") return value
+          return {
+            placement:
+              value === "hidden"
+                ? "hidden"
+                : category === "subagents"
+                  ? "separate"
+                  : category === "tools"
+                    ? "grouped"
+                    : value === "expanded"
+                      ? "separate"
+                      : value === "collapsed"
+                        ? "grouped"
+                        : undefined,
+            details: value === "expanded" ? "expanded" : "collapsed",
+          }
+        }),
+        encode: SchemaGetter.passthrough(),
+      }),
+    ),
+  )
+}
+
+function legacyTimelineActivity(value: boolean | "hidden" | "compact" | "full" | null | undefined) {
+  if (value === undefined || value === null) return
+  const expanded = value === true || value === "full"
+  return {
+    placement: value === "hidden" ? "hidden" : expanded ? "separate" : "grouped",
+    details: expanded ? "expanded" : "collapsed",
+  } as const
+}
+
+export const settingsPersistence = Persistence.migrate(
+  settingsSchema,
+  Schema.Struct({
+    general: Persistence.optional(
+      Schema.Struct({
+        // Keep invalid explicit values distinct from absent values so legacy preferences cannot replace them.
+        timelineDetail: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              shell: storedTimelineCategory("shell"),
+              edit: storedTimelineCategory("edit"),
+              thinking: storedTimelineCategory("thinking"),
+              subagents: storedTimelineCategory("subagents"),
+              notices: storedTimelineCategory("notices"),
+              tools: storedTimelineCategory("tools"),
+            }),
+          ),
+        ).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(null)))),
+        reasoningMode: Schema.optional(Schema.NullOr(Schema.Literals(["hidden", "compact", "full"]))).pipe(
+          Schema.catchDecoding(() => Effect.succeed(Option.some(null))),
+        ),
+        showReasoningSummaries: Persistence.optional(Schema.Boolean),
+        shellToolPartsExpanded: Persistence.optional(Schema.Boolean),
+        editToolPartsExpanded: Persistence.optional(Schema.Boolean),
+      }),
+    ),
+  }).pipe(
+    Schema.decode({
+      decode: SchemaGetter.transform((value) => {
+        const general = value.general
+        if (!general || general.timelineDetail !== undefined) return value
+        return {
+          ...value,
+          general: {
+            ...general,
+            timelineDetail: {
+              shell: legacyTimelineActivity(general.shellToolPartsExpanded),
+              edit: legacyTimelineActivity(general.editToolPartsExpanded),
+              thinking: legacyTimelineActivity(
+                general.reasoningMode === undefined ? general.showReasoningSummaries : general.reasoningMode,
+              ),
+            },
+          },
+        }
+      }),
+      encode: SchemaGetter.transform((value) => value),
+    }),
+  ),
+)
+
+export const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
@@ -126,35 +245,18 @@ const defaultSettings: Settings = {
     showStatus: false,
     showProjectIcon: false,
     showTerminal: false,
-    reasoningMode: "compact",
-    shellToolPartsExpanded: false,
-    editToolPartsExpanded: false,
+    timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
     mobileDiffWrap: true,
     terminalPlacement: "side",
     followUpBehavior: "steer",
   },
-  appearance: {
-    fontSize: 14,
-    mono: "",
-    sans: "",
-    terminal: "",
-    tabLayout: "horizontal",
-  },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", showProjectName: false },
   keybinds: {},
-  permissions: {
-    autoApprove: false,
-  },
-  workspaces: {
-    defaultDestination: "last-used",
-    lastUsed: {},
-  },
-  notifications: {
-    agent: true,
-    permissions: true,
-    errors: false,
-  },
+  permissions: { autoApprove: false },
+  workspaces: { defaultDestination: "last-used", lastUsed: {} },
+  notifications: { agent: true, permissions: true, errors: false },
   sounds: {
     agentEnabled: true,
     agent: "staplebops-01",
@@ -169,26 +271,11 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
 
-export function migrateSettings(value: unknown) {
-  if (!value || typeof value !== "object" || !("general" in value)) return value
-  const general = value.general
-  if (!general || typeof general !== "object") return value
-  if ("reasoningMode" in general && general.reasoningMode !== undefined) return value
-  if (!("showReasoningSummaries" in general) || typeof general.showReasoningSummaries !== "boolean") return value
-  return {
-    ...value,
-    general: { ...general, reasoningMode: general.showReasoningSummaries ? "full" : "compact" },
-  }
-}
-
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   gate: false,
   init: () => {
-    const [store, setStore, , ready] = persisted(
-      { key: "settings.v3", migrate: migrateSettings },
-      createStore<Settings>(defaultSettings),
-    )
+    const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
@@ -241,23 +328,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
         },
-        reasoningMode: withFallback(() => store.general?.reasoningMode, defaultSettings.general.reasoningMode),
-        setReasoningMode(value: ReasoningMode) {
-          setStore("general", "reasoningMode", value)
-        },
-        shellToolPartsExpanded: withFallback(
-          () => store.general?.shellToolPartsExpanded,
-          defaultSettings.general.shellToolPartsExpanded,
-        ),
-        setShellToolPartsExpanded(value: boolean) {
-          setStore("general", "shellToolPartsExpanded", value)
-        },
-        editToolPartsExpanded: withFallback(
-          () => store.general?.editToolPartsExpanded,
-          defaultSettings.general.editToolPartsExpanded,
-        ),
-        setEditToolPartsExpanded(value: boolean) {
-          setStore("general", "editToolPartsExpanded", value)
+        timelineDetail: withFallback(() => store.general?.timelineDetail, defaultSettings.general.timelineDetail),
+        setTimelineDetail(value: TimelineDetail) {
+          setStore("general", "timelineDetail", structuredClone(unwrap(value)))
         },
         showCustomAgents,
         setShowCustomAgents(value: boolean) {
@@ -312,6 +385,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
+        },
+        showProjectName: withFallback(
+          () => store.appearance?.showProjectName,
+          defaultSettings.appearance.showProjectName,
+        ),
+        setShowProjectName(value: boolean) {
+          setStore("appearance", "showProjectName", value)
         },
       },
       keybinds: {

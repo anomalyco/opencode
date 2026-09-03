@@ -2,22 +2,32 @@ export const MAX_TITLEBAR_HISTORY = 100
 
 export type TitlebarAction = "back" | "forward" | undefined
 
+export type HistoryLocation = { url: string; state?: unknown }
+
 export type TitlebarHistory = {
-  stack: string[]
+  stack: HistoryLocation[]
   index: number
   action: TitlebarAction
 }
 
-export function applyPath(state: TitlebarHistory, current: string, max = MAX_TITLEBAR_HISTORY): TitlebarHistory {
+export function applyPath(
+  state: TitlebarHistory,
+  current: HistoryLocation,
+  max = MAX_TITLEBAR_HISTORY,
+): TitlebarHistory {
   if (!state.stack.length) {
-    const stack = current === "/" ? ["/"] : ["/", current]
+    const stack = current.url === "/" ? [current] : [{ url: "/" }, current]
     return { stack, index: stack.length - 1, action: undefined }
   }
 
   const active = state.stack[state.index]
-  if (current === active) {
-    if (!state.action) return state
-    return { ...state, action: undefined }
+  if (current.url === active.url) {
+    if (!state.action && current.state === active.state) return state
+    return {
+      ...state,
+      stack: state.stack.map((entry, index) => (index === state.index ? current : entry)),
+      action: undefined,
+    }
   }
 
   if (state.action) return { ...state, action: undefined }
@@ -25,13 +35,13 @@ export function applyPath(state: TitlebarHistory, current: string, max = MAX_TIT
   return pushPath(state, current, max)
 }
 
-export function pushPath(state: TitlebarHistory, path: string, max = MAX_TITLEBAR_HISTORY): TitlebarHistory {
+export function pushPath(state: TitlebarHistory, path: HistoryLocation, max = MAX_TITLEBAR_HISTORY): TitlebarHistory {
   const stack = state.stack.slice(0, state.index + 1).concat(path)
   const next = trimHistory(stack, stack.length - 1, max)
   return { ...state, ...next, action: undefined }
 }
 
-export function trimHistory(stack: string[], index: number, max = MAX_TITLEBAR_HISTORY) {
+export function trimHistory(stack: HistoryLocation[], index: number, max = MAX_TITLEBAR_HISTORY) {
   if (stack.length <= max) return { stack, index }
   const cut = stack.length - max
   return {

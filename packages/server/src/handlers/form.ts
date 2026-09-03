@@ -9,10 +9,10 @@ import {
   FormNotFoundError,
   InvalidRequestError,
 } from "@opencode-ai/protocol/errors"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { requestRef, response, sessionInfo, withLoadedLocationServices } from "../location"
+import { requestRef, response, sessionInfo } from "../location"
 
 function missingForm(id: Form.ID) {
   return new FormNotFoundError({ id, message: `Form not found: ${id}` })
@@ -45,9 +45,9 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
             ctx.params.sessionID === "global" ? undefined : yield* sessionInfo(sessions, ctx.params.sessionID)
           const read = Form.Service.use((form) => form.list({ sessionID: ctx.params.sessionID }))
           const forms = yield* session
-            ? read.pipe(instances.provideIfLoaded(session))
-            : withLoadedLocationServices(locations, requestRef(ctx.request), read)
-          return { data: Option.getOrElse(forms, () => []) }
+            ? read.pipe(instances.provide(session))
+            : read.pipe(Effect.provide(locations.get(requestRef(ctx.request))))
+          return { data: forms }
         }),
       )
       .handle(

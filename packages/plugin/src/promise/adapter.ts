@@ -204,7 +204,7 @@ function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
 
 /**
  * Adapts a Promise plugin into an Effect plugin so the existing Effect-only
- * loader (`Plugin` / `PluginSupervisor`) can run it unchanged.
+ * Core plugin runtime can run it unchanged.
  *
  * Hook registrations created during the async `setup` attach to the plugin's
  * scope, so unloading the plugin disposes them. The captured fiber context
@@ -270,13 +270,13 @@ export function fromPromise(plugin: Plugin) {
         }
 
         const transform =
-          <Draft>(domain: {
-            transform: (callback: (draft: Draft) => void) => Effect.Effect<HostRegistration, never, Scope.Scope>
+          <Editor>(domain: {
+            transform: (callback: (editor: Editor) => void) => Effect.Effect<HostRegistration, never, Scope.Scope>
           }) =>
-          (callback: (draft: Draft) => void) =>
+          (callback: (editor: Editor) => void) =>
             register(
-              domain.transform((draft) => {
-                callback(draft)
+              domain.transform((editor) => {
+                callback(editor)
               }),
             )
 
@@ -312,10 +312,10 @@ export function fromPromise(plugin: Plugin) {
             list: adaptApiMethod(CommandEndpoints["command.list"], host.command.list),
             transform: (callback) =>
               register(
-                host.command.transform((draft) =>
+                host.command.transform((editor) =>
                   callback({
                     add: (definition) =>
-                      draft.add({
+                      editor.add({
                         ...definition,
                         execute: (input) =>
                           Effect.tryPromise({ try: () => definition.execute(input), catch: (cause) => cause }),
@@ -377,18 +377,18 @@ export function fromPromise(plugin: Plugin) {
             },
             transform: (callback) =>
               register(
-                host.integration.transform((draft) =>
+                host.integration.transform((editor) =>
                   callback({
-                    list: draft.list,
-                    get: draft.get,
-                    update: draft.update,
-                    remove: draft.remove,
+                    list: editor.list,
+                    get: editor.get,
+                    update: editor.update,
+                    remove: editor.remove,
                     method: {
-                      list: draft.method.list,
+                      list: editor.method.list,
                       update: (input) => {
-                        if (!("authorize" in input)) return draft.method.update(input)
+                        if (!("authorize" in input)) return editor.method.update(input)
                         const refresh = input.refresh
-                        draft.method.update({
+                        editor.method.update({
                           ...input,
                           authorize: (answer) =>
                             Effect.promise(() => input.authorize(answer)).pipe(
@@ -410,7 +410,7 @@ export function fromPromise(plugin: Plugin) {
                               : (credential) => Effect.promise(() => refresh(credential)),
                         })
                       },
-                      remove: draft.method.remove,
+                      remove: editor.method.remove,
                     },
                   }),
                 ),
@@ -457,21 +457,21 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.tool.reload()),
             transform: (callback) =>
               register(
-                host.tool.transform((draft) =>
+                host.tool.transform((editor) =>
                   callback({
-                    list: () => draft.list().map((tool) => ({ ...tool, execute: promiseExecutor(tool.execute) })),
+                    list: () => editor.list().map((tool) => ({ ...tool, execute: promiseExecutor(tool.execute) })),
                     get: (id) => {
-                      const tool = draft.get(id)
+                      const tool = editor.get(id)
                       return tool ? { ...tool, execute: promiseExecutor(tool.execute) } : undefined
                     },
-                    namespace: draft.namespace,
+                    namespace: editor.namespace,
                     add: (tool: Info) =>
-                      draft.add({
+                      editor.add({
                         ...tool,
                         execute: (input, context) => executePromiseTool(tool, input, context),
                       }),
                     update: (id, update) =>
-                      draft.update(id, (tool) => {
+                      editor.update(id, (tool) => {
                         const value: Info = {
                           ...tool,
                           execute: promiseExecutor(tool.execute),
@@ -484,7 +484,7 @@ export function fromPromise(plugin: Plugin) {
                             executePromiseTool(value, input, context),
                         })
                       }),
-                    remove: draft.remove,
+                    remove: editor.remove,
                   }),
                 ),
               ),
@@ -500,11 +500,11 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.vcs.reload()),
             transform: (callback) =>
               register(
-                host.vcs.transform((draft) => {
+                host.vcs.transform((editor) => {
                   callback({
                     add: (definition) => {
                       const base = definition.base?.bind(definition)
-                      draft.add({
+                      editor.add({
                         id: definition.id,
                         name: definition.name,
                         info: (input) => attempt((signal) => definition.info(input, { signal })),
@@ -514,7 +514,7 @@ export function fromPromise(plugin: Plugin) {
                         diff: (input) => attempt((signal) => definition.diff(input, { signal })),
                       })
                     },
-                    default: draft.default,
+                    default: editor.default,
                   })
                 }),
               ),
@@ -525,15 +525,15 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.websearch.reload()),
             transform: (callback) =>
               register(
-                host.websearch.transform((draft) => {
+                host.websearch.transform((editor) => {
                   callback({
                     add: (definition) =>
-                      draft.add({
+                      editor.add({
                         id: definition.id,
                         name: definition.name,
                         execute: (input) => attempt((signal) => definition.execute(input, { signal })),
                       }),
-                    default: draft.default,
+                    default: editor.default,
                   })
                 }),
               ),

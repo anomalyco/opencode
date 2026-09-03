@@ -62,8 +62,8 @@ type PlatformBase = {
   /** Observe native drag cancellation that does not reach the renderer event loop. */
   onDragCancel?(callback: () => void): () => void
 
-  /** Open a native save file picker dialog (desktop only) */
-  saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
+  /** Open a native save file dialog and write content to the selected path (desktop only) */
+  saveFile?(opts: SaveFilePickerOptions, content: string): Promise<boolean>
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage

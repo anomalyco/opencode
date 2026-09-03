@@ -12,8 +12,9 @@ import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { showToast } from "@/shell/notifications/toast"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useProviders } from "@/providers/catalog/providers"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
@@ -84,6 +85,7 @@ const emptyMessages: SessionMessageInfo[] = []
 export function SessionContextTab() {
   const data = useData()
   const language = useLanguage()
+  const platform = usePlatform()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const providers = useProviders(() => sdk().directory)
@@ -199,7 +201,7 @@ export function SessionContextTab() {
         api: serverSDK.api,
       })
       const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      if (!(await saveSessionExport(filename, data, platform))) return
       showToast({
         variant: "success",
         icon: "circle-check",

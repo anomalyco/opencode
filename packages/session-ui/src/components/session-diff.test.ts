@@ -127,6 +127,38 @@ describe("session diff", () => {
     expect(resolveFileDiff({ file: "b.ts", patch }).name).toBe("b.ts")
   })
 
+  test.each([
+    "@@ -1 +1 @@\n-old\n+new\n",
+    "--- a.ts\t\n+++ a.ts\t\n@@ -1 +1 @@\n-old\n+new\n",
+  ])("reuses a highlight identity for the same cached patch: %s", (patch) => {
+    const first = resolveFileDiff({ file: "a.ts", patch })
+    expect(first.cacheKey).toBeString()
+    expect(resolveFileDiff({ file: "a.ts", patch }).cacheKey).toBe(first.cacheKey)
+    expect(resolveFileDiff({ file: "b.ts", patch }).cacheKey).not.toBe(first.cacheKey)
+    expect(resolveFileDiff({ file: "a.ts", patch: patch.replace("+new", "+next") }).cacheKey).not.toBe(first.cacheKey)
+  })
+
+  test("keys preloaded content diffs by file name and content", () => {
+    const diff = { file: "a.ts", before: "one\n", after: "two\n", additions: 1, deletions: 1 }
+    const first = normalize(diff).fileDiff
+    expect(first.cacheKey).toBeString()
+    expect(normalize(diff).fileDiff.cacheKey).toBe(first.cacheKey)
+    expect(normalize({ ...diff, file: "a.py" }).fileDiff.cacheKey).not.toBe(first.cacheKey)
+    expect(normalize({ ...diff, after: "three\n" }).fileDiff.cacheKey).not.toBe(first.cacheKey)
+  })
+
+  test("does not reuse an evicted highlight identity for different content", () => {
+    const patch = "@@ -1 +1 @@\n-old\n+new\n"
+    const first = resolveFileDiff({ file: "evicted.ts", patch })
+    const keys = Array.from({ length: 20 }, (_, index) =>
+      resolveFileDiff({ file: "evicted.ts", patch: patch.replace("+new", `+new${index}`) }).cacheKey,
+    )
+    expect(keys).not.toContain(first.cacheKey)
+    const restored = resolveFileDiff({ file: "evicted.ts", patch })
+    expect(restored.additionLines).toEqual(first.additionLines)
+    expect(restored.cacheKey).toBeString()
+  })
+
   test("keeps capped header-only patches partial", () => {
     const fileDiff = resolveFileDiff({
       file: "a.ts",

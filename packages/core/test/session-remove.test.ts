@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Option, RcMap, Scope } from "effect"
+import { Effect, Layer, RcMap, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
@@ -17,6 +17,7 @@ import { SessionEnvironment } from "@opencode-ai/core/session/environment"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
+import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 
 const closed: Session.ID[] = []
@@ -43,13 +44,14 @@ const it = testEffect(
       SessionStore.node,
       SessionEnvironment.node,
       Session.node,
-      Instance.byLocationNode,
+      Instance.node,
       LocationServiceMap.node,
     ]),
     [
       Project.node.replace(globalProjectNode),
       SessionExecution.node.replace(SessionExecution.noopLayer),
       SessionModelTransport.node.replace(transport),
+      offlineModels,
     ],
   ),
 )
@@ -88,14 +90,14 @@ describe("Session.remove", () => {
       const parent = yield* sessions.create({
         location: Location.Ref.make({ directory: AbsolutePath.make(temporary.path) }),
       })
-      yield* sessions.create({ parentID: parent.id })
+      const child = yield* sessions.create({ parentID: parent.id })
       closed.length = 0
       expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
 
       yield* sessions.remove(parent.id)
 
-      expect(closed).toEqual([])
-      expect(transportScopes.size).toBe(0)
+      expect(closed).toEqual([parent.id, child.id])
+      expect(transportScopes.size).toBe(1)
       expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
       expect((yield* sessions.list()).data).toEqual([])
     }),
@@ -110,43 +112,6 @@ describe("Session.remove", () => {
         _tag: "Failure",
         failure: { _tag: "Session.NotFoundError", sessionID },
       })
-    }),
-  )
-})
-
-describe("Instance.provideIfLoaded", () => {
-  it.live("skips absent instances and scopes loaded borrows without replacing the caller's Scope", () =>
-    Effect.gen(function* () {
-      const temporary = yield* tmpdirScoped()
-      const sessions = yield* Session.Service
-      const instances = yield* Instance.Service
-      const locations = yield* LocationServiceMap.Service
-      const scope = yield* Scope.Scope
-      const session = yield* sessions.create({
-        location: Location.Ref.make({ directory: AbsolutePath.make(temporary.path) }),
-      })
-      const absent = Effect.die("An unloaded instance must not run the effect").pipe(instances.provideIfLoaded(session))
-
-      expect(yield* absent).toEqual(Option.none())
-      expect(transportScopes.size).toBe(0)
-      yield* Location.Service.pipe(instances.provide(session))
-      expect(transportScopes.size).toBe(1)
-      expect(yield* Effect.void.pipe(instances.provideIfLoaded(session))).toEqual(Option.some(undefined))
-      const failure = new Error("Borrowed operation failed")
-      expect(yield* Effect.fail(failure).pipe(instances.provideIfLoaded(session), Effect.flip)).toBe(failure)
-
-      const borrowed = yield* Effect.gen(function* () {
-        const location = yield* Location.Service
-        const callerScope = yield* Scope.Scope
-        expect(callerScope).toBe(scope)
-        yield* locations.invalidate(session.location)
-        expect(transportScopes.size).toBe(1)
-        return location.directory
-      }).pipe(instances.provideIfLoaded(session), Effect.satisfiesServicesType<Scope.Scope>())
-
-      expect(borrowed).toEqual(Option.some(session.location.directory))
-      expect(transportScopes.size).toBe(0)
-      expect(yield* absent).toEqual(Option.none())
     }),
   )
 })

@@ -1,6 +1,7 @@
 import { Component, createMemo } from "solid-js"
 import { Select } from "@opencode-ai/ui/select"
 import { TextInput } from "@opencode-ai/ui/text-input"
+import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
@@ -148,6 +149,20 @@ export const SettingsAppearance: Component = () => {
                 }
                 onSelect={(option) => option && appearance.tabs.select(option)}
               />
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.appearance.row.projectName.title")}
+              description={language.t("settings.appearance.row.projectName.description")}
+            >
+              <div data-action="settings-show-project-name">
+                <Switch
+                  checked={appearance.projectName.current()}
+                  onChange={appearance.projectName.set}
+                  hideLabel
+                >
+                  {language.t("settings.appearance.row.projectName.title")}
+                </Switch>
+              </div>
             </SettingsRow>
           </SettingsList>
         </div>

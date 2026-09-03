@@ -6,8 +6,9 @@ const serverA = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${p
 const serverB = "http://127.0.0.1:4097"
 const sessionA = session("ses_server_a", "C:/server-a", "Server A session")
 const sessionB = session("ses_server_b", "/home/server-b", "Server B session")
+const childB = { ...session("ses_server_b_child", sessionB.directory, "Server B subagent"), parentID: sessionB.id }
 
-test("tab busy indicator reflects the tab server's own session status", async ({ page }) => {
+test("tab busy indicator reflects activity in the tab session family", async ({ page }, info) => {
   await mockServers(page)
   await page.addInitScript(
     ({ serverA, serverB, sessionA, sessionB }) => {
@@ -25,13 +26,13 @@ test("tab busy indicator reflects the tab server's own session status", async ({
 
   const hrefA = `/server/${base64Encode(serverA)}/session/${sessionA.id}`
   const hrefB = `/server/${base64Encode(serverB)}/session/${sessionB.id}`
-  await page.goto(hrefA)
-  await expect(page.getByText(sessionA.title).first()).toBeVisible()
+  await page.goto(hrefB)
+  await expect(page.getByText(sessionB.title).first()).toBeVisible()
 
-  // Session B is busy on server B while server A stays the active server, so the
-  // busy indicator must come from the tab server's status, not the active server's.
+  // The parent is idle, but its tab remains active while the background child runs.
   const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefB}"])`)
   await expect(tabB.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+  await tabB.screenshot({ path: info.outputPath("subagent-tab-activity.png") })
 
   const tabA = page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefA}"])`)
   await expect(tabA.locator("[data-titlebar-tab-title]")).toHaveText(sessionA.title)
@@ -60,8 +61,12 @@ async function mockServers(page: Page) {
     if (url.pathname === "/api/event") return sse(route)
     if (url.pathname === "/api/health") return json(route, { pid: 1 })
     if (url.pathname === "/api/session/active")
-      return json(route, { data: url.origin === serverB ? { [sessionB.id]: { type: "running" } } : {} })
-    if (url.pathname === "/api/session") return json(route, { data: [currentSession(current)], cursor: {} })
+      return json(route, { data: url.origin === serverB ? { [childB.id]: { type: "running" } } : {} })
+    if (url.pathname === "/api/session")
+      return json(route, {
+        data: url.origin === serverB ? [currentSession(current), currentSession(childB)] : [currentSession(current)],
+        cursor: {},
+      })
     if (url.pathname === `/api/session/${current.id}`) return json(route, { data: currentSession(current) })
     if (url.pathname === `/api/session/${current.id}/message`) return json(route, { data: [], cursor: {} })
     if (["/api/agent", "/api/provider", "/api/model", "/api/command", "/api/reference"].includes(url.pathname))

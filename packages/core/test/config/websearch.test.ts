@@ -20,8 +20,8 @@ describe("ConfigWebSearchPlugin.Plugin", () => {
       const bus = yield* Bus.Service
       const config = yield* Config.Test
       const plugins = yield* Plugin.Service
-      yield* websearch.transform((draft) =>
-        draft.add({ id: WebSearch.ID.make("test"), name: "Test", execute: () => Effect.succeed([]) }),
+      yield* websearch.transform((editor) =>
+        editor.add({ id: WebSearch.ID.make("test"), name: "Test", execute: () => Effect.succeed([]) }),
       )
       yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins))
 

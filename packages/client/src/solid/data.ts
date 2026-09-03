@@ -83,10 +83,8 @@ type LocationData = {
   agent?: AgentInfo[]
   command?: CommandInfo[]
   integration?: IntegrationInfo[]
-  mcp?: {
-    server?: McpServer[]
-    resource?: McpResource[]
-  }
+  mcpServer?: McpServer[]
+  mcpResource?: McpResource[]
   model?: ModelInfo[]
   provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
@@ -109,7 +107,6 @@ type Store = {
     messageCursor: Record<string, string | undefined>
     messageLoading: Record<string, boolean>
     pending: Record<string, SessionInboxInfo[]>
-    input: Record<string, string[]>
     permission: Record<string, PermissionRequest[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormWithLocation[]>
@@ -125,8 +122,8 @@ export function locationKey(location: LocationRef) {
   return JSON.stringify([location.directory, location.workspaceID])
 }
 
-function locationQuery(ref?: LocationRef) {
-  return ref ? { directory: ref.directory, workspace: ref.workspaceID } : undefined
+function locationQuery(ref: LocationRef) {
+  return { directory: ref.directory, workspace: ref.workspaceID }
 }
 
 function formRequestOptions(sessionID: string, ref?: LocationRef) {
@@ -147,7 +144,7 @@ function createSync() {
     state.set(key, entry)
     entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
       .then(() => {
-        if (state.get(key) === entry) state.set(key, true)
+        if (state.get(key) === entry && !entry.invalidated) state.set(key, true)
       })
       .finally(() => {
         if (state.get(key) === entry) state.delete(key)
@@ -200,7 +197,6 @@ export function createData(config: CreateDataInput) {
       messageCursor: {},
       messageLoading: {},
       pending: {},
-      input: {},
       permission: {},
       form: {},
     },
@@ -232,13 +228,6 @@ export function createData(config: CreateDataInput) {
         "pending",
         sessionID,
         (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inboxID),
-      )
-    if (store.session.input[sessionID]?.includes(inboxID))
-      setStore(
-        "session",
-        "input",
-        sessionID,
-        (store.session.input[sessionID] ?? []).filter((id) => id !== inboxID),
       )
   }
 
@@ -337,8 +326,8 @@ export function createData(config: CreateDataInput) {
     return request
   }
 
-  // Upsert an admitted inbox item into pending, input, and (for user and
-  // synthetic items) the visible transcript. Used by the inbox.enqueued
+  // Upsert an admitted inbox item into pending and (for user and synthetic
+  // items) the visible transcript. Used by the inbox.enqueued
   // handler and by optimistic admission; the upsert is what reconciles
   // the durable echo with an optimistic placeholder — the durable payload and
   // times replace the client's guess.
@@ -353,8 +342,6 @@ export function createData(config: CreateDataInput) {
         at < 0 ? [...pending, item] : pending.map((entry, index) => (index === at ? item : entry)),
       )
       if (item.type === "compaction") return
-      const input = store.session.input[item.sessionID] ?? []
-      if (!input.includes(item.id)) setStore("session", "input", item.sessionID, [...input, item.id])
       materializeInboxMessage(item)
     })
   }
@@ -403,13 +390,42 @@ export function createData(config: CreateDataInput) {
       index.set(item.id, messages.length)
       messages.push(item)
     },
+    insert(sessionID: string, item: SessionMessageInfo) {
+      message.update(sessionID, (draft, index) => message.append(draft, index, item))
+    },
+    // Streaming events target one assistant message and, within it, the latest part of a kind.
+    // A missing target means the row was never loaded or was evicted; the event is dropped.
+    editAssistant(sessionID: string, messageID: string, fn: (assistant: SessionMessageAssistant) => void) {
+      message.update(sessionID, (draft, index) => {
+        const position = index.get(messageID)
+        const item = position === undefined ? undefined : draft[position]
+        if (item?.type === "assistant") fn(item)
+      })
+    },
+    editTool(sessionID: string, messageID: string, toolID: string, fn: (tool: SessionMessageAssistantTool) => void) {
+      message.editAssistant(sessionID, messageID, (assistant) => {
+        const tool = assistant.content.findLast(
+          (item): item is SessionMessageAssistantTool => item.type === "tool" && item.id === toolID,
+        )
+        if (tool) fn(tool)
+      })
+    },
+    editText(sessionID: string, messageID: string, fn: (text: SessionMessageAssistantText) => void) {
+      message.editAssistant(sessionID, messageID, (assistant) => {
+        const text = assistant.content.findLast((item): item is SessionMessageAssistantText => item.type === "text")
+        if (text) fn(text)
+      })
+    },
+    editReasoning(sessionID: string, messageID: string, fn: (reasoning: SessionMessageAssistantReasoning) => void) {
+      message.editAssistant(sessionID, messageID, (assistant) => {
+        const reasoning = assistant.content.findLast(
+          (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
+        )
+        if (reasoning) fn(reasoning)
+      })
+    },
     activeAssistant(messages: SessionMessageInfo[]) {
       const item = messages.findLast((item) => item.type === "assistant" && !item.time.completed)
-      return item?.type === "assistant" ? item : undefined
-    },
-    assistant(messages: SessionMessageInfo[], index: Map<string, number>, messageID: string) {
-      const position = index.get(messageID)
-      const item = position === undefined ? undefined : messages[position]
       return item?.type === "assistant" ? item : undefined
     },
     shell(messages: SessionMessageInfo[], shellID: string) {
@@ -419,19 +435,6 @@ export function createData(config: CreateDataInput) {
     compaction(messages: SessionMessageInfo[]) {
       const item = messages.findLast((item) => item.type === "compaction" && item.status === "running")
       return item?.type === "compaction" ? item : undefined
-    },
-    latestTool(assistant: SessionMessageAssistant | undefined, id?: string) {
-      return assistant?.content.findLast(
-        (item): item is SessionMessageAssistantTool => item.type === "tool" && (id === undefined || item.id === id),
-      )
-    },
-    latestText(assistant: SessionMessageAssistant | undefined) {
-      return assistant?.content.findLast((item): item is SessionMessageAssistantText => item.type === "text")
-    },
-    latestReasoning(assistant: SessionMessageAssistant | undefined) {
-      return assistant?.content.findLast(
-        (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
-      )
     },
     reindex(messages: SessionMessageInfo[], index: Map<string, number>, start: number) {
       for (let position = start; position < messages.length; position++) {
@@ -493,6 +496,29 @@ export function createData(config: CreateDataInput) {
     )
   }
 
+  function evictSession(sessionID: string) {
+    if (sessionOutbox.has(sessionID)) return
+    sync.invalidate(`session.pending:${sessionID}`)
+    sync.invalidate(`session.message:${sessionID}`)
+    messageLoads.delete(sessionID)
+    // Keep unacknowledged submissions until their echo or rollback settles them.
+    const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
+    const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
+    messageIndex.delete(sessionID)
+    if (messages.length) messageIndex.set(sessionID, new Map(messages.map((item, index) => [item.id, index])))
+    setStore(
+      "session",
+      produce((draft) => {
+        delete draft.message[sessionID]
+        delete draft.messageCursor[sessionID]
+        delete draft.messageLoading[sessionID]
+        delete draft.pending[sessionID]
+        if (messages.length) draft.message[sessionID] = messages
+        if (pending.length) draft.pending[sessionID] = pending
+      }),
+    )
+  }
+
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
@@ -512,7 +538,6 @@ export function createData(config: CreateDataInput) {
         delete draft.messageCursor[sessionID]
         delete draft.messageLoading[sessionID]
         delete draft.pending[sessionID]
-        delete draft.input[sessionID]
         delete draft.permission[sessionID]
         delete draft.form[sessionID]
         for (const [rootID, family] of Object.entries(draft.family)) {
@@ -584,14 +609,12 @@ export function createData(config: CreateDataInput) {
         const previous = store.session.info[event.data.sessionID]?.agent
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "agent", event.data.agent)
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "agent-switched",
-            agent: event.data.agent,
-            previous,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "agent-switched",
+          agent: event.data.agent,
+          previous,
+          time: { created: event.created },
         })
         return
       }
@@ -599,13 +622,11 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "model", event.data.model)
         if (!store.session.message[event.data.sessionID]) return
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "model-switched",
-            model: event.data.model,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "model-switched",
+          model: event.data.model,
+          time: { created: event.created },
         })
         void api()
           .session.message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
@@ -640,16 +661,14 @@ export function createData(config: CreateDataInput) {
           setStore("session", "info", event.data.sessionID, "location", event.data.location)
           if (event.data.projectID) setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
           setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
-          message.update(event.data.sessionID, (draft, index) => {
-            message.append(draft, index, {
-              id: messageIDFromEvent(event.id),
-              type: "location-switched",
-              location: event.data.location,
-              projectID: event.data.projectID,
-              subpath: event.data.subpath,
-              previous,
-              time: { created: event.created },
-            })
+          message.insert(event.data.sessionID, {
+            id: messageIDFromEvent(event.id),
+            type: "location-switched",
+            location: event.data.location,
+            projectID: event.data.projectID,
+            subpath: event.data.subpath,
+            previous,
+            time: { created: event.created },
           })
         }
         return
@@ -679,7 +698,7 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.inbox.delivered": {
-        const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inboxID) ?? false
+        const admitted = result.session.input.has(event.data.sessionID, event.data.inboxID)
         removePending(event.data.sessionID, event.data.inboxID)
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.inboxID)
@@ -723,42 +742,36 @@ export function createData(config: CreateDataInput) {
         // and produce no transcript message.
         const updateText = event.data.text
         if (updateText === undefined) return
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "system",
-            text: updateText,
-            description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
-            metadata: event.metadata,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "system",
+          text: updateText,
+          description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
+          metadata: event.metadata,
+          time: { created: event.created },
         })
         return
       case "session.synthetic":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "synthetic",
-            text: event.data.text,
-            description: event.data.description,
-            metadata: event.data.metadata,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "synthetic",
+          text: event.data.text,
+          description: event.data.description,
+          metadata: event.data.metadata,
+          time: { created: event.created },
         })
         return
       case "session.shell.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "shell",
-            shellID: event.data.shell.id,
-            command: event.data.shell.command,
-            status: event.data.shell.status,
-            exit: event.data.shell.exit,
-            metadata:
-              event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "shell",
+          shellID: event.data.shell.id,
+          command: event.data.shell.command,
+          status: event.data.shell.status,
+          exit: event.data.shell.exit,
+          metadata:
+            event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
+          time: { created: event.created },
         })
         return
       case "session.shell.ended":
@@ -773,9 +786,8 @@ export function createData(config: CreateDataInput) {
         return
       case "session.message.content.updated": {
         if (store.session.message[event.data.sessionID])
-          message.update(event.data.sessionID, (draft, index) => {
-            const assistant = message.assistant(draft, index, event.data.messageID)
-            if (assistant) assistant.content = [...event.data.content]
+          message.editAssistant(event.data.sessionID, event.data.messageID, (assistant) => {
+            assistant.content = [...event.data.content]
           })
         if (!sync.pending(`session.message:${event.data.sessionID}`)) return
         result.session.message.invalidate(event.data.sessionID)
@@ -817,65 +829,54 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.step.streamed":
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (currentAssistant) currentAssistant.time.streamed = event.created
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.streamed = event.created
         })
         return
       case "session.step.ended": {
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!currentAssistant) return
-          currentAssistant.time.completed = event.created
-          currentAssistant.finish = event.data.finish
-          currentAssistant.rawFinish = event.data.rawFinish
-          currentAssistant.providerState = event.data.providerState
-          currentAssistant.cost = event.data.cost
-          currentAssistant.tokens = event.data.tokens
-          if (event.data.snapshot)
-            currentAssistant.snapshot = { ...currentAssistant.snapshot, end: event.data.snapshot }
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.completed = event.created
+          assistant.finish = event.data.finish
+          assistant.rawFinish = event.data.rawFinish
+          assistant.providerState = event.data.providerState
+          assistant.cost = event.data.cost
+          assistant.tokens = event.data.tokens
+          if (event.data.snapshot) assistant.snapshot = { ...assistant.snapshot, end: event.data.snapshot }
         })
         return
       }
       case "session.step.failed":
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!currentAssistant) return
-          currentAssistant.time.completed = event.created
-          currentAssistant.finish = event.data.finish ?? "error"
-          currentAssistant.rawFinish = event.data.rawFinish
-          currentAssistant.providerState = event.data.providerState
-          currentAssistant.error = event.data.error
-          currentAssistant.retry = undefined
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.completed = event.created
+          assistant.finish = event.data.finish ?? "error"
+          assistant.rawFinish = event.data.rawFinish
+          assistant.providerState = event.data.providerState
+          assistant.error = event.data.error
+          assistant.retry = undefined
           if (event.data.cost !== undefined && event.data.tokens !== undefined) {
-            currentAssistant.cost = event.data.cost
-            currentAssistant.tokens = event.data.tokens
+            assistant.cost = event.data.cost
+            assistant.tokens = event.data.tokens
           }
         })
         return
       case "session.text.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
-            type: "text",
-            text: "",
-          })
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.content.push({ type: "text", text: "" })
         })
         return
       case "session.text.delta":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) match.text += event.data.delta
+        message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
+          text.text += event.data.delta
         })
         return
       case "session.text.ended":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) match.text = event.data.text
+        message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
+          text.text = event.data.text
         })
         return
       case "session.tool.input.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.content.push({
             type: "tool",
             id: event.data.id,
             name: event.data.name,
@@ -885,86 +886,60 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.tool.input.delta":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status === "streaming") match.state.input += event.data.delta
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status === "streaming") tool.state.input += event.data.delta
         })
         return
       case "session.tool.input.ended":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status === "streaming") match.state.input = event.data.text
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status === "streaming") tool.state.input = event.data.text
         })
         return
       case "session.tool.called":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (!match) return
-          match.time.ran = event.created
-          match.executed = event.data.executed
-          match.providerState = event.data.state
-          match.state = { status: "running", input: event.data.input, metadata: {} }
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          tool.time.ran = event.created
+          tool.executed = event.data.executed
+          tool.providerState = event.data.state
+          tool.state = { status: "running", input: event.data.input, metadata: {} }
         })
         return
       case "session.tool.progress":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status !== "running") return
-          match.state.metadata = event.data.metadata
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status === "running") tool.state.metadata = event.data.metadata
         })
         return
       case "session.tool.success":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status !== "running") return
-          match.state = {
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status !== "running") return
+          tool.state = {
             status: "completed",
-            input: match.state.input,
+            input: tool.state.input,
             metadata: event.data.metadata,
             content: [...event.data.content],
           }
-          match.executed = event.data.executed || match.executed === true
-          match.providerResultState = event.data.resultState
-          match.time.completed = event.created
+          tool.executed = event.data.executed || tool.executed === true
+          tool.providerResultState = event.data.resultState
+          tool.time.completed = event.created
         })
         return
       case "session.tool.failed":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (!match || (match.state.status !== "streaming" && match.state.status !== "running")) return
-          match.state = {
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status !== "streaming" && tool.state.status !== "running") return
+          tool.state = {
             status: "error",
             error: event.data.error,
-            input: typeof match.state.input === "string" ? {} : match.state.input,
+            input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
             content: event.data.content,
           }
-          match.executed = event.data.executed || match.executed === true
-          match.providerResultState = event.data.resultState
-          match.time.completed = event.created
+          tool.executed = event.data.executed || tool.executed === true
+          tool.providerResultState = event.data.resultState
+          tool.time.completed = event.created
         })
         return
       case "session.reasoning.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.content.push({
             type: "reasoning",
             text: "",
             state: event.data.state,
@@ -973,30 +948,20 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.reasoning.delta":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) match.text += event.data.delta
+        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
+          reasoning.text += event.data.delta
         })
         return
       case "session.reasoning.ended":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) {
-            match.text = event.data.text
-            match.time = { created: match.time?.created ?? event.created, completed: event.created }
-            if (event.data.state !== undefined) match.state = event.data.state
-          }
+        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
+          reasoning.text = event.data.text
+          reasoning.time = { created: reasoning.time?.created ?? event.created, completed: event.created }
+          if (event.data.state !== undefined) reasoning.state = event.data.state
         })
         return
       case "session.retry.scheduled":
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!currentAssistant) return
-          currentAssistant.retry = {
-            attempt: event.data.attempt,
-            at: event.data.at,
-            error: event.data.error,
-          }
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.retry = { attempt: event.data.attempt, at: event.data.at, error: event.data.error }
         })
         return
       case "session.execution.started":
@@ -1004,16 +969,14 @@ export function createData(config: CreateDataInput) {
         return
       case "session.compaction.started":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: event.data.inputID ?? messageIDFromEvent(event.id),
-            type: "compaction",
-            status: "running",
-            reason: event.data.reason,
-            summary: "",
-            recent: event.data.recent ?? "",
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: event.data.inputID ?? messageIDFromEvent(event.id),
+          type: "compaction",
+          status: "running",
+          reason: event.data.reason,
+          summary: "",
+          recent: event.data.recent ?? "",
+          time: { created: event.created },
         })
         if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
@@ -1048,11 +1011,12 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID]) {
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         }
+        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
         setStore(
           "session",
-          "input",
+          "pending",
           event.data.sessionID,
-          (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.to),
+          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
         )
         message.update(event.data.sessionID, (draft, index) => {
           const position = draft.findIndex((item) => item.id >= event.data.to)
@@ -1216,8 +1180,8 @@ export function createData(config: CreateDataInput) {
         }))
         break
       case "reference.updated":
-        result.location.reference.invalidate()
-        void result.location.reference.sync()
+        result.location.reference.invalidate(location)
+        void result.location.reference.sync(location)
         break
       case "integration.updated":
         result.location.integration.invalidate(location)
@@ -1246,6 +1210,41 @@ export function createData(config: CreateDataInput) {
     }
   }
 
+  // A cached per-location catalog. `sync` loads once per invalidation, keyed by the
+  // effective location, and publishes under the server's canonical location; `alias`
+  // also publishes under the requested key when the two differ.
+  function locationResource<Field extends keyof LocationData>(
+    field: Field,
+    load: (location: ReturnType<typeof locationQuery>) => Promise<{ location: LocationRef; data: LocationData[Field] }>,
+    options?: { alias?: boolean },
+  ) {
+    const publish = (key: string, value: LocationData[Field]) => setStore("location", key, { [field]: value })
+    return {
+      list: (ref?: LocationRef) => store.location[locationKey(ref ?? defaultLocation())]?.[field],
+      sync: (ref?: LocationRef) => {
+        const location = ref ?? defaultLocation()
+        const id = locationKey(location)
+        return sync.run(`location.${field}:${id}`, async () => {
+          const response = await load(locationQuery(location))
+          const key = locationKey(response.location)
+          publish(key, response.data)
+          if (options?.alias && key !== id) publish(id, response.data)
+        })
+      },
+      invalidate: (ref?: LocationRef) => sync.invalidate(`location.${field}:${locationKey(ref ?? defaultLocation())}`),
+    }
+  }
+
+  const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
+  const shells = locationResource("shell", async (location) => {
+    const response = await api().shell.list({ location })
+    const ref = { directory: response.location.directory, workspaceID: response.location.workspaceID }
+    return {
+      location: response.location,
+      data: Object.fromEntries(response.data.map((info) => [info.id, { ...info, location: ref }])),
+    }
+  })
+
   const result = {
     on: config.event.on,
     listen: config.event.listen,
@@ -1260,9 +1259,11 @@ export function createData(config: CreateDataInput) {
         return creating.has(sessionID)
       },
       remember(info: SessionInfo) {
-        setStore("session", "info", info.id, reconcile(info))
-        sync.complete(`session:${info.id}`)
-        registerSession(info.id)
+        batch(() => {
+          setStore("session", "info", info.id, reconcile(info))
+          sync.complete(`session:${info.id}`)
+          registerSession(info.id)
+        })
       },
       setStatus(sessionID: string, status: DataSessionStatus) {
         setSessionActive(sessionID, status)
@@ -1272,6 +1273,13 @@ export function createData(config: CreateDataInput) {
       },
       family(sessionID: string) {
         return store.session.family[resolveRoot(sessionID)] ?? []
+      },
+      /** Clear heavy cached data for the root and all known descendants. */
+      evict(sessionID: string) {
+        const root = resolveRoot(sessionID)
+        batch(() => {
+          for (const id of new Set([root, sessionID, ...(store.session.family[root] ?? [])])) evictSession(id)
+        })
       },
       cost(sessionID: string) {
         const session = store.session.info[sessionID]
@@ -1285,12 +1293,17 @@ export function createData(config: CreateDataInput) {
       status(sessionID: string) {
         return store.session.active[sessionID] ?? "idle"
       },
+      // Inputs are the pending user and synthetic items; compactions are control items.
       input: {
         list(sessionID: string) {
-          return store.session.input[sessionID] ?? []
+          return (store.session.pending[sessionID] ?? []).flatMap((item) =>
+            item.type === "compaction" ? [] : [item.id],
+          )
         },
         has(sessionID: string, inboxID: string) {
-          return store.session.input[sessionID]?.includes(inboxID) ?? false
+          return (
+            store.session.pending[sessionID]?.some((item) => item.id === inboxID && item.type !== "compaction") ?? false
+          )
         },
       },
       pending: {
@@ -1314,12 +1327,6 @@ export function createData(config: CreateDataInput) {
             const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
             batch(() => {
               setStore("session", "pending", sessionID, reconcile(merged))
-              setStore(
-                "session",
-                "input",
-                sessionID,
-                reconcile(merged.filter((item) => item.type !== "compaction").map((item) => item.id)),
-              )
               merged.forEach(materializeInboxMessage)
             })
           })
@@ -1484,17 +1491,19 @@ export function createData(config: CreateDataInput) {
               : [],
           ])
           const sessions = [info, ...children]
-          setStore(
-            "session",
-            "info",
-            produce((draft) => {
-              for (const session of sessions) draft[session.id] = session
-            }),
-          )
-          for (const session of sessions) {
-            sync.complete(`session:${session.id}`)
-            registerSession(session.id)
-          }
+          batch(() => {
+            setStore(
+              "session",
+              "info",
+              produce((draft) => {
+                for (const session of sessions) draft[session.id] = session
+              }),
+            )
+            for (const session of sessions) {
+              sync.complete(`session:${session.id}`)
+              registerSession(session.id)
+            }
+          })
         })
       },
       invalidate(sessionID: string) {
@@ -1702,7 +1711,7 @@ export function createData(config: CreateDataInput) {
     },
     shell: {
       list(location?: LocationRef) {
-        return Object.values(store.location[locationKey(location ?? defaultLocation())]?.shell ?? {})
+        return Object.values(shells.list(location) ?? {})
       },
       listBySession(sessionID: string) {
         return Object.values(store.location)
@@ -1714,31 +1723,8 @@ export function createData(config: CreateDataInput) {
           .map((data) => data.shell?.[id])
           .find((shell) => shell !== undefined)
       },
-      sync(ref?: LocationRef) {
-        const id = locationKey(ref ?? defaultLocation())
-        return sync.run(`location.shell:${id}`, async () => {
-          const response = await api().shell.list({ location: locationQuery(ref ?? defaultLocation()) })
-          const key = locationKey(response.location)
-          setStore("location", key, {
-            ...store.location[key],
-            shell: Object.fromEntries(
-              response.data.map((info) => [
-                info.id,
-                {
-                  ...info,
-                  location: {
-                    directory: response.location.directory,
-                    workspaceID: response.location.workspaceID,
-                  },
-                },
-              ]),
-            ),
-          })
-        })
-      },
-      invalidate(ref?: LocationRef) {
-        sync.invalidate(`location.shell:${locationKey(ref ?? defaultLocation())}`)
-      },
+      sync: shells.sync,
+      invalidate: shells.invalidate,
     },
     location: {
       info(ref?: LocationRef) {
@@ -1793,162 +1779,20 @@ export function createData(config: CreateDataInput) {
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
       },
-      vcs: {
-        info(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.vcs
-        },
-        sync(ref?: LocationRef) {
-          const location = ref ?? defaultLocation()
-          return sync.run(`location.vcs:${locationKey(location)}`, async () => {
-            const response = await api().vcs.get({ location: locationQuery(location) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], vcs: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.vcs:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      agent: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.agent
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.agent:${id}`, async () => {
-            const response = await api().agent.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], agent: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.agent:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      command: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.command
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.command:${id}`, async () => {
-            const response = await api().command.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], command: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.command:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      integration: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.integration
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.integration:${id}`, async () => {
-            const response = await api().integration.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], integration: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.integration:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
+      vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
+      agent: locationResource("agent", (location) => api().agent.list({ location })),
+      command: locationResource("command", (location) => api().command.list({ location })),
+      integration: locationResource("integration", (location) => api().integration.list({ location })),
       mcp: {
-        server: {
-          list(location?: LocationRef) {
-            return store.location[locationKey(location ?? defaultLocation())]?.mcp?.server
-          },
-          sync(ref?: LocationRef) {
-            const id = locationKey(ref ?? defaultLocation())
-            return sync.run(`location.mcp.server:${id}`, async () => {
-              const response = await api().mcp.list({ location: locationQuery(ref ?? defaultLocation()) })
-              const key = locationKey(response.location)
-              setStore("location", key, {
-                ...store.location[key],
-                mcp: { ...store.location[key]?.mcp, server: response.data },
-              })
-            })
-          },
-          invalidate(ref?: LocationRef) {
-            sync.invalidate(`location.mcp.server:${locationKey(ref ?? defaultLocation())}`)
-          },
-        },
-        resource: {
-          list(location?: LocationRef) {
-            return store.location[locationKey(location ?? defaultLocation())]?.mcp?.resource
-          },
-          sync(ref?: LocationRef) {
-            const id = locationKey(ref ?? defaultLocation())
-            return sync.run(`location.mcp.resource:${id}`, async () => {
-              const response = await api().mcp.resource.catalog({
-                location: locationQuery(ref ?? defaultLocation()),
-              })
-              const key = locationKey(response.location)
-              setStore("location", key, {
-                ...store.location[key],
-                mcp: { ...store.location[key]?.mcp, resource: response.data.resources },
-              })
-            })
-          },
-          invalidate(ref?: LocationRef) {
-            sync.invalidate(`location.mcp.resource:${locationKey(ref ?? defaultLocation())}`)
-          },
-        },
+        server: locationResource("mcpServer", (location) => api().mcp.list({ location })),
+        resource: locationResource("mcpResource", async (location) => {
+          const response = await api().mcp.resource.catalog({ location })
+          return { location: response.location, data: response.data.resources }
+        }),
       },
-      model: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.model
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.model:${id}`, async () => {
-            const response = await api().model.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], model: response.data })
-            if (key !== id) setStore("location", id, { ...store.location[id], model: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.model:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      provider: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.provider
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.provider:${id}`, async () => {
-            const response = await api().provider.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], provider: response.data })
-            if (key !== id) setStore("location", id, { ...store.location[id], provider: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.provider:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      reference: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.reference
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.reference:${id}`, async () => {
-            const response = await api().reference.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], reference: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.reference:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
+      model: locationResource("model", (location) => api().model.list({ location }), { alias: true }),
+      provider: locationResource("provider", (location) => api().provider.list({ location }), { alias: true }),
+      reference: locationResource("reference", (location) => api().reference.list({ location })),
       websearch: {
         list(location?: LocationRef) {
           return store.location[locationKey(location ?? defaultLocation())]?.websearch
@@ -1963,22 +1807,7 @@ export function createData(config: CreateDataInput) {
           })
         },
       },
-      skill: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.skill
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.skill:${id}`, async () => {
-            const response = await api().skill.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], skill: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.skill:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
+      skill: locationResource("skill", (location) => api().skill.list({ location })),
     },
   }
 

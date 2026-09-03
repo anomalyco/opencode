@@ -11,7 +11,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { formatServerError } from "@/runtime/server/errors"
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
-import { directoryKey } from "./global-sync/utils"
+import { directoryKey, updateProjectInfo } from "./global-sync/utils"
 import { PathKey } from "@/workspaces/path-key"
 import type { ServerScope } from "@/runtime/server/scope"
 import { persisted } from "@/runtime/persistence/storage"
@@ -215,8 +215,15 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     return promise
   }
 
+  function applyProjectUpdate(update: Parameters<typeof updateProjectInfo>[1]) {
+    setProjects((projects) =>
+      projects.map((project) => (project.id === update.id ? updateProjectInfo(project, update) : project)),
+    )
+  }
+
   const unsub = serverSDK.event.listen((event) => {
     connection.handleEvent({ type: event.type })
+    if (event.type === "project.updated") applyProjectUpdate(event.data)
 
     if (!event.location) {
       if (event.type === "config.updated" || event.type === "agent.updated" || event.type === "worktree.updated")
@@ -230,8 +237,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     children.mark(key)
     if (event.type === "config.updated" || event.type === "agent.updated") queue.push(key)
     if (event.type === "worktree.updated") void bootstrap.refetch()
-    if (event.type === "reference.updated" && children.active(key))
-      void data.location.reference.sync({ directory: key }).catch(() => undefined)
   })
 
   onCleanup(unsub)
@@ -245,6 +250,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const projectApi = {
+    update: applyProjectUpdate,
     meta(directory: string, patch: ProjectMeta) {
       children.projectMeta(directory, patch)
     },

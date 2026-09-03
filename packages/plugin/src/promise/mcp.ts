@@ -3,7 +3,7 @@ import type { Mcp } from "@opencode-ai/schema/mcp"
 import type { Transform } from "./registration.js"
 import type { DeepMutable } from "./types.js"
 
-export interface MCPDraft {
+export interface MCPEditor {
   list(): readonly [string, DeepMutable<Mcp.ServerConfig>][]
   get(name: string): DeepMutable<Mcp.ServerConfig> | undefined
   set(name: string, config: Mcp.ServerConfig): void
@@ -12,6 +12,6 @@ export interface MCPDraft {
 }
 
 export interface MCPDomain extends Pick<McpApi, "list"> {
-  readonly transform: Transform<MCPDraft>
+  readonly transform: Transform<MCPEditor>
   readonly reload: () => Promise<void>
 }

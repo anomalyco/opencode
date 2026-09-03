@@ -73,8 +73,8 @@ export function footerStatuslinePolicy(input: {
       "agent",
       "model",
       "context",
-      "cost",
       "provider",
+      "cost",
       "menu",
     ]
     const groups = order.flatMap((id) => selected.get(id) ?? [])

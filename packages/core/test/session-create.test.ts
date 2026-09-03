@@ -3,6 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { Money } from "@opencode-ai/schema/money"
 import { Shell } from "@opencode-ai/schema/shell"
 import { Skill } from "@opencode-ai/schema/skill"
@@ -35,6 +36,7 @@ import { Workspace } from "@opencode-ai/core/workspace"
 import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -61,7 +63,11 @@ const it = testEffect(
 const liveIt = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
-    [Bus.node.replace(Bus.configured({ persist: true })), SessionExecution.node.replace(SessionExecution.noopLayer)],
+    [
+      Bus.node.replace(Bus.configured({ persist: true })),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      offlineModels,
+    ],
   ),
 )
 const projectIt = testEffect(
@@ -1320,6 +1326,7 @@ describe("SessionTransfer", () => {
       const sessionID = Session.ID.create()
       const sourceMessageID = SessionMessage.ID.create()
       const errorMessageID = SessionMessage.ID.create()
+      yield* TestClock.setTime(1_000)
 
       const imported = yield* transfer.import({
         data: {
@@ -1328,6 +1335,7 @@ describe("SessionTransfer", () => {
             id: sessionID,
             time: {
               ...template.time,
+              updated: DateTime.makeUnsafe(100),
               idle: DateTime.makeUnsafe(200),
               viewed: DateTime.makeUnsafe(150),
             },
@@ -1361,7 +1369,11 @@ describe("SessionTransfer", () => {
       const messages = yield* session.messages({ sessionID, order: "asc" })
 
       expect(imported).toMatchObject({ id: sessionID, title: "Exported", location, metadata: { channel: "C123" } })
-      expect(imported.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
+      expect(imported.time).toMatchObject({
+        updated: DateTime.makeUnsafe(1_000),
+        idle: DateTime.makeUnsafe(200),
+        viewed: DateTime.makeUnsafe(150),
+      })
       expect(messages).toMatchObject([
         { id: sourceMessageID, ...Expected.user("Imported message") },
         { id: errorMessageID, type: "compaction", error: { type: "test_error", message: "Original error" } },

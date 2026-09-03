@@ -73,6 +73,7 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
     const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
     clearAuthToken()
     const standalone = isStandalone()
+    root.dataset.standalone = String(standalone)
     if (standalone) restorePwaRoute()
     const server: ServerConnection.Http = {
       type: "http",

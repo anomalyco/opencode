@@ -2,6 +2,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { V1Migration } from "@opencode-ai/core/database/v1-migration"
 import { App } from "@opencode-ai/core/app"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Node } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Bus } from "@opencode-ai/core/bus"
@@ -25,7 +26,6 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
-import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { PluginUpdate } from "@opencode-ai/core/plugin/update"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { WellKnown } from "@opencode-ai/core/wellknown"
@@ -58,9 +58,8 @@ const applicationServiceNodes = [
   Project.node,
   Worktree.node,
   Session.node,
-  Instance.byLocationNode,
+  Instance.node,
   SessionTransfer.node,
-  PluginRuntime.providerNode,
   SdkPlugins.node,
   PluginUpdate.node,
   PermissionSaved.node,
@@ -91,8 +90,16 @@ export function createRoutes(
   )
 }
 
-export function createEmbeddedRoutes(options: ServerOptions = {}, overrides: LayerNode.Replacements = []) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides)
+type InstanceNode = (
+  replacements: () => LayerNode.Replacements,
+) => LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
+
+export function createEmbeddedRoutes(
+  options: ServerOptions = {},
+  overrides: LayerNode.Replacements = [],
+  instances?: InstanceNode,
+) {
+  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, instances)
 }
 
 function makeRoutes<AuthError, AuthServices>(
@@ -101,8 +108,8 @@ function makeRoutes<AuthError, AuthServices>(
   serviceURLs: () => ReadonlyArray<string>,
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
+  instances?: InstanceNode,
 ) {
-  const pluginRuntimeCell = PluginRuntime.makeCell()
   const standard: LayerNode.Replacements = [
     Database.node.replace(Database.configured(options.database)),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
@@ -129,27 +136,37 @@ function makeRoutes<AuthError, AuthServices>(
         },
       }),
     ),
-    PluginRuntime.node.replace(PluginRuntime.layerWithCell(pluginRuntimeCell)),
-    PluginRuntime.providerNode.replace(PluginRuntime.providerNodeWithCell(pluginRuntimeCell)),
   ]
-  const replacements: LayerNode.Replacements = [...standard, ...overrides]
+  const build = (overrides: LayerNode.Replacements) => {
+    const replacements: LayerNode.Replacements = [
+      ...standard,
+      // Private instances resolve this list lazily so they inherit the complete host graph, including the selector.
+      ...(instances ? [Instance.node.replace(instances(() => replacements))] : []),
+      ...overrides,
+    ]
+    return AppNodeBuilder.build(applicationServices, replacements)
+  }
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {
           const { simulationReplacements } = yield* Effect.promise(() => import("@opencode-ai/simulation/backend"))
           const simulation = yield* simulationReplacements({ version: App.make(options.app).version })
-          return AppNodeBuilder.build(applicationServices, [...replacements, ...simulation])
+          return build([...overrides, ...simulation])
         }),
       )
-    : AppNodeBuilder.build(applicationServices, replacements)
+    : build(overrides)
   return serviceLayer.pipe(
     Layer.flatMap((context) => {
       const services = Layer.succeedContext(context)
       const requestServices = Layer.merge(
         Layer.succeedContext(
-          Context.pick(Database.Service, PermissionSaved.Service, PluginUpdate.Service, Project.Service, WellKnown.Service)(
-            context,
-          ),
+          Context.pick(
+            Database.Service,
+            PermissionSaved.Service,
+            PluginUpdate.Service,
+            Project.Service,
+            WellKnown.Service,
+          )(context),
         ),
         ServerInfo.layer(serviceURLs, options.app),
       )

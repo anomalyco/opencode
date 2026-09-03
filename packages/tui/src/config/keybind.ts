@@ -88,14 +88,14 @@ export const Definitions = {
   "diff.help": keybind("?,shift+?,shift+/", "Show more diff viewer shortcuts"),
 
   "prompt.editor": keybind("<leader>e", "Open external editor"),
-  "theme.switch": keybind("<leader>t", "List available themes"),
+  "theme.switch": keybind("none", "List available themes"),
   "theme.switch_mode": keybind("none", "Switch between light and dark theme mode"),
   "theme.mode.lock": keybind("none", "Lock or unlock theme mode"),
   "session.sidebar.toggle": keybind("<leader>b", "Toggle sidebar"),
   "pane.focus.left": keybind("<leader>left", "Focus session pane"),
   "pane.focus.right": keybind("<leader>right", "Focus terminal pane"),
   "terminal.select": keybind("<leader>down", "Select terminal"),
-  "terminal.toggle": keybind("none", "Toggle terminal pane"),
+  "terminal.toggle": keybind("<leader>t", "Toggle terminal pane"),
   "terminal.close": keybind("<leader>up", "Close terminal pane"),
   "session.toggle.scrollbar": keybind("none", "Toggle session scrollbar"),
   "opencode.status": keybind("<leader>s", "View status"),
@@ -103,6 +103,7 @@ export const Definitions = {
 
   "session.export": keybind("<leader>x", "Export session to editor"),
   "session.copy": keybind("none", "Copy session transcript"),
+  "session.copy.id": keybind("none", "Copy session ID"),
   "session.move": keybind("none", "Move session"),
   "session.new": keybind("<leader>n", "Create a new session"),
   "session.list": keybind("<leader>l", "List all sessions"),
@@ -271,6 +272,8 @@ export const Definitions = {
   "plugins.toggle": keybind("return", "Toggle plugin"),
   "dialog.mcp.toggle": keybind("space", "Toggle MCP server"),
   "dialog.plugins.install": keybind("shift+i", "Install plugin from plugin dialog"),
+  "dialog.plugins.update": keybind("ctrl+u", "Update plugin from plugin dialog"),
+  "dialog.plugins.check": keybind("ctrl+r", "Check for plugin updates from plugin dialog"),
 
   "terminal.suspend": keybind("ctrl+z", "Suspend terminal"),
   "terminal.title.toggle": keybind("none", "Toggle terminal title"),

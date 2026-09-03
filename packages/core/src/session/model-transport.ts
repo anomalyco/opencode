@@ -14,7 +14,7 @@ import { AIError, AIErrorReason, TransportError, type TransportOperation } from 
 import { Hash } from "@opencode-ai/util/hash"
 import { Cause, Clock, Context, Effect, Fiber, Layer, Metric, Queue, Scope, Semaphore, Stream } from "effect"
 import { Socket } from "effect/unstable/socket"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionSchema } from "./schema.js"
 import { webSocketConstructor } from "../effect/app-node-platform.js"
 
@@ -504,4 +504,4 @@ export const layer = Layer.unwrap(
   ),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [webSocketConstructor] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [webSocketConstructor] })

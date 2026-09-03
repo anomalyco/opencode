@@ -231,6 +231,7 @@ describe("Composer submission", () => {
 
   test("previews the first prompt while starting and hands it off before completing preparation", async () => {
     const draft = createMemoryComposerState({ prompt: "prepare my worktree" }).capture()
+    const promoted = createMemoryComposerState().capture()
     const preview = Promise.withResolvers<SessionMessageUser>()
     const ready = Promise.withResolvers<void>()
     const calls: string[] = []
@@ -247,9 +248,10 @@ describe("Composer submission", () => {
       controls,
       working: () => false,
       submitted() {},
-      async start(_selection, _submission, message) {
+      async start(_selection, submission, message) {
         preview.resolve(message)
         await ready.promise
+        submission.retarget(promoted, { preserveDraft: true })
         return {
           session: target,
           cleanupReady: Promise.resolve(),
@@ -257,6 +259,8 @@ describe("Composer submission", () => {
             expect(handoff).toHaveLength(1)
             expect(handoff[0]?.id).toBe(message.id)
             expect(handoff[0]?.text).toBe("prepare my worktree")
+            expect(promoted.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+            promoted.set([{ type: "text", content: "follow up", start: 0, end: 9 }], 9)
             calls.push("complete")
           },
         }
@@ -271,6 +275,7 @@ describe("Composer submission", () => {
     await submitted
     expect(calls).toContain("complete")
     expect(draft.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+    expect(promoted.current()).toEqual([{ type: "text", content: "follow up", start: 0, end: 9 }])
   })
 
   test("does not restore a prompt already acknowledged by the durable inbox", async () => {

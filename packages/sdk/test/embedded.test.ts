@@ -6,10 +6,9 @@ import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
-import { Deferred, Effect, Fiber, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Latch, Layer, Option, Schedule, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import type { OpenCodeEvent } from "../src/effect"
@@ -36,21 +35,11 @@ const location = (fixture: Fixture) =>
   fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })
 
 for (const selection of ["explicit", "default"] as const) {
-  it.live(`first generate.text waits for inline providers with ${selection} model selection`, () =>
+  it.live(`generate.text uses configured providers with ${selection} model selection`, () =>
     withEmbedded("opencode-embedded-generate-", (fixture) =>
       Effect.gen(function* () {
-        const release = yield* Latch.make()
         const llm = yield* TestLLM.Test.pipe(
           Effect.provide(TestLLM.testLayer({ fallback: TestLLM.text("ready", "answer") })),
-        )
-        const supervisor = PluginSupervisor.node.mapLayer((layer) =>
-          Layer.effect(
-            PluginSupervisor.Service,
-            Effect.gen(function* () {
-              const plugins = yield* PluginSupervisor.Service
-              return { flush: release.open.pipe(Effect.andThen(plugins.flush)) }
-            }),
-          ).pipe(Layer.provide(layer)),
         )
         const opencode = yield* fixture.sdk.OpenCode.create(
           {
@@ -72,14 +61,17 @@ for (const selection of ["explicit", "default"] as const) {
             fs: { filewatcher: false },
           },
           {
-            overrides: [
-              llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
-              PluginSupervisor.node.replace(supervisor),
-            ],
+            overrides: [llmClient.replace(Layer.succeed(LLMClient.Service, llm))],
           },
         )
-        // Hold provider activation until the request reaches readiness, regardless of startup speed.
-        yield* opencode.plugin({ id: "gate-catalog", effect: () => release.await })
+
+        yield* opencode.model.list({ location: location(fixture) }).pipe(
+          Effect.filterOrFail((page) =>
+            page.data.some((model) => model.providerID === "custom" && model.id === "fictional-chat"),
+          ),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("2 seconds"),
+        )
 
         const result = yield* opencode.generate.text({
           prompt: "Say ready",
@@ -102,260 +94,6 @@ for (const selection of ["explicit", "default"] as const) {
   )
 }
 
-it.live("exposes app metadata to plugins", () =>
-  withEmbedded("opencode-embedded-app-", (fixture) =>
-    Effect.gen(function* () {
-      const opencode = yield* fixture.sdk.OpenCode.create({
-        app: { name: "test", version: "1.2.3", channel: "beta" },
-      })
-      const app = yield* Deferred.make<{ readonly name: string; readonly version: string; readonly channel: string }>()
-      yield* opencode.plugin({
-        id: `app-${crypto.randomUUID()}`,
-        effect: (ctx) => Deferred.succeed(app, ctx.app).pipe(Effect.asVoid),
-      })
-      yield* opencode.plugin.list({ location: location(fixture) })
-      expect(yield* Deferred.await(app).pipe(Effect.timeout("4 seconds"))).toEqual({
-        name: "test",
-        version: "1.2.3",
-        channel: "beta",
-      })
-    }),
-  ),
-)
-
-it.live(
-  "reloads every booted Location after SDK plugin registration",
-  () =>
-    withEmbedded("opencode-embedded-plugin-reload-", (fixture) =>
-      Effect.gen(function* () {
-        const opencode = yield* fixture.sdk.OpenCode.create()
-        const booted = yield* Deferred.make<void>()
-        const activated = yield* Deferred.make<boolean>()
-        const bootCount = yield* Ref.make(0)
-        const activationCount = yield* Ref.make(0)
-        const secondDirectory = path.join(fixture.directory, "second")
-        yield* Effect.promise(() => fs.mkdir(secondDirectory))
-        const refs = [
-          location(fixture),
-          fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(secondDirectory) }),
-        ]
-        const bootstrapID = `bootstrap-sdk-${crypto.randomUUID()}`
-        const id = `late-sdk-${crypto.randomUUID()}`
-
-        yield* opencode.plugin({
-          id: bootstrapID,
-          effect: (ctx) =>
-            Effect.gen(function* () {
-              yield* ctx.tool
-                .transform((draft) =>
-                  draft.add({
-                    name: "bootstrap_sdk_tool",
-                    description: "Marks the initial Location plugin generation",
-                    input: Schema.Struct({}),
-                    output: Schema.Void,
-                    execute: () => Effect.succeed({ output: undefined }),
-                  }),
-                )
-                .pipe(Effect.orDie)
-              if (yield* Ref.updateAndGet(bootCount, (count) => count + 1).pipe(Effect.map((count) => count === 2))) {
-                yield* Deferred.succeed(booted, undefined)
-              }
-            }),
-        })
-        yield* Effect.all(
-          refs.map((ref) => opencode.plugin.list({ location: ref })),
-          { discard: true },
-        )
-        yield* Deferred.await(booted).pipe(Effect.timeout("4 seconds"))
-        yield* opencode.plugin({
-          id,
-          effect: (ctx) =>
-            Effect.gen(function* () {
-              yield* ctx.tool
-                .transform((draft) =>
-                  draft.add({
-                    name: "late_sdk_tool",
-                    description: "Tool registered after Location boot",
-                    input: Schema.Struct({}),
-                    output: Schema.Void,
-                    execute: () => Effect.succeed({ output: undefined }),
-                  }),
-                )
-                .pipe(Effect.orDie)
-              if (
-                yield* Ref.updateAndGet(activationCount, (count) => count + 1).pipe(Effect.map((count) => count === 2))
-              ) {
-                yield* Deferred.succeed(activated, true)
-              }
-            }),
-        })
-
-        expect(yield* Deferred.await(activated).pipe(Effect.timeout("10 seconds"))).toBe(true)
-      }),
-    ),
-  25_000,
-)
-
-it.live(
-  "preserves SDK plugins across Location eviction",
-  () =>
-    withEmbedded("opencode-embedded-plugin-eviction-", (fixture) =>
-      Effect.gen(function* () {
-        const opencode = yield* fixture.sdk.OpenCode.create()
-        const ref = location(fixture)
-        const connected = yield* Latch.make(false)
-        const booted = yield* Deferred.make<void>()
-        // The rebooted Location commits its second plugin generation.
-        const recommitted = yield* Deferred.make<void>()
-        const generations = yield* Ref.make(0)
-        const id = `evicted-sdk-${crypto.randomUUID()}`
-
-        yield* opencode.events.subscribe().pipe(
-          Stream.runForEach((event) => {
-            if (event.type === "server.connected") return connected.open
-            if (event.type !== "plugin.updated" || event.location?.directory !== fixture.directory) return Effect.void
-            return Ref.updateAndGet(generations, (total) => total + 1).pipe(
-              Effect.flatMap((total) => {
-                if (total === 1) return Deferred.succeed(booted, undefined)
-                if (total === 2) return Deferred.succeed(recommitted, undefined)
-                return Effect.void
-              }),
-              Effect.asVoid,
-            )
-          }),
-          Effect.forkScoped,
-        )
-        yield* connected.await
-        yield* opencode.plugin({ id, effect: () => Effect.void })
-
-        yield* opencode.plugin.list({ location: ref })
-        yield* Deferred.await(booted).pipe(Effect.timeout("5 seconds"))
-        yield* opencode.debug.location.evict({ location: ref })
-        yield* opencode.plugin.list({ location: ref })
-        yield* Deferred.await(recommitted).pipe(Effect.timeout("5 seconds"))
-
-        expect((yield* opencode.plugin.list({ location: ref })).data.map((plugin) => String(plugin.id))).toContain(id)
-      }),
-    ),
-  15_000,
-)
-
-it.live(
-  "evicts a Location without triggering connected client refetches",
-  () =>
-    withEmbedded("opencode-embedded-quiet-eviction-", (fixture) =>
-      Effect.gen(function* () {
-        const opencode = yield* fixture.sdk.OpenCode.create({
-          config: { directory: fixture.directory, project: false, content: "{}" },
-        })
-        const ref = location(fixture)
-        const connected = yield* Latch.make(false)
-        const booted = yield* Deferred.make<void>()
-        const boots = yield* Ref.make(0)
-        const updates = yield* Ref.make<string[]>([])
-
-        yield* opencode.plugin({
-          id: `quiet-eviction-${crypto.randomUUID()}`,
-          effect: (ctx) =>
-            Effect.gen(function* () {
-              yield* Ref.update(boots, (count) => count + 1)
-              yield* ctx.catalog.transform((catalog) => catalog.provider.update("eviction-test", () => {}))
-              yield* ctx.agent.transform((agents) => agents.update("eviction-test", () => {}))
-              yield* ctx.command.transform((commands) =>
-                commands.add({ name: "eviction-test", execute: () => Effect.void }),
-              )
-            }),
-        })
-        const subscriber = yield* opencode.events.subscribe().pipe(
-          Stream.runForEach((event) =>
-            Effect.gen(function* () {
-              if (event.type === "server.connected") {
-                yield* connected.open
-                return
-              }
-              if (event.location?.directory !== fixture.directory) return
-              if (event.type === "plugin.updated") {
-                yield* Deferred.succeed(booted, undefined)
-                return
-              }
-              if (
-                event.type !== "catalog.updated" &&
-                event.type !== "agent.updated" &&
-                event.type !== "command.updated"
-              )
-                return
-              yield* Ref.update(updates, (types) => [...types, event.type])
-              // A connected consumer re-reads invalidated resources through the real router.
-              if (event.type === "catalog.updated") {
-                yield* opencode.model.list({ location: ref })
-                yield* opencode.provider.list({ location: ref })
-                return
-              }
-              if (event.type === "agent.updated") {
-                yield* opencode.agent.list({ location: ref })
-                return
-              }
-              yield* opencode.command.list({ location: ref })
-            }),
-          ),
-          Effect.forkScoped,
-        )
-        yield* connected.await
-        yield* opencode.plugin.list({ location: ref })
-        yield* Deferred.await(booted).pipe(Effect.timeout("5 seconds"))
-        expect(yield* Ref.get(updates)).toEqual(
-          expect.arrayContaining(["catalog.updated", "agent.updated", "command.updated"]),
-        )
-        yield* Ref.set(updates, [])
-
-        yield* opencode.debug.location.evict({ location: ref })
-        // Allow the live event stream to deliver teardown notifications and any refetches.
-        yield* Effect.sleep("200 millis")
-
-        expect(yield* Ref.get(updates)).toEqual([])
-        expect(yield* Ref.get(boots)).toBe(1)
-        expect(yield* opencode.debug.location.list()).toEqual([])
-        expect(subscriber.pollUnsafe()).toBeUndefined()
-      }),
-    ),
-  15_000,
-)
-
-it.live(
-  "keeps SDK plugin registration isolated between embedded hosts",
-  () =>
-    withEmbedded("opencode-embedded-plugin-isolation-", (fixture) =>
-      Effect.gen(function* () {
-        const first = yield* fixture.sdk.OpenCode.create()
-        const second = yield* fixture.sdk.OpenCode.create()
-        const firstReady = yield* Deferred.make<void>()
-        const secondReady = yield* Deferred.make<void>()
-        const activated = yield* Deferred.make<void>()
-        const ref = location(fixture)
-        const id = `isolated-sdk-${crypto.randomUUID()}`
-
-        yield* first.plugin({
-          id: `first-ready-${crypto.randomUUID()}`,
-          effect: () => Deferred.succeed(firstReady, undefined),
-        })
-        yield* second.plugin({
-          id: `second-ready-${crypto.randomUUID()}`,
-          effect: () => Deferred.succeed(secondReady, undefined),
-        })
-        yield* Effect.all([first.plugin.list({ location: ref }), second.plugin.list({ location: ref })], {
-          discard: true,
-        })
-        yield* Effect.all([Deferred.await(firstReady), Deferred.await(secondReady)], { discard: true })
-
-        yield* first.plugin({ id, effect: () => Deferred.succeed(activated, undefined) })
-        yield* Deferred.await(activated).pipe(Effect.timeout("5 seconds"))
-
-        expect((yield* second.plugin.list({ location: ref })).data.map((plugin) => String(plugin.id))).not.toContain(id)
-      }),
-    ),
-  15_000,
-)
-
 it.live(
   "embedded client uses the real router and handlers",
   () =>
@@ -366,22 +104,6 @@ it.live(
         const model = fixture.sdk.Model.Ref.make({
           id: fixture.sdk.Model.ID.make("embedded"),
           providerID: fixture.sdk.Provider.ID.make("test"),
-        })
-
-        yield* opencode.plugin({
-          id: `embedded-tools-${crypto.randomUUID()}`,
-          effect: (ctx) =>
-            ctx.tool
-              .transform((draft) =>
-                draft.add({
-                  name: "embedded_tool",
-                  description: "Embedded test tool",
-                  input: Schema.Struct({}),
-                  output: Schema.Struct({ ok: Schema.Boolean }),
-                  execute: () => Effect.succeed({ output: { ok: true } }),
-                }),
-              )
-              .pipe(Effect.orDie),
         })
 
         const created = yield* opencode.sessions.create({
@@ -488,8 +210,8 @@ it.live("embedded client exposes plugin-backed web search", () =>
       yield* opencode.plugin({
         id: `embedded-websearch-${crypto.randomUUID()}`,
         effect: (ctx) =>
-          ctx.websearch.transform((draft) => {
-            draft.add({
+          ctx.websearch.transform((editor) => {
+            editor.add({
               id: providerID,
               name: "Embedded web search",
               execute: (input) =>

@@ -97,7 +97,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
           <div data-component="tool-trigger">
             <div data-slot="basic-tool-tool-trigger-content">
               <span data-slot="basic-tool-tool-indicator" data-component="tool-error-card-icon">
-                <Icon name="circle-exclamation" />
+                <Icon name="outline-hexagonal-warning" />
               </span>
               <div data-slot="basic-tool-tool-info">
                 <div data-slot="basic-tool-tool-info-structured">
@@ -121,9 +121,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                         </a>
                       </Show>
                     </Show>
-                    <span data-slot="tool-error-card-dot" aria-hidden="true">
-                      ·
-                    </span>
                     <span data-slot="tool-error-card-summary">{summary()}</span>
                   </div>
                 </div>

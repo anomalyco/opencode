@@ -4,7 +4,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode-ai/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, on, onMount, Show } from "solid-js"
+import { createEffect, on, onMount } from "solid-js"
 import { Composer, type ComposerDropState } from "@/composer/composer"
 import { createComposerModel, type ComposerModel } from "@/composer/model"
 import { useComposerState } from "@/composer/persistence"
@@ -32,7 +32,6 @@ import { SessionQueuePanel } from "./queue-panel"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
 import { useSettings } from "@/settings/model"
-import { SessionLocationMissing } from "./location-missing"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
@@ -221,14 +220,6 @@ export function ActiveSessionComposerRegion(props: {
   onDropStateChange?: (state: ComposerDropState) => void
 }) {
   const settings = useSettings()
-  const location = useWorkspaceLocation()
-  const missing = createMemo(() => {
-    const error = location().error
-    const current = props.session.data.info()?.location
-    if (error && current?.directory === error.location.directory && current.workspaceID === error.location.workspaceID)
-      return current.directory
-    return undefined
-  })
   const region = createSessionComposerRegionController({
     state: props.model.region.state,
     parentID: props.session.data.parentID,
@@ -257,26 +248,12 @@ export function ActiveSessionComposerRegion(props: {
     <SessionComposerRegion
       controller={region}
       composer={
-        <Show
-          when={missing()}
-          keyed
-          fallback={
-            <div class="relative">
-              <SessionQueuePanel queue={queue} />
-              <div class="relative z-10">
-                <Composer model={composer} borderUnderlay onDropStateChange={props.onDropStateChange} />
-              </div>
-            </div>
-          }
-        >
-          {(directory) => (
-            <SessionLocationMissing
-              sessionID={requireSessionID(props.session)}
-              projectID={props.session.data.info()!.projectID}
-              directory={directory}
-            />
-          )}
-        </Show>
+        <div class="relative">
+          <SessionQueuePanel queue={queue} />
+          <div class="relative z-10">
+            <Composer model={composer} borderUnderlay onDropStateChange={props.onDropStateChange} />
+          </div>
+        </div>
       }
     />
   )

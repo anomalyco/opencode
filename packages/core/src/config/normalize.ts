@@ -24,6 +24,7 @@ import { ConfigMCPV1 } from "../v1/config/mcp.js"
 import { ConfigPermissionV1 } from "../v1/config/permission.js"
 import { ConfigPluginV1 } from "../v1/config/plugin.js"
 import { ConfigProviderV1 } from "../v1/config/provider.js"
+import { ConfigV1 } from "../v1/config/config.js"
 import { ConfigMigrateV1 } from "../v1/config/migrate.js"
 import { PositiveInt } from "../schema.js"
 
@@ -69,6 +70,9 @@ export function normalize(input: unknown): Result {
   const legacySnapshots = own(input, "snapshot")
     ? decodeEncoded(Schema.Boolean, input.snapshot, ["snapshot"], diagnostics)
     : undefined
+  const legacyUpdate = own(input, "autoupdate")
+    ? decodeValue(ConfigV1.Info.fields.autoupdate, input.autoupdate, ["autoupdate"], diagnostics)
+    : undefined
   const legacyShare = own(input, "autoshare")
     ? decodeValue(Schema.Boolean, input.autoshare, ["autoshare"], diagnostics) === true
       ? "auto"
@@ -82,6 +86,7 @@ export function normalize(input: unknown): Result {
     if (migrated !== undefined) encoded.media = canonical(ConfigMedia.Info, migrated)
   }
   if (legacySnapshots !== undefined) encoded.snapshots = legacySnapshots
+  if (legacyUpdate !== undefined) encoded.update = ConfigMigrateV1.migrate({ autoupdate: legacyUpdate }).update
   if (legacyShare !== undefined) encoded.share = legacyShare
 
   const legacyReferences = decodeMap(input.reference, ConfigReference.Entry, ["reference"], diagnostics, decodeEncoded)
@@ -191,7 +196,7 @@ export function normalize(input: unknown): Result {
     shell: Info.fields.shell,
     model: Info.fields.model,
     default_agent: Info.fields.default_agent,
-    autoupdate: Info.fields.autoupdate,
+    update: Info.fields.update,
     share: Info.fields.share,
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,

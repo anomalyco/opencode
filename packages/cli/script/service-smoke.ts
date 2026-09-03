@@ -93,7 +93,11 @@ try {
 }
 
 const output = await Promise.all(errors)
-await fs.rm(root, { recursive: true, force: true })
+// Windows can retain directory handles briefly after the service processes exit.
+await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch((cause: unknown) => {
+  console.error("Failed to remove service smoke-test directory", cause)
+  failure ??= cause
+})
 if (failure)
   throw new Error(output.filter(Boolean).join("\n") || "Compiled service lifecycle smoke test failed", {
     cause: failure,

@@ -34,7 +34,7 @@ type Resolution<T> = { id: string; store: SessionStore<T> } & (
 export function createSessionResolution<T>(
   sessionID: () => string | undefined,
   sessions: () => SessionStore<T>,
-  options?: { children?: boolean },
+  options?: { children?: boolean; connected?: () => boolean },
 ) {
   const cached = createMemo(() => {
     const id = sessionID()
@@ -46,15 +46,15 @@ export function createSessionResolution<T>(
   // Start independent reads before constructing the selected view, including
   // when its metadata is cached but its transcript has never been loaded.
   createRenderEffect(
-    on([sessionID, sessions] as const, ([id, store]) => {
-      if (!id) return
+    on([sessionID, sessions, () => options?.connected?.() ?? true] as const, ([id, store, connected]) => {
+      if (!id || !connected) return
       let stale = false
       onCleanup(() => {
         stale = true
       })
       // The timeline owns message errors; metadata resolution stays independent.
       void store.message.sync(id).catch(() => undefined)
-      if (cached() && !options?.children) {
+      if (cached() && !options?.children && !options?.connected) {
         setStatus({ id, store, state: "settled" })
         return
       }

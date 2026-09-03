@@ -32,8 +32,8 @@ export const Plugin = {
     const websearch = yield* WebSearch.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description,

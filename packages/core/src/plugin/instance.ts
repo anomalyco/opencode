@@ -40,8 +40,6 @@ export function bound(plugins: List) {
   if (duplicates.length > 0) {
     throw new Error(`duplicate instance plugin ids: ${duplicates.map((plugin) => plugin.id).join(", ")}`)
   }
-  const stamped = plugins.map(
-    (plugin): Generation => ({ ...plugin, revision: "instance", source: { type: "sdk" } }),
-  )
+  const stamped = plugins.map((plugin): Generation => ({ ...plugin, revision: "instance", source: { type: "sdk" } }))
   return Layer.succeed(Service, Service.of({ all: () => stamped }))
 }

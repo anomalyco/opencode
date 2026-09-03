@@ -21,7 +21,7 @@ import {
   type Accessor,
   type JSX,
 } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
@@ -33,7 +33,15 @@ const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 // exactly to the end, while a one-pixel nudge upward is a deliberate move away from it.
 const endEpsilon = 0.5
 const upwardKeys = new Set(["up", "page-up", "home"])
-const cache = new Map<string, { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }>()
+const cache = new Map<
+  string,
+  {
+    measurements: VirtualItem[]
+    toolOpen: Record<string, boolean | undefined>
+    patchGroupKeys: Map<string, string>
+    presentationKey?: string
+  }
+>()
 
 type Projection = Pick<
   ReturnType<typeof createTimelineProjection>,
@@ -42,6 +50,7 @@ type Projection = Pick<
 
 type Input = {
   sessionKey: Accessor<string>
+  presentationKey?: Accessor<string>
   projection: Projection
   showHeader: Accessor<boolean>
   /** True while the timeline follows the newest content. Drives every anchoring decision. */
@@ -77,11 +86,20 @@ export function createTimelineVirtualizer(input: Input) {
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const topOffset = () => (input.showHeader() ? 64 : isDesktop() ? 0 : 16)
   const ownerSessionKey = input.sessionKey()
-  const cached = cache.get(ownerSessionKey)
+  const entry = cache.get(ownerSessionKey)
+  const cached = entry?.presentationKey === input.presentationKey?.() ? entry : undefined
   const initialMeasurements = cached?.measurements
   const coldBottomMount = !initialMeasurements?.length && input.pinned()
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
+  const patchGroupKeys = cached?.patchGroupKeys ?? new Map<string, string>()
+  createEffect(
+    on(
+      () => input.presentationKey?.(),
+      () => setToolOpen(reconcile({})),
+      { defer: true },
+    ),
+  )
   const [rendering, setRendering] = createStore({ initialTail: coldBottomMount })
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
@@ -189,7 +207,8 @@ export function createTimelineVirtualizer(input: Input) {
     },
     scrollEndThreshold: 80,
     get scrollMargin() {
-      return topOffset()
+      // Empty projections still need the bottom spacer for running status.
+      return rows().length > 0 ? topOffset() : 0
     },
     paddingEnd: 64,
     get rangeExtractor() {
@@ -540,15 +559,13 @@ export function createTimelineVirtualizer(input: Input) {
             }}
           >
             <For each={virtualRowKeys()}>{(rowKey) => <VirtualRow rowKey={rowKey} />}</For>
-            <Show when={rows().length > 0}>
-              <div
-                data-timeline-row="bottom-spacer"
-                class="h-16 absolute top-0 left-0 w-full"
-                style={{ transform: `translateY(${virtualizer.getTotalSize() - 64}px)` }}
-              >
-                {props.bottomSpacer}
-              </div>
-            </Show>
+            <div
+              data-timeline-row="bottom-spacer"
+              class="h-16 absolute top-0 left-0 w-full"
+              style={{ transform: `translateY(${virtualizer.getTotalSize() - 64}px)` }}
+            >
+              {props.bottomSpacer}
+            </div>
           </div>
         </ScrollView>
       </div>
@@ -557,7 +574,12 @@ export function createTimelineVirtualizer(input: Input) {
 
   onCleanup(() => {
     cache.delete(ownerSessionKey)
-    cache.set(ownerSessionKey, { measurements: virtualizer.takeSnapshot(), toolOpen: { ...toolOpen } })
+    cache.set(ownerSessionKey, {
+      measurements: virtualizer.takeSnapshot(),
+      toolOpen: { ...toolOpen },
+      patchGroupKeys,
+      presentationKey: input.presentationKey?.(),
+    })
     while (cache.size > 16) cache.delete(cache.keys().next().value!)
     coldPending = false
     contentObserver?.disconnect()
@@ -569,6 +591,7 @@ export function createTimelineVirtualizer(input: Input) {
 
   return {
     disclosure: {
+      patchGroupKeys,
       value: (key: string) => toolOpen[key],
       set: (key: string, open: boolean) => setToolOpen(key, open),
     },

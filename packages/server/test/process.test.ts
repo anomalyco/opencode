@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 import { Effect } from "effect"
 import { HttpServer, HttpServerError, HttpServerResponse } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"
@@ -99,7 +100,12 @@ it.live("allows browser preflight requests without credentials", () =>
     )
     expect(event.status).toBe(200)
     expect(event.headers.get("content-encoding")).toBeNull()
-    yield* Effect.promise(() => event.body?.cancel() ?? Promise.resolve())
+    if (!event.body) return yield* Effect.die(new Error("Event response has no body"))
+    const reader = event.body.getReader()
+    yield* Effect.promise(() => readUntil(reader, "server.connected"))
+    yield* server.updateAvailable("2.0.0")
+    yield* Effect.promise(() => readUntil(reader, "installation.update-available"))
+    yield* Effect.promise(() => reader.cancel())
 
     const missing = yield* Effect.promise(() =>
       fetch(new URL("/missing", HttpServer.formatAddress(server.address)), {
@@ -114,5 +120,21 @@ it.live("allows browser preflight requests without credentials", () =>
     expect(missing.headers.get("content-type")).toBe("text/plain")
     expect(missing.headers.get("vary")?.toLowerCase()).toContain("accept-encoding")
     expect(yield* Effect.promise(() => missing.text())).toBe(fallback)
+
+    yield* Effect.forEach(["/api", "/api/missing", "/openapi.json"], (pathname) =>
+      Effect.gen(function* () {
+        const response = yield* Effect.promise(() => fetch(new URL(pathname, HttpServer.formatAddress(server.address))))
+        expect(response.status).toBe(401)
+        expect(yield* Effect.promise(() => response.text())).toBe("")
+      }),
+    )
   }),
 )
+
+async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, expected: string) {
+  while (true) {
+    const next = await reader.read()
+    if (next.done) throw new Error(`Event stream ended before ${expected}`)
+    if (new TextDecoder().decode(next.value).includes(expected)) return
+  }
+}

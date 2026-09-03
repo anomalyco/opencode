@@ -10,11 +10,11 @@ export interface WebSearchDefinition {
 }
 
 export interface WebSearchDomain extends WebSearchApi<unknown> {
-  readonly transform: Transform<WebSearchDraft>
+  readonly transform: Transform<WebSearchEditor>
   readonly reload: () => Effect.Effect<void>
 }
 
-export interface WebSearchDraft {
+export interface WebSearchEditor {
   add(definition: WebSearchDefinition): void
   readonly default: {
     get(): string | false | undefined

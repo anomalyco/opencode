@@ -10,9 +10,8 @@ export const Updated = Bus.ephemeral({ type: "sdk.plugin.updated", schema: {} })
 
 /**
  * Holds the plugins an embedder (the `@opencode-ai/sdk` host) contributes,
- * so `PluginSupervisor` can add them on every Location boot through the ordinary
- * generation path that `PluginSupervisor` uses for plugins discovered from
- * config. Registration publishes an unlocated update so every booted Location
+ * so the application loader can add them on every Location boot through its
+ * ordinary generation path. Registration publishes an unlocated update so every booted Location
  * reloads its plugin generation from the shared store.
  *
  * Each host-global layer owns one private store. Location graphs reuse that

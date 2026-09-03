@@ -1,4 +1,4 @@
-import { RGBA, type MouseEvent } from "@opentui/core"
+import { RGBA, MouseEvent, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createEffect, createMemo, createResource, createSignal, on, Show } from "solid-js"
 import { useConfig } from "../config"
@@ -54,6 +54,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const [terminalFocused, setTerminalFocused] = createSignal(false)
   const [restoreTerminalFocus, setRestoreTerminalFocus] = createSignal(false)
   let focusTerminal: (() => void) | undefined
+  let sessionScroll: ScrollBoxRenderable | undefined
   createResource(
     () => (config.data.session.terminal ? props.sessionID : undefined),
     (sessionID) => sessions.refresh(sessionID).catch(() => undefined),
@@ -146,6 +147,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         }}
       >
         <Session
+          scrollRef={(value) => (sessionScroll = value)}
           verticalTabsWidth={props.verticalTabsWidth}
           promptMuted={terminalFocused()}
           sidebarVisible={rightPane() === "sidebar"}
@@ -161,6 +163,15 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
             width="100%"
             height="100%"
             zIndex={1}
+            onMouseScroll={(event) => {
+              if (!sessionScroll || sessionScroll.isDestroyed) return
+              const viewport = sessionScroll.viewport
+              if (event.x < viewport.x || event.x >= viewport.x + viewport.width) return
+              if (event.y < viewport.y || event.y >= viewport.y + viewport.height) return
+              // Keep the focus-only click guard, but let the transcript handle its own wheel events.
+              event.stopPropagation()
+              sessionScroll.processMouseEvent(new MouseEvent(sessionScroll, event))
+            }}
             // Consume the release before revealing permission buttons underneath.
             onMouseUp={() => {
               if (terminalResize.resizing() || resizeRelease) return
@@ -202,7 +213,11 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         </box>
       </Show>
       <Show when={rightPane() === "terminal" && availableWidth() >= 3}>
-        <PaneResizeHandle resize={terminalResize} left={availableWidth() - terminalResize.size() - 1} highlight="right" />
+        <PaneResizeHandle
+          resize={terminalResize}
+          left={availableWidth() - terminalResize.size() - 1}
+          highlight="right"
+        />
       </Show>
       <Show when={rightPane() === "sidebar" && !wide()}>
         <box

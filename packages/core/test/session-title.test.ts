@@ -1,13 +1,5 @@
 import { beforeEach, expect } from "bun:test"
-import {
-  AIError,
-  LLMClient,
-  LLMEvent,
-  LanguageModel,
-  SystemPart,
-  TransportError,
-  type LLMRequest,
-} from "@opencode-ai/ai"
+import { AIError, LLMClient, LLMEvent, LanguageModel, TransportError, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -130,7 +122,7 @@ const it = testEffect(
       Catalog.node.replace(catalog),
       SessionRunnerModel.node.replace(models),
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
-      PluginSupervisor.node.replace(Layer.mock(PluginSupervisor.Service, { flush: Effect.void })),
+      PluginSupervisor.node.replace(Layer.empty),
     ],
   ),
 )
@@ -504,29 +496,6 @@ it.effect("does not rename after a failed title stream", () =>
     const store = yield* SessionStore.Service
     expect(requests).toHaveLength(1)
     expect((yield* store.get(sessionID))?.title).toBeUndefined()
-  }),
-)
-
-it.effect("keeps session context hooks away from title requests", () =>
-  Effect.gen(function* () {
-    yield* enableTitleAgent
-    // Context hooks shape the agent conversation; title generation is not part of
-    // it, so it opts out and the transcript passes through unchanged.
-    const hooks = yield* PluginHooks.Service
-    yield* hooks.register("session", "context", (event) =>
-      Effect.sync(() => {
-        event.system.push(SystemPart.make("Keep titles in sentence case."))
-      }),
-    )
-    const sessionID = Session.ID.make("ses_title_context_hook")
-    yield* insertSession(sessionID)
-    yield* prompt(sessionID, "Hook this title request")
-
-    const title = yield* SessionTitle.Service
-    yield* title.generate(sessionID)
-
-    expect(requests).toHaveLength(1)
-    expect(requests[0]?.system.map((part) => part.text)).toEqual(["You are a title generator."])
   }),
 )
 

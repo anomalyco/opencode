@@ -6,7 +6,7 @@ import { ephemeral } from "@opencode-ai/schema/event"
 import type { Session } from "@opencode-ai/schema/session"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Stream, Types } from "effect"
+import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -133,7 +133,7 @@ type Data = {
   removed: Set<ServerName>
 }
 
-export type Draft = {
+export type Editor = {
   list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
   get: (server: ServerName | string) => Types.DeepMutable<Mcp.ServerConfig> | undefined
   set: (server: ServerName | string, config: Mcp.ServerConfig) => void
@@ -143,7 +143,7 @@ export type Draft = {
 
 const cloneConfig = (config: Mcp.ServerConfig) => structuredClone(config) as Types.DeepMutable<Mcp.ServerConfig>
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
   readonly add: (server: ServerName | string, config: Mcp.ServerConfig) => Effect.Effect<void>
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
@@ -227,12 +227,12 @@ export const layer = (options?: Options) =>
         const scope = yield* Scope.fork(root)
         entry.registration = { dispose: Scope.close(scope, Exit.void) }
         yield* integration
-          .transform((draft) => {
-            draft.update(integrationID, (ref) => {
+          .transform((editor) => {
+            editor.update(integrationID, (ref) => {
               ref.name = name
               ref.metadata = { source: "mcp" }
             })
-            draft.method.update({
+            editor.method.update({
               integrationID,
               method: { id: methodID, type: "oauth", label: name },
               authorize: () =>
@@ -615,8 +615,9 @@ export const layer = (options?: Options) =>
 
       let applied: Map<ServerName, Mcp.ServerConfig> | undefined
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
-      const reconcile = Effect.fnUntraced(function* (next: Draft) {
-        const servers = new Map(next.list())
+      const reconcileLock = Semaphore.makeUnsafe(1)
+      const reconcile = Effect.fnUntraced(function* () {
+        const servers = state.get().servers
         if (!applied && entries.size === 0) {
           for (const [name, server] of servers) {
             entries.set(name, {
@@ -677,7 +678,7 @@ export const layer = (options?: Options) =>
           Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
         ),
       )
-      const state = State.create<Data, Draft>({
+      const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",
         initial: () => ({
           servers: new Map(
@@ -687,22 +688,22 @@ export const layer = (options?: Options) =>
           ),
           removed: new Set(Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : []))),
         }),
-        draft: (draft) => ({
-          list: () => Array.from(draft.servers),
-          get: (server) => draft.servers.get(ServerName.make(server)),
+        editor: (editor) => ({
+          list: () => Array.from(editor.servers),
+          get: (server) => editor.servers.get(ServerName.make(server)),
           set: (server, serverConfig) => {
             const name = ServerName.make(server)
-            if (draft.removed.has(name)) return
-            draft.servers.set(name, cloneConfig(serverConfig))
+            if (editor.removed.has(name)) return
+            editor.servers.set(name, cloneConfig(serverConfig))
           },
           update: (server, update) => {
-            const current = draft.servers.get(ServerName.make(server))
+            const current = editor.servers.get(ServerName.make(server))
             if (!current) return
             update(current)
           },
-          remove: (server) => draft.servers.delete(ServerName.make(server)),
+          remove: (server) => editor.servers.delete(ServerName.make(server)),
         }),
-        finalize: reconcile,
+        notify: () => State.reconcile(root, fork, () => reconcileLock.withPermit(reconcile())),
       })
 
       // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.

@@ -18,6 +18,7 @@ describe("acp service", () => {
           body: request.method === "GET" ? undefined : await request.json().catch(() => undefined),
         })
         const location = { directory: "/workspace", project: { id: "global", directory: "/workspace" } }
+        if (url.pathname === "/api/plugin/await-activation") return new Response(null, { status: 204 })
         if (url.pathname === "/api/model") return Response.json({ location, data: [model] })
         if (url.pathname === "/api/model/default") return Response.json({ location, data: model })
         if (url.pathname === "/api/agent") return Response.json({ location, data: [agent] })

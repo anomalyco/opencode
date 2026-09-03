@@ -94,10 +94,10 @@ describe("CodeModeInstructions", () => {
       const tools = yield* Tool.Service
       const initialized = yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* tools.transform((draft) => {
-            draft.namespace({ name: "tools", description: "Project utilities" })
-            draft.add({ ...zeta, options: { namespace: "tools" } })
-            draft.add({ ...alpha, options: { namespace: "tools" } })
+          yield* tools.transform((editor) => {
+            editor.namespace({ name: "tools", description: "Project utilities" })
+            editor.add({ ...zeta, options: { namespace: "tools" } })
+            editor.add({ ...alpha, options: { namespace: "tools" } })
           })
           const snapshot = yield* tools.snapshot()
           return yield* readInitial(CodeModeInstructions.make(snapshot.codeModeCatalog))
@@ -105,10 +105,10 @@ describe("CodeModeInstructions", () => {
       )
       const reordered = yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* tools.transform((draft) => {
-            draft.namespace({ name: "tools", description: "Project utilities" })
-            draft.add({ ...alpha, options: { namespace: "tools" } })
-            draft.add({ ...zeta, options: { namespace: "tools" } })
+          yield* tools.transform((editor) => {
+            editor.namespace({ name: "tools", description: "Project utilities" })
+            editor.add({ ...alpha, options: { namespace: "tools" } })
+            editor.add({ ...zeta, options: { namespace: "tools" } })
           })
           const snapshot = yield* tools.snapshot()
           return yield* readUpdate(CodeModeInstructions.make(snapshot.codeModeCatalog), initialized)
