@@ -39,6 +39,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
+import { desktopMenuAcceleratorKeybind, desktopMenuActionBinds } from "@/desktop-menu"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { ServerSDKProvider } from "@/context/server-sdk"
@@ -329,15 +330,30 @@ function DesktopCommands() {
 
   command.register("desktop", () => {
     const commands: CommandOption[] = []
-    if (platform.platform === "desktop" && platform.exportDebugLogs) {
-      commands.push({
-        id: "logs.export",
-        title: language.t("command.logs.export"),
-        category: language.t("command.category.settings"),
-        onSelect: () => {
-          void platform.exportDebugLogs?.()
-        },
-      })
+    if (platform.platform === "desktop") {
+      if (platform.exportDebugLogs) {
+        commands.push({
+          id: "logs.export",
+          title: language.t("command.logs.export"),
+          category: language.t("command.category.settings"),
+          onSelect: () => {
+            void platform.exportDebugLogs?.()
+          },
+        })
+      }
+      if (platform.os === "windows" || platform.os === "linux") {
+        for (const bind of desktopMenuActionBinds("windows")) {
+          commands.push({
+            id: bind.action,
+            title: bind.labelKey ? language.t(bind.labelKey) : bind.action,
+            keybind: desktopMenuAcceleratorKeybind(bind.accelerator),
+            hidden: true,
+            onSelect: () => {
+              void platform.runDesktopMenuAction?.(bind.action)
+            },
+          })
+        }
+      }
     }
     return commands
   })
