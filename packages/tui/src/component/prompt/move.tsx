@@ -15,6 +15,23 @@ function moveReminderText(directory: string) {
   return `<system-reminder>The user has changed the current working directory to "${directory}". This is still the same project but at a possibly new location; take this into account when working with any files from now on.</system-reminder>`
 }
 
+export async function resolvePromptMoveDirectory(input: {
+  selection: MoveSessionSelection
+  create: () => Promise<string | undefined>
+  validate: (directory: string) => Promise<void>
+  onUnavailable: (error: unknown) => void
+}) {
+  const directory = input.selection.type === "new" ? await input.create() : input.selection.directory
+  if (!directory) return undefined
+  try {
+    await input.validate(directory)
+    return directory
+  } catch (error) {
+    input.onUnavailable(error)
+    return undefined
+  }
+}
+
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
   const sdk = useSDK()
@@ -29,7 +46,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
 
   async function create(context?: string) {
     const projectID = input.projectID()
-    if (!projectID) return
+    if (!projectID) return undefined
     setCreating(true)
     setProgress("Creating copy")
     try {
@@ -61,8 +78,16 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       setProgress(undefined)
       setCreating(false)
       toast.show({ title: "Creating workspace failed", message: errorMessage(err), variant: "error" })
-      return
+      return undefined
     }
+  }
+
+  async function validateDirectory(directory: string) {
+    await sdk.client.path.get({ directory }, { throwOnError: true })
+  }
+
+  function showUnavailableDirectory(error: unknown) {
+    toast.show({ title: "Project unavailable", message: errorMessage(error), variant: "error" })
   }
 
   function open() {
@@ -91,8 +116,21 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
         onSelect={(selection) => {
           const sessionID = input.sessionID()
           if (!sessionID) {
-            homeDestination?.setDestination(selection)
-            dialog.clear()
+            if (selection.type === "new") {
+              homeDestination?.setDestination(selection)
+              dialog.clear()
+              return
+            }
+            void resolvePromptMoveDirectory({
+              selection,
+              create: async () => undefined,
+              validate: validateDirectory,
+              onUnavailable: showUnavailableDirectory,
+            }).then((directory) => {
+              if (!directory) return
+              homeDestination?.setDestination({ ...selection, directory })
+              dialog.clear()
+            })
             return
           }
           void moveExistingSession(sessionID, selection)
@@ -119,13 +157,17 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     const status = await sdk.client.vcs.status({ directory: session?.directory }).catch(() => undefined)
     const choice = status?.data?.length ? await DialogWorkspaceFileChanges.show(dialog, status.data) : "no"
     if (!choice) return
-    dialog.clear()
-    const directory = selection.type === "new" ? await create(sessionContext(sessionID)) : selection.directory
+    const directory = await resolvePromptMoveDirectory({
+      selection,
+      create: () => create(sessionContext(sessionID)),
+      validate: validateDirectory,
+      onUnavailable: showUnavailableDirectory,
+    })
     if (!directory) {
       setProgress(undefined)
-      dialog.clear()
       return
     }
+    dialog.clear()
     setProgress("Moving session")
     try {
       await sdk.client.experimental.controlPlane.moveSession(
@@ -165,11 +207,13 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
 
   async function getDirectory(context?: string) {
     const value = homeDestination?.destination()
-    if (!value) return
-    if (value.type === "directory") {
-      return value.directory
-    }
-    return await create(context)
+    if (!value) return undefined
+    return await resolvePromptMoveDirectory({
+      selection: value,
+      create: () => create(context),
+      validate: validateDirectory,
+      onUnavailable: showUnavailableDirectory,
+    })
   }
 
   function startSubmit() {

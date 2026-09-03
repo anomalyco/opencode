@@ -25,7 +25,7 @@ type ProjectDirectory = ProjectDirectories[number]
 type DialogMoveSessionProps = {
   projectID: string
   current?: MoveSessionSelection
-  onSelect: (selection: MoveSessionSelection) => void
+  onSelect: (selection: MoveSessionSelection) => Promise<void> | void
   onCurrentChange?: (selection: MoveSessionSelection) => void
   initialDirectories?: ProjectDirectory[]
   initialRemoving?: string
@@ -312,7 +312,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         locked={showError() || directories.loading || loadedProject.loading || Boolean(removing())}
         current={current()}
         onSelect={(option) => {
-          if (option.value) props.onSelect(option.value)
+          if (option.value) void props.onSelect(option.value)
         }}
         onMove={() => setToDelete(undefined)}
         actions={
