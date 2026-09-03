@@ -103,6 +103,62 @@ test("extensions opens without waiting for MCPs or plugins", async ({ page }) =>
   await expect(settings.getByRole("switch", { name: "demo-mcp" })).toBeChecked()
 })
 
+test("about opens without waiting for contributors", async ({ page }) => {
+  const contributors = Promise.withResolvers<void>()
+  const url = "https://api.github.com/repos/anomalyco/opencode/contributors?anon=1&per_page=1"
+  await page.route(url, async (route) => {
+    await contributors.promise
+    await route.fulfill({
+      json: [],
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-expose-headers": "Link",
+        Link: `<${url}&page=1004>; rel="last"`,
+      },
+    })
+  })
+  const settings = page.getByTestId("settings-screen")
+  const requested = page.waitForRequest(url)
+  await settings.getByRole("tab", { name: "About", exact: true }).click()
+  await requested
+  await expect(settings.getByRole("tab", { name: "About", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(settings.getByText("Released under the MIT License", { exact: true })).toBeVisible()
+  await expect(settings.getByRole("link", { name: "935 others", exact: true })).toBeVisible()
+  await expect(settings.getByRole("button", { name: "Back to app" })).toBeVisible()
+
+  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
+  await expect(settings.getByRole("tab", { name: "Preferences", exact: true })).toHaveAttribute("aria-selected", "true")
+  await settings.getByRole("tab", { name: "About", exact: true }).click()
+  await expect(settings.getByRole("link", { name: "935 others", exact: true })).toBeVisible()
+
+  const website = settings.getByRole("link", { name: "www.opencode.ai", exact: true })
+  await website.focus()
+  contributors.resolve()
+  await expect(settings.getByRole("link", { name: "988 others", exact: true })).toBeVisible()
+  await expect(website).toBeFocused()
+})
+
+test("about keeps its fallback when the contributor request fails", async ({ page }) => {
+  const contributors = Promise.withResolvers<void>()
+  const url = "https://api.github.com/repos/anomalyco/opencode/contributors?anon=1&per_page=1"
+  await page.route(url, async (route) => {
+    await contributors.promise
+    await route.abort("failed")
+  })
+  const settings = page.getByTestId("settings-screen")
+  const requested = page.waitForRequest(url)
+  await settings.getByRole("tab", { name: "About", exact: true }).click()
+  await requested
+  await expect(settings.getByRole("link", { name: "935 others", exact: true })).toBeVisible()
+
+  const failed = page.waitForEvent("requestfailed", (request) => request.url() === url)
+  contributors.resolve()
+  await failed
+  await expect(settings.getByRole("link", { name: "935 others", exact: true })).toBeVisible()
+  await expect(settings.getByText("Released under the MIT License", { exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "About", exact: true })).toHaveAttribute("aria-selected", "true")
+})
+
 test("workspace inventory uses the settings panel scroll area", async ({ page }) => {
   const settings = page.getByTestId("settings-screen")
   await settings.getByRole("tab", { name: "Workspaces", exact: true }).click()

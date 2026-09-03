@@ -52,8 +52,8 @@ export function SettingsAbout(props: { active: boolean }) {
           and={language.t("settings.about.and")}
           tail={
             <ExternalLink href="https://github.com/anomalyco/opencode/graphs/contributors">
-              {language.plural("settings.about.otherContributor", otherContributors(), {
-                count: otherContributors(),
+              {language.plural("settings.about.otherContributor", otherContributors.latest, {
+                count: otherContributors.latest,
               })}
             </ExternalLink>
           }
