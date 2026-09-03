@@ -34,6 +34,7 @@ export type Update = ParcelWatcher.Event
 
 export type WatchInput =
   | { readonly path: string; readonly type: "file" }
+  | { readonly path: string; readonly type: "entries"; readonly names: readonly string[] }
   | { readonly path: string; readonly type: "directory"; readonly ignore?: readonly string[] }
 
 export type Subscription = {
@@ -48,13 +49,14 @@ export interface NativeInterface {
     readonly type: WatchInput["type"]
     readonly target: string
     readonly ignore: readonly string[]
+    readonly names?: readonly string[]
     readonly publish: (update: Update) => void
   }) => Effect.Effect<Subscription | undefined>
 }
 
 /**
  * The OS-level watch implementation behind the Watcher service. The default
- * layer uses `node:fs.watch` for files and `@parcel/watcher` for directories;
+ * layer uses `node:fs.watch` for exact files/entries and `@parcel/watcher` for directories;
  * tests provide implementations they can control.
  */
 export class Native extends Context.Service<Native, NativeInterface>()("@opencode/Watcher/Native") {}
@@ -89,7 +91,12 @@ export const layer = (options?: Options) =>
       const native = yield* Native
 
       // Keys compare structurally (effect Equal), so equivalent watches share one entry.
-      type Key = { readonly type: WatchInput["type"]; readonly target: string; readonly ignore: readonly string[] }
+      type Key = {
+        readonly type: WatchInput["type"]
+        readonly target: string
+        readonly ignore: readonly string[]
+        readonly names: readonly string[]
+      }
       const watchers = yield* RcMap.make({
         lookup: (key: Key) =>
           Effect.gen(function* () {
@@ -99,6 +106,7 @@ export const layer = (options?: Options) =>
                 type: key.type,
                 target: key.target,
                 ignore: key.ignore,
+                names: key.names,
                 publish: (update) => PubSub.publishUnsafe(pubsub, update),
               }),
               (subscription) =>
@@ -130,6 +138,7 @@ export const layer = (options?: Options) =>
       const subscribe = (input: WatchInput) => {
         const target = path.resolve(input.path)
         const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
+        const names = [...new Set(input.type === "entries" ? input.names : [])].toSorted()
         return Effect.gen(function* () {
           yield* Effect.logInfo("watcher subscribe", {
             path: target,
@@ -138,7 +147,7 @@ export const layer = (options?: Options) =>
           })
           return Stream.unwrap(
             Effect.gen(function* () {
-              const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore })
+              const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore, names })
               return Stream.fromPubSub(pubsub)
             }),
           )
@@ -165,9 +174,11 @@ export const testLayer = Layer.effectContext(
           subscriptions.push(
             input.type === "file"
               ? { path: input.target, type: "file" }
-              : input.ignore.length > 0
-                ? { path: input.target, type: "directory", ignore: input.ignore }
-                : { path: input.target, type: "directory" },
+              : input.type === "entries"
+                ? { path: input.target, type: "entries", names: input.names ?? [] }
+                : input.ignore.length > 0
+                  ? { path: input.target, type: "directory", ignore: input.ignore }
+                  : { path: input.target, type: "directory" },
           )
           // Ignore entries resolve against the target like the parcel wrapper's
           // literal paths. Glob entries resolve to paths nothing lives under, so
@@ -177,8 +188,11 @@ export const testLayer = Layer.effectContext(
             input.publish,
             input.type === "file"
               ? (target) => target === input.target
-              : (target) =>
-                  FSUtil.contains(input.target, target) && !ignored.some((entry) => FSUtil.contains(entry, target)),
+              : input.type === "entries"
+                ? (target) =>
+                    path.dirname(target) === input.target && (input.names ?? []).includes(path.basename(target))
+                : (target) =>
+                    FSUtil.contains(input.target, target) && !ignored.some((entry) => FSUtil.contains(entry, target)),
           )
           return {
             unsubscribe: () => {
@@ -208,16 +222,19 @@ export const nativeLayer = Layer.succeed(
   Native,
   Native.of({
     subscribe: (input) => {
-      if (input.type === "file") {
+      if (input.type === "file" || input.type === "entries") {
         return Effect.sync(() => {
-          const directory = path.dirname(input.target)
+          const directory = input.type === "file" ? path.dirname(input.target) : input.target
+          const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
           const subscription = watch(directory, { recursive: false }, (_event, file) => {
-            if (file && path.resolve(directory, file.toString()) !== input.target) return
-            input.publish({ path: input.target, type: "update" } satisfies Update)
+            if (file && !names.has(file)) return
+            for (const name of file ? [file] : names) {
+              input.publish({ path: path.join(directory, name), type: "update" })
+            }
           })
           if ("on" in subscription && typeof subscription.on === "function") {
             subscription.on("error", (error: unknown) =>
-              Effect.runFork(Effect.logError("watcher callback failed", { path: input.target, error })),
+              Effect.runFork(Effect.logError("watcher callback failed", { path: directory, error })),
             )
           }
           return { unsubscribe: () => Promise.resolve(subscription.close()), backend: "node" }

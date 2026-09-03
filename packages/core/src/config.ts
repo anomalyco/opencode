@@ -4,7 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
-import { Context, Effect, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, Exit, Layer, Option, PubSub, Ref, Schema, Scope, Semaphore, Stream } from "effect"
 import {
   AgentsDirectory,
   ClaudeDirectory,
@@ -200,28 +200,25 @@ export const layer = (options?: Options) =>
         const discovered =
           locationIsGlobal || options?.project === false
             ? []
-            : yield* Effect.all([
-                fs.up({ targets: [".opencode", ".claude", ".agents"], start: location.directory }),
-                // Missing direct files still need a watch so their first creation
-                // reloads config. File watches observe the parent non-recursively.
-                fs
-                  .up({ targets: ["."], start: location.directory })
-                  .pipe(
-                    Effect.map((directories) =>
-                      directories.flatMap((directory) => names.toReversed().map((name) => path.join(directory, name))),
-                    ),
-                  ),
-              ]).pipe(
-                Effect.map((items) => items.flat()),
-                Effect.flatMap((items) =>
-                  Effect.forEach(items, (item) =>
-                    // Resolve the parent too: a missing file under a symlinked
-                    // global root must obey the same exclusion as an existing one.
-                    fs.resolve(path.dirname(item)).pipe(
-                      Effect.flatMap((directory) => fs.resolve(path.join(directory, path.basename(item)))),
-                      Effect.map((resolved) => ({ item, resolved })),
-                    ),
-                  ),
+            : yield* fs.up({ targets: ["."], start: location.directory }).pipe(
+                Effect.flatMap((directories) =>
+                  Effect.forEach(directories, (directory) =>
+                    Effect.gen(function* () {
+                      // Resolve each parent once, including for missing children
+                      // under symlinked global roots.
+                      const parent = yield* fs.resolve(directory)
+                      const ecosystem = yield* Effect.filter([".claude", ".agents"], (name) =>
+                        fs.exists(path.join(directory, name)),
+                      )
+                      // Exact-path parent watches cover first creation without
+                      // recursively watching the project or its ancestors.
+                      return yield* Effect.forEach([...ecosystem, ".opencode", ...names.toReversed()], (name) =>
+                        fs
+                          .resolve(path.join(parent, name))
+                          .pipe(Effect.map((resolved) => ({ item: path.join(directory, name), resolved }))),
+                      )
+                    }),
+                  ).pipe(Effect.map((items) => items.flat())),
                 ),
                 Effect.orDie,
               )
@@ -255,15 +252,16 @@ export const layer = (options?: Options) =>
           ]),
         ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
 
-        const projectDirectories = visible
+        const projectTargets = visible
           .filter((item) => path.basename(item) === ".opencode")
           .toReversed()
           .map((directory) => AbsolutePath.make(directory))
+        const projectDirectories = yield* Effect.filter(projectTargets, (directory) => fs.isDir(directory))
         const directPaths = visible
           .filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item)))
           .toReversed()
         fileTargets.clear()
-        directPaths.forEach((filepath) => fileTargets.add(AbsolutePath.make(filepath)))
+        directPaths.concat(projectTargets).forEach((filepath) => fileTargets.add(AbsolutePath.make(filepath)))
         const direct = yield* Effect.forEach(directPaths, (filepath) => loadFile(filepath)).pipe(
           Effect.orDie,
           Effect.map((entries) => entries.filter((entry): entry is Document => entry !== undefined)),
@@ -316,30 +314,42 @@ export const layer = (options?: Options) =>
       // Vendored trees inside config roots (a plugin's node_modules, a nested
       // .git) produce event blizzards that can never change discovery output.
       const ignore = ["node_modules", ".git", "**/{node_modules,.git}/**"]
-      // Watch-once: roots leave discovery only by deletion, so a stale watch is
-      // inert, bounded, and dies with this layer — and keeping a deleted root's
-      // watch alive is exactly what makes its recreation observable.
-      const watched = new Set<string>()
+      const lifetime = yield* Scope.Scope
+      const watched = new Map<string, Scope.Closeable>()
       const reconcile = Effect.fn("Config.reconcileWatches")(function* (entries: readonly Entry[]) {
         const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
         const files = [
           ...entries.flatMap((entry) => (entry.type === "document" && entry.path ? [entry.path] : [])),
           ...fileTargets,
         ]
+        const parents = new Map<string, Set<string>>()
+        for (const file of files) {
+          if (directories.some((directory) => file !== directory && FSUtil.contains(directory, file))) continue
+          const parent = path.dirname(file)
+          const entries = parents.get(parent) ?? new Set<string>()
+          entries.add(path.basename(file))
+          parents.set(parent, entries)
+        }
         const targets = [
           ...directories.map((path) => ({ path, type: "directory" as const, ignore })),
-          ...files
-            .filter((file) => !directories.some((directory) => FSUtil.contains(directory, file)))
-            .map((path) => ({ path, type: "file" as const })),
+          ...Array.from(parents, ([path, names]) => ({ path, type: "entries" as const, names: [...names].toSorted() })),
         ]
-        for (const target of targets) {
-          const key = JSON.stringify(target)
+        const next = new Map(targets.map((target) => [JSON.stringify(target), target]))
+        // Retain parent watches for missing candidates, but release deleted
+        // directory watches so recreation attaches to the new directory.
+        for (const [key, scope] of watched) {
+          if (next.has(key)) continue
+          watched.delete(key)
+          yield* Scope.close(scope, Exit.void)
+        }
+        for (const [key, target] of next) {
           if (watched.has(key)) continue
-          watched.add(key)
+          const scope = yield* Scope.fork(lifetime)
+          watched.set(key, scope)
           const stream = yield* watcher.subscribe(target)
           yield* stream.pipe(
             Stream.runForEach((update) => PubSub.publish(updates, update)),
-            Effect.forkScoped({ startImmediately: true }),
+            Effect.forkIn(scope, { startImmediately: true }),
           )
         }
       })

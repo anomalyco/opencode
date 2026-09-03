@@ -52,6 +52,46 @@ function countingNative() {
 }
 
 describe("Watcher lifecycle", () => {
+  it.live("watches only named immediate entries, including missing directories", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const native = yield* Watcher.Native
+          const events: Watcher.Update[] = []
+          yield* Effect.acquireRelease(
+            native.subscribe({
+              type: "entries",
+              target: tmp.path,
+              names: ["opencode.json", ".opencode"],
+              ignore: [],
+              publish: (update) => events.push(update),
+            }),
+            (subscription) => Effect.promise(() => subscription?.unsubscribe() ?? Promise.resolve()),
+          )
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "nested"))
+            await fs.writeFile(path.join(tmp.path, "nested", "opencode.json"), "ignored")
+            await fs.writeFile(path.join(tmp.path, "opencode.jsonc"), "ignored")
+            await fs.writeFile(path.join(tmp.path, "opencode.json"), "first")
+          })
+          yield* Effect.sync(() => events.length).pipe(
+            Effect.filterOrFail((count) => count > 0),
+            Effect.retry(Schedule.spaced("10 millis")),
+            Effect.timeout("1 second"),
+          )
+          expect(events.every((update) => update.path === path.join(tmp.path, "opencode.json"))).toBe(true)
+          yield* Effect.sleep("10 millis")
+          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, ".opencode")))
+          yield* Effect.sync(() => events.some((update) => update.path === path.join(tmp.path, ".opencode"))).pipe(
+            Effect.filterOrFail(Boolean),
+            Effect.retry(Schedule.spaced("10 millis")),
+            Effect.timeout("1 second"),
+          )
+        }).pipe(Effect.provide(Watcher.nativeLayer)),
+      ),
+    ),
+  )
+
   it.effect("interrupting a consumer interrupts a pending acquisition", () =>
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>()
@@ -76,16 +116,16 @@ describe("Watcher lifecycle", () => {
     }),
   )
 
-  it.effect("shares one subscription and releases exactly once after the final consumer", () => {
+  it.effect("shares equivalent entry sets and releases exactly once after the final consumer", () => {
     const { native, counts } = countingNative()
     return Effect.gen(function* () {
       const watcher = yield* Watcher.Service
-      const consume = () =>
+      const consume = (names: string[]) =>
         watcher
-          .subscribe({ path: "/shared", type: "directory" })
+          .subscribe({ path: "/shared", type: "entries", names })
           .pipe(Effect.flatMap(Stream.runDrain), Effect.forkScoped({ startImmediately: true }))
-      const first = yield* consume()
-      const second = yield* consume()
+      const first = yield* consume(["opencode.json", ".opencode", "opencode.json"])
+      const second = yield* consume([".opencode", "opencode.json"])
       yield* Effect.yieldNow
       expect(counts.subscribes).toBe(1)
 

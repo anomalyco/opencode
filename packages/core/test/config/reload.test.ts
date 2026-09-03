@@ -41,7 +41,16 @@ const decode = Schema.decodeUnknownSync(Info)
 const document = path.join(import.meta.dir, "opencode.json")
 
 describe("config plugin reloads", () => {
-  for (const file of ["opencode.json", "opencode.jsonc", "../opencode.json", "../opencode.jsonc"]) {
+  for (const file of [
+    "opencode.json",
+    "opencode.jsonc",
+    "../opencode.json",
+    "../opencode.jsonc",
+    ".opencode/opencode.json",
+    ".opencode/opencode.jsonc",
+    "../.opencode/opencode.json",
+    "../.opencode/opencode.jsonc",
+  ]) {
     it.live(`loads references when ${file} is first created and keeps watching it`, () =>
       Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
         Effect.flatMap((tmp) =>
@@ -57,7 +66,25 @@ describe("config plugin reloads", () => {
               expect(yield* references.list()).toEqual([])
               yield* Effect.sleep("10 millis")
 
-              yield* Effect.promise(() => fs.writeFile(target, JSON.stringify({ references: { docs: "./docs" } })))
+              if (file.includes(".opencode/") && file.endsWith(".jsonc")) {
+                yield* Effect.promise(() => fs.mkdir(path.dirname(target)))
+                const config = yield* Config.Service
+                yield* waitUntil(
+                  config
+                    .entries()
+                    .pipe(
+                      Effect.map((entries) =>
+                        entries.some((entry) => entry.type === "directory" && entry.path === path.dirname(target)),
+                      ),
+                    ),
+                )
+                // Exercise a file written after discovering an empty config root.
+                yield* Effect.sleep("50 millis")
+              }
+              yield* Effect.promise(async () => {
+                await fs.mkdir(path.dirname(target), { recursive: true })
+                await fs.writeFile(target, JSON.stringify({ references: { docs: "./docs" } }))
+              })
               yield* waitUntil(
                 references.list().pipe(Effect.map((items) => items.some((item) => item.name === "docs"))),
               )
@@ -69,11 +96,20 @@ describe("config plugin reloads", () => {
                 references.list().pipe(Effect.map((items) => items.length === 1 && items[0]?.name === "next")),
               )
 
-              yield* Effect.promise(() => fs.rm(target))
+              yield* Effect.promise(() =>
+                fs.rm(file.includes(".opencode/") ? path.dirname(target) : target, { recursive: true }),
+              )
               yield* waitUntil(references.list().pipe(Effect.map((items) => items.length === 0)))
-              yield* Effect.promise(() => fs.writeFile(target, JSON.stringify({ references: { docs: "./docs" } })))
+              yield* Effect.promise(async () => {
+                await fs.mkdir(path.dirname(target), { recursive: true })
+                await fs.writeFile(target, JSON.stringify({ references: { docs: "./docs" } }))
+              })
               yield* waitUntil(
                 references.list().pipe(Effect.map((items) => items.length === 1 && items[0]?.name === "docs")),
+              )
+              yield* Effect.promise(() => fs.writeFile(target, JSON.stringify({ references: { next: "./next" } })))
+              yield* waitUntil(
+                references.list().pipe(Effect.map((items) => items.length === 1 && items[0]?.name === "next")),
               )
             }).pipe(
               Effect.provide(
