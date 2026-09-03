@@ -67,7 +67,7 @@ export default function Layout(props: ParentProps) {
               class="relative flex h-full min-h-0 shrink-0 flex-col bg-v2-background-bg-deep px-2.5 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
               style={{
                 width: `${state.tabsWidth}px`,
-                "padding-bottom": "max(8px, env(safe-area-inset-bottom, 0px))",
+                "padding-bottom": "max(10px, env(safe-area-inset-bottom, 0px))",
               }}
             >
               <ResizeHandle

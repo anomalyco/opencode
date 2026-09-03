@@ -231,6 +231,92 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabB).toBeVisible()
 })
 
+for (const direction of ["ltr", "rtl"]) {
+  test(`vertical tabs keep Settings pinned while scrolling in ${direction}`, async ({ page }, testInfo) => {
+    await mockServer(page)
+    await page.addInitScript(
+      ({ server, sessionA, sessionB, directory }) => {
+        localStorage.setItem("settings.v3", JSON.stringify({ appearance: { tabLayout: "vertical" } }))
+        localStorage.setItem(
+          "opencode.window.browser.dat:tabs",
+          JSON.stringify([
+            { type: "session", server, sessionId: sessionA },
+            ...Array.from({ length: 24 }, (_, index) => ({
+              type: "draft",
+              server,
+              directory,
+              draftID: `draft_scroll_${index}`,
+            })),
+            { type: "session", server, sessionId: sessionB },
+          ]),
+        )
+      },
+      { server, sessionA: sessionA.id, sessionB: sessionB.id, directory: sessionA.directory },
+    )
+    await page.goto("/")
+
+    const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+    const settings = sidebar.getByRole("button", { name: "Settings", exact: true })
+    const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
+    const hrefB = `/server/${base64Encode(server)}/session/${sessionB.id}`
+    const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${hrefB}"]`)
+    await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
+    await expect(settings).toHaveText("Settings")
+    await page.evaluate((direction) => document.documentElement.setAttribute("dir", direction), direction)
+
+    for (const width of [1280, 800]) {
+      await page.setViewportSize({ width, height: 360 })
+      await expect(settings).toBeInViewport({ ratio: 1 })
+      await expect(sidebar).toHaveCSS("padding-inline-start", "10px")
+      await expect(sidebar).toHaveCSS("padding-bottom", "10px")
+      await expect(settings).toHaveCSS("margin-top", "8px")
+      await expect
+        .poll(() =>
+          sidebar.locator('[data-slot="vertical-tabs-footer"]').evaluate((element) => {
+            const content = Math.max(
+              0,
+              ...Array.from(element.children, (child) => child.getBoundingClientRect().height),
+            )
+            return element.getBoundingClientRect().height - content
+          }),
+        )
+        .toBe(0)
+      await expect(scroll).toHaveCSS("mask-image", /linear-gradient/)
+      await scroll.evaluate((element) => element.scrollTo(0, 0))
+      await expect(scroll).toHaveJSProperty("scrollTop", 0)
+      const pinned = await settings.boundingBox()
+      await scroll.hover()
+      await page.mouse.wheel(0, 200)
+      await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      await expect.poll(() => settings.boundingBox()).toEqual(pinned)
+      await testInfo.attach(`vertical-tabs-settings-${width}`, {
+        body: await sidebar.screenshot(),
+        contentType: "image/png",
+      })
+
+      await scroll.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+      await expect(tabB).toBeInViewport({ ratio: 1 })
+      await expect
+        .poll(async () => {
+          const tab = await tabB.boundingBox()
+          const viewport = await scroll.boundingBox()
+          return !!tab && !!viewport && tab.y + tab.height <= viewport.y + viewport.height - 16
+        })
+        .toBe(true)
+      await expect.poll(() => settings.boundingBox()).toEqual(pinned)
+    }
+
+    await settings.click()
+    await expect(page.getByTestId("settings-screen")).toBeVisible()
+    await expect(settings).toHaveAttribute("aria-pressed", "true")
+    await sidebar.getByRole("button", { name: "Home", exact: true }).click()
+    await expect(page.getByTestId("settings-screen")).toBeHidden()
+    await settings.focus()
+    await settings.press("Enter")
+    await expect(page.getByTestId("settings-screen")).toBeVisible()
+  })
+}
+
 test("appearance experimental settings control vertical tab details", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
