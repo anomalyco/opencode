@@ -156,7 +156,18 @@ export const AssistantReasoning = Schema.Struct({
   }).pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Reasoning" })
 
-export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
+export interface AssistantLog extends Schema.Schema.Type<typeof AssistantLog> {}
+export const AssistantLog = Schema.Struct({
+  type: Schema.Literal("log"),
+  id: Schema.String,
+  text: Schema.String,
+  time: Schema.Struct({
+    created: DateTimeUtcFromMillis,
+    completed: DateTimeUtcFromMillis.pipe(optional),
+  }).pipe(optional),
+}).annotate({ identifier: "Session.Message.Assistant.Log" })
+
+export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantLog, AssistantTool]).pipe(
   Schema.toTaggedUnion("type"),
 )
 export type AssistantContent = AssistantText | AssistantReasoning | AssistantTool

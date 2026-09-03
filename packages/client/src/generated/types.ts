@@ -666,6 +666,12 @@ export type SessionsContextOutput = {
               readonly time?: { readonly created: number; readonly completed?: number }
             }
           | {
+              readonly type: "log"
+              readonly id: string
+              readonly text: string
+              readonly time?: { readonly created: number; readonly completed?: number }
+            }
+          | {
               readonly type: "tool"
               readonly id: string
               readonly name: string
@@ -1111,6 +1117,20 @@ export type SessionsHistoryOutput = {
           readonly reasoningID: string
           readonly text: string
           readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: JsonValue } }
+        }
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly type: "session.next.log.ended"
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+        readonly location?: { readonly directory: string; readonly workspaceID?: string }
+        readonly data: {
+          readonly timestamp: number
+          readonly sessionID: string
+          readonly assistantMessageID: string
+          readonly logID: string
+          readonly text: string
         }
       }
     | {
@@ -1574,6 +1594,20 @@ export type SessionsEventsOutput =
   | {
       readonly id: string
       readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.next.log.ended"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly timestamp: number
+        readonly sessionID: string
+        readonly assistantMessageID: string
+        readonly logID: string
+        readonly text: string
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.next.retried"
       readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
@@ -1741,6 +1775,12 @@ export type SessionsMessageOutput = {
               readonly id: string
               readonly text: string
               readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: JsonValue } }
+              readonly time?: { readonly created: number; readonly completed?: number }
+            }
+          | {
+              readonly type: "log"
+              readonly id: string
+              readonly text: string
               readonly time?: { readonly created: number; readonly completed?: number }
             }
           | {
@@ -1913,6 +1953,12 @@ export type MessagesListOutput = {
               readonly id: string
               readonly text: string
               readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: JsonValue } }
+              readonly time?: { readonly created: number; readonly completed?: number }
+            }
+          | {
+              readonly type: "log"
+              readonly id: string
+              readonly text: string
               readonly time?: { readonly created: number; readonly completed?: number }
             }
           | {

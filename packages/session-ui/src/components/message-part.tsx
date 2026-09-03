@@ -1773,6 +1773,40 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   )
 }
 
+PART_MAPPING["log"] = function LogPartDisplay(props) {
+  const data = useData()
+  const i18n = useI18n()
+  const part = () => props.part as unknown as { type: "log"; id: string; text: string }
+  const text = () => readPartText(data.store.part_text_accum_delta, part())
+  const heading = () => {
+    const value = text()?.trim().split("\n")[0] ?? ""
+    return value.length > 80 ? `${value.slice(0, 80)}…` : value
+  }
+
+  return (
+    <Show when={text()}>
+      <div data-component="log-part" data-timeline-part-id={part().id}>
+        <Accordion multiple style={{ "--sticky-accordion-offset": "44px" }}>
+          <Accordion.Item value={part().id}>
+            <StickyAccordionHeader>
+              <Accordion.Trigger>
+                <div data-slot="log-trigger-content">
+                  <Icon name="console" size="small" />
+                  <span data-slot="log-label">{i18n.t("ui.messagePart.log")}</span>
+                  <span data-slot="log-heading">{heading()}</span>
+                </div>
+              </Accordion.Trigger>
+            </StickyAccordionHeader>
+            <Accordion.Content>
+              <pre data-slot="log-text">{text()}</pre>
+            </Accordion.Content>
+          </Accordion.Item>
+        </Accordion>
+      </div>
+    </Show>
+  )
+}
+
 ToolRegistry.register({
   name: "read",
   render(props) {

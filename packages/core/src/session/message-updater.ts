@@ -371,6 +371,20 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
+      "session.next.log.ended": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.content.push(
+            castDraft(
+              SessionMessage.AssistantLog.make({
+                type: "log",
+                id: event.data.logID,
+                text: event.data.text,
+                time: { created: event.data.timestamp },
+              }),
+            ),
+          )
+        })
+      },
       "session.next.retried": () => Effect.void,
       "session.next.compaction.started": () => Effect.void,
       "session.next.compaction.delta": () => Effect.void,

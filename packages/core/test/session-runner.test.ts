@@ -539,7 +539,7 @@ const verifyPartialFlushOnFailure = (kind: FragmentKind) =>
         type: "assistant",
         finish: "error",
         error: { type: "unknown", message: "Provider unavailable" },
-        content: [fixture.expectedContent],
+        content: [fixture.expectedContent, { type: "log", text: "Provider unavailable" }],
       },
     ])
   })
@@ -571,6 +571,7 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
           kind === "tool input"
             ? { type: "tool", id: fragmentID(kind, "interrupted"), state: { status: "error" } }
             : fixture.expectedContent,
+          { type: "log", text: "Provider turn interrupted" },
         ],
       },
     ])
@@ -2958,6 +2959,7 @@ describe("SessionRunnerLLM", () => {
           type: "assistant",
           content: [
             { type: "tool", id: "call-before-failure", state: { status: "completed", structured: { text: "settle" } } },
+            { type: "log", text: "Provider unavailable" },
           ],
         },
       ])
@@ -2996,6 +2998,7 @@ describe("SessionRunnerLLM", () => {
               id: "call-before-interrupt",
               state: { status: "error", error: { type: "unknown", message: "Tool execution interrupted" } },
             },
+            { type: "log", text: "Provider turn interrupted" },
           ],
         },
       ])
@@ -3004,7 +3007,13 @@ describe("SessionRunnerLLM", () => {
 
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Interrupt blocked tool" },
-        { type: "assistant", content: [{ type: "tool", id: "call-before-interrupt", state: { status: "error" } }] },
+        {
+          type: "assistant",
+          content: [
+            { type: "tool", id: "call-before-interrupt", state: { status: "error" } },
+            { type: "log", text: "Provider turn interrupted" },
+          ],
+        },
       ])
       requests.length = 0
       responseStream = undefined
@@ -3238,7 +3247,7 @@ describe("SessionRunnerLLM", () => {
           type: "assistant",
           finish: "error",
           error: { message: "prompt too long" },
-          content: [{ type: "text", text: "Partial" }],
+          content: [{ type: "text", text: "Partial" }, { type: "log", text: "prompt too long" }],
         },
       ])
     }),
@@ -3311,7 +3320,10 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Fail hosted tool durably" },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "call-hosted-provider-error", state: { status: "error" } }],
+          content: [
+            { type: "tool", id: "call-hosted-provider-error", state: { status: "error" } },
+            { type: "log", text: "Provider unavailable" },
+          ],
         },
       ])
     }),
@@ -3373,7 +3385,10 @@ describe("SessionRunnerLLM", () => {
           type: "assistant",
           finish: "error",
           error: { type: "unknown", message: "Provider unavailable" },
-          content: [{ type: "tool", id: "call-hosted-raw-failure", state: { status: "error" } }],
+          content: [
+            { type: "tool", id: "call-hosted-raw-failure", state: { status: "error" } },
+            { type: "log", text: "Provider unavailable" },
+          ],
         },
       ])
     }),

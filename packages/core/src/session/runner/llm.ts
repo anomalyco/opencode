@@ -118,6 +118,7 @@ const layer = Layer.effect(
     const preActionProjection = reflectiveReasoning?.preActionProjection ?? true
     const reflectionTimeout = Duration.millis(reflectiveReasoning?.reflectionTimeoutMs ?? 120_000)
     const streamIdleTimeout = Duration.millis(Config.latest(configEntries, "stream_idle_timeout_ms") ?? 300_000)
+    const streamIdleGapThreshold = 5_000
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -354,10 +355,21 @@ const layer = Layer.effect(
       }
 
       let overflowFailure: ProviderErrorEvent | undefined
+      let lastProviderEventAt = 0
       const providerStream = llm.stream(request).pipe(
         Stream.timeout(streamIdleTimeout),
         Stream.runForEach((event) =>
           Effect.gen(function* () {
+            const now = DateTime.toEpochMillis(yield* DateTime.now)
+            if (lastProviderEventAt !== 0) {
+              const gap = now - lastProviderEventAt
+              if (gap > streamIdleGapThreshold) {
+                const message = `Provider stream gap of ${Math.round(gap / 1000)}s between events; possible dropped packet or network delay`
+                yield* Effect.logWarning(message)
+                yield* withPublication(publisher.appendLog(message))
+              }
+            }
+            lastProviderEventAt = now
             if (overflowFailure || publisher.hasProviderError()) return
             if (LLMEvent.is.providerError(event)) {
               if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
@@ -488,8 +500,14 @@ const layer = Layer.effect(
           }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
-          if (stream._tag === "Success" && !publisher.hasProviderError())
+          if (stream._tag === "Success" && !publisher.hasProviderError()) {
+            if (!publisher.hasStepFinish() && publisher.hasProducedText()) {
+              const message = "Provider stream ended without a step-finish event; the response was truncated (dropped packets)"
+              yield* Effect.logWarning(message)
+              yield* withPublication(publisher.failAssistant(message))
+            }
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+          }
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)

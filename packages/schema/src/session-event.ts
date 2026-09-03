@@ -431,6 +431,20 @@ export namespace Compaction {
   export type Ended = typeof Ended.Type
 }
 
+export namespace Log {
+  export const Ended = Event.define({
+    type: "session.next.log.ended",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+      logID: Schema.String,
+      text: Schema.String,
+    },
+  })
+  export type Ended = typeof Ended.Type
+}
+
 export namespace ReasoningCycle {
   export const Fired = Event.define({
     // Diagnostic bookkeeping published per reflection-loop pass and dismissed by
@@ -491,6 +505,7 @@ export const DurableDefinitions = Event.inventory(
   Tool.Failed,
   Reasoning.Started,
   Reasoning.Ended,
+  Log.Ended,
   Retried,
   Compaction.Started,
   Compaction.Ended,
@@ -518,6 +533,7 @@ export const Definitions = Event.inventory(
   Reasoning.Started,
   Reasoning.Delta,
   Reasoning.Ended,
+  Log.Ended,
   Tool.Input.Started,
   Tool.Input.Delta,
   Tool.Input.Ended,
