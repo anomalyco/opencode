@@ -242,6 +242,125 @@ test("bootstraps MCP data for the TUI location", async () => {
   }
 })
 
+test("does not report failed resource syncs as missing locations and retries after reconnecting", async () => {
+  const events = createEventStream()
+  let modelRequests = 0
+  let fail = false
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/model") return
+    modelRequests++
+    if (fail) return json({ message: "server restarting" }, { status: 503 })
+    return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+  }, events)
+  let location!: ReturnType<typeof useLocation>
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    location = useLocation()
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <DataProvider>
+          <Probe />
+        </DataProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => modelRequests === 1)
+    await Bun.sleep(30)
+    fail = true
+    data.location.invalidate()
+    location.set({ directory })
+    await wait(() => modelRequests === 2)
+    await Bun.sleep(30)
+    expect(location.error).toBeUndefined()
+
+    fail = false
+    events.disconnect()
+    await wait(() => modelRequests === 3)
+    expect(location.error).toBeUndefined()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("does not report transport failures as missing locations", async () => {
+  const events = createEventStream()
+  const unavailable = `${directory}/unavailable`
+  let requests = 0
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/location" || url.searchParams.get("location[directory]") !== unavailable) return undefined
+    requests++
+    throw new Error("server restarting")
+  }, events)
+  let location!: ReturnType<typeof useLocation>
+
+  function Probe() {
+    location = useLocation()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <DataProvider>
+          <Probe />
+        </DataProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => location.current !== undefined)
+    location.set({ directory: unavailable })
+    await wait(() => requests > 0)
+    await Bun.sleep(30)
+    expect(location.error).toBeUndefined()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("still reports failures from the location lookup itself", async () => {
+  const events = createEventStream()
+  const missing = `${directory}/missing`
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/location" || url.searchParams.get("location[directory]") !== missing) return
+    return json({ message: "directory does not exist" }, { status: 500 })
+  }, events)
+  let location!: ReturnType<typeof useLocation>
+
+  function Probe() {
+    location = useLocation()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <DataProvider>
+          <Probe />
+        </DataProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => location.current !== undefined)
+    location.set({ directory: missing })
+    await wait(() => location.error !== undefined)
+    expect(location.error?.location.directory).toBe(missing)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("syncs MCP status when a connection settles during bootstrap", async () => {
   const events = createEventStream()
   let mcpRequests = 0

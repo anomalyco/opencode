@@ -1,4 +1,4 @@
-import type { LocationGetOutput, LocationRef } from "@opencode-ai/client"
+import { ClientError, type LocationGetOutput, type LocationRef } from "@opencode-ai/client"
 import { createContext, createMemo, createSignal, onCleanup, useContext, type ParentProps } from "solid-js"
 import { useClient } from "./client"
 import { useData } from "./data"
@@ -28,16 +28,21 @@ export function LocationProvider(props: ParentProps) {
         ? undefined
         : location
     setError(undefined)
-    void data.location.sync(target).catch((cause) => {
-      const current = ref()
-      if (
-        generation !== attempt ||
-        current?.directory !== location.directory ||
-        current.workspaceID !== location.workspaceID
-      )
-        return
-      setError({ location, cause })
-    })
+    void data.location
+      .syncInfo(target)
+      .then(() => data.location.sync(target).catch(() => undefined))
+      .catch((cause) => {
+        const current = ref()
+        if (
+          generation !== attempt ||
+          current?.directory !== location.directory ||
+          current.workspaceID !== location.workspaceID ||
+          client.connection.status() !== "connected" ||
+          (cause instanceof ClientError && cause.reason === "Transport")
+        )
+          return
+        setError({ location, cause })
+      })
   }
 
   function set(location?: LocationRef) {
