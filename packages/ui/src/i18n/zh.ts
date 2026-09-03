@@ -48,10 +48,8 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "无法显示 {{path}}，因为它是二进制文件。",
   "ui.fileMedia.binary.description.default": "无法显示此文件，因为它是二进制文件。",
 
-  "ui.lineComment.label.prefix": "评论",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "正在评论",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "评论{{selection}}",
+  "ui.lineComment.editorLabel": "正在评论{{selection}}",
   "ui.lineComment.placeholder": "添加评论",
   "ui.lineComment.contextPlaceholder": "添加此更改的上下文",
   "ui.lineComment.submit": "发布评论",
@@ -112,8 +110,7 @@ export const dict = {
   "ui.list.loading": "加载中",
   "ui.list.empty": "无结果",
   "ui.list.clearFilter": "清除筛选",
-  "ui.list.emptyWithFilter.prefix": "没有关于",
-  "ui.list.emptyWithFilter.suffix": "的结果",
+  "ui.list.emptyWithFilter": "没有关于{{query}}的结果",
 
   "ui.messageNav.newMessage": "新消息",
 

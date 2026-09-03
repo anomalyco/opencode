@@ -48,10 +48,8 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "無法顯示 {{path}}，因為它是二進位檔案。",
   "ui.fileMedia.binary.description.default": "無法顯示此檔案，因為它是二進位檔案。",
 
-  "ui.lineComment.label.prefix": "留言於 ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "正在留言於 ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "留言於 {{selection}}",
+  "ui.lineComment.editorLabel": "正在留言於 {{selection}}",
   "ui.lineComment.placeholder": "新增留言",
   "ui.lineComment.contextPlaceholder": "新增此變更的相關資訊",
   "ui.lineComment.submit": "留言",
@@ -112,8 +110,7 @@ export const dict = {
   "ui.list.loading": "載入中",
   "ui.list.empty": "無結果",
   "ui.list.clearFilter": "清除篩選",
-  "ui.list.emptyWithFilter.prefix": "沒有關於",
-  "ui.list.emptyWithFilter.suffix": "的結果",
+  "ui.list.emptyWithFilter": "沒有關於{{query}}的結果",
 
   "ui.messageNav.newMessage": "新訊息",
 

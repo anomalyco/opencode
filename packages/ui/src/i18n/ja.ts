@@ -44,10 +44,8 @@ export const dict = {
   "ui.fileMedia.binary.title": "バイナリファイル",
   "ui.fileMedia.binary.description.path": "{{path}} はバイナリファイルのため表示できません。",
   "ui.fileMedia.binary.description.default": "このファイルはバイナリファイルのため表示できません。",
-  "ui.lineComment.label.prefix": "",
-  "ui.lineComment.label.suffix": "へのコメント",
-  "ui.lineComment.editorLabel.prefix": "",
-  "ui.lineComment.editorLabel.suffix": "へのコメントを作成中",
+  "ui.lineComment.label": "{{selection}}へのコメント",
+  "ui.lineComment.editorLabel": "{{selection}}へのコメントを作成中",
   "ui.lineComment.placeholder": "コメントを追加",
   "ui.lineComment.contextPlaceholder": "この変更に関するコンテキストを追加",
   "ui.lineComment.submit": "コメント",
@@ -109,8 +107,7 @@ export const dict = {
   "ui.list.loading": "読み込み中",
   "ui.list.empty": "結果なし",
   "ui.list.clearFilter": "フィルターをクリア",
-  "ui.list.emptyWithFilter.prefix": "次の検索結果はありません: ",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "次の検索結果はありません: {{query}}",
 
   "ui.messageNav.newMessage": "新しいメッセージ",
 

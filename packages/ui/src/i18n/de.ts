@@ -51,10 +51,8 @@ export const dict = {
     "{{path}} kann nicht angezeigt werden, da es sich um eine Binärdatei handelt.",
   "ui.fileMedia.binary.description.default":
     "Diese Datei kann nicht angezeigt werden, da es sich um eine Binärdatei handelt.",
-  "ui.lineComment.label.prefix": "Kommentar zu ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Kommentiere ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Kommentar zu {{selection}}",
+  "ui.lineComment.editorLabel": "Kommentiere {{selection}}",
   "ui.lineComment.placeholder": "Kommentar hinzufügen",
   "ui.lineComment.submit": "Kommentieren",
   "ui.lineComment.cancel": "Abbrechen",
@@ -115,8 +113,7 @@ export const dict = {
   "ui.list.loading": "Laden",
   "ui.list.empty": "Keine Ergebnisse",
   "ui.list.clearFilter": "Filter löschen",
-  "ui.list.emptyWithFilter.prefix": "Keine Ergebnisse für",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Keine Ergebnisse für{{query}}",
 
   "ui.messageNav.newMessage": "Neue Nachricht",
 

@@ -167,6 +167,23 @@ describe("i18n parity", () => {
       }
     }
   })
+
+  test("UI rich templates keep exactly one typed slot", async () => {
+    const expected = {
+      "ui.lineComment.label": "selection",
+      "ui.lineComment.editorLabel": "selection",
+      "ui.list.emptyWithFilter": "query",
+    } as const
+    const legacy = Object.keys(expected).flatMap((key) => [`${key}.prefix`, `${key}.suffix`])
+
+    for (const locale of ["en", ...appLocales]) {
+      const target = await dictionary(`../../../ui/src/i18n/${locale}.ts`)
+      for (const [key, slot] of Object.entries(expected)) {
+        expect({ locale, key, placeholders: placeholders(target[key]) }).toEqual({ locale, key, placeholders: [slot] })
+      }
+      expect({ locale, legacy: legacy.filter((key) => Object.hasOwn(target, key)) }).toEqual({ locale, legacy: [] })
+    }
+  })
 })
 
 describe("i18n plural parity", () => {

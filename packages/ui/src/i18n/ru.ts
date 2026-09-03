@@ -44,10 +44,8 @@ export const dict = {
   "ui.fileMedia.binary.title": "Двоичный файл",
   "ui.fileMedia.binary.description.path": "Невозможно отобразить {{path}}, так как это двоичный файл.",
   "ui.fileMedia.binary.description.default": "Невозможно отобразить этот файл, так как он двоичный.",
-  "ui.lineComment.label.prefix": "Комментарий к ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Комментирование: ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Комментарий к {{selection}}",
+  "ui.lineComment.editorLabel": "Комментирование: {{selection}}",
   "ui.lineComment.placeholder": "Добавить комментарий",
   "ui.lineComment.contextPlaceholder": "Добавить контекст для этого изменения",
   "ui.lineComment.submit": "Добавить комментарий",
@@ -117,8 +115,7 @@ export const dict = {
   "ui.list.loading": "Загрузка",
   "ui.list.empty": "Нет результатов",
   "ui.list.clearFilter": "Очистить фильтр",
-  "ui.list.emptyWithFilter.prefix": "Нет результатов для",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Нет результатов для{{query}}",
 
   "ui.messageNav.newMessage": "Новое сообщение",
 

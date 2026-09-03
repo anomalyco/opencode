@@ -44,10 +44,8 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "{{path}} عبارة عن ملف ثنائي ولا يمكن عرضه.",
   "ui.fileMedia.binary.description.default": "هذا ملف ثنائي ولا يمكن عرضه.",
 
-  "ui.lineComment.label.prefix": "تعليق على ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "جارٍ التعليق على ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "تعليق على {{selection}}",
+  "ui.lineComment.editorLabel": "جارٍ التعليق على {{selection}}",
   "ui.lineComment.placeholder": "أضف تعليقًا",
   "ui.lineComment.contextPlaceholder": "أضف سياقًا لهذا التغيير",
   "ui.lineComment.submit": "تعليق",
@@ -126,8 +124,7 @@ export const dict = {
   "ui.list.loading": "جارٍ التحميل",
   "ui.list.empty": "لا توجد نتائج",
   "ui.list.clearFilter": "مسح عامل التصفية",
-  "ui.list.emptyWithFilter.prefix": "لا توجد نتائج لـ",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "لا توجد نتائج لـ{{query}}",
 
   "ui.messageNav.newMessage": "رسالة جديدة",
 

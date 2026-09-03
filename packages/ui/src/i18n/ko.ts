@@ -26,10 +26,8 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "{{path}}은(는) 바이너리 파일이므로 표시할 수 없습니다.",
   "ui.fileMedia.binary.description.default": "바이너리 파일이므로 표시할 수 없습니다.",
 
-  "ui.lineComment.label.prefix": "",
-  "ui.lineComment.label.suffix": "에 댓글 달기",
-  "ui.lineComment.editorLabel.prefix": "",
-  "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
+  "ui.lineComment.label": "{{selection}}에 댓글 달기",
+  "ui.lineComment.editorLabel": "{{selection}}에 댓글 작성 중",
   "ui.lineComment.placeholder": "댓글 추가",
   "ui.lineComment.contextPlaceholder": "이 변경 사항에 대한 컨텍스트 추가",
   "ui.lineComment.submit": "댓글 달기",
@@ -86,8 +84,7 @@ export const dict = {
   "ui.list.loading": "로딩 중",
   "ui.list.empty": "결과 없음",
   "ui.list.clearFilter": "필터 지우기",
-  "ui.list.emptyWithFilter.prefix": "다음에 대한 결과 없음: ",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "다음에 대한 결과 없음: {{query}}",
 
   "ui.messageNav.newMessage": "새 메시지",
 

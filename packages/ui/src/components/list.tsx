@@ -247,16 +247,9 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     const query = filter()
     if (!query) return i18n.t("ui.list.empty")
 
-    const suffix = i18n.t("ui.list.emptyWithFilter.suffix")
-    return (
-      <>
-        <span>{i18n.t("ui.list.emptyWithFilter.prefix")}</span>
-        <span data-slot="list-filter">&quot;{query}&quot;</span>
-        <Show when={suffix}>
-          <span>{suffix}</span>
-        </Show>
-      </>
-    )
+    return i18n.parts("ui.list.emptyWithFilter", {
+      query: <span data-slot="list-filter">&quot;{query}&quot;</span>,
+    })
   }
 
   return (

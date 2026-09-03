@@ -44,10 +44,8 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "{{path}} เป็นไฟล์ไบนารีและไม่สามารถแสดงผลได้",
   "ui.fileMedia.binary.description.default": "ไฟล์ไบนารีไม่สามารถแสดงผลได้",
 
-  "ui.lineComment.label.prefix": "แสดงความคิดเห็นที่ ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "กำลังแสดงความคิดเห็นที่ ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "แสดงความคิดเห็นที่ {{selection}}",
+  "ui.lineComment.editorLabel": "กำลังแสดงความคิดเห็นที่ {{selection}}",
   "ui.lineComment.placeholder": "เพิ่มความคิดเห็น",
   "ui.lineComment.contextPlaceholder": "เพิ่มบริบทสำหรับการเปลี่ยนแปลงนี้",
   "ui.lineComment.submit": "แสดงความคิดเห็น",
@@ -110,8 +108,7 @@ export const dict = {
   "ui.list.loading": "กำลังโหลด",
   "ui.list.empty": "ไม่มีผลลัพธ์",
   "ui.list.clearFilter": "ล้างตัวกรอง",
-  "ui.list.emptyWithFilter.prefix": "ไม่มีผลลัพธ์สำหรับ",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "ไม่มีผลลัพธ์สำหรับ{{query}}",
 
   "ui.messageNav.newMessage": "ข้อความใหม่",
 
