@@ -9,8 +9,8 @@ export type SessionMutationClient = {
   session: {
     update(input: { sessionID: string; title?: string; directory?: string; time?: { archived: number } }): Promise<unknown>
     delete(input: { sessionID: string; directory: string }): Promise<unknown>
-    share(input: { sessionID: string }): Promise<{ data?: { share?: { url?: string } } | null }>
-    unshare(input: { sessionID: string }): Promise<unknown>
+    share(input: { sessionID: string }): Promise<{ data?: Session | null }>
+    unshare(input: { sessionID: string }): Promise<{ data?: Session | null }>
   }
 }
 
@@ -76,10 +76,10 @@ export function createSessionMutation(input: { client: SessionMutationClient; se
       return ids
     },
     async publish(session: Session) {
-      const url = (await input.client.session.share({ sessionID: session.id })).data?.share?.url
-      if (!url) throw new Error("Session share URL missing")
-      applySession(input.serverSync, { ...session, share: { url } })
-      return url
+      const data = (await input.client.session.share({ sessionID: session.id })).data
+      const url = data?.share?.url
+      if (!data || !url) throw new Error("Session share URL missing")
+      return applySession(input.serverSync, data).share!.url
     },
     async unpublish(session: Session) {
       await input.client.session.unshare({ sessionID: session.id })

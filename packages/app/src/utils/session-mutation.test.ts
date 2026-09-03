@@ -18,9 +18,10 @@ function fixture(input: { fail?: boolean; shareURL?: string } = {}) {
       delete: async () => {
         if (input.fail) throw new Error("failed")
       },
-      share: async () => ({ data: input.shareURL ? { share: { url: input.shareURL } } : undefined }),
+      share: async () => ({ data: input.shareURL ? { ...session, share: { url: input.shareURL } } : undefined }),
       unshare: async () => {
         if (input.fail) throw new Error("failed")
+        return { data: { ...session, share: undefined } }
       },
     },
   }
