@@ -1878,7 +1878,12 @@ const layer = Layer.effect(
         return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
       }
 
-      const info = provider.models[modelID]
+      // Some catalogs publish model IDs that repeat the provider name, so the registry key
+      // is e.g. `nvidia/nemotron-3-ultra-550b-a55b` under provider `nvidia`. `parseModel`
+      // splits a ref on its first slash, so the natural `<provider>/<model>` form drops the
+      // repeated segment and misses the key. Restore it once before giving up, which also
+      // stops the suggester from echoing the requested ref back as a "did you mean".
+      const info = provider.models[modelID] ?? provider.models[`${providerID}/${modelID}`]
       if (!info) {
         const current = modelSuggestions(provider, modelID, runtimeFlags.enableExperimentalModels)
         const suggestions = current.length
