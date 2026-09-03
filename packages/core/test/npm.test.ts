@@ -22,6 +22,15 @@ const writePackage = (dir: string, pkg: Record<string, unknown>) =>
 const npmLayer = (cache: string) =>
   AppNodeBuilder.build(Npm.node, [Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") }))])
 
+// Keep local installs independent of the public npm security-audit endpoint.
+async function disableAudit(cache: string, ...specs: string[]) {
+  for (const spec of specs) {
+    const root = path.join(cache, "npm", await Npm.cacheKey(spec))
+    await fs.mkdir(root, { recursive: true })
+    await Bun.write(path.join(root, ".npmrc"), "audit=false\n")
+  }
+}
+
 async function createGitFixture(directory: string) {
   const repository = path.join(directory, "repository")
   await fs.mkdir(path.join(repository, "dependency"), { recursive: true })
@@ -202,7 +211,7 @@ describe("Npm.add", () => {
     await Bun.write(path.join(tmp.path, "fixture-provider", "tui.js"), "export const tui = true\n")
 
     const spec = `fixture-provider@file:${path.join(tmp.path, "fixture-provider")}`
-    await fs.mkdir(path.join(tmp.path, "cache", "npm", Npm.sanitize(spec)), { recursive: true })
+    await disableAudit(path.join(tmp.path, "cache"), spec)
 
     const entries = await Effect.gen(function* () {
       const npm = yield* Npm.Service
@@ -223,6 +232,7 @@ describe("Npm.add", () => {
       kind === "unnamed"
         ? `git+file://${fixture.repository}#${fixture.commit}`
         : `fixture-named-plugin@git+file://${fixture.repository}#fixture-branch`
+    await disableAudit(path.join(tmp.path, "cache"), spec)
 
     const entries = await Effect.gen(function* () {
       const npm = yield* Npm.Service
@@ -248,6 +258,7 @@ describe("Npm.add", () => {
     await using tmp = await tmpdir()
     const fixture = await createGitFixture(tmp.path)
     const spec = `git+file://${fixture.repository}#${fixture.commit}::path:packages/subdirectory-plugin`
+    await disableAudit(path.join(tmp.path, "cache"), spec)
     const entry = await Effect.gen(function* () {
       const npm = yield* Npm.Service
       return yield* npm.add(spec)
@@ -268,6 +279,7 @@ describe("Npm.add", () => {
     const repository = pathToFileURL(fixture.repository).href
     const mutable = `git+${repository}#fixture-branch`
     const pinned = `git+${repository}#${fixture.commit}`
+    await disableAudit(cache, mutable, pinned)
 
     const result = await Effect.gen(function* () {
       const npm = yield* Npm.Service
@@ -304,29 +316,34 @@ describe("Npm.add", () => {
   }, 30_000)
 
   // Symlink creation needs elevated privileges on Windows.
-  test.skipIf(win)("records Git revisions when the cache directory is reached through a symlink", async () => {
-    await using tmp = await tmpdir()
-    const fixture = await createGitFixture(tmp.path)
-    await fs.mkdir(path.join(tmp.path, "cache"))
-    await fs.symlink(path.join(tmp.path, "cache"), path.join(tmp.path, "link"))
-    const mutable = `git+${pathToFileURL(fixture.repository).href}#fixture-branch`
+  test.skipIf(win)(
+    "records Git revisions when the cache directory is reached through a symlink",
+    async () => {
+      await using tmp = await tmpdir()
+      const fixture = await createGitFixture(tmp.path)
+      await fs.mkdir(path.join(tmp.path, "cache"))
+      await fs.symlink(path.join(tmp.path, "cache"), path.join(tmp.path, "link"))
+      const mutable = `git+${pathToFileURL(fixture.repository).href}#fixture-branch`
+      await disableAudit(path.join(tmp.path, "link"), mutable)
 
-    const result = await Effect.gen(function* () {
-      const npm = yield* Npm.Service
-      const added = yield* npm.add(mutable)
-      const current = yield* npm.check(mutable)
-      yield* Effect.promise(async () => {
-        await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
-        await Bun.$`git -C ${fixture.repository} add .`
-        await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
-      })
-      return { added, current, outdated: yield* npm.check(mutable) }
-    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "link"))), Effect.runPromise)
+      const result = await Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        const added = yield* npm.add(mutable)
+        const current = yield* npm.check(mutable)
+        yield* Effect.promise(async () => {
+          await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
+          await Bun.$`git -C ${fixture.repository} add .`
+          await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
+        })
+        return { added, current, outdated: yield* npm.check(mutable) }
+      }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "link"))), Effect.runPromise)
 
-    expect(result.added.version).toBe(fixture.commit)
-    expect(result.current).toBeFalse()
-    expect(result.outdated).toBeTrue()
-  }, 30_000)
+      expect(result.added.version).toBe(fixture.commit)
+      expect(result.current).toBeFalse()
+      expect(result.outdated).toBeTrue()
+    },
+    30_000,
+  )
 })
 
 describe("Npm.resolve", () => {
