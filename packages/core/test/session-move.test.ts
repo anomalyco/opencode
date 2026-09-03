@@ -18,6 +18,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
@@ -25,7 +26,7 @@ import { globalProjectNode } from "./lib/project"
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
-    [Project.node.replace(globalProjectNode), SessionExecution.node.replace(SessionExecution.noopLayer)],
+    [Project.node.replace(globalProjectNode), SessionExecution.node.replace(SessionExecution.noopLayer), offlineModels],
   ),
 )
 const itWithActiveExecution = testEffect(
@@ -47,7 +48,7 @@ const itWithActiveExecution = testEffect(
             (ref: Location.Ref) =>
               Layer.merge(
                 LayerNode.compile(Location.boundNode(ref), {
-                  replacements: [Project.node.replace(globalProjectNode)],
+                  replacements: [Project.node.replace(globalProjectNode), offlineModels],
                 }),
                 Layer.succeed(SessionRunner.Service, { drain: () => Effect.never }),
               ) as unknown as Layer.Layer<LocationServices>,

@@ -24,6 +24,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions } from "./lib/tool"
 import { Database } from "../src/database/database"
@@ -34,6 +35,7 @@ import { Tool } from "../src/tool"
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
+    offlineModels,
   ]),
 )
 const activityLocations = Layer.effect(

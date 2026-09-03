@@ -14,6 +14,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Database } from "../../src/database/database"
 import { Bus } from "../../src/bus"
 import { tempGlobalLayer } from "../fixture/global"
+import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
@@ -37,6 +38,7 @@ const instances = Layer.effect(
     )
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
+      offlineModels,
       LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
       Instance.node.replace(
         Layer.succeed(Instance.Service, {
@@ -51,6 +53,7 @@ const instances = Layer.effect(
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
+    offlineModels,
     LocationServiceMap.node.replace(instances),
   ]),
 )

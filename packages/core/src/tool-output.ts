@@ -1,7 +1,7 @@
 export * as ToolOutput from "./tool-output.js"
 
 import path from "path"
-import type { Tool } from "@opencode-ai/schema/tool"
+import type { Tool } from "./tool.js"
 import { Context, Duration, Effect, Layer, Schedule } from "effect"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -15,7 +15,7 @@ export const MAX_BYTES = 50 * 1024 // 50 KiB
 export const RETENTION = Duration.days(7)
 export const DIRECTORY = "tool-output"
 
-type Result = Tool.Result
+type Result = Tool.NormalizedResult
 
 type Limits = {
   maxLines: number
@@ -64,8 +64,7 @@ const layer = Layer.effect(
 
     const truncate = Effect.fnUntraced(function* (result: Result) {
       if (result.metadata?.truncated !== undefined) return result
-      const content =
-        typeof result.content === "string" ? [{ type: "text" as const, text: result.content }] : (result.content ?? [])
+      const content = result.content
       const text = content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")
       const limits = state.get()
       const lines = text.split("\n")

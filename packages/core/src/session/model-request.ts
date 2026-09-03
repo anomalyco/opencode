@@ -53,7 +53,9 @@ export interface Prepared {
    * One request-scoped execution operation. Unknown and hook-removed calls
    * fail individually through the same seam.
    */
-  readonly executeTool: (input: Parameters<Tool.Snapshot["execute"]>[0]) => Effect.Effect<Tool.Result, ExecuteError>
+  readonly executeTool: (
+    input: Parameters<Tool.Snapshot["execute"]>[0],
+  ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
 }
 
 interface PrepareInput {

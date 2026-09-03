@@ -17,6 +17,7 @@ import { SessionEnvironment } from "@opencode-ai/core/session/environment"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
+import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 
 const closed: Session.ID[] = []
@@ -50,6 +51,7 @@ const it = testEffect(
       Project.node.replace(globalProjectNode),
       SessionExecution.node.replace(SessionExecution.noopLayer),
       SessionModelTransport.node.replace(transport),
+      offlineModels,
     ],
   ),
 )
