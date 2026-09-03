@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "Jazyk cyklu",
   "command.language.set": "Použít jazyk: {{language}}",
   "command.session.new": "Nová relace",
+  "command.session.import": "Importovat relaci",
   "command.file.open": "Otevřít soubor",
   "command.tab.close": "Zavřít kartu",
   "command.tab.reopenClosed": "Znovu otevřete zavřenou kartu",

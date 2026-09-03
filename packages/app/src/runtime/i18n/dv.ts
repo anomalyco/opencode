@@ -136,6 +136,7 @@ export const dict = {
   "command.language.cycle": "ސައިކަލް ބަސް",
   "command.language.set": "ބަސް ބޭނުންކުރުން: {{language}}",
   "command.session.new": "އާ ޖަލްސާއެއް",
+  "command.session.import": "ޖަލްސާ އިމްޕޯޓް ކުރައްވާ",
   "command.file.open": "ފައިލް ހުޅުވާލާށެވެ",
   "command.tab.close": "ޓެބް ބަންދުކުރުން",
   "command.tab.reopenClosed": "ބަންދުކޮށްފައިވާ ޓެބް އަލުން ހުޅުވާލާށެވެ",

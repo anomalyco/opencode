@@ -40,6 +40,7 @@ export const dict = {
   "command.language.cycle": "Vaihda kieltä",
   "command.language.set": "Käytä kieltä: {{language}}",
   "command.session.new": "Uusi istunto",
+  "command.session.import": "Tuo istunto",
   "command.file.open": "Avaa tiedosto",
   "command.tab.close": "Sulje välilehti",
   "command.tab.reopenClosed": "Avaa suljettu välilehti uudelleen",

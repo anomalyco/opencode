@@ -434,7 +434,7 @@ export function Titlebar(props: {
                 }}
               >
                 <Show when={!mobile() && (!props.verticalTabs || windows())}>
-                  <ChannelIndicator debugTools={props.debugTools} height={windows() ? minHeight() : undefined} />
+                  <ChannelIndicator debugTools={props.debugTools} />
                 </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
@@ -753,18 +753,23 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   )
 }
 
-function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void }; height?: string }) {
+function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void } }) {
   const platform = usePlatform()
+  const windows = () => platform.platform === "desktop" && platform.os === "windows"
+  const classes = () => ({
+    "px-2 rounded-sm": windows(),
+    "inline-flex h-4 shrink-0 items-center leading-4 px-1.5 rounded-full": !windows(),
+  })
   const style = () => ({
-    height: props.height,
-    "font-size": platform.platform === "desktop" && platform.os === "macos" ? "9px" : "10px",
+    "font-size": windows() ? undefined : platform.platform === "desktop" && platform.os === "macos" ? "9px" : "10px",
   })
   const channel = import.meta.env.VITE_OPENCODE_CHANNEL
   if (channel === "dev" && props.debugTools) {
     return (
       <button
         type="button"
-        class="inline-flex h-4 shrink-0 items-center bg-icon-interactive-base text-[#FFF] leading-4 font-medium px-1.5 rounded-full uppercase font-mono cursor-pointer [app-region:no-drag]"
+        class="bg-icon-interactive-base text-[#FFF] font-medium uppercase font-mono cursor-pointer [app-region:no-drag]"
+        classList={classes()}
         style={style()}
         onClick={props.debugTools.toggle}
         aria-label="Toggle debug tools"
@@ -780,7 +785,8 @@ function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () =
     <Show when={label}>
       {(value) => (
         <div
-          class="inline-flex h-4 shrink-0 items-center bg-icon-interactive-base text-[#FFF] leading-4 font-medium px-1.5 rounded-full uppercase font-mono"
+          class="bg-icon-interactive-base text-[#FFF] font-medium uppercase font-mono"
+          classList={classes()}
           style={style()}
         >
           {value()}

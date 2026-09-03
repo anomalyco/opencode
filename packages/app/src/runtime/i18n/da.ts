@@ -46,6 +46,7 @@ export const dict = {
   "command.language.set": "Brug sprog: {{language}}",
 
   "command.session.new": "Ny session",
+  "command.session.import": "Importer session",
   "command.file.open": "Åbn fil",
   "command.tab.close": "Luk fane",
   "command.tab.reopenClosed": "Åbn lukket fane igen",

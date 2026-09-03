@@ -139,6 +139,7 @@ export const dict = {
   "command.language.cycle": "言語の切り替え",
   "command.language.set": "言語を使用: {{language}}",
   "command.session.new": "新しいセッション",
+  "command.session.import": "セッションをインポート",
   "command.file.open": "ファイルを開く",
   "command.tab.close": "タブを閉じる",
   "command.tab.reopenClosed": "閉じたタブを再度開く",

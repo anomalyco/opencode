@@ -133,6 +133,7 @@ export const dict: Record<string, string> = {
   "command.language.cycle": "චක්‍ර භාෂාව",
   "command.language.set": "භාෂාව භාවිතා කරන්න: {{language}}",
   "command.session.new": "නව සැසිය",
+  "command.session.import": "සැසිය ආනයනය කරන්න",
   "command.file.open": "ගොනුව විවෘත කරන්න",
   "command.tab.close": "ටැබ් එක වසන්න",
   "command.tab.reopenClosed": "වසා දැමූ ටැබය නැවත විවෘත කරන්න",
