@@ -52,6 +52,7 @@ export const SettingsPluginsV2: Component<{}> = () => {
 
   const [view, setView] = createSignal<"browse" | "installed">("browse")
   const [query, setQuery] = createSignal("")
+  const [sourceFilter, setSourceFilter] = createSignal<"all" | "ecosystem" | "awesome">("all")
   const [busy, setBusy] = createSignal(false)
   const [copied, setCopied] = createSignal<string | undefined>()
   const [configsError, setConfigsError] = createSignal<string | undefined>()
@@ -103,11 +104,12 @@ export const SettingsPluginsV2: Component<{}> = () => {
   })
 
   const filtered = createMemo(() => {
+    const source = sourceFilter()
+    const base = source === "all" ? (catalog()?.entries ?? []) : (catalog()?.entries ?? []).filter((entry) => entry.source === source)
     const q = query().trim().toLowerCase()
-    const entries = catalog()?.entries ?? []
-    if (!q) return entries
+    if (!q) return base
     return fuzzysort
-      .go(q, entries, {
+      .go(q, base, {
         keys: [(entry) => entry.name, (entry) => entry.description ?? ""],
       })
       .map((result) => result.obj)
@@ -227,6 +229,29 @@ export const SettingsPluginsV2: Component<{}> = () => {
         </div>
         <Show when={view() === "browse"}>
           <div class="settings-v2-tab-search">
+            <div class="flex items-center gap-2">
+              <ButtonV2
+                size="normal"
+                variant={sourceFilter() === "all" ? "neutral" : "ghost-muted"}
+                onClick={() => setSourceFilter("all")}
+              >
+                {language.t("settings.plugins.source.all")}
+              </ButtonV2>
+              <ButtonV2
+                size="normal"
+                variant={sourceFilter() === "ecosystem" ? "neutral" : "ghost-muted"}
+                onClick={() => setSourceFilter("ecosystem")}
+              >
+                {language.t("settings.plugins.source.ecosystem")}
+              </ButtonV2>
+              <ButtonV2
+                size="normal"
+                variant={sourceFilter() === "awesome" ? "neutral" : "ghost-muted"}
+                onClick={() => setSourceFilter("awesome")}
+              >
+                {language.t("settings.plugins.source.awesome")}
+              </ButtonV2>
+            </div>
             <TextInputV2
               type="search"
               appearance="base"
