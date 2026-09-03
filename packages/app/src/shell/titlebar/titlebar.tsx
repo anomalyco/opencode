@@ -357,10 +357,9 @@ export function Titlebar(props: {
                   <span class="min-w-0 truncate">{language.t("home.title")}</span>
                   <span
                     class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
-                    dir="ltr"
                     aria-hidden="true"
                   >
-                    {command.keybind("home.toggle")}
+                    <bdi dir="ltr">{command.keybind("home.toggle")}</bdi>
                   </span>
                 </button>
               </Show>
@@ -661,10 +660,9 @@ export function Titlebar(props: {
                               <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
                               <span
                                 class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
-                                dir="ltr"
                                 aria-hidden="true"
                               >
-                                {command.keybind("tab.new")}
+                                <bdi dir="ltr">{command.keybind("tab.new")}</bdi>
                               </span>
                             </button>
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />
