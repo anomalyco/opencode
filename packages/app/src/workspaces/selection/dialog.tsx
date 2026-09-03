@@ -30,6 +30,7 @@ import {
 import "./dialog.css"
 import { Divider } from "@opencode-ai/ui/divider"
 import { getFilename } from "@opencode-ai/util/path"
+import { createTreeTouchScrollController, findTreeTouch } from "./scroll"
 
 interface DirectoryPickerDialogProps {
   title?: string
@@ -65,6 +66,10 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   let container: HTMLDivElement | undefined
   let pathArea: HTMLDivElement | undefined
   let navigation = 0
+  const getTreeScroller = () =>
+    tree?.getFileTreeContainer()?.shadowRoot?.querySelector<HTMLElement>("[data-file-tree-virtualized-scroll]") ??
+    undefined
+  const touchScroll = createTreeTouchScrollController(getTreeScroller)
 
   const [fallbackPath] = createResource(
     () => (!(sync.data.path.home || sync.data.path.directory) ? true : undefined),
@@ -276,6 +281,13 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       },
     })
     if (!container) return
+    const blockDraggedClick = (event: MouseEvent) => {
+      if (!touchScroll.consumeClick()) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    container.addEventListener("click", blockDraggedClick, { capture: true })
+    onCleanup(() => container?.removeEventListener("click", blockDraggedClick, { capture: true }))
     tree.render({ containerWrapper: container })
     tree.getFileTreeContainer()?.classList.add("directory-picker-tree")
   })
@@ -352,10 +364,25 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         <div
           class="directory-picker-browser"
           ref={container}
+          onTouchStart={(event) => {
+            const touch = event.changedTouches[0]
+            if (touch) touchScroll.start(touch.identifier, touch.clientY)
+          }}
+          onTouchMove={(event) => {
+            const touch = findTreeTouch(event.touches, touchScroll.identifier)
+            if (!touch || !touchScroll.move(touch.identifier, touch.clientY)) return
+            event.preventDefault()
+          }}
+          onTouchEnd={(event) => {
+            const touch = findTreeTouch(event.changedTouches, touchScroll.identifier)
+            if (touch) touchScroll.end(touch.identifier)
+          }}
+          onTouchCancel={(event) => {
+            const touch = findTreeTouch(event.changedTouches, touchScroll.identifier)
+            if (touch) touchScroll.cancel(touch.identifier)
+          }}
           onWheel={(event) => {
-            const scroller = tree
-              ?.getFileTreeContainer()
-              ?.shadowRoot?.querySelector<HTMLElement>("[data-file-tree-virtualized-scroll]")
+            const scroller = getTreeScroller()
             if (!scroller) return
             const next = nextTreeScrollTop(
               scroller.scrollTop,
