@@ -13,6 +13,7 @@ return await tools.browser.snapshot({ tabID: tab.id })
 All page operations require a `tabID` returned by `browser.tabs.open/list`.
 Focus selects the visible Review tab, not an implicit command target. Discover
 current signatures with `search({ namespace: "browser" })`.
+Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
 
 ## Tools
 
