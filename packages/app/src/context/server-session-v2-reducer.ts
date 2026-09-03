@@ -1,8 +1,15 @@
-import type { OpenCodeEvent, SessionMessageInfo, SessionPendingMessage } from "@opencode-ai/client/promise"
+import type { JsonValue, OpenCodeEvent, SessionMessageInfo, SessionPendingMessage } from "@opencode-ai/client/promise"
+import {
+  attachToolStructured,
+  hasToolStructured,
+  readToolRendererMetadata,
+  readToolStructured,
+} from "../utils/session-tool-structured"
 
 type Assistant = Extract<SessionMessageInfo, { type: "assistant" }>
 type Compaction = Extract<SessionMessageInfo, { type: "compaction" }>
 type Shell = Extract<SessionMessageInfo, { type: "shell" }>
+type ToolMetadata = Record<string, JsonValue>
 
 export type V2SessionReduction = {
   sessionID: string
@@ -269,8 +276,10 @@ export function createV2SessionReducer() {
           ...tool,
           executed: event.data.executed,
           providerState: event.data.state,
-          // structured: {}, content: []
-          state: { status: "running", input: event.data.input, metadata: {} },
+          state: attachToolStructured(
+            { status: "running", input: event.data.input, metadata: {} },
+            readToolStructured(event.data),
+          ),
           time: { ...tool.time, ran: event.created },
         }))
       case "session.tool.progress":
@@ -278,8 +287,10 @@ export function createV2SessionReducer() {
           tool.state.status === "running"
             ? {
                 ...tool,
-                // state: { ...tool.state, structured: event.data.structured, content: event.data.content },
-                state: { ...tool.state, metadata: event.data.metadata },
+                state: attachToolStructured(
+                  { ...tool.state, metadata: rendererMetadata(tool.name, event.data) ?? {} },
+                  readToolStructured(event.data),
+                ),
               }
             : tool,
         )
@@ -290,14 +301,15 @@ export function createV2SessionReducer() {
             ...tool,
             executed: event.data.executed || tool.executed === true,
             providerResultState: event.data.resultState,
-            state: {
-              status: "completed",
-              input: tool.state.input,
-              // structured: event.data.structured,
-              metadata: event.data.metadata,
-              content: event.data.content,
-              // result: event.data.result,
-            },
+            state: attachToolStructured(
+              {
+                status: "completed",
+                input: tool.state.input,
+                metadata: rendererMetadata(tool.name, event.data) ?? {},
+                content: event.data.content,
+              },
+              readToolStructured(event.data),
+            ),
             time: { ...tool.time, completed: event.created },
           }
         })
@@ -308,15 +320,21 @@ export function createV2SessionReducer() {
             ...tool,
             executed: event.data.executed || tool.executed === true,
             providerResultState: event.data.resultState,
-            state: {
-              status: "error",
-              input: typeof tool.state.input === "string" ? {} : tool.state.input,
-              // structured: tool.state.status === "running" ? tool.state.structured : {},
-              metadata: event.data.metadata ?? (tool.state.status === "running" ? tool.state.metadata : {}),
-              content: event.data.content,
-              error: event.data.error,
-              // result: event.data.result,
-            },
+            state: attachToolStructured(
+              {
+                status: "error",
+                input: typeof tool.state.input === "string" ? {} : tool.state.input,
+                metadata:
+                  rendererMetadata(tool.name, event.data) ??
+                  (tool.state.status === "running" ? rendererMetadata(tool.name, tool.state) : undefined) ??
+                  {},
+                content: event.data.content,
+                error: event.data.error,
+              },
+              tool.state.status === "running" && hasToolStructured(tool.state)
+                ? tool.state.structured
+                : readToolStructured(event.data),
+            ),
             time: { ...tool.time, completed: event.created },
           }
         })
@@ -414,6 +432,10 @@ export function createV2SessionReducer() {
       }
     },
   }
+}
+
+function rendererMetadata(toolName: string, value: unknown) {
+  return readToolRendererMetadata(toolName, value) as ToolMetadata | undefined
 }
 
 function key(sessionID: string, inputID: string) {

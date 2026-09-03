@@ -12,6 +12,7 @@ import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
 import { useServerSync } from "@/context/server-sync"
+import { DirectoryVisualizationProvider } from "./directory-visualization-provider"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -67,7 +68,9 @@ export function DirectoryDataProvider(
           onNavigateToSession={(sessionID: string) => navigate(href(sessionID))}
           onSessionHref={href}
         >
-          <LocalProvider>{props.children}</LocalProvider>
+          <LocalProvider>
+            <DirectoryVisualizationProvider>{props.children}</DirectoryVisualizationProvider>
+          </LocalProvider>
         </DataProvider>
       )}
     </Show>

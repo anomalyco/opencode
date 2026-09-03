@@ -42,6 +42,7 @@ import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "./tool-error-card"
+import { VisualizationTool } from "./visualization-tool"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
@@ -1456,6 +1457,7 @@ export function Part(props: MessagePartProps) {
 export interface ToolProps {
   input: Record<string, any>
   metadata: Record<string, any>
+  structured?: unknown
   tool: string
   sessionID?: string
   output?: string
@@ -1494,6 +1496,8 @@ export const ToolRegistry = {
   register: registerTool,
   render: getTool,
 }
+
+ToolRegistry.register({ name: "visualization_create", render: VisualizationTool })
 
 function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element }) {
   const value = createMemo(() => props.path || "tool-file")
@@ -1543,10 +1547,12 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
   const emptyInput: Record<string, any> = {}
   const emptyMetadata: Record<string, any> = {}
+  type StructuredToolState = ToolPart["state"] & { structured?: unknown }
 
   const input = () => part().state?.input ?? emptyInput
   // @ts-expect-error
   const partMetadata = () => part().state?.metadata ?? emptyMetadata
+  const structured = () => (part().state as StructuredToolState).structured
   const taskId = createMemo(() => {
     if (part().tool !== "task") return
     const value = partMetadata().sessionId
@@ -1614,6 +1620,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               tool={part().tool}
               sessionID={part().sessionID}
               metadata={partMetadata()}
+              structured={structured()}
               // @ts-expect-error
               output={part().state.output}
               status={part().state.status}

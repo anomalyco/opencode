@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
 import { Daemon } from "./services/daemon"
+import { CLI_RUNTIME_VERSION } from "./version"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -24,7 +25,7 @@ const Handlers = Runtime.handlers(Commands, {
   serve: () => import("./commands/handlers/serve"),
 })
 
-Runtime.run(Commands, Handlers, { version: "local" }).pipe(
+Runtime.run(Commands, Handlers, { version: CLI_RUNTIME_VERSION }).pipe(
   Effect.provide(Daemon.layer),
   Effect.provide(NodeServices.layer),
   Effect.scoped,

@@ -1844,6 +1844,88 @@ unix(
   30_000,
 )
 
+it.instance("visualize command requires only the visualization tool on its first turn", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const { prompt, chat } = yield* boot()
+    yield* llm.tool("visualization_create", { title: "Clock", html: '<div id="clock"></div>' })
+    yield* llm.text("done")
+
+    const result = yield* prompt.command({
+      sessionID: chat.id,
+      command: "visualize",
+      arguments: "在会话中预览个时钟",
+    })
+
+    expect(result.info.role).toBe("assistant")
+    const request = (yield* llm.inputs).find((input) => input.tool_choice === "required")
+    expect(request?.tool_choice).toBe("required")
+    expect(request?.tools).toEqual([
+      expect.objectContaining({ function: expect.objectContaining({ name: "visualization_create" }) }),
+    ])
+    expect(JSON.stringify(request?.messages)).toContain("transparent conversation background")
+    expect(JSON.stringify(request?.messages)).toContain("100vh")
+    expect(JSON.stringify(request?.messages)).toContain("negative page margins")
+    const inputs = yield* llm.inputs
+    expect(JSON.stringify(inputs)).toContain("Visualization created")
+    expect(JSON.stringify(inputs)).not.toContain('id=\\"clock\\"')
+
+    const tool = (yield* MessageV2.filterCompactedEffect(chat.id))
+      .flatMap((message) => message.parts)
+      .find((part): part is CompletedToolPart => part.type === "tool" && part.tool === "visualization_create")
+    expect(tool?.state).toMatchObject({
+      status: "completed",
+      output: "Visualization created",
+      metadata: { version: 1, title: "Clock", html: '<div id="clock"></div>' },
+    })
+  }),
+)
+
+it.instance("visualize omits required tool choice for DeepSeek V4 thinking models", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => {
+      const config = providerCfg(url)
+      return {
+        ...config,
+        provider: {
+          test: {
+            ...config.provider.test,
+            models: {
+              "deepseek-v4-flash": {
+                ...cfg.provider.test.models["test-model"],
+                id: "deepseek-v4-flash",
+                name: "DeepSeek V4 Flash",
+                reasoning: true,
+              },
+            },
+          },
+        },
+      }
+    })
+    const { prompt, chat } = yield* boot()
+    yield* llm.tool("visualization_create", { title: "Clock", html: '<div id="clock"></div>' })
+    yield* llm.text("done")
+
+    const result = yield* prompt.command({
+      sessionID: chat.id,
+      command: "visualize",
+      arguments: "在会话中预览个时钟",
+    })
+
+    expect(result.info.role).toBe("assistant")
+    const request = (yield* llm.inputs).find(
+      (input) =>
+        Array.isArray(input.tools) &&
+        input.tools.length === 1 &&
+        JSON.stringify(input.tools).includes("visualization_create"),
+    )
+    expect(request?.tool_choice).toBeUndefined()
+    expect(request?.tools).toEqual([
+      expect.objectContaining({ function: expect.objectContaining({ name: "visualization_create" }) }),
+    ])
+  }),
+)
+
 unixNoLLMServer(
   "cancel interrupts shell and resolves cleanly",
   () =>

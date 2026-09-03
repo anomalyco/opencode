@@ -47,6 +47,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import * as Visualize from "@/command/visualize"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -1096,6 +1097,7 @@ const layer = Layer.effect(
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+          const visualization = Visualize.isSystem(lastUser.system)
 
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
@@ -1231,6 +1233,7 @@ const layer = Layer.effect(
               bypassAgentCheck,
               messages: msgs,
               promptOps,
+              only: visualization && step === 1 ? [Visualize.toolID] : undefined,
             }).pipe(
               Effect.provideService(Plugin.Service, plugin),
               Effect.provideService(Permission.Service, permission),
@@ -1282,7 +1285,8 @@ const layer = Layer.effect(
               ],
               tools,
               model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
+              toolChoice:
+                visualization && step === 1 ? "required" : format.type === "json_schema" ? "required" : undefined,
             })
 
             if (structured !== undefined) {
@@ -1469,6 +1473,7 @@ const layer = Layer.effect(
         model: userModel,
         agent: userAgent,
         parts,
+        system: cmd.visualization ? Visualize.system : undefined,
         variant: input.variant,
       })
       yield* events.publish(Command.Event.Executed, {

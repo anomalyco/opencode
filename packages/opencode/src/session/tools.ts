@@ -24,6 +24,10 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
+type ToolWithModelOutput = AITool & {
+  __opencodeToModelOutput?: (output: unknown) => string
+}
+
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
   listTemplates: "list_mcp_resource_templates",
@@ -46,6 +50,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   bypassAgentCheck: boolean
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
+  only?: readonly string[]
 }) {
   const tools: Record<string, AITool> = {}
   const run = yield* EffectBridge.make()
@@ -95,10 +100,16 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     agent: input.agent,
     permission: input.session.permission,
   })) {
+    if (input.only && !input.only.includes(item.id)) continue
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
-    tools[item.id] = tool({
+    const resolved: ToolWithModelOutput = tool({
       description: item.description,
       inputSchema: jsonSchema(schema),
+      ...(item.toModelOutput
+        ? {
+            toModelOutput: ({ output }) => ({ type: "text" as const, value: item.toModelOutput!(output) }),
+          }
+        : {}),
       execute(args, options) {
         return run.promise(
           Effect.gen(function* () {
@@ -131,7 +142,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         )
       },
     })
+    if (item.toModelOutput) resolved.__opencodeToModelOutput = (output) => item.toModelOutput!(output as never)
+    tools[item.id] = resolved
   }
+
+  if (input.only) return tools
 
   const hasMcpResourceServer = Object.values(yield* mcp.clients()).some(
     (client) => !!client.getServerCapabilities()?.resources,

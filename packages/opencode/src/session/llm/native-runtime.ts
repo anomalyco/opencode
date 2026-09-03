@@ -43,6 +43,10 @@ type StreamInput = {
   readonly abort: AbortSignal
 }
 
+type ToolWithModelOutput = Tool & {
+  __opencodeToModelOutput?: (output: unknown) => string
+}
+
 export function status(input: Pick<StreamInput, "model" | "provider" | "auth">): RuntimeStatus {
   return statusWithFetch(input, providerFetch(input))
 }
@@ -166,7 +170,10 @@ function nativeSchema(value: unknown): JsonSchema {
   return asSchema(value as Parameters<typeof asSchema>[0]).jsonSchema as JsonSchema
 }
 
-export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput, "messages" | "abort">) {
+export function nativeTools(
+  tools: Record<string, ToolWithModelOutput>,
+  input: Pick<StreamInput, "messages" | "abort">,
+) {
   return Object.fromEntries(
     Object.entries(tools).map(([name, item]) => [
       name,
@@ -175,7 +182,12 @@ export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput
       NativeTool.make({
         description: item.description ?? "",
         jsonSchema: nativeSchema(item.inputSchema),
-        execute: (args: unknown, ctx) =>
+        toModelOutput: item.__opencodeToModelOutput
+          ? ({ output }: { output: unknown }) => [
+              { type: "text" as const, text: item.__opencodeToModelOutput!(output) },
+            ]
+          : undefined,
+        execute: (args: unknown, ctx?: { id: string }) =>
           Effect.tryPromise({
             try: () => {
               if (!item.execute) throw new Error(`Tool has no execute handler: ${name}`)

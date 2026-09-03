@@ -7,6 +7,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import type { AssistantMessage, FilePart, Message, Part, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Option, Schema } from "effect"
+import { attachToolStructured, readToolRendererMetadata, readToolStructured } from "./session-tool-structured"
 
 const emptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 const emptyModel: { id: string; providerID: string; variant?: string } = { id: "", providerID: "" }
@@ -309,23 +310,27 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
       return { status: "pending" as const, input, raw: tool.state.input }
     }
     if (tool.state.status === "running") {
-      return {
-        status: "running" as const,
-        input: normalizeToolInput(tool.name, tool.state.input),
-        // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
-        metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
-        time: { start },
-      }
+      return attachToolStructured(
+        {
+          status: "running" as const,
+          input: normalizeToolInput(tool.name, tool.state.input),
+          metadata: normalizeToolMetadata(tool.name, readToolRendererMetadata(tool.name, tool.state) ?? {}),
+          time: { start },
+        },
+        readToolStructured(tool.state),
+      )
     }
     if (tool.state.status === "error") {
-      return {
-        status: "error" as const,
-        input: normalizeToolInput(tool.name, tool.state.input),
-        error: tool.state.error.message,
-        // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
-        metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
-        time: { start, end: tool.time.completed ?? start },
-      }
+      return attachToolStructured(
+        {
+          status: "error" as const,
+          input: normalizeToolInput(tool.name, tool.state.input),
+          error: tool.state.error.message,
+          metadata: normalizeToolMetadata(tool.name, readToolRendererMetadata(tool.name, tool.state) ?? {}),
+          time: { start, end: tool.time.completed ?? start },
+        },
+        readToolStructured(tool.state),
+      )
     }
     const attachments = tool.state.content.flatMap((item, index): FilePart[] =>
       item.type === "file"
@@ -342,16 +347,18 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
           ]
         : [],
     )
-    return {
-      status: "completed" as const,
-      input: normalizeToolInput(tool.name, tool.state.input),
-      output: tool.state.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n"),
-      title: tool.name,
-      // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
-      metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
-      time: { start, end: tool.time.completed ?? start },
-      attachments: attachments.length ? attachments : undefined,
-    }
+    return attachToolStructured(
+      {
+        status: "completed" as const,
+        input: normalizeToolInput(tool.name, tool.state.input),
+        output: tool.state.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n"),
+        title: tool.name,
+        metadata: normalizeToolMetadata(tool.name, readToolRendererMetadata(tool.name, tool.state) ?? {}),
+        time: { start, end: tool.time.completed ?? start },
+        attachments: attachments.length ? attachments : undefined,
+      },
+      readToolStructured(tool.state),
+    )
   })()
   return {
     id: tool.id,
