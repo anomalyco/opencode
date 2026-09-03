@@ -1,0 +1,93 @@
+export * as ConfigDiscovery from "./discovery.js"
+
+import path from "path"
+import { Effect } from "effect"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Global } from "@opencode-ai/util/global"
+import { Location } from "../location.js"
+import { AbsolutePath } from "../schema.js"
+import type { Options } from "../config.js"
+
+export const names = ["opencode.json", "opencode.jsonc"]
+
+/** Eligible sources in priority order, including paths that may appear later. */
+export interface Sources {
+  readonly global?: AbsolutePath
+  readonly explicit?: AbsolutePath
+  readonly direct: readonly AbsolutePath[]
+  readonly project: readonly { readonly path: AbsolutePath; readonly present: boolean }[]
+  readonly claude: readonly AbsolutePath[]
+  readonly agents: readonly AbsolutePath[]
+}
+
+export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options?: Options) {
+  const fs = yield* FSUtil.Service
+  const global = yield* Global.Service
+  const location = yield* Location.Service
+  const globalDirectory = AbsolutePath.make(global.config)
+  const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
+  const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
+  // Classify symlinked/global paths once, before either loading or watch planning.
+  const globalRoots = yield* Effect.forEach([globalDirectory, globalClaudeDirectory, globalAgentsDirectory], (item) =>
+    fs.resolve(item),
+  )
+  const locationIsGlobal = (yield* fs.resolve(location.directory)) === globalRoots[0]
+  const discovered =
+    locationIsGlobal || options?.project === false
+      ? []
+      : yield* fs.up({ targets: ["."], start: location.directory }).pipe(
+          Effect.flatMap((directories) =>
+            Effect.forEach(directories, (directory) =>
+              Effect.gen(function* () {
+                // Resolve each parent once, including for missing children.
+                const parent = yield* fs.resolve(directory)
+                const ecosystem = yield* Effect.filter([".claude", ".agents"], (name) =>
+                  fs.exists(path.join(directory, name)),
+                )
+                return yield* Effect.forEach([...ecosystem, ".opencode", ...names.toReversed()], (name) =>
+                  fs
+                    .resolve(path.join(parent, name))
+                    .pipe(
+                      Effect.map((resolved) => ({ item: AbsolutePath.make(path.join(directory, name)), resolved })),
+                    ),
+                )
+              }),
+            ).pipe(Effect.map((items) => items.flat())),
+          ),
+          Effect.orDie,
+        )
+
+  const globalEnabled = options?.global !== false
+  const globalFiles = yield* Effect.forEach(names, (name) => fs.resolve(path.join(globalDirectory, name)))
+  // A walked path into a global root stays global, however it was reached.
+  // Enabled globals are loaded separately; disabled globals cannot leak back in.
+  const visible = discovered
+    .filter(({ resolved }) =>
+      globalEnabled
+        ? !globalRoots.includes(resolved) && !globalFiles.includes(resolved)
+        : !globalRoots.some((root) => resolved === root || resolved.startsWith(root + path.sep)),
+    )
+    .map(({ item }) => item)
+
+  return {
+    global: globalEnabled ? globalDirectory : undefined,
+    explicit: options?.file ? AbsolutePath.make(path.resolve(options.file)) : undefined,
+    direct: visible.filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item))).toReversed(),
+    project: yield* Effect.forEach(
+      visible.filter((item) => path.basename(item) === ".opencode").toReversed(),
+      (directory) => fs.isDir(directory).pipe(Effect.map((present) => ({ path: directory, present }))),
+    ),
+    claude: [
+      ...new Set([
+        ...(globalEnabled && (yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
+        ...visible.filter((item) => path.basename(item) === ".claude").toReversed(),
+      ]),
+    ],
+    agents: [
+      ...new Set([
+        ...(globalEnabled && (yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
+        ...visible.filter((item) => path.basename(item) === ".agents").toReversed(),
+      ]),
+    ],
+  } satisfies Sources
+})

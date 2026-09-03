@@ -52,6 +52,62 @@ function countingNative() {
 }
 
 describe("Watcher lifecycle", () => {
+  it.effect("signals readiness after acquisition and buffers updates published by the ready callback", () =>
+    Effect.gen(function* () {
+      const publish = yield* Deferred.make<(update: Watcher.Update) => void>()
+      const acquired = yield* Deferred.make<void>()
+      const counts = { ready: 0, closed: 0 }
+      yield* Effect.gen(function* () {
+        const watcher = yield* Watcher.Service
+        const consumer = yield* watcher
+          .subscribe(
+            { path: "/shared", type: "entries", names: ["opencode.json"] },
+            Effect.gen(function* () {
+              counts.ready++
+              const notify = yield* Deferred.await(publish)
+              notify({ path: "/shared/opencode.json", type: "create" })
+            }),
+          )
+          .pipe(Effect.flatMap(Stream.runHead), Effect.forkScoped({ startImmediately: true }))
+        yield* Deferred.await(publish)
+        expect(counts.ready).toBe(0)
+        yield* Deferred.succeed(acquired, undefined)
+        expect(Option.getOrUndefined(yield* Fiber.join(consumer))).toEqual({
+          path: "/shared/opencode.json",
+          type: "create",
+        })
+        expect(counts).toEqual({ ready: 1, closed: 1 })
+      }).pipe(
+        withNative({
+          subscribe: (input) =>
+            Deferred.succeed(publish, input.publish).pipe(
+              Effect.andThen(Deferred.await(acquired)),
+              Effect.as({
+                unsubscribe: async () => {
+                  counts.closed++
+                },
+              }),
+            ),
+        }),
+      )
+    }),
+  )
+
+  it.effect("does not signal readiness for an unavailable native watch", () => {
+    const counts = { ready: 0 }
+    return Effect.gen(function* () {
+      const watcher = yield* Watcher.Service
+      const stream = yield* watcher.subscribe(
+        { path: "/unavailable", type: "directory" },
+        Effect.sync(() => {
+          counts.ready++
+        }),
+      )
+      yield* Stream.runDrain(stream)
+      expect(counts.ready).toBe(0)
+    }).pipe(withNative({ subscribe: () => Effect.undefined }))
+  })
+
   it.live("watches only named immediate entries, including missing directories", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
@@ -96,14 +152,21 @@ describe("Watcher lifecycle", () => {
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>()
       const interrupted = yield* Deferred.make<void>()
+      const counts = { ready: 0 }
       yield* Effect.gen(function* () {
         const watcher = yield* Watcher.Service
         const consumer = yield* watcher
-          .subscribe({ path: "/pending", type: "directory" })
+          .subscribe(
+            { path: "/pending", type: "directory" },
+            Effect.sync(() => {
+              counts.ready++
+            }),
+          )
           .pipe(Effect.flatMap(Stream.runDrain), Effect.forkScoped({ startImmediately: true }))
         yield* Deferred.await(started)
         yield* Fiber.interrupt(consumer)
         expect(yield* Deferred.isDone(interrupted)).toBe(true)
+        expect(counts.ready).toBe(0)
       }).pipe(
         withNative({
           subscribe: () =>
@@ -522,17 +585,35 @@ describeNative("LocationWatcher", () => {
   })
 
   it.live("publishes .hg/branch events", () =>
-    withTmp(
-      (directory) =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<string>()
+      const watcher = Layer.effect(
+        Watcher.Service,
         Effect.gen(function* () {
-          const fs = yield* FSUtil.Service
-          const branch = path.join(directory, ".hg", "branch")
-          yield* ready(branch)
-          expect(
-            yield* nextUpdate((event) => event.file === branch, fs.writeFileString(branch, "feature\n")),
-          ).toMatchObject({ file: branch })
+          const service = yield* Watcher.Service
+          return Watcher.Service.of({
+            subscribe: (input, onReady) =>
+              service.subscribe(
+                input,
+                Deferred.succeed(started, input.path).pipe(Effect.andThen(onReady ?? Effect.void)),
+              ),
+          })
         }),
-      { vcs: "hg" },
-    ),
+      ).pipe(Layer.provide(AppNodeBuilder.build(Watcher.node)))
+      return yield* withTmp(
+        (directory) =>
+          Effect.gen(function* () {
+            const fs = yield* FSUtil.Service
+            const branch = path.join(directory, ".hg", "branch")
+            // Use the actual acquisition barrier, not a probe write whose event
+            // callback can race the next write in Bun's filesystem watcher.
+            expect(yield* Deferred.await(started)).toBe(branch)
+            expect(
+              yield* nextUpdate((event) => event.file === branch, fs.writeFileString(branch, "feature\n")),
+            ).toMatchObject({ file: branch })
+          }),
+        { vcs: "hg", watcher },
+      )
+    }),
   )
 })

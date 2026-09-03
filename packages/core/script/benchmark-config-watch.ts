@@ -4,7 +4,7 @@
 //   TMPDIR=/tmp/opencode bun script/benchmark-config-watch.ts --ref 0da51e9274 > /tmp/opencode/config-base.json
 //   TMPDIR=/tmp/opencode bun script/benchmark-config-watch.ts --ref working > /tmp/opencode/config-next.json
 // Optional: --depths 0,20,60 --locations 1,20,100 --reloads 3 --noise 100
-// Each case runs in a fresh child. Only config.ts and filesystem/watcher.ts are
+// Each case runs in a fresh child. Config discovery/planning and watcher sources are
 // snapshotted; all other dependencies come from this checkout. Source hashes
 // identify working snapshots. No checkout/reset, live database, or network.
 import fs from "node:fs/promises"
@@ -65,19 +65,28 @@ if (!args.snapshot) {
   try {
     const revision = (await git("rev-parse", args.ref === "working" ? "HEAD" : `${args.ref}^{commit}`)).trim()
     const hashes: Record<string, string> = {}
-    await fs.mkdir(path.join(root, "src", "filesystem"), { recursive: true })
+    const measured = ["src/config.ts", "src/config/discovery.ts", "src/config/watch.ts", "src/filesystem/watcher.ts"]
+    const available =
+      args.ref === "working"
+        ? measured
+        : (await git("ls-tree", "-r", "--name-only", revision, "packages/core/src"))
+            .trim()
+            .split("\n")
+            .map((file) => file.slice("packages/core/".length))
+    const directories = ["src", "src/filesystem", "src/config"]
+    for (const directory of directories) await fs.mkdir(path.join(root, directory), { recursive: true })
     // Symlink unchanged imports, but copy both measured modules before any child
     // starts. Concurrent edits to those runtime files cannot change a running set.
-    for (const directory of ["src", "src/filesystem"]) {
+    for (const directory of directories) {
       for (const entry of await fs.readdir(path.join(core, directory))) {
         const relative = path.join(directory, entry)
-        if (["src/config.ts", "src/filesystem", "src/filesystem/watcher.ts"].includes(relative)) continue
+        if (measured.includes(relative) || directories.includes(relative)) continue
         await fs.symlink(path.join(core, relative), path.join(root, relative))
       }
     }
     await fs.symlink(path.join(core, "node_modules"), path.join(root, "node_modules"))
     await fs.copyFile(path.join(core, "package.json"), path.join(root, "package.json"))
-    for (const relative of ["src/config.ts", "src/filesystem/watcher.ts"]) {
+    for (const relative of measured.filter((file) => available.includes(file))) {
       const source =
         args.ref === "working"
           ? await Bun.file(path.join(core, relative)).text()
@@ -120,8 +129,8 @@ if (!args.snapshot) {
           bun: Bun.version,
           platform: process.platform,
           caveats: [
-            "Only config.ts and filesystem/watcher.ts vary by ref; other source/dependencies use this checkout.",
-            "Startup is warm Config construction, excluding imports, fixtures, Bus/database and shared Watcher/FSUtil construction.",
+            "Config, discovery, watch planning and filesystem/watcher.ts vary by ref; other source/dependencies use this checkout.",
+            "Startup ms is warm Config construction; CPU/calls include post-readiness settling. Imports, fixtures and shared dependencies are excluded.",
             "Discovery is clamped at the fixture root instead of scanning host ancestors.",
             "Heap uses two forced GCs and includes one changes observer per location; RSS includes allocator/JIT/native noise.",
             "Native subscriptions count Native interface handles (logical if pooled); Linux inotify delta counts kernel watches.",
@@ -194,6 +203,13 @@ if (!args.snapshot) {
     )
     return text.flatMap((text) => text.split("\n")).filter((line) => line.startsWith("inotify ")).length
   }
+  const settle = Effect.gen(function* () {
+    while (true) {
+      const before = JSON.stringify([calls, native])
+      yield* Effect.sleep("150 millis")
+      if (!pending && before === JSON.stringify([calls, native])) return
+    }
+  }).pipe(Effect.timeout("15 seconds"))
   const program = Effect.gen(function* () {
     const shared = yield* Layer.build(
       AppNodeBuilder.build(Bus.node, [Global.node.replace(Layer.succeed(Global.Service, global))]),
@@ -212,13 +228,22 @@ if (!args.snapshot) {
       subscribe: (input) =>
         Effect.gen(function* () {
           if (!FSUtil.contains(root, input.target)) return yield* Effect.die(`Watch escaped fixture: ${input.target}`)
-          const subscription = yield* realNative.subscribe({
-            ...input,
-            publish: (update) => {
-              calls.nativeEvents++
-              input.publish(update)
-            },
-          })
+          pending++
+          const subscription = yield* realNative
+            .subscribe({
+              ...input,
+              publish: (update) => {
+                calls.nativeEvents++
+                input.publish(update)
+              },
+            })
+            .pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  pending--
+                }),
+              ),
+            )
           if (!subscription) {
             native.failed++
             return undefined
@@ -287,7 +312,7 @@ if (!args.snapshot) {
       )
     // Warm one Config before measuring so module/JIT caches do not masquerade
     // as retained per-location state. Its subscriptions are closed first.
-    yield* build(directories[0]).pipe(Effect.andThen(Effect.sleep("100 millis")), Effect.scoped)
+    yield* build(directories[0]).pipe(Effect.andThen(settle), Effect.scoped)
     native.acquired = 0
     const configs: Config.Interface[] = []
     const before = memory()
@@ -308,10 +333,11 @@ if (!args.snapshot) {
         Effect.forkScoped({ startImmediately: true }),
       )
     }
-    const startup = { ms: performance.now() - start, cpu: process.cpuUsage(startCPU), calls: delta(startCalls) }
-    // Native directory subscription acquisition is asynchronous. An observed
-    // reload below verifies readiness; this pause is outside startup timing.
-    yield* Effect.sleep("100 millis")
+    const constructed = performance.now() - start
+    // Native readiness can schedule a follow-up scan. Include it in CPU/call
+    // counts and retained memory, not in the construction-only wall time.
+    yield* settle
+    const startup = { ms: constructed, cpu: process.cpuUsage(startCPU), calls: delta(startCalls) }
     const after = memory()
     const retained = { heapBytes: after.heapUsed - before.heapUsed, rssBytes: after.rss - before.rss }
     const kernelAfter = yield* Effect.promise(inotify)
@@ -348,13 +374,7 @@ if (!args.snapshot) {
         yield* Effect.promise(() => Bun.write(path.join(target, `unrelated-${index}.txt`), "x"))
       }
       yield* Effect.sleep("300 millis")
-      yield* Effect.gen(function* () {
-        while (true) {
-          const before = JSON.stringify(calls)
-          yield* Effect.sleep("150 millis")
-          if (!pending && before === JSON.stringify(calls)) return
-        }
-      }).pipe(Effect.timeout("15 seconds"))
+      yield* settle
       noiseResults.push({
         target: path.relative(project, target) || ".",
         writes: noise,

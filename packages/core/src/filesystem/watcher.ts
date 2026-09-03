@@ -62,7 +62,8 @@ export interface NativeInterface {
 export class Native extends Context.Service<Native, NativeInterface>()("@opencode/Watcher/Native") {}
 
 export interface Interface {
-  readonly subscribe: (input: WatchInput) => Effect.Effect<Stream.Stream<Update>>
+  /** onReady runs after native acquisition and listener registration, when the stream is consumed. */
+  readonly subscribe: (input: WatchInput, onReady?: Effect.Effect<void>) => Effect.Effect<Stream.Stream<Update>>
 }
 
 export const Options = Schema.Struct({
@@ -135,7 +136,7 @@ export const layer = (options?: Options) =>
           }),
       })
 
-      const subscribe = (input: WatchInput) => {
+      const subscribe = (input: WatchInput, onReady: Effect.Effect<void> = Effect.void) => {
         const target = path.resolve(input.path)
         const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
         const names = [...new Set(input.type === "entries" ? input.names : [])].toSorted()
@@ -148,7 +149,10 @@ export const layer = (options?: Options) =>
           return Stream.unwrap(
             Effect.gen(function* () {
               const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore, names })
-              return Stream.fromPubSub(pubsub)
+              const subscription = yield* PubSub.subscribe(pubsub)
+              if (yield* PubSub.isShutdown(pubsub)) return Stream.empty
+              yield* onReady
+              return Stream.fromSubscription(subscription)
             }),
           )
         })
