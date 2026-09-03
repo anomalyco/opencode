@@ -93,7 +93,7 @@ describe("createCatalogFetcher", () => {
     expect(result.entries.find((e) => e.name === "opencode-daytona")?.onNpm).toBe(false)
   })
 
-  test("serves disk cache when fetch fails, marks stale", async () => {
+  test("fresh disk cache is served as fresh even when fetch would fail", async () => {
     // Prime cache: first call succeeds
     const okFetch: typeof fetch = async (input) => {
       const url = String(input instanceof Request ? input.url : input)
@@ -109,10 +109,11 @@ describe("createCatalogFetcher", () => {
     const cached = JSON.parse(await readFile(cacheFile, "utf8"))
     expect(cached.entries.length).toBeGreaterThan(0)
 
+    // Cache-first: a fresh disk cache is served instantly, network untouched.
     const failingFetch: typeof fetch = async () => { throw new Error("offline") }
     const f2 = createCatalogFetcher({ fetchImpl: failingFetch, cacheDir: dir })
     const result = await f2.fetchCatalog()
-    expect(result.stale).toBe(true)
+    expect(result.stale).toBe(false)
     expect(result.entries.length).toBeGreaterThan(0)
   })
 
@@ -125,8 +126,11 @@ describe("createCatalogFetcher", () => {
       if (url.startsWith("https://api.npmjs.org/")) return json({ downloads: 1 })
       throw new Error("unexpected")
     }
-    const f1 = createCatalogFetcher({ fetchImpl: okFetch, cacheDir: dir })
+    const past = 1_000_000 + 25 * 60 * 60 * 1000
+    const f1 = createCatalogFetcher({ fetchImpl: okFetch, cacheDir: dir, now: () => 1_000_000 })
     await f1.fetchCatalog()
+
+    // Beyond-TTL clock so the disk cache is stale and a refresh is triggered.
 
     const eco404: typeof fetch = async (input) => {
       const url = String(input instanceof Request ? input.url : input)
@@ -134,7 +138,7 @@ describe("createCatalogFetcher", () => {
       if (url.includes("awesome-opencode")) return new Response(AWESOME_MD)
       throw new Error("unexpected")
     }
-    const f2 = createCatalogFetcher({ fetchImpl: eco404, cacheDir: dir })
+    const f2 = createCatalogFetcher({ fetchImpl: eco404, cacheDir: dir, now: () => past })
     const ecoResult = await f2.fetchCatalog()
     expect(ecoResult.stale).toBe(true)
     expect(ecoResult.entries.length).toBeGreaterThan(0)
@@ -145,7 +149,7 @@ describe("createCatalogFetcher", () => {
       if (url.includes("awesome-opencode")) return new Response("boom", { status: 500 })
       throw new Error("unexpected")
     }
-    const f2b = createCatalogFetcher({ fetchImpl: awesome500, cacheDir: dir })
+    const f2b = createCatalogFetcher({ fetchImpl: awesome500, cacheDir: dir, now: () => past })
     const awesomeResult = await f2b.fetchCatalog()
     expect(awesomeResult.stale).toBe(true)
   })
@@ -239,5 +243,90 @@ describe("createCatalogFetcher", () => {
     const first = networkCalls
     await f.fetchCatalog()
     expect(networkCalls).toBe(first) // served from memory cache
+  })
+
+  test("disk cache is served instantly when fresh, without any network", async () => {
+    // Prime disk cache with a long-lived fetcher
+    const priming: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(ECOSYSTEM_HTML)
+      if (url.includes("awesome-opencode")) return new Response(AWESOME_MD)
+      if (url.startsWith("https://registry.npmjs.org/")) return new Response("nf", { status: 404 })
+      if (url.startsWith("https://api.npmjs.org/")) return json({ downloads: 1 })
+      throw new Error("unexpected")
+    }
+    const f1 = createCatalogFetcher({ fetchImpl: priming, cacheDir: dir, now: () => 1_000_000 })
+    await f1.fetchCatalog()
+
+    // New process (no memory cache), network completely dead, clock inside TTL.
+    const failing: typeof fetch = async () => {
+      throw new Error("network must not be touched")
+    }
+    const f2 = createCatalogFetcher({ fetchImpl: failing, cacheDir: dir, now: () => 1_000_000 + 60_000 })
+    const t0 = Date.now()
+    const result = await f2.fetchCatalog()
+    expect(Date.now() - t0).toBeLessThan(500)
+    expect(result.stale).toBe(false)
+    expect(result.entries.length).toBeGreaterThan(0)
+  })
+
+  test("beyond-TTL disk cache is served immediately as stale, then refreshed in background", async () => {
+    const priming: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(ECOSYSTEM_HTML)
+      if (url.includes("awesome-opencode")) return new Response(AWESOME_MD)
+      if (url.startsWith("https://registry.npmjs.org/")) return new Response("nf", { status: 404 })
+      if (url.startsWith("https://api.npmjs.org/")) return json({ downloads: 1 })
+      throw new Error("unexpected")
+    }
+    const f1 = createCatalogFetcher({ fetchImpl: priming, cacheDir: dir, now: () => 1_000_000 })
+    const first = await f1.fetchCatalog()
+
+    let refreshable = true
+    const refresh: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (!refreshable) throw new Error("offline during refresh")
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(ECOSYSTEM_HTML)
+      if (url.includes("awesome-opencode")) return new Response(AWESOME_MD)
+      if (url.startsWith("https://registry.npmjs.org/")) return new Response("nf", { status: 404 })
+      if (url.startsWith("https://api.npmjs.org/")) return json({ downloads: 2 })
+      throw new Error("unexpected")
+    }
+    const f2 = createCatalogFetcher({ fetchImpl: refresh, cacheDir: dir, now: () => 1_000_000 + 25 * 60 * 60 * 1000 })
+    const served = await f2.fetchCatalog()
+    expect(served.stale).toBe(true)
+    expect(served.entries.length).toBe(first.entries.length)
+    // Background refresh writes a fresh cache; a subsequent fresh reader sees stale: false
+    await f2.refreshInBackground().catch(() => {})
+    refreshable = false
+    const f3 = createCatalogFetcher({ fetchImpl: refresh, cacheDir: dir, now: () => 1_000_000 + 26 * 60 * 60 * 1000 })
+    const after = await f3.fetchCatalog()
+    expect(after.stale).toBe(false)
+  })
+
+  test("npm enrichment runs with bounded concurrency, not sequentially", async () => {
+    let inFlight = 0
+    let peak = 0
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(ECOSYSTEM_HTML)
+      if (url.includes("awesome-opencode")) return new Response(AWESOME_MD)
+      if (url.startsWith("https://registry.npmjs.org/") || url.startsWith("https://api.npmjs.org/")) {
+        inFlight++
+        peak = Math.max(peak, inFlight)
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        inFlight--
+        if (url.startsWith("https://api.npmjs.org/")) return json({ downloads: 1 })
+        return new Response("nf", { status: 404 })
+      }
+      throw new Error("unexpected")
+    }
+    const f = createCatalogFetcher({ fetchImpl, cacheDir: dir })
+    const result = await f.fetchCatalog()
+    expect(result.entries.length).toBeGreaterThan(0)
+    // With 185+ entries sequential would be peak=1; bounded concurrency must exceed it
+    // but never exceed the cap (12).
+    expect(peak).toBeGreaterThan(1)
+    expect(peak).toBeLessThanOrEqual(12)
   })
 })

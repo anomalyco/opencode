@@ -23,6 +23,8 @@ export type CatalogResult = { entries: CatalogEntry[]; fetchedAt: number; stale:
 
 type RawEntry = { name: string; description?: string; url?: string; source: "ecosystem" | "awesome" }
 
+const NPM_CONCURRENCY = 12
+
 export function createCatalogFetcher(deps: {
   fetchImpl?: typeof fetch
   cacheDir: string
@@ -31,6 +33,7 @@ export function createCatalogFetcher(deps: {
   const doFetch = deps.fetchImpl ?? fetch
   const now = deps.now ?? Date.now
   let memory: { result: CatalogResult; at: number } | undefined
+  let refresh: Promise<void> | undefined
 
   const parseEcosystem = (html: string): RawEntry[] => {
     const out: RawEntry[] = []
@@ -119,17 +122,47 @@ export function createCatalogFetcher(deps: {
   async function fetchCatalog(): Promise<CatalogResult> {
     if (memory && now() - memory.at < TTL_MS) return memory.result
 
+    // Cache-first: serve the disk cache instantly when present, then refresh in
+    // the background. A cold fetch takes seconds (per-entry npm enrichment), and
+    // the Plugins tab must not block on it.
+    const cached = await readDiskCache()
+    if (cached) {
+      const fresh = now() - cached.fetchedAt < TTL_MS
+      if (fresh) return cached
+      startBackgroundRefresh()
+      return { ...cached, stale: true }
+    }
+
     let result: CatalogResult
     try {
       result = await fetchFresh()
       memory = { result, at: now() }
     } catch {
-      const cached = await readDiskCache()
-      if (cached) return { ...cached, stale: true }
       throw new Error("Failed to fetch plugin catalog and no cache available")
     }
     await writeDiskCache(result)
     return result
+  }
+
+  function startBackgroundRefresh() {
+    if (refresh) return
+    refresh = fetchFresh()
+      .then((result) => {
+        memory = { result, at: now() }
+        return writeDiskCache(result)
+      })
+      .catch(() => {
+        /* offline during refresh — keep serving the stale cache */
+      })
+      .finally(() => {
+        refresh = undefined
+      })
+  }
+
+  // Exposed for tests: flush the background refresh.
+  const refreshInBackground = () => {
+    startBackgroundRefresh()
+    return refresh ?? Promise.resolve()
   }
 
   async function fetchFresh(): Promise<CatalogResult> {
@@ -152,56 +185,68 @@ export function createCatalogFetcher(deps: {
       if (!byName.has(key)) byName.set(key, entry)
     }
 
-    const entries: CatalogEntry[] = []
-    for (const entry of byName.values()) {
-      const candidate = npmName(entry)
-      const base: CatalogEntry = {
-        name: entry.name,
-        description: entry.description,
-        repository: entry.url,
-        onNpm: false,
-        source: entry.source,
-      }
-      if (!candidate) {
-        entries.push(base)
-        continue
-      }
-      try {
-        const packRes = await doFetch(NPM_REGISTRY + encodeURIComponent(candidate))
-        if (packRes.ok) {
-          const pack = (await packRes.json()) as any
-          const latest = pack["dist-tags"]?.latest as string | undefined
-          const versionMeta = latest ? pack.versions?.[latest] : undefined
-          entries.push({
-            ...base,
-            name: candidate,
-            onNpm: true,
-            version: latest,
-            description: (versionMeta?.description as string | undefined) ?? base.description,
-            repository:
-              (typeof versionMeta?.repository?.url === "string"
-                ? versionMeta.repository.url.replace(/^git\+/, "").replace(/\.git$/, "")
-                : undefined) ?? base.repository,
-            updatedAt: pack.time?.modified as string | undefined,
-          })
-          try {
-            const dlRes = await doFetch(NPM_DOWNLOADS + encodeURIComponent(candidate))
-            if (dlRes.ok) {
-              const dl = (await dlRes.json()) as { downloads?: number }
-              entries[entries.length - 1].downloadsLastWeek = dl.downloads
-            }
-          } catch {
-            /* downloads are optional */
-          }
-        } else {
-          entries.push(base)
-        }
-      } catch {
-        entries.push(base)
+    const rawList = [...byName.values()]
+    const entries: CatalogEntry[] = new Array(rawList.length)
+    let cursor = 0
+
+    // Bounded-concurrency worker pool: a sequential per-entry enrichment means
+    // ~2 HTTP round-trips × ~185 entries, which takes seconds. The pool keeps
+    // peak concurrency at NPM_CONCURRENCY and preserves result order.
+    const worker = async () => {
+      for (;;) {
+        const index = cursor++
+        if (index >= rawList.length) return
+        entries[index] = await enrichEntry(rawList[index])
       }
     }
+    await Promise.all(Array.from({ length: Math.min(NPM_CONCURRENCY, rawList.length) }, worker))
 
     return { entries, fetchedAt: now(), stale: false }
+  }
+
+  async function enrichEntry(entry: RawEntry): Promise<CatalogEntry> {
+    const candidate = npmName(entry)
+    const base: CatalogEntry = {
+      name: entry.name,
+      description: entry.description,
+      repository: entry.url,
+      onNpm: false,
+      source: entry.source,
+    }
+    if (!candidate) return base
+    try {
+      const packRes = await doFetch(NPM_REGISTRY + encodeURIComponent(candidate))
+      if (packRes.ok) {
+        const pack = (await packRes.json()) as any
+        const latest = pack["dist-tags"]?.latest as string | undefined
+        const versionMeta = latest ? pack.versions?.[latest] : undefined
+        const enriched: CatalogEntry = {
+          ...base,
+          name: candidate,
+          onNpm: true,
+          version: latest,
+          description: (versionMeta?.description as string | undefined) ?? base.description,
+          repository:
+            (typeof versionMeta?.repository?.url === "string"
+              ? versionMeta.repository.url.replace(/^git\+/, "").replace(/\.git$/, "")
+              : undefined) ?? base.repository,
+          updatedAt: pack.time?.modified as string | undefined,
+        }
+        try {
+          const dlRes = await doFetch(NPM_DOWNLOADS + encodeURIComponent(candidate))
+          if (dlRes.ok) {
+            const dl = (await dlRes.json()) as { downloads?: number }
+            enriched.downloadsLastWeek = dl.downloads
+          }
+        } catch {
+          /* downloads are optional */
+        }
+        return enriched
+      }
+      return base
+    } catch {
+      return base
+    }
   }
 
   async function readDiskCache(): Promise<CatalogResult | undefined> {
@@ -224,5 +269,5 @@ export function createCatalogFetcher(deps: {
     }
   }
 
-  return { fetchCatalog }
+  return { fetchCatalog, refreshInBackground }
 }

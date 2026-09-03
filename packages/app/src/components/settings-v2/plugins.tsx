@@ -1,3 +1,4 @@
+import fuzzysort from "fuzzysort"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -105,9 +106,11 @@ export const SettingsPluginsV2: Component<{}> = () => {
     const q = query().trim().toLowerCase()
     const entries = catalog()?.entries ?? []
     if (!q) return entries
-    return entries.filter(
-      (entry) => entry.name.toLowerCase().includes(q) || (entry.description ?? "").toLowerCase().includes(q),
-    )
+    return fuzzysort
+      .go(q, entries, {
+        keys: [(entry) => entry.name, (entry) => entry.description ?? ""],
+      })
+      .map((result) => result.obj)
   })
 
   const installed = createMemo(() => {
