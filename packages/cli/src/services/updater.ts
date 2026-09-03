@@ -1,9 +1,7 @@
 import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
-import { OpenCode } from "@opencode-ai/client"
-import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
-import { Context, Duration, Effect, FileSystem, Layer, Ref, Schedule, Semaphore, Stream } from "effect"
+import { Context, Duration, Effect, FileSystem, Layer, Schedule } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
@@ -13,142 +11,25 @@ export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
 export type Method = (typeof methods)[number]
 
 export interface Interface {
-  readonly check: () => Effect.Effect<void>
-  readonly monitor: (input: {
-    readonly url: string
-    readonly password: string
-    readonly managed: boolean
-    readonly notify: (version: string) => Effect.Effect<void>
-    readonly restart: (handoff: PersistentPty.Handoff | null) => Effect.Effect<void>
-  }) => Effect.Effect<void>
+  readonly watch: (notify: (version: string) => Effect.Effect<void>) => Effect.Effect<void>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
 }
 
-export type Inspection =
-  | { readonly action: "none" }
-  | { readonly action: Exclude<Action, "none">; readonly version: string }
+type Inspection = { readonly action: "none" } | { readonly action: Exclude<Action, "none">; readonly version: string }
 
-type State =
-  | { readonly type: "current" }
-  | { readonly type: "available"; readonly version: string; readonly availableSince: number }
-  | { readonly type: "ready-to-restart"; readonly version: string }
-
-export interface MonitorInput {
-  readonly url: string
-  readonly password: string
-  readonly managed: boolean
+export const watchUpdates = Effect.fnUntraced(function* (input: {
   readonly inspect: () => Effect.Effect<Inspection, Error>
-  readonly install: (version: string) => Effect.Effect<boolean, Error>
-  readonly restart: (handoff: PersistentPty.Handoff | null) => Effect.Effect<void>
-  readonly interval?: Duration.Input
-  readonly notificationThreshold?: Duration.Input
   readonly notify: (version: string) => Effect.Effect<void>
-}
-
-export const monitorServer = Effect.fnUntraced(function* (input: MonitorInput) {
-  const state = yield* Ref.make<State>({ type: "current" })
-  const applyLock = yield* Semaphore.make(1)
-  const client = OpenCode.make({
-    baseUrl: input.url,
-    headers: { authorization: `Basic ${btoa(`opencode:${input.password}`)}` },
-  })
-
-  const applyIfIdle = () =>
-    applyLock.withPermit(
-      Effect.gen(function* () {
-        const pending = yield* Ref.get(state)
-        if (pending.type !== "available") return
-        const active = yield* Effect.tryPromise({
-          try: () => client.session.active(),
-          catch: (cause) => new Error("Failed to read active sessions", { cause }),
-        })
-        if (Object.keys(active).length > 0) return
-        const latest = yield* input.inspect()
-        if (latest.action !== "upgrade") {
-          yield* Ref.set(state, { type: "current" })
-          return
-        }
-        const installed = yield* input
-          .install(latest.version)
-          .pipe(
-            Effect.catch((error) =>
-              Effect.logWarning("automatic update failed", { cause: error }).pipe(Effect.as(false)),
-            ),
-          )
-        if (!installed) return
-        const handoff = input.managed
-          ? yield* Effect.tryPromise({
-              try: () => client.experimental.persistentPty.handoff(),
-              catch: (cause) => new Error("Failed to prepare persistent terminals for restart", { cause }),
-            })
-          : undefined
-        yield* Ref.set(state, { type: "ready-to-restart", version: latest.version })
-        if (handoff) yield* input.restart(handoff.handoff)
-      }),
-    )
-
-  const checkServer = Effect.gen(function* () {
+  readonly interval?: Duration.Input
+}) {
+  const check = Effect.gen(function* () {
     const result = yield* input.inspect()
-    if (result.action === "notify") {
-      yield* input.notify(result.version)
-      return
-    }
-    if (result.action !== "upgrade") {
-      yield* Ref.update(
-        state,
-        (current): State => (current.type === "ready-to-restart" ? current : { type: "current" }),
-      )
-      return
-    }
-    yield* Ref.update(state, (current): State => {
-      if (current.type === "ready-to-restart" && current.version === result.version) return current
-      return {
-        type: "available",
-        version: result.version,
-        availableSince: current.type === "available" ? current.availableSince : Date.now(),
-      }
-    })
-    yield* applyIfIdle()
-    const pending = yield* Ref.get(state)
-    if (
-      pending.type === "available" &&
-      Date.now() - pending.availableSince >= Duration.toMillis(input.notificationThreshold ?? "3 days")
-    )
-      yield* input.notify(pending.version)
-  }).pipe(Effect.catch((cause) => Effect.logWarning("automatic update check failed", { cause })))
-
-  const subscribe = Effect.suspend(() =>
-    Stream.fromAsyncIterable(
-      client.event.subscribe(),
-      (cause) => new Error("Update event stream failed", { cause }),
-    ).pipe(
-      Stream.runForEach((event) => {
-        if (event.type === "server.connected") return applyIfIdle()
-        if (
-          event.type !== "session.execution.succeeded" &&
-          event.type !== "session.execution.failed" &&
-          event.type !== "session.execution.interrupted"
-        )
-          return Effect.void
-        return Effect.tryPromise({
-          try: () => client.session.wait({ sessionID: event.data.sessionID }),
-          catch: (cause) => new Error(`Failed to wait for Session ${event.data.sessionID}`, { cause }),
-        }).pipe(Effect.andThen(applyIfIdle()))
-      }),
-      Effect.catch((cause) => Effect.logWarning("update event stream disconnected", { cause })),
-    ),
-  ).pipe(Effect.repeat(Schedule.spaced("1 second")))
-
-  return yield* Effect.all(
-    [checkServer.pipe(Effect.repeat(Schedule.spaced(input.interval ?? "10 minutes"))), subscribe],
-    {
-      concurrency: "unbounded",
-      discard: true,
-    },
-  )
+    if (result.action !== "none") yield* input.notify(result.version)
+  }).pipe(Effect.catchCause((cause) => Effect.logWarning("automatic update check failed", { cause })))
+  return yield* check.pipe(Effect.repeat(Schedule.spaced(input.interval ?? "10 minutes")))
 })
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
@@ -161,13 +42,13 @@ export function decodePolicy(text: string): Policy | undefined {
   if (errors.length || typeof input !== "object" || input === null) return
   if ("update" in input) {
     const value = input.update
-    if (value === "disable" || value === "notify" || value === "auto") return value
+    if (value === "disable" || value === "notify") return value
     return
   }
   if (!("autoupdate" in input)) return
   if (input.autoupdate === false) return "disable"
   if (input.autoupdate === "notify") return "notify"
-  if (input.autoupdate === true) return "auto"
+  if (input.autoupdate === true) return "notify"
 }
 
 const make = Effect.gen(function* () {
@@ -192,7 +73,7 @@ const make = Effect.gen(function* () {
         Effect.orElseSucceed(() => undefined),
       ),
     )
-    return values.findLast((value) => value !== undefined) ?? "auto"
+    return values.findLast((value) => value !== undefined) ?? "notify"
   })
 
   const run = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "10 seconds") {
@@ -327,10 +208,7 @@ const make = Effect.gen(function* () {
       yield* Effect.logInfo("update check done", { action: "up-to-date" })
       return { action: "none" }
     }
-    if (next === "notify") {
-      yield* Effect.logInfo("OpenCode update available", { current: OPENCODE_VERSION, latest: version })
-      return { action: next, version }
-    }
+    yield* Effect.logInfo("OpenCode update available", { current: OPENCODE_VERSION, latest: version })
     return { action: next, version }
   })
 
@@ -349,26 +227,9 @@ const make = Effect.gen(function* () {
     if (!(yield* install(version))) return yield* Effect.fail(new Error("Installation method not found"))
   })
 
-  const check = Effect.fn("cli.updater.check")(
-    function* () {
-      const result = yield* inspect()
-      if (result.action !== "upgrade") return
-      yield* install(result.version)
-    },
-    Effect.catchCause((cause) => Effect.logWarning("automatic update failed", { cause })),
-  )
+  const watch = (notify: (version: string) => Effect.Effect<void>) => watchUpdates({ inspect, notify })
 
-  const monitor = Effect.fn("cli.updater.monitor")(function* (input: {
-    readonly url: string
-    readonly password: string
-    readonly managed: boolean
-    readonly notify: (version: string) => Effect.Effect<void>
-    readonly restart: (handoff: PersistentPty.Handoff | null) => Effect.Effect<void>
-  }) {
-    return yield* monitorServer({ ...input, inspect, install })
-  })
-
-  return Service.of({ check, monitor, apply, method, latest, upgrade })
+  return Service.of({ watch, apply, method, latest, upgrade })
 })
 
 export const layer = Layer.effect(Service, make)

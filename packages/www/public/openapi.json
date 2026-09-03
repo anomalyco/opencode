@@ -13899,7 +13899,7 @@
           },
           "update": {
             "type": "string",
-            "enum": ["disable", "notify", "auto"]
+            "enum": ["disable", "notify"]
           },
           "share": {
             "type": "string",

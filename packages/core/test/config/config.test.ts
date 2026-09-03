@@ -620,7 +620,7 @@ describe("Config", () => {
   test("migrates the v1 update policy", () => {
     expect(ConfigMigrateV1.migrate({ autoupdate: false }).update).toBe("disable")
     expect(ConfigMigrateV1.migrate({ autoupdate: "notify" }).update).toBe("notify")
-    expect(ConfigMigrateV1.migrate({ autoupdate: true }).update).toBe("auto")
+    expect(ConfigMigrateV1.migrate({ autoupdate: true }).update).toBe("notify")
     expect(ConfigMigrateV1.migrate({}).update).toBeUndefined()
   })
 

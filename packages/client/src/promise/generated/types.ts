@@ -1883,7 +1883,7 @@ export type ConfigEntry =
         shell?: string
         model?: string | { providerID: string; model: string; variant?: string }
         default_agent?: string
-        update?: "disable" | "notify" | "auto"
+        update?: "disable" | "notify"
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
