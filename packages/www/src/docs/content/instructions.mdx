@@ -91,9 +91,10 @@ The selected agent or provider system prompt is sent first. OpenCode then sends
 the session's initial instructions, composed in this order:
 
 1. Built-in environment and date context.
-2. Ambient `AGENTS.md` discovery.
-3. Available skill, reference, and MCP guidance.
-4. Session-specific instruction entries supplied through the API.
+2. Config `customInstructions`, applied after environment context and before `AGENTS.md` files, so repo instructions can refine your global defaults.
+3. Ambient `AGENTS.md` discovery.
+4. Available skill, reference, and MCP guidance.
+5. Session-specific instruction entries supplied through the API.
 
 These sources are combined; ordering is not an override mechanism. Nested
 `AGENTS.md` files discovered by reads are chronological session entries rather

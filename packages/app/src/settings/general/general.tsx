@@ -20,11 +20,13 @@ import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import {
   createAppearanceSettingsController,
+  createCustomInstructionsSettingsController,
   createShellOptions,
   createShellSettingsController,
   type AppearanceSettingsController,
   type ShellSettingsController,
 } from "./controllers"
+import { CustomInstructionsSetting } from "./custom-instructions"
 import "@/settings/settings.css"
 import { ServerConnection } from "@/runtime/server/registry"
 
@@ -304,6 +306,7 @@ export const SettingsGeneral: Component<{
   const mobile = createMediaQuery("(max-width: 767px)")
   const updater = useUpdaterAction()
   const shell = createShellSettingsController(() => props.server)
+  const customInstructions = createCustomInstructionsSettingsController(() => props.server)
   const desktop = createMemo(() => platform.platform === "desktop")
 
   const [pinchZoom, { mutate: setPinchZoom }] = createResource(
@@ -530,6 +533,9 @@ export const SettingsGeneral: Component<{
       </div>
       <div class="settings-tab-body">
         <GeneralSection />
+
+        {/* Custom instructions sits in its own section so general-row changes merge cleanly. */}
+        <CustomInstructionsSetting controller={customInstructions} />
 
         <section class="settings-section" aria-label={language.t("settings.timeline.title")}>
           <h3 class="settings-section-title">{language.t("settings.timeline.title")}</h3>

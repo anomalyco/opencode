@@ -7,6 +7,8 @@ import { Location } from "@opencode-ai/core/location"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Config } from "@opencode-ai/core/config"
+import { Document, Info } from "@opencode-ai/schema/config"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { location } from "../fixture/location"
@@ -28,12 +30,16 @@ const locationLayer = Layer.succeed(
     ),
   ),
 )
-const it = testEffect(
+const osName = (platform: string) =>
+  platform === "win32" ? "Windows" : platform === "darwin" ? "macOS" : platform === "linux" ? "Linux" : platform
+const expectedOS = `  OS: ${osName(process.platform)} (${process.arch})`
+const baseLayer = (entries: Parameters<typeof Config.testLayer>[0] = []) =>
   AppNodeBuilder.build(InstructionBuiltIns.node, [
     Location.node.replace(locationLayer),
     Global.node.replace(Global.layerWith({ config: temporary, tmp: temporary })),
-  ]),
-)
+    Config.node.replace(Config.testLayer(entries)),
+  ])
+const it = testEffect(baseLayer())
 
 describe("InstructionBuiltIns", () => {
   it.effect("loads location-scoped environment and host-local date instructions", () =>
@@ -42,7 +48,7 @@ describe("InstructionBuiltIns", () => {
       const context = yield* InstructionBuiltIns.Service
       const initialized = yield* readInitial(yield* context.load(sessionID))
 
-      expect(initialized.text).toBe(
+      expect(initialized.text).toContain(
         [
           "Here is some useful information about the environment you are running in:",
           "<env>",
@@ -51,6 +57,12 @@ describe("InstructionBuiltIns", () => {
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
           `  Platform: ${process.platform}`,
+          expectedOS,
+        ].join("\n"),
+      )
+      expect(initialized.text).toMatch(/  Shell: .+ \(.+\)/)
+      expect(initialized.text).toContain(
+        [
           `  Prefer ${temporary} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
           "</env>",
           "",
@@ -81,6 +93,53 @@ describe("InstructionBuiltIns", () => {
 
       yield* TestClock.setTime(timestamp + 60 * 60 * 1000)
       expect((yield* readUpdate(yield* context.load(sessionID), initialized)).changed).toBe(false)
+    }),
+  )
+})
+
+describe("InstructionBuiltIns custom instructions", () => {
+  const customIt = (entries: Parameters<typeof Config.testLayer>[0]) => testEffect(baseLayer(entries))
+
+  customIt([
+    new Document({ type: "document", info: new Info({ customInstructions: "global rules" }) }),
+    new Document({ type: "document", info: new Info({ customInstructions: "project rules" }) }),
+  ]).effect("merges custom instructions from global-first entries", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(timestamp)
+      const context = yield* InstructionBuiltIns.Service
+      const initialized = yield* readInitial(yield* context.load(sessionID))
+      expect(initialized.text).toContain("<custom_instructions>\nglobal rules\n\nproject rules\n</custom_instructions>")
+    }),
+  )
+
+  customIt([
+    new Document({ type: "document", info: new Info({ customInstructions: "  custom rules  " }) }),
+  ]).effect("trims surrounding whitespace", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(timestamp)
+      const context = yield* InstructionBuiltIns.Service
+      const initialized = yield* readInitial(yield* context.load(sessionID))
+      expect(initialized.text).toContain("<custom_instructions>\ncustom rules\n</custom_instructions>")
+    }),
+  )
+
+  customIt([
+    new Document({ type: "document", info: new Info({ customInstructions: "   " }) }),
+  ]).effect("omits the custom block when custom instructions are blank", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(timestamp)
+      const context = yield* InstructionBuiltIns.Service
+      const initialized = yield* readInitial(yield* context.load(sessionID))
+      expect(initialized.text).not.toContain("<custom_instructions>")
+    }),
+  )
+
+  customIt([]).effect("omits the custom block when no custom instructions are configured", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(timestamp)
+      const context = yield* InstructionBuiltIns.Service
+      const initialized = yield* readInitial(yield* context.load(sessionID))
+      expect(initialized.text).not.toContain("<custom_instructions>")
     }),
   )
 })

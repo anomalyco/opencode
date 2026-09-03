@@ -157,6 +157,7 @@ export type Config = {
   agent?: Record<string, unknown>
   command?: Record<string, unknown>
   instructions?: string[]
+  customInstructions?: string
   disabled_providers?: string[]
   enabled_providers?: string[]
   permission?: string | Record<string, unknown>
