@@ -259,6 +259,11 @@ async function main() {
       .find((line) => line.includes('[button] "Frame button"'))
       ?.match(/@e\d+/)?.[0]
     assert(childRef, childSnapshot.content)
+    await rpc.deny({ urls: [child.url] }, { location })
+    await fails("evaluate", { tabID, frameID: child.id, script: "document.body.innerText" }, /permission_denied/)
+    await fails("snapshot", { tabID, frameID: child.id }, /permission_denied/)
+    await fails("click", { tabID, ref: childRef }, /permission_denied/)
+    await rpc.deny({ urls: [] }, { location })
     await call("click", { tabID, ref: Browser.Ref.make(childRef) })
     assert.equal(
       (await call("evaluate", { tabID, frameID: child.id, script: "document.querySelector('button').textContent" }))
@@ -283,6 +288,9 @@ async function main() {
     assert(network.requests.length)
     const detail = await call("network.get", { tabID, id: network.requests[0].id, includeBody: true })
     assert.equal(detail.responseBody.state, "text")
+    await rpc.deny({ urls: [network.requests[0].url] }, { location })
+    await fails("network.get", { tabID, id: network.requests[0].id, includeBody: true }, /permission_denied/)
+    await rpc.deny({ urls: [] }, { location })
     await fails("network.get", { tabID, id: "unknown-request" }, /Do not reload or resend/)
     const fileSnap = await call("snapshot", { tabID })
     const input = fileSnap.content
@@ -328,6 +336,12 @@ async function main() {
       Buffer.from(await rpc.read({ path: download.files[0].path }, { location }), "base64").toString(),
       "desktop download bytes",
     )
+    await call("navigate", { tabID, url: "about:blank" })
+    await rpc.deny({ urls: [fixture + "/download"] }, { location })
+    await fails("files.get", { tabID, fileID: downloads.id }, /permission_denied/)
+    await fails("heap.summary", { tabID, fileID: downloads.id }, /permission_denied/)
+    await rpc.deny({ urls: [] }, { location })
+    await call("navigate", { tabID, url: fixture })
     await call("evaluate", { tabID, script: "setTimeout(()=>alert('hello dialog'),0); null" })
     await until(async () => (await call("dialog", { tabID, action: "get" })).dialog)
     await fails("evaluate", { tabID, script: "1" }, /Inspect it with browser\.dialog/)
