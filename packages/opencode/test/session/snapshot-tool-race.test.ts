@@ -19,6 +19,7 @@ import path from "path"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionSummary } from "../../src/session/summary"
+import { SessionRevert } from "../../src/session/revert"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
@@ -82,6 +83,7 @@ const root = LayerNode.group([
   Session.node,
   SessionProjector.node,
   SessionSummary.node,
+  SessionRevert.node,
   Database.node,
   CrossSpawnSpawner.node,
   LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] }),
@@ -185,5 +187,56 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       expect(diff.length).toBeGreaterThan(0)
     }),
     { git: true, config: providerCfg },
+  ),
+)
+
+it.live("undo restores agent file changes in non-git projects", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ dir, llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const revert = yield* SessionRevert.Service
+
+      const session = yield* sessions.create({
+        title: "non-git undo test",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      const filePath = path.join(dir, "undo-test.txt")
+      const command = `echo 'agent was here' > ${filePath}`
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create the file"), "bash", {
+        command,
+      })
+      yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "create the file" }],
+      })
+      yield* prompt.loop({ sessionID: session.id })
+
+      expect(yield* Effect.promise(() => fs.readFile(filePath, "utf8"))).toContain("agent was here")
+
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      const user = messages.findLast((msg) => msg.info.role === "user")
+      if (!user) throw new Error("Expected user message")
+
+      yield* revert.revert({ sessionID: session.id, messageID: user.info.id })
+      yield* revert.cleanup(yield* sessions.get(session.id))
+
+      const restored = yield* Effect.promise(() =>
+        fs
+          .access(filePath)
+          .then(() => true)
+          .catch(() => false),
+      )
+      expect(restored).toBe(false)
+
+      const remaining = yield* sessions.messages({ sessionID: session.id })
+      expect(remaining.length).toBe(0)
+    }),
+    { config: providerCfg },
   ),
 )

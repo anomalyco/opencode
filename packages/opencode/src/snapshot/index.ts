@@ -25,6 +25,31 @@ const limit = 2 * 1024 * 1024
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
+// Applied only to worktrees without Git (where no .gitignore hierarchy exists).
+// Keeps the snapshot out of dependency and cache directories so tracking stays
+// fast and the shadow repo stays small. Everything else is snapshotted so undo
+// can restore it.
+const defaultExcludes = [
+  "node_modules/",
+  ".git/",
+  "__pycache__/",
+  ".venv/",
+  "venv/",
+  ".tox/",
+  ".mypy_cache/",
+  ".pytest_cache/",
+  ".ruff_cache/",
+  ".gradle/",
+  ".cache/",
+  ".parcel-cache/",
+  ".next/",
+  ".nuxt/",
+  ".output/",
+  ".turbo/",
+  ".yarn/",
+  "target/",
+  "coverage/",
+]
 interface GitResult {
   readonly code: ChildProcessSpawner.ExitCode
   readonly text: string
@@ -65,10 +90,14 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Snapshot.state")(function* (ctx) {
+        // Non-Git projects resolve to a synthetic global project whose worktree is
+        // the filesystem root. Snapshot those instances at the opened directory
+        // instead so tracking stays scoped to the actual project.
+        const worktree = ctx.project.vcs === "git" ? ctx.worktree : ctx.directory
         const state = {
           directory: ctx.directory,
-          worktree: ctx.worktree,
-          gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree)),
+          worktree,
+          gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(worktree)),
           vcs: ctx.project.vcs,
         }
 
@@ -103,11 +132,14 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           if (!files.length) return new Set<string>()
           // check-ignore treats a leading colon as pathspec magic but accepts and echoes a protective ./ prefix.
           const checkIgnorePaths = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
+          // Worktrees without Git have no .git dir to resolve excludes against, so
+          // point check-ignore at the shadow gitdir where sync() mirrors the rules.
+          const gitdir = state.vcs === "git" ? path.join(state.worktree, ".git") : state.gitdir
           const check = yield* git(
             [
               ...quote,
               "--git-dir",
-              path.join(state.worktree, ".git"),
+              gitdir,
               "--work-tree",
               state.worktree,
               "check-ignore",
@@ -165,7 +197,6 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
 
         const enabled = Effect.fnUntraced(function* () {
-          if (state.vcs !== "git") return false
           return (yield* config.get()).snapshot !== false
         })
 
@@ -184,6 +215,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           const target = path.join(state.gitdir, "info", "exclude")
           const text = [
             file ? (yield* read(file)).trimEnd() : "",
+            ...(state.vcs === "git" ? [] : defaultExcludes),
             ...list.map((item) => `/${item.replaceAll("\\", "/")}`),
           ]
             .filter(Boolean)
