@@ -26,6 +26,7 @@ export type ClientConnectionOptions = {
 
 const connectTimeout = 2_000
 const reconnectDelay = 1_000
+const maxReconnectDelay = 30_000
 const connectionHistoryLimit = 50
 
 export function createClientConnection(initialApi: OpenCodeClient, options: ClientConnectionOptions) {
@@ -140,7 +141,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
           if (attempt === 1) continue
         }
       }
-      await wait(reconnectDelay, controller.signal)
+      await wait(Math.min(reconnectDelay * 2 ** (attempt - 1), maxReconnectDelay), controller.signal)
     }
   }
 
