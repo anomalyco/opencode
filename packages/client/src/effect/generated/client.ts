@@ -397,6 +397,7 @@ const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: Ses
         model: input?.["model"],
         location: input?.["location"],
         metadata: input?.["metadata"],
+        infinite: input?.["infinite"],
       },
     }).pipe(
       Effect.mapError(mapClientError),
@@ -493,6 +494,7 @@ const EndpointSessionPrompt = (raw: RawClient["server.session"]) => (input: Sess
         metadata: input["metadata"],
         delivery: input["delivery"],
         resume: input["resume"],
+        infinite: input["infinite"],
       },
     }).pipe(
       Effect.mapError(mapClientError),

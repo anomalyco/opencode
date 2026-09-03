@@ -335,6 +335,28 @@ Control automatic context compaction and how much recent context it preserves.
 
 See the [compaction guide](/compaction) for automatic context management.
 
+### Infinite
+
+Control infinite agent mode auto-continue limits through the `infinite` option.
+
+```jsonc
+{
+  "infinite": {
+    "maxIterations": 100,
+    "maxHours": 8,
+    "sentinel": "[TASK_COMPLETE]",
+    "todoDetection": true
+  }
+}
+```
+
+- `maxIterations` - Maximum auto-continue iterations before stopping (default: `100`).
+- `maxHours` - Maximum wall-clock hours before stopping (default: `8`).
+- `sentinel` - Completion marker the agent emits when the task is fully complete (default: `"[TASK_COMPLETE]"`).
+- `todoDetection` - Stop when all todos are completed or cancelled (default: `true`).
+
+Use the Mode toggle in the composer footer to switch between `Complete` and `Infinite` per session. The existing Stop button interrupts the loop at any time.
+
 ### Session warming
 
 Keep recently active model sessions warm with periodic transient requests.

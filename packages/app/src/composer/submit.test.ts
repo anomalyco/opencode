@@ -31,7 +31,7 @@ const selection = {
   },
 } satisfies ModelSelection
 
-function controls(): ComposerControls {
+function controls(mode = "complete"): ComposerControls {
   return {
     agents: {
       available: [{ name: "build", mode: "primary" }],
@@ -41,6 +41,7 @@ function controls(): ComposerControls {
       select() {},
     },
     model: { selection, paid: true, loading: false },
+    mode: { current: mode, select() {} },
     session: {
       tabs: { active: () => undefined, all: () => [], open() {}, setActive() {} },
       reviewPanel: { opened: () => false, open() {} },
@@ -471,5 +472,53 @@ describe("Composer submission", () => {
     await submitInput(adapter, undefined, "shell").submit(new Event("submit"))
 
     expect(state.current().some((part) => part.type === "image")).toBe(true)
+  })
+
+  test("sends infinite false for complete mode followups", async () => {
+    const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const target = session({
+      calls: [],
+      prompt: async (value) => admitted.resolve(value),
+    })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls: () => controls("complete"),
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+
+    await submitInput(adapter).submit(new Event("submit"))
+    const request = await admitted.promise
+    expect(request.infinite).toBe(false)
+  })
+
+  test("sends infinite true for infinite mode followups", async () => {
+    const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const target = session({
+      calls: [],
+      prompt: async (value) => admitted.resolve(value),
+    })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls: () => controls("infinite"),
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+
+    await submitInput(adapter).submit(new Event("submit"))
+    const request = await admitted.promise
+    expect(request.infinite).toBe(true)
   })
 })

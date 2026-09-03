@@ -175,6 +175,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           model: Model.Ref.pipe(Schema.optional),
           location: Location.Ref.pipe(Schema.optional),
           metadata: Session.Metadata.pipe(Schema.optional),
+          infinite: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
       }).annotateMerge(
@@ -343,6 +344,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           metadata: SessionInbox.UserPayload.fields.metadata,
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
+          infinite: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInbox.User }),
         error: [ConflictError, InvalidRequestError, SessionNotFoundError],

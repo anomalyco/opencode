@@ -192,6 +192,7 @@ function readSubmission(
     return
   }
   const variant = controls.model.selection.variant.current()
+  const infinite = controls.mode.current === "infinite"
   const retry = input.adapter.state.retry.current()
   const retryID =
     retry &&
@@ -213,6 +214,7 @@ function readSubmission(
       agent,
       model: { modelID: model.id, providerID: model.provider.id },
       variant,
+      infinite,
     },
     delivery: input.delivery?.(alternate) ?? "steer",
   }
@@ -339,6 +341,7 @@ async function sendPrompt(session: ComposerSession, value: ComposerSubmission) {
     files: request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
     agents: request.agents,
     skills: request.skills,
+    infinite: value.selection.infinite,
     metadata: {
       displayText: request.displayText,
       comments: request.comments,

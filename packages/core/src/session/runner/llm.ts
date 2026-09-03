@@ -2,14 +2,19 @@ export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
+import { Config } from "../../config.js"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
+import { Form } from "../../form.js"
+import { Permission } from "../../permission.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
 import { SessionHistory } from "../history.js"
+import { SessionInfinite } from "../infinite.js"
+import { SessionTodo } from "../todo.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
@@ -38,12 +43,53 @@ const layer = Layer.effect(
     const context = yield* SessionContext.Service
     const modelTransport = yield* SessionModelTransport.Service
     const db = (yield* Database.Service).db
+    const config = yield* Config.Service
+    const permissions = yield* Permission.Service
+    const forms = yield* Form.Service
     const compaction = yield* SessionCompaction.Service
     const plugins = yield* Plugin.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
+
+    const lastAssistant = Effect.fn("SessionRunner.lastAssistant")(function* (sessionID: SessionSchema.ID) {
+      const messages = yield* store.context(sessionID)
+      const assistant = messages.toReversed().find((message) => message.type === "assistant")
+      if (!assistant || assistant.type !== "assistant") return undefined
+      return assistant
+    })
+
+    const maybeInfiniteContinue = Effect.fn("SessionRunner.maybeInfiniteContinue")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      if (!SessionInfinite.isEnabled(sessionID)) return false
+      const entries = yield* config.entries()
+      const settings = SessionInfinite.resolve(
+        entries.flatMap((entry) => (entry.type === "document" && entry.info.infinite ? [entry.info.infinite] : [])),
+      )
+      const pendingPermissions = yield* permissions.forSession(sessionID)
+      if (pendingPermissions.length > 0) return false
+      const pendingForms = yield* forms.list({ sessionID })
+      if (pendingForms.length > 0) return false
+      const progress = SessionInfinite.getProgress(sessionID) ?? { iterations: 0, startedAt: Date.now() }
+      if (progress.iterations >= settings.maxIterations) return false
+      if (Date.now() - progress.startedAt >= settings.maxHours * 3_600_000) return false
+      const assistant = yield* lastAssistant(sessionID)
+      if (assistant?.error !== undefined) return false
+      const text = assistant?.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n") ?? ""
+      if (SessionInfinite.containsSentinel(text, settings.sentinel)) return false
+      if (settings.todoDetection) {
+        const current = yield* SessionTodo.get(db, sessionID)
+        if (SessionInfinite.isTerminated(current)) return false
+      }
+      yield* bus.publish(SessionEvent.Synthetic, {
+        sessionID,
+        text: SessionInfinite.continuationPrompt(settings.sentinel),
+      })
+      SessionInfinite.recordIteration(sessionID)
+      return true
+    })
 
     const drain = Effect.fn("SessionRunner.drain")(function* (input: Parameters<Interface["drain"]>[0]) {
       const sessionID = input.sessionID
@@ -169,7 +215,26 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step)
+        const done = yield* runStep(next.context, step)
+        if (done) {
+          continuing = true
+          step++
+          force = false
+          entering = false
+          continue
+        }
+        const pending = yield* SessionInbox.has(db, sessionID, "input")
+        if (!pending) {
+          const continued = yield* maybeInfiniteContinue(sessionID)
+          if (continued) {
+            continuing = true
+            step = 1
+            force = false
+            entering = false
+            continue
+          }
+        }
+        continuing = false
         step++
         force = false
         entering = false
@@ -320,5 +385,8 @@ export const node = makeLocationNode({
     Snapshot.node,
     ToolOutput.node,
     Database.node,
+    Config.node,
+    Permission.node,
+    Form.node,
   ],
 })

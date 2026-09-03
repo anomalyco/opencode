@@ -1347,6 +1347,7 @@ export function createData(config: CreateDataInput) {
         title?: string
         agent?: string
         model?: ModelRef
+        infinite?: boolean
         location?: LocationRef
         projectID?: string
       }) {

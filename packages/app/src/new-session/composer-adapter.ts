@@ -76,6 +76,7 @@ export function createNewSessionComposerAdapter(props: {
           providerID: selection.model.providerID,
           variant: selection.variant,
         },
+        infinite: selection.infinite,
         location: { directory: sessionDirectory },
       })
       const creation = created.request.then(
@@ -110,6 +111,7 @@ export function createNewSessionComposerAdapter(props: {
           agent: selection.agent,
           model: selection.model,
           variant: selection.variant ?? null,
+          mode: selection.infinite ? "infinite" : "complete",
         })
         if (!pending) tabs.promoteDraft(draftID, { server: server.key, sessionId: created.id })
         submission.retarget(

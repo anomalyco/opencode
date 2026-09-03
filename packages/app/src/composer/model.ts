@@ -366,6 +366,14 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         onSelect: (value) => adapter.controls().model.selection.variant.set(value === "default" ? undefined : value),
         keybind: () => command.keybindParts("model.variant.cycle"),
       },
+      mode: {
+        options: () => [
+          { id: "complete", label: language.t("session.mode.complete") },
+          { id: "infinite", label: language.t("session.mode.infinite") },
+        ],
+        current: () => adapter.controls().mode.current,
+        onSelect: (value) => adapter.controls().mode.select(value === "infinite" ? "infinite" : "complete"),
+      },
       submit: {
         stopping,
         working: adapter.working,

@@ -58,6 +58,7 @@ import { SessionModelTransport } from "./session/model-transport.js"
 import { llmClient } from "./effect/app-node-platform.js"
 import { Snapshot } from "./snapshot.js"
 import { Session } from "./session/session.js"
+import { SessionInfinite } from "./session/infinite.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { Job } from "./job.js"
@@ -86,6 +87,7 @@ type CreateBaseInput = {
   agent?: Agent.ID
   model?: Model.Ref
   metadata?: SessionSchema.Metadata
+  infinite?: boolean
 }
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
@@ -249,6 +251,8 @@ const layer = Layer.effect(
     const result = Service.of({
       create: Effect.fn("Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
+        if (input.infinite === true) SessionInfinite.enable(sessionID)
+        if (input.infinite === false) SessionInfinite.disable(sessionID)
         const recorded = yield* store.get(sessionID)
         if (recorded) return recorded
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined

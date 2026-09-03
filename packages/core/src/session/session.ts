@@ -31,11 +31,13 @@ import { SessionRevert } from "./revert.js"
 import { SessionShell } from "./shell.js"
 import { SessionSkill } from "./skill.js"
 import { SessionSchema } from "./schema.js"
+import { SessionInfinite } from "./infinite.js"
 import { SessionStore } from "./store.js"
 
 type PromptRequest = SessionPrompt.Input & {
   id?: SessionMessage.ID
   resume?: boolean
+  infinite?: boolean
 }
 
 /**
@@ -155,6 +157,12 @@ export const make = Effect.fn("Session.make")(function* () {
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const session = yield* get(sessionID)
+        if (input.infinite === true) SessionInfinite.enable(sessionID)
+        if (input.infinite === false) SessionInfinite.disable(sessionID)
+        const resolvedText =
+          input.infinite === true
+            ? SessionInfinite.withSentinelInstruction(input.text, SessionInfinite.Defaults.sentinel)
+            : input.text
         const messageID = input.id ?? SessionMessage.ID.create()
         const admitted = yield* Effect.gen(function* () {
           const existing = yield* admission.reconcile({
@@ -165,7 +173,7 @@ export const make = Effect.fn("Session.make")(function* () {
           })
           if (existing) return existing
           const item = yield* restore(
-            SessionPrompt.prepare({ session, messageID, input }).pipe(
+            SessionPrompt.prepare({ session, messageID, input: { ...input, text: resolvedText } }).pipe(
               Effect.provideService(Instance.Service, instances),
               Effect.provideService(FSUtil.Service, fs),
             ),

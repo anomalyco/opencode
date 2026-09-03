@@ -36,6 +36,7 @@ export type ComposerEditorView = {
   }
   agent?: ComposerSelectControl
   variant?: ComposerSelectControl
+  mode?: ComposerSelectControl
   submit: {
     stopping: Accessor<boolean>
     working?: Accessor<boolean>
