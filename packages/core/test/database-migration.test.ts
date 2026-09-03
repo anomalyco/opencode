@@ -20,7 +20,6 @@ import workspaceMigration from "@opencode-ai/core/database/migration/20260808023
 import executionClaimsMigration from "@opencode-ai/core/database/migration/20260811161259_execution_claim_attempts"
 import sessionInboxMigration from "@opencode-ai/core/database/migration/20260812181746_session_inbox"
 import sessionViewedStateMigration from "@opencode-ai/core/database/migration/20260819222447_session_viewed_state"
-import compactionModelMigration from "@opencode-ai/core/database/migration/20260902000000_compaction_model"
 import { Global } from "@opencode-ai/util/global"
 
 const run = <A, E>(
@@ -63,100 +62,6 @@ const parkedClient = (arrived: Deferred.Deferred<void>, gate: Deferred.Deferred<
   ).pipe(Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Layer.provide(Reactivity.layer))
 
 describe("DatabaseMigration", () => {
-  for (const source of ["messages", "events"] as const) {
-    test.each([
-      ["previous", "next", "selected", undefined, "previous"],
-      [undefined, "next", "selected", undefined, "next"],
-      [undefined, undefined, "selected", undefined, "selected"],
-      [undefined, undefined, undefined, undefined, "unknown"],
-      ["previous", "next", "selected", "recorded", "recorded"],
-    ])(
-      `backfills compaction models from ${source}: %s / %s / %s / %s`,
-      async (before, after, selected, recorded, expected) => {
-        await run(
-          Effect.gen(function* () {
-            const db = yield* makeDb
-            yield* db.run(sql`CREATE TABLE session_v2 (id TEXT PRIMARY KEY, model TEXT)`)
-            yield* db.run(
-              sql`CREATE TABLE session_message (id TEXT, session_id TEXT, seq INTEGER, type TEXT, data TEXT)`,
-            )
-            yield* db.run(sql`CREATE TABLE event (id TEXT, aggregate_id TEXT, seq INTEGER, type TEXT, data TEXT)`)
-            const model = (id: string) => ({
-              id,
-              providerID: id === "unknown" ? "unknown" : "provider",
-              variant: "variant",
-            })
-            yield* db.run(
-              sql`INSERT INTO session_v2 VALUES ('ses_test', ${selected ? JSON.stringify(model(selected)) : null})`,
-            )
-            for (const entry of [
-              { id: "older", seq: 0 },
-              { id: before, seq: 1 },
-              { id: after, seq: 5 },
-            ]) {
-              if (!entry.id || (entry.seq === 0 && !before)) continue
-              const data = JSON.stringify({ model: model(entry.id) })
-              if (source === "messages")
-                yield* db.run(
-                  sql`INSERT INTO session_message VALUES (${entry.id}, 'ses_test', ${entry.seq}, 'assistant', ${data})`,
-                )
-              if (source === "events")
-                yield* db.run(
-                  sql`INSERT INTO event VALUES (${entry.id}, 'ses_test', ${entry.seq}, 'session.step.started.1', ${data})`,
-                )
-            }
-            // A different session must never supply the inferred model.
-            yield* db.run(
-              sql`INSERT INTO session_message VALUES ('other', 'ses_other', 2, 'assistant', '{"model":{"id":"other","providerID":"other"}}')`,
-            )
-            const data = JSON.stringify({
-              status: "completed",
-              summary: "Summary",
-              recent: "Recent",
-              ...(recorded ? { model: model(recorded), providerState: { opaque: "keep" } } : {}),
-            })
-            yield* db.run(sql`INSERT INTO session_message VALUES ('checkpoint', 'ses_test', 3, 'compaction', ${data})`)
-            yield* db.run(sql`INSERT INTO event VALUES ('ended', 'ses_test', 4, 'session.compaction.ended.1', ${data})`)
-            yield* db.run(
-              sql`INSERT INTO session_message VALUES ('running', 'ses_test', 6, 'compaction', '{"status":"running"}')`,
-            )
-            yield* db.run(
-              sql`INSERT INTO session_message VALUES ('failed', 'ses_test', 7, 'compaction', '{"status":"failed"}')`,
-            )
-
-            yield* DatabaseMigration.applyOnly(db, [compactionModelMigration])
-            yield* DatabaseMigration.applyOnly(db, [compactionModelMigration])
-
-            for (const table of ["session_message", "event"]) {
-              const row = yield* db.get<{
-                model: string
-                provider: string
-                variant: string | null
-                state: string | null
-                summary: string
-              }>(sql`
-              SELECT json_extract(data, '$.model.id') AS model, json_extract(data, '$.model.providerID') AS provider,
-                json_extract(data, '$.model.variant') AS variant, json_extract(data, '$.providerState.opaque') AS state,
-                json_extract(data, '$.summary') AS summary
-              FROM ${sql.identifier(table)} WHERE id = ${table === "event" ? "ended" : "checkpoint"}
-            `)
-              expect(row).toEqual({
-                model: expected,
-                provider: expected === "unknown" ? "unknown" : "provider",
-                variant: expected === "unknown" ? null : "variant",
-                state: recorded ? "keep" : null,
-                summary: "Summary",
-              })
-            }
-            expect(
-              yield* db.all(sql`SELECT data FROM session_message WHERE id IN ('running', 'failed') ORDER BY seq`),
-            ).toEqual([{ data: '{"status":"running"}' }, { data: '{"status":"failed"}' }])
-          }),
-        )
-      },
-    )
-  }
-
   test("defaults missing workspace names while preserving legacy workspace data", async () => {
     await run(
       Effect.gen(function* () {

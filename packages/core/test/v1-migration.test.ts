@@ -867,7 +867,6 @@ describe("V1Migration database workflow", () => {
         ('ses_existing', 'next-project', 'source-existing', '/tmp/next', 'Source existing', '2', NULL, NULL, 11, 21),
         ('ses_orphan', 'missing-project', 'orphan', '/tmp/orphan', 'Orphan', '2', NULL, NULL, 12, 22);
       INSERT INTO session_message VALUES
-        ('msg_next_checkpoint', 'ses_next', 'compaction', 3, 11, 12, '{"status":"completed","reason":"manual","summary":"Summary","recent":"","time":{"created":11}}'),
         ('msg_next', 'ses_next', 'user', 4, 12, 13, '{"text":"from next''s history","time":{"created":12}}'),
         ('msg_source_existing', 'ses_existing', 'user', 2, 12, 13, '{"text":"source","time":{"created":12}}'),
         ('msg_orphan', 'ses_orphan', 'user', 0, 12, 13, '{"text":"orphan","time":{"created":12}}');
@@ -909,21 +908,13 @@ describe("V1Migration database workflow", () => {
             .where(eq(SessionTable.id, SessionSchema.ID.make("ses_next")))
             .get(),
         ).toEqual({ directory: process.platform === "win32" ? "C:\\Users\\sewer" : "C:/Users/sewer" })
-        expect(
-          yield* db.all(sql`SELECT id, seq, data FROM session_message WHERE session_id = 'ses_next' AND type = 'user'`),
-        ).toEqual([
+        expect(yield* db.all(sql`SELECT id, seq, data FROM session_message WHERE session_id = 'ses_next'`)).toEqual([
           {
             id: "msg_next",
             seq: 4,
             data: '{"text":"from next\'s history","time":{"created":12}}',
           },
         ])
-        expect(
-          yield* db.get(sql`
-          SELECT json_extract(data, '$.model') AS model, json_extract(data, '$.providerState') AS state
-          FROM session_message WHERE id = 'msg_next_checkpoint'
-        `),
-        ).toEqual({ model: '{"id":"model","providerID":"provider"}', state: null })
         expect(yield* db.get(sql`SELECT seq, owner_id FROM event_sequence WHERE aggregate_id = 'ses_next'`)).toEqual({
           seq: 4,
           owner_id: null,

@@ -1312,10 +1312,6 @@ describe("SessionTransfer", () => {
         completedCompactionID,
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
-      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({
-        id: completedCompactionID,
-        model,
-      })
     }),
   )
 
@@ -1355,46 +1351,6 @@ describe("SessionTransfer", () => {
       })
     }),
   )
-
-  for (const source of ["before", "after", "session", "unknown"] as const) {
-    it.effect(`backfills imported compactions from ${source} without inventing provider state`, () =>
-      Effect.gen(function* () {
-        const sessions = yield* Session.Service
-        const transfer = yield* SessionTransfer.Service
-        const template = yield* sessions.create({ location })
-        const model = Model.Ref.parse("provider/model#variant")
-        const checkpoint = {
-          id: SessionMessage.ID.create(),
-          type: "compaction" as const,
-          status: "completed" as const,
-          reason: "manual" as const,
-          summary: "Summary",
-          recent: "",
-          providerState: { unbound: "discard" },
-          time: { created: DateTime.makeUnsafe(1) },
-        }
-        const selected = SessionMessage.ModelSelected.make({
-          id: SessionMessage.ID.create(),
-          type: "model-switched",
-          model,
-          time: { created: DateTime.makeUnsafe(1) },
-        })
-        const imported = yield* transfer.import({
-          data: {
-            info: { ...template, id: Session.ID.create(), model: source === "session" ? model : undefined },
-            messages:
-              source === "before" ? [selected, checkpoint] : source === "after" ? [checkpoint, selected] : [checkpoint],
-          },
-          location,
-        })
-        const result = (yield* transfer.export({ sessionID: imported.id })).messages.find(
-          (message) => message.id === checkpoint.id,
-        )
-        expect(result).toMatchObject({ model: source === "unknown" ? Model.Ref.parse("unknown/unknown") : model })
-        expect(result && "providerState" in result ? result.providerState : undefined).toBeUndefined()
-      }),
-    )
-  }
 
   it.effect("imports projected messages and reserves their aggregate sequence", () =>
     Effect.gen(function* () {

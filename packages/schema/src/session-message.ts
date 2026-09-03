@@ -250,8 +250,7 @@ export const CompactionCompleted = Schema.Struct({
   ...CompactionBase,
   status: Schema.tag("completed"),
   reason: Schema.Literals(["auto", "manual"]),
-  /** Producing model. Historical checkpoints may contain a best-effort backfill. */
-  model: Model.Ref,
+  model: Model.Ref.pipe(optional),
   providerState: ProviderState.pipe(optional),
   summary: Schema.String,
   recent: Schema.String,

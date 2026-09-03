@@ -211,7 +211,6 @@ test("resets the cross-turn cache baseline after compaction", () => {
         id: "compaction-1",
         status: "completed",
         reason: "auto",
-        model: first.model,
         summary: "Compacted context",
         recent: "",
         time: { created: 2 },

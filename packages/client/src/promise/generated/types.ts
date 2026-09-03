@@ -517,7 +517,7 @@ export type SessionMessageCompactionCompleted = {
   time: { created: number }
   status: "completed"
   reason: "auto" | "manual"
-  model: ModelRef
+  model?: ModelRef
   providerState?: SessionMessageProviderState
   summary: string
   recent: string
@@ -1353,7 +1353,7 @@ export type SessionCompactionEnded = {
   data: {
     sessionID: string
     reason: "auto" | "manual"
-    model: ModelRef
+    model?: ModelRef
     providerState?: SessionMessageProviderState1
     text: string
     recent: string
@@ -3072,7 +3072,7 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
-              readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
               readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
@@ -3087,18 +3087,6 @@ export type SessionImportInput = {
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
             }
         )
-      | {
-          readonly type: "compaction"
-          readonly id: string
-          readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly time: { readonly created: number }
-          readonly status: "completed"
-          readonly reason: "auto" | "manual"
-          readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
-          readonly providerState?: { readonly [x: string]: JsonValue }
-          readonly summary: string
-          readonly recent: string
-        }
     >
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["info"]
@@ -3363,7 +3351,7 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
-              readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
               readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
@@ -3378,18 +3366,6 @@ export type SessionImportInput = {
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
             }
         )
-      | {
-          readonly type: "compaction"
-          readonly id: string
-          readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly time: { readonly created: number }
-          readonly status: "completed"
-          readonly reason: "auto" | "manual"
-          readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
-          readonly providerState?: { readonly [x: string]: JsonValue }
-          readonly summary: string
-          readonly recent: string
-        }
     >
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["messages"]
@@ -3654,7 +3630,7 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
-              readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
               readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
@@ -3669,18 +3645,6 @@ export type SessionImportInput = {
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
             }
         )
-      | {
-          readonly type: "compaction"
-          readonly id: string
-          readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly time: { readonly created: number }
-          readonly status: "completed"
-          readonly reason: "auto" | "manual"
-          readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
-          readonly providerState?: { readonly [x: string]: JsonValue }
-          readonly summary: string
-          readonly recent: string
-        }
     >
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["location"]

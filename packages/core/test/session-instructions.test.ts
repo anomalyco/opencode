@@ -252,13 +252,7 @@ describe("SessionInstructions", () => {
       // A completed compaction truncates model-visible history at its boundary, dropping
       // the synthetic that carried sub's instructions.
       yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "" })
-      yield* bus.publish(SessionEvent.Compaction.Ended, {
-        sessionID,
-        reason: "manual",
-        model: Model.Ref.parse("test/model"),
-        text: "summary",
-        recent: "",
-      })
+      yield* bus.publish(SessionEvent.Compaction.Ended, { sessionID, reason: "manual", text: "summary", recent: "" })
       expect(yield* synthetics(sessionID)).toHaveLength(0)
 
       // The model no longer has the rules, so the next read under the subtree must

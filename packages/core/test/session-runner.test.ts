@@ -2699,7 +2699,6 @@ describe("SessionRunnerLLM", () => {
     yield* s.bus.publish(SessionEvent.Compaction.Ended, {
       sessionID,
       reason: "manual",
-      model: Model.Ref.parse(`${s.currentModel.provider}/${s.currentModel.id}`),
       text: "summary",
       recent: "",
     })
