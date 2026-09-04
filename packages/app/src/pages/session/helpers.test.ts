@@ -191,6 +191,47 @@ describe("createSessionTabs", () => {
     })
   })
 
+  test("treats tasks as a special tab outside file tabs", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: "tasks" as string | undefined,
+        all: ["file://src/a.ts", "tasks"],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice("file://".length) : undefined),
+        normalizeTab: (tab) => tab,
+      })
+
+      expect(result.tasksOpen()).toBe(true)
+      expect(result.panelTabs()).toEqual(["file://src/a.ts"])
+      expect(result.openedTabs()).toEqual(["file://src/a.ts"])
+      expect(result.activeTab()).toBe("tasks")
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.closableTab()).toBe("tasks")
+      dispose()
+    })
+  })
+
+  test("falls back to tasks when open without file tabs", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: undefined as string | undefined,
+        all: ["tasks"],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: () => undefined,
+        normalizeTab: (tab) => tab,
+      })
+
+      expect(result.activeTab()).toBe("tasks")
+      dispose()
+    })
+  })
+
   test("hides the Open File placeholder when the file browser is unavailable", () => {
     createRoot((dispose) => {
       const [state] = createStore({

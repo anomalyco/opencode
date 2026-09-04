@@ -565,6 +565,19 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     }),
+    viewCommand({
+      id: "tasks.toggle",
+      title: language.t("command.tasks.toggle"),
+      onSelect: () => {
+        if (tabs().active() === "tasks") {
+          tabs().close("tasks")
+          return
+        }
+        tabs().open("tasks")
+        tabs().setActive("tasks")
+        view().reviewPanel.open()
+      },
+    }),
     ...(shown()
       ? [
           viewCommand({

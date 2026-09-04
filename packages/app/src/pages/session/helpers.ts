@@ -33,6 +33,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const hasReview = input.hasReview ?? (() => false)
   const fileBrowser = input.fileBrowser ?? (() => false)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
+  const tasksOpen = createMemo(() => input.tabs().active() === "tasks" || input.tabs().all().includes("tasks"))
   const openFileOpen = createMemo(
     () =>
       fileBrowser() &&
@@ -45,7 +46,7 @@ export const createSessionTabs = (input: TabsInput) => {
         .tabs()
         .all()
         .flatMap((tab) => {
-          if (tab === "context" || tab === "review") return []
+          if (tab === "context" || tab === "review" || tab === "tasks") return []
           if (tab === SESSION_OPEN_FILE_TAB && !fileBrowser()) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
@@ -62,6 +63,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active
+    if (active === "tasks" && tasksOpen()) return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
@@ -69,6 +71,7 @@ export const createSessionTabs = (input: TabsInput) => {
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (tasksOpen()) return "tasks"
     if (review() && hasReview()) return "review"
     return "empty"
   })
@@ -80,6 +83,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const closableTab = createMemo(() => {
     const active = activeTab()
     if (active === "context") return active
+    if (active === "tasks") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (!openedTabs().includes(active)) return
     return active
@@ -87,6 +91,7 @@ export const createSessionTabs = (input: TabsInput) => {
 
   return {
     contextOpen,
+    tasksOpen,
     openFileOpen,
     panelTabs,
     openedTabs,
