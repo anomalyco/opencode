@@ -244,6 +244,7 @@ export const Definitions = {
   "composer.subagent.interrupt": keybind("ctrl+d", "Interrupt subagent"),
   "composer.shell.up": keybind("up", "Previous shell"),
   "composer.shell.down": keybind("down", "Next shell"),
+  "composer.shell.select": keybind("return", "View shell output"),
   "composer.shell.kill": keybind("ctrl+d", "Kill shell command"),
   "composer.terminal.up": keybind("up,k", "Previous terminal"),
   "composer.terminal.down": keybind("down,j", "Next terminal"),

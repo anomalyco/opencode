@@ -128,9 +128,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
     external: ["node-gyp"],
     format: "esm",
     minify: true,
-    // Bun 1.4.0 cross-compiled bytecode can crash on Windows (oven-sh/bun#40270).
-    // Re-enable after both the builder and embedded runtime move to Bun 1.4.1.
-    bytecode: false,
+    bytecode: true,
     sourcemap: Script.channel === "dev" || Script.channel === "local" ? "inline" : "none",
     splitting: true,
     compile: {

@@ -12,8 +12,10 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
+import { Icon } from "@opencode-ai/ui/icon"
 import { MessageTimeline, SessionSummaryPanel } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
+import { useLanguage } from "@/runtime/i18n/language"
 import { projectForSession } from "@/shell/layout/helpers"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
@@ -28,6 +30,7 @@ import { SessionContextTab } from "./files/session-context-tab"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
+import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 
 const SessionMobileFiles = lazy(async () => {
@@ -38,6 +41,7 @@ const SessionMobileFiles = lazy(async () => {
 export function SessionScreen(props: { session: SessionModel }) {
   const session = props.session
   const server = useServer()
+  const language = useLanguage()
   const detailsProject = createMemo(() => {
     const info = session.data.info()
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
@@ -59,6 +63,7 @@ export function SessionScreen(props: { session: SessionModel }) {
   const [elements, setElements] = createStore<{
     side?: HTMLDivElement
     bottomTerminal?: HTMLDivElement
+    dropzone?: HTMLDivElement
   }>({})
   const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
   const sideTerminalVisible = createMemo(() => isDesktop() && screen.terminal.side() && screen.terminal.open())
@@ -133,7 +138,20 @@ export function SessionScreen(props: { session: SessionModel }) {
     session,
     screen,
     timeline,
+    visible: conversationVisible,
   })
+  const dropLabel = createMemo(() => {
+    const input = composer.drop.input()
+    if (!input?.image && !input?.pdf) return language.t("ui.promptInput.dropFiles")
+    if (!input.pdf) return language.t("ui.promptInput.dropFiles.image")
+    if (!input.image) return language.t("ui.promptInput.dropFiles.pdf")
+    return language.t("ui.promptInput.dropFiles.imagePdf")
+  })
+  const dropPresence = createAnimatedPresence(
+    () => (composer.drop.active() ? dropLabel() : undefined),
+    () => elements.dropzone ?? null,
+    session.layout.tabKey,
+  )
 
   useUsageExceededDialogs()
 
@@ -175,7 +193,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                           review.mobile.setTab("changes")
                           session.layout.view().terminal.close()
                         }}
-                        backgroundTasks={composer.region.state.background.tasks()}
+                        backgroundTasks={composer.requests.background.tasks()}
                       />
                     )}
                   </Show>
@@ -197,6 +215,63 @@ export function SessionScreen(props: { session: SessionModel }) {
 
   const sessionPanelContent = () => (
     <>
+      <div
+        data-slot="session-dropzone-blur"
+        data-visible={composer.drop.active()}
+        class="pointer-events-none absolute inset-0 z-[79] rounded-[inherit] opacity-[0.001] backdrop-blur-[1.5px] transition-opacity duration-200 ease-[cubic-bezier(0.215,0.61,0.355,1)] will-change-[opacity,backdrop-filter] data-[visible=true]:opacity-100 motion-reduce:transition-none"
+        style={{
+          "-webkit-mask-image":
+            "linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%), linear-gradient(to bottom, transparent 0%, black 28%, black 72%, transparent 100%)",
+          "-webkit-mask-composite": "source-in",
+          "mask-image":
+            "linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%), linear-gradient(to bottom, transparent 0%, black 28%, black 72%, transparent 100%)",
+          "mask-composite": "intersect",
+        }}
+      />
+      <Show when={dropPresence.present()}>
+        <div
+          ref={(element) => setElements("dropzone", element)}
+          data-component="session-dropzone"
+          data-visible={composer.drop.active()}
+          class="pointer-events-none absolute inset-0 z-[80] grid place-items-center overflow-hidden rounded-[inherit] bg-[color-mix(in_srgb,var(--v2-text-text-base)_var(--session-dropzone-wash),transparent)] opacity-100 transition-opacity duration-200 ease-[cubic-bezier(0.215,0.61,0.355,1)] data-[visible=false]:opacity-0 motion-reduce:transition-none"
+        >
+          <div class="absolute inset-0 bg-v2-background-bg-base/25" />
+          <div
+            class="absolute inset-y-0 left-1/2 w-full -translate-x-1/2 md:max-w-200 2xl:max-w-[1000px]"
+            style={{
+              "-webkit-mask-image": "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
+              "mask-image": "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
+            }}
+          >
+            <div
+              data-slot="session-dropzone-stripes"
+              class="absolute inset-0 opacity-60"
+              style={{
+                background:
+                  "repeating-linear-gradient(135deg, transparent 0px, transparent 12px, color-mix(in srgb, var(--v2-text-text-base) var(--session-dropzone-stripe), transparent) 12px, color-mix(in srgb, var(--v2-text-text-base) var(--session-dropzone-stripe), transparent) 24px)",
+                "-webkit-mask-image":
+                  "radial-gradient(ellipse 59% 40% at center, black 0%, rgba(0,0,0,0.72) 58%, transparent 100%)",
+                "mask-image":
+                  "radial-gradient(ellipse 59% 40% at center, black 0%, rgba(0,0,0,0.72) 58%, transparent 100%)",
+              }}
+            />
+          </div>
+          <div
+            data-slot="session-dropzone-content"
+            class="relative flex translate-y-0 flex-col items-center gap-5 opacity-100 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.215,0.61,0.355,1)] data-[visible=false]:translate-y-1 data-[visible=false]:opacity-0 motion-reduce:transition-none"
+            data-visible={composer.drop.active()}
+          >
+            <div
+              data-slot="session-dropzone-upload"
+              class="flex size-10 items-center justify-center rounded-full bg-[var(--session-dropzone-card)] text-v2-icon-icon-muted shadow-[var(--v2-elevation-floating)]"
+              aria-hidden="true"
+            >
+              <Icon name="arrow-up" size="normal" class="text-v2-icon-icon-muted" />
+            </div>
+            <div class="text-[15px] font-[530] leading-6 text-v2-text-text-base">{dropPresence.value()}</div>
+          </div>
+        </div>
+      </Show>
       <Show when={!isDesktop() && !!session.identity.params.id}>{mobileTabs()}</Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>
@@ -234,7 +309,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                 <MessageTimeline
                   hideHeader={!isDesktop()}
                   session={session}
-                  background={composer.region.state.background}
+                  background={composer.requests.background}
                   actions={composer.actions.timeline}
                   scroll={timeline.scroll}
                   onResumeScroll={timeline.actions.resume}
@@ -262,10 +337,8 @@ export function SessionScreen(props: { session: SessionModel }) {
         </Switch>
       </div>
 
-      <Show when={conversationVisible() ? session.identity.params.id : undefined} keyed>
-        {(_id) => (
-          <ActiveSessionComposerRegion model={composer} session={session} onResponseSubmit={timeline.actions.resume} />
-        )}
+      <Show when={composer.active()} keyed>
+        {(model) => <ActiveSessionComposerRegion model={model} />}
       </Show>
     </>
   )
@@ -274,10 +347,19 @@ export function SessionScreen(props: { session: SessionModel }) {
     <>
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
+          {/* Keep the control outside panel animations; the terminal's 52px header includes a 1px divider. */}
+          <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
+            <div
+              class="absolute end-3 top-0 z-30 flex items-center"
+              classList={{ "h-[51px]": sideTerminalVisible(), "h-12": !sideTerminalVisible() }}
+              data-slot="session-review-toggle"
+            >
+              <SessionReviewToggle />
+            </div>
+          </Show>
           <div
             classList={{
-              "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]":
-                true,
+              "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
               "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
                 !screen.size.active() && sidePresence.animate(),
               "transition-none": screen.size.active() || !sidePresence.animate(),
@@ -408,6 +490,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                             present={store.sideTerminalPresent}
                             animate={sidePresence.animate() || sideMotion().animateTerminal}
                             contentHeight={screen.side.terminal.contentHeight()}
+                            reserveReviewToggle={!screen.side.region.open()}
                           />
                         </div>
                       </div>

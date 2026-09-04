@@ -3,6 +3,28 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { useCommand } from "@/shell/commands/command"
+import { reviewTooltipKeybind } from "@/shell/commands/tooltip-keybind"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useSessionLayout } from "@/session/session-layout"
+
+export function SessionReviewToggle() {
+  const command = useCommand()
+  const language = useLanguage()
+  const { view } = useSessionLayout()
+
+  return (
+    <SessionHeaderActions
+      state={{
+        reviewLabel: language.t("command.review.toggle"),
+        reviewKeybind: reviewTooltipKeybind(command),
+        reviewVisible: true,
+        reviewOpened: view().reviewPanel.opened(),
+        onReviewToggle: () => view().reviewPanel.toggle(),
+      }}
+    />
+  )
+}
 
 export type SessionHeaderActionsState = {
   reviewLabel: string

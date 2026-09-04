@@ -12,6 +12,7 @@ import {
   LanguageModel,
   ToolCallPart,
   ToolDefinition,
+  ToolNamespace,
   ToolResultPart,
   TransportError,
   Usage,
@@ -140,6 +141,94 @@ describe("OpenAI Responses route", () => {
         { type: "image_generation", action: "generate", quality: "high", size: "1024x1024" },
       ])
       expect(prepared.body.tool_choice).toEqual({ type: "image_generation" })
+    }),
+  )
+
+  it.effect("lowers tool namespaces without flattening leaf names", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Find a customer and their orders.",
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              description: "Customer management",
+              tools: [
+                ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} }),
+                ToolDefinition.make({ name: "orders", description: "List customer orders", inputSchema: {} }),
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "namespace",
+          name: "crm",
+          description: "Customer management",
+          tools: [
+            { type: "function", name: "lookup", description: "Look up a customer", parameters: {}, strict: false },
+            { type: "function", name: "orders", description: "List customer orders", parameters: {}, strict: false },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("flattens nested levels within a native tool namespace", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              type: "namespace",
+              name: "crm",
+              description: "Customer management",
+              tools: [
+                {
+                  type: "namespace",
+                  name: "orders",
+                  description: "Order management",
+                  tools: [ToolDefinition.make({ name: "list", description: "List orders", inputSchema: {} })],
+                },
+              ],
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "namespace",
+          name: "crm",
+          description: "Customer management",
+          tools: [{ type: "function", name: "orders_list", description: "List orders", parameters: {}, strict: false }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("defaults tool namespace descriptions", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              type: "namespace",
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        expect.objectContaining({ type: "namespace", name: "crm", description: "Tools in the crm namespace." }),
+      ])
     }),
   )
 
@@ -2130,6 +2219,71 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("preserves tool namespaces through streaming and history replay", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "function_call",
+        id: "fc_1",
+        call_id: "call_1",
+        namespace: "crm",
+        name: "lookup",
+        arguments: "",
+      }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item },
+              {
+                type: "response.function_call_arguments.delta",
+                output_index: 0,
+                item_id: "fc_1",
+                delta: '{"id":"123"}',
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: { ...item, arguments: '{"id":"123"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      const toolEvents = response.events.filter((event) => event.type.startsWith("tool-"))
+      expect(toolEvents).toEqual([
+        expect.objectContaining({ type: "tool-input-start", name: "lookup", namespace: "crm" }),
+        expect.objectContaining({ type: "tool-input-delta", name: "lookup", namespace: "crm" }),
+        expect.objectContaining({ type: "tool-input-end", name: "lookup", namespace: "crm" }),
+        expect.objectContaining({ type: "tool-call", name: "lookup", namespace: "crm", input: { id: "123" } }),
+      ])
+      expect(response.message.content).toEqual([
+        expect.objectContaining({ type: "tool-call", name: "lookup", namespace: "crm", input: { id: "123" } }),
+      ])
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            response.message,
+            Message.tool({ id: "call_1", name: "lookup", namespace: "crm", result: { customer: "Ada" } }),
+          ],
+        }),
+      )
+      expect(prepared.body.input).toEqual([
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          namespace: "crm",
+          name: "lookup",
+          arguments: '{"id":"123"}',
+        },
+        { type: "function_call_output", call_id: "call_1", output: '{"customer":"Ada"}' },
+      ])
+    }),
+  )
   it.effect("routes reasoning summary events by output index", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
@@ -2860,7 +3014,6 @@ describe("OpenAI Responses route", () => {
               // Duplicate added for a known item is not overlap and must no-op.
               { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
               { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "Think" },
-              { type: "response.output_item.done", item: { type: "reasoning", id: "rs_1" } },
               { type: "response.output_item.done", item: { type: "reasoning", id: "rs_1" } },
               {
                 type: "response.output_item.added",

@@ -57,6 +57,7 @@
   gap: 8px;
   height: 28px;
   padding: 0 12px;
+  padding-inline-end: 6px;
   background: transparent;
   border-radius: 4px;
   outline: none;

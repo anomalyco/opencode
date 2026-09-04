@@ -21,6 +21,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
+import { Job } from "@opencode-ai/core/job"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "@opencode-ai/core/location"
 import { Credential } from "@opencode-ai/core/credential"
@@ -37,7 +38,7 @@ import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 
 const it = testEffect(
-  Layer.merge(PluginTestLayer, AppNodeBuilder.build(LayerNode.group([AppProcess.node, ShellSelect.node]))),
+  Layer.merge(PluginTestLayer, AppNodeBuilder.build(LayerNode.group([AppProcess.node, ShellSelect.node, Job.node]))),
 )
 const decode = Schema.decodeUnknownSync(Info)
 const document = path.join(import.meta.dir, "opencode.json")

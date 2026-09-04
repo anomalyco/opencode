@@ -965,6 +965,8 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
+            readonly model?: Model.Ref | undefined
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly text: string
             readonly recent: string
           }

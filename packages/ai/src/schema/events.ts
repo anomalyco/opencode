@@ -170,6 +170,7 @@ export const ToolInputStart = Schema.Struct({
   type: Schema.tag("tool-input-start"),
   id: ToolCallID,
   name: Schema.String,
+  namespace: Schema.optional(Schema.String),
   providerExecuted: Schema.optional(Schema.Boolean),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolInputStart" })
@@ -179,6 +180,7 @@ export const ToolInputDelta = Schema.Struct({
   type: Schema.tag("tool-input-delta"),
   id: ToolCallID,
   name: Schema.String,
+  namespace: Schema.optional(Schema.String),
   text: Schema.String,
   /** Best-effort parse of all input fragments received through this delta. */
   input: Schema.optional(Schema.Unknown),
@@ -189,6 +191,7 @@ export const ToolInputEnd = Schema.Struct({
   type: Schema.tag("tool-input-end"),
   id: ToolCallID,
   name: Schema.String,
+  namespace: Schema.optional(Schema.String),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolInputEnd" })
 export type ToolInputEnd = Schema.Schema.Type<typeof ToolInputEnd>
@@ -198,6 +201,7 @@ export const ToolInputError = Schema.Struct({
   type: Schema.tag("tool-input-error"),
   id: ToolCallID,
   name: Schema.String,
+  namespace: Schema.optional(Schema.String),
   raw: Schema.String,
 }).annotate({ identifier: "LLM.Event.ToolInputError" })
 export type ToolInputError = Schema.Schema.Type<typeof ToolInputError>
@@ -206,6 +210,7 @@ export const ToolCall = Schema.Struct({
   type: Schema.tag("tool-call"),
   id: ToolCallID,
   name: Schema.String,
+  namespace: Schema.optional(Schema.String),
   input: Schema.Unknown,
   providerExecuted: Schema.optional(Schema.Boolean),
   providerMetadata: Schema.optional(ProviderMetadata),
@@ -216,6 +221,7 @@ export const ToolResult = Schema.Struct({
   type: Schema.tag("tool-result"),
   id: ToolCallID,
   name: Schema.String,
+  namespace: Schema.optional(Schema.String),
   result: ToolResultValue,
   output: Schema.optional(ToolOutput),
   providerExecuted: Schema.optional(Schema.Boolean),
@@ -227,6 +233,7 @@ export const ToolError = Schema.Struct({
   type: Schema.tag("tool-error"),
   id: ToolCallID,
   name: Schema.String,
+  namespace: Schema.optional(Schema.String),
   message: Schema.String,
   error: Schema.optional(Schema.Defect()),
   providerMetadata: Schema.optional(ProviderMetadata),
@@ -400,6 +407,7 @@ interface ContentAssembly {
 
 interface ToolInputAssembly {
   readonly name: string
+  readonly namespace?: string
   readonly text: string
   readonly providerMetadata?: ProviderMetadata
 }
@@ -537,12 +545,17 @@ const reduceToolInputStart = (state: ResponseState, event: ToolInputStart): Resp
   ...state,
   toolInputs: {
     ...state.toolInputs,
-    [event.id]: { name: event.name, text: "", providerMetadata: event.providerMetadata },
+    [event.id]: {
+      name: event.name,
+      namespace: event.namespace,
+      text: "",
+      providerMetadata: event.providerMetadata,
+    },
   },
 })
 
 const reduceToolInputDelta = (state: ResponseState, event: ToolInputDelta): ResponseState => {
-  const current = state.toolInputs[event.id] ?? { name: event.name, text: "" }
+  const current = state.toolInputs[event.id] ?? { name: event.name, namespace: event.namespace, text: "" }
   return {
     ...state,
     toolInputs: { ...state.toolInputs, [event.id]: { ...current, text: current.text + event.text } },
@@ -550,7 +563,7 @@ const reduceToolInputDelta = (state: ResponseState, event: ToolInputDelta): Resp
 }
 
 const reduceToolInputEnd = (state: ResponseState, event: ToolInputEnd): ResponseState => {
-  const current = state.toolInputs[event.id] ?? { name: event.name, text: "" }
+  const current = state.toolInputs[event.id] ?? { name: event.name, namespace: event.namespace, text: "" }
   return {
     ...state,
     toolInputs: {
@@ -558,6 +571,7 @@ const reduceToolInputEnd = (state: ResponseState, event: ToolInputEnd): Response
       [event.id]: {
         ...current,
         name: event.name,
+        namespace: event.namespace,
         providerMetadata: event.providerMetadata ?? current.providerMetadata,
       },
     },
@@ -568,6 +582,7 @@ const toolCallContent = (event: ToolCall): ContentPart =>
   ToolCallPart.make({
     id: event.id,
     name: event.name,
+    namespace: event.namespace,
     input: event.input,
     ...(event.providerExecuted === undefined ? {} : { providerExecuted: event.providerExecuted }),
     ...(event.providerMetadata === undefined ? {} : { providerMetadata: event.providerMetadata }),
@@ -577,6 +592,7 @@ const toolResultContent = (event: ToolResult): ContentPart =>
   ToolResultPart.make({
     id: event.id,
     name: event.name,
+    namespace: event.namespace,
     result: event.result,
     ...(event.providerExecuted === undefined ? {} : { providerExecuted: event.providerExecuted }),
     ...(event.providerMetadata === undefined ? {} : { providerMetadata: event.providerMetadata }),

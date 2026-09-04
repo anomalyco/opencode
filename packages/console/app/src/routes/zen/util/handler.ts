@@ -1109,6 +1109,8 @@ export async function handler(
     authInfo = authInfo!
 
     const cost = centsToMicroCents(totalCostInCent)
+    // Keep period bounds and persisted timestamps on one snapshot when a queued write crosses a reset boundary.
+    const trackedAt = new Date()
 
     // For hot workspaces, batch balance/usage updates through Redis to avoid
     // row-level lock contention on BillingTable/UserTable. Returns the amount
@@ -1149,7 +1151,7 @@ export async function handler(
           if (billingSource === "subscription") {
             const plan = authInfo.billing.subscription!.plan
             const black = BlackData.getLimits({ plan })
-            const week = getWeekBounds(new Date())
+            const week = getWeekBounds(trackedAt)
             const rollingWindowSeconds = black.rollingWindow * 3600
             return [
               db
@@ -1157,11 +1159,17 @@ export async function handler(
                 .set({
                   fixedUsage: sql`
               CASE
+                WHEN ${SubscriptionTable.timeFixedUpdated} >= ${week.end} THEN ${SubscriptionTable.fixedUsage}
                 WHEN ${SubscriptionTable.timeFixedUpdated} >= ${week.start} THEN ${SubscriptionTable.fixedUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                  timeFixedUpdated: sql`now()`,
+                  timeFixedUpdated: sql`
+              CASE
+                WHEN ${SubscriptionTable.timeFixedUpdated} > ${trackedAt} THEN ${SubscriptionTable.timeFixedUpdated}
+                ELSE ${trackedAt}
+              END
+            `,
                   rollingUsage: sql`
               CASE
                 WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.rollingUsage} + ${cost}
@@ -1185,8 +1193,8 @@ export async function handler(
           }
           if (billingSource === "lite") {
             const lite = LiteData.getLimits()
-            const week = getWeekBounds(new Date())
-            const month = getMonthlyBounds(new Date(), authInfo.lite!.timeCreated)
+            const week = getWeekBounds(trackedAt)
+            const month = getMonthlyBounds(trackedAt, authInfo.lite!.timeCreated)
             const rollingWindowSeconds = lite.rollingWindow * 3600
             const quotaCost = Math.round(cost * modelInfo.costMultiplier)
             return [
@@ -1195,18 +1203,30 @@ export async function handler(
                 .set({
                   monthlyUsage: sql`
               CASE
+                WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.end} THEN ${LiteTable.monthlyUsage}
                 WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN ${LiteTable.monthlyUsage} + ${quotaCost}
                 ELSE ${quotaCost}
               END
             `,
-                  timeMonthlyUpdated: sql`now()`,
+                  timeMonthlyUpdated: sql`
+              CASE
+                WHEN ${LiteTable.timeMonthlyUpdated} > ${trackedAt} THEN ${LiteTable.timeMonthlyUpdated}
+                ELSE ${trackedAt}
+              END
+            `,
                   weeklyUsage: sql`
               CASE
+                WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.end} THEN ${LiteTable.weeklyUsage}
                 WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN ${LiteTable.weeklyUsage} + ${quotaCost}
                 ELSE ${quotaCost}
               END
             `,
-                  timeWeeklyUpdated: sql`now()`,
+                  timeWeeklyUpdated: sql`
+              CASE
+                WHEN ${LiteTable.timeWeeklyUpdated} > ${trackedAt} THEN ${LiteTable.timeWeeklyUpdated}
+                ELSE ${trackedAt}
+              END
+            `,
                   rollingUsage: sql`
               CASE
                 WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.rollingUsage} + ${quotaCost}

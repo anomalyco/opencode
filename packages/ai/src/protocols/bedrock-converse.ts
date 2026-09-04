@@ -427,21 +427,22 @@ const lowerSystem = (
 
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
+  const flattened = ProviderShared.flattenToolRequest(request)
   const generation = request.generation
   // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints()
   const toolConfig = (() => {
-    if (request.tools.length === 0) return undefined
+    if (flattened.tools.length === 0) return undefined
     return {
-      tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools),
+      tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, flattened.tools),
       // Converse has no native "none". Keep definitions stable for prompt
       // caching and omit only the unsupported choice.
       toolChoice,
     }
   })()
   const system = lowerSystem(breakpoints, request.system)
-  const messages = yield* lowerMessages(request, breakpoints)
+  const messages = yield* lowerMessages(flattened.request, breakpoints)
   if (breakpoints.dropped > 0) {
     yield* Effect.logWarning(
       `Bedrock Converse: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${BedrockCache.BEDROCK_BREAKPOINT_CAP} per request.`,
@@ -508,7 +509,6 @@ const mapUsage = (usage: BedrockUsageSchema | undefined, providerMetadataKey: st
 interface ParserState {
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<number>
-  readonly finishedTools: ReadonlySet<number>
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). Hold both in state so `onHalt` can emit exactly
   // one finish after both chunks have had a chance to arrive.
@@ -620,16 +620,14 @@ const step = (state: ParserState, event: BedrockEvent) =>
     }
 
     if (event.contentBlockDelta?.delta?.toolUse) {
-      const index = event.contentBlockDelta.contentBlockIndex
-      if (state.finishedTools.has(index)) return [state, []] as const
-      const result = ToolStream.appendExisting(
-        ADAPTER,
+      // A delta for a block that is not open, whether it already stopped or never
+      // started, has nothing to attach to and is dropped.
+      const result = ToolStream.append(
         state.tools,
-        index,
+        event.contentBlockDelta.contentBlockIndex,
         event.contentBlockDelta.delta.toolUse.input,
-        "Bedrock Converse tool delta is missing its tool call",
       )
-      if (ToolStream.isError(result)) return yield* result
+      if (!result) return [state, []] as const
       const events: LLMEvent[] = []
       const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
       events.push(...result.events)
@@ -668,7 +666,6 @@ const step = (state: ParserState, event: BedrockEvent) =>
             state.hasToolCalls,
           lifecycle,
           tools: result.tools,
-          finishedTools: resultEvents.length > 0 ? new Set([...state.finishedTools, index]) : state.finishedTools,
           reasoningSignatures: Object.fromEntries(
             Object.entries(state.reasoningSignatures).filter(([key]) => key !== String(index)),
           ),
@@ -765,7 +762,6 @@ export const protocol = Protocol.make({
     initial: (request) => ({
       providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       tools: ToolStream.empty<number>(),
-      finishedTools: new Set<number>(),
       finishReason: undefined,
       usage: undefined,
       hasToolCalls: false,

@@ -60,7 +60,6 @@
 
 .settings-screen .settings-tab-body {
   padding-inline: 0;
-  padding-bottom: var(--settings-bottom-inset, 0px);
 }
 
 .settings-nav {
@@ -91,19 +90,101 @@
   overflow-y: auto;
 }
 
-.settings-nav-footer {
+.settings-about {
+  align-items: center;
+  padding-inline: 24px;
+}
+
+.settings-about-content {
   display: flex;
   flex-shrink: 0;
+  width: 100%;
+  max-width: 560px;
+  min-height: 462px;
   flex-direction: column;
-  gap: 8px;
-  margin-top: auto;
-  padding-block: 20px 4px;
-  padding-inline-start: 4px;
-  font-size: 11px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 24px;
+  padding-block: 80px calc(80px + var(--settings-bottom-inset, 0px));
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
   font-weight: 440;
-  line-height: var(--line-height-tight);
+  line-height: var(--line-height-base);
+  letter-spacing: -0.04px;
+  text-align: center;
+}
+
+.settings-about-content p {
+  margin: 0;
+}
+
+.settings-about-intro,
+.settings-about-credits,
+.settings-about-publication,
+.settings-about-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-about-intro {
+  gap: 14px;
+}
+
+.settings-about-credits,
+.settings-about-publication,
+.settings-about-details {
+  gap: 16px;
+}
+
+.settings-about-wordmark {
+  width: 178px;
+  height: 32px;
+  flex-shrink: 0;
+  opacity: 0.2;
+  color: var(--v2-text-text-muted);
+  fill: currentColor;
+}
+
+.settings-about-letter-shadow {
+  opacity: 0.3;
+}
+
+.settings-about-faint,
+.settings-about-credits {
   color: var(--v2-text-text-faint);
-  user-select: none;
+}
+
+.settings-about-legal {
+  width: 109.2px;
+  height: 19.2px;
+}
+
+.settings-about-copyright {
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-about-anomaly-brush {
+  width: 126.72px;
+  height: 48.384px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.settings-about-content a {
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.settings-about-content a:hover,
+.settings-about-content a:focus-visible {
+  color: var(--v2-text-text-base);
+  text-decoration: underline;
 }
 
 .settings-back {
@@ -192,7 +273,7 @@
   flex-direction: column;
   gap: 36px;
   width: 100%;
-  padding: 0 40px 40px;
+  padding: 0 40px calc(80px + var(--settings-bottom-inset, 0px));
 }
 
 [data-slot="settings-row-description"] a.settings-link {
@@ -566,7 +647,8 @@
 
 .settings-tab-search {
   position: relative;
-  width: 100%;
+  width: calc(100% - 2px);
+  margin-inline: 1px;
 }
 
 .settings-tab-search [data-component="text-input-v2"] {
@@ -1089,7 +1171,7 @@
   }
 
   .settings-tab-body.settings-workspaces {
-    padding: 0 20px 24px;
+    padding-inline: 20px;
   }
 
   .settings-workspaces-toolbar,

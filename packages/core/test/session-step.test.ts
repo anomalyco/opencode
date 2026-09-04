@@ -148,7 +148,9 @@ for (const fixture of [
         .all()
       const types = events.map((event) => event.type)
       const terminal = fixture.finish === "stop" ? "session.step.ended.1" : "session.step.failed.1"
+      expect(types.filter((type) => type === "session.step.streamed.1")).toHaveLength(1)
       expect(types.filter((type) => type === terminal)).toHaveLength(1)
+      expect(types.indexOf("session.step.streamed.1")).toBeLessThan(types.indexOf(terminal))
       expect(
         types.indexOf(fixture.toolChoice === "none" ? "session.tool.failed.2" : "session.tool.success.2"),
       ).toBeLessThan(types.indexOf(terminal))

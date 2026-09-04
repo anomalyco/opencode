@@ -78,7 +78,7 @@ test("renders current protocol notices in CLI order", async ({ page }) => {
 
   const notices = page.locator('[data-slot="session-timeline-notice"]')
   await expect(notices).toHaveCount(4)
-  await expect(notices.nth(0)).toContainText("Agent · explore")
+  await expect(notices.nth(0)).toHaveText(/^Agent changed\s*Explore$/)
   await expect(notices.nth(1)).toContainText("explore finished · Search code")
   await expect(notices.nth(2)).toContainText("Continuing after restart")
   await expect(notices.nth(3)).toContainText("Skill · Review")
@@ -182,20 +182,15 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
   await expect(card).not.toContainText("(background)")
   await expect(page.getByText("Called `subagent`", { exact: false })).toHaveCount(0)
   await expect(page.locator('[data-component="background-tool-control"]')).toHaveCount(0)
-  const hint = page.locator('[data-component="session-background-hint"]')
-  const hintPrefix = hint.locator('[data-slot="session-background-hint-prefix"]')
+  const hint = page.getByRole("button", { name: /move running work to the background/i })
   await expect(hint).toBeVisible()
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
   await expect
     .poll(async () => {
-      const [cardBox, hintBox, prefixBox] = await Promise.all([
-        card.boundingBox(),
-        hint.boundingBox(),
-        hintPrefix.boundingBox(),
-      ])
-      if (!cardBox || !hintBox || !prefixBox) return undefined
+      const [cardBox, hintBox] = await Promise.all([card.boundingBox(), hint.boundingBox()])
+      if (!cardBox || !hintBox) return undefined
       return {
-        aligned: Math.abs(cardBox.x - prefixBox.x) < 2,
+        aligned: Math.abs(cardBox.x - hintBox.x) < 2,
         ordered: cardBox.y < hintBox.y,
       }
     })
@@ -220,10 +215,10 @@ test("navigates from a running subagent card and hides background controls in th
     sessionStatus: { [sessionID]: { type: "busy" }, [childID]: { type: "busy" } },
   })
 
-  await expect(page.getByText(/move running work to the background/i)).toBeVisible()
+  await expect(page.getByRole("button", { name: /move running work to the background/i })).toBeVisible()
   await page.locator('[data-component="task-tool-card"]').click()
   await expect(page).toHaveURL(new RegExp(`/session/${childID}$`))
-  await expect(page.getByText(/move running work to the background/i)).toHaveCount(0)
+  await expect(page.getByRole("button", { name: /move running work to the background/i })).toHaveCount(0)
 })
 
 for (const name of ["shell", "subagent"] as const) {
@@ -267,7 +262,7 @@ for (const name of ["shell", "subagent"] as const) {
     const group = page.locator('[data-timeline-part-ids="call_read,call_running"]')
     await expect(group).toBeVisible()
     await expect(group.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "false")
-    await expect(page.locator('[data-component="session-background-hint"]')).toBeVisible()
+    await expect(page.getByRole("button", { name: /move running work to the background/i })).toBeVisible()
     const request = page.waitForRequest(
       (request) =>
         request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/background`,
@@ -286,9 +281,9 @@ test("shows a badge for active background work", async ({ page }) => {
   })
 
   await page.getByRole("button", { name: "Session details" }).click()
-  const summary = page.getByRole("button", { name: "1 item running in background" })
+  const summary = page.getByRole("button", { name: "1 background task running", exact: true })
   await expect(summary).toContainText("1")
-  await expect(summary).toContainText("Running work in background")
+  await expect(summary).toContainText("1 background task running")
   await summary.click()
   await expect(
     page.locator('[data-component="session-background-list"]').getByText("Agent", { exact: true }),
@@ -387,7 +382,7 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
     },
   })
   const backgroundCard = page.locator('[data-timeline-part-id="call_backgrounded"]')
-  await expect(page.getByText(/move running work to the background/i)).toBeVisible()
+  await expect(page.getByRole("button", { name: /move running work to the background/i })).toBeVisible()
   const used = page
     .locator('[data-timeline-part-ids="call_backgrounded,call_shell_backgrounded,call_blocking"]')
     .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
@@ -396,7 +391,7 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
   await used.click()
   await expect(used).toHaveAttribute("aria-expanded", "true")
   await page.getByRole("button", { name: "Session details" }).click()
-  const summary = page.getByRole("button", { name: "2 items running in background" })
+  const summary = page.getByRole("button", { name: "2 background tasks running", exact: true })
   await expect(summary).toContainText("2")
   await summary.click()
   const list = page.locator('[data-component="session-background-list"]')

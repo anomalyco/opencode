@@ -1243,6 +1243,7 @@ describe("SessionTransfer", () => {
       const runningCompactionID = SessionMessage.ID.create()
       const completedCompactionID = SessionMessage.ID.create()
       const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+      const providerState = { responseId: "summary-response" }
 
       yield* transfer.import({
         data: {
@@ -1297,6 +1298,8 @@ describe("SessionTransfer", () => {
               type: "compaction",
               status: "completed",
               reason: "manual",
+              model,
+              providerState,
               summary: "summary",
               recent: "recent",
               time: { created: DateTime.makeUnsafe(9) },
@@ -1313,6 +1316,11 @@ describe("SessionTransfer", () => {
         completedCompactionID,
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
+      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ model, providerState })
+      expect((yield* transfer.export({ sessionID, sanitize: true })).messages.at(-1)).toMatchObject({
+        model,
+        providerState: { redacted: `compaction-provider-state:${completedCompactionID}` },
+      })
     }),
   )
 

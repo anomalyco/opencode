@@ -47,7 +47,6 @@ export default Runtime.handler(Commands, (input) =>
       ),
     )
     const updater = yield* Updater.Service
-    if (!server.service) yield* updater.check().pipe(Effect.forkScoped)
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -83,11 +82,14 @@ export default Runtime.handler(Commands, (input) =>
         get: () => runPromise(config.get()),
         update: (update) => runPromise(config.update(update)),
       },
-      updater: service
-        ? {
-            apply: (version) => runPromise(updater.apply(version)),
-          }
-        : undefined,
+      updater: {
+        monitor: (notify, signal) =>
+          runPromise(
+            updater.monitor((version) => Effect.sync(() => notify(version))),
+            { signal },
+          ),
+        apply: (version) => runPromise(updater.apply(version)),
+      },
       packages: {
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },

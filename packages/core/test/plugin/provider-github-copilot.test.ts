@@ -1,7 +1,8 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { App } from "@opencode-ai/core/app"
 import { Agent } from "@opencode-ai/schema/agent"
-import { Session } from "@opencode-ai/schema/session"
+import { Session } from "@opencode-ai/core/session"
+import { Location } from "@opencode-ai/core/location"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -18,6 +19,7 @@ import {
 } from "@opencode-ai/core/plugin/provider/github-copilot"
 import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
+import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
 import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -34,6 +36,25 @@ function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
 }
+
+const sessions = Effect.fn(function* () {
+  const service = yield* Session.Service
+  const location = yield* Location.Service
+  const parent = yield* service.create({ location: { directory: location.directory } })
+  const child = yield* service.create({ parentID: parent.id })
+  return { parent: parent.id, child: child.id }
+})
+
+const modelRequest = Effect.fn(function* (sessionID: Session.ID, kind: SessionRequestKind, agent = "build") {
+  const hooks = yield* PluginHooks.Service
+  return yield* hooks.trigger("session", "model.request", {
+    sessionID,
+    agent: Agent.ID.make(agent),
+    model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
+    kind,
+    headers: {},
+  })
+})
 
 describe("GithubCopilotPlugin", () => {
   test("prefers the account-specific Copilot API endpoint", () => {
@@ -122,7 +143,7 @@ describe("GithubCopilotPlugin", () => {
       expect(requests[0]?.has("x-api-key")).toBe(false)
       expect(requests[0]?.get("x-initiator")).toBe("user")
       expect(requests[0]?.get("copilot-vision-request")).toBe("true")
-      expect(requests[0]?.get("x-github-api-version")).toBe("2026-06-01")
+      expect(requests[0]?.get("x-github-api-version")).toBe("2026-08-01")
       expect(requests[0]?.get("user-agent")).toBe("opencode/beta/1.2.3/test")
     }),
   )
@@ -135,6 +156,7 @@ describe("GithubCopilotPlugin", () => {
         sessionID: Session.ID.make("ses_test"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("claude-sonnet-4.5") }),
+        kind: "primary",
         request: new Request("https://api.githubcopilot.com/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-api-key": "token" },
@@ -145,35 +167,92 @@ describe("GithubCopilotPlugin", () => {
       expect(event.request.headers.has("x-api-key")).toBe(false)
       expect(event.request.headers.get("x-initiator")).toBe("user")
       expect(event.request.headers.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14")
-      expect(event.request.headers.get("x-github-api-version")).toBe("2026-06-01")
+      expect(event.request.headers.get("x-github-api-version")).toBe("2026-08-01")
+    }),
+  )
+
+  it.effect("classifies main-loop steps as agent interactions", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).parent, "primary")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
+    }),
+  )
+
+  it.effect("classifies child-session steps as subagent interactions", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).child, "primary")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-subagent", "x-initiator": "agent" })
     }),
   )
 
   it.effect("classifies title generation as a background interaction", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const hooks = yield* PluginHooks.Service
-      const event = yield* hooks.trigger("session", "http.request", {
-        sessionID: Session.ID.make("ses_title"),
-        agent: Agent.ID.make("title"),
-        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4-nano") }),
-        request: new Request("https://api.githubcopilot.com/chat/completions"),
-      })
-      expect(event.request.headers.get("x-interaction-type")).toBe("conversation-background")
+      const event = yield* modelRequest((yield* sessions()).parent, "title")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-background", "x-initiator": "agent" })
     }),
   )
 
-  it.effect("classifies compaction requests", () =>
+  it.effect("classifies compaction requests by kind rather than agent", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).child, "compaction", "build")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-compaction", "x-initiator": "agent" })
+    }),
+  )
+
+  it.effect("does not classify by agent name", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).parent, "primary", "compaction")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
+    }),
+  )
+
+  it.effect("ignores other providers' model requests", () =>
     Effect.gen(function* () {
       yield* addPlugin()
       const hooks = yield* PluginHooks.Service
-      const event = yield* hooks.trigger("session", "http.request", {
-        sessionID: Session.ID.make("ses_compaction"),
-        agent: Agent.ID.make("compaction"),
-        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
-        request: new Request("https://api.githubcopilot.com/responses"),
+      const event = yield* hooks.trigger("session", "model.request", {
+        sessionID: (yield* sessions()).parent,
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5.4") }),
+        kind: "primary",
+        headers: {},
       })
-      expect(event.request.headers.get("x-interaction-type")).toBe("conversation-compaction")
+      expect(event.headers).toEqual({})
+    }),
+  )
+
+  it.live("keeps a declared agent initiator when the body looks user-initiated", () =>
+    Effect.gen(function* () {
+      const requests: Headers[] = []
+      const send = copilotFetch(
+        "token",
+        async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          requests.push(new Headers(init?.headers))
+          return Response.json({ ok: true })
+        },
+        App.make({ name: "test", version: "1.2.3", channel: "beta" }),
+      )
+      yield* Effect.promise(() =>
+        send("https://api.githubcopilot.com/chat/completions", {
+          method: "POST",
+          headers: { "x-initiator": "agent" },
+          body: JSON.stringify({ messages: [{ role: "user", content: "summarize" }] }),
+        }),
+      )
+      expect(requests[0]?.get("x-initiator")).toBe("agent")
+    }),
+  )
+
+  it.effect("classifies session generation requests as agent interactions", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).parent, "generate")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
     }),
   )
 

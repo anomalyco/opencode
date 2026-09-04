@@ -528,12 +528,12 @@ export function CurrentContextToolGroup(props: {
       .join(", "),
   )
   const label = createMemo(() => {
-    const notices = props.parts.filter((part) => part.type === "notice").length
-    const title =
-      [names(), notices ? i18n.plural("ui.messagePart.context.notice", notices) : undefined]
-        .filter(Boolean)
-        .join(", ") ||
-      i18n.plural("ui.messagePart.context.thought", props.parts.filter((part) => part.type === "reasoning").length)
+    const thoughts = props.parts.filter((part) => part.type === "reasoning").length
+    if (!names() && !thoughts) {
+      const title = i18n.t("ui.messagePart.context.details")
+      return { text: title, title, before: "", after: "" }
+    }
+    const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
     const text = i18n.t("ui.messagePart.tools.used", { tools: title })
     const index = text.indexOf(title)
     return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
@@ -951,20 +951,66 @@ export const ToolRegistry = {
   render: getTool,
 }
 
+function FileTool(props: ToolProps & { title: string; count: number; children: JSX.Element }) {
+  const i18n = useI18n()
+  return (
+    <BasicTool
+      {...props}
+      open
+      onOpenChange={undefined}
+      locked
+      icon="code-lines"
+      defer={false}
+      rail={false}
+      trigger={{
+        title: props.title,
+        subtitle: props.count > 0 ? `${props.count} ${i18n.plural("ui.common.file", props.count)}` : "",
+      }}
+    >
+      {props.children}
+    </BasicTool>
+  )
+}
+
 function ToolFileAccordion(props: {
   path: string
   actions?: JSX.Element
   children: JSX.Element
   defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  forceOpen?: boolean
+  defer?: boolean
 }) {
   const value = createMemo(() => props.path || "tool-file")
+  const [expanded, setExpanded] = createSignal(props.defaultOpen ?? false)
+  const [visible, setVisible] = createSignal(false)
+  const open = () => props.open ?? expanded()
+  const change = (value: boolean) => {
+    if (props.open === undefined) setExpanded(value)
+    props.onOpenChange?.(value)
+  }
+
+  createEffect(() => {
+    if (props.forceOpen && !open()) change(true)
+  })
+
+  createEffect(() => {
+    if (!open()) {
+      setVisible(false)
+      return
+    }
+    const frame = requestAnimationFrame(() => setVisible(true))
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
 
   return (
     <Accordion
       multiple
       data-scope="apply-patch"
       style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
-      defaultValue={props.defaultOpen === false ? [] : [value()]}
+      value={open() ? [value()] : []}
+      onChange={(next) => change(next.includes(value()))}
     >
       <Accordion.Item value={value()}>
         <StickyAccordionHeader>
@@ -986,7 +1032,9 @@ function ToolFileAccordion(props: {
             </div>
           </Accordion.Trigger>
         </StickyAccordionHeader>
-        <Accordion.Content>{props.children}</Accordion.Content>
+        <Accordion.Content>
+          <Show when={!props.defer || visible()}>{props.children}</Show>
+        </Accordion.Content>
       </Accordion.Item>
     </Accordion>
   )
@@ -1709,7 +1757,6 @@ ToolRegistry.register({
       const value = diff()
       return typeof value?.file === "string" ? value.file : inputPath()
     })
-    const filename = () => getFilename(inputPath())
     const pending = () => props.status === "streaming" || props.status === "running"
     const diffSource = createMemo(
       () => {
@@ -1749,39 +1796,15 @@ ToolRegistry.register({
 
     return (
       <div data-component="edit-tool">
-        <BasicTool
-          {...props}
-          icon="code-lines"
-          rail={false}
-          defer={props.deferContent !== false}
-          trigger={
-            <div data-component="edit-trigger">
-              <div data-slot="message-part-title-area">
-                <div data-slot="message-part-title">
-                  <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
-                  </span>
-                  <Show when={!pending()}>
-                    <span data-slot="message-part-title-filename">{filename()}</span>
-                  </Show>
-                </div>
-                <Show when={!pending() && inputPath().includes("/")}>
-                  <div data-slot="message-part-path">
-                    <span data-slot="message-part-directory">{displayDirectory(inputPath())}</span>
-                  </div>
-                </Show>
-              </div>
-              <div data-slot="message-part-actions">
-                <Show when={!pending() ? diff() : undefined}>
-                  {(diff) => <DiffChanges appearance="standard" changes={diff()} />}
-                </Show>
-              </div>
-            </div>
-          }
-        >
+        <FileTool {...props} title={i18n.t("ui.messagePart.title.edit")} count={path() ? 1 : 0}>
           <Show when={path()}>
             <ToolFileAccordion
               path={path()}
+              defaultOpen={props.defaultOpen}
+              open={props.open}
+              onOpenChange={props.onOpenChange}
+              forceOpen={props.forceOpen}
+              defer={props.deferContent !== false}
               actions={
                 <Show when={!pending() ? diff() : undefined}>
                   {(diff) => <DiffChanges appearance="standard" changes={diff()} />}
@@ -1800,7 +1823,7 @@ ToolRegistry.register({
             </ToolFileAccordion>
           </Show>
           <DiagnosticsDisplay diagnostics={diagnostics()} />
-        </BasicTool>
+        </FileTool>
       </div>
     )
   },
@@ -1814,38 +1837,18 @@ ToolRegistry.register({
     const path = createMemo(() => (typeof props.input.path === "string" ? props.input.path : ""))
     const content = createMemo(() => (typeof props.input.content === "string" ? props.input.content : ""))
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, path()))
-    const filename = () => getFilename(path())
-    const pending = () => props.status === "streaming" || props.status === "running"
     return (
       <div data-component="write-tool">
-        <BasicTool
-          {...props}
-          icon="code-lines"
-          rail={false}
-          defer={props.deferContent !== false}
-          trigger={
-            <div data-component="write-trigger">
-              <div data-slot="message-part-title-area">
-                <div data-slot="message-part-title">
-                  <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
-                  </span>
-                  <Show when={!pending()}>
-                    <span data-slot="message-part-title-filename">{filename()}</span>
-                  </Show>
-                </div>
-                <Show when={!pending() && path().includes("/")}>
-                  <div data-slot="message-part-path">
-                    <span data-slot="message-part-directory">{displayDirectory(path())}</span>
-                  </div>
-                </Show>
-              </div>
-              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
-            </div>
-          }
-        >
-          <Show when={content() && path()}>
-            <ToolFileAccordion path={path()}>
+        <FileTool {...props} title={i18n.t("ui.messagePart.title.write")} count={path() ? 1 : 0}>
+          <Show when={path()}>
+            <ToolFileAccordion
+              path={path()}
+              defaultOpen={props.defaultOpen}
+              open={props.open}
+              onOpenChange={props.onOpenChange}
+              forceOpen={props.forceOpen}
+              defer={props.deferContent !== false}
+            >
               <div data-component="write-content">
                 <Dynamic
                   component={fileComponent}
@@ -1862,7 +1865,7 @@ ToolRegistry.register({
             </ToolFileAccordion>
           </Show>
           <DiagnosticsDisplay diagnostics={diagnostics()} />
-        </BasicTool>
+        </FileTool>
       </div>
     )
   },
@@ -1891,27 +1894,9 @@ ToolRegistry.register({
       files().forEach((file) => props.onFileOpenChange?.(file.path, next.includes(file.path)))
     }
 
-    const subtitle = createMemo(() => {
-      const count = files().length
-      if (count === 0) return ""
-      return `${count} ${i18n.plural("ui.common.file", count)}`
-    })
-
     return (
       <div data-component="apply-patch-tool">
-        <BasicTool
-          {...props}
-          open
-          onOpenChange={undefined}
-          locked
-          icon="code-lines"
-          defer={false}
-          rail={false}
-          trigger={{
-            title: title(),
-            subtitle: subtitle(),
-          }}
-        >
+        <FileTool {...props} title={title()} count={files().length}>
           <Show when={files().length > 0}>
             <Accordion
               multiple
@@ -2000,7 +1985,7 @@ ToolRegistry.register({
               </Index>
             </Accordion>
           </Show>
-        </BasicTool>
+        </FileTool>
       </div>
     )
   },

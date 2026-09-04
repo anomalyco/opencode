@@ -134,6 +134,7 @@ function ComposerStory(props: {
       },
       variant: {
         options: () => [
+          { id: "default", label: "default" },
           { id: "balanced", label: "balanced" },
           { id: "high", label: "high" },
         ],

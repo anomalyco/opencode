@@ -59,6 +59,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
   commands: [
     Spec.make("upgrade", {
       description: "Upgrade OpenCode to the latest or a specific version",
+      aliases: ["update"],
       params: {
         target: Argument.string("target").pipe(
           Argument.withDescription("Version to upgrade to (with or without a leading v)"),

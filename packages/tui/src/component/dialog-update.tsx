@@ -8,22 +8,32 @@ import { useDialog } from "../ui/dialog"
 import { Spinner } from "./spinner"
 
 type State =
-  | { type: "ready"; active: "update" | "ignore" }
+  | { type: "ready"; active: "update" | "skip" }
   | { type: "installing" }
   | { type: "restarting" }
   | { type: "failed"; message: string }
 
-export function DialogUpdate(props: { version: string; install: () => Promise<void>; restart: () => Promise<void> }) {
+export function DialogUpdate(props: {
+  dialogKey: string
+  version: string
+  install: () => Promise<void>
+  restart?: () => Promise<void>
+}) {
   const dialog = useDialog()
   const theme = useTheme("elevated")
   const [state, setState] = createSignal<State>({ type: "ready", active: "update" })
+  const close = () => {
+    if (dialog.key === props.dialogKey) dialog.clear()
+  }
 
   const install = async () => {
     setState({ type: "installing" })
     await props.install()
-    setState({ type: "restarting" })
-    await props.restart()
-    dialog.clear()
+    if (props.restart) {
+      setState({ type: "restarting" })
+      await props.restart()
+    }
+    close()
   }
 
   const beginInstall = () => {
@@ -34,16 +44,16 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
   const run = () => {
     const current = state()
     if (current.type !== "ready") return
-    if (current.active === "ignore") return dialog.clear()
+    if (current.active === "skip") return close()
     beginInstall()
   }
 
   const toggle = () =>
     setState((current) =>
-      current.type === "ready" ? { ...current, active: current.active === "update" ? "ignore" : "update" } : current,
+      current.type === "ready" ? { ...current, active: current.active === "update" ? "skip" : "update" } : current,
     )
 
-  const selected = (action: "update" | "ignore") => {
+  const selected = (action: "update" | "skip") => {
     const current = state()
     return current.type === "ready" && current.active === action
   }
@@ -60,7 +70,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
         bind: "return",
         title: "Confirm update action",
         group: "Dialog",
-        run: () => (state().type === "failed" ? dialog.clear() : run()),
+        run: () => (state().type === "failed" ? close() : run()),
       },
       {
         bind: "left",
@@ -81,9 +91,9 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-          Update
+          Update available
         </text>
-        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.subdued} onMouseUp={close}>
           esc
         </text>
       </box>
@@ -91,14 +101,17 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
         <Switch>
           <Match when={state().type === "ready"}>
             <text fg={theme.text.subdued}>
-              Update to v{props.version}? It will be applied in the background and active sessions will be restarted.
+              An update is available. Applying will
+              {props.restart
+                ? " restart the server and active sessions will be resumed."
+                : " install the update but you will need to manually restart."}
             </text>
           </Match>
           <Match when={state().type === "installing"}>
-            <Spinner>Installing OpenCode {props.version}…</Spinner>
+            <Spinner shimmer={theme.text.default}>Installing OpenCode {props.version}…</Spinner>
           </Match>
           <Match when={state().type === "restarting"}>
-            <Spinner>Restarting the background service…</Spinner>
+            <Spinner shimmer={theme.text.default}>Restarting the background service…</Spinner>
           </Match>
           <Match when={state().type === "failed"}>
             <text fg={theme.text.feedback.error.default}>{failure()}</text>
@@ -114,7 +127,7 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
                 paddingLeft={3}
                 paddingRight={3}
                 backgroundColor={theme.background.action.primary.focused}
-                onMouseUp={() => dialog.clear()}
+                onMouseUp={close}
               >
                 <text fg={theme.text.action.primary.focused}>close</text>
               </box>
@@ -123,19 +136,19 @@ export function DialogUpdate(props: { version: string; install: () => Promise<vo
         }
       >
         <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
-          <For each={["ignore", "update"] as const}>
+          <For each={["skip", "update"] as const}>
             {(action) => (
               <box
                 paddingLeft={1}
                 paddingRight={1}
                 backgroundColor={selected(action) ? theme.background.action.primary.focused : undefined}
                 onMouseUp={() => {
-                  if (action === "ignore") return dialog.clear()
+                  if (action === "skip") return close()
                   beginInstall()
                 }}
               >
                 <text fg={selected(action) ? theme.text.action.primary.focused : theme.text.subdued}>
-                  {action === "update" ? "Update" : "Ignore"}
+                  {action === "update" ? "Update" : "Skip"}
                 </text>
               </box>
             )}
