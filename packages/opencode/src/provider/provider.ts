@@ -1080,6 +1080,15 @@ export const Model = Schema.Struct({
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
+  compaction: optional(
+    Schema.Struct({
+      auto: optional(Schema.Boolean),
+      prune: optional(Schema.Boolean),
+      tail_turns: optional(Schema.Number),
+      preserve_recent_tokens: optional(Schema.Number),
+      reserved: optional(Schema.Number),
+    }),
+  ),
   status: ModelStatus,
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
@@ -1556,6 +1565,7 @@ const layer = Layer.effect(
                 input: model.limit?.input ?? existingModel?.limit?.input,
                 output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
               },
+              compaction: model.compaction ?? existingModel?.compaction,
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
