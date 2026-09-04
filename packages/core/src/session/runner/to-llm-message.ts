@@ -280,9 +280,11 @@ function toLLMMessage(
       return assistant(message, model, providerMetadataKey)
     case "compaction":
       if (message.status !== "completed") return []
+      // Explicit system updates inside a native replacement predate its completed
+      // compaction epoch; the current epoch baseline supersedes those instructions.
       if (message.providerContext)
         return SessionProviderContext.compatible(message.providerContext, target)
-          ? [...SessionProviderContext.decode(message.providerContext)]
+          ? SessionProviderContext.decode(message.providerContext).filter((message) => message.role !== "system")
           : []
       return [
         Message.make({

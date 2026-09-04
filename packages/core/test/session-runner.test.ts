@@ -1443,6 +1443,8 @@ describe("SessionRunnerLLM", () => {
       const compaction = yield* SessionCompaction.Service
       yield* compaction.transform((editor) => editor.configure({ auto: false }))
       yield* s.runPrompt("Original request")
+      s.systemBaseline = "Checkpoint instructions"
+      yield* s.runPrompt("Before checkpoint")
       const target = SessionProviderContext.provenance({
         model: s.currentModel,
         ref: Model.Ref.make({
@@ -1452,6 +1454,7 @@ describe("SessionRunnerLLM", () => {
       })
       if (!target) throw new Error("Expected concrete fixture endpoint")
       const replacement = [
+        Message.system("Checkpoint instructions"),
         Message.assistant(CompactionPart.make({ provider: s.currentModel.provider, encrypted: "checkpoint" })),
       ]
       const providerContext = SessionProviderContext.encode(target, replacement)
@@ -1469,17 +1472,31 @@ describe("SessionRunnerLLM", () => {
       const after = yield* s.runPrompt("After checkpoint")
       const continued = s.requests.at(-1)
       if (!continued) throw new Error("Expected continuation request")
-      expect(continued.messages[0]).toEqual(replacement[0])
-      expect(systemTexts(continued)).toContain("Newest instructions")
+      expect(continued.messages[0]).toEqual(replacement[1])
+      expect(continued.system.map((part) => part.text)).toContain("Checkpoint instructions")
+      expect(systemTexts(continued)).toEqual(["Newest instructions"])
 
       const forked = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: after.id } })
       yield* s.session.prompt({ sessionID: forked.id, text: "Fork prompt", resume: false })
       yield* s.session.resume(forked.id)
-      expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[0])
+      expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[1])
       expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Newest instructions")
+      expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
+        Message.system("Newest instructions"),
+      ])
       expect(
         (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
       ).toMatchObject({ providerContext })
+
+      const original = s.currentModel
+      s.currentModel = LanguageModel.update(original, { id: "different-deployment" })
+      yield* s.session.prompt({ sessionID: forked.id, text: "Switched fork", resume: false })
+      yield* s.session.resume(forked.id)
+      expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
+      expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
+        Message.system("Newest instructions"),
+      ])
+      s.currentModel = original
 
       yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: checkpoint.id })
       yield* s.runPrompt("After revert")

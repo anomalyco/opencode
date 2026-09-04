@@ -7,7 +7,7 @@ import { SessionSchema } from "./schema.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionProviderContext } from "./provider-context.js"
-import { SessionMessageTable } from "./sql.js"
+import { InstructionStateTable, SessionMessageTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -81,14 +81,33 @@ const messageEntries = Effect.fnUntraced(function* (
   const entries = yield* Effect.forEach(rows, (row) =>
     decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
+  const native = entries.findLast(
+    (entry) =>
+      entry.message.type === "compaction" && entry.message.status === "completed" && entry.message.providerContext,
+  )
+  const epoch = native
+    ? yield* db
+        .select({ start: InstructionStateTable.epoch_start })
+        .from(InstructionStateTable)
+        .where(eq(InstructionStateTable.session_id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
+    : undefined
   // Skipped native checkpoints are not textual summaries. Their original transcript remains available.
-  return entries.filter(
-    ({ message }) =>
+  return entries.filter((entry) => {
+    const message = entry.message
+    // Re-expansion may cross native checkpoints, but their advanced baseline still applies.
+    // Do not replay superseded instruction updates ahead of post-epoch updates.
+    // Forks seed their baseline at sequence 0 but retain parent message sequences.
+    // The copied native boundary still retires the instructions preceding it.
+    if (message.type === "system" && native && entry.seq < Math.max(epoch?.start ?? 0, native.seq)) return false
+    return (
       message.type !== "compaction" ||
       message.status !== "completed" ||
       !message.providerContext ||
-      SessionProviderContext.compatible(message.providerContext, target),
-  )
+      SessionProviderContext.compatible(message.providerContext, target)
+    )
+  })
 })
 
 /** Without a resolved target, native checkpoints are conservatively skipped. */

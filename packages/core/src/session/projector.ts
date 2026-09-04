@@ -695,10 +695,7 @@ const layer = Layer.effectDiscard(
         if (event.data.providerContext)
           yield* SessionProviderContext.validate(event.data.providerContext).pipe(Effect.orDie)
         yield* run(db, event)
-        // Native windows include chronological updates, but may be skipped after a model switch.
-        // Keep the prior baseline so re-expansion can replay those same updates in order.
-        if (!event.data.providerContext)
-          yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
+        yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
       }),
     )
     yield* bus.project(SessionEvent.Compaction.Failed, (event) => run(db, event))
