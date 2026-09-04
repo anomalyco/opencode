@@ -354,7 +354,7 @@ Hook surface (mutate `output` in place; return `void`):
 - `permission.ask`
 - `experimental.chat.messages.transform`, `experimental.chat.system.transform`,
   `experimental.session.compacting`, `experimental.compaction.autocontinue`,
-  `experimental.text.complete`
+  `experimental.text.complete`, `experimental.session.stopping`
 
 Special object-shaped (not callbacks): `tool: { my_tool: { ... } }`,
 `auth: { ... }`, `provider: { ... }`.
