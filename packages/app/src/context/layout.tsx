@@ -127,6 +127,46 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   }
 }
 
+function enrichProject({
+  project,
+  data,
+}: {
+  project: { worktree: string; expanded: boolean }
+  data: {
+    project: { id?: string; worktree: string; sandboxes?: string[] }[]
+    child: (directory: string, options?: { bootstrap: boolean }) => [Store<unknown>, SetStoreFunction<unknown>]
+  }
+}) {
+  const [childStore] = data.child(project.worktree, { bootstrap: false })
+  const child = childStore as Record<string, unknown>
+  const key = pathKey(project.worktree)
+  const byDirectory =
+    data.project.find((x) => pathKey(x.worktree) === key) ??
+    data.project.find((x) => x.sandboxes?.some((sandbox) => pathKey(sandbox) === key))
+  if (byDirectory) {
+    const base = { ...byDirectory, ...project }
+    const icon = child.icon
+    if (icon) {
+      return { ...base, icon: { ...base.icon, override: icon } }
+    }
+    return base
+  }
+  const projectID = child.project as string | undefined
+  const metadata = projectID
+    ? data.project.find((x) => x.id === projectID)
+    : data.project.find((x) => x.worktree === project.worktree)
+
+  // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
+  // Without this, different subdirectories of the same git repo would share the same
+  // icon from the database instead of using their individual overrides.
+  const base = { ...metadata, ...project }
+  const icon = child.icon
+  if (icon) {
+    return { ...base, icon: { ...base.icon, override: icon } }
+  }
+  return base
+}
+
 export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
   if (parts.length === 0) return { type: "home" }
@@ -442,29 +482,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return available[Math.floor(Math.random() * available.length)]
     }
 
-    function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = serverSync().child(project.worktree, { bootstrap: false })
-      const projectID = childStore.project
-      const metadata = projectID
-        ? serverSync().data.project.find((x) => x.id === projectID)
-        : serverSync().data.project.find((x) => x.worktree === project.worktree)
+    const enriched = createMemo(() =>
+      server.projects.list().map((project) => enrichProject({ project, data: serverSync() })),
+    )
 
-      // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
-      // Without this, different subdirectories of the same git repo would share the same
-      // icon from the database instead of using their individual overrides.
-      const base = { ...metadata, ...project }
-      if (childStore.icon) {
-        return { ...base, icon: { ...base.icon, override: childStore.icon } }
-      }
-      return base
-    }
-
+    // Sandbox chain map keyed by pathKey so that drive roots (C:/) never resolve
+    // through subdirectories (C:/foo) and vice versa. Each sandbox maps to its
+    // parent worktree; the map must not contain drive roots as keys or values.
     const roots = createMemo(() => {
       const map = new Map<string, string>()
       for (const project of serverSync().data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
+          map.set(pathKey(sandbox), project.worktree)
         }
       }
       return map
@@ -481,11 +511,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const current = chain[chain.length - 1]
         if (!current) return directory
 
-        const next = map.get(current)
+        // Stop if we would traverse into a drive root (e.g. C:/) since that
+        // would cause a project on C:/foo to resolve back to C:/ and collide
+        // with a project actually rooted at C:/.
+        if (current !== "/" && /^[a-z]:\//i.test(current) && pathKey(current).length <= 3) return directory
+
+        const next = map.get(pathKey(current))
         if (!next) return current
 
-        if (visited.has(next)) return directory
-        visited.add(next)
+        const nextKey = pathKey(next)
+        if (visited.has(nextKey)) return directory
+        visited.add(nextKey)
         chain.push(next)
       }
 
@@ -494,18 +530,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     createEffect(() => {
       const projects = server.projects.list()
-      const seen = new Set(projects.map((project) => project.worktree))
+      const seen = new Set(projects.map((project) => pathKey(project.worktree)))
 
       batch(() => {
         for (const project of projects) {
           const root = rootFor(project.worktree)
-          if (root === project.worktree) continue
+          if (pathKey(root) === pathKey(project.worktree)) continue
 
           server.projects.remove(project.worktree)
 
-          if (!seen.has(root)) {
+          if (!seen.has(pathKey(root))) {
             server.projects.open(root)
-            seen.add(root)
+            seen.add(pathKey(root))
           }
 
           if (project.expanded) server.projects.expand(root)
@@ -513,7 +549,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })
     })
 
-    const enriched = createMemo(() => server.projects.list().map(enrich))
+    const enriched = createMemo(() =>
+      server.projects.list().map((project) => enrichProject({ project, data: serverSync() })),
+    )
     const list = createMemo(() => {
       const projects = enriched()
       return projects.map((project) => {
@@ -638,11 +676,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             .recentlyClosed()
             .filter((worktree) => known.has(pathKey(worktree)))
             .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
-            .map((worktree) => enrich({ worktree, expanded: false }))
+            .map((worktree) => enrichProject({ project: { worktree, expanded: false }, data: serverSync() }))
         }),
         open(directory: string) {
           const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
+          const rootKey = pathKey(root)
+          if (server.projects.list().find((x) => pathKey(x.worktree) === rootKey)) return
           void serverSync().project.loadSessions(root)
           server.projects.open(root)
         },
