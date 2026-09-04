@@ -1580,6 +1580,8 @@ const layer = Layer.effect(
         for (const [id, provider] of Object.entries(database)) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
+          // GITHUB_TOKEN is commonly set for GitHub tooling; github-copilot must only activate through its OAuth plugin flow.
+          if (providerID === ProviderV2.ID.githubCopilot) continue
           const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
           if (!apiKey) continue
           mergeProvider(providerID, {
