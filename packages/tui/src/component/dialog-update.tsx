@@ -2,12 +2,13 @@ import { TextAttributes } from "@opentui/core"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import type { UpdateState } from "../context/update-notification"
+import type { UpdateOrigin, UpdateState } from "../context/update-notification"
 import { useDialog } from "../ui/dialog"
 import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
 
 export function DialogUpdate(props: {
+  origin: UpdateOrigin
   check?: (signal: AbortSignal) => Promise<string | undefined>
   state: () => UpdateState | undefined
   install: () => Promise<void>
@@ -48,7 +49,13 @@ export function DialogUpdate(props: {
         : type === "installed"
           ? { label: "Restart", run: props.restart }
           : undefined
-    return [{ label: confirm ? "Cancel" : "close", run: () => dialog.clear() }, ...(confirm ? [confirm] : [])]
+    return [
+      {
+        label: type === "available" && props.origin === "notification" ? "Skip" : confirm ? "Cancel" : "close",
+        run: () => dialog.clear(),
+      },
+      ...(confirm ? [confirm] : []),
+    ]
   })
 
   createEffect(() => setActive(Math.max(0, buttons().length - 1)))
