@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { spawn } from "child_process"
 import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -356,7 +357,30 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         // Build credential provider options (only pass profile if specified)
         const credentialProviderOptions = profile ? { profile } : {}
 
-        providerOptions.credentialProvider = fromNodeProviderChain(credentialProviderOptions)
+        const rawProvider = fromNodeProviderChain(credentialProviderOptions)
+        providerOptions.credentialProvider = async () => {
+          try {
+            return await rawProvider()
+          } catch (e) {
+            if (e instanceof Error && e.name === "CredentialsProviderError") {
+              // AWS SSO session expired - attempt re-authentication
+              await new Promise<void>((resolve, reject) => {
+                const args = ["sso", "login", ...(profile ? ["--profile", profile] : [])]
+                const child = spawn("aws", args, { stdio: "pipe" })
+                child.on("exit", (code) => {
+                  if (code === 0) {
+                    resolve()
+                  } else {
+                    reject(e)
+                  }
+                })
+                child.on("error", () => reject(e))
+              })
+              return await rawProvider()
+            }
+            throw e
+          }
+        }
       }
 
       // Add custom endpoint if specified (endpoint takes precedence over baseURL)
