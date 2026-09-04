@@ -167,7 +167,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       yield* Updater.Service.pipe(
         Effect.flatMap((updater) =>
           Updater.pollUpdates({
-            check: updater.check().pipe(
+            check: updater.run().pipe(
               Effect.flatMap((result) => {
                 if (!result) return Effect.void
                 if (result.type === "available") return server.updateAvailable(result.version)

@@ -9,12 +9,12 @@ import { action, parseReleaseVersion, type Policy } from "./updater-action"
 
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
 export type Method = (typeof methods)[number]
-export type CheckResult = { readonly type: "available" | "installed"; readonly version: string }
-export type ManualCheckResult = CheckResult | { readonly type: "unavailable"; readonly message: string }
+export type RunResult = { readonly type: "available" | "installed"; readonly version: string }
+export type CheckResult = RunResult | { readonly type: "unavailable"; readonly message: string }
 
 export interface Interface {
-  readonly check: () => Effect.Effect<CheckResult | undefined>
-  readonly checkManual: () => Effect.Effect<ManualCheckResult | undefined, Error>
+  readonly run: () => Effect.Effect<RunResult | undefined>
+  readonly check: () => Effect.Effect<CheckResult | undefined, Error>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
@@ -78,7 +78,7 @@ const make = Effect.gen(function* () {
     return values.findLast((value) => value !== undefined) ?? "auto"
   })
 
-  const run = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "10 seconds") {
+  const exec = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "10 seconds") {
     return yield* appProcess
       .run(ChildProcess.make(command[0], command.slice(1)), {
         timeout,
@@ -113,7 +113,7 @@ const make = Effect.gen(function* () {
     ]
     const results = yield* Effect.forEach(
       checks,
-      (check) => run(check.command).pipe(Effect.map((result) => ({ check, result }))),
+      (check) => exec(check.command).pipe(Effect.map((result) => ({ check, result }))),
       { concurrency: "unbounded" },
     )
     return results.find((result) => result.result.stdout.includes(installedPackage))?.check.method
@@ -168,17 +168,20 @@ const make = Effect.gen(function* () {
           // Bun does not prune old versions from its shared package cache.
           yield* fs.makeDirectory(global.cache, { recursive: true })
           const cache = yield* fs.makeTempDirectoryScoped({ directory: global.cache, prefix: "update-" })
-          return yield* run(["bun", "install", "--global", "--trust", "--cache-dir", cache, target], "5 minutes")
+          return yield* exec(["bun", "install", "--global", "--trust", "--cache-dir", cache, target], "5 minutes")
         }
         if (method === "curl") {
           yield* fs.makeDirectory(global.cache, { recursive: true })
           const directory = yield* fs.makeTempDirectoryScoped({ directory: global.cache, prefix: "update-" })
           const installer = path.join(directory, "install")
-          const download = yield* run(["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"], "5 minutes")
+          const download = yield* exec(
+            ["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"],
+            "5 minutes",
+          )
           if (download.code !== 0) return download
-          return yield* run(["bash", installer, "--version", version, "--no-modify-path"], "5 minutes")
+          return yield* exec(["bash", installer, "--version", version, "--no-modify-path"], "5 minutes")
         }
-        return yield* run(commands[method], "5 minutes")
+        return yield* exec(commands[method], "5 minutes")
       }),
     ).pipe(Effect.mapError((cause) => new Error(`Failed to update with ${method}`, { cause })))
     if (result.code === 0) return
@@ -232,7 +235,7 @@ const make = Effect.gen(function* () {
     if (!(yield* install(version))) return yield* Effect.fail(new Error("Installation method not found"))
   })
 
-  const checkManual = Effect.fn("cli.updater.check-manual")(function* () {
+  const check = Effect.fn("cli.updater.check")(function* () {
     if (OPENCODE_LOCAL)
       return {
         type: "unavailable" as const,
@@ -250,7 +253,7 @@ const make = Effect.gen(function* () {
     return { type: "available" as const, version }
   })
 
-  const check = Effect.fn("cli.updater.check")(
+  const run = Effect.fn("cli.updater.run")(
     function* () {
       const result = yield* inspect()
       if (!result) return undefined
@@ -261,7 +264,7 @@ const make = Effect.gen(function* () {
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )
 
-  return Service.of({ check, checkManual, apply, method, latest, upgrade })
+  return Service.of({ run, check, apply, method, latest, upgrade })
 })
 
 export const layer = Layer.effect(Service, make)
