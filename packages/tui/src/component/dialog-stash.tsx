@@ -1,10 +1,11 @@
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, onCleanup } from "solid-js"
 import { Locale } from "../util/locale"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { usePromptStash, type StashEntry } from "../prompt/stash"
+import { useToast } from "../ui/toast"
 
 function getRelativeTime(timestamp: number): string {
   const now = Date.now()
@@ -31,15 +32,20 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const stash = usePromptStash()
   const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
+  const toast = useToast()
 
-  const [toDelete, setToDelete] = createSignal<number>()
+  const [toDelete, setToDelete] = createSignal<string>()
+  let disposed = false
+  onCleanup(() => {
+    disposed = true
+  })
 
   const options = createMemo(() => {
     const entries = stash.list()
     // Show most recent first
     return entries
-      .map((entry, index) => {
-        const isDeleting = toDelete() === index
+      .map((entry) => {
+        const isDeleting = toDelete() === entry.id
         const lineCount = (entry.prompt.text.match(/\n/g)?.length ?? 0) + 1
         return {
           title: isDeleting
@@ -47,7 +53,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
             : getStashPreview(entry.prompt.text),
           bg: isDeleting ? theme.background.action.destructive.focused : undefined,
           fg: isDeleting ? theme.text.action.destructive.focused : undefined,
-          value: index,
+          value: entry.id,
           description: getRelativeTime(entry.timestamp),
           footer: lineCount > 1 ? `~${lineCount} lines` : undefined,
         }
@@ -59,25 +65,29 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
     <DialogSelect
       title="Stash"
       options={options()}
+      preserveSelection
       onMove={() => {
         setToDelete(undefined)
       }}
-      onSelect={(option) => {
-        const entries = stash.list()
-        const entry = entries[option.value]
-        if (entry) {
-          stash.remove(option.value)
-          props.onSelect(entry)
-        }
-        dialog.clear()
+      onSelect={async (option) => {
+        if (stash.pending()) return
+        await stash.remove(option.value).then(
+          (entry) => {
+            // A consumed entry still belongs to the caller after this dialog closes.
+            if (entry) props.onSelect(entry)
+            if (!disposed) dialog.clear()
+          },
+          (error) => toast.error(error),
+        )
       }}
       actions={[
         {
           command: "stash.delete",
           title: "delete",
-          onTrigger: (option) => {
+          onTrigger: async (option) => {
+            if (stash.pending()) return
             if (toDelete() === option.value) {
-              stash.remove(option.value)
+              await stash.remove(option.value).catch((error) => toast.error(error))
               setToDelete(undefined)
               return
             }
