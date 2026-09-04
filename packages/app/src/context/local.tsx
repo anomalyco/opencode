@@ -14,12 +14,15 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useServerSDK } from "./server-sdk"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+import { modelForAgent, setModelForAgent } from "./agent-model-selection"
+import type { AgentModelKey } from "./agent-model-selection"
 
-export type ModelKey = { providerID: string; modelID: string; variant?: string }
+export type ModelKey = AgentModelKey
 
 type State = {
   agent?: string
   model?: ModelKey
+  models?: Record<string, ModelKey | null>
   variant?: string | null
 }
 
@@ -53,6 +56,9 @@ const clone = (value: State | undefined) => {
   return {
     ...value,
     model: value.model ? { ...value.model } : undefined,
+    models: value.models
+      ? Object.fromEntries(Object.entries(value.models).map(([agent, model]) => [agent, model ? { ...model } : null]))
+      : undefined,
   } satisfies State
 }
 
@@ -193,6 +199,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
 
         batch(() => {
+          const previousAgent = agent.current()?.name
+          const previous = scope()
           setStore("current", item.name)
           setStore("last", {
             type: "agent",
@@ -200,11 +208,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             model: item.model,
             variant: item.variant ?? null,
           })
-          const prev = scope()
           const next = {
             agent: item.name,
-            model: item.model ?? prev?.model,
-            variant: item.variant ?? prev?.variant,
+            model: previous?.models || previousAgent ? undefined : previous?.model,
+            models:
+              previous?.models ??
+              (previous?.model && previousAgent ? { [previousAgent]: previous.model } : undefined),
+            variant: previous?.variant,
           } satisfies State
           const session = id()
           if (session) {
@@ -231,8 +241,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const current = () => {
+      const currentAgent = agent.current()?.name
       const item = firstModel(
-        () => scope()?.model,
+        () => modelForAgent(scope(), currentAgent),
         () => agent.current()?.model,
         fallback,
       )
@@ -307,7 +318,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               model: item ?? null,
               variant: selected(),
             })
-            write({ model: item })
+            write(setModelForAgent(scope(), agent.current()?.name, item))
             if (!item) return
             models.setVisibility(item, true)
             if (!options?.recent) return

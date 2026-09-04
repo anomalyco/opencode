@@ -1,5 +1,6 @@
 import { batch, createMemo, startTransition } from "solid-js"
 import { useModels } from "@/context/models"
+import { useLocal } from "@/context/local"
 import type { ModelKey, ModelSelection } from "@/context/local"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/context/model-variant"
 import { usePrompt } from "@/context/prompt"
@@ -12,6 +13,7 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
   const sdk = useSDK()
   const sync = useSync()
   const models = useModels()
+  const local = useLocal()
   const prompt = usePrompt()
   const providers = useProviders(() => sdk().directory)
   const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
@@ -37,7 +39,9 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
   }
 
   const current = () => {
-    const key = [prompt.model.current(), input.agent()?.model, configured(), recent(), fallback()].find(
+    const selected = local.model.current()
+    const localKey = selected ? { providerID: selected.provider.id, modelID: selected.id } : undefined
+    const key = [localKey, prompt.model.current(), input.agent()?.model, configured(), recent(), fallback()].find(
       (item): item is ModelKey => !!item && valid(item),
     )
     if (!key) return
@@ -67,6 +71,7 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
     set(item: ModelKey | undefined, options?: { recent?: boolean }) {
       startTransition(() =>
         batch(() => {
+          local.model.set(item)
           prompt.model.set(item ? { ...item, variant: prompt.model.current()?.variant } : undefined)
           if (!item) return
           models.setVisibility(item, true)
