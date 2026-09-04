@@ -66,6 +66,36 @@ describe("Runner reply-required FIFO (CP-033)", () => {
   )
 
   it.live(
+    "keeps an Idle selected F behind its release gate (T-04/M-02)",
+    Effect.gen(function* () {
+      const scope = yield* Scope.Scope
+      const runner = Runner.make<string>(scope)
+      const release = yield* Deferred.make<void>()
+      const bodyEntered = yield* Deferred.make<void>()
+      const bodyFinished = yield* Deferred.make<void>()
+      yield* Effect.addFinalizer(() => open(release).pipe(Effect.andThen(open(bodyFinished)), Effect.ignore))
+
+      const entry = published(
+        yield* runner.publish(
+          () => open(bodyEntered).pipe(Effect.andThen(Deferred.await(bodyFinished)), Effect.as("released")),
+          release,
+        ),
+      )
+
+      // Idle publication opens `start` before returning. This explicit scheduler handoff therefore
+      // gives the selected fiber a deterministic opportunity to reach the still-closed release gate.
+      yield* Effect.yieldNow
+      expect(yield* Deferred.isDone(bodyEntered)).toBe(false)
+
+      yield* open(release)
+      yield* Deferred.await(bodyEntered)
+      expect(yield* Deferred.isDone(bodyEntered)).toBe(true)
+      yield* open(bodyFinished)
+      expect(yield* entry.await).toBe("released")
+    }),
+  )
+
+  it.live(
     "promotes B/C/D in FIFO order after every non-cancel predecessor exit (T-08)",
     Effect.gen(function* () {
       const modes = ["success", "failure", "defect", "interrupt"] as const
