@@ -329,7 +329,7 @@ export function MessageTimeline(props: {
     if (value) return value
     return language.t("command.session.new")
   })
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const showHeader = createMemo(() => !!sessionID())
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,
