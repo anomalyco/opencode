@@ -2,6 +2,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type Component, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { useLanguage } from "@/context/language"
@@ -12,17 +13,20 @@ import "./settings-v2.css"
 export const DialogServerV2: Component<{
   mode: "add" | "edit"
   server?: ServerConnection.Http
+  url?: string
+  onAdded?: (conn: ServerConnection.Http, signal: AbortSignal) => void | Promise<void>
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const controller = useServerManagementController({
     onSelect: () => dialog.close(),
+    onAdded: props.onAdded,
     navigateOnAdd: false,
   })
   const [opened, setOpened] = createSignal(false)
 
   onMount(() => {
-    if (props.mode === "add") controller.startAdd()
+    if (props.mode === "add") controller.startAdd(props.url)
     if (props.mode === "edit" && props.server) controller.startEdit(props.server)
     setOpened(true)
   })
@@ -125,7 +129,14 @@ export const DialogServerV2: Component<{
         <ButtonV2 variant="neutral" disabled={controller.formBusy()} onClick={() => dialog.close()}>
           {language.t("common.cancel")}
         </ButtonV2>
-        <ButtonV2 variant="contrast" disabled={controller.formBusy()} onClick={controller.submitForm}>
+        <ButtonV2
+          variant={controller.formBusy() ? "loading" : "contrast"}
+          disabled={controller.formBusy()}
+          onClick={controller.submitForm}
+        >
+          <Show when={controller.formBusy()}>
+            <LoaderV2 />
+          </Show>
           {submitLabel()}
         </ButtonV2>
       </DialogFooter>

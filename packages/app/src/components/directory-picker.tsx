@@ -14,6 +14,7 @@ type DirectoryPickerInput = {
   server: ServerConnection.Any
   title?: string
   multiple?: boolean
+  start?: string
   onSelect: (result: string | string[] | null) => void
 }
 

@@ -80,9 +80,12 @@ function useEnvProxy() {
 
 function emitDeepLinks(urls: string[]) {
   if (urls.length === 0) return
-  pendingDeepLinks.push(...urls)
   const win = getLastFocusedWindow()
-  if (win) sendDeepLinks(win, urls)
+  if (win) {
+    sendDeepLinks(win, urls)
+    return
+  }
+  pendingDeepLinks.push(...urls)
 }
 
 async function killSidecar() {
@@ -220,6 +223,8 @@ const main = Effect.gen(function* () {
     logger.log("deep link received via open-url", { url })
     emitDeepLinks([url])
   })
+
+  emitDeepLinks(process.argv.filter((arg) => arg.startsWith("opencode://")))
 
   app.on("before-quit", () => {
     setAppQuitting()
