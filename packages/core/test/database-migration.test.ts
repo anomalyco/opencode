@@ -382,6 +382,37 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("defaults missing workspace names during legacy workspace rebuild", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`
+          CREATE TABLE workspace (
+            id text PRIMARY KEY,
+            type text NOT NULL,
+            branch text,
+            directory text,
+            extra text,
+            project_id text NOT NULL
+          )
+        `)
+        yield* db.run(sql`
+          INSERT INTO workspace (id, type, branch, directory, extra, project_id)
+          VALUES ('wrk_legacy', 'remote', 'main', '/repo', '{}', 'proj_legacy')
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [workspaceNameMigration])
+
+        expect(yield* db.get(sql`SELECT id, name, directory, extra FROM workspace`)).toEqual({
+          id: "wrk_legacy",
+          name: "",
+          directory: "/repo",
+          extra: "{}",
+        })
+      }),
+    )
+  })
+
   test("resets incompatible projected Session messages before adding sequence order", async () => {
     await run(
       Effect.gen(function* () {
