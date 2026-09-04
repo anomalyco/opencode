@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -194,8 +194,13 @@ export function TasksPanel() {
   const [dismissed, setDismissed] = createSignal<Set<string>>(new Set())
   const [tick, setTick] = createSignal(0)
 
-  const timer = setInterval(() => setTick((t) => t + 1), 1000)
-  onCleanup(() => clearInterval(timer))
+  // Elapsed-time ticker exists only while live work is present: no timer,
+  // no re-render churn, nothing retained when the panel is idle.
+  createEffect(() => {
+    if (items().running.length === 0) return
+    const timer = setInterval(() => setTick((t) => t + 1), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
 
   const visible = createMemo(() => {
     const gone = dismissed()
