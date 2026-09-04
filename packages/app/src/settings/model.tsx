@@ -87,7 +87,7 @@ const generalSchema = Persistence.struct({
     edit: activitySchema,
     thinking: activitySchema,
     subagents: placementOnlySchema,
-    notices: Persistence.struct({ placement: Schema.Literals(["separate", "hidden"]) }),
+    notices: placementOnlySchema,
     tools: placementOnlySchema,
   }),
   showCustomAgents: Schema.Boolean,
@@ -153,16 +153,12 @@ function storedTimelineCategory(category: TimelineCategory) {
     ]).pipe(
       Schema.decode({
         decode: SchemaGetter.transform((value) => {
-          if (typeof value !== "string") {
-            return category === "notices" && value.placement === "grouped"
-              ? { ...value, placement: "separate" as const }
-              : value
-          }
+          if (typeof value !== "string") return value
           return {
             placement:
               value === "hidden"
                 ? "hidden"
-                : category === "subagents" || category === "notices"
+                : category === "subagents"
                   ? "separate"
                   : category === "tools"
                     ? "grouped"

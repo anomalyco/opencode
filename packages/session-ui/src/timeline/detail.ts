@@ -10,7 +10,7 @@ export type TimelineDetail = {
   edit: { placement: TimelinePlacement; details: TimelineExpansion }
   thinking: { placement: TimelinePlacement; details: TimelineExpansion }
   subagents: { placement: TimelinePlacement }
-  notices: { placement: "separate" | "hidden" }
+  notices: { placement: TimelinePlacement }
   tools: { placement: TimelinePlacement }
 }
 
@@ -33,7 +33,7 @@ export const timelinePresets = [
       edit: { placement: "separate", details: "expanded" },
       thinking: { placement: "grouped", details: "collapsed" },
       subagents: { placement: "separate" },
-      notices: { placement: "separate" },
+      notices: { placement: "grouped" },
       tools: { placement: "grouped" },
     },
   },
@@ -44,7 +44,7 @@ export const timelinePresets = [
       edit: { placement: "grouped", details: "collapsed" },
       thinking: { placement: "grouped", details: "collapsed" },
       subagents: { placement: "grouped" },
-      notices: { placement: "separate" },
+      notices: { placement: "grouped" },
       tools: { placement: "grouped" },
     },
   },

@@ -31,52 +31,6 @@ describe("settings timeline detail migration", () => {
     expect(settings.appearance.fontSize).toBe(16)
     expect(decode(encode(settings))).toEqual(settings)
   })
-
-  test.each([{ placement: "grouped" }, "collapsed"])("migrates grouped notices to separate: %j", (notices) => {
-    const restore = Schema.decodeUnknownSync(
-      Persistence.withInitial(settingsPersistence, {
-        ...defaultSettings,
-        general: { ...defaultSettings.general, timelineDetail: timelinePresets[4].value },
-      }),
-    )
-    const settings = restore({
-      general: {
-        autoSave: false,
-        timelineDetail: {
-          shell: { placement: "hidden", details: "expanded" },
-          edit: { placement: "grouped", details: "expanded" },
-          thinking: { placement: "separate", details: "collapsed" },
-          subagents: { placement: "hidden" },
-          notices,
-          tools: { placement: "separate" },
-        },
-      },
-      appearance: { fontSize: 18 },
-    })
-    expect(settings.general.timelineDetail).toEqual({
-      shell: { placement: "hidden", details: "expanded" },
-      edit: { placement: "grouped", details: "expanded" },
-      thinking: { placement: "separate", details: "collapsed" },
-      subagents: { placement: "hidden" },
-      notices: { placement: "separate" },
-      tools: { placement: "separate" },
-    })
-    expect(settings.general.autoSave).toBe(false)
-    expect(settings.appearance.fontSize).toBe(18)
-    expect(decode(encode(settings))).toEqual(settings)
-  })
-
-  test.each(["separate", "hidden"])("preserves notice placement: %s", (placement) => {
-    const settings = decode({ general: { timelineDetail: { notices: { placement } } } })
-    expect(settings.general.timelineDetail.notices).toEqual({ placement })
-    expect(decode(encode(settings))).toEqual(settings)
-  })
-
-  test("preserves legacy hidden notices", () => {
-    const settings = decode({ general: { timelineDetail: { notices: "hidden" } } })
-    expect(settings.general.timelineDetail.notices).toEqual({ placement: "hidden" })
-    expect(decode(encode(settings))).toEqual(settings)
-  })
 })
 
 describe("settings schema", () => {
@@ -201,18 +155,6 @@ describe("settings schema", () => {
     expect(() =>
       Schema.encodeUnknownSync(settingsSchema)({ ...decode({}), appearance: { fontSize: "large" } }),
     ).toThrow()
-  })
-
-  test("rejects grouped notices in the current schema", () => {
-    const settings = {
-      ...defaultSettings,
-      general: {
-        ...defaultSettings.general,
-        timelineDetail: { ...defaultSettings.general.timelineDetail, notices: { placement: "grouped" } },
-      },
-    }
-    expect(() => Schema.decodeUnknownSync(settingsSchema)(settings)).toThrow()
-    expect(() => Schema.encodeUnknownSync(settingsSchema)(settings)).toThrow()
   })
 })
 

@@ -485,7 +485,7 @@ function ExaOutput(props: { output?: string }) {
 export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
-  | { type: "shell"; id: string; render: () => JSX.Element }
+  | { type: "notice" | "shell"; id: string; render: () => JSX.Element }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -528,9 +528,12 @@ export function CurrentContextToolGroup(props: {
       .join(", "),
   )
   const label = createMemo(() => {
-    const title =
-      names() ||
-      i18n.plural("ui.messagePart.context.thought", props.parts.filter((part) => part.type === "reasoning").length)
+    const thoughts = props.parts.filter((part) => part.type === "reasoning").length
+    if (!names() && !thoughts) {
+      const title = i18n.t("ui.messagePart.context.details")
+      return { text: title, title, before: "", after: "" }
+    }
+    const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
     const text = i18n.t("ui.messagePart.tools.used", { tools: title })
     const index = text.indexOf(title)
     return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
@@ -622,7 +625,7 @@ export function CurrentContextToolGroup(props: {
               })
               const callback = createMemo(() => {
                 const value = item()
-                return !Array.isArray(value) && value.type === "shell" ? value : undefined
+                return !Array.isArray(value) && (value.type === "notice" || value.type === "shell") ? value : undefined
               })
               return (
                 <Show
