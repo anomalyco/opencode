@@ -51,15 +51,20 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const location = () => (props.directory ? { location: { directory: props.directory } } : {})
   const directory = () => (props.directory ? { directory: props.directory } : undefined)
 
-  // The v1 and v2 servers expose different MCP surfaces:
-  // - v1: REST `/api/mcp*` (list/add/remove/connect/disconnect)
-  // - v2: `GET /mcp` status map + `PUT /mcp` add + connect/disconnect; there is
-  //   NO delete route — removal is a config update that unsets the key.
+  // The MCP surface used here is the SDK client's `/mcp` routes (status/add/
+  // connect/disconnect), NOT the promise client's `/api/mcp*` — the desktop
+  // sidecar (in-tree server) does not expose `/api/mcp`, and upstream's own
+  // loadMcpQuery/toggleMcp call `legacy.mcp.status()` and `sdk.mcp.*` on both
+  // protocols. Removal has no dedicated route: it unsets `mcp[name]` in the
+  // global config. The promise client's mcp routes only exist on genuine
+  // 1.17-era servers; fall back to them only when the SDK client fails with a
+  // route error (defense in depth for real v1 servers).
   const mcpApi = () => {
     const sdk = serverSdk()
     return {
       list: async () => {
-        if (protocol() === "v2") {
+        if (protocol() === "v1") {
+          // Matches server-sync.tsx loadMcpQuery v1 path: legacy.mcp.status()
           const status = await sdk.client.mcp.status(directory())
           return Object.entries(status).map(([name, value]) => ({ name, status: { status: value.status } }))
         }
@@ -69,39 +74,43 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
         return result.data ?? []
       },
       add: async (server: string, config: McpServerConfig) => {
-        if (protocol() === "v2") {
-          // The v2 schema wants mutable arrays; the payload builder types them readonly.
-          const mutable = (config.type === "local"
-            ? { ...config, command: [...config.command] }
-            : { ...config }) as McpLocalConfig | McpRemoteConfig
+        // The v2 schema wants mutable arrays; the payload builder types them readonly.
+        const mutable = (config.type === "local"
+          ? { ...config, command: [...config.command] }
+          : { ...config }) as McpLocalConfig | McpRemoteConfig
+        try {
           await sdk.client.mcp.add({ name: server, config: mutable, ...directory() })
-          return
+        } catch (error) {
+          if (protocol() === "v2") throw error
+          await sdk.api.mcp.add({ server, config, ...location() })
         }
-        await sdk.api.mcp.add({ server, config, ...location() })
       },
       remove: async (server: string) => {
-        if (protocol() === "v2") {
-          const config = serverSync().data.config
-          const next = { ...config, mcp: { ...config?.mcp } }
-          delete next.mcp[server]
+        const config = serverSync().data.config
+        const next = { ...config, mcp: { ...config?.mcp } }
+        delete next.mcp[server]
+        try {
           await sdk.client.global.config.update({ config: next })
-          return
+        } catch (error) {
+          if (protocol() === "v2") throw error
+          await sdk.api.mcp.remove({ server, ...location() })
         }
-        await sdk.api.mcp.remove({ server, ...location() })
       },
       connect: async (server: string) => {
-        if (protocol() === "v2") {
+        try {
           await sdk.client.mcp.connect({ name: server, ...directory() })
-          return
+        } catch (error) {
+          if (protocol() === "v2") throw error
+          await sdk.api.mcp.connect({ server, ...location() })
         }
-        await sdk.api.mcp.connect({ server, ...location() })
       },
       disconnect: async (server: string) => {
-        if (protocol() === "v2") {
+        try {
           await sdk.client.mcp.disconnect({ name: server, ...directory() })
-          return
+        } catch (error) {
+          if (protocol() === "v2") throw error
+          await sdk.api.mcp.disconnect({ server, ...location() })
         }
-        await sdk.api.mcp.disconnect({ server, ...location() })
       },
     }
   }
