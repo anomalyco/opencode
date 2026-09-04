@@ -1,6 +1,6 @@
 import { createUniqueId, type ComponentProps } from "solid-js"
 
-export function Wordmark(props: Pick<ComponentProps<"svg">, "class">) {
+export function Wordmark(props: Pick<ComponentProps<"svg">, "class"> & { fade?: boolean }) {
   const mask = createUniqueId()
   const maskGradient = createUniqueId()
 
@@ -12,7 +12,7 @@ export function Wordmark(props: Pick<ComponentProps<"svg">, "class">) {
       classList={{ [props.class ?? ""]: !!props.class }}
     >
       <g opacity="0.6" class="[[data-color-scheme=dark]_&]:opacity-100">
-        <g mask={`url(#${mask})`}>
+        <g mask={props.fade === false ? undefined : `url(#${mask})`}>
           <g opacity="0.16">
             <path
               opacity="0.7"
