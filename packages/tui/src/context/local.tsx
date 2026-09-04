@@ -208,6 +208,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (saveState.pending) savePreferences()
         })
 
+      const configuredModel = createMemo(() => {
+        const entry = data.location.config
+          .list(location.ref)
+          ?.findLast((entry) => entry.type === "document" && entry.info.model !== undefined)
+        const configured = entry?.type === "document" ? entry.info.model : undefined
+        if (!configured) return
+        return typeof configured === "string"
+          ? { ...parseModel(configured), variant: undefined }
+          : { providerID: configured.providerID, modelID: configured.model, variant: configured.variant }
+      })
+
       const fallbackModel = createMemo(() => {
         if (args.model) {
           const { providerID, modelID } = parseModel(args.model)
@@ -219,17 +230,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        const entry = data.location.config
-          .list(location.ref)
-          ?.findLast((entry) => entry.type === "document" && entry.info.model !== undefined)
-        const configured = entry?.type === "document" ? entry.info.model : undefined
-        if (configured) {
-          const model =
-            typeof configured === "string"
-              ? parseModel(configured)
-              : { providerID: configured.providerID, modelID: configured.model }
-          if (isModelValid(model)) return model
-        }
+        const configured = configuredModel()
+        if (configured && isModelValid(configured)) return configured
 
         for (const item of preferences.recent) {
           if (isModelValid(item)) {
@@ -274,11 +276,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       function preferredSelection(model: ModelPreferenceModel): ModelSelection {
         const configured = agent.current()?.model
+        const fallback = configuredModel()
         const preferred = preferences.variant[modelPreferenceKey(model)]
         const variant = normalizeModelVariant(
           preferred ??
             (configured?.providerID === model.providerID && configured.id === model.modelID
               ? configured.variant
+              : undefined) ??
+            (fallback?.providerID === model.providerID && fallback.modelID === model.modelID
+              ? fallback.variant
               : undefined),
         )
         const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)

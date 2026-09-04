@@ -291,6 +291,35 @@ test("drops unavailable session variants rather than sending a hidden invalid va
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: undefined })
 })
 
+test.each(["global", "agent", "saved", "default"])(
+  "resolves %s variants ahead of the global model variant",
+  async (source) => {
+    await using setup = await renderLocal({
+      models: [model("first", ["low", "medium", "high"]), model("second", ["low", "high"])],
+      agents: [
+        agent("build", source === "global" ? undefined : { providerID: "provider", id: "first", variant: "low" }),
+      ],
+      preferences: {
+        variant:
+          source === "saved" || source === "default"
+            ? { "provider/first": source === "saved" ? "medium" : "default" }
+            : {},
+      },
+      fetch: (url) => {
+        if (url.pathname === "/api/config")
+          return json([
+            { type: "document", info: { model: { providerID: "provider", model: "first", variant: "high" } } },
+          ])
+      },
+    })
+    expect(setup.local.model.variant.current()).toBe(
+      source === "global" ? "high" : source === "agent" ? "low" : source === "saved" ? "medium" : undefined,
+    )
+    setup.local.model.set({ providerID: "provider", modelID: "second" })
+    expect(setup.local.model.variant.current()).toBeUndefined()
+  },
+)
+
 test("a manual agent switch supersedes the CLI agent after its commit", async () => {
   await using setup = await renderLocal({
     args: { agent: "build" },
