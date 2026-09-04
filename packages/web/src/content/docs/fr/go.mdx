@@ -63,6 +63,7 @@ La liste actuelle des modèles comprend :
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([régions limitées](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([régions limitées](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
@@ -74,18 +75,33 @@ La liste actuelle des modèles comprend :
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 La liste des modèles peut changer au fur et à mesure que nous en testons et en ajoutons de nouveaux.
 
 ---
 
+## Où puis-je l'utiliser ?
+
+OpenCode Go est conçu pour être utilisé avec [OpenCode](https://opencode.ai) et d'autres agents de codage populaires qui génèrent des types de requêtes similaires.
+
+Le trafic est surveillé afin de détecter tout trafic abusif qui dégrade l'expérience des autres utilisateurs.
+
+Pour éviter que votre compte ne soit signalé, assurez-vous que l'outil que vous utilisez
+
+1\. ne génère pas de trafic abusif  
+2\. s'identifie correctement (pas d'agents utilisateur génériques)  
+3\. inclut l'en-tête `x-opencode-session` afin que nous puissions optimiser la mise en cache des prompts
+
 ## Limites d'utilisation
 
-OpenCode Go inclut les limites suivantes :
+OpenCode Go inclut les limites de base suivantes :
 
 - **Limite de 5 heures** — 12 $ d'utilisation
 - **Limite hebdomadaire** — 30 $ d'utilisation
 - **Limite mensuelle** — 60 $ d'utilisation
+
+L'allocation effective varie selon le modèle ; consultez le tableau ci-dessous.
 
 Les limites sont définies en valeur monétaire (dollars). Cela signifie que votre nombre réel de requêtes dépend du modèle que vous utilisez. Les modèles moins chers comme MiMo-V2.5 permettent plus de requêtes, tandis que les modèles plus coûteux comme GLM-5.2 en permettent moins.
 
@@ -107,6 +123,7 @@ Le tableau ci-dessous fournit une estimation du nombre de requêtes basée sur d
 | MiMo-V2.5-Pro                | 3,250                 | 8,150                | 16,300            |
 | MiniMax M3                   | 3,200                 | 8,000                | 16,000            |
 | MiniMax M2.7                 | 3,400                 | 8,500                | 17,000            |
+| Muse Spark 1.3 Contributor   | 45,300                | 113,300              | 226,600           |
 | Muse Spark 1.2 Contributor   | 45,300                | 113,300              | 226,600           |
 | Qwen3.8 Max                  | 160                   | 400                  | 810               |
 | Qwen3.8 Flash                | 5,400                 | 13,500               | 27,000            |
@@ -118,8 +135,9 @@ Le tableau ci-dessous fournit une estimation du nombre de requêtes basée sur d
 | DeepSeek V4 Flash Vision Exp | 3,800                 | 9,450                | 18,900            |
 | Hy4 preview                  | 1,350                 | 3,380                | 6,770             |
 | Hy3                          | 4,300                 | 10,750               | 21,500            |
+| Omen Alpha                   | 11,600                | 29,000               | 57,900            |
 
-Les estimations sont basées sur les schémas de requêtes observés :
+Les estimations utilisent les nombres de tokens suivants par requête ; l'utilisation réelle varie.
 
 - Grok 4.6 — 390 tokens en entrée, 32,500 en cache, 120 tokens en sortie par requête
 - GLM-5.3-Flash — 1,000 tokens en entrée, 55,000 en cache, 200 tokens en sortie par requête
@@ -133,6 +151,7 @@ Les estimations sont basées sur les schémas de requêtes observés :
 - DeepSeek V4 Flash Vision Exp — 410 tokens en entrée, 71,300 en cache, 310 tokens en sortie par requête
 - MiniMax M3 — 510 tokens en entrée, 56,000 en cache, 190 tokens en sortie par requête
 - MiniMax M2.7 — 300 tokens en entrée, 55,000 en cache, 125 tokens en sortie par requête
+- Muse Spark 1.3 Contributor — 620 tokens en entrée, 71,400 en cache, 300 tokens en sortie par requête
 - Muse Spark 1.2 Contributor — 620 tokens en entrée, 71,400 en cache, 300 tokens en sortie par requête
 - Qwen3.8 Max — 420 tokens en entrée, 66,000 en cache, 200 tokens en sortie par requête
 - Qwen3.8 Flash — 600 tokens en entrée, 58,000 en cache, 200 tokens en sortie par requête
@@ -143,6 +162,7 @@ Les estimations sont basées sur les schémas de requêtes observés :
 - Hy3 — 830 tokens en entrée, 71,500 en cache, 295 tokens en sortie par requête
 - MiMo-V2.5 — 830 tokens en entrée, 71,500 en cache, 295 tokens en sortie par requête
 - MiMo-V2.5-Pro — 790 tokens en entrée, 86,000 en cache, 305 tokens en sortie par requête
+- Omen Alpha — 300 tokens en entrée, 40 000 en cache, 100 tokens en sortie par requête
 
 Les estimations sont également basées sur les prix suivants par 1M tokens et sur l'utilisation mensuelle incluse avec chaque modèle :
 
@@ -165,6 +185,7 @@ Les estimations sont également basées sur les prix suivants par 1M tokens et s
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60         |
 | MiniMax M2.7                            | $0.30  | $1.20  | $0.06       | $0.375       | $60         |
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | $60         |
+| Muse Spark 1.3 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60         |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60         |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | $15         |
 | Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | $30         |
@@ -181,6 +202,7 @@ Les estimations sont également basées sur les prix suivants par 1M tokens et s
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15         |
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30         |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60         |
+| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | $100        |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Les heures Peak sont 01:00-04:00 et 06:00-10:00 UTC, du lundi au vendredi ; toutes les autres heures, y compris le week-end, sont Off-Peak. [En savoir plus](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -204,7 +226,7 @@ Si vous avez également des crédits sur votre solde Zen, vous pouvez activer l'
 
 ### Pourquoi certains modèles offrent un volume d'utilisation inférieur
 
-Avec Go, vous payez 10 $/mois et nous cherchons à vous offrir un volume d'utilisation équivalant à 6 fois ce montant.
+Avec Go, vous payez 10 $/mois et, pour la plupart des modèles, nous cherchons à vous offrir un volume d'utilisation équivalant à 6 fois ce montant.
 
 Pour la plupart des modèles, nous y parvenons grâce à des remises sur volume et à une capacité GPU réservée. Nous vous faisons ensuite bénéficier de ces économies grâce à un coefficient multiplicateur de 6.
 
@@ -238,6 +260,7 @@ Vous pouvez également accéder aux modèles Go via les points de terminaison d'
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -246,6 +269,7 @@ Vous pouvez également accéder aux modèles Go via les points de terminaison d'
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 L'[ID de modèle](/docs/config/#models) dans votre configuration OpenCode utilise le format `opencode-go/<model-id>`. Par exemple, pour Kimi K3, vous utiliseriez `opencode-go/kimi-k3` dans votre configuration.
 
@@ -284,15 +308,18 @@ https://opencode.ai/zen/go/v1/models
 | Qwen3.6 Plus                 | Non utilisé              | 0 jour                   |
 | MiniMax M3                   | Non utilisé              | 0 jour                   |
 | MiniMax M2.7                 | Non utilisé              | 0 jour                   |
+| Muse Spark 1.3 Contributor   | Oui                      | Pas de ZDR               |
 | Muse Spark 1.2 Contributor   | Oui                      | Pas de ZDR               |
 | DeepSeek V4 Pro              | Non utilisé              | 0 jour                   |
 | DeepSeek V4 Flash            | Non utilisé              | 0 jour                   |
 | DeepSeek V4 Flash Vision Exp | Non utilisé              | 0 jour                   |
 | Hy4 preview                  | Non utilisé              | 0 jour                   |
 | Hy3                          | Non utilisé              | 0 jour                   |
+| Omen Alpha                   | Non utilisé              | 0 jour                   |
 
 - **Grok 4.6:** Le ZDR désactive d’importantes fonctionnalités API qui dépendent des données stockées, notamment Responses API avec état, Files and Collections et Batch API. [En savoir plus](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Des journaux de surveillance des abus sont générés pour toute utilisation des fonctionnalités API et conservés pendant un maximum de 30 jours. [En savoir plus](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Muse Spark 1.3 Contributor:** Des tarifs de tokens fortement réduits en échange de l’autorisation d’utiliser vos prompts et vos complétions pour entraîner de futurs modèles Meta. La disponibilité est limitée aux régions autorisées par la [Politique d’utilisation géographique](https://ai.developer.meta.com/legal/geographic-use-policy) de Meta. [En savoir plus](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Des tarifs de tokens fortement réduits en échange de l’autorisation d’utiliser vos prompts et vos complétions pour entraîner de futurs modèles Meta. La disponibilité est limitée aux régions autorisées par la [Politique d’utilisation géographique](https://ai.developer.meta.com/legal/geographic-use-policy) de Meta. [En savoir plus](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek V4 Flash:** L’accord ZDR est renouvelé chaque mois. L’accord actuel est valable jusqu’au 31 août 2026.
 
