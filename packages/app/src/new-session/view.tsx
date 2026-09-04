@@ -6,6 +6,7 @@ import { Show, createMemo, createSignal } from "solid-js"
 import { Schema } from "effect"
 import createPresence from "solid-presence"
 import { Composer } from "@/composer/composer"
+import { ComposerDropzone } from "@/composer/dropzone"
 import type { ComposerModel } from "@/composer/model"
 import { PromptGitStatus, PromptWorkspaceSelector } from "@/new-session/workspace/selector"
 import {
@@ -56,6 +57,10 @@ export function NewSessionView(props: {
         data-component="new-session"
         class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
+        <ComposerDropzone
+          active={props.composer.state.drag === "active"}
+          input={props.composer.model.selection.current()?.capabilities.input}
+        />
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <Wordmark class="h-auto w-full text-v2-background-bg-inverse" />
