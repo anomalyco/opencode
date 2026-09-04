@@ -57,7 +57,12 @@ const comparable = (value: unknown) => {
   if (value.type === "message" && value.role === "assistant")
     return {
       role: "assistant",
-      content: value.content,
+      // Annotations and logprobs describe the response, not the text replayed in model input.
+      content: Array.isArray(value.content)
+        ? value.content.map((part) =>
+            ProviderShared.isRecord(part) && part.type === "output_text" ? { type: part.type, text: part.text } : part,
+          )
+        : value.content,
       ...(value.phase === undefined ? {} : { phase: value.phase }),
     }
   if (value.type === "function_call")
@@ -121,7 +126,7 @@ const rejected = (
 
 export const driver = (input: DriverInput): WebSocketChannelDriver => {
   const { previous_response_id: _previousResponseID, ...request } = input.request
-  let output: unknown[] = []
+  let output: OpenResponses.StreamItem[] = []
   return {
     create: (checkpoint) =>
       Effect.sync(() => {
@@ -159,7 +164,14 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
               version: VERSION,
               responseID,
               request,
-              output: event.response?.output ? [...event.response.output] : output.slice(),
+              // Completion can re-encrypt reasoning. Callers replay the item already emitted by output_item.done.
+              output: event.response?.output
+                ? event.response.output.map((item) =>
+                    item.type === "reasoning" && item.id !== undefined
+                      ? (output.find((done) => done.type === item.type && done.id === item.id) ?? item)
+                      : item,
+                  )
+                : output.slice(),
             } satisfies CheckpointValue,
           },
         }

@@ -657,7 +657,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues a promoted steer after the completed assistant output", () =>
+  it.effect("continues a promoted steer after assistant output with response-only text metadata", () =>
     Effect.gen(function* () {
       const firstInput = [{ role: "user", content: [{ type: "input_text", text: "First" }] }]
       const first = continuationDriver({ type: "response.create", model: "gpt-5.2", store: false, input: firstInput })
@@ -671,7 +671,7 @@ describe("OpenAI Responses route", () => {
             id: "msg_1",
             status: "completed",
             role: "assistant",
-            content: [{ type: "output_text", text: "Hello" }],
+            content: [{ type: "output_text", text: "Hello", annotations: [], logprobs: [] }],
           },
         }),
       )
@@ -699,42 +699,37 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues store-false reasoning while retaining the output item ID", () =>
+  it.effect("continues streamed reasoning when completion re-encrypts the same item", () =>
     Effect.gen(function* () {
       const firstInput = [{ role: "user", content: [{ type: "input_text", text: "Think" }] }]
       const request = { type: "response.create", model: "gpt-5.2", store: false, input: firstInput }
+      const reasoning = {
+        type: "reasoning",
+        id: "rs_1",
+        summary: [{ type: "summary_text", text: "Thought" }],
+        encrypted_content: "encrypted",
+      }
       const first = continuationDriver(request)
       const create = yield* first.create(undefined)
       yield* first.observe(
         create,
         ProviderShared.encodeJson({
           type: "response.output_item.done",
-          item: {
-            type: "reasoning",
-            id: "rs_1",
-            summary: [{ type: "summary_text", text: "Thought" }],
-            encrypted_content: "encrypted",
-          },
+          item: reasoning,
         }),
       )
       const saved = checkpoint(
         yield* first.observe(
           create,
-          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+          ProviderShared.encodeJson({
+            type: "response.completed",
+            response: { id: "resp_1", output: [{ ...reasoning, encrypted_content: "terminal-encrypted" }] },
+          }),
         ),
       )
       const next = continuationDriver({
         ...request,
-        input: [
-          ...firstInput,
-          {
-            type: "reasoning",
-            id: "rs_1",
-            summary: [{ type: "summary_text", text: "Thought" }],
-            encrypted_content: "encrypted",
-          },
-          { role: "user", content: [{ type: "input_text", text: "Continue" }] },
-        ],
+        input: [...firstInput, reasoning, { role: "user", content: [{ type: "input_text", text: "Continue" }] }],
       })
 
       const continued = yield* next.create(saved)
@@ -744,6 +739,11 @@ describe("OpenAI Responses route", () => {
         previous_response_id: "resp_1",
         input: [{ role: "user", content: [{ type: "input_text", text: "Continue" }] }],
       })
+      const edited = yield* continuationDriver({
+        ...request,
+        input: [...firstInput, { ...reasoning, encrypted_content: "edited" }, { role: "user", content: "Continue" }],
+      }).create(saved)
+      expect(edited.mode).toBe("full")
     }),
   )
 
