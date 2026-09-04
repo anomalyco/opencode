@@ -28,6 +28,7 @@ import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { CompletionCommand } from "./cli/cmd/completion"
 import { Heap } from "./cli/heap"
 
 const args = hideBin(process.argv)
@@ -77,7 +78,7 @@ const cli = yargs(args)
     process.env.OPENCODE_PID = String(process.pid)
   })
   .usage("")
-  .completion("completion", "generate shell completion script")
+  .command(CompletionCommand)
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
