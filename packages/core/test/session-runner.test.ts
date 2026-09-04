@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   AIError,
+  HttpContext,
   LLMEvent,
   LLMRequest,
   Message,
@@ -2337,26 +2338,46 @@ describe("SessionRunnerLLM", () => {
     })
   }
 
-  scenario("allows the retry hook to stop compaction retries", function* (s) {
-    yield* s.llm.push(TestLLM.text("Earlier answer", "history"))
-    yield* s.runPrompt("Earlier question")
-    s.requests.length = 0
-    const hooks = yield* PluginHooks.Service
-    yield* hooks.register("session", "retry", (event) =>
-      Effect.sync(() => {
-        event.decision = { retry: false }
-      }),
-    )
-    yield* s.llm.push(Stream.fail(incompleteStream()))
-    const compaction = yield* s.session.compact({ sessionID })
-    yield* s.resume
+  for (const header of [false, true]) {
+    scenario(`stops compaction retries through the ${header ? "provider header" : "retry hook"}`, function* (s) {
+      yield* s.llm.push(TestLLM.text("Earlier answer", "history"))
+      yield* s.runPrompt("Earlier question")
+      s.requests.length = 0
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "retry", (event) =>
+        Effect.sync(() => {
+          expect(event.decision.retry).toBe(!header)
+          event.decision = { retry: false }
+        }),
+      )
+      yield* s.llm.push(
+        Stream.fail(
+          header
+            ? new AIError({
+                reason: new TransportError({
+                  message: "Connection closed",
+                  transport: "http",
+                  operation: "read",
+                  http: new HttpContext({
+                    url: "https://example.com",
+                    status: 200,
+                    headers: { "x-should-retry": "false" },
+                  }),
+                }),
+              })
+            : incompleteStream(),
+        ),
+      )
+      const compaction = yield* s.session.compact({ sessionID })
+      yield* s.resume
 
-    expect(s.requests).toHaveLength(1)
-    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
-      status: "failed",
-      error: { type: "provider.invalid-output" },
+      expect(s.requests).toHaveLength(1)
+      expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+        status: "failed",
+        error: { type: header ? "provider.transport" : "provider.invalid-output" },
+      })
     })
-  })
+  }
 
   for (const response of ["length", "content-filter", "invalid request", "context overflow"] as const) {
     scenario(`rejects compaction ${response} without retrying or committing its draft`, function* (s) {

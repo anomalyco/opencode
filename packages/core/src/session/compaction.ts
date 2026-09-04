@@ -417,112 +417,105 @@ export const layer = Layer.effect(
         },
       })
       const retry = yield* SessionRunnerRetry.policy(context.session.id)
-      // Keep transient retries separate from the one template correction.
-      let corrected = false
-      while (true) {
-        chunks.length = 0
-        providerState = undefined
-        failure = undefined
-        const retried = yield* llm
-          .stream(
-            !corrected
-              ? prepared.request
-              : LLMRequest.update(prepared.request, {
-                  messages: [
-                    ...prepared.request.messages,
-                    Message.user(
-                      "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template.",
-                    ),
-                  ],
-                }),
-            prepared.options,
-          )
-          .pipe(
-            Stream.runForEach((event) => {
-              if (LLMEvent.is.providerError(event))
+      // Both requests share the retry allowance; rejected output never enters the reminder request.
+      for (const request of [
+        prepared.request,
+        LLMRequest.update(prepared.request, {
+          messages: [
+            ...prepared.request.messages,
+            Message.user(
+              "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template.",
+            ),
+          ],
+        }),
+      ]) {
+        yield* Stream.suspend(() => {
+          chunks.length = 0
+          providerState = undefined
+          failure = undefined
+          return llm.stream(request, prepared.options)
+        }).pipe(
+          Stream.runForEach((event) => {
+            if (LLMEvent.is.providerError(event))
+              failure = {
+                type: event.classification === "context-overflow" ? "provider.invalid-request" : "provider.error",
+                message: event.message,
+              }
+            if (LLMEvent.is.textDelta(event)) {
+              chunks.push(event.text)
+              return bus.publish(SessionEvent.Compaction.Delta, {
+                sessionID: context.session.id,
+                text: event.text,
+              })
+            }
+            if (LLMEvent.is.stepFinish(event)) {
+              providerState =
+                event.providerMetadata?.[context.model.model.route.providerMetadataKey ?? context.model.model.provider]
+              const step = SessionUsage.record(event.usage, context.model.cost)
+              usage = usage ? SessionUsage.add(usage, step) : step
+            }
+            if (LLMEvent.is.finish(event)) {
+              if (event.reason.normalized === "length")
+                failure = { type: "compaction.failed", message: "Compaction summary reached the output token limit" }
+              if (event.reason.normalized === "content-filter")
                 failure = {
-                  type: event.classification === "context-overflow" ? "provider.invalid-request" : "provider.error",
-                  message: event.message,
+                  type: "provider.content-filter",
+                  message: "Compaction summary was blocked by the provider",
                 }
-              if (LLMEvent.is.textDelta(event)) {
-                chunks.push(event.text)
-                return bus.publish(SessionEvent.Compaction.Delta, {
-                  sessionID: context.session.id,
-                  text: event.text,
-                })
-              }
-              if (LLMEvent.is.stepFinish(event)) {
-                providerState =
-                  event.providerMetadata?.[
-                    context.model.model.route.providerMetadataKey ?? context.model.model.provider
-                  ]
-                const step = SessionUsage.record(event.usage, context.model.cost)
-                usage = usage ? SessionUsage.add(usage, step) : step
-              }
-              if (LLMEvent.is.finish(event)) {
-                if (event.reason.normalized === "length")
-                  failure = { type: "compaction.failed", message: "Compaction summary reached the output token limit" }
-                if (event.reason.normalized === "content-filter")
-                  failure = {
-                    type: "provider.content-filter",
-                    message: "Compaction summary was blocked by the provider",
-                  }
-                if (event.reason.normalized === "unknown")
-                  return Effect.fail(
-                    new AIError({
-                      reason: new InvalidProviderOutputError({
-                        message: "The provider response ended with an unknown finish reason.",
-                        classification: "incomplete-stream",
-                      }),
+              if (event.reason.normalized === "unknown")
+                return Effect.fail(
+                  new AIError({
+                    reason: new InvalidProviderOutputError({
+                      message: "The provider response ended with an unknown finish reason.",
+                      classification: "incomplete-stream",
                     }),
-                  )
-                if (event.reason.normalized === "error")
-                  return Effect.fail(
-                    new AIError({ reason: new UnknownProviderError({ message: "Compaction generation failed" }) }),
-                  )
-              }
-              return Effect.void
+                  }),
+                )
+              if (event.reason.normalized === "error")
+                return Effect.fail(
+                  new AIError({ reason: new UnknownProviderError({ message: "Compaction generation failed" }) }),
+                )
+            }
+            return Effect.void
+          }),
+          Effect.retry({
+            while: (cause) =>
+              Effect.gen(function* () {
+                if (isContextOverflowFailure(cause)) return false
+                const decision = yield* retry({
+                  cause,
+                  error: toSessionError(cause),
+                  agent: Agent.ID.make("compaction"),
+                  model: context.model.ref,
+                  hook: prepared.retry,
+                  retry: SessionRunnerRetry.isRetryable(cause),
+                })
+                if (!decision.retry) return false
+                yield* Effect.sleep(decision.delay)
+                return true
+              }),
+          }),
+          Effect.catchTag("AI.Error", (error) =>
+            Effect.sync(() => {
+              failure = toSessionError(error)
             }),
-            Effect.matchEffect({
-              onSuccess: () => Effect.succeed(false),
-              onFailure: (cause) =>
-                Effect.gen(function* () {
-                  failure = toSessionError(cause)
-                  if (isContextOverflowFailure(cause)) return false
-                  const decision = yield* retry({
-                    cause,
-                    error: failure,
-                    agent: Agent.ID.make("compaction"),
-                    model: context.model.ref,
-                    hook: prepared.retry,
-                    retry:
-                      SessionRunnerRetry.isRetryable(cause) ||
-                      (cause.reason._tag === "Transport" && cause.reason.operation === "read"),
-                  })
-                  if (!decision.retry) return false
-                  yield* Effect.sleep(decision.delay)
-                  return true
-                }),
-            }),
-            Effect.onInterrupt(() =>
-              recordUsage.pipe(
-                Effect.andThen(
-                  input.reason === "auto"
-                    ? failed({
-                        sessionID: context.session.id,
-                        reason: input.reason,
-                        error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
-                        inputID: input.inputID,
-                      }).pipe(Effect.asVoid)
-                    : Effect.void,
-                ),
+          ),
+          Effect.onInterrupt(() =>
+            recordUsage.pipe(
+              Effect.andThen(
+                input.reason === "auto"
+                  ? failed({
+                      sessionID: context.session.id,
+                      reason: input.reason,
+                      error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+                      inputID: input.inputID,
+                    }).pipe(Effect.asVoid)
+                  : Effect.void,
               ),
             ),
-          )
-        if (retried) continue
-        if (failure || hasSummarySection(chunks.join("")) || corrected) break
-        // Ignored output never enters the correction request or needs fabricated tool results.
-        corrected = true
+          ),
+        )
+        if (failure || hasSummarySection(chunks.join(""))) break
       }
       yield* recordUsage
       const summary = chunks.join("")
