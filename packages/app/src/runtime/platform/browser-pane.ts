@@ -6,6 +6,8 @@ export type BrowserPaneLayout = {
   tabID: Browser.TabID
   visible: boolean
   bounds?: { x: number; y: number; width: number; height: number }
+  background?: readonly [number, number, number, number]
+  radius?: number
 }
 
 export type BrowserPaneCommand = Browser.Action
