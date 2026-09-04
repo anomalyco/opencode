@@ -6,14 +6,14 @@ describe("updater", () => {
   test("reads update policy from JSONC", () => {
     expect(decodePolicy('{ // preference\n "update": "notify",\n}')).toBe("notify")
     expect(decodePolicy('{ "update": "disable" }')).toBe("disable")
-    expect(decodePolicy('{ "update": "auto" }')).toBe("notify")
+    expect(decodePolicy('{ "update": "auto" }')).toBe("auto")
     expect(decodePolicy('{ "update": "invalid" }')).toBeUndefined()
   })
 
   test("maps the v1 update policy", () => {
     expect(decodePolicy('{ "autoupdate": false }')).toBe("disable")
     expect(decodePolicy('{ "autoupdate": "notify" }')).toBe("notify")
-    expect(decodePolicy('{ "autoupdate": true }')).toBe("notify")
+    expect(decodePolicy('{ "autoupdate": true }')).toBe("auto")
   })
 
   test("reports every available release", () => {
@@ -21,6 +21,11 @@ describe("updater", () => {
     expect(action("1.2.3", "1.3.0", "notify")).toBe("notify")
     expect(action("1.2.3", "2.0.0", "notify")).toBe("notify")
     expect(action("1.2.3", "1.2.3", "notify")).toBe("none")
+  })
+
+  test("automatically installs every available release when enabled", () => {
+    expect(action("1.2.3", "1.2.4", "auto")).toBe("auto")
+    expect(action("1.2.3", "1.2.3", "auto")).toBe("none")
   })
 
   test("skips when updates are disabled", () => {

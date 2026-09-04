@@ -64,7 +64,6 @@ import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair, type DialogPairCredentials } from "./component/dialog-pair"
-import { DialogUpdate } from "./component/dialog-update"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -88,6 +87,7 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { newSessionLocation } from "./config/new-session-location"
+import { UpdateNotificationProvider, type UpdateSource } from "./context/update-notification"
 import { PluginProvider, usePlugin, type PackageSource } from "./plugin/context"
 import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
@@ -185,10 +185,7 @@ export type TuiInput = {
   }
   args: Args
   config: Config.Interface
-  updater?: {
-    monitor: (notify: (version: string) => void, signal: AbortSignal) => Promise<void>
-    apply: (version: string) => Promise<void>
-  }
+  updater?: UpdateSource
   packages: PackageSource
   environment?: Readonly<Record<string, string>>
   terminalHandoff?: () => Promise<
@@ -397,22 +394,25 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                     <PromptRefProvider>
                                                                       <EditorContextProvider>
                                                                         <AttentionProvider>
-                                                                          <PluginProvider
-                                                                            packages={input.packages}
-                                                                            directories={pluginDirectories}
+                                                                          <UpdateNotificationProvider
+                                                                            updater={input.updater}
                                                                           >
-                                                                            <App
-                                                                              updater={input.updater}
-                                                                              pair={
-                                                                                input.server.endpoint.auth
-                                                                                  ? input.server.endpoint.auth
-                                                                                  : {
-                                                                                      username: "opencode",
-                                                                                      password: "",
-                                                                                    }
-                                                                              }
-                                                                            />
-                                                                          </PluginProvider>
+                                                                            <PluginProvider
+                                                                              packages={input.packages}
+                                                                              directories={pluginDirectories}
+                                                                            >
+                                                                              <App
+                                                                                pair={
+                                                                                  input.server.endpoint.auth
+                                                                                    ? input.server.endpoint.auth
+                                                                                    : {
+                                                                                        username: "opencode",
+                                                                                        password: "",
+                                                                                      }
+                                                                                }
+                                                                              />
+                                                                            </PluginProvider>
+                                                                          </UpdateNotificationProvider>
                                                                         </AttentionProvider>
                                                                       </EditorContextProvider>
                                                                     </PromptRefProvider>
@@ -462,7 +462,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"] }) {
+function App(props: { pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
@@ -500,40 +500,6 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
   })
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
-  })
-  const [updateNotifications, markUpdateNotification] = useStorage().store<{ versions: string[] }>(
-    "update-notifications",
-    { initial: { versions: [] } },
-  )
-  const showUpdate = (version: string) => {
-    const updater = props.updater
-    if (!updater || updateNotifications.versions.includes(version)) return
-    void markUpdateNotification((draft) => {
-      draft.versions = [...draft.versions, version].slice(-100)
-    }).catch((error) => log.error("failed to persist update notification", { error }))
-    const key = `update:${version}`
-    dialog.replace(
-      () => (
-        <DialogUpdate
-          dialogKey={key}
-          version={version}
-          install={() => updater.apply(version)}
-          restart={client.restart}
-        />
-      ),
-      undefined,
-      { key },
-    )
-    dialog.setCentered(true)
-  }
-  onMount(() => {
-    const updater = props.updater
-    if (!updater) return
-    const controller = new AbortController()
-    onCleanup(() => controller.abort())
-    void updater.monitor(showUpdate, controller.signal).catch((error) => {
-      if (!controller.signal.aborted) log.error("update monitor failed", { error })
-    })
   })
   const tabsResize = createPaneResize({
     value: () => layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH,
