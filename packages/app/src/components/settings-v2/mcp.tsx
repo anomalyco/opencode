@@ -6,6 +6,7 @@ import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { For, Show, createMemo, createResource, createSignal, type Component } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
@@ -30,7 +31,7 @@ const statusKey = (status: McpStatusState) =>
     needs_auth: "mcp.status.needs_auth",
     needs_client_registration: "mcp.status.needs_client_registration",
     disabled: "mcp.status.disabled",
-    pending: "settings.mcp.status.pending",
+    pending: "mcp.status.pending",
   })[status]
 
 const statusTagVariant = (status: McpStatusState) =>
@@ -48,11 +49,13 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const location = () => (props.directory ? { location: { directory: props.directory } } : {})
 
   const [servers, serversActions] = createResource(
-    () => props.directory,
-    async (directory) => {
+    // A resource source of `undefined` would skip the fetcher entirely, so use a
+    // constant source and branch the location inside.
+    () => true,
+    async () => {
       try {
         const result = await serverSdk().api.mcp.list(
-          directory ? { location: { directory } } : undefined,
+          props.directory ? { location: { directory: props.directory } } : undefined,
         )
         setLoadError(undefined)
         return result.data ?? []
@@ -80,7 +83,11 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
     await serverSdk().api.mcp.add({ server: built.input.server, config: built.input.config, ...location() })
   }
 
-  const openForm = (form: McpFormState, previous?: { name: string; wasConnected: boolean }) => {
+  const openForm = (initial: McpFormState, previous?: { name: string; wasConnected: boolean }) => {
+    // A reactive store keeps the dialog's toggles, switches, and row editors
+    // updating as the form is mutated (a plain object would render once and
+    // freeze every non-text control).
+    const [form] = createStore<McpFormState>({ ...initial, environment: [...initial.environment], headers: [...initial.headers] })
     void dialog.push(() => (
       <Dialog fit>
         <DialogHeader>
@@ -100,6 +107,7 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
           <McpFormSave
             form={form}
             previous={previous}
+            existingNames={() => (servers() ?? []).map((server) => server.name)}
             onSave={async () => {
               await addServer(form, previous)
               await serversActions.refetch()
@@ -151,7 +159,10 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const authenticate = async (name: string) => {
     setBusy(name)
     try {
-      await serverSdk().client.mcp.auth.authenticate({ name })
+      await serverSdk().client.mcp.auth.authenticate({
+        name,
+        directory: props.directory,
+      })
       await serversActions.refetch()
     } catch (error) {
       onError(error)
@@ -264,7 +275,7 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
         fallback={
           <div class="settings-v2-plugins-note">
             <Show when={!servers.loading} fallback={<>{language.t("common.loading")}{language.t("common.loading.ellipsis")}</>}>
-              <Show when={!loadError()} fallback={<>{loadError()}</>}>
+              <Show when={!loadError()} fallback={<>{language.t("settings.mcp.errors.refresh")} {loadError()}</>}>
                 {language.t("settings.mcp.empty")}
               </Show>
             </Show>
@@ -496,6 +507,7 @@ const KeyValueRows: Component<{
 const McpFormSave: Component<{
   form: McpFormState
   previous?: { name: string; wasConnected: boolean }
+  existingNames: () => string[]
   onSave: () => Promise<void>
   onClose: () => void
 }> = (props) => {
@@ -505,10 +517,7 @@ const McpFormSave: Component<{
 
   const errorText = (field: string | undefined) => {
     if (field === undefined) return undefined
-    if (field === "name" || field === "command" || field === "url") {
-      return language.t(`settings.mcp.form.error.${field}`)
-    }
-    if (field === "callbackPort" || field === "timeout") {
+    if (["name", "command", "url", "callbackPort", "timeout"].includes(field)) {
       return language.t(`settings.mcp.form.error.${field}`)
     }
     return language.t("settings.mcp.errors.invalid")
@@ -520,19 +529,20 @@ const McpFormSave: Component<{
       setFieldError(built.error)
       return
     }
+    // The server's add endpoint upserts; guard the add flow against replacing an
+    // existing server (edits pass `previous` and intentionally re-add).
+    if (!props.previous && props.existingNames().includes(built.input.server)) {
+      setFieldError("name")
+      showToast({ variant: "error", description: language.t("settings.mcp.errors.duplicate") })
+      return
+    }
     setSaving(true)
     setFieldError(undefined)
     try {
       await props.onSave()
       props.onClose()
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      if (message.includes("exist") || message.includes("duplicate")) {
-        setFieldError("name")
-        showToast({ variant: "error", description: language.t("settings.mcp.errors.duplicate") })
-      } else {
-        showToast({ variant: "error", description: message })
-      }
+      showToast({ variant: "error", description: error instanceof Error ? error.message : String(error) })
     } finally {
       setSaving(false)
     }
