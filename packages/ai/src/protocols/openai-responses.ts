@@ -147,12 +147,12 @@ const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (
 ) {
   if (tool.type === "tool")
     return yield* lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility))
-  if (tool.description === undefined)
-    return yield* ProviderShared.invalidRequest("OpenAI Responses tool namespaces require a description")
+  // OpenAI requires a namespace description; fall back to a generic one so a
+  // missing description never blocks the request.
   return {
     type: "namespace" as const,
     name: tool.name,
-    description: tool.description,
+    description: tool.description ?? `Tools in the ${tool.name} namespace.`,
     tools: yield* Effect.forEach(ProviderShared.flattenTools(tool.tools), (leaf) =>
       OpenResponses.lowerTool(NAME, leaf, ToolSchemaProjection.modelCompatibility(leaf.inputSchema, compatibility)),
     ),

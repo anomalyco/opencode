@@ -211,14 +211,24 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("requires tool namespace descriptions", () =>
+  it.effect("defaults tool namespace descriptions", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
-        LLM.request({ model, tools: [{ type: "namespace", name: "crm", tools: [] }] }),
-      ).pipe(Effect.flip)
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              type: "namespace",
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+            },
+          ],
+        }),
+      )
 
-      expect(error.reason._tag).toBe("InvalidRequest")
-      expect(error.message).toContain("tool namespaces require a description")
+      expect(prepared.body.tools).toEqual([
+        expect.objectContaining({ type: "namespace", name: "crm", description: "Tools in the crm namespace." }),
+      ])
     }),
   )
 
