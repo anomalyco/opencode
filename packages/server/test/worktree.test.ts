@@ -9,58 +9,97 @@ import { startServer } from "./fixture/server"
 import { OpenCode } from "@opencode-ai/client"
 import { initRepo } from "../../core/test/fixture/git"
 
-it.live("lists, creates, and removes worktrees by project ID", () =>
-  Effect.gen(function* () {
-    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-worktree-endpoint-")))
-    const project = path.join(tmp.path, "project")
-    const destination = path.join(tmp.path, "worktrees")
-    yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
-    yield* Effect.promise(() => $`git init`.cwd(project).quiet())
-    yield* Effect.promise(() => $`git config user.email test@opencode.test`.cwd(project).quiet())
-    yield* Effect.promise(() => $`git config user.name Test`.cwd(project).quiet())
-    yield* Effect.promise(() => $`git commit --allow-empty -m root`.cwd(project).quiet())
-    const server = yield* startServer(path.join(tmp.path, "config"))
-    const location = new URL("/api/location", server.base)
-    location.searchParams.set("location[directory]", project)
-    const resolved = yield* Effect.promise(() =>
-      fetch(location, { headers: server.headers }).then((response) => response.json()),
-    )
-    if (!isRecord(resolved) || !isRecord(resolved.project) || typeof resolved.project.id !== "string")
-      throw new Error("Expected resolved project")
-    const url = new URL(`/api/worktree/${resolved.project.id}`, server.base)
-    url.searchParams.set("location[directory]", project)
+it.live(
+  "lists worktrees by project and creates and removes them through a location",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-worktree-endpoint-")))
+      const project = path.join(tmp.path, "project")
+      const destination = path.join(tmp.path, "worktrees")
+      yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
+      yield* Effect.promise(() => $`git init`.cwd(project).quiet())
+      yield* Effect.promise(() => $`git config user.email test@opencode.test`.cwd(project).quiet())
+      yield* Effect.promise(() => $`git config user.name Test`.cwd(project).quiet())
+      yield* Effect.promise(() => $`git commit --allow-empty -m root`.cwd(project).quiet())
+      const server = yield* startServer(path.join(tmp.path, "config"))
+      const location = new URL("/api/location", server.base)
+      location.searchParams.set("location[directory]", project)
+      const resolved = yield* Effect.promise(() =>
+        fetch(location, { headers: server.headers }).then((response) => response.json()),
+      )
+      if (!isRecord(resolved) || !isRecord(resolved.project) || typeof resolved.project.id !== "string")
+        throw new Error("Expected resolved project")
+      const inventory = new URL(`/api/worktree/${resolved.project.id}`, server.base)
+      const url = new URL("/api/worktree", server.base)
+      url.searchParams.set("location[directory]", project)
 
-    const initial = yield* Effect.promise(() =>
-      fetch(url, { headers: server.headers }).then((response) => response.json()),
-    )
-    expect(initial).toEqual([{ directory: project }])
+      const initial = yield* Effect.promise(() =>
+        fetch(inventory, { headers: server.headers }).then((response) => response.json()),
+      )
+      expect(initial).toEqual([{ directory: project }])
 
-    const created = yield* Effect.promise(() =>
-      fetch(url, {
-        method: "POST",
-        headers: { ...server.headers, "content-type": "application/json" },
-        body: JSON.stringify({ strategy: "git", directory: destination, name: "api" }),
-      }).then((response) => response.json()),
-    )
-    expect(created).toEqual({ directory: path.join(destination, "api") })
+      const created = yield* Effect.promise(() =>
+        fetch(url, {
+          method: "POST",
+          headers: { ...server.headers, "content-type": "application/json" },
+          body: JSON.stringify({ strategy: "git", directory: destination, name: "api" }),
+        }).then((response) => response.json()),
+      )
+      expect(created).toEqual({ directory: path.join(destination, "api") })
 
-    const listed = yield* Effect.promise(() =>
-      fetch(url, { headers: server.headers }).then((response) => response.json()),
-    )
-    expect(listed).toContainEqual({
-      directory: path.join(destination, "api"),
-      strategy: "git",
-    })
+      const listed = yield* Effect.promise(() =>
+        fetch(inventory, { headers: server.headers }).then((response) => response.json()),
+      )
+      expect(listed).toContainEqual({
+        directory: path.join(destination, "api"),
+        strategy: "git",
+      })
 
-    const removed = yield* Effect.promise(() =>
-      fetch(url, {
-        method: "DELETE",
-        headers: { ...server.headers, "content-type": "application/json" },
-        body: JSON.stringify({ directory: path.join(destination, "api"), force: false }),
-      }),
-    )
-    expect(removed.status).toBe(204)
-  }),
+      const removed = yield* Effect.promise(() =>
+        fetch(url, {
+          method: "DELETE",
+          headers: { ...server.headers, "content-type": "application/json" },
+          body: JSON.stringify({ directory: path.join(destination, "api"), force: false }),
+        }),
+      )
+      expect(removed.status).toBe(204)
+    }),
+  30_000,
+)
+
+it.live(
+  "derives the project and creation defaults when the SDK omits its input",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-worktree-default-location-")))
+      const project = path.join(tmp.path, "project")
+      const config = path.join(tmp.path, "config")
+      const destination = path.join(tmp.path, "copies")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(project)
+        await initRepo(project)
+        await fs.mkdir(config)
+        await Bun.write(path.join(config, "opencode.json"), JSON.stringify({ worktree: { directory: destination } }))
+      })
+      const server = yield* startServer(config)
+      const api = OpenCode.make({
+        baseUrl: server.base,
+        headers: { ...server.headers, "x-opencode-directory": encodeURIComponent(project) },
+      })
+      yield* Effect.promise(async () => {
+        const created = await api.worktree.create()
+        expect(path.dirname(created.directory)).toBe(destination)
+        await api.worktree.refresh()
+        const location = await api.location.get()
+        expect(await api.worktree.list({ projectID: location.project.id })).toContainEqual({
+          directory: created.directory,
+          strategy: "git",
+        })
+        await api.worktree.remove({ directory: created.directory, force: false })
+        expect(await api.worktree.list({ projectID: location.project.id })).toEqual([{ directory: project }])
+      })
+    }),
+  30_000,
 )
 
 it.live(
@@ -98,12 +137,12 @@ it.live(
         const b = await api.location.get({ location: { directory: second } })
         expect(a.project.id).toBe(b.project.id)
         const projectID = a.project.id
-        const custom = await api.worktree.create({ projectID, location: { directory: nested }, name: "custom" })
-        const builtin = await api.worktree.create({ projectID, location: { directory: second }, name: "builtin" })
+        const custom = await api.worktree.create({ location: { directory: nested }, name: "custom" })
+        const builtin = await api.worktree.create({ location: { directory: second }, name: "builtin" })
         expect(custom.directory).toBe(path.join(destination, "custom"))
         expect(builtin.directory).toBe(path.join(destination, "builtin"))
-        await api.worktree.refresh({ projectID, location: { directory: second } })
-        await api.worktree.refresh({ projectID, location: { directory: nested } })
+        await api.worktree.refresh({ location: { directory: second } })
+        await api.worktree.refresh({ location: { directory: nested } })
         const rows = await api.worktree.list({ projectID })
         expect(rows).toContainEqual({
           directory: custom.directory,
@@ -112,7 +151,7 @@ it.live(
         expect(rows).toContainEqual({ directory: builtin.directory, strategy: "git" })
 
         await Bun.write(path.join(custom.directory, "dirty.txt"), "keep me")
-        const remove = new URL(`/api/worktree/${projectID}`, server.base)
+        const remove = new URL("/api/worktree", server.base)
         remove.searchParams.set("location[directory]", second)
         const unavailable = await fetch(remove, {
           method: "DELETE",
@@ -135,13 +174,11 @@ it.live(
         expect(await Bun.file(path.join(custom.directory, "dirty.txt")).text()).toBe("keep me")
 
         await api.worktree.remove({
-          projectID,
           location: { directory: nested },
           directory: custom.directory,
           force: true,
         })
         await api.worktree.remove({
-          projectID,
           location: { directory: second },
           directory: builtin.directory,
           force: false,
@@ -204,7 +241,7 @@ it.live("rejects workspace-qualified worktree operations without touching the ho
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-worktree-local-")))
     const server = yield* startServer(tmp.path)
-    const url = new URL("/api/worktree/project", server.base)
+    const url = new URL("/api/worktree", server.base)
     url.searchParams.set("location[directory]", tmp.path)
     url.searchParams.set("location[workspace]", "wrk_remote")
     const response = yield* Effect.promise(() =>

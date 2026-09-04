@@ -992,14 +992,16 @@ location unless overridden; `list` reads project-wide inventory without discover
 
 ```ts
 const projectID = ctx.location.project.id
-const created = await ctx.worktree.create({ projectID, name: "task" })
+const created = await ctx.worktree.create({ name: "task" })
 const inventory = await ctx.worktree.list({ projectID })
-await ctx.worktree.refresh({ projectID })
-await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
+await ctx.worktree.refresh()
+await ctx.worktree.remove({ directory: created.directory, force: false })
 ```
 
 Create accepts optional explicit `strategy`, destination `directory`, source `from`, and starting `branch` overrides.
-The source defaults to the location's checkout. A supplied starting ref must be supported by the selected strategy;
+Create, remove, and refresh derive the project from their location; only list requires `projectID`.
+The source defaults to the location's checkout, and a `from` override must belong to that project.
+A supplied starting ref must be supported by the selected strategy;
 Rift's native snapshot operation, for example, has no ref-selection option.
 
 Calls targeting another location wait for its plugins to activate. Calls in the current plugin's location during setup
@@ -1011,7 +1013,6 @@ The worktree's destination can be elsewhere:
 
 ```ts
 await ctx.worktree.remove({
-  projectID,
   directory: "/worktrees/task",
   location: { directory: "/repos/app" },
   force: false,

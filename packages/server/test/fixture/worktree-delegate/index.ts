@@ -6,7 +6,6 @@ export default Plugin.define({
     const directory = ctx.options.directory
     if (typeof directory !== "string") throw new Error("Missing target location")
     await ctx.worktree.create({
-      projectID: ctx.location.project.id,
       location: { directory },
       name: "delegated",
     })

@@ -34,9 +34,7 @@ export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (han
         badRequest(
           Effect.gen(function* () {
             const request = yield* HttpServerRequest.HttpServerRequest
-            return yield* run(requestRef(request), (worktrees) =>
-              worktrees.create({ ...ctx.payload, projectID: ctx.params.projectID }),
-            )
+            return yield* run(requestRef(request), (worktrees) => worktrees.create(ctx.payload))
           }),
         ),
       )
@@ -44,19 +42,15 @@ export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (han
         badRequest(
           Effect.gen(function* () {
             const request = yield* HttpServerRequest.HttpServerRequest
-            return yield* run(requestRef(request), (worktrees) =>
-              worktrees.remove({ ...ctx.payload, projectID: ctx.params.projectID }),
-            )
+            return yield* run(requestRef(request), (worktrees) => worktrees.remove(ctx.payload))
           }),
         ).pipe(Effect.as(HttpApiSchema.NoContent.make())),
       )
-      .handle("worktree.refresh", (ctx) =>
+      .handle("worktree.refresh", () =>
         badRequest(
           Effect.gen(function* () {
             const request = yield* HttpServerRequest.HttpServerRequest
-            return yield* run(requestRef(request), (worktrees) =>
-              worktrees.refresh({ projectID: ctx.params.projectID }),
-            )
+            return yield* run(requestRef(request), (worktrees) => worktrees.refresh())
           }),
         ).pipe(Effect.as(HttpApiSchema.NoContent.make())),
       )
@@ -90,8 +84,6 @@ function message(error: Worktree.Error) {
   if (error instanceof Worktree.DirectoryUnavailableError) return `Worktree directory unavailable: ${error.directory}`
   if (error instanceof Worktree.InvalidDirectoryError) return `Invalid worktree directory: ${error.directory}`
   if (error instanceof Worktree.StrategyUnavailableError) return `Worktree strategy unavailable: ${error.strategy}`
-  if (error instanceof Worktree.ProjectMismatchError)
-    return `Worktree location belongs to project ${error.actualProjectID}, not ${error.projectID}`
   if (error instanceof Worktree.UnsupportedLocationError) return "Worktree operations only support local locations"
   return error.message
 }

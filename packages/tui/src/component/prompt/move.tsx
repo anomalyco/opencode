@@ -37,7 +37,6 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       const project = data.location.info(location)?.project
       if (!project) throw new Error("Unable to determine current project")
       const result = await client.api.worktree.create({
-        projectID: project.id,
         location: { directory: location.directory, workspace: location.workspaceID },
         name,
       })

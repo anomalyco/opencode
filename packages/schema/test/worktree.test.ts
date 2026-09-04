@@ -5,27 +5,29 @@ import { Worktree } from "../src/worktree.js"
 describe("Worktree.CreateInput", () => {
   test("allows the server to choose the destination", () => {
     const input = Schema.decodeUnknownSync(Worktree.CreateInput)({
-      projectID: "project",
       strategy: "git",
     })
     expect(input.directory).toBeUndefined()
     expect(Schema.encodeSync(Worktree.CreateInput)({ ...input, directory: undefined })).toEqual({
-      projectID: "project",
       strategy: "git",
     })
   })
 
   test("preserves an explicit destination", () => {
-    const input = { projectID: "project", strategy: "git", directory: "/custom/worktrees" }
+    const input = { strategy: "git", directory: "/custom/worktrees" }
     expect(Schema.encodeSync(Worktree.CreateInput)(Schema.decodeUnknownSync(Worktree.CreateInput)(input))).toEqual(
       input,
     )
   })
 })
 
-test("worktree creation can omit strategy and destination", () => {
-  const value = Schema.decodeUnknownSync(Worktree.CreateInput)({ projectID: "project", name: "task" })
-  expect(Schema.encodeSync(Worktree.CreateInput)(value)).toEqual({ projectID: "project", name: "task" })
+test("worktree mutation inputs do not require a project or explicit creation defaults", () => {
+  const value = Schema.decodeUnknownSync(Worktree.CreateInput)({ name: "task" })
+  expect(Schema.encodeSync(Worktree.CreateInput)(value)).toEqual({ name: "task" })
+  expect(Schema.encodeSync(Worktree.CreateInput)(Schema.decodeUnknownSync(Worktree.CreateInput)({}))).toEqual({})
+  expect(Worktree.CreateInput.fields).not.toHaveProperty("projectID")
+  expect(Worktree.RemoveInput.fields).not.toHaveProperty("projectID")
+  expect(Worktree.ListInput.fields).toHaveProperty("projectID")
 })
 
 test("inventory contains only the directory and its owning strategy", () => {

@@ -35,11 +35,6 @@ export type CreateInput = typeof CreateInput.Type
 export const RemoveInput = Worktree.RemoveInput
 export type RemoveInput = typeof RemoveInput.Type
 
-export const RefreshInput = Schema.Struct({
-  projectID: ProjectSchema.ID,
-}).annotate({ identifier: "Worktree.RefreshInput" })
-export type RefreshInput = typeof RefreshInput.Type
-
 export const RefreshResult = Schema.Struct({
   updated: Schema.Array(AbsolutePath),
   removed: Schema.Array(AbsolutePath),
@@ -78,11 +73,6 @@ export class StrategyUnavailableError extends Schema.TaggedError<StrategyUnavail
   { strategy: StrategyID },
 ) {}
 
-export class ProjectMismatchError extends Schema.TaggedError<ProjectMismatchError>()("Worktree.ProjectMismatchError", {
-  projectID: ProjectSchema.ID,
-  actualProjectID: ProjectSchema.ID,
-}) {}
-
 export class UnsupportedLocationError extends Schema.TaggedError<UnsupportedLocationError>()(
   "Worktree.UnsupportedLocationError",
   { directory: AbsolutePath },
@@ -94,7 +84,6 @@ export type Error =
   | DirectoryUnavailableError
   | InvalidDirectoryError
   | StrategyUnavailableError
-  | ProjectMismatchError
   | UnsupportedLocationError
   | Worktree.OperationError
   | AppProcess.AppProcessError
@@ -130,9 +119,9 @@ export interface Editor {
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: (projectID: ProjectSchema.ID) => Effect.Effect<List>
-  readonly create: (input: CreateInput) => Effect.Effect<Info, Error>
+  readonly create: (input?: CreateInput) => Effect.Effect<Info, Error>
   readonly remove: (input: RemoveInput) => Effect.Effect<void, Error>
-  readonly refresh: (input: RefreshInput) => Effect.Effect<RefreshResult, Error>
+  readonly refresh: () => Effect.Effect<RefreshResult, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Worktree") {}
@@ -163,18 +152,17 @@ const layer = Layer.effect(
     const processService = yield* AppProcess.Service
     const location = yield* Location.Service
     const global = yield* Global.Service
+    const projectID = location.project.id
 
-    const local = Effect.fnUntraced(function* (projectID: ProjectSchema.ID) {
-      if (location.workspaceID) yield* new UnsupportedLocationError({ directory: location.directory })
-      if (projectID !== location.project.id)
-        yield* new ProjectMismatchError({ projectID, actualProjectID: location.project.id })
-    })
+    const local = location.workspaceID
+      ? Effect.fail(new UnsupportedLocationError({ directory: location.directory }))
+      : Effect.void
 
     const gitStrategy = yield* WorktreeGit.make
     const state = State.create({
       name: "worktree",
       initial: () => ({
-        directory: AbsolutePath.make(path.join(global.data, "worktree", location.project.id.slice(0, 6))),
+        directory: AbsolutePath.make(path.join(global.data, "worktree", projectID.slice(0, 6))),
         strategies: new Map<StrategyID, Strategy>([[gitStrategy.id, gitStrategy]]),
         selected: gitStrategy.id,
       }),
@@ -239,7 +227,7 @@ const layer = Layer.effect(
           ),
     }
 
-    const source = Effect.fnUntraced(function* (input: AbsolutePath | undefined, projectID: ProjectSchema.ID) {
+    const source = Effect.fnUntraced(function* (input: AbsolutePath | undefined) {
       const sourceDirectory = input ?? location.project.directory
       const resolved = yield* canonical(fs, sourceDirectory)
       if ((yield* ops.find(projectID, resolved)) === undefined)
@@ -253,12 +241,12 @@ const layer = Layer.effect(
       return found
     })
 
-    const create = Effect.fn("Worktree.create")(function* (input: CreateInput) {
-      yield* local(input.projectID)
+    const create = Effect.fn("Worktree.create")(function* (input: CreateInput = {}) {
+      yield* local
       const current = state.get()
       const selected = yield* getStrategy(input.strategy ?? current.selected, current.strategies)
       const directory = input.directory ?? current.directory
-      const sourceDirectory = yield* source(input.from, input.projectID)
+      const sourceDirectory = yield* source(input.from)
       yield* fs.makeDirectory(directory, { recursive: true }).pipe(Effect.orDie)
       const name = input.name ?? Slug.create()
       let suffix = 1
@@ -280,9 +268,9 @@ const layer = Layer.effect(
       if (result.directory !== (yield* canonical(fs, worktreeDirectory)))
         return yield* new InvalidDirectoryError({ directory: result.directory })
       yield* changed(
-        input.projectID,
+        projectID,
         yield* ops.create({
-          projectID: input.projectID,
+          projectID,
           directory: result.directory,
           strategy: selected.id,
           replace: true,
@@ -291,7 +279,7 @@ const layer = Layer.effect(
       const project = yield* db
         .select({ commands: ProjectTable.commands })
         .from(ProjectTable)
-        .where(eq(ProjectTable.id, input.projectID))
+        .where(eq(ProjectTable.id, projectID))
         .get()
         .pipe(Effect.orDie)
       const command = project?.commands?.start?.trim()
@@ -316,9 +304,9 @@ const layer = Layer.effect(
     })
 
     const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
-      yield* local(input.projectID)
+      yield* local
       const worktreeDirectory = yield* canonical(fs, input.directory)
-      const stored = yield* ops.find(input.projectID, worktreeDirectory)
+      const stored = yield* ops.find(projectID, worktreeDirectory)
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
       const strategy = yield* getStrategy(StrategyID.make(stored.strategy), state.get().strategies)
       yield* strategy
@@ -327,12 +315,12 @@ const layer = Layer.effect(
           force: input.force,
         })
         .pipe(Effect.mapError((error) => operationError(strategy.id, "remove", error)))
-      yield* changed(input.projectID, yield* ops.remove(input.projectID, worktreeDirectory))
+      yield* changed(projectID, yield* ops.remove(projectID, worktreeDirectory))
     })
 
-    const refresh = Effect.fn("Worktree.refresh")(function* (input: RefreshInput) {
-      yield* local(input.projectID)
-      const stored = yield* ops.list(input.projectID)
+    const refresh = Effect.fn("Worktree.refresh")(function* () {
+      yield* local
+      const stored = yield* ops.list(projectID)
       const checked = yield* Effect.forEach(
         stored,
         (item) => fs.isDir(item.directory).pipe(Effect.map((exists) => ({ ...item, exists }))),
@@ -353,7 +341,7 @@ const layer = Layer.effect(
             )
             if (!directory || discovered.has(directory)) continue
             discovered.set(directory, {
-              projectID: input.projectID,
+              projectID,
               directory,
               strategy: entry.type === "worktree" ? strategy.id : undefined,
             })
@@ -367,11 +355,11 @@ const layer = Layer.effect(
             updated: Effect.filter(Array.from(discovered.values()), (item) => ops.create(item, tx)).pipe(
               Effect.map((items) => items.map((item) => item.directory)),
             ),
-            removed: Effect.filter(removed, (directory) => ops.remove(input.projectID, directory, tx)),
+            removed: Effect.filter(removed, (directory) => ops.remove(projectID, directory, tx)),
           }),
         )
         .pipe(Effect.orDie)
-      yield* changed(input.projectID, changes.updated.length > 0 || changes.removed.length > 0)
+      yield* changed(projectID, changes.updated.length > 0 || changes.removed.length > 0)
       return changes
     })
 

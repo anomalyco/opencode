@@ -180,6 +180,8 @@ async function renderMove(input: {
             : [{ directory: main }, { directory: clone }, { directory: linked, strategy: "git" }],
         )
       }
+    }
+    if (url.pathname === "/api/worktree") {
       if (request.method === "POST") {
         requests.push({
           payload: await request.json(),
@@ -193,8 +195,7 @@ async function renderMove(input: {
         return new Response(null, { status: 204 })
       }
     }
-    if (url.pathname === "/api/worktree/proj_launch/refresh" || url.pathname === "/api/worktree/proj_test/refresh")
-      return new Response(null, { status: 204 })
+    if (url.pathname === "/api/worktree/refresh") return new Response(null, { status: 204 })
     if (url.pathname === "/api/session/ses_clone/move") {
       moves.push(await request.json())
       return new Response(null, { status: 204 })

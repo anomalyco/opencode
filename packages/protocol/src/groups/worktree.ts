@@ -1,10 +1,10 @@
 import { Project } from "@opencode-ai/schema/project"
 import { Worktree } from "@opencode-ai/schema/worktree"
-import { Schema, Struct } from "effect"
+import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
-const root = "/api/worktree/:projectID"
+const root = "/api/worktree"
 
 export class WorktreeError extends Schema.Error<WorktreeError>("WorktreeError")(
   {
@@ -17,12 +17,9 @@ export class WorktreeError extends Schema.Error<WorktreeError>("WorktreeError")(
   { httpApiStatus: 400 },
 ) {}
 
-const CreatePayload = Schema.Struct(Struct.omit(Worktree.CreateInput.fields, ["projectID"]))
-const RemovePayload = Schema.Struct(Struct.omit(Worktree.RemoveInput.fields, ["projectID"]))
-
 export const WorktreeGroup = HttpApiGroup.make("server.worktree")
   .add(
-    HttpApiEndpoint.get("worktree.list", root, {
+    HttpApiEndpoint.get("worktree.list", `${root}/:projectID`, {
       params: { projectID: Project.ID },
       success: Worktree.List,
     }).annotateMerge(
@@ -35,9 +32,8 @@ export const WorktreeGroup = HttpApiGroup.make("server.worktree")
   )
   .add(
     HttpApiEndpoint.post("worktree.create", root, {
-      params: { projectID: Project.ID },
       query: LocationQuery,
-      payload: CreatePayload,
+      payload: Worktree.CreateInput,
       success: Worktree.Info,
       error: WorktreeError,
     })
@@ -53,9 +49,8 @@ export const WorktreeGroup = HttpApiGroup.make("server.worktree")
   )
   .add(
     HttpApiEndpoint.delete("worktree.remove", root, {
-      params: { projectID: Project.ID },
       query: LocationQuery,
-      payload: RemovePayload,
+      payload: Worktree.RemoveInput,
       success: HttpApiSchema.NoContent,
       error: WorktreeError,
     })
@@ -64,13 +59,12 @@ export const WorktreeGroup = HttpApiGroup.make("server.worktree")
         OpenApi.annotations({
           identifier: "v2.worktree.remove",
           summary: "Remove worktree",
-          description: "Remove a managed worktree from a project.",
+          description: "Remove a managed worktree from the requested location's project using its recorded strategy.",
         }),
       ),
   )
   .add(
     HttpApiEndpoint.post("worktree.refresh", `${root}/refresh`, {
-      params: { projectID: Project.ID },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
       error: WorktreeError,

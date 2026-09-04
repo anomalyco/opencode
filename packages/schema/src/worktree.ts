@@ -10,7 +10,6 @@ export const StrategyID = Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()), Sc
 export type StrategyID = typeof StrategyID.Type
 
 export const CreateInput = Schema.Struct({
-  projectID: ProjectID,
   strategy: optional(StrategyID),
   from: optional(AbsolutePath),
   branch: optional(Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()))),
@@ -23,7 +22,6 @@ export const CreateInput = Schema.Struct({
 export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
 
 export const RemoveInput = Schema.Struct({
-  projectID: ProjectID,
   directory: AbsolutePath,
   force: Schema.Boolean,
 }).annotate({ identifier: "Worktree.RemoveInput" })

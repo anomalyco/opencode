@@ -14,7 +14,7 @@ const layer = Layer.effectDiscard(
     const worktrees = yield* Worktree.Service
     if (location.workspaceID) return
     yield* plugins.awaitActivation.pipe(
-      Effect.andThen(worktrees.refresh({ projectID: location.project.id })),
+      Effect.andThen(worktrees.refresh()),
       Effect.catchCause((cause) => Effect.logWarning("worktree refresh failed", { cause })),
       Effect.forkScoped,
     )

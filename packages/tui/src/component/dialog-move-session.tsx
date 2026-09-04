@@ -87,7 +87,6 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         // A failed discovery must not hide the project-wide stored inventory.
         await client.api.worktree
           .refresh({
-            projectID,
             location: worktreeLocation(),
           })
           .catch(() => undefined)
@@ -235,7 +234,6 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     setRemoving(selected.directory)
     setWorking(true)
     const request = {
-      projectID: props.projectID,
       directory: selected.directory,
       location: worktreeLocation(),
     }
