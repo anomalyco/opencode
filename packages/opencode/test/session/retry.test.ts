@@ -4,7 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Schedule, Schema, Clock } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -141,6 +141,115 @@ describe("session.retry.delay", () => {
 
       yield* Effect.forEach(Array.from({ length: SessionRetry.RETRY_MAX_RETRIES + 1 }), () =>
         Effect.ignore(step(error)),
+      )
+
+      expect(attempts).toStrictEqual([1, 2, 3, 4, 5])
+    }),
+  )
+
+  it.instance("policy surfaces free-tier limit once then stops without waiting", () =>
+    Effect.gen(function* () {
+      const updates: Array<{ attempt: number; message: string; action?: SessionRetry.Retryable["action"]; next: number }> =
+        []
+      const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+        new SessionV1.APIError({
+          message: "Rate limit exceeded",
+          isRetryable: true,
+          statusCode: 429,
+          responseHeaders: { "retry-after": "30000" },
+          responseBody: JSON.stringify({
+            type: "error",
+            error: { type: "FreeUsageLimitError", message: "Rate limit exceeded" },
+          }),
+        }).toObject(),
+      )
+
+      const before = yield* Clock.currentTimeMillis
+      yield* Effect.fail(error).pipe(
+        Effect.retry(
+          SessionRetry.policy({
+            provider: "opencode",
+            parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+            set: (info) =>
+              Effect.sync(() => {
+                updates.push(info)
+              }),
+          }),
+        ),
+        Effect.catch(() => Effect.void),
+      )
+      const after = yield* Clock.currentTimeMillis
+
+      expect(updates).toHaveLength(1)
+      expect(updates[0]?.message).toBe(SessionRetry.GO_UPSELL_MESSAGE)
+      expect(updates[0]?.action?.reason).toBe("free_tier_limit")
+      expect(updates[0]?.next).toBeGreaterThanOrEqual(before)
+      expect(updates[0]?.next).toBeLessThanOrEqual(after)
+      expect(after - before).toBeLessThan(1000)
+    }),
+  )
+
+  it.instance("policy surfaces Go usage limit once then stops without waiting", () =>
+    Effect.gen(function* () {
+      const updates: Array<{ attempt: number; message: string; action?: SessionRetry.Retryable["action"] }> = []
+      const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+        new SessionV1.APIError({
+          message: "Subscription quota exceeded",
+          isRetryable: true,
+          statusCode: 429,
+          responseHeaders: { "retry-after": "19380" },
+          responseBody: JSON.stringify({
+            type: "error",
+            error: {
+              type: "GoUsageLimitError",
+              message: "Subscription quota exceeded. You can continue using free models.",
+            },
+            metadata: {
+              workspace: "wrk_01K6XGM22R6FM8JVABE9XDQXGH",
+              limitName: "5 hour",
+            },
+          }),
+        }).toObject(),
+      )
+
+      const before = yield* Clock.currentTimeMillis
+      yield* Effect.fail(error).pipe(
+        Effect.retry(
+          SessionRetry.policy({
+            provider: "opencode-go",
+            parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+            set: (info) =>
+              Effect.sync(() => {
+                updates.push(info)
+              }),
+          }),
+        ),
+        Effect.catch(() => Effect.void),
+      )
+      const after = yield* Clock.currentTimeMillis
+
+      expect(updates).toHaveLength(1)
+      expect(updates[0]?.action?.reason).toBe("account_rate_limit")
+      expect(after - before).toBeLessThan(1000)
+    }),
+  )
+
+  it.instance("policy still retries transient rate limits", () =>
+    Effect.gen(function* () {
+      const attempts: number[] = []
+      const error = apiError({ "retry-after-ms": "0" })
+      yield* Effect.fail(error).pipe(
+        Effect.retry(
+          SessionRetry.policy({
+            provider: "test",
+            parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+            set: (info) =>
+              Effect.sync(() => {
+                attempts.push(info.attempt)
+              }),
+          }),
+        ),
+        Effect.catch(() => Effect.void),
       )
 
       expect(attempts).toStrictEqual([1, 2, 3, 4, 5])
