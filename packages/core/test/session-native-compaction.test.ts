@@ -306,15 +306,16 @@ it.live(
   15000,
 )
 
-it.live("endpoint-only compaction keeps the provider replacement unchanged", () =>
+it.live("manual and automatic endpoint compaction keep the provider replacement unchanged", () =>
   Effect.gen(function* () {
     const fixture = yield* setup(true)
     yield* fixture.prompt("Original user")
     expect(yield* fixture.compact).toEqual({ status: "completed" })
+    expect(yield* fixture.automatic).toEqual({ status: "completed" })
     const replacement = SessionProviderContext.decode(yield* fixture.checkpoint)
     expect(replacement[0]?.content).toEqual([Message.text("endpoint retained")])
     expect(JSON.stringify(replacement)).not.toContain("Original user")
-    expect(fixture.state.calls).toBe(1)
+    expect(fixture.state.calls).toBe(2)
     expect(fixture.headers[0]?.get("x-http-hook")).toBe("compaction")
     expect(fixture.bodies[0]).not.toHaveProperty("context_management")
   }),
