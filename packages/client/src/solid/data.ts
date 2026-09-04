@@ -6,6 +6,7 @@
 import type {
   AgentInfo,
   CommandInfo,
+  ConfigEntry,
   FormCancelInput,
   FormInfo,
   FormReplyInput,
@@ -84,6 +85,7 @@ type LocationData = {
   vcs?: VcsInfo
   agent?: AgentInfo[]
   command?: CommandInfo[]
+  config?: ConfigEntry[]
   integration?: IntegrationInfo[]
   mcpServer?: McpServer[]
   mcpResource?: McpResource[]
@@ -1215,6 +1217,11 @@ export function createData(config: CreateDataInput) {
         )
         break
       case "config.updated":
+        result.location.config.invalidate(location)
+        if (result.location.config.list(location) !== undefined || sync.has(`location.config:${locationKey(location)}`))
+          refresh(() => result.location.config.sync(location))
+        refresh(() => result.location.websearch.refresh(location))
+        break
       case "websearch.updated":
         refresh(() => result.location.websearch.refresh(location))
         break
@@ -1790,6 +1797,7 @@ export function createData(config: CreateDataInput) {
         result.location.vcs.invalidate(location)
         result.location.agent.invalidate(location)
         result.location.command.invalidate(location)
+        result.location.config.invalidate(location)
         result.location.integration.invalidate(location)
         result.location.mcp.server.invalidate(location)
         result.location.mcp.resource.invalidate(location)
@@ -1803,6 +1811,10 @@ export function createData(config: CreateDataInput) {
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
+      config: locationResource("config", async (location) => ({
+        location: { directory: location.directory, workspaceID: location.workspace },
+        data: await api().config.get({ location }),
+      })),
       integration: locationResource("integration", (location) => api().integration.list({ location })),
       mcp: {
         server: locationResource("mcpServer", (location) => api().mcp.list({ location })),

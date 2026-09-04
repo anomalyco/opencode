@@ -5,10 +5,9 @@ import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
 import path from "node:path"
-import { createEventStream, createFetch, directory, json, type FetchHandler } from "./fixture/tui-client"
+import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
-import type { TuiInput } from "../src/app"
-import type { Config } from "../src/config"
+import { createAppFixture } from "./fixture/app"
 import type { PluginInfo } from "@opencode-ai/client"
 
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
@@ -1530,54 +1529,3 @@ test("server plugin failures share one notice and use source names before an ID 
   expect(setup.captureCharFrame()).toContain("/fixture/broken.ts")
   expect(setup.captureCharFrame()).toContain("Open plugins")
 })
-
-async function createAppFixture(
-  input: {
-    width?: number
-    height?: number
-    state?: string
-    config?: Config.Info
-    args?: TuiInput["args"]
-    fetch?: FetchHandler
-  } = {},
-) {
-  const { run } = await import("../src/app")
-  const setup = await createTestRenderer({
-    width: input.width ?? 100,
-    height: input.height ?? 30,
-    useThread: false,
-    kittyKeyboard: true,
-  })
-  setup.renderer.start()
-  const ready = Promise.withResolvers<void>()
-  const events = createEventStream()
-  const calls = createFetch(input.fetch, events)
-  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
-  const task = Effect.runPromise(
-    run({
-      app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() } },
-      config: { get: async () => input.config ?? { animations: false }, update: async () => ({}) },
-      packages: { prepare: async () => ({ directory: "" }) },
-      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
-      args: input.args ?? {},
-      log: () => {},
-    }).pipe(
-      Effect.provide(input.state ? Global.layerWith({ state: input.state }) : AppNodeBuilder.build(Global.node)),
-      Effect.provide(FileSystem.layerNoop({})),
-    ),
-  )
-  return {
-    ...setup,
-    events,
-    ready: ready.promise,
-    async [Symbol.asyncDispose]() {
-      try {
-        if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-        await task
-      } finally {
-        await server.stop()
-      }
-    },
-  }
-}
