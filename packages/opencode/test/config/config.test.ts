@@ -1664,6 +1664,39 @@ it.instance("local .opencode config can override MCP from project config", () =>
   }),
 )
 
+// Regression for #41916: mergeDeep shares nested object references between the
+// cached global config and the per-workspace result when the workspace has no
+// value for that key. Plugin config hooks mutate the workspace result, and those
+// writes leak back into the global cache — visible to every other workspace on
+// the same server.
+it.effect("workspace config mutation does not leak into the global cache", () =>
+  withConfigTree(
+    {
+      global: { mcp: { server1: { type: "remote", url: "https://server1.example.com/mcp", enabled: true } } },
+    },
+    // Clear OPENCODE_CONFIG_DIR so the developer's real config (which may contain
+    // mcp: {}) doesn't incidentally break the shared reference chain and mask the bug.
+    withProcessEnv("OPENCODE_CONFIG_DIR", undefined,
+      Effect.gen(function* () {
+        const cfg = yield* Config.use.get()
+        expect(cfg.mcp?.server1).toBeDefined()
+
+        // Simulate a plugin config hook mutation: `config.mcp[name] ??= {...}`
+        cfg.mcp!.injected = { type: "remote", url: "https://injected.example.com/mcp", enabled: true }
+
+        // The global cache must not see the mutation.
+        const globalCfg = yield* Config.use.getGlobal()
+        expect(globalCfg.mcp?.injected).toBeUndefined()
+        expect(globalCfg.mcp?.server1).toEqual({
+          type: "remote",
+          url: "https://server1.example.com/mcp",
+          enabled: true,
+        })
+      }),
+    ),
+  ),
+)
+
 const remoteProjectOverride = wellKnown({
   config: {
     mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false } },

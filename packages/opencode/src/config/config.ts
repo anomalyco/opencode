@@ -409,7 +409,12 @@ const layer = Layer.effect(
           }
         }
 
-        const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
+        // Clone the cached global config so plugin config hooks and other consumers
+        // can freely mutate the per-workspace result without leaking writes back
+        // into the process-global cache (shared across all workspaces on serve).
+        const global = Object.keys(authEnv).length
+          ? yield* loadGlobal(authEnv)
+          : structuredClone(yield* getGlobal())
         yield* merge(Global.Path.config, global, "global")
 
         if (Flag.OPENCODE_CONFIG) {
