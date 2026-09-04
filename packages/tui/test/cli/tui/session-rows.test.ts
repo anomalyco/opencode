@@ -466,6 +466,28 @@ test("groups across empty assistant reasoning parts", () => {
   ])
 })
 
+test("keeps empty reasoning with provider state", () => {
+  const message = assistant("assistant-1", [
+    {
+      type: "reasoning",
+      text: "",
+      state: { reasoningEncryptedContent: "opaque" },
+      time: { created: 1_000, completed: 4_200 },
+    },
+  ])
+  message.finish = "stop"
+
+  expect(reduceSessionRows([message])).toEqual([
+    {
+      type: "group",
+      kind: "reasoning",
+      completed: true,
+      refs: [{ messageID: "assistant-1", partID: "reasoning:0" }],
+    },
+    { type: "assistant-footer", messageID: "assistant-1" },
+  ])
+})
+
 test("completes exploration groups when another row follows", () => {
   const finished = assistant("assistant-2", [
     { type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } },

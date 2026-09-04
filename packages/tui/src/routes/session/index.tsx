@@ -1859,10 +1859,11 @@ function SessionReasoningGroupView(props: {
       const message = props.message(ref.messageID)
       if (message?.type !== "assistant") return []
       const part = resolvePart(message, ref.partID)
-      if (part?.type !== "reasoning" || !reasoningContent(part)) return []
+      if (part?.type !== "reasoning" || (!reasoningContent(part) && !part.state)) return []
       return [{ message, part }]
     }),
   )
+  const opaque = createMemo(() => parts().length > 0 && parts().every((item) => !reasoningContent(item.part)))
   const latest = createMemo((previous: string | null) => {
     const item = parts().at(-1)
     if (!item) return previous
@@ -1887,7 +1888,7 @@ function SessionReasoningGroupView(props: {
       >
         <box flexDirection="column" flexShrink={0}>
           <InlineToolRow
-            icon={expanded() ? "-" : "+"}
+            icon={opaque() ? "" : expanded() ? "-" : "+"}
             color={
               !props.completed
                 ? theme.text.default
@@ -1903,19 +1904,29 @@ function SessionReasoningGroupView(props: {
             complete={props.completed}
             pending={latest() ? `Thinking: ${latest()}` : "Thinking"}
             spinner={!props.completed}
-            onMouseOver={() => setHover(true)}
+            onMouseOver={() => !opaque() && setHover(true)}
             onMouseOut={() => setHover(false)}
             onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
+              if (renderer.getSelection()?.getSelectedText() || opaque()) return
               setExpanded((value) => !value)
             }}
           >
-            {props.completed ? "Thought" : latest() ? `Thinking: ${latest()}` : "Thinking"}
-            <Show when={props.completed && !expanded() && latest()}>: {latest()}</Show>
-            <Show when={props.completed && parts().length > 1}> · {parts().length} steps</Show>
-            <Show when={props.completed && duration()}> · {Locale.duration(duration())}</Show>
+            <Show
+              when={opaque() && props.completed}
+              fallback={
+                <>
+                  {props.completed ? "Thought" : latest() ? `Thinking: ${latest()}` : "Thinking"}
+                  <Show when={props.completed && !expanded() && latest()}>: {latest()}</Show>
+                  <Show when={props.completed && parts().length > 1}> · {parts().length} steps</Show>
+                  <Show when={props.completed && duration()}> · {Locale.duration(duration())}</Show>
+                </>
+              }
+            >
+              Thought
+              <Show when={duration()}> · {Locale.duration(duration())}</Show> · encrypted
+            </Show>
           </InlineToolRow>
-          <Show when={expanded()}>
+          <Show when={expanded() && !opaque()}>
             <box paddingLeft={3}>
               <For each={props.refs}>
                 {(ref) => {
@@ -2551,6 +2562,7 @@ function ReasoningPart(props: {
   const [expanded, setExpanded] = createSignal(false)
 
   const content = createMemo(() => reasoningContent(props.part))
+  const opaque = createMemo(() => !content() && Boolean(props.part.state))
   const isDone = createMemo(
     () => props.part.time?.completed !== undefined || props.message.time.completed !== undefined,
   )
@@ -2562,12 +2574,12 @@ function ReasoningPart(props: {
   })
   const summary = createMemo(() => reasoningSummary(content()))
   const toggle = () => {
-    if (!inMinimal()) return
+    if (!inMinimal() || opaque()) return
     setExpanded((prev) => !prev)
   }
 
   return (
-    <Show when={content()}>
+    <Show when={content() || opaque()}>
       <box paddingLeft={3} flexDirection="column" flexShrink={0}>
         <box
           border={!inMinimal() || expanded() ? ["left"] : undefined}
@@ -2577,15 +2589,16 @@ function ReasoningPart(props: {
         >
           <box onMouseUp={toggle}>
             <ReasoningHeader
-              toggleable={inMinimal()}
+              toggleable={inMinimal() && !opaque()}
               open={!inMinimal() || expanded()}
               done={isDone()}
               title={inMinimal() && !expanded() ? summary().title : null}
               duration={isDone() ? Locale.duration(duration()) : undefined}
+              encrypted={opaque()}
             />
           </box>
         </box>
-        <Show when={!inMinimal() || expanded()}>
+        <Show when={!opaque() && (!inMinimal() || expanded())}>
           <box marginTop={1}>
             <box
               border={["left"]}
@@ -2621,6 +2634,7 @@ function ReasoningHeader(props: {
   done: boolean
   title: string | null
   duration?: string
+  encrypted?: boolean
 }) {
   const theme = useTheme()
   const fg = () =>
@@ -2642,21 +2656,34 @@ function ReasoningHeader(props: {
       </Match>
       <Match when={true}>
         <text fg={fg()} wrapMode="none">
-          <Show when={props.toggleable}>
-            <span>{props.open ? "- " : "+ "}</span>
-          </Show>
-          <span>Thought</span>
-          <Show when={props.title || props.duration}>
-            <span>: </span>
-          </Show>
-          <Show when={props.title}>
-            <span>{props.title}</span>
-          </Show>
-          <Show when={props.duration}>
-            <span>
-              {props.title ? " · " : ""}
-              {props.duration}
-            </span>
+          <Show
+            when={props.encrypted}
+            fallback={
+              <>
+                <Show when={props.toggleable}>
+                  <span>{props.open ? "- " : "+ "}</span>
+                </Show>
+                <span>Thought</span>
+                <Show when={props.title || props.duration}>
+                  <span>: </span>
+                </Show>
+                <Show when={props.title}>
+                  <span>{props.title}</span>
+                </Show>
+                <Show when={props.duration}>
+                  <span>
+                    {props.title ? " · " : ""}
+                    {props.duration}
+                  </span>
+                </Show>
+              </>
+            }
+          >
+            <span>Thought</span>
+            <Show when={props.duration}>
+              <span> · {props.duration}</span>
+            </Show>
+            <span> · encrypted</span>
           </Show>
         </text>
       </Match>

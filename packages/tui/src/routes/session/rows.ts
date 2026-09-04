@@ -241,6 +241,13 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       if (event.data.sessionID === sessionID() && event.data.text.trim())
         appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` }, { type: "text" })
     }),
+    data.on("session.reasoning.started", (event) => {
+      if (event.data.sessionID === sessionID())
+        appendPart(
+          { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
+          { type: "reasoning" },
+        )
+    }),
     data.on("session.reasoning.delta", (event) => {
       if (event.data.sessionID === sessionID() && event.data.delta.trim())
         appendPart(
@@ -307,7 +314,12 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
-      if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
+      if (
+        (part.type === "text" || part.type === "reasoning") &&
+        !part.text.trim() &&
+        !(part.type === "reasoning" && part.state)
+      )
+        return
       append(rows, { messageID: message.id, partID }, part)
     })
     const terminal = (message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error
