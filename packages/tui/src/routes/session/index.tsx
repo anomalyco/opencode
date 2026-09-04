@@ -28,6 +28,7 @@ import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, 
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
+  FilePart,
   Part,
   Provider,
   ToolPart,
@@ -1361,6 +1362,19 @@ export function Session() {
   )
 }
 
+export function FileChip(props: { file: FilePart }) {
+  const { theme } = useTheme()
+  const directory = createMemo(() => props.file.mime === "application/x-directory")
+  return (
+    <text fg={theme.text}>
+      <span style={{ bg: theme.secondary, fg: selectedForeground(theme, theme.secondary) }}>
+        {directory() ? " Directory " : " File "}
+      </span>
+      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {props.file.filename} </span>
+    </text>
+  )
+}
+
 function UserMessage(props: {
   message: UserMessage
   parts: Part[]
@@ -1419,19 +1433,7 @@ function UserMessage(props: {
             <text fg={theme.text}>{text()}</text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
-                <For each={files()}>
-                  {(file) => {
-                    const directory = file.mime === "application/x-directory"
-                    return (
-                      <text fg={theme.text}>
-                        <span style={{ bg: theme.secondary, fg: theme.background }}>
-                          {directory ? " Directory " : " File "}
-                        </span>
-                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                      </text>
-                    )
-                  }}
-                </For>
+                <For each={files()}>{(file) => <FileChip file={file} />}</For>
               </box>
             </Show>
             <Show
