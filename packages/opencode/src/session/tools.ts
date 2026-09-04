@@ -25,7 +25,6 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { AutoMode } from "@/auto-mode/service"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { QueueAuthority } from "@/loop/spec-queue/authority"
-import { ToolActivity } from "./tool-activity"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -146,9 +145,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       description: item.description,
       inputSchema: jsonSchema(schema),
       execute(args, options) {
-        // fork: the stream watchdog must not count our own tool's runtime as
-        // provider silence — see tool-activity.ts.
-        ToolActivity.begin(input.session.id)
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
@@ -176,7 +172,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               yield* input.processor.completeToolCall(options.toolCallId, output)
             }
             return output
-          }).pipe(Effect.ensuring(Effect.sync(() => ToolActivity.end(input.session.id)))),
+          }),
         )
       },
     })
@@ -439,9 +435,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
     item.inputSchema = jsonSchema(transformed)
     item.execute = (args, opts) => {
-      // fork: same as the registry tools above — an MCP call is stream silence
-      // the watchdog would otherwise blame on the provider.
-      ToolActivity.begin(input.session.id)
       return run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
@@ -516,7 +509,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             yield* input.processor.completeToolCall(opts.toolCallId, output)
           }
           return output
-        }).pipe(Effect.ensuring(Effect.sync(() => ToolActivity.end(input.session.id)))),
+        }),
       )
     }
     tools[key] = item

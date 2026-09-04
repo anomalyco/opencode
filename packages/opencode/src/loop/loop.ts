@@ -452,16 +452,15 @@ export const layer = Layer.effect(
         const aborted = message.info.role === "assistant" && AbortedError.isInstance(message.info.error)
 
         // A turn can also end in a *message-level* error without promptSvc.prompt()
-        // itself failing — a watchdog-caught StreamStalledError (llm.ts), auth
-        // failure, context overflow, etc. all resolve as a completed assistant
-        // message carrying `.info.error` (see SessionProcessor / MessageV2.fromError)
-        // rather than propagating as an Effect failure. Left undetected here, a
-        // turn like that reports 0 tool calls and empty output, which similarity()
-        // deliberately scores as "not identical" for two empty strings — so the
-        // no-progress streak below never builds (it keeps resetting to 1) and a
-        // provider that is already known to be dead just gets re-prompted every
-        // iteration up to maxIterations, each one blocking for the full stream-
-        // inactivity deadline. Treat it the same as the Effect-failure path: fail
+        // itself failing — auth failure, context overflow, etc. all resolve as a
+        // completed assistant message carrying `.info.error` (see SessionProcessor /
+        // MessageV2.fromError) rather than propagating as an Effect failure. Left
+        // undetected here, a turn like that reports 0 tool calls and empty output,
+        // which similarity() deliberately scores as "not identical" for two empty
+        // strings — so the no-progress streak below never builds (it keeps
+        // resetting to 1) and a provider that is already known to be dead just
+        // gets re-prompted every iteration up to maxIterations. Treat it the same
+        // as the Effect-failure path: fail
         // the iteration outright instead of feeding the no-progress heuristic.
         const turnErrored = message.info.role === "assistant" && !!message.info.error && !aborted
 

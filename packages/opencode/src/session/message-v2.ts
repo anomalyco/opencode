@@ -17,7 +17,6 @@ import {
 } from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
-import { StreamStalledError } from "./stream-stalled"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -609,21 +608,6 @@ export function fromError(
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
   switch (true) {
-    // Watchdog-detected wedge (llm.ts). Deliberately NOT AbortedError: the
-    // user did not stop this turn, the provider did — surface it as an API
-    // failure whose message says what actually happened. Also deliberately
-    // NOT isRetryable: the session retry policy re-driving a wedged provider
-    // just recreates the hang with extra steps; the turn fails cleanly and
-    // the caller (loop engine, user) decides whether to try again.
-    case StreamStalledError.isInstance(e):
-      return new APIError(
-        {
-          message: e.message,
-          isRetryable: false,
-          metadata: { code: "STREAM_STALLED", seconds: String(e.seconds) },
-        },
-        { cause: e },
-      ).toObject()
     case e instanceof DOMException && e.name === "AbortError":
       return new AbortedError(
         { message: e.message },

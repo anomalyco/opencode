@@ -15,7 +15,6 @@ import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
-import { StreamStalledError } from "./stream-stalled"
 import { Plugin } from "@/plugin"
 import { Permission } from "@/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -30,21 +29,8 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
-import { SkeinLoading } from "@/local/skein-loading"
-import { ToolActivity } from "./tool-activity"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
-
-// While a local model cold-loads, llama-skein streams loading-flavor chunks
-// that stripSkeinLoading removes before the ai-sdk — so from this watchdog's
-// viewpoint a healthy multi-minute load is total event silence. The strip
-// callback stamps SkeinLoading; a tick that fires only while that stamp is
-// fresh feeds the timeout as liveness. The signal is process-global, not
-// per-request: a concurrent load elsewhere can extend a genuinely dead
-// stream's life — bounded (loads end, then the deadline runs as usual) and
-// far cheaper than a false kill of a working turn.
-const LOADING_TICK: unique symbol = Symbol("skein-loading-tick")
-const LOADING_ACTIVE_WINDOW_MS = 30_000
 
 export type StreamInput = {
   user: SessionV1.User
@@ -379,68 +365,7 @@ const live: Layer.Layer<
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
-            // Inactivity watchdog: a wedged provider (half-open socket, dead
-            // upstream) is detected rather than waited on. Checked per pull —
-            // any event resets it — so slow-but-live streams are unaffected.
-            // 0 disables. Applied at this seam so both runtimes are covered.
-            const cfg = yield* config.get()
-            // fork: was 600s, matching SUBAGENT_TASK_TIMEOUT_MS (task.ts) — but
-            // tied at 600s each, a subagent running long and a compaction pass
-            // doing one big single-shot summarization call (no tool ticks to
-            // stay alive, and it fires exactly when the prompt is largest and
-            // slowest to prefill) both raced this deadline and lost, killing
-            // legitimate work. Raised to match the host-paced floor below so a
-            // flat deadline stops being the common case for "doing harm."
-            const configured = cfg.experimental?.stream_inactivity_seconds ?? 1800
-            // A model placed hybrid GPU + system-RAM is legitimately silent
-            // for far longer than a flat deadline allows: measured on z4, 254s
-            // passed before the FIRST token of any kind (faulting ~50 GB of
-            // expert weights back in, then prefill), after which it generates
-            // at ~0.8 tok/s. The 300s default fired mid-generation and
-            // abandoned a working turn. Give such a model a longer floor —
-            // the watchdog still catches a genuinely dead stream, just later.
-            // An explicit 0 still disables it entirely.
-            const deadline =
-              configured > 0 && Provider.isHostPaced(input.model.providerID, input.model.id)
-                ? Math.max(configured, Provider.HOST_PACED_STREAM_DEADLINE_SECONDS)
-                : configured
-            // Liveness ticks: the merged tick fires only while something we
-            // know about is legitimately producing silence, so the deadline
-            // measures actual provider absence rather than any quiet stretch.
-            // Two such sources:
-            //   - a stripped skein_loading cold load (see LOADING_TICK above)
-            //   - one of OUR tools still executing: the ai-sdk awaits execute()
-            //     before emitting tool-result, so the stream is silent for the
-            //     whole call. Without this a foreground subagent (allowed 600s
-            //     by SUBAGENT_TASK_TIMEOUT_MS) always outlived the 300s
-            //     deadline and killed its own parent, reported as a provider
-            //     stall. Tool calls carry their own timeouts.
-            // Ticks are filtered back out after the timeout — they never reach
-            // the processor. haltStrategy "left": the tick stream must not keep
-            // a finished event stream open.
-            const watchdog = <A, E, R>(self: Stream.Stream<A, E, R>): Stream.Stream<A, E | StreamStalledError, R> =>
-              deadline <= 0
-                ? self
-                : self.pipe(
-                    Stream.merge(
-                      Stream.tick(`${LOADING_ACTIVE_WINDOW_MS / 2} millis`).pipe(
-                        Stream.filter(
-                          () =>
-                            SkeinLoading.activeWithin(LOADING_ACTIVE_WINDOW_MS) ||
-                            ToolActivity.active(input.sessionID),
-                        ),
-                        Stream.map(() => LOADING_TICK),
-                      ),
-                      { haltStrategy: "left" },
-                    ),
-                    Stream.timeoutOrElse({
-                      duration: `${deadline} seconds`,
-                      orElse: () => Stream.fail(new StreamStalledError(deadline)),
-                    }),
-                    Stream.filter((event): event is A => event !== LOADING_TICK),
-                  )
-
-            if (result.type === "native") return watchdog(result.stream)
+            if (result.type === "native") return result.stream
 
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
@@ -450,7 +375,6 @@ const live: Layer.Layer<
             ).pipe(
               Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
               Stream.flatMap((events) => Stream.fromIterable(events)),
-              watchdog,
             )
           }),
         ),

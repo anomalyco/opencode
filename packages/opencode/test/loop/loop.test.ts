@@ -490,39 +490,6 @@ it.instance(
 )
 
 it.instance(
-  "a stream stall fails the loop immediately instead of grinding through every iteration",
-  () =>
-    Effect.gen(function* () {
-      const { directory: dir } = yield* TestInstance
-      const llm = yield* TestLLMServer
-      // A stalled provider stream resolves as a completed assistant message
-      // carrying `.info.error` (StreamStalledError → APIError, see
-      // MessageV2.fromError), not a promptSvc.prompt() failure — so unlike a
-      // thrown error it used to be indistinguishable from a turn that
-      // legitimately produced nothing, and got silently re-prompted on every
-      // iteration up to maxIterations instead of failing fast.
-      yield* writeConfig(dir, { ...providerCfg(llm.url), experimental: { stream_inactivity_seconds: 1 } })
-      const loop = yield* Loop.Service
-
-      // Sends the head SSE line (one real event, resetting the watchdog once)
-      // then hangs forever — the watchdog fires after 1s with no further
-      // events, exactly the "half-open socket" case stream-stalled.ts guards.
-      yield* llm.hang
-
-      const info = yield* loop.create({
-        prompt: "do the thing",
-        maxIterations: 10,
-        interval: 0,
-      })
-      const final = yield* waitForTerminal(info.id, 15)
-
-      expect(final.status).toBe("error")
-      expect(final.iterations).toHaveLength(1)
-    }),
-  { config: {} },
-)
-
-it.instance(
   "pause, resume, and cancel transition loop status",
   () =>
     Effect.gen(function* () {
