@@ -23,7 +23,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await page.goto(stressSessionHref(fixture.targetID))
     const header = page.locator("[data-session-title]")
     const more = header.getByRole("button", { name: "More options", exact: true })
-    const review = header.getByRole("button", { name: "Toggle review", exact: true })
+    const review = page.getByRole("button", { name: "Toggle review", exact: true })
     const details = header.getByRole("button", { name: "Session details", exact: true })
     await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
     await page.evaluate((direction) => document.documentElement.setAttribute("dir", direction), direction)
