@@ -6,6 +6,7 @@ import { createCdp, abortError, waitFor } from "./browser/cdp"
 import { createBrowserFiles } from "./browser/files"
 import { createDiagnostics } from "./browser/diagnostics"
 import { createProfiling } from "./browser/profiling"
+import { createCornerImages } from "./browser/corners"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 let nextRef = 0
@@ -226,8 +227,13 @@ export function createBrowserPage(
   })
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   view.setVisible(false)
-  view.setBorderRadius(10)
   win.contentView.addChildView(view)
+  const corners = [new electron.ImageView(), new electron.ImageView()]
+  let cornerKey = ""
+  corners.forEach((corner) => {
+    corner.setVisible(false)
+    win.contentView.addChildView(corner)
+  })
   const ready = Promise.all([
     files.ready,
     ...(options.initialize === false ? [] : [contents.loadURL("about:blank")]),
@@ -247,6 +253,33 @@ export function createBrowserPage(
     contents,
     state,
     ready,
+    layout(bounds: Electron.Rectangle, background?: readonly [number, number, number, number], radius = 10) {
+      view.setBounds(bounds)
+      const size = Math.min(radius, Math.floor(bounds.width / 2), Math.floor(bounds.height / 2))
+      const scale = electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
+      const key = background && size > 0 ? `${background}:${size}:${scale}` : ""
+      if (key && key !== cornerKey && background) {
+        createCornerImages(background, size, scale).forEach((image, index) => corners[index].setImage(image))
+      }
+      cornerKey = key
+      corners.forEach((corner, index) => {
+        // A composited layer is required above WebContentsView. A zero-duration
+        // bounds update creates that layer without a visible animation.
+        corner.setBounds(
+          {
+            x: bounds.x + (index ? bounds.width - size : 0),
+            y: bounds.y + bounds.height - size,
+            width: size,
+            height: size,
+          },
+          { animate: { duration: 0 } },
+        )
+      })
+    },
+    setVisible(visible: boolean) {
+      view.setVisible(visible)
+      corners.forEach((corner) => corner.setVisible(visible && !!cornerKey))
+    },
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
       abortError(signal)
@@ -305,7 +338,10 @@ export function createBrowserPage(
       await profiling.dispose()
       cdp.dispose()
       refs.clear()
-      if (!win.isDestroyed()) win.contentView.removeChildView(view)
+      if (!win.isDestroyed()) {
+        corners.forEach((corner) => win.contentView.removeChildView(corner))
+        win.contentView.removeChildView(view)
+      }
       if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false })
       await files.dispose()
     },

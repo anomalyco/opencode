@@ -30,6 +30,9 @@ export function SessionBrowserPane(props: {
   let frame: number | undefined
   let layout: string | undefined
   let until = 0
+  const canvas = document.createElement("canvas")
+  canvas.width = canvas.height = 1
+  const paint = canvas.getContext("2d", { willReadFrequently: true })
 
   // The native page always paints above the DOM, so hide it while a floating
   // menu, select, or popover overlaps it. Tooltips are excluded.
@@ -53,13 +56,24 @@ export function SessionBrowserPane(props: {
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
     const visible = props.visible && store.visible && !dialog.active && !covered(rect)
-    const next = `${tab.id}:${visible}:${left}:${top}:${right}:${bottom}`
+    const color = getComputedStyle(surface).backgroundColor
+    const next = `${tab.id}:${visible}:${left}:${top}:${right}:${bottom}:${color}:${window.devicePixelRatio}`
     if (next !== layout) {
       layout = next
+      // Let the browser resolve the semantic surface color, including custom
+      // themes using color formats that Electron's color parser cannot read.
+      if (paint) {
+        paint.clearRect(0, 0, 1, 1)
+        paint.fillStyle = color
+        paint.fillRect(0, 0, 1, 1)
+      }
+      const rgba = paint?.getImageData(0, 0, 1, 1).data
       props.registration.setLayout({
         tabID: tab.id,
         visible,
         bounds: { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) },
+        background: rgba ? [rgba[0], rgba[1], rgba[2], rgba[3]] : undefined,
+        radius: Math.round(10 * zoom),
       })
     }
     if (performance.now() < until) frame = requestAnimationFrame(measure)
@@ -89,6 +103,10 @@ export function SessionBrowserPane(props: {
   const portals = new MutationObserver(() => schedule(300))
   portals.observe(document.body, { childList: true })
   onCleanup(() => portals.disconnect())
+  const appearance = new MutationObserver(() => schedule(300))
+  appearance.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "data-theme"] })
+  onCleanup(() => appearance.disconnect())
+  createEventListener(window.matchMedia("(prefers-color-scheme: dark)"), "change", () => schedule(300))
   createEventListener(document, "visibilitychange", () => setStore("visible", document.visibilityState === "visible"))
   onCleanup(() => {
     if (frame !== undefined) cancelAnimationFrame(frame)

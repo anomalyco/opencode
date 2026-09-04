@@ -190,19 +190,19 @@ export function createBrowserPane() {
     },
     layout(win: BrowserWindow, bindingID: string, value?: BrowserPaneLayout) {
       const entry = owned(win, bindingID)
-      if (!value) return entry.pages.forEach((page) => page.view.setVisible(false))
+      if (!value) return entry.pages.forEach((page) => page.setVisible(false))
       const page = entry.pages.get(value.tabID)
       if (!page) return
       const bounds = value.bounds
       if (!value.visible || !bounds || bounds.width <= 0 || bounds.height <= 0) {
-        page.view.setVisible(false)
+        page.setVisible(false)
         return
       }
       entry.pages.forEach((other) => {
-        if (other !== page) other.view.setVisible(false)
+        if (other !== page) other.setVisible(false)
       })
-      page.view.setBounds(bounds)
-      page.view.setVisible(true)
+      page.layout(bounds, value.background, value.radius)
+      page.setVisible(true)
     },
     async command(win: BrowserWindow, bindingID: string, command: BrowserPaneCommand) {
       const entry = owned(win, bindingID)
