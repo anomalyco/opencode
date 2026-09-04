@@ -641,7 +641,6 @@ export function Titlebar(props: {
                                 data-tauri-drag-region
                               />
                             </Show>
-                            <ChannelIndicator sidebar debugTools={props.debugTools} />
                             {homeButton(true)}
                             <button
                               type="button"
@@ -676,8 +675,14 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
-                              <TitlebarRightMount vertical />
+                            <div
+                              data-slot="vertical-tabs-footer"
+                              class="mt-2 flex w-full shrink-0 flex-row items-center gap-1"
+                            >
+                              <div class="min-w-0 flex-1">
+                                <TitlebarRightMount vertical />
+                              </div>
+                              <ChannelIndicator sidebar debugTools={props.debugTools} />
                             </div>
                           </Portal>
                         )}
@@ -767,15 +772,15 @@ function ChannelIndicator(props: {
   const debug = () => (channel === "dev" ? props.debugTools : undefined)
   return (
     <Tooltip
-      placement={props.sidebar ? "right" : "bottom"}
+      placement={props.sidebar ? "top" : "bottom"}
       value={label()}
-      class={`shrink-0 [app-region:no-drag] ${props.sidebar ? "mb-4 ms-0.5 self-start" : ""} ${props.horizontal ? "me-1.5" : ""} ${props.horizontal && platform.platform === "web" ? "ps-2.5" : ""}`}
+      class={`shrink-0 [app-region:no-drag] ${props.horizontal ? "me-1.5" : ""} ${props.horizontal && platform.platform === "web" ? "ps-2.5" : ""}`}
     >
       <Dynamic
         component={debug() ? "button" : "div"}
         type={debug() ? "button" : undefined}
         data-slot="channel-indicator"
-        class="flex h-7 shrink-0 items-center rounded-[6px] [app-region:no-drag]"
+        class="flex h-7 shrink-0 items-center justify-center rounded-[6px] [app-region:no-drag]"
         classList={{
           "w-6": props.sidebar,
           "w-5": !props.sidebar,
