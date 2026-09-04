@@ -96,6 +96,8 @@ export type Editor = {
 export type AutoInput = {
   readonly context: SessionContext.Loaded
   readonly prepare: SessionModelRequest.Interface["prepare"]
+  /** Known overflow must recover from durable history, not submit the overflowing native window again. */
+  readonly overflow?: boolean
 }
 
 type RequiredInput = {
@@ -127,7 +129,10 @@ type ExecuteInput = AutoInput & {
 }
 
 export type Outcome =
-  | Pick<SessionMessage.CompactionCompleted, "status">
+  | (Pick<SessionMessage.CompactionCompleted, "status"> & {
+      /** Consumes the logical step's one overflow rebuild even when the native attempt overflowed first. */
+      readonly recoveredOverflow?: boolean
+    })
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
 export interface Interface extends State.Transformable<Editor> {
@@ -442,6 +447,10 @@ export const layer = Layer.effect(
     }
     /** The durable transcript since the last local summary, re-expanding every native window. */
     const original = (sessionID: SessionSchema.ID) => SessionHistory.load(db, sessionID, "local").pipe(Effect.orDie)
+    const recoverLocally = (input: ExecuteInput) =>
+      original(input.context.session.id).pipe(
+        Effect.flatMap((messages) => execute({ ...input, context: { ...input.context, messages } })),
+      )
     const executeProvider = Effect.fn("SessionCompaction.executeProvider")(function* (input: ExecuteInput) {
       const context = input.context
       const reject = (message: string) =>
@@ -469,7 +478,7 @@ export const layer = Layer.effect(
       yield* started(input, "")
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          // One physical attempt, with no local-summary fallback or provider-error retry.
+          // One native physical attempt; only a known automatic overflow permits local recovery.
           const result = yield* restore(
             Effect.gen(function* () {
               if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
@@ -503,13 +512,21 @@ export const layer = Layer.effect(
         }),
       ).pipe(
         Effect.onInterrupt(() => interrupted(input)),
-        Effect.catchTag("AI.Error", (cause) =>
-          failed({
-            sessionID: context.session.id,
-            reason: input.reason,
-            inputID: input.inputID,
-            error: toSessionError(cause),
-          }),
+        Effect.catchTag(
+          "AI.Error",
+          (cause): Effect.Effect<Outcome> =>
+            input.reason === "auto" && isContextOverflowFailure(cause)
+              ? recoverLocally({ ...input, started: true }).pipe(
+                  Effect.map((result) =>
+                    result.status === "completed" ? { ...result, recoveredOverflow: true } : result,
+                  ),
+                )
+              : failed({
+                  sessionID: context.session.id,
+                  reason: input.reason,
+                  inputID: input.inputID,
+                  error: toSessionError(cause),
+                }),
         ),
       )
     })
@@ -659,22 +676,50 @@ export const layer = Layer.effect(
       })
       return { status: "completed" as const }
     })
-    const compact = (input: AutoInput) => execute({ ...input, reason: "auto" })
+    const compact = Effect.fn("SessionCompaction.compact")(function* (input: AutoInput): Effect.fn.Return<Outcome> {
+      const request = { ...input, reason: "auto" as const }
+      if (input.overflow) return yield* recoverLocally(request)
+      if (input.context.model.compaction?.mode !== "provider") return yield* execute(request)
+      return yield* executeProvider(request)
+    })
     const required = (input: RequiredInput) => {
       const config = state.get()
       if (!config.auto) return false
       // Run the completed checkpoint before considering another automatic compaction.
       const last = input.messages.at(-1)
       if (last?.type === "compaction" && last.status === "completed") return false
+      const native = input.messages.findLastIndex(
+        (message) => message.type === "compaction" && message.status === "completed" && message.providerContext,
+      )
+      // Native usage describes the compaction operation, not the replacement's size. Wait for
+      // a primary response to anchor the new window, including after restart or new admission.
+      if (
+        native >= 0 &&
+        !input.messages
+          .slice(native + 1)
+          .some(
+            (message) =>
+              message.type === "assistant" &&
+              !message.error &&
+              message.tokens &&
+              message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
+          )
+      )
+        return false
       const limit = input.resolved.limit
       const context = limit.context
-      if (context <= 0) return false
+      const policy = input.resolved.compaction
+      // Preserve local behavior. Provider policies can use a known input limit or an
+      // explicit threshold when the catalog has no context limit; no universal default.
+      if (context <= 0 && policy?.mode !== "provider") return false
       const output = Math.min(limit.output, OUTPUT_TOKEN_MAX)
       const promptCeiling = Math.min(
         limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,
-        context - Math.max(output, config.buffer),
+        context <= 0 ? Number.POSITIVE_INFINITY : context - Math.max(output, config.buffer),
       )
-      return estimateTokens(input) >= promptCeiling
+      const threshold =
+        policy?.mode === "provider" ? Math.min(policy.threshold ?? Infinity, promptCeiling) : promptCeiling
+      return Number.isFinite(threshold) && estimateTokens(input) >= threshold
     }
     const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
       if (findTailStart(input.messages, state.get().tokens) === undefined)

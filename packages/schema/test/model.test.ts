@@ -63,6 +63,15 @@ describe("Model.Info", () => {
       mode: "provider",
     })
     expect(Schema.decodeUnknownSync(Provider.Compaction)({ mode: "local" })).toEqual({ mode: "local" })
+    expect(Schema.encodeSync(Provider.Compaction)({ mode: "provider", threshold: undefined })).toEqual({
+      mode: "provider",
+    })
+    expect(Schema.decodeUnknownSync(Provider.Compaction)({ mode: "provider", threshold: 120_000 })).toEqual({
+      mode: "provider",
+      threshold: 120_000,
+    })
+    for (const threshold of [0, -1, 1.5])
+      expect(() => Schema.decodeUnknownSync(Provider.Compaction)({ mode: "provider", threshold })).toThrow()
     expect(() => Schema.decodeUnknownSync(Provider.Compaction)({ mode: "automatic" })).toThrow()
   })
 

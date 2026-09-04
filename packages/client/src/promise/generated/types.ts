@@ -192,7 +192,7 @@ export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning
 
 export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 
-export type ProviderCompaction = { mode: "local" | "provider" }
+export type ProviderCompaction = { mode: "local" } | { mode: "provider"; threshold?: number }
 
 export type ModelCapabilities = {
   tools: boolean
