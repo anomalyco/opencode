@@ -110,6 +110,7 @@ export function createNewSessionComposerAdapter(props: {
           agent: selection.agent,
           model: selection.model,
           variant: selection.variant ?? null,
+          choices: model.remembered(),
         })
         if (!pending) tabs.promoteDraft(draftID, { server: server.key, sessionId: created.id })
         submission.retarget(

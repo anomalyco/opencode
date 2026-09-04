@@ -207,6 +207,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
       )
       .handleAll({
         health: () => Effect.succeed({ healthy: true, version: "2.0.0", pid: 1 }),
+        config: () => Effect.succeed([]),
         reference: () =>
           Effect.succeed({
             location: {

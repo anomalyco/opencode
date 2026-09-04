@@ -530,6 +530,7 @@ async function mockServer(page: Page) {
     if (url.origin !== server) return route.fallback()
     if (url.pathname === `/api/session/${unresolvedSessionID}`) return new Promise(() => {})
     if (url.pathname === "/api/event") return sse(route)
+    if (url.pathname === "/api/config") return json(route, [])
     if (url.pathname === "/api/session")
       return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
     if (url.pathname === "/api/session/active") return json(route, { data: {} })

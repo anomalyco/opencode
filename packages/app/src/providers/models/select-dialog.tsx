@@ -1,7 +1,7 @@
 import { Popover } from "@kobalte/core/popover"
 import { Component, ComponentProps, createEffect, createMemo, For, JSX, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocal } from "@/providers/models/selection"
+import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/providers/catalog/providers"
 import { Button } from "@opencode-ai/ui/button"
@@ -27,7 +27,7 @@ import "@/settings/settings.css"
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
-type ModelState = ReturnType<typeof useLocal>["model"]
+type ModelState = ModelSelection
 type ModelItem = ReturnType<ModelState["list"]>[number]
 
 const modelKey = (model: ModelItem) => `${model.provider.id}:${model.id}`
