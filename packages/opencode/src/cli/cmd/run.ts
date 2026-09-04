@@ -453,6 +453,29 @@ export const RunCommand = effectCmd({
         return message.slice(0, 50) + (message.length > 50 ? "..." : "")
       }
 
+      async function resumed(sdk: OpencodeClient, info: SessionInfo): Promise<SessionInfo> {
+        // resume must apply the same denies create does, or a session made
+        // elsewhere keeps the question tool live and blocks the run forever
+        if (!rules.length) return info
+        const current = await sdk.session.get({ sessionID: info.id })
+        if (current.error || !current.data) return die("failed to read the resumed session")
+        // appended rules are last and always win; skip only on an exact
+        // tail match (a duplicate append is harmless, a wrong skip is not)
+        const tail = (current.data.permission ?? []).slice(-rules.length)
+        const applied =
+          tail.length === rules.length &&
+          tail.every(
+            (rule, index) =>
+              rule.permission === rules[index].permission &&
+              rule.pattern === rules[index].pattern &&
+              rule.action === rules[index].action,
+          )
+        if (applied) return info
+        const updated = await sdk.session.update({ sessionID: info.id, permission: [...rules] })
+        if (updated.error) die("failed to apply permission rules to the resumed session")
+        return info
+      }
+
       async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
         if (args.session) {
           const current = await sdk.session
@@ -475,18 +498,18 @@ export const RunCommand = effectCmd({
               return
             }
 
-            return {
+            return resumed(sdk, {
               id,
               title: forked.data?.title ?? current.data.title,
               directory: forked.data?.directory ?? current.data.directory,
-            }
+            })
           }
 
-          return {
+          return resumed(sdk, {
             id: current.data.id,
             title: current.data.title,
             directory: current.data.directory,
-          }
+          })
         }
 
         const base = args.continue ? (await sdk.session.list()).data?.find((item) => !item.parentID) : undefined
@@ -500,19 +523,19 @@ export const RunCommand = effectCmd({
             return
           }
 
-          return {
+          return resumed(sdk, {
             id,
             title: forked.data?.title ?? base.title,
             directory: forked.data?.directory ?? base.directory,
-          }
+          })
         }
 
         if (base) {
-          return {
+          return resumed(sdk, {
             id: base.id,
             title: base.title,
             directory: base.directory,
-          }
+          })
         }
 
         const name = title()
