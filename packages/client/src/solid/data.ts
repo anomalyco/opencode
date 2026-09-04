@@ -1217,6 +1217,9 @@ export function createData(config: CreateDataInput) {
         )
         break
       case "config.updated":
+        result.location.config.invalidate(location)
+        refresh(() => Promise.all([result.location.config.sync(location), result.location.websearch.refresh(location)]))
+        break
       case "websearch.updated":
         refresh(() => result.location.websearch.refresh(location))
         break

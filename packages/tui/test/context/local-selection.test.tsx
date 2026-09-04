@@ -68,7 +68,7 @@ test("agent models, CLI models, and explicit selections take precedence over the
   expect(setup.local.model.current()?.modelID).toBe("second")
 })
 
-test("model defaults follow the location and refresh after catalog invalidation", async () => {
+test("model defaults follow the location and refresh after a config update", async () => {
   let selected = "second"
   await using setup = await renderLocal({
     models: [model("first"), model("second"), model("third")],
@@ -89,8 +89,17 @@ test("model defaults follow the location and refresh after catalog invalidation"
   await setup.data.location.sync({ directory: "/other" })
   expect(setup.local.model.current()?.modelID).toBe("second")
   selected = "third"
-  setup.data.location.invalidate({ directory: "/other" })
-  await setup.data.location.sync({ directory: "/other" })
+  setup.events.emit({
+    id: "evt_config",
+    created: 1,
+    type: "config.updated",
+    location: { directory: "/other" },
+    data: {},
+  })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.local.model.current()?.modelID === "third"
+  })
   expect(setup.local.model.current()?.modelID).toBe("third")
 })
 
