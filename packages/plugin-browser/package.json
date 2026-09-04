@@ -18,7 +18,8 @@
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./rpc": "./src/rpc.ts"
+    "./rpc": "./src/rpc.ts",
+    "./proxy": "./src/proxy.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

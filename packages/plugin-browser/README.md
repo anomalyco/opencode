@@ -45,7 +45,7 @@ Native browser coverage lives in `packages/desktop/test/browser-native.test.ts`.
 The plugin-owned contract is `@opencode-ai/plugin-browser/rpc`. This entrypoint
 contains only schemas and descriptions; it does not load the server plugin or
 filesystem code. The desktop subscribes
-to control events before starting `attach` with `version: 3`. The attachment call
+to control events before starting `attach` with `version: 4`. The attachment call
 stays pending for its lifetime. A matching `attached` event is the readiness barrier.
 
 - `state` publishes the authoritative tab inventory.
@@ -74,8 +74,15 @@ reload, so a returned path remains usable; they follow the host's temporary-file
 lifetime.
 
 Each transfer is limited to 5 MiB total. There is no shared filesystem assumption,
-resumable transfer service, new socket, or object store. Browsing uses the
-desktop's network: its `localhost` is not the remote server's `localhost`.
+resumable file-transfer service or object store. Browsing uses the connected
+server's network: `localhost:8000` reaches that server's port 8000, while Chromium
+and page JavaScript still run on the desktop. Dev-server ports need not be public.
+
+`tunnel.open/read/write/close` relay bounded TCP chunks through the existing
+authenticated plugin RPC route. The desktop-only `/proxy` entrypoint adapts
+Chromium's HTTP/CONNECT proxy traffic, including WebSockets, to those methods.
+Network bytes never go onto the global event stream. Attachment closure releases
+the sockets; failed writes are not replayed and there is no direct-network fallback.
 
 Remote endpoints can use HTTPS and the existing server credentials. A reverse
 proxy must allow long-lived event and attachment requests; the attachment RPC

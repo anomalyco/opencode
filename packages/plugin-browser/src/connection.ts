@@ -6,12 +6,14 @@ import type { Session } from "@opencode-ai/schema/session"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Deferred, Effect, Schema, Stream } from "effect"
 import { Browser } from "./rpc.js"
+import { BrowserTunnel } from "./tunnel.js"
 
 type Attachment = {
   connectionID: string
   state: Browser.State
   closed: Deferred.Deferred<"closed" | "replaced">
   pending: Map<string, { command: Browser.Command; result: Deferred.Deferred<Browser.Result, Tool.Error> }>
+  tunnels: BrowserTunnel.Tunnels
 }
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
@@ -26,12 +28,22 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       const browser = browsers.get(sessionID)
       if (!browser) return
       browsers.delete(sessionID)
+      browser.tunnels.dispose()
       yield* Deferred.succeed(browser.closed, reason)
     })
   yield* Effect.addFinalizer(() => {
     active = false
     return Effect.forEach(browsers.keys(), (id) => close(id), { discard: true })
   })
+  const tunnels = (input: {
+    sessionID: Session.ID
+    connectionID: string
+  }): Effect.Effect<BrowserTunnel.Tunnels, Error> => {
+    const browser = browsers.get(input.sessionID)
+    return browser?.connectionID === input.connectionID
+      ? Effect.succeed(browser.tunnels)
+      : Effect.fail(new Error("Browser attachment is unavailable; its network connections were closed."))
+  }
   const rpc: RpcRegistration<typeof Browser.Definition> = yield* ctx.rpc
     .register(Browser.Definition, {
       attach: (input, call) =>
@@ -53,6 +65,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
                 state: { tabs: [], focusedTabID: null },
                 closed: yield* Deferred.make<"closed" | "replaced">(),
                 pending: new Map(),
+                tunnels: BrowserTunnel.make(),
               }
               browsers.set(input.sessionID, browser)
               return browser
@@ -60,7 +73,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             (browser) => (browsers.get(input.sessionID) === browser ? close(input.sessionID) : Effect.void),
           )
           yield* rpc.events
-            .emit("control", { type: "attached", connectionID: input.connectionID, version: 3 })
+            .emit("control", { type: "attached", connectionID: input.connectionID, version: 4 })
             .pipe(Effect.orDie)
           return yield* Deferred.await(browser.closed)
         }).pipe(Effect.scoped),
@@ -94,6 +107,26 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             ).pipe(Effect.asVoid)
           yield* Deferred.succeed(pending.result, input.outcome.result)
         }).pipe(Effect.asVoid),
+      "tunnel.open": (input, call) =>
+        tunnels(input).pipe(
+          Effect.flatMap((network) => network.open(input.target)),
+          Effect.mapError((error) => call.error("unavailable", error.message, {})),
+        ),
+      "tunnel.read": (input, call) =>
+        tunnels(input).pipe(
+          Effect.flatMap((network) => network.read(input.tunnelID)),
+          Effect.mapError((error) => call.error("unavailable", error.message, {})),
+        ),
+      "tunnel.write": (input, call) =>
+        tunnels(input).pipe(
+          Effect.flatMap((network) => network.write(input.tunnelID, input.data, input.end)),
+          Effect.mapError((error) => call.error("unavailable", error.message, {})),
+        ),
+      "tunnel.close": (input, call) =>
+        tunnels(input).pipe(
+          Effect.flatMap((network) => network.close(input.tunnelID)),
+          Effect.mapError((error) => call.error("unavailable", error.message, {})),
+        ),
     })
     .pipe(Effect.orDie)
   yield* ctx.event.subscribe().pipe(

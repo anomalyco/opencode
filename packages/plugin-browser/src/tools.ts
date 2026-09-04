@@ -114,7 +114,7 @@ function exportResult(output: Schema.Schema.Type<Browser.Operation["output"]>, f
 }
 
 const invalidURL =
-  "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths such as /tmp/page.html are not browser URLs. The desktop must be able to reach the address; localhost refers to the desktop, not the server."
+  "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths such as /tmp/page.html are not browser URLs. The connected server must be able to reach the address; localhost refers to that server."
 
 function normalizeAction(action: Browser.Action): Browser.Action {
   if (action.type !== "navigate" && action.type !== "tabs.open") return action

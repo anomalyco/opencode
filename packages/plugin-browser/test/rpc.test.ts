@@ -47,7 +47,24 @@ test("network lifecycle and RPC version are explicit", () => {
   expect(() => decode({ ...request, state: "failed" })).toThrow()
   expect(() => Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client" })).toThrow()
   expect(() =>
+    Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client", version: 3 }),
+  ).toThrow()
+  expect(() =>
     Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client", version: 2 }),
   ).toThrow()
   expect(Schema.decodeUnknownSync(Browser.Definition.methods.attach.output)("replaced")).toBe("replaced")
+})
+
+test("network RPC is bounded bytes and does not add model tools", () => {
+  expect(Browser.Operations.some((operation) => operation.name.startsWith("tunnel."))).toBe(false)
+  expect(Schema.decodeUnknownSync(Browser.TunnelRead)({ data: "AAEC", eof: false }).data).toEqual(
+    new Uint8Array([0, 1, 2]),
+  )
+  expect(() =>
+    Schema.decodeUnknownSync(Browser.TunnelRead)({
+      data: Buffer.alloc(Browser.TUNNEL_CHUNK_BYTES + 1).toString("base64"),
+      eof: false,
+    }),
+  ).toThrow()
+  expect(() => Schema.decodeUnknownSync(Browser.TunnelTarget)({ host: "localhost", port: 0 })).toThrow()
 })
