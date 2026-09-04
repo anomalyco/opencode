@@ -58,6 +58,7 @@ export const SettingsProviders: Component<{
         (provider) =>
           provider.id !== "opencode" || Object.values(provider.models).some((model) => model.cost.input > 0),
       )
+      .toSorted((a, b) => Number(b.id === "opencode-go") - Number(a.id === "opencode-go"))
   })
 
   const popular = createMemo(() => {
