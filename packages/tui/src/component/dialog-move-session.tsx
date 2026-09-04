@@ -27,6 +27,7 @@ type ProjectDirectory = WorktreeListOutput[number]
 
 type DialogMoveSessionProps = {
   projectID: string
+  location?: { directory: string; workspaceID?: string }
   current?: MoveSessionSelection
   onSelect: (selection: MoveSessionSelection) => void
   onCurrentChange?: (selection: MoveSessionSelection) => void
@@ -45,7 +46,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const toast = useToast()
   const paths = useTuiPaths()
   const shortcuts = Keymap.useShortcuts()
-  const location = createMemo(() => sessionData.location.info())
+  const location = createMemo(() => sessionData.location.info(props.location))
   const [working, setWorking] = createSignal(Boolean(props.initialRemoving))
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
@@ -79,7 +80,16 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     () => (props.fixture || props.initialRemoving ? undefined : props.projectID),
     async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
-        await client.api.worktree.refresh({ projectID })
+        // A failed discovery must not hide the project-wide stored inventory.
+        await client.api.worktree
+          .refresh({
+            projectID,
+            location: {
+              directory: props.location?.directory ?? location()?.directory ?? paths.cwd,
+              workspace: props.location?.workspaceID ?? location()?.workspaceID,
+            },
+          })
+          .catch(() => undefined)
         const directories = await client.api.worktree.list({ projectID })
         setLoadError(undefined)
         return directories

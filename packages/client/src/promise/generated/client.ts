@@ -1984,6 +1984,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/worktree/${encodeURIComponent(input.projectID)}`,
+            query: { location: input["location"] },
             body: {
               strategy: input["strategy"],
               from: input["from"],
@@ -2002,6 +2003,7 @@ export function make(options: ClientOptions) {
           {
             method: "DELETE",
             path: `/api/worktree/${encodeURIComponent(input.projectID)}`,
+            query: { location: input["location"] },
             body: { directory: input["directory"], force: input["force"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
@@ -2014,6 +2016,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/worktree/${encodeURIComponent(input.projectID)}/refresh`,
+            query: { location: input["location"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
             empty: true,

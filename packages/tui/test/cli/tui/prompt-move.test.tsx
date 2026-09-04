@@ -1,6 +1,5 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import path from "path"
 import { InputRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { usePromptMove } from "../../../src/component/prompt/move"
@@ -29,7 +28,7 @@ test.each([
   { name: "an uncached session in a linked worktree", directory: linked, worktree: linked },
   { name: "a session in a linked worktree subdirectory", directory: `${linked}/packages/tui`, worktree: linked },
   { name: "the home/default location", directory: `${clone}/packages/tui`, home: true },
-])("creates from the clone's main worktree for $name", async (input) => {
+])("passes the current location and uses server worktree defaults for $name", async (input) => {
   const fixture = await renderMove(input)
   try {
     await fixture.data.project.sync()
@@ -46,9 +45,7 @@ test.each([
 
     await fixture.create()
 
-    expect(fixture.requests).toEqual([
-      { strategy: "git", from: clone, directory: path.join("/tmp/opencode", "proj_t"), name: "fresh" },
-    ])
+    expect(fixture.requests).toEqual([{ payload: { name: "fresh" }, directory: input.directory, workspace: null }])
     expect(fixture.data.location.info({ directory: created })?.project.canonical).toBe(clone)
     expect(fixture.reads.locations.filter((directory) => directory === input.directory)).toHaveLength(1)
     expect(fixture.reads.session).toBe(input.home ? 0 : 1)
@@ -77,7 +74,7 @@ test.each([
     expect(frame).toContain(clone)
     expect(frame.indexOf(clone)).toBeLessThan(frame.indexOf(main))
     expect(fixture.requests).toEqual([
-      { strategy: "git", from: clone, directory: path.join("/tmp/opencode", "proj_t"), name: "fresh" },
+      { payload: { name: "fresh" }, directory: `${clone}/packages/tui`, workspace: input.workspaceID ?? null },
     ])
     expect(fixture.data.location.info(selected)?.project.canonical).toBe(clone)
     expect(fixture.moves).toEqual([])
@@ -166,11 +163,16 @@ async function renderMove(input: {
         )
       }
       if (request.method === "POST") {
-        requests.push(await request.json())
+        requests.push({
+          payload: await request.json(),
+          directory: url.searchParams.get("location[directory]"),
+          workspace: url.searchParams.get("location[workspace]"),
+        })
         return json({ directory: created })
       }
     }
-    if (url.pathname === "/api/worktree/proj_launch/refresh") return new Response(null, { status: 204 })
+    if (url.pathname === "/api/worktree/proj_launch/refresh" || url.pathname === "/api/worktree/proj_test/refresh")
+      return new Response(null, { status: 204 })
     if (url.pathname === "/api/session/ses_clone/move") {
       moves.push(await request.json())
       return new Response(null, { status: 204 })

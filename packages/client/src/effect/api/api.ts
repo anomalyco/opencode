@@ -1937,7 +1937,8 @@ export type WorktreeListOperation<E = never> = (input: WorktreeListInput) => Eff
 
 export type WorktreeCreateInput = {
   readonly projectID: Project.ID
-  readonly strategy: Worktree.StrategyID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly strategy?: Worktree.StrategyID | undefined
   readonly from?: AbsolutePath | undefined
   readonly branch?: string | undefined
   readonly directory?: AbsolutePath | undefined
@@ -1948,13 +1949,17 @@ export type WorktreeCreateOperation<E = never> = (input: WorktreeCreateInput) =>
 
 export type WorktreeRemoveInput = {
   readonly projectID: Project.ID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly directory: AbsolutePath
   readonly force: boolean
 }
 export type WorktreeRemoveOutput = void
 export type WorktreeRemoveOperation<E = never> = (input: WorktreeRemoveInput) => Effect.Effect<WorktreeRemoveOutput, E>
 
-export type WorktreeRefreshInput = { readonly projectID: Project.ID }
+export type WorktreeRefreshInput = {
+  readonly projectID: Project.ID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
 export type WorktreeRefreshOutput = void
 export type WorktreeRefreshOperation<E = never> = (
   input: WorktreeRefreshInput,

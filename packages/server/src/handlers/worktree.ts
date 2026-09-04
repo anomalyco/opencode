@@ -1,28 +1,76 @@
 import { Git } from "@opencode-ai/core/git"
 import { Worktree } from "@opencode-ai/core/worktree"
+import { Database } from "@opencode-ai/core/database/database"
+import { Location } from "@opencode-ai/core/location"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { Plugin } from "@opencode-ai/core/plugin"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { WorktreeError } from "@opencode-ai/protocol/groups/worktree"
 import { Effect } from "effect"
+import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
+import { requestRef } from "../location"
 
 export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (handlers) =>
   Effect.gen(function* () {
-    const worktrees = yield* Worktree.Service
+    const locations = yield* LocationServiceMap.Service
+    const database = yield* Database.Service
+    const fs = yield* FSUtil.Service
+
+    const run = <A>(ref: Location.Ref, action: (service: Worktree.Interface) => Effect.Effect<A, Worktree.Error>) => {
+      if (ref.workspaceID) return Effect.fail(new Worktree.UnsupportedLocationError({ directory: ref.directory }))
+      return Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const worktrees = yield* Worktree.Service
+        yield* plugins.awaitActivation
+        return yield* action(worktrees)
+      }).pipe(Effect.provide(locations.get(ref)))
+    }
 
     return handlers
-      .handle("worktree.list", (ctx) => worktrees.list(ctx.params.projectID))
+      .handle("worktree.list", (ctx) =>
+        Worktree.list(ctx.params.projectID).pipe(Effect.provideService(Database.Service, database)),
+      )
       .handle("worktree.create", (ctx) =>
-        badRequest(worktrees.create({ ...ctx.payload, projectID: ctx.params.projectID })),
+        badRequest(
+          Effect.gen(function* () {
+            const request = yield* HttpServerRequest.HttpServerRequest
+            return yield* run(requestRef(request), (worktrees) =>
+              worktrees.create({ ...ctx.payload, projectID: ctx.params.projectID }),
+            )
+          }),
+        ),
       )
       .handle("worktree.remove", (ctx) =>
-        badRequest(worktrees.remove({ ...ctx.payload, projectID: ctx.params.projectID })).pipe(
-          Effect.as(HttpApiSchema.NoContent.make()),
-        ),
+        badRequest(
+          Effect.gen(function* () {
+            const request = yield* HttpServerRequest.HttpServerRequest
+            const input = { ...ctx.payload, projectID: ctx.params.projectID }
+            const explicit =
+              ctx.query.location?.directory ||
+              ctx.query.location?.workspace ||
+              request.headers["x-opencode-directory"] ||
+              request.headers["x-opencode-workspace"]
+            const ref = explicit
+              ? requestRef(request)
+              : yield* Worktree.removalLocation(input).pipe(
+                  Effect.provideService(Database.Service, database),
+                  Effect.provideService(FSUtil.Service, fs),
+                )
+            return yield* run(ref, (worktrees) => worktrees.remove(input))
+          }),
+        ).pipe(Effect.as(HttpApiSchema.NoContent.make())),
       )
       .handle("worktree.refresh", (ctx) =>
-        badRequest(worktrees.refresh({ projectID: ctx.params.projectID })).pipe(
-          Effect.as(HttpApiSchema.NoContent.make()),
-        ),
+        badRequest(
+          Effect.gen(function* () {
+            const request = yield* HttpServerRequest.HttpServerRequest
+            return yield* run(requestRef(request), (worktrees) =>
+              worktrees.refresh({ projectID: ctx.params.projectID }),
+            )
+          }),
+        ).pipe(Effect.as(HttpApiSchema.NoContent.make())),
       )
   }),
 )
@@ -35,7 +83,10 @@ function badRequest<A, R>(effect: Effect.Effect<A, Worktree.Error, R>) {
           name: "WorktreeError",
           data: {
             message: message(error),
-            forceRequired: error instanceof Git.WorktreeError ? error.forceRequired : undefined,
+            forceRequired:
+              error instanceof Git.WorktreeError || error instanceof Worktree.OperationError
+                ? error.forceRequired
+                : undefined,
           },
         }),
     ),
@@ -51,5 +102,8 @@ function message(error: Worktree.Error) {
   if (error instanceof Worktree.DirectoryUnavailableError) return `Worktree directory unavailable: ${error.directory}`
   if (error instanceof Worktree.InvalidDirectoryError) return `Invalid worktree directory: ${error.directory}`
   if (error instanceof Worktree.StrategyUnavailableError) return `Worktree strategy unavailable: ${error.strategy}`
+  if (error instanceof Worktree.ProjectMismatchError)
+    return `Worktree location belongs to project ${error.actualProjectID}, not ${error.projectID}`
+  if (error instanceof Worktree.UnsupportedLocationError) return "Worktree operations only support local locations"
   return error.message
 }

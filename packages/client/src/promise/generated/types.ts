@@ -407,7 +407,7 @@ export type ReferenceGitSource = {
   hidden?: boolean
 }
 
-export type WorktreeDirectory = { directory: string; strategy?: string }
+export type WorktreeDirectory = { directory: string; strategy?: string; configurationDirectory?: string }
 
 export type WorktreeInfo = { directory: string }
 
@@ -429,6 +429,8 @@ export type VcsBranchList = Array<string>
 export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
+
+export type ConfigWorktree = { directory: string }
 
 export type ProviderRequest = {
   settings: ProviderSettings
@@ -1993,6 +1995,7 @@ export type ConfigEntry =
         }
         websearch?: false | { provider: "random" | (string & {}) }
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
+        worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {
           [x: string]: {
@@ -6083,36 +6086,39 @@ export type WorktreeListOutput = WorktreeList
 
 export type WorktreeCreateInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
-  readonly strategy: {
-    readonly strategy: string
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly strategy?: {
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
     readonly name?: string
   }["strategy"]
   readonly from?: {
-    readonly strategy: string
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
     readonly name?: string
   }["from"]
   readonly branch?: {
-    readonly strategy: string
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
     readonly name?: string
   }["branch"]
   readonly directory?: {
-    readonly strategy: string
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
     readonly name?: string
   }["directory"]
   readonly name?: {
-    readonly strategy: string
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
@@ -6124,13 +6130,21 @@ export type WorktreeCreateOutput = WorktreeInfo
 
 export type WorktreeRemoveInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
   readonly directory: { readonly directory: string; readonly force: boolean }["directory"]
   readonly force: { readonly directory: string; readonly force: boolean }["force"]
 }
 
 export type WorktreeRemoveOutput = void
 
-export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: string }["projectID"] }
+export type WorktreeRefreshInput = {
+  readonly projectID: { readonly projectID: string }["projectID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
 
 export type WorktreeRefreshOutput = void
 

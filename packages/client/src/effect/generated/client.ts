@@ -1460,6 +1460,7 @@ const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input: Wo
   preserveEffect<WorktreeCreateOutput>()(
     raw["worktree.create"]({
       params: { projectID: input["projectID"] },
+      query: { location: input["location"] },
       payload: {
         strategy: input["strategy"],
         from: input["from"],
@@ -1474,13 +1475,16 @@ const EndpointWorktreeRemove = (raw: RawClient["server.worktree"]) => (input: Wo
   preserveEffect<WorktreeRemoveOutput>()(
     raw["worktree.remove"]({
       params: { projectID: input["projectID"] },
+      query: { location: input["location"] },
       payload: { directory: input["directory"], force: input["force"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointWorktreeRefresh = (raw: RawClient["server.worktree"]) => (input: WorktreeRefreshInput) =>
   preserveEffect<WorktreeRefreshOutput>()(
-    raw["worktree.refresh"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["worktree.refresh"]({ params: { projectID: input["projectID"] }, query: { location: input["location"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
   )
 
 const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({

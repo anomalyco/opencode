@@ -1,5 +1,4 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import path from "path"
 import { useTuiPaths } from "../../context/runtime"
 import { errorMessage } from "../../util/error"
 import { useDialog } from "../../ui/dialog"
@@ -39,9 +38,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       if (!project) throw new Error("Unable to determine current project")
       const result = await client.api.worktree.create({
         projectID: project.id,
-        strategy: "git",
-        from: project.canonical,
-        directory: path.join(paths.worktree, project.id.slice(0, 6)),
+        location: { directory: location.directory, workspace: location.workspaceID },
         name,
       })
       const directory = result.directory
@@ -74,6 +71,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     dialog.replace(() => (
       <DialogMoveSession
         projectID={projectID}
+        location={session?.location ?? homeLocation()}
         current={
           destination() ??
           (session

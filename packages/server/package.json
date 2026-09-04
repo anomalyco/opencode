@@ -36,6 +36,8 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@opencode-ai/client": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"

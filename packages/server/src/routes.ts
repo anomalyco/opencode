@@ -21,6 +21,7 @@ import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Job } from "@opencode-ai/core/job"
 import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Global } from "@opencode-ai/util/global"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { LocationActivity } from "@opencode-ai/core/location-activity"
@@ -30,7 +31,6 @@ import { PluginUpdate } from "@opencode-ai/core/plugin/update"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Workspace } from "@opencode-ai/core/workspace"
-import { Worktree } from "@opencode-ai/core/worktree"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -50,13 +50,13 @@ import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
   Global.node,
+  FSUtil.node,
   Database.node,
   Bus.node,
   EventLogger.node,
   httpClient,
   Job.node,
   Project.node,
-  Worktree.node,
   Session.node,
   Instance.node,
   SessionTransfer.node,

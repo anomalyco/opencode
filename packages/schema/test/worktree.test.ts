@@ -22,3 +22,21 @@ describe("Worktree.CreateInput", () => {
     )
   })
 })
+
+test("worktree creation can omit strategy and destination", () => {
+  const value = Schema.decodeUnknownSync(Worktree.CreateInput)({ projectID: "project", name: "task" })
+  expect(Schema.encodeSync(Worktree.CreateInput)(value)).toEqual({ projectID: "project", name: "task" })
+})
+
+test("existing inventory rows do not require configuration provenance", () => {
+  const value = Schema.decodeUnknownSync(Worktree.Directory)({ directory: "/repo/task", strategy: "git" })
+  expect(Schema.encodeSync(Worktree.Directory)(value)).toEqual({ directory: "/repo/task", strategy: "git" })
+})
+
+test("strategy failures can request force confirmation without Core or Git dependencies", () => {
+  const value = new Worktree.OperationError({ message: "Dirty worktree", forceRequired: true })
+  expect(value.forceRequired).toBe(true)
+  expect(
+    Schema.encodeSync(Worktree.OperationError)(new Worktree.OperationError({ message: "Failed" })),
+  ).not.toHaveProperty("forceRequired")
+})

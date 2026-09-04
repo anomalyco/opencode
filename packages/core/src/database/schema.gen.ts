@@ -233,6 +233,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`project_id\` text NOT NULL,
           \`directory\` text NOT NULL,
           \`strategy\` text,
+          \`configuration_directory\` text,
           \`time_created\` integer NOT NULL,
           CONSTRAINT \`worktree_pk\` PRIMARY KEY(\`project_id\`, \`directory\`),
           CONSTRAINT \`fk_worktree_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE

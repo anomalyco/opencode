@@ -11,12 +11,12 @@ export type StrategyID = typeof StrategyID.Type
 
 export const CreateInput = Schema.Struct({
   projectID: ProjectID,
-  strategy: StrategyID,
+  strategy: optional(StrategyID),
   from: optional(AbsolutePath),
   branch: optional(Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()))),
   directory: optional(AbsolutePath).annotate({
     description:
-      "Parent directory for the new worktree. Defaults to the server's data directory under worktree/<first six project ID characters>.",
+      "Parent directory for the new worktree. Uses the location's configuration, then defaults to the server's data directory under worktree/<first six project ID characters>.",
   }),
   name: optional(Schema.String),
 }).annotate({ identifier: "Worktree.CreateInput" })
@@ -37,8 +37,20 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Directory = Schema.Struct({
   directory: AbsolutePath,
   strategy: optional(Schema.String),
+  configurationDirectory: optional(AbsolutePath),
 }).annotate({ identifier: "Worktree.Directory" })
 export interface Directory extends Schema.Schema.Type<typeof Directory> {}
+
+export const ListEntry = Schema.Struct({
+  directory: AbsolutePath,
+  type: Schema.Literals(["root", "worktree"]),
+}).annotate({ identifier: "Worktree.ListEntry" })
+export interface ListEntry extends Schema.Schema.Type<typeof ListEntry> {}
+
+export class OperationError extends Schema.TaggedError<OperationError>()("Worktree.OperationError", {
+  message: Schema.String,
+  forceRequired: optional(Schema.Boolean),
+}) {}
 
 export const ListInput = Schema.Struct({
   projectID: ProjectID,

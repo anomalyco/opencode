@@ -20,6 +20,7 @@ import { ConfigWebSearch } from "./config/websearch.js"
 import { ConfigToolOutput } from "./config/tool-output.js"
 import { ConfigWatcher } from "./config/watcher.js"
 import { ConfigWarming } from "./config/warming.js"
+import { ConfigWorktree } from "./config/worktree.js"
 
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: optional(Schema.String).annotate({
@@ -97,6 +98,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   plugins: ConfigPlugin.Plugins.pipe(optional).annotate({
     description: "Ordered plugin enablement directives and external package declarations",
+  }),
+  worktree: ConfigWorktree.Info.pipe(optional).annotate({
+    description: "Directory defaults for local worktree creation",
   }),
   warming: ConfigWarming.Warming.pipe(optional).annotate({
     description: "Keep recently active sessions warm with transient model requests (default: false)",

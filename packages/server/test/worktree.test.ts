@@ -6,6 +6,8 @@ import { Effect } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
+import { OpenCode } from "@opencode-ai/client"
+import { initRepo } from "../../core/test/fixture/git"
 
 it.live("lists, creates, and removes worktrees by project ID", () =>
   Effect.gen(function* () {
@@ -26,6 +28,7 @@ it.live("lists, creates, and removes worktrees by project ID", () =>
     if (!isRecord(resolved) || !isRecord(resolved.project) || typeof resolved.project.id !== "string")
       throw new Error("Expected resolved project")
     const url = new URL(`/api/worktree/${resolved.project.id}`, server.base)
+    url.searchParams.set("location[directory]", project)
 
     const initial = yield* Effect.promise(() =>
       fetch(url, { headers: server.headers }).then((response) => response.json()),
@@ -44,7 +47,11 @@ it.live("lists, creates, and removes worktrees by project ID", () =>
     const listed = yield* Effect.promise(() =>
       fetch(url, { headers: server.headers }).then((response) => response.json()),
     )
-    expect(listed).toContainEqual({ directory: path.join(destination, "api"), strategy: "git" })
+    expect(listed).toContainEqual({
+      directory: path.join(destination, "api"),
+      strategy: "git",
+      configurationDirectory: project,
+    })
 
     const removed = yield* Effect.promise(() =>
       fetch(url, {
@@ -54,6 +61,145 @@ it.live("lists, creates, and removes worktrees by project ID", () =>
       }),
     )
     expect(removed.status).toBe(204)
+  }),
+)
+
+it.live(
+  "uses checkout-local plugins and configuration for clones sharing a project",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-worktree-plugins-")))
+      const first = path.join(tmp.path, "first")
+      const second = path.join(tmp.path, "second")
+      const nested = path.join(first, "nested")
+      const config = path.join(tmp.path, "config")
+      const destination = path.join(tmp.path, "worktrees")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(first)
+        await initRepo(first)
+        await $`git remote add origin git@github.com:example/worktree-fixture.git`.cwd(first).quiet()
+        await $`git clone --no-hardlinks ${first} ${second}`.quiet()
+        await $`git remote set-url origin https://github.com/example/worktree-fixture.git`.cwd(second).quiet()
+        await fs.mkdir(nested)
+        await fs.mkdir(config)
+        await Bun.write(path.join(config, "opencode.json"), JSON.stringify({ worktree: { directory: destination } }))
+        await Bun.write(
+          path.join(nested, "opencode.json"),
+          JSON.stringify({
+            plugins: [
+              { package: path.join(import.meta.dir, "fixture/worktree-plugin"), options: { strategy: "test-copy" } },
+            ],
+          }),
+        )
+      })
+      const server = yield* startServer(config)
+      const api = OpenCode.make({ baseUrl: server.base, headers: server.headers })
+      yield* Effect.promise(async () => {
+        const a = await api.location.get({ location: { directory: nested } })
+        const b = await api.location.get({ location: { directory: second } })
+        expect(a.project.id).toBe(b.project.id)
+        const projectID = a.project.id
+        const custom = await api.worktree.create({ projectID, location: { directory: nested }, name: "custom" })
+        const builtin = await api.worktree.create({ projectID, location: { directory: second }, name: "builtin" })
+        expect(custom.directory).toBe(path.join(destination, "custom"))
+        expect(builtin.directory).toBe(path.join(destination, "builtin"))
+        await api.worktree.refresh({ projectID, location: { directory: second } })
+        await api.worktree.refresh({ projectID, location: { directory: nested } })
+        const rows = await api.worktree.list({ projectID })
+        expect(rows).toContainEqual({
+          directory: custom.directory,
+          strategy: "test-copy",
+          configurationDirectory: nested,
+        })
+        expect(rows).toContainEqual({ directory: builtin.directory, strategy: "git", configurationDirectory: second })
+
+        await Bun.write(path.join(custom.directory, "dirty.txt"), "keep me")
+        const remove = new URL(`/api/worktree/${projectID}`, server.base)
+        const failure = await fetch(remove, {
+          method: "DELETE",
+          headers: { ...server.headers, "content-type": "application/json" },
+          body: JSON.stringify({ directory: custom.directory, force: false }),
+        })
+        expect(failure.status).toBe(400)
+        expect(await failure.json()).toMatchObject({ data: { forceRequired: true } })
+        expect(await Bun.file(path.join(custom.directory, "dirty.txt")).text()).toBe("keep me")
+
+        // Neither caller supplies a location: removal must recover the nested plugin's origin.
+        await api.worktree.remove({ projectID, directory: custom.directory, force: true })
+        await api.worktree.remove({ projectID, directory: builtin.directory, force: false })
+        expect((await api.worktree.list({ projectID })).filter((row) => row.strategy)).toEqual([])
+      })
+    }),
+  30_000,
+)
+
+it.live(
+  "plugin calls await a different location's strategy and directory configuration",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-worktree-delegate-")))
+      const source = path.join(tmp.path, "source")
+      const target = path.join(tmp.path, "target")
+      const destination = path.join(tmp.path, "copies")
+      yield* Effect.promise(async () => {
+        for (const directory of [source, target]) {
+          await fs.mkdir(directory)
+          await initRepo(directory)
+          await $`git remote add origin git@github.com:example/delegate-fixture.git`.cwd(directory).quiet()
+        }
+        await Bun.write(
+          path.join(source, "opencode.json"),
+          JSON.stringify({
+            plugins: [
+              { package: path.join(import.meta.dir, "fixture/worktree-delegate"), options: { directory: target } },
+            ],
+          }),
+        )
+        await Bun.write(
+          path.join(target, "opencode.json"),
+          JSON.stringify({
+            worktree: { directory: destination },
+            plugins: [
+              { package: path.join(import.meta.dir, "fixture/worktree-plugin"), options: { strategy: "target-copy" } },
+            ],
+          }),
+        )
+      })
+      const server = yield* startServer(path.join(tmp.path, "config"))
+      const api = OpenCode.make({ baseUrl: server.base, headers: server.headers })
+      yield* Effect.promise(async () => {
+        const location = await api.location.get({ location: { directory: source } })
+        const url = new URL("/api/plugin/await-activation", server.base)
+        url.searchParams.set("location[directory]", source)
+        expect((await fetch(url, { method: "POST", headers: server.headers })).status).toBe(204)
+        expect(await api.worktree.list({ projectID: location.project.id })).toContainEqual({
+          directory: path.join(destination, "delegated"),
+          strategy: "target-copy",
+          configurationDirectory: target,
+        })
+      })
+    }),
+  30_000,
+)
+
+it.live("rejects workspace-qualified worktree operations without touching the host", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-worktree-local-")))
+    const server = yield* startServer(tmp.path)
+    const url = new URL("/api/worktree/project", server.base)
+    url.searchParams.set("location[directory]", tmp.path)
+    url.searchParams.set("location[workspace]", "wrk_remote")
+    const response = yield* Effect.promise(() =>
+      fetch(url, {
+        method: "POST",
+        headers: { ...server.headers, "content-type": "application/json" },
+        body: JSON.stringify({ name: "not-local" }),
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({
+      data: { message: "Worktree operations only support local locations" },
+    })
   }),
 )
 

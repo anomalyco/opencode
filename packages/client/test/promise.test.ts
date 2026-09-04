@@ -380,6 +380,22 @@ test("worktree methods use the global project contract", async () => {
   expect(await requests[2]?.json()).toEqual({ directory: "/tmp/worktrees/api", force: false })
 })
 
+test("worktree creation sends location separately and allows server defaults", async () => {
+  const requests: Request[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init))
+      return Response.json({ directory: "/configured/task" })
+    },
+  })
+  expect(
+    await client.worktree.create({ projectID: "project", location: { directory: "/repo/nested" }, name: "task" }),
+  ).toEqual({ directory: "/configured/task" })
+  expect(requests[0]?.url).toBe("http://localhost:3000/api/worktree/project?location%5Bdirectory%5D=%2Frepo%2Fnested")
+  expect(await requests[0]?.json()).toEqual({ name: "task" })
+})
+
 test("workspace.destroy returns the transition result", async () => {
   let request: Request | undefined
   const client = OpenCode.make({

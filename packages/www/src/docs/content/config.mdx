@@ -419,6 +419,25 @@ context.
 
 See the [references guide](/references) for shorthand, visibility, and path resolution.
 
+### Worktrees
+
+Set the parent directory for new local worktrees. OpenCode appends the requested or generated worktree name.
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+Relative paths resolve against the config file that declares them; `~/` resolves against the user's home directory.
+Without this setting, creation uses the server's data directory under `worktree/<first-six-project-ID-characters>`.
+Configuration applies to the caller's location, not every clone sharing a project ID. Changing it does not move existing worktrees.
+
+Git is the built-in default. A [plugin](/build/plugins#worktrees) that registers a strategy automatically becomes the
+default for its location. Strategy-specific options belong to that plugin, not the `worktree` config object.
+
 ### Plugins
 
 Load plugins from packages or local plugin directories. Use the object form when a plugin

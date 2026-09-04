@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "be60f352-8da1-40e1-8d70-dc41121cfbc5",
-  "prevIds": ["3fb67508-0196-4bae-b2bd-c08ece7583fd"],
+  "id": "6bd2962c-c9e8-4b38-b8b1-52a5ad43f4cb",
+  "prevIds": ["be60f352-8da1-40e1-8d70-dc41121cfbc5"],
   "ddl": [
     {
       "name": "account_state",
@@ -1497,6 +1497,16 @@
       "default": null,
       "generated": null,
       "name": "strategy",
+      "entityType": "columns",
+      "table": "worktree"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "configuration_directory",
       "entityType": "columns",
       "table": "worktree"
     },

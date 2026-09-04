@@ -11,8 +11,7 @@ export async function createWorktree(input: {
   const project = input.project ?? (await input.api.location.get({ location: { directory: input.directory } })).project
   const created = await input.api.worktree.create({
     projectID: project.id,
-    strategy: "git",
-    from: project.canonical,
+    location: { directory: input.directory },
     branch: input.branch,
   })
   // Populate the client cache before the destination session mounts.
