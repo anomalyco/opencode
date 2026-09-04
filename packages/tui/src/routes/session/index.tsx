@@ -283,6 +283,26 @@ export function Session() {
   const sdk = useSDK()
   const editor = useEditorContext()
 
+  onMount(() => {
+    const keymap = useOpencodeKeymap()
+    keymap.registerLayer({
+      commands: [
+        {
+          name: "reasoning.show",
+          title: "Show reasoning logs",
+          category: "Session",
+          namespace: "palette",
+          keybinding: "ctrl+r",
+          run() {
+            setSidebar(() => "auto")
+            setSidebarOpen(true)
+            toast.show({ message: "Reasoning logs shown in sidebar", variant: "info" })
+          },
+        },
+      ],
+    })
+  })
+
   createEffect(() => {
     const sessionID = route.sessionID
     void (async () => {

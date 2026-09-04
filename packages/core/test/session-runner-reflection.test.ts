@@ -11,6 +11,7 @@ import {
   tokensOf,
 } from "../src/session/runner/reflection-metric"
 import { ReflectionState } from "../src/session/runner/reflection-state"
+import { EVI } from "../src/session/runner/evi"
 
 describe("containsHedge", () => {
   it("detects standard epistemic hedges", () => {
@@ -124,14 +125,23 @@ describe("ReflectionMetric", () => {
 describe("ReflectionState", () => {
   const sessionID = SessionSchema.ID.make("ses_test_reflection")
 
+  const baseState = {
+    directionConfirmed: true,
+    lastWhyConverged: true,
+    lastThenConverged: true,
+    steers: [] as string[],
+    hypotheses: [] as readonly ReflectionState.Hypothesis[],
+    confidenceHistory: [] as readonly ReflectionState.ConfidenceRecord[],
+    causalNodes: [] as readonly ReflectionState.CausalNode[],
+    causalEdges: [] as readonly ReflectionState.CausalEdge[],
+    reasoningLog: [] as readonly ReflectionState.ReasoningLogEntry[],
+    riskBudget: { used: 0, limit: 100 },
+    temporalGuards: [] as readonly ReflectionState.TemporalGuard[],
+  }
+
   it("accumulates steers and sets directionConfirmed to false", () => {
     ReflectionState.clear(sessionID)
-    ReflectionState.set(sessionID, {
-      directionConfirmed: true,
-      lastWhyConverged: true,
-      lastThenConverged: true,
-      steers: [],
-    })
+    ReflectionState.set(sessionID, baseState)
     expect(ReflectionState.hasSteers(sessionID)).toBe(false)
 
     ReflectionState.addSteer(sessionID, "[Then Loop forward check]\nRisk of deadlock")
@@ -162,9 +172,7 @@ describe("ReflectionState", () => {
   it("clearDirection resets confirmation while preserving steers", () => {
     ReflectionState.clear(sessionID)
     ReflectionState.set(sessionID, {
-      directionConfirmed: true,
-      lastWhyConverged: true,
-      lastThenConverged: true,
+      ...baseState,
       steers: ["pending steer"],
     })
 
@@ -174,5 +182,102 @@ describe("ReflectionState", () => {
     expect(state.lastWhyConverged).toBe(false)
     expect(state.lastThenConverged).toBe(false)
     expect(state.steers).toEqual(["pending steer"])
+  })
+
+  it("tracks hypotheses and includes them in reflection text", () => {
+    ReflectionState.clear(sessionID)
+    ReflectionState.setHypotheses(sessionID, [
+      { description: "Missing import in index.ts", probability: 0.7, evidence: [] },
+      { description: "TypeScript version conflict", probability: 0.3, evidence: [] },
+    ])
+
+    const hypotheses = ReflectionState.getHypotheses(sessionID)
+    expect(hypotheses.length).toBe(2)
+    expect(hypotheses[0].description).toBe("Missing import in index.ts")
+    expect(hypotheses[0].probability).toBe(0.7)
+
+    const reflectionText = ReflectionState.getReflectionText(sessionID)
+    expect(reflectionText).toContain("Active competing hypotheses:")
+    expect(reflectionText).toContain("[70%] Missing import in index.ts")
+    expect(reflectionText).toContain("[30%] TypeScript version conflict")
+  })
+
+  it("manages temporal guards and updates their status", () => {
+    ReflectionState.clear(sessionID)
+    const guardId = ReflectionState.addTemporalGuard(sessionID, {
+      formula: "always(typecheck_passes)",
+      description: "Code must typecheck before committing",
+    })
+
+    const guards = ReflectionState.getTemporalGuards(sessionID)
+    expect(guards.length).toBe(1)
+    expect(guards[0].status).toBe("pending")
+
+    ReflectionState.updateTemporalGuard(sessionID, guardId, "violated")
+    expect(ReflectionState.getTemporalGuards(sessionID)[0].status).toBe("violated")
+  })
+
+  it("manages risk budget", () => {
+    ReflectionState.clear(sessionID)
+    ReflectionState.resetRiskBudget(sessionID, 50)
+    expect(ReflectionState.getRiskBudget(sessionID)).toEqual({ used: 0, limit: 50, remaining: 50 })
+
+    const allowed = ReflectionState.consumeRiskBudget(sessionID, 30)
+    expect(allowed).toBe(true)
+    expect(ReflectionState.getRiskBudget(sessionID).remaining).toBe(20)
+
+    const denied = ReflectionState.consumeRiskBudget(sessionID, 30)
+    expect(denied).toBe(false)
+    expect(ReflectionState.getRiskBudget(sessionID).remaining).toBe(20)
+  })
+
+  it("records and retrieves reasoning log entries", () => {
+    ReflectionState.clear(sessionID)
+    ReflectionState.addReasoningLog(sessionID, {
+      type: "why_loop",
+      content: "Soundness verified",
+      metadata: { converged: true },
+    })
+
+    const log = ReflectionState.getReasoningLog(sessionID)
+    expect(log.length).toBe(1)
+    expect(log[0].type).toBe("why_loop")
+    expect(log[0].content).toBe("Soundness verified")
+  })
+})
+
+describe("EVI", () => {
+  it("computes Shannon entropy accurately", () => {
+    expect(EVI.entropy([1.0])).toBe(0)
+    expect(EVI.entropy([0.5, 0.5])).toBe(1.0)
+    expect(EVI.entropy([])).toBe(0)
+  })
+
+  it("scores diagnostic tools higher than mutative tools when uncertainty is high", () => {
+    const hypotheses = [
+      { description: "Syntax error in file A", probability: 0.5 },
+      { description: "Syntax error in file B", probability: 0.5 },
+    ]
+
+    const readScore = EVI.scoreToolEVI("read", hypotheses)
+    const writeScore = EVI.scoreToolEVI("write", hypotheses)
+
+    expect(readScore.isDiagnostic).toBe(true)
+    expect(writeScore.isDiagnostic).toBe(false)
+    expect(readScore.score).toBeGreaterThan(writeScore.score)
+  })
+
+  it("generates EVI guidance text when hypothesis entropy exceeds threshold", () => {
+    const highEntropy = [
+      { description: "Hypothesis A", probability: 0.5 },
+      { description: "Hypothesis B", probability: 0.5 },
+    ]
+    const guidance = EVI.guidanceTextForEVI(highEntropy)
+    expect(guidance).toBeDefined()
+    expect(guidance).toContain("[Expected Value of Information (EVI)]")
+    expect(guidance).toContain("Prioritize high-EVI diagnostic actions")
+
+    const lowEntropy = [{ description: "Certain cause", probability: 1.0 }]
+    expect(EVI.guidanceTextForEVI(lowEntropy)).toBeUndefined()
   })
 })

@@ -482,6 +482,21 @@ export namespace RevertEvent {
   })
 }
 
+export namespace ReasoningLog {
+  export const Recorded = Event.define({
+    type: "session.next.reasoning.log.recorded",
+    ...options,
+    schema: {
+      ...Base,
+      id: Schema.String,
+      type: Schema.Literals(["why_loop", "then_loop", "pre_action", "hypothesis_update", "evi_score", "counterfactual", "self_consistency", "temporal_guard"]),
+      content: Schema.String,
+      metadata: Schema.Record(Schema.String, Schema.Unknown),
+    },
+  })
+  export type Recorded = typeof Recorded.Type
+}
+
 export const DurableDefinitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
@@ -512,6 +527,7 @@ export const DurableDefinitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  ReasoningLog.Recorded,
 )
 
 export const Definitions = Event.inventory(
@@ -549,6 +565,7 @@ export const Definitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  ReasoningLog.Recorded,
 )
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })

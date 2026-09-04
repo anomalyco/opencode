@@ -1221,6 +1221,29 @@ export type SessionsHistoryOutput = {
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
       }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly type: "session.next.reasoning.log.recorded"
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+        readonly location?: { readonly directory: string; readonly workspaceID?: string }
+        readonly data: {
+          readonly timestamp: number
+          readonly sessionID: string
+          readonly id: string
+          readonly type:
+            | "why_loop"
+            | "then_loop"
+            | "pre_action"
+            | "hypothesis_update"
+            | "evi_score"
+            | "counterfactual"
+            | "self_consistency"
+            | "temporal_guard"
+          readonly content: string
+          readonly metadata: { readonly [x: string]: JsonValue }
+        }
+      }
   >
   readonly hasMore: boolean
 }
@@ -1692,6 +1715,29 @@ export type SessionsEventsOutput =
       readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.next.reasoning.log.recorded"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly timestamp: number
+        readonly sessionID: string
+        readonly id: string
+        readonly type:
+          | "why_loop"
+          | "then_loop"
+          | "pre_action"
+          | "hypothesis_update"
+          | "evi_score"
+          | "counterfactual"
+          | "self_consistency"
+          | "temporal_guard"
+        readonly content: string
+        readonly metadata: { readonly [x: string]: unknown }
+      }
     }
 
 export type SessionsInterruptInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }

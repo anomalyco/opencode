@@ -6,6 +6,7 @@ import {
   Message,
   SystemPart,
   isContextOverflowFailure,
+  type Model,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import { Cause, DateTime, Duration, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
@@ -27,6 +28,7 @@ import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
+import { ReasoningLog } from "@opencode-ai/schema/session-event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionMessage } from "../message"
@@ -40,6 +42,7 @@ import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
 import { containsHedge } from "./hedge"
 import { ReflectionState } from "./reflection-state"
+import { EVI } from "./evi"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -451,10 +454,16 @@ const layer = Layer.effect(
           )
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
           if (overflowFailure) yield* publish(overflowFailure)
-          const llmFailure = failure instanceof LLMError ? failure : undefined
-          if (llmFailure && !publisher.hasProviderError()) {
+          if (stream._tag === "Failure" && !Cause.hasInterrupts(stream.cause) && !publisher.hasProviderError()) {
+            const raw = failure ?? Cause.squash(stream.cause)
+            const message =
+              raw instanceof LLMError
+                ? raw.reason.message
+                : raw instanceof Error
+                  ? raw.message
+                  : String(raw)
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
-            yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
+            yield* withPublication(publisher.failAssistant(message))
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
@@ -730,7 +739,20 @@ const layer = Layer.effect(
         const reflectionMsgs = [
           ...toLLMMessages(lastMsgs, model.value),
           Message.user(
-            `Reflect on the most recent tool result against the active goal premises. Determine if the result refutes your assumptions (e.g. non-zero exit code, error trace, missing resource, unexpected output) requiring a shift to a new or debugging sub-goal. If the goal changes, state the new sub-goal in one sentence. If all premises hold, output exactly "Goal unchanged."`,
+            [
+              "Reflect on the most recent tool result against the active goal premises. Conduct an integrated epistemics check:",
+              "1. SOUNDNESS: Did the result refute assumptions, fail unexpectedly, or require a sub-goal shift?",
+              "2. PRE-MORTEM: What catastrophic failure mode could occur if the next action proceeds unchecked?",
+              "3. INVARIANTS: Were any preconditions, temporal guards, or safety invariants violated?",
+              "4. HYPOTHESES: If ambiguous or failed, list 1-3 competing explanations with probabilities summing to 1.0.",
+              "",
+              "Respond strictly in this structured format:",
+              "VERDICT: CONVERGED | GOAL_SHIFT: <summary of shifted goal>",
+              "PREMORTEM: SAFE | RISK: <catastrophic failure risk to prevent>",
+              "INVARIANTS: SATISFIED | VIOLATED: <violated invariant>",
+              "HYPOTHESES: NONE | [0.7] explanation 1 | [0.3] explanation 2",
+              "STEER: <concise actionable instruction for next step, or NONE>",
+            ].join("\n"),
           ),
         ]
         const req = LLM.request({
@@ -752,10 +774,34 @@ const layer = Layer.effect(
         )
         if (failed || chunks.length === 0) break
         reflection = chunks.join("").trim()
-        const claimsUnchanged = /goal unchanged|goal is unchanged/i.test(reflection)
-        const hasGoalShift = /\b(however|but|shift|switch|modify|instead|update|error|fail|debug|broken)\b/i.test(reflection)
-        const converged = (claimsUnchanged && !hasGoalShift) || (reflection.length < 20 && !hasGoalShift)
-        if (converged) {
+
+        const lines = reflection.split("\n").map((l) => l.trim())
+        const getField = (prefix: string) => lines.find((l) => l.startsWith(prefix))?.slice(prefix.length).trim() ?? ""
+
+        const verdict = getField("VERDICT:")
+        const premortem = getField("PREMORTEM:")
+        const invariants = getField("INVARIANTS:")
+        const rawHypotheses = getField("HYPOTHESES:")
+        const steerText = getField("STEER:")
+
+        const isConverged =
+          (verdict.toUpperCase().includes("CONVERGED") || (!verdict && /goal unchanged/i.test(reflection))) &&
+          !premortem.toUpperCase().startsWith("RISK:") &&
+          !invariants.toUpperCase().startsWith("VIOLATED:")
+
+        if (isConverged) {
+          const whyLoopEntry = {
+            type: "why_loop" as const,
+            content: "Soundness verified. Goal and assumptions hold.",
+            metadata: { iterates, converged: true },
+          }
+          ReflectionState.addReasoningLog(sessionID, whyLoopEntry)
+          yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+            ...whyLoopEntry,
+            sessionID,
+            id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            timestamp: yield* DateTime.now,
+          })
           yield* publishCycle(
             "why",
             sessionID,
@@ -766,7 +812,115 @@ const layer = Layer.effect(
           )
           return converge(false, iterates, reflection, extensionsDetected, approxTcaTolerance > 0 ? 0 : undefined)
         }
-        ReflectionState.addSteer(sessionID, `[Why Loop reflection]\n${reflection}`)
+
+        const nowTime = yield* DateTime.now
+        const whyLoopEntry = {
+          type: "why_loop" as const,
+          content: verdict || reflection,
+          metadata: { iterates, converged: false },
+        }
+        ReflectionState.addReasoningLog(sessionID, whyLoopEntry)
+        yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+          ...whyLoopEntry,
+          sessionID,
+          id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          timestamp: nowTime,
+        })
+
+        if (premortem.toUpperCase().startsWith("RISK:")) {
+          const riskDesc = premortem.slice(5).trim()
+          const counterfactualEntry = {
+            type: "counterfactual" as const,
+            content: riskDesc,
+            metadata: { trigger: "why_loop" },
+          }
+          ReflectionState.addReasoningLog(sessionID, counterfactualEntry)
+          yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+            ...counterfactualEntry,
+            sessionID,
+            id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            timestamp: yield* DateTime.now,
+          })
+        }
+
+        if (invariants.toUpperCase().startsWith("VIOLATED:")) {
+          const violation = invariants.slice(9).trim()
+          const guardEntry = {
+            type: "temporal_guard" as const,
+            content: `Temporal guard violated: ${violation}`,
+            metadata: { guard: violation },
+          }
+          ReflectionState.addReasoningLog(sessionID, guardEntry)
+          yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+            ...guardEntry,
+            sessionID,
+            id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            timestamp: yield* DateTime.now,
+          })
+          ReflectionState.updateTemporalGuard(sessionID, violation, "violated")
+        }
+
+        if (rawHypotheses && !rawHypotheses.toUpperCase().includes("NONE")) {
+          const parsedHypotheses: Array<{ description: string; probability: number; evidence: readonly string[] }> = []
+          const regex = /\[([0-9.]+)\]\s*([^|]+)/g
+          let match: RegExpExecArray | null
+          while ((match = regex.exec(rawHypotheses)) !== null) {
+            const prob = parseFloat(match[1])
+            const desc = match[2].trim()
+            if (!isNaN(prob) && desc.length > 0) {
+              parsedHypotheses.push({ description: desc, probability: prob, evidence: [reflection] })
+            }
+          }
+          if (parsedHypotheses.length > 0) {
+            ReflectionState.setHypotheses(sessionID, parsedHypotheses)
+            const hypSummary = parsedHypotheses.map((h) => `[${Math.round(h.probability * 100)}%] ${h.description}`).join("; ")
+            const hypEntry = {
+              type: "hypothesis_update" as const,
+              content: hypSummary,
+              metadata: { count: parsedHypotheses.length },
+            }
+            ReflectionState.addReasoningLog(sessionID, hypEntry)
+            yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+              ...hypEntry,
+              sessionID,
+              id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              timestamp: yield* DateTime.now,
+            })
+
+            const eviGuidance = EVI.guidanceTextForEVI(parsedHypotheses)
+            if (eviGuidance) {
+              const eviEntry = {
+                type: "evi_score" as const,
+                content: eviGuidance,
+                metadata: { entropy: EVI.entropy(parsedHypotheses.map((h) => h.probability)) },
+              }
+              ReflectionState.addReasoningLog(sessionID, eviEntry)
+              yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+                ...eviEntry,
+                sessionID,
+                id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+                timestamp: yield* DateTime.now,
+              })
+              ReflectionState.addSteer(sessionID, eviGuidance)
+            }
+          }
+        }
+
+        const steerItems: string[] = []
+        if (verdict && !verdict.toUpperCase().includes("CONVERGED")) {
+          steerItems.push(verdict.startsWith("GOAL_SHIFT:") ? verdict.slice(11).trim() : verdict)
+        }
+        if (premortem.toUpperCase().startsWith("RISK:")) {
+          steerItems.push(`[Pre-mortem Risk] ${premortem.slice(5).trim()}`)
+        }
+        if (invariants.toUpperCase().startsWith("VIOLATED:")) {
+          steerItems.push(`[Invariant Violation] ${invariants.slice(9).trim()}`)
+        }
+        if (steerText && steerText !== "NONE" && steerText.length > 0) {
+          steerItems.push(steerText)
+        }
+        const finalSteer = steerItems.join("\n") || reflection
+        ReflectionState.addSteer(sessionID, `[Why Loop reflection]\n${finalSteer}`)
         steered = true
         break
       }
