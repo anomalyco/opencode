@@ -91,7 +91,7 @@ export function SessionProjectMenu(props: {
               when={props.showProjectIcon}
               fallback={
                 <span class={props.workspace ? "text-v2-icon-icon-accent" : "text-v2-icon-icon-muted"}>
-                  <Icon name={props.workspace ? "workspace-isolated" : "monitor"} />
+                  <Icon name={props.workspace ? "outline-worktree" : "monitor"} />
                 </span>
               }
             >
