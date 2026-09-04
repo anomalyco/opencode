@@ -33,10 +33,24 @@ const statusKey = (status: McpStatusState) =>
     needs_client_registration: "mcp.status.needs_client_registration",
     disabled: "mcp.status.disabled",
     pending: "mcp.status.pending",
-  })[status]
+  })[status] ?? "mcp.status.failed"
 
 const statusTagVariant = (status: McpStatusState) =>
   status === "connected" ? "accent" : "neutral"
+
+const asStatusState = (value: unknown): McpStatusState => {
+  const allowed: readonly McpStatusState[] = [
+    "connected",
+    "pending",
+    "disabled",
+    "failed",
+    "needs_auth",
+    "needs_client_registration",
+  ]
+  return typeof value === "string" && (allowed as readonly string[]).includes(value)
+    ? (value as McpStatusState)
+    : "failed"
+}
 
 export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const language = useLanguage()
@@ -68,7 +82,10 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
         // exists on genuine 1.17-era servers and hangs/404s elsewhere).
         if (protocol() !== "v2") {
           // Matches server-sync.tsx loadMcpQuery v1 path: legacy.mcp.status()
-          const status = await sdk.client.mcp.status(directory())
+          // The SDK wraps responses in { data: ... } — loadMcpQuery unwraps the
+          // same way ((await legacy.mcp.status()).data ?? {}).
+          const response = await sdk.client.mcp.status(directory())
+          const status = (response as { data?: Record<string, { status: McpStatusState }> }).data ?? {}
           return Object.entries(status).map(([name, value]) => ({ name, status: { status: value.status } }))
         }
         const result = await sdk.api.mcp.list(
@@ -364,12 +381,12 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
                 <SettingsRowV2
                   title={server.name}
                   description={
-                    <Tag variant={statusTagVariant(server.status.status)}>
-                      {language.t(statusKey(server.status.status))}
+                    <Tag variant={statusTagVariant(asStatusState(server.status?.status))}>
+                      {language.t(statusKey(asStatusState(server.status?.status)))}
                     </Tag>
                   }
                 >
-                  {actionRow(server)}
+                  {actionRow({ name: server.name, status: { status: asStatusState(server.status?.status) } })}
                 </SettingsRowV2>
               )}
             </For>
