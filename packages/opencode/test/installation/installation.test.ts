@@ -1,4 +1,6 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
+import fs from "fs"
+import path from "path"
 import { Effect, Layer, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -224,6 +226,93 @@ describe("installation", () => {
     ).effect("falls back to sh when bash is unavailable during curl upgrade", () =>
       Effect.gen(function* () {
         yield* Installation.use.upgrade("curl", "9.9.9")
+      }),
+    )
+  })
+
+  describe("versions", () => {
+    test("compares four-segment release tags numerically", () => {
+      expect(Installation.compareVersions("1.17.11.2", "1.17.11.1")).toBe(1)
+      expect(Installation.compareVersions("1.17.11.1", "1.17.11.2")).toBe(-1)
+      expect(Installation.compareVersions("1.17.11.2", "1.17.11.2")).toBe(0)
+      expect(Installation.compareVersions("1.17.11.1", "1.17.11")).toBe(1)
+      expect(Installation.compareVersions("1.17.11", "1.17.8")).toBe(1)
+      expect(Installation.compareVersions("v1.18.0", "1.17.11.2")).toBe(1)
+      expect(Installation.compareVersions("1.18.0-beta.1", "1.18.0")).toBe(-1)
+      expect(Installation.compareVersions("1.18.0", "1.18.0-beta.1")).toBe(1)
+    })
+
+    test("classifies release types for four-segment versions", () => {
+      expect(Installation.getReleaseType("1.17.11.1", "1.17.11.2")).toBe("patch")
+      expect(Installation.getReleaseType("1.17.11", "1.17.11.1")).toBe("patch")
+      expect(Installation.getReleaseType("1.17.8", "1.17.11")).toBe("patch")
+      expect(Installation.getReleaseType("1.17.11.2", "1.18.0")).toBe("minor")
+      expect(Installation.getReleaseType("1.17.11.2", "2.0.0")).toBe("major")
+    })
+  })
+
+  // process.execPath and process.platform are plain properties in bun, so tests swap them
+  // for the duration of one effect and restore them afterwards.
+  function withProcessValue<A, E, R>(key: "execPath" | "platform", value: string, effect: Effect.Effect<A, E, R>) {
+    const original = Object.getOwnPropertyDescriptor(process, key)
+    return Effect.suspend(() => {
+      Object.defineProperty(process, key, { value, configurable: true, writable: true })
+      return effect
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (original) Object.defineProperty(process, key, original)
+        }),
+      ),
+    )
+  }
+
+  describe("method", () => {
+    const spawned: string[] = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd) => {
+          spawned.push(cmd)
+          return "opencode-ai@1.0.0"
+        },
+      ),
+    ).effect("detects the install-script location and never probes package managers", () =>
+      Effect.gen(function* () {
+        const home = path.join(path.sep, "home", "user")
+        const curl = yield* withProcessValue(
+          "execPath",
+          path.join(home, ".mammouth", "bin", "mammouth"),
+          Installation.use.method(),
+        )
+        expect(curl).toBe("curl")
+        const unknown = yield* withProcessValue(
+          "execPath",
+          path.join(path.sep, "usr", "bin", "bun"),
+          Installation.use.method(),
+        )
+        expect(unknown).toBe("unknown")
+        expect(spawned).toEqual([])
+      }),
+    )
+  })
+
+  describe("upgrade on windows", () => {
+    const scripts: string[] = []
+    testEffect(
+      testLayer(
+        () => new Response("Write-Host installing", { status: 200 }),
+        (cmd, args) => {
+          if (cmd !== "powershell") return ""
+          expect(args.slice(0, 4)).toEqual(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+          scripts.push(fs.readFileSync(args[4], "utf8"))
+          return "ok"
+        },
+      ),
+    ).effect("runs install.ps1 through powershell from a temp file", () =>
+      Effect.gen(function* () {
+        yield* withProcessValue("platform", "win32", Installation.use.upgrade("curl", "9.9.9"))
+        expect(scripts).toEqual(["Write-Host installing"])
       }),
     )
   })

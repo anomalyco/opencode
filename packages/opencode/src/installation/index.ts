@@ -8,8 +8,9 @@ import { errorMessage } from "@/util/error"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import path from "path"
+import fs from "fs/promises"
+import os from "os"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
-import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
 import { InstallationEvent } from "@opencode-ai/schema/installation-event"
@@ -20,14 +21,35 @@ export type ReleaseType = "patch" | "minor" | "major"
 
 export const Event = InstallationEvent
 
-export function getReleaseType(current: string, latest: string): ReleaseType {
-  const currMajor = semver.major(current)
-  const currMinor = semver.minor(current)
-  const newMajor = semver.major(latest)
-  const newMinor = semver.minor(latest)
+// Mammouth Code tags releases with up to four numeric segments (1.17.11.2), which strict
+// semver rejects. Compare segment by segment; missing segments count as zero and a build
+// without a prerelease tag ranks above the same version with one.
+function parseVersion(value: string) {
+  const [core = "", prerelease] = value.trim().replace(/^v/, "").split("-", 2)
+  return {
+    segments: core.split(".").map((part) => Number.parseInt(part, 10) || 0),
+    prerelease,
+  }
+}
 
-  if (newMajor > currMajor) return "major"
-  if (newMinor > currMinor) return "minor"
+export function compareVersions(left: string, right: string): -1 | 0 | 1 {
+  const a = parseVersion(left)
+  const b = parseVersion(right)
+  for (let index = 0; index < Math.max(a.segments.length, b.segments.length); index++) {
+    const diff = (a.segments[index] ?? 0) - (b.segments[index] ?? 0)
+    if (diff) return diff > 0 ? 1 : -1
+  }
+  if (a.prerelease === b.prerelease) return 0
+  if (!a.prerelease) return 1
+  if (!b.prerelease) return -1
+  return a.prerelease.localeCompare(b.prerelease, undefined, { numeric: true }) > 0 ? 1 : -1
+}
+
+export function getReleaseType(current: string, latest: string): ReleaseType {
+  const curr = parseVersion(current).segments
+  const next = parseVersion(latest).segments
+  if ((next[0] ?? 0) > (curr[0] ?? 0)) return "major"
+  if ((next[1] ?? 0) > (curr[1] ?? 0)) return "minor"
   return "patch"
 }
 
@@ -141,11 +163,35 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
       return "sh"
     })
 
+    // install.ps1 is PowerShell, so it cannot be piped into bash like install.sh. Running it
+    // from a file makes a terminating error abort the whole script, the same as `irm | iex`.
+    const upgradePowershell = Effect.fnUntraced(function* (target: string) {
+      const response = yield* httpOk.execute(HttpClientRequest.get("https://code.mammouth.ai/install.ps1"))
+      const body = yield* response.text
+      const dir = yield* Effect.tryPromise(() => fs.mkdtemp(path.join(os.tmpdir(), "mammouth-upgrade-")))
+      const script = path.join(dir, "install.ps1")
+      return yield* Effect.gen(function* () {
+        yield* Effect.tryPromise(() => fs.writeFile(script, body))
+        const result = yield* appProcess.run(
+          ChildProcess.make("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script], {
+            env: { VERSION: target },
+            extendEnv: true,
+          }),
+        )
+        return {
+          code: result.exitCode,
+          stdout: result.stdout.toString("utf8"),
+          stderr: result.stderr.toString("utf8"),
+        }
+      }).pipe(
+        Effect.ensuring(Effect.tryPromise(() => fs.rm(dir, { recursive: true, force: true })).pipe(Effect.ignore)),
+      )
+    })
+
     const upgradeCurl = Effect.fnUntraced(
       function* (target: string) {
-        const url =
-          process.platform === "win32" ? "https://code.mammouth.ai/install.ps1" : "https://code.mammouth.ai/install.sh"
-        const response = yield* httpOk.execute(HttpClientRequest.get(url))
+        if (process.platform === "win32") return yield* upgradePowershell(target)
+        const response = yield* httpOk.execute(HttpClientRequest.get("https://code.mammouth.ai/install.sh"))
         const body = yield* response.text
         const bodyBytes = new TextEncoder().encode(body)
         const shell = yield* upgradeScriptShell()
@@ -173,38 +219,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         }
       }),
       method: Effect.fn("Installation.method")(function* () {
+        // Mammouth Code ships only through install.sh / install.ps1, which put the binary in
+        // ~/.mammouth/bin. Upstream's package-manager probes (npm, brew, ...) would find an
+        // unrelated opencode install and compare against its versions, so anything else is unknown.
         if (process.execPath.includes(path.join(".mammouth", "bin"))) return "curl" as Method
-        if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
-        if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
-        const exec = process.execPath.toLowerCase()
-
-        const checks: Array<{ name: Method; command: () => Effect.Effect<string> }> = [
-          { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]) },
-          { name: "yarn", command: () => text(["yarn", "global", "list"]) },
-          { name: "pnpm", command: () => text(["pnpm", "list", "-g", "--depth=0"]) },
-          { name: "bun", command: () => text(["bun", "pm", "ls", "-g"]) },
-          { name: "brew", command: () => text(["brew", "list", "--formula", "opencode"]) },
-          { name: "scoop", command: () => text(["scoop", "list", "opencode"]) },
-          { name: "choco", command: () => text(["choco", "list", "--limit-output", "opencode"]) },
-        ]
-
-        checks.sort((a, b) => {
-          const aMatches = exec.includes(a.name)
-          const bMatches = exec.includes(b.name)
-          if (aMatches && !bMatches) return -1
-          if (!aMatches && bMatches) return 1
-          return 0
-        })
-
-        for (const check of checks) {
-          const output = yield* check.command()
-          const installedName =
-            check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
-          if (output.includes(installedName)) {
-            return check.name
-          }
-        }
-
         return "unknown" as Method
       }),
       latest: Effect.fn("Installation.latest")(function* (installMethod?: Method) {
