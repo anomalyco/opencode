@@ -77,6 +77,42 @@ const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
     const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
+    const nameOf = (spec: string) => {
+      try {
+        return npa(spec).name ?? spec
+      } catch {
+        return spec
+      }
+    }
+    const omitSet = (conf: Record<string, unknown>): Set<string> => {
+      const omit = conf.omit
+      if (Array.isArray(omit)) return new Set(omit)
+      return typeof omit === "string" ? new Set([omit]) : new Set<string>()
+    }
+    // Arborist rewrites package.json from the add list, so reifies must
+    // preserve every dependency already declared in the project's package.json.
+    const collectDeps = (pkg: any, add: string[], omit: Set<string>): string[] => {
+      const sections = [
+        ["dependencies", false],
+        ["devDependencies", omit.has("dev")],
+        ["peerDependencies", omit.has("peer")],
+        ["optionalDependencies", omit.has("optional")],
+      ] as const
+      const specs = sections.flatMap(([section, excluded]) =>
+        excluded
+          ? []
+          : Object.entries(pkg?.[section] || {}).map(([name, version]) => [name, version].filter(Boolean).join("@")),
+      )
+      const byName = new Map<string, string>()
+      for (const spec of specs) byName.set(nameOf(spec), spec)
+      for (const spec of add) byName.set(nameOf(spec), spec)
+      return [...byName.values()]
+    }
+    const readExistingDeps = (dir: string, add: string[], omit: Set<string>): Effect.Effect<string[]> =>
+      Effect.gen(function* () {
+        const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))
+        return collectDeps(pkg, add, omit)
+      })
     const reify = (input: { dir: string; add?: string[] }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
@@ -126,7 +162,9 @@ const layer = Layer.effect(
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))
       }
 
-      const tree = yield* reify({ dir, add: [pkg] })
+      const omit = yield* NpmConfig.load(dir).pipe(Effect.map(omitSet))
+      const existing = yield* readExistingDeps(dir, [pkg], omit)
+      const tree = yield* reify({ dir, add: existing })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
         const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
@@ -144,11 +182,13 @@ const layer = Layer.effect(
       if (!canWrite) return
 
       const add = input?.add.map((pkg) => [pkg.name, pkg.version].filter(Boolean).join("@")) ?? []
+      const omit = yield* NpmConfig.load(dir).pipe(Effect.map(omitSet))
       if (
         yield* Effect.gen(function* () {
           const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
           if (!nodeModulesExists) {
-            yield* reify({ add, dir })
+            const existing = yield* readExistingDeps(dir, add, omit)
+            yield* reify({ add: existing, dir })
             return true
           }
           return false
@@ -180,7 +220,7 @@ const layer = Layer.effect(
 
         for (const name of declared) {
           if (!locked.has(name)) {
-            yield* reify({ dir, add })
+            yield* reify({ dir, add: collectDeps(pkgAny, add, omit) })
             return
           }
         }
