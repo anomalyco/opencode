@@ -14,7 +14,6 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes, type RGBA } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useUpdateNotification } from "../context/update-notification"
-import { Spinner } from "../component/spinner"
 import { FadeInText } from "../component/fade-in-text"
 import { stringWidth } from "../util/string-width"
 
@@ -122,141 +121,60 @@ export function Home() {
 function UpdateNotification() {
   const update = useUpdateNotification()
   const theme = useTheme()
-  const action = theme.text.action.primary.selected
-  const [hovered, setHovered] = createSignal<"primary" | "skip" | "later" | "close">()
+  const remoteMessage = "A remote server cannot be updated from here. Updating it is recommended."
+  const [hovered, setHovered] = createSignal<"primary" | "close">()
   createEffect(() => {
-    update.state()
+    update.notification()
     setHovered(undefined)
   })
 
   return (
-    <Show when={update.state()} keyed>
+    <Show when={update.notification()} keyed>
       {(state) => (
         <box flexShrink={0} marginTop={4} alignItems="center">
           <Switch>
-            <Match when={state.type === "available" && (state.source === "client" || !state.remote)}>
-              <box alignItems="center">
-                <box
-                  alignItems="center"
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={hovered() === "primary" ? theme.background.action.primary.hovered : undefined}
-                  onMouseOver={() => setHovered("primary")}
-                  onMouseOut={() => setHovered(undefined)}
-                  onMouseUp={() => void update.install()}
-                >
-                  <UpdateMessage
-                    title="Update available"
-                    description={`Version ${state.version} is available. Click to install`}
-                    backdrop={
-                      hovered() === "primary" ? theme.background.action.primary.hovered : theme.background.default
-                    }
-                  />
-                </box>
-                <box width="100%" alignItems="center" marginTop={1}>
-                  <FadeInText
-                    fg={theme.text.subdued}
-                    backdrop={hovered() === "skip" ? theme.background.action.primary.hovered : theme.background.default}
-                    sweepWidth={stringWidth(`Version ${state.version} is available. Click to install`)}
-                    sweepOffset={Math.floor(
-                      (stringWidth(`Version ${state.version} is available. Click to install`) -
-                        stringWidth("Skip this version")) /
-                        2,
-                    )}
-                    paddingLeft={1}
-                    paddingRight={1}
-                    bg={hovered() === "skip" ? theme.background.action.primary.hovered : undefined}
-                    onMouseOver={() => setHovered("skip")}
-                    onMouseOut={() => setHovered(undefined)}
-                    onMouseUp={update.skip}
-                  >
-                    Skip this version
-                  </FadeInText>
-                </box>
+            <Match when={state.source === "client" || !state.remote}>
+              <box
+                alignItems="center"
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={hovered() === "primary" ? theme.background.action.primary.hovered : undefined}
+                onMouseOver={() => setHovered("primary")}
+                onMouseOut={() => setHovered(undefined)}
+                onMouseUp={() => update.open?.("notification")}
+              >
+                <UpdateMessage
+                  title="Update available"
+                  description={`Version ${state.version} is available. Click for more details`}
+                  backdrop={
+                    hovered() === "primary" ? theme.background.action.primary.hovered : theme.background.default
+                  }
+                />
               </box>
             </Match>
             <Match when={state.type === "available" && state.source === "server" && state.remote}>
               <box alignItems="center">
                 <UpdateMessage
                   title="Server update available"
-                  description="A remote server cannot be updated from here. Updating it is recommended."
+                  description={remoteMessage}
                   backdrop={theme.background.default}
                 />
                 <FadeInText
                   fg={theme.text.subdued}
                   backdrop={hovered() === "close" ? theme.background.action.primary.hovered : theme.background.default}
-                  sweepWidth={stringWidth("A remote server cannot be updated from here. Updating it is recommended.")}
-                  sweepOffset={Math.floor(
-                    (stringWidth("A remote server cannot be updated from here. Updating it is recommended.") -
-                      stringWidth("Close")) /
-                      2,
-                  )}
+                  sweepWidth={stringWidth(remoteMessage)}
+                  sweepOffset={Math.floor((stringWidth(remoteMessage) - stringWidth("Close")) / 2)}
                   marginTop={1}
                   paddingLeft={1}
                   paddingRight={1}
                   bg={hovered() === "close" ? theme.background.action.primary.hovered : undefined}
                   onMouseOver={() => setHovered("close")}
                   onMouseOut={() => setHovered(undefined)}
-                  onMouseUp={update.close}
+                  onMouseUp={update.dismiss}
                 >
                   Close
                 </FadeInText>
               </box>
-            </Match>
-            <Match when={state.type === "installing"}>
-              <Spinner color={theme.text.subdued}>Installing update…</Spinner>
-            </Match>
-            <Match when={state.type === "install-success" || state.type === "installed"}>
-              <box alignItems="center">
-                <box
-                  alignItems="center"
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={hovered() === "primary" ? theme.background.action.primary.hovered : undefined}
-                  onMouseOver={() => setHovered("primary")}
-                  onMouseOut={() => setHovered(undefined)}
-                  onMouseUp={update.restart}
-                >
-                  <UpdateMessage
-                    title="Update installed"
-                    description={
-                      state.type === "install-success"
-                        ? "Click to restart. Active sessions will\nautomatically resume after restart"
-                        : `Version ${state.version} has been installed. Click to restart`
-                    }
-                    animate={state.type === "installed"}
-                    backdrop={
-                      hovered() === "primary" ? theme.background.action.primary.hovered : theme.background.default
-                    }
-                  />
-                </box>
-                <box width="100%" alignItems="center" marginTop={1}>
-                  <FadeInText
-                    fg={theme.text.subdued}
-                    backdrop={
-                      hovered() === "later" ? theme.background.action.primary.hovered : theme.background.default
-                    }
-                    animate={state.type === "installed"}
-                    sweepWidth={stringWidth(`Version ${state.version} has been installed. Click to restart`)}
-                    sweepOffset={Math.floor(
-                      (stringWidth(`Version ${state.version} has been installed. Click to restart`) -
-                        stringWidth("Restart later")) /
-                        2,
-                    )}
-                    paddingLeft={1}
-                    paddingRight={1}
-                    bg={hovered() === "later" ? theme.background.action.primary.hovered : undefined}
-                    onMouseOver={() => setHovered("later")}
-                    onMouseOut={() => setHovered(undefined)}
-                    onMouseUp={update.later}
-                  >
-                    Restart later
-                  </FadeInText>
-                </box>
-              </box>
-            </Match>
-            <Match when={state.type === "failed"}>
-              <text fg={theme.text.feedback.error.default}>{state.type === "failed" ? state.message : ""}</text>
             </Match>
           </Switch>
         </box>
@@ -265,7 +183,7 @@ function UpdateNotification() {
   )
 }
 
-function UpdateMessage(props: { title: string; description: string; backdrop: RGBA; animate?: boolean }) {
+function UpdateMessage(props: { title: string; description: string; backdrop: RGBA }) {
   const theme = useTheme()
   const lines = props.description.split("\n")
   const width = Math.max(stringWidth(props.title), ...lines.map((line) => stringWidth(line)))
@@ -278,7 +196,6 @@ function UpdateMessage(props: { title: string; description: string; backdrop: RG
       wrapMode="none"
       fg={theme.text.default}
       backdrop={props.backdrop}
-      animate={props.animate}
     >
       <span style={{ fg: theme.text.action.primary.selected, attributes: TextAttributes.BOLD }}>
         {padding}

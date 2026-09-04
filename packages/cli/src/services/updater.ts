@@ -10,9 +10,11 @@ import { action, parseReleaseVersion, type Policy } from "./updater-action"
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
 export type Method = (typeof methods)[number]
 export type CheckResult = { readonly type: "available" | "installed"; readonly version: string }
+export type ManualCheckResult = CheckResult | { readonly type: "unavailable"; readonly message: string }
 
 export interface Interface {
   readonly check: () => Effect.Effect<CheckResult | undefined>
+  readonly checkManual: () => Effect.Effect<ManualCheckResult | undefined, Error>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
@@ -230,6 +232,24 @@ const make = Effect.gen(function* () {
     if (!(yield* install(version))) return yield* Effect.fail(new Error("Installation method not found"))
   })
 
+  const checkManual = Effect.fn("cli.updater.check-manual")(function* () {
+    if (OPENCODE_LOCAL)
+      return {
+        type: "unavailable" as const,
+        message: "This build runs from a source checkout. Use an installed OpenCode release to check for updates.",
+      }
+    const version = yield* latest()
+    if (!parseReleaseVersion(version)) return yield* Effect.fail(new Error(`Invalid version: ${version}`))
+    const current = yield* Ref.get(installedVersion)
+    if (action(current, version, "auto") === "none") {
+      // An earlier check may have installed the update while this client is still running.
+      return action(OPENCODE_VERSION, current, "auto") === "none"
+        ? undefined
+        : { type: "installed" as const, version: current }
+    }
+    return { type: "available" as const, version }
+  })
+
   const check = Effect.fn("cli.updater.check")(
     function* () {
       const result = yield* inspect()
@@ -241,7 +261,7 @@ const make = Effect.gen(function* () {
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )
 
-  return Service.of({ check, apply, method, latest, upgrade })
+  return Service.of({ check, checkManual, apply, method, latest, upgrade })
 })
 
 export const layer = Layer.effect(Service, make)

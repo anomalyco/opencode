@@ -1,16 +1,19 @@
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { Global } from "@opencode-ai/util/global"
 import { run } from "@opencode-ai/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
 import { Context, Effect, Fiber, FileSystem, Option, Queue } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode-ai/util/npm"
-import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../../version"
 import { Env } from "../../env"
+import { selfCommand } from "../../util/process"
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
@@ -57,7 +60,7 @@ export default Runtime.handler(Commands, (input) =>
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
     const service = server.service
-    yield* run({
+    return yield* run({
       app: {
         name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
         version: OPENCODE_VERSION,
@@ -92,6 +95,7 @@ export default Runtime.handler(Commands, (input) =>
             ),
             { signal },
           ),
+        check: () => runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.checkManual()))),
         apply: (version) => runPromise(updater.apply(version)),
       },
       packages: {
@@ -111,5 +115,32 @@ export default Runtime.handler(Commands, (input) =>
         runFork(effect)
       },
     }).pipe(Effect.provide(LayerNode.compile(Global.node)))
-  }),
+  }).pipe(
+    Effect.scoped,
+    Effect.flatMap((restart) => {
+      if (!restart) return Effect.void
+      return Effect.gen(function* () {
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+        // Resolve the updated launcher, not the old binary in a package manager's cache.
+        const command = OPENCODE_LOCAL ? selfCommand() : [Commands.name]
+        const server = Option.getOrUndefined(input.server)
+        // Relaunch only after the old TUI and standalone server have shut down.
+        // Resume the current session without replaying the initial prompt.
+        const child = yield* spawner.spawn(
+          ChildProcess.make(
+            command[0],
+            [
+              ...command.slice(1),
+              ...(server !== undefined ? ["--server", server] : []),
+              ...(input.standalone ? ["--standalone"] : []),
+              ...(restart.sessionID ? ["--session", restart.sessionID] : []),
+              ...(input.auto || input.yolo || input.dangerouslySkipPermissions ? ["--auto"] : []),
+            ],
+            { stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+          ),
+        )
+        process.exitCode = yield* child.exitCode
+      }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)), Effect.scoped)
+    }),
+  ),
 )

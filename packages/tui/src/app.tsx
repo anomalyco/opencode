@@ -87,7 +87,7 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { newSessionLocation } from "./config/new-session-location"
-import { UpdateNotificationProvider, type UpdateSource } from "./context/update-notification"
+import { UpdateNotificationProvider, useUpdateNotification, type UpdateSource } from "./context/update-notification"
 import { PluginProvider, usePlugin, type PackageSource } from "./plugin/context"
 import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
@@ -154,6 +154,7 @@ const appBindingCommands = [
   "provider.connect",
   "opencode.settings",
   "opencode.status",
+  "opencode.update",
   "server.pair",
   "service.restart",
   "opencode.debug",
@@ -225,7 +226,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         restart: managed.restart,
       }
     : undefined
-  const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
+  const exit = {
+    epilogue: undefined as string | undefined,
+    reason: undefined as unknown,
+    restart: undefined as { sessionID?: string } | undefined,
+  }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const options = {
@@ -396,6 +401,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                         <AttentionProvider>
                                                                           <UpdateNotificationProvider
                                                                             updater={input.updater}
+                                                                            onRestart={(sessionID) => {
+                                                                              exit.restart = { sessionID }
+                                                                            }}
                                                                           >
                                                                             <PluginProvider
                                                                               packages={input.packages}
@@ -452,7 +460,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }
       })
       yield* shutdown.await
-      return { epilogue: exit.epilogue, reason: exit.reason }
+      return { epilogue: exit.epilogue, reason: exit.reason, restart: exit.restart }
     }),
   )
   yield* Effect.sync(() => {
@@ -460,6 +468,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")
   })
+  return result.restart
 })
 
 function App(props: { pair?: DialogPairCredentials }) {
@@ -478,6 +487,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const event = useEvent()
   const client = useClient()
   const toast = useToast()
+  const updater = useUpdateNotification()
   const theme = useTheme()
   const { mode, supports, setMode, locked, lock, unlock } = useThemes()
   const data = useData()
@@ -938,6 +948,17 @@ function App(props: { pair?: DialogPairCredentials }) {
         },
         category: "System",
       },
+      ...(updater.open
+        ? [
+            {
+              name: "opencode.update",
+              title: "Update OpenCode",
+              slash: { name: "update" },
+              run: () => updater.open?.("manual"),
+              category: "System",
+            },
+          ]
+        : []),
       {
         name: "server.pair",
         title: "Pair device",
