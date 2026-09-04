@@ -63,6 +63,7 @@ OpenCode Go ทำงานเหมือนกับผู้ให้บร�
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([เฉพาะบางภูมิภาค](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([เฉพาะบางภูมิภาค](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
@@ -74,18 +75,33 @@ OpenCode Go ทำงานเหมือนกับผู้ให้บร�
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 รายชื่อโมเดลอาจมีการเปลี่ยนแปลงเมื่อเราทำการทดสอบและเพิ่มโมเดลใหม่ๆ
 
 ---
 
+## ใช้งานได้ที่ไหน?
+
+OpenCode Go ออกแบบมาเพื่อใช้กับ [OpenCode](https://opencode.ai) และเอเจนต์เขียนโค้ดยอดนิยมอื่นๆ ที่สร้างคำขอในลักษณะเดียวกัน
+
+ระบบจะตรวจสอบการรับส่งข้อมูลเพื่อค้นหาการใช้งานในทางที่ผิดซึ่งส่งผลกระทบต่อประสบการณ์ของผู้ใช้รายอื่น
+
+เพื่อให้แน่ใจว่าบัญชีของคุณจะไม่ถูกตั้งค่าสถานะ โปรดตรวจสอบว่าเครื่องมือที่คุณใช้
+
+1\. ไม่สร้างการรับส่งข้อมูลที่เป็นการใช้งานในทางที่ผิด  
+2\. ระบุตัวตนอย่างถูกต้อง (ไม่ใช้ข้อมูลระบุตัวแทนผู้ใช้แบบกว้างเกินไป)  
+3\. มีส่วนหัว `x-opencode-session` เพื่อให้เราสามารถปรับการแคชพรอมต์ให้เหมาะสมได้
+
 ## Usage limits
 
-OpenCode Go มีขีดจำกัดดังต่อไปนี้:
+OpenCode Go มีขีดจำกัดพื้นฐานดังต่อไปนี้:
 
 - **ขีดจำกัดต่อ 5 ชั่วโมง** — การใช้งานมูลค่า $12
 - **ขีดจำกัดรายสัปดาห์** — การใช้งานมูลค่า $30
 - **ขีดจำกัดรายเดือน** — การใช้งานมูลค่า $60
+
+ขีดจำกัดการใช้งานที่มีผลแตกต่างกันไปตามโมเดล โปรดดูตารางด้านล่าง
 
 ขีดจำกัดถูกกำหนดเป็นมูลค่าดอลลาร์ ซึ่งหมายความว่าจำนวน request จริงของคุณจะขึ้นอยู่กับโมเดลที่คุณใช้งาน โมเดลที่ราคาถูกกว่าอย่าง MiMo-V2.5 จะสามารถส่ง request ได้มากกว่า ในขณะที่โมเดลที่มีราคาสูงกว่าอย่าง GLM-5.2 จะส่งได้น้อยกว่า
 
@@ -107,10 +123,11 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | MiMo-V2.5-Pro                | 3,250                  | 8,150               | 16,300            |
 | MiniMax M3                   | 3,200                  | 8,000               | 16,000            |
 | MiniMax M2.7                 | 3,400                  | 8,500               | 17,000            |
+| Muse Spark 1.3 Contributor   | 45,300                 | 113,300             | 226,600           |
 | Muse Spark 1.2 Contributor   | 45,300                 | 113,300             | 226,600           |
 | Qwen3.8 Max                  | 160                    | 400                 | 810               |
 | Qwen3.8 Flash                | 5,400                  | 13,500              | 27,000            |
-| Qwen3.7 Max                  | 340                    | 840                 | 1,690             |
+| Qwen3.7 Max                  | 170                    | 420                 | 840               |
 | Qwen3.7 Plus                 | 4,300                  | 10,800              | 21,600            |
 | Qwen3.6 Plus                 | 3,300                  | 8,200               | 16,300            |
 | DeepSeek V4 Pro              | 1,050                  | 2,600               | 5,200             |
@@ -118,8 +135,9 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | DeepSeek V4 Flash Vision Exp | 3,800                  | 9,450               | 18,900            |
 | Hy4 preview                  | 1,350                  | 3,380               | 6,770             |
 | Hy3                          | 4,300                  | 10,750              | 21,500            |
+| Omen Alpha                   | 11,600                 | 29,000              | 57,900            |
 
-การประมาณการนี้อ้างอิงจากรูปแบบการใช้งาน request ที่สังเกตพบ:
+การประมาณการใช้จำนวน token ต่อ request ดังต่อไปนี้ การใช้งานจริงอาจแตกต่างกัน
 
 - Grok 4.6 — 390 input, 32,500 cached, 120 output tokens ต่อ request
 - GLM-5.3-Flash — 1,000 input, 55,000 cached, 200 output tokens ต่อ request
@@ -133,6 +151,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 - DeepSeek V4 Flash Vision Exp — 410 input, 71,300 cached, 310 output tokens ต่อ request
 - MiniMax M3 — 510 input, 56,000 cached, 190 output tokens ต่อ request
 - MiniMax M2.7 — 300 input, 55,000 cached, 125 output tokens ต่อ request
+- Muse Spark 1.3 Contributor — 620 input, 71,400 cached, 300 output tokens ต่อ request
 - Muse Spark 1.2 Contributor — 620 input, 71,400 cached, 300 output tokens ต่อ request
 - Qwen3.8 Max — 420 input, 66,000 cached, 200 output tokens ต่อ request
 - Qwen3.8 Flash — 600 input, 58,000 cached, 200 output tokens ต่อ request
@@ -143,6 +162,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 - Hy3 — 830 input, 71,500 cached, 295 output tokens ต่อ request
 - MiMo-V2.5 — 830 input, 71,500 cached, 295 output tokens ต่อ request
 - MiMo-V2.5-Pro — 790 input, 86,000 cached, 305 output tokens ต่อ request
+- Omen Alpha — 300 input, 40,000 cached, 100 output tokens ต่อ request
 
 การประมาณการนี้ยังอ้างอิงจากราคาต่อ 1M tokens และปริมาณการใช้งานรายเดือนที่รวมอยู่ในแต่ละโมเดลดังต่อไปนี้:
 
@@ -165,10 +185,11 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60   |
 | MiniMax M2.7                            | $0.30  | $1.20  | $0.06       | $0.375       | $60   |
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | $60   |
+| Muse Spark 1.3 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60   |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60   |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | $15   |
 | Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | $30   |
-| Qwen3.7 Max                             | $2.50  | $7.50  | $0.50       | $3.125       | $60   |
+| Qwen3.7 Max                             | $2.50  | $7.50  | $0.50       | $3.125       | $30   |
 | Qwen3.7 Plus (≤ 256K tokens)            | $0.40  | $1.60  | $0.04       | $0.50        | $60   |
 | Qwen3.7 Plus (> 256K tokens)            | $1.20  | $4.80  | $0.12       | $1.50        | $60   |
 | Qwen3.6 Plus (≤ 256K tokens)            | $0.50  | $3.00  | $0.05       | $0.625       | $60   |
@@ -181,6 +202,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15   |
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30   |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
+| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | $100  |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** ช่วงเวลา Peak คือ 01:00-04:00 และ 06:00-10:00 UTC ตั้งแต่วันจันทร์ถึงวันศุกร์ ส่วนเวลาอื่นทั้งหมด รวมถึงวันหยุดสุดสัปดาห์ เป็น Off-Peak [ดูข้อมูลเพิ่มเติม](https://api-docs.deepseek.com/quick_start/pricing/)
 
@@ -204,7 +226,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 
 ### เหตุใดบางโมเดลจึงมีปริมาณการใช้งานต่ำกว่า
 
-สำหรับ Go คุณจ่าย $10/เดือน และเราตั้งเป้าที่จะมอบปริมาณการใช้งานให้คุณ 6 เท่าของจำนวนดังกล่าว
+สำหรับ Go คุณจ่าย $10/เดือน และสำหรับโมเดลส่วนใหญ่ เราตั้งเป้าที่จะมอบปริมาณการใช้งานให้คุณ 6 เท่าของจำนวนดังกล่าว
 
 สำหรับโมเดลส่วนใหญ่ เราทำเช่นนี้ได้ผ่านส่วนลดสำหรับการซื้อจำนวนมากและความจุ GPU ที่จองไว้ จากนั้นเราจะส่งต่อส่วนลดเหล่านั้นให้คุณผ่านตัวคูณ 6 เท่า
 
@@ -238,6 +260,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -246,6 +269,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [model id](/docs/config/#models) ใน OpenCode config ของคุณจะใช้รูปแบบ `opencode-go/<model-id>` ตัวอย่างเช่น สำหรับ Kimi K3 คุณจะใช้ `opencode-go/kimi-k3` ใน config ของคุณ
 
@@ -284,17 +308,20 @@ https://opencode.ai/zen/go/v1/models
 | Qwen3.6 Plus                 | ไม่นำไปใช้  | 0 วัน              |
 | MiniMax M3                   | ไม่นำไปใช้  | 0 วัน              |
 | MiniMax M2.7                 | ไม่นำไปใช้  | 0 วัน              |
+| Muse Spark 1.3 Contributor   | ใช่         | ไม่ใช่ ZDR         |
 | Muse Spark 1.2 Contributor   | ใช่         | ไม่ใช่ ZDR         |
 | DeepSeek V4 Pro              | ไม่นำไปใช้  | 0 วัน              |
 | DeepSeek V4 Flash            | ไม่นำไปใช้  | 0 วัน              |
 | DeepSeek V4 Flash Vision Exp | ไม่นำไปใช้  | 0 วัน              |
 | Hy4 preview                  | ไม่นำไปใช้  | 0 วัน              |
 | Hy3                          | ไม่นำไปใช้  | 0 วัน              |
+| Omen Alpha                   | ไม่นำไปใช้  | 0 วัน              |
 
 - **Grok 4.6:** ZDR ปิดใช้งานฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ ซึ่งรวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API [ดูข้อมูลเพิ่มเติม](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)
 - **GPT 5.6 Luna:** ระบบจะสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับการใช้งานฟีเจอร์ API ทั้งหมด และเก็บรักษาไว้นานสูงสุด 30 วัน [ดูข้อมูลเพิ่มเติม](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)
+- **Muse Spark 1.3 Contributor:** ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต การให้บริการจำกัดเฉพาะภูมิภาคที่ได้รับอนุญาตตาม[นโยบายการใช้งานตามพื้นที่ทางภูมิศาสตร์](https://ai.developer.meta.com/legal/geographic-use-policy)ของ Meta [ดูข้อมูลเพิ่มเติม](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)
 - **Muse Spark 1.2 Contributor:** ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต การให้บริการจำกัดเฉพาะภูมิภาคที่ได้รับอนุญาตตาม[นโยบายการใช้งานตามพื้นที่ทางภูมิศาสตร์](https://ai.developer.meta.com/legal/geographic-use-policy)ของ Meta [ดูข้อมูลเพิ่มเติม](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)
-- **DeepSeek V4 Flash:** ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 31 สิงหาคม 2026
+- **DeepSeek V4 Flash:** ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 30 กันยายน 2026
 
 ---
 
