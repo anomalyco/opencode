@@ -1131,7 +1131,13 @@ export function toPublicInfo(provider: Info): Info {
 }
 
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
-  return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
+  // Zero-model providers are a supported state (e.g. a bare custom provider
+  // declared in opencode.jsonc that the catalog does not yet know about), so
+  // skip them rather than crash on `[].id`.
+  return mapValues(
+    pickBy(providers, (item) => Object.keys(item.models).length > 0),
+    (item) => sort(Object.values(item.models))[0].id,
+  )
 }
 
 export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
