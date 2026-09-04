@@ -29,10 +29,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
 import { ASYNC_TASK_PROTOCOL } from "./task-protocol"
 
-type AdmissionError =
-  | SessionClosure.AdmissionRefused
-  | SessionMutation.MutationRefused
-  | SessionPrompt.ScopeOwnRefused
+type AdmissionError = SessionClosure.AdmissionRefused | SessionMutation.MutationRefused | SessionPrompt.ScopeOwnRefused
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -819,9 +816,9 @@ export const TaskTool = Tool.define(
         // THE CHILD'S REGISTRATION MEANS ONE THING: THIS CHILD IS LIVE.
         //
         // So it is released when the child's LIFETIME ends, on its own fiber, and nothing about
-        // delivery may gate that. Delivery is `inject` — a prompt into the PARENT — and a prompt
-        // into a running session joins that run and returns only when it ends (`prompt` reaches
-        // `SessionRunState.ensureRunning`, which awaits the active run's `done`). While the release
+        // delivery may gate that. Delivery is `inject` — a prompt into the PARENT — and a
+        // reply-required prompt into a running session publishes a FIFO entry that cannot run until
+        // the active head ends (`prompt` reaches `SessionRunState.publish`). While the release
         // rode the observation's `ensuring`, a finished child stayed registered for the length of a
         // whole parent run, and every `Task(task_id=child)` in that window died on the coordinator's
         // exclusive open.
@@ -915,9 +912,7 @@ export const TaskTool = Tool.define(
         yield* attachObservation(armedHandle)
       })
 
-      const attachExtension = Effect.fn("TaskTool.attachExtension")(function* (
-        handle: BackgroundJob.InvocationHandle,
-      ) {
+      const attachExtension = Effect.fn("TaskTool.attachExtension")(function* (handle: BackgroundJob.InvocationHandle) {
         // A root extension already belongs either to the original synchronous waiter or to the one
         // observer installed when that lifetime became async. Installing another notifier here would
         // duplicate the result and every later extension. Only a distinct parent reservation can own

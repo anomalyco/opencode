@@ -47,9 +47,9 @@ import { SessionClosureModel as Model } from "@/session/closure/model"
  * `attachments.open()` exclusive, so the entry's lifetime must equal the child's lifetime. The
  * entry is opened before `startExact` and so outlives the child's run; releasing it from an
  * `Effect.ensuring` bound to the whole observation is what created the window. The observation's
- * delivery step is `inject(...)`, a prompt into the PARENT, and a prompt into a running session
- * joins that run and returns only when the run ENDS (`prompt` reaches
- * `SessionRunState.ensureRunning`, which awaits the active run's `done`). A finished child
+ * delivery step is `inject(...)`, a prompt into the PARENT, and a reply-required prompt into a
+ * running session publishes a FIFO entry that cannot run until the active head ENDS (`prompt`
+ * reaches `SessionRunState.publish`). A finished child
  * therefore stayed registered for the length of an entire parent run, and every resume inside that
  * window died with "Attachment scope already open for session <child>" from the coordinator's
  * exclusive open, surfaced as a hard tool error by `Effect.orDie` at the tool boundary. Observed in

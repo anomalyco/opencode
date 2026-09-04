@@ -256,7 +256,7 @@ export const REGISTRY: readonly Entry[] = [
       {
         authority: "pre_fence_leased_execution",
         evidence:
-          "Writes streamed reasoning, step, patch, text and Assistant state throughout `processor.ts:563-837`; direct tracked writes occur at `:576,710,736,747,759,796,830`. It is invoked by the stream drain at `:1011-1018`, specifically `Stream.tap` at `:1012`. Production processor work is bound under the `SessionRunState.ensureRunning` admission at `run-state.ts:200-214`. This is the per-streaming-token writer, so the enclosing loop's single admission is the correct granularity — a per-write lease would be wrong.",
+          "Writes streamed reasoning, step, patch, text and Assistant state throughout `processor.ts:563-837`; direct tracked writes occur at `:576,710,736,747,759,796,830`. It is invoked by the stream drain at `:1011-1018`, specifically `Stream.tap` at `:1012`. Production reply-required processor work is bound under `SessionRunState.publish`'s fresh execution admission at `run-state.ts:259-295`; legacy wake remains on `ensureRunning`. This is the per-streaming-token writer, so the enclosing loop's single admission is the correct granularity — a per-write lease would be wrong.",
       },
     ],
   },

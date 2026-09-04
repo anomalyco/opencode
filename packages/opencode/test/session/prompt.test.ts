@@ -333,6 +333,38 @@ const refusedLoopNoLLMServer = testEffect(
     [SessionProcessor.node, blockingProcessor],
   ]),
 )
+const wiringLog: string[] = []
+const wiringResult: { value: SessionV1.WithParts | undefined } = { value: undefined }
+const wiringValue = (): Effect.Effect<SessionV1.WithParts> =>
+  Effect.suspend(() => {
+    const value = wiringResult.value
+    return value ? Effect.succeed(value) : Effect.die(new Error("missing CP-033 wiring result"))
+  })
+const wiringState = Layer.mock(SessionRunState.Service)({
+  publish: () =>
+    Effect.gen(function* () {
+      wiringLog.push("publish")
+      return { type: "completed" as const, value: yield* wiringValue() }
+    }),
+  awaitPublished: (published) =>
+    Effect.sync(() => wiringLog.push("await")).pipe(
+      Effect.andThen(published.type === "completed" ? Effect.succeed(published.value) : published.await),
+    ),
+  ensureRunning: () =>
+    Effect.gen(function* () {
+      wiringLog.push("ensureRunning")
+      return yield* wiringValue()
+    }),
+})
+const wiringNoLLMServer = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [SessionRunState.node, wiringState],
+  ]),
+)
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -563,6 +595,29 @@ refusedLoopNoLLMServer.instance(
       expect(created.value).toBe(0)
       expect((yield* run.listActive()).some((entry) => entry.session === chat.id)).toBe(false)
     }),
+)
+
+wiringNoLLMServer.instance("routes reply-required loop through F publication, never legacy J (CP-033 T-02/M-01)", () =>
+  Effect.gen(function* () {
+    wiringLog.length = 0
+    wiringResult.value = undefined
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        wiringLog.length = 0
+        wiringResult.value = undefined
+      }),
+    )
+
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const initial = yield* seed(chat.id, { finish: "stop" })
+    wiringResult.value = { info: initial.assistant, parts: [] }
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.id).toBe(initial.assistant.id)
+    expect(wiringLog).toEqual(["publish", "await"])
+  }),
 )
 
 noLLMServer.instance("noReply persists without publishing an F entry (CP-033)", () =>
