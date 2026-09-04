@@ -1120,7 +1120,7 @@ effect: (ctx) =>
 ```
 
 Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
-it. Both hooks run for every request a session issues; `event.kind` is `"session"`, `"compaction"`, `"title"`, or
+it. Both hooks run for every request a session issues; `event.kind` is `"primary"`, `"compaction"`, `"title"`, or
 `"generate"` depending on which flow issued it.
 
 ```ts

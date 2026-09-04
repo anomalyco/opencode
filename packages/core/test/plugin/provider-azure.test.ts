@@ -281,7 +281,7 @@ describe("AzurePlugin", () => {
             sessionID: Session.ID.make("ses_azure"),
             agent: Agent.ID.make("build"),
             model,
-            kind: "session",
+            kind: "primary",
             request: new Request("https://test-resource.openai.azure.com/openai/v1/responses", {
               headers: { "api-key": "stored-token", "x-keep": "yes" },
             }),
@@ -296,7 +296,7 @@ describe("AzurePlugin", () => {
             sessionID: Session.ID.make("ses_foundry"),
             agent: Agent.ID.make("build"),
             model,
-            kind: "session",
+            kind: "primary",
             request: new Request("https://test-resource.services.ai.azure.com/anthropic/v1/messages", {
               headers: { "x-api-key": "stored-token" },
             }),

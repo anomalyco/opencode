@@ -34,7 +34,7 @@ export interface SessionContext {
  * Why a Session request is being made. Auxiliary requests share the Session's
  * hook identity but need to be told apart from the agent loop.
  */
-export type SessionRequestKind = "session" | "compaction" | "title" | "generate"
+export type SessionRequestKind = "primary" | "compaction" | "title" | "generate"
 
 export interface SessionModelRequest {
   readonly sessionID: Session.ID

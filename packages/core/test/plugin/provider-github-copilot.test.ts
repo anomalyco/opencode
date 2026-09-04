@@ -156,7 +156,7 @@ describe("GithubCopilotPlugin", () => {
         sessionID: Session.ID.make("ses_test"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("claude-sonnet-4.5") }),
-        kind: "session",
+        kind: "primary",
         request: new Request("https://api.githubcopilot.com/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-api-key": "token" },
@@ -174,7 +174,7 @@ describe("GithubCopilotPlugin", () => {
   it.effect("classifies main-loop steps as agent interactions", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).parent, "session")
+      const event = yield* modelRequest((yield* sessions()).parent, "primary")
       expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
     }),
   )
@@ -182,7 +182,7 @@ describe("GithubCopilotPlugin", () => {
   it.effect("classifies child-session steps as subagent interactions", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).child, "session")
+      const event = yield* modelRequest((yield* sessions()).child, "primary")
       expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-subagent", "x-initiator": "agent" })
     }),
   )
@@ -206,7 +206,7 @@ describe("GithubCopilotPlugin", () => {
   it.effect("does not classify by agent name", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).parent, "session", "compaction")
+      const event = yield* modelRequest((yield* sessions()).parent, "primary", "compaction")
       expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
     }),
   )
@@ -219,7 +219,7 @@ describe("GithubCopilotPlugin", () => {
         sessionID: (yield* sessions()).parent,
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5.4") }),
-        kind: "session",
+        kind: "primary",
         headers: {},
       })
       expect(event.headers).toEqual({})

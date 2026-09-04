@@ -48,7 +48,7 @@ const request = Effect.fn(function* (providerID: Provider.ID, baseURL: string) {
     sessionID: Session.ID.make("ses_test"),
     agent: Agent.ID.make("build"),
     model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
-    kind: "session",
+    kind: "primary",
     baseURL,
     headers: {},
   })
@@ -227,7 +227,7 @@ describe("OpenAIPlugin", () => {
       const program = Effect.gen(function* () {
         const requests = yield* SessionModelRequest.Service
         return yield* requests.prepare({
-          kind: "session",
+          kind: "primary",
           scope: {
             session: Session.Info.make({
               id: sessionID,
