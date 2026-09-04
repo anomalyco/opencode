@@ -19,6 +19,10 @@ export type ComposerControls = {
     paid: boolean
     loading: boolean
   }
+  mode: {
+    current: string
+    select: (mode: string | undefined) => void
+  }
   session: {
     tabs: {
       active: () => string | undefined
@@ -37,6 +41,7 @@ export type ComposerSelection = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  infinite?: boolean
 }
 
 export type ComposerDelivery = "steer" | "queue"

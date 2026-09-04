@@ -34,6 +34,10 @@ export function createComposerControls(input: { sessionKey: Accessor<string>; mo
           (local.agent.visible() && data.location.agent.list({ directory: sdk().directory }) === undefined) ||
           !providers.ready(),
       },
+      mode: {
+        current: local.mode.current(),
+        select: local.mode.set,
+      },
       session: {
         tabs: layout.tabs(input.sessionKey),
         reviewPanel: view.reviewPanel,

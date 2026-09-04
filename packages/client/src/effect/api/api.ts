@@ -209,6 +209,7 @@ export type SessionCreateInput = {
   readonly model?: Model.Ref | undefined
   readonly location?: Location.Ref | undefined
   readonly metadata?: Session.Metadata | undefined
+  readonly infinite?: boolean | undefined
 }
 export type SessionCreateOutput = Session.Info
 export type SessionCreateOperation<E = never> = (input?: SessionCreateInput) => Effect.Effect<SessionCreateOutput, E>
@@ -275,6 +276,7 @@ export type SessionPromptInput = {
   readonly metadata?: { readonly [x: string]: unknown } | undefined
   readonly delivery?: SessionInbox.Delivery | undefined
   readonly resume?: boolean | undefined
+  readonly infinite?: boolean | undefined
 }
 export type SessionPromptOutput = SessionInbox.User
 export type SessionPromptOperation<E = never> = (input: SessionPromptInput) => Effect.Effect<SessionPromptOutput, E>

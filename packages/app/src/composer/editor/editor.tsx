@@ -274,6 +274,14 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   </Show>
                 )}
               </Show>
+              <Show when={view.mode} keyed>
+                {(control) => (
+                  <ComposerEditorConfiguredSelect
+                    title={i18n.t("ui.promptInput.chooseMode")}
+                    control={control}
+                  />
+                )}
+              </Show>
             </Show>
           </div>
           <Show when={state.mode === "normal"}>

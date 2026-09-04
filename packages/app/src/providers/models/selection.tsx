@@ -11,6 +11,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { hasCustomAgent, resolveAgent } from "./agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./variant"
+import { cycleSessionMode, resolveSessionMode } from "@/composer/session-mode"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData } from "@/runtime/server/current"
 import { normalizeAgentList } from "@/runtime/server/global-sync/utils"
@@ -28,6 +29,7 @@ const StateSchema = Schema.Struct({
   agent: Persistence.optional(Schema.String),
   model: Persistence.optional(ModelKeySchema),
   variant: Persistence.optional(Schema.NullOr(Schema.String)),
+  mode: Persistence.optional(Schema.NullOr(Schema.String)),
 })
 type State = typeof StateSchema.Type
 
@@ -99,10 +101,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       draft?: State
       promoting?: State
       last?: {
-        type: "agent" | "model" | "variant"
+        type: "agent" | "model" | "variant" | "mode"
         agent?: string
         model?: ModelKey | null
         variant?: string | null
+        mode?: string | null
       }
     }>({
       current: list()[0]?.name,
@@ -198,12 +201,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             agent: item.name,
             model: item.model,
             variant: item.variant ?? null,
+            mode: selectedMode(),
           })
           const prev = scope()
           const next = {
             agent: item.name,
             model: item.model ?? prev?.model,
             variant: item.variant ?? prev?.variant,
+            mode: prev?.mode,
           } satisfies State
           const session = id()
           if (session) {
@@ -251,12 +256,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const selected = () => scope()?.variant
 
+    const selectedMode = () => scope()?.mode
+
     const snapshot = () => {
       const model = current()
       return {
         agent: agent.current()?.name,
         model: model ? { providerID: model.provider.id, modelID: model.id } : undefined,
         variant: selected(),
+        mode: selectedMode(),
       } satisfies State
     }
 
@@ -305,6 +313,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               agent: agent.current()?.name,
               model: item ?? null,
               variant: selected(),
+              mode: selectedMode(),
             })
             write({ model: item })
             if (!item) return
@@ -349,6 +358,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 agent: agent.current()?.name,
                 model: model ? { providerID: model.provider.id, modelID: model.id } : null,
                 variant: value ?? null,
+                mode: selectedMode(),
               })
               write({ variant: value ?? null })
               if (model) {
@@ -371,10 +381,37 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
+    const mode = {
+      selected: selectedMode,
+      current() {
+        return resolveSessionMode(selectedMode())
+      },
+      set(value: string | undefined) {
+        const resolved = resolveSessionMode(value ?? null)
+        startTransition(() =>
+          batch(() => {
+            const item = current()
+            setStore("last", {
+              type: "mode",
+              agent: agent.current()?.name,
+              model: item ? { providerID: item.provider.id, modelID: item.id } : null,
+              variant: selected(),
+              mode: resolved ?? null,
+            })
+            write({ mode: resolved ?? null })
+          }),
+        )
+      },
+      cycle() {
+        mode.set(cycleSessionMode(mode.current()))
+      },
+    }
+
     const result = {
       slug: createMemo(() => base64Encode(sdk().directory)),
       model,
       agent,
+      mode,
       session: {
         ready: savedReady,
         reset() {
