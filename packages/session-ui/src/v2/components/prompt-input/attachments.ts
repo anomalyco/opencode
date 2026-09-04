@@ -274,5 +274,12 @@ function cursorPosition(editor: HTMLElement) {
 
 function largePaste(text: string) {
   if (text.length >= 8000) return true
-  return text.split("\n").length - 1 >= 120
+  let breaks = 0
+  for (let index = 0; index < text.length; index++) {
+    if (text[index] === "\n") {
+      breaks += 1
+      if (breaks >= 120) return true
+    }
+  }
+  return false
 }
