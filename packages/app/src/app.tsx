@@ -33,6 +33,7 @@ import {
   type JSX,
   lazy,
   onCleanup,
+  onMount,
   type ParentProps,
   Show,
 } from "solid-js"
@@ -46,7 +47,7 @@ import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
-import { LayoutProvider } from "@/context/layout"
+import { LayoutProvider, useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
@@ -68,6 +69,11 @@ import { createSessionLineage } from "@/pages/session/session-lineage"
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome } from "@/pages/home"
 import { LegacyHome } from "@/pages/home/legacy-home"
+import {
+  deepLinkEvent,
+  drainPendingDeepLinks,
+  handleDeepLinks,
+} from "@/pages/layout/deep-links"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
 
@@ -360,6 +366,55 @@ function ServerScopedProviders(props: ServerScopedShellProps) {
   )
 }
 
+function DesktopDeepLinks() {
+  const settings = useSettings()
+  const server = useServer()
+  const layout = useLayout()
+  const tabs = useTabs()
+  const navigate = useNavigate()
+  const pending: string[] = []
+
+  const receive = (urls: string[]) => {
+    if (!settings.general.newLayoutDesigns()) return
+    pending.push(...urls)
+    flush()
+  }
+
+  const flush = () => {
+    if (!settings.general.newLayoutDesigns()) return
+    if (!tabs.ready()) return
+    const urls = pending.splice(0)
+    if (urls.length === 0) return
+
+    handleDeepLinks(urls, {
+      canHandle: server.isLocal,
+      openProject: (directory) => {
+        layout.projects.open(directory)
+        server.projects.touch(directory)
+        layout.home.setSelection({ server: server.key, directory })
+        navigate("/")
+      },
+      openNewSession: (link) => {
+        layout.projects.open(link.directory)
+        server.projects.touch(link.directory)
+        void tabs.newDraft({ server: server.key, directory: link.directory }, link.prompt)
+      },
+    })
+  }
+
+  createEffect(flush)
+
+  onMount(() => {
+    receive(drainPendingDeepLinks(window))
+    makeEventListener(window, deepLinkEvent, (event: Event) => {
+      const detail = (event as CustomEvent<{ urls: string[] }>).detail
+      receive(detail?.urls ?? [])
+    })
+  })
+
+  return null
+}
+
 function LegacyServerScopedShell(props: ServerScopedShellProps) {
   return (
     <ServerScopedProviders directory={props.directory} serverScoped={props.serverScoped}>
@@ -372,6 +427,7 @@ function NewAppLayout(props: ParentProps<{ serverScoped?: JSX.Element }>) {
   return (
     <SelectedServerProviders>
       <ServerScopedProviders serverScoped={props.serverScoped}>
+        <DesktopDeepLinks />
         <NewLayout>{props.children}</NewLayout>
       </ServerScopedProviders>
     </SelectedServerProviders>
