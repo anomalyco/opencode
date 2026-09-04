@@ -93,3 +93,34 @@ test("model defaults follow the location and refresh after catalog invalidation"
   await setup.data.location.sync({ directory: "/other" })
   expect(setup.local.model.current()?.modelID).toBe("third")
 })
+
+test("uses the agent variant only for its configured model and lets cycling select default", async () => {
+  await using setup = await renderLocal({
+    models: [model("first", ["low", "high"]), model("second", ["low", "high"])],
+    agents: [agent("build", { providerID: "provider", id: "first", variant: "high" })],
+  })
+  expect(setup.local.model.variant.current()).toBe("high")
+  setup.local.model.variant.cycle()
+  expect(setup.local.model.variant.current()).toBeUndefined()
+  setup.local.model.variant.cycle()
+  expect(setup.local.model.variant.current()).toBe("low")
+  setup.local.model.set({ providerID: "provider", modelID: "second" })
+  expect(setup.local.model.variant.current()).toBeUndefined()
+})
+
+test.each(["low", "default"])("saved variant %s overrides the agent variant", async (variant) => {
+  await using setup = await renderLocal({
+    models: [model("first", ["low", "high"])],
+    agents: [agent("build", { providerID: "provider", id: "first", variant: "high" })],
+    preferences: { variant: { "provider/first": variant } },
+  })
+  expect(setup.local.model.variant.current()).toBe(variant === "default" ? undefined : variant)
+})
+
+test("ignores unsupported agent variants", async () => {
+  await using setup = await renderLocal({
+    models: [model("first", ["low", "high"])],
+    agents: [agent("build", { providerID: "provider", id: "first", variant: "missing" })],
+  })
+  expect(setup.local.model.selection()?.variant).toBeUndefined()
+})
