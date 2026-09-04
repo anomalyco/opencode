@@ -9,6 +9,7 @@ import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
 import { createBrowserPage, destinationOrigin, type BrowserPage } from "./browser-chromium"
 import { browserFailure } from "./browser/errors"
+import { createBrowserNetwork, type BrowserNetwork } from "./browser/network"
 import { emitIpcEvent } from "./ipc-events"
 
 type Entry = {
@@ -23,6 +24,7 @@ type Entry = {
   focusedTabID: Browser.TabID | null
   partition: string
   lastState?: string
+  network?: BrowserNetwork
 }
 
 export function createBrowserPane() {
@@ -82,6 +84,12 @@ export function createBrowserPane() {
             }
             const attachment = { sessionID, connectionID: crypto.randomUUID() }
             const rpc = client.rpc(Browser.Definition)
+            entry.network = yield* createBrowserNetwork({
+              rpc,
+              attachment,
+              location: options.location,
+              partition: entry.partition,
+            })
             const connected = yield* Deferred.make<void>()
             const outbound = yield* Queue.unbounded<Effect.Effect<void, unknown>>()
             // Report state before publishing it locally or completing a command.
@@ -161,7 +169,7 @@ export function createBrowserPane() {
               receive,
               Stream.fromQueue(outbound).pipe(Stream.runForEach((send) => send)),
               Deferred.await(connected).pipe(
-                Effect.andThen(rpc.attach({ ...attachment, version: 3 }, options)),
+                Effect.andThen(rpc.attach({ ...attachment, version: 4 }, options)),
                 Effect.tap((result) =>
                   Effect.sync(() => {
                     if (result === "replaced") reason = "browser.pane.replaced"
@@ -280,6 +288,7 @@ export function createBrowserPane() {
   }
 
   function create(entry: Entry, initialize = true, popupOptions?: Electron.BrowserWindowConstructorOptions) {
+    if (!entry.network) throw new Error("Browser network is not ready; no tab was opened.")
     const id = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
     const fail = () => {
       if (entry.pages.has(id)) void closePage(entry, id, "page_crashed").catch(() => undefined)
@@ -287,6 +296,7 @@ export function createBrowserPane() {
     const page = createBrowserPage(entry.win, {
       id,
       partition: entry.partition,
+      network: entry.network,
       initialize,
       popupOptions,
       fail,

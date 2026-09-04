@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { once } from "node:events"
+import { createHash } from "node:crypto"
 import path from "node:path"
 import { app, BrowserWindow, nativeImage } from "electron"
 import { Browser } from "@opencode-ai/plugin-browser/rpc"
@@ -29,6 +30,12 @@ async function main() {
   app.on("window-all-closed", () => {})
   await app.whenReady()
   const web = createServer((request, response) => {
+    if (request.url === "/cors-allowed" || request.url === "/cors-denied") {
+      if (request.url === "/cors-allowed") response.setHeader("access-control-allow-origin", "*")
+      response.setHeader("content-type", "text/plain")
+      response.end("cors proof")
+      return
+    }
     if (request.url === "/api/test") {
       response.setHeader("content-type", "application/json")
       response.end('{"message":"network body"}')
@@ -54,6 +61,18 @@ async function main() {
     response.end(
       `<!doctype html><html lang="en"><head><title>Browser suite</title><meta name="description" content="Native browser test"><style>body{font:16px sans-serif;padding:20px}input,button,select{margin:6px}#space{height:1400px}</style></head><body><h1>Browser suite</h1><label>Name<input aria-label="Name"></label><button onclick="document.querySelector('output').textContent=document.querySelector('input').value">Apply</button><output>Waiting</output><input type="checkbox" aria-label="Remember"><select aria-label="Color"><option value="red">Red</option><option value="blue">Blue</option></select><input type="file" aria-label="Upload"><button onclick="alert('hello dialog')">Dialog</button><a href="/download">Download</a><a href="/frame" target="_blank">Popup</a><iframe title="Child frame" src="/frame"></iframe><div id="space">Scroll content</div><script>console.log('fixture log'); console.error('fixture error'); fetch('/api/test'); fetch('/missing'); window.heapFixture={value:'heap marker'};</script></body></html>`,
     )
+  })
+  web.on("upgrade", (request, socket) => {
+    socket.on("error", () => socket.destroy())
+    const accept = createHash("sha1")
+      .update(request.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+      .digest("base64")
+    socket.write(
+      `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`,
+    )
+    const message = Buffer.from("rpc websocket proof")
+    socket.write(Buffer.concat([Buffer.from([0x81, message.length]), message]))
+    socket.once("data", () => socket.end(Buffer.from([0x88, 0])))
   })
   await once(web.listen(0, "127.0.0.1"), "listening")
   const address = web.address()
@@ -135,6 +154,22 @@ async function main() {
     const second = await call("tabs.open", { url: `${fixture}/other`, focus: false })
     assert.equal((await call("tabs.list", {})).tabs.length, 2)
     const tabID = first.id
+    assert.equal(first.url, fixture + "/")
+    const networkProof = await call("evaluate", {
+      tabID,
+      script: `(async () => ({
+        origin: location.origin,
+        denied: await fetch('http://localhost:${address.port}/cors-denied').then(() => false, () => true),
+        allowed: await fetch('http://localhost:${address.port}/cors-allowed').then(response => response.text()),
+        websocket: await new Promise((resolve, reject) => { const socket = new WebSocket('ws://localhost:${address.port}/hmr'); socket.onmessage = event => { resolve(event.data); socket.close(); }; socket.onerror = () => reject(new Error('WebSocket failed')); })
+      }))()`,
+    })
+    assert.deepEqual(networkProof.value, {
+      origin: fixture,
+      denied: true,
+      allowed: "cors proof",
+      websocket: "rpc websocket proof",
+    })
     const upload = await rpc.write({ text: "server upload bytes" }, { location })
     await fails("trace.stop", { tabID }, /browser\.trace\.start/)
     await fails("cpu.stop", { tabID }, /browser\.cpu\.start/)
