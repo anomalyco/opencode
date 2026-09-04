@@ -258,6 +258,31 @@ describe("BashTool", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       ),
     )
+
+    it.live("keeps captured output in the timeout settlement", () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withTool(
+            tmp.path,
+            (registry) => settleTool(registry, call({ command: "echo bash-timeout-marker; sleep 30", timeout: 1_000 })),
+            LayerNode.compile(AppProcess.node),
+          ).pipe(
+            Effect.andThen((settled) =>
+              Effect.sync(() => {
+                expect(settled.output?.structured).toMatchObject({ timeout: true })
+                const text = settled.output?.content[0]?.type === "text" ? settled.output.content[0].text : ""
+                expect(text).toContain("Command exceeded timeout")
+                expect(text).toContain("Output captured before timeout:")
+                expect(text).toContain("bash-timeout-marker")
+              }),
+            ),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ),
+    )
   }
 
   it.live("approves an explicit external workdir before bash execution", () =>

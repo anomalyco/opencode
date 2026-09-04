@@ -174,9 +174,11 @@ const layer = Layer.effectDiscard(
                     isTimeout(error) ? Effect.succeed(undefined) : Effect.fail(error),
                   ),
                 )
-              if (!result) {
+              if (!result || result.timedOut) {
+                const captured = result?.output?.toString("utf8").trimEnd()
+                const capturedBlock = captured ? `\n\nOutput captured before timeout:\n${captured}` : ""
                 return {
-                  output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
+                  output: `Command exceeded timeout of ${timeout} ms.${capturedBlock}\n\nRetry with a larger timeout if the command is expected to take longer.`,
                   truncated: false,
                   timeout: true,
                   ...(warnings.length ? { warnings } : {}),
