@@ -41,17 +41,14 @@ export function DialogUpdate(props: {
   const buttons = createMemo(() => {
     const type = state().type
     if (type === "installing") return []
-    if (type === "checking") return [{ label: "Cancel", padding: 1, run: () => dialog.clear() }]
+    if (type === "checking") return [{ label: "Cancel", run: () => dialog.clear() }]
     const confirm =
       type === "available"
         ? { label: "Update", run: props.install }
         : type === "installed"
           ? { label: "Restart", run: props.restart }
           : undefined
-    return [
-      { label: confirm ? "Cancel" : "close", padding: confirm ? 1 : 3, run: () => dialog.clear() },
-      ...(confirm ? [{ ...confirm, padding: 1 }] : []),
-    ]
+    return [{ label: confirm ? "Cancel" : "close", run: () => dialog.clear() }, ...(confirm ? [confirm] : [])]
   })
 
   createEffect(() => setActive(Math.max(0, buttons().length - 1)))
@@ -133,8 +130,8 @@ export function DialogUpdate(props: {
           <For each={buttons()}>
             {(button, index) => (
               <box
-                paddingLeft={button.padding}
-                paddingRight={button.padding}
+                paddingLeft={1}
+                paddingRight={1}
                 backgroundColor={active() === index() ? theme.background.action.primary.focused : undefined}
                 onMouseUp={() => void button.run()}
               >
