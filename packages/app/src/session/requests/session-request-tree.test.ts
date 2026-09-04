@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
-import { sessionPermissionRequest, sessionQuestionForm } from "@/session/requests/session-request-tree"
+import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -22,6 +22,22 @@ const question = (id: string, sessionID: string) =>
     metadata: { kind: "question" },
     fields: [{ key: "q0", type: "string" }],
   }) as FormInfo
+
+describe("sessionTreeIDs", () => {
+  test("returns only the current session and its descendants", () => {
+    const sessions = [
+      session({ id: "root" }),
+      session({ id: "child", parentID: "root" }),
+      session({ id: "grand", parentID: "child" }),
+      session({ id: "sibling", parentID: "root" }),
+      session({ id: "other" }),
+    ]
+
+    expect(sessionTreeIDs(sessions, "child")).toEqual(["child", "grand"])
+    expect(sessionTreeIDs(sessions, "root")).toEqual(["root", "child", "sibling", "grand"])
+    expect(sessionTreeIDs(sessions)).toEqual([])
+  })
+})
 
 describe("sessionPermissionRequest", () => {
   test("prefers the current session permission", () => {
@@ -81,7 +97,7 @@ describe("sessionPermissionRequest", () => {
   })
 })
 
-describe("sessionQuestionForm", () => {
+describe("sessionFormRequest", () => {
   test("prefers the current session question", () => {
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
     const questions = {
@@ -89,7 +105,7 @@ describe("sessionQuestionForm", () => {
       child: [question("q-child", "child")],
     }
 
-    expect(sessionQuestionForm(sessions, questions, "root")?.id).toBe("q-root")
+    expect(sessionFormRequest(sessions, questions, "root")?.id).toBe("q-root")
   })
 
   test("returns a nested child question", () => {
@@ -102,15 +118,29 @@ describe("sessionQuestionForm", () => {
       grand: [question("q-grand", "grand")],
     }
 
-    expect(sessionQuestionForm(sessions, questions, "root")?.id).toBe("q-grand")
+    expect(sessionFormRequest(sessions, questions, "root")?.id).toBe("q-grand")
   })
 
-  test("skips forms that are not questions", () => {
+  test("skips unsupported forms", () => {
     const sessions = [session({ id: "root" })]
     const forms = {
       root: [{ ...question("form", "root"), metadata: { kind: "integration" } }],
     }
 
-    expect(sessionQuestionForm(sessions, forms, "root")).toBeUndefined()
+    expect(sessionFormRequest(sessions, forms, "root")).toBeUndefined()
+  })
+
+  test("finds web search consent in a nested child session", () => {
+    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
+    const form = { ...question("search", "child"), metadata: { kind: "websearch.provider" } }
+    expect(sessionFormRequest(sessions, { child: [form] }, "root")).toBe(form)
+  })
+
+  test("preserves request order across questions and web search", () => {
+    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
+    const form = { ...question("search", "root"), metadata: { kind: "websearch.provider" } }
+    expect(sessionFormRequest(sessions, { root: [form, question("q", "root")] }, "root")).toBe(form)
+    expect(sessionFormRequest(sessions, { root: [question("q", "root"), form] }, "root")?.id).toBe("q")
+    expect(sessionFormRequest(sessions, { root: [form], child: [question("q", "child")] }, "root")).toBe(form)
   })
 })

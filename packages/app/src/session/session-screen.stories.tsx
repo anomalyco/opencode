@@ -138,6 +138,26 @@ export const QuestionRequest = {
   ),
 }
 
+export const WebSearchRequest = {
+  render: () => (
+    <SessionPreview
+      title="Search for current documentation"
+      description={description}
+      document={questionPendingDocument}
+      request={{
+        type: "websearch",
+        value: {
+          id: "frm_websearch_preview",
+          sessionID: "ses_websearch_preview",
+          title: "Web Search",
+          metadata: { kind: "websearch.provider" },
+          fields: [{ key: "choice", type: "string", required: true, custom: false }],
+        },
+      }}
+    />
+  ),
+}
+
 export const RetryAndInterruption = {
   render: () => (
     <SessionPreview title="Recover the interrupted run" description={description} document={retryAfterInterruption} />
