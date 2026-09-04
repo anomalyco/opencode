@@ -180,6 +180,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           description: "Remove stored OAuth credentials for an MCP server",
           params: { name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server")) },
         }),
+        Spec.make("remove", {
+          description: "Remove an MCP server from your configuration",
+          params: { name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server")) },
+        }),
       ],
     }),
     Spec.make("plugin", {

@@ -38,6 +38,7 @@ const Handlers = Runtime.handlers(Commands, {
     add: () => import("./commands/handlers/mcp/add"),
     auth: () => import("./commands/handlers/mcp/auth"),
     logout: () => import("./commands/handlers/mcp/logout"),
+    remove: () => import("./commands/handlers/mcp/remove"),
   },
   plugin: {
     list: () => import("./commands/handlers/plugin/list"),
