@@ -16,6 +16,9 @@ export function createWindowRegistry<W>(persistence: {
 
   return {
     persisted,
+    isQuitting() {
+      return quitting
+    },
     setQuitting(value = true) {
       quitting = value
     },
