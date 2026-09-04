@@ -137,6 +137,7 @@ const layer = Layer.effect(
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
+          process.stderr.write(`[plugin] ${message}\n`)
           bridge.fork(events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
         }
 
