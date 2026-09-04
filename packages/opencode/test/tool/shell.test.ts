@@ -1335,12 +1335,18 @@ describe("tool.shell background", () => {
           expect(meta.background).toBe(true)
           expect(result.metadata.truncated).toBe(false)
           expect(result.output).toContain(`state="running"`)
+          expect(result.output).toContain(`<log>`)
           const jobID = meta.jobId
           if (!jobID) throw new Error("expected jobId in metadata")
+          const logPath = (result.metadata as { logPath?: string }).logPath
+          expect(logPath).toBeTruthy()
 
           const waited = yield* jobs.wait({ id: jobID })
           expect(waited.info?.status).toBe("completed")
           expect(waited.info?.output).toContain("bg-marker-ok")
+
+          const log = yield* (yield* FSUtil.Service).readFileString(logPath!)
+          expect(log).toContain("bg-marker-ok")
 
           const injected = yield* Deferred.await(captured)
           expect(injected.sessionID).toBe(chat.id)

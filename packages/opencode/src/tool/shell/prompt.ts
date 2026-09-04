@@ -21,7 +21,7 @@ export function parameterSchema() {
     }),
     run_in_background: Schema.optional(Schema.Boolean).annotate({
       description:
-        "Set to true to run the command in the background and return immediately. The output is delivered automatically when the command exits; do not poll, sleep, or re-run the command while it runs. Intended for long-running commands like dev servers, watch processes, builds, or long test suites.",
+        "Set to true to run the command in the background and return immediately. The output is delivered automatically when the command exits; do not poll, sleep, or re-run the command while it runs. All output is also written to a log file (logPath in the result metadata) that you can Read or Grep at any time. Use the bash_jobs tool to list or kill background commands. Intended for long-running commands like dev servers, watch processes, builds, or long test suites.",
     }),
   })
 }
@@ -278,7 +278,9 @@ function backgroundSection(enabled: boolean) {
   if (!enabled) return ""
   return `# Running commands in the background
 - Set \`run_in_background: true\` for long-running commands (dev servers, watch modes, builds, long test suites) so you do not block on them.
-- The tool returns immediately with a \`jobId\` in its metadata; when the command exits, its output is delivered to you automatically as a new message.
+- The tool returns immediately with a \`jobId\` and a \`logPath\`; when the command exits, its output is delivered to you automatically as a new message.
+- All output is teed to the log file, so Read/Grep \`logPath\` if you ever need to inspect progress.
+- Use the \`bash_jobs\` tool to list background commands or kill one that is no longer needed.
 - While a background command runs, NEVER sleep, poll, check on it, or re-run it to see progress. Continue other work or briefly tell the user what you started and end your turn.
 - Do not use it when the next step depends on the command's result; run those commands in the foreground.`
 }

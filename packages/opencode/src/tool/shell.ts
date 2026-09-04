@@ -268,10 +268,16 @@ const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boole
 const BACKGROUND_GUIDANCE = [
   "The command is running in the background. You will be notified automatically when it finishes.",
   "DO NOT sleep, poll for progress, check on it, or run the same command again.",
-  "Continue with non-overlapping work, or briefly tell the user what you started and end your response.",
+  "If you truly need a peek, Read or Grep the log file in <log>; otherwise continue with non-overlapping work or end your response.",
 ].join("\n")
 
-function renderJobOutput(input: { jobID: string; command: string; state: "running" | "completed" | "error"; text: string }) {
+function renderJobOutput(input: {
+  jobID: string
+  command: string
+  state: "running" | "completed" | "error"
+  text: string
+  logPath?: string
+}) {
   const tag = input.state === "error" ? "shell_job_error" : "shell_job_result"
   const summary =
     input.state === "completed"
@@ -282,6 +288,7 @@ function renderJobOutput(input: { jobID: string; command: string; state: "runnin
   return [
     `<shell_job id="${input.jobID}" state="${input.state}">`,
     `<summary>${summary}</summary>`,
+    ...(input.logPath ? [`<log>${input.logPath}</log>`] : []),
     `<${tag}>`,
     input.text,
     `</${tag}>`,
@@ -466,6 +473,7 @@ export const ShellTool = Tool.define(
         env: NodeJS.ProcessEnv
         timeout: number | undefined
         background: boolean
+        logPath?: string
       },
       ctx: Tool.Context,
     ) {
@@ -514,6 +522,10 @@ export const ShellTool = Tool.define(
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(closeSink)
+          if (input.logPath) {
+            file = input.logPath
+            sink = createWriteStream(input.logPath, { flags: "a" })
+          }
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
           yield* Effect.forkScoped(
@@ -621,6 +633,7 @@ export const ShellTool = Tool.define(
           exit: code,
           truncated: cut,
           ...(cut && file ? { outputPath: file } : {}),
+          ...(input.background && file ? { logPath: file } : {}),
         },
         output,
       }
@@ -691,7 +704,7 @@ export const ShellTool = Tool.define(
                         {
                           type: "text",
                           synthetic: true,
-                          text: renderJobOutput({ jobID, command: params.command, state, text }),
+                          text: renderJobOutput({ jobID, command: params.command, state, text, logPath }),
                         },
                       ],
                     })
@@ -714,10 +727,11 @@ export const ShellTool = Tool.define(
                   )
                 })
 
+                const logPath = yield* trunc.write("")
                 const started = yield* background.start({
                   type: ShellID.ToolID,
                   title: params.command,
-                  metadata: { command: params.command, cwd, background: true },
+                  metadata: { command: params.command, cwd, background: true, logPath },
                   run: run(
                     {
                       shell,
@@ -726,6 +740,7 @@ export const ShellTool = Tool.define(
                       env,
                       timeout: params.timeout,
                       background: true,
+                      logPath,
                     },
                     ctx,
                   ).pipe(Effect.map((result) => result.output)),
@@ -739,12 +754,14 @@ export const ShellTool = Tool.define(
                     truncated: false,
                     background: true,
                     jobId: started.id,
+                    logPath,
                   },
                   output: renderJobOutput({
                     jobID: started.id,
                     command: params.command,
                     state: "running",
                     text: BACKGROUND_GUIDANCE,
+                    logPath,
                   }),
                 }
               }
