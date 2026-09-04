@@ -404,6 +404,33 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   }
 }
 
+export function cacheBustWarning(input: {
+  providerID: string
+  modelID: string
+  sessionID: string
+  finish: string
+  usage: ReturnType<typeof getUsage>
+}) {
+  const cacheWriteTokens = input.usage.tokens.cache.write
+  const cacheReadTokens = input.usage.tokens.cache.read
+  if (cacheWriteTokens < 50_000) return undefined
+  if (cacheReadTokens !== 0) return undefined
+
+  const provider = input.providerID.toLowerCase()
+  const model = input.modelID.toLowerCase()
+  if (!provider.includes("anthropic") && !model.includes("claude")) return undefined
+
+  return {
+    providerID: input.providerID,
+    modelID: input.modelID,
+    sessionID: input.sessionID,
+    finish: input.finish,
+    cost: input.usage.cost,
+    cacheWriteTokens,
+    cacheReadTokens,
+  }
+}
+
 export class BusyError extends Schema.TaggedErrorClass<BusyError>()("SessionBusyError", {
   sessionID: SessionID,
 }) {}
