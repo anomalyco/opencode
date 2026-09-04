@@ -1,4 +1,5 @@
 import path from "path"
+import { mkdir } from "fs/promises"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
@@ -12,6 +13,36 @@ describe("NpmConfig.load", () => {
     const config = await Effect.runPromise(NpmConfig.load(tmp.path))
 
     expect(config.registry).toBe("https://registry.example.test/")
+  })
+
+  test("prefers the requested directory over ancestor package.json anchors", async () => {
+    await using tmp = await tmpdir()
+    // An ancestor holding package.json captures @npmcli/config's prefix walk,
+    // which would otherwise read this .npmrc instead of the requested dir's.
+    await Bun.write(path.join(tmp.path, "package.json"), JSON.stringify({ name: "anchor" }))
+    await Bun.write(path.join(tmp.path, ".npmrc"), "registry=https://ancestor.example.test/\n")
+
+    const dir = path.join(tmp.path, "project")
+    await mkdir(dir)
+    await Bun.write(path.join(dir, ".npmrc"), "registry=https://project.example.test/\n")
+
+    const config = await Effect.runPromise(NpmConfig.load(dir))
+
+    expect(config.registry).toBe("https://project.example.test/")
+  })
+
+  test("prefers the requested directory over ancestor node_modules anchors", async () => {
+    await using tmp = await tmpdir()
+    await mkdir(path.join(tmp.path, "node_modules"))
+    await Bun.write(path.join(tmp.path, ".npmrc"), "registry=https://ancestor.example.test/\n")
+
+    const dir = path.join(tmp.path, "project")
+    await mkdir(dir)
+    await Bun.write(path.join(dir, ".npmrc"), "registry=https://project.example.test/\n")
+
+    const config = await Effect.runPromise(NpmConfig.load(dir))
+
+    expect(config.registry).toBe("https://project.example.test/")
   })
 
   test("reads scoped registries from project .npmrc", async () => {
