@@ -263,6 +263,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                       title={i18n.t("ui.promptInput.chooseVariant")}
                       keybind={["Shift", "Mod", "D"]}
                       control={control}
+                      class={control.current() === "default" ? "composer-variant-default" : undefined}
                     />
                   </Show>
                 )}
@@ -596,12 +597,14 @@ function ComposerEditorConfiguredSelect(props: {
   keybind?: string[]
   control: ComposerSelectControl
   model?: boolean
+  class?: string
 }) {
   const current = () => props.control.current()
   const providerID = () => props.control.options().find((option) => option.id === current())?.providerID
   return (
     <ComposerEditorSelect
       title={props.title}
+      class={props.class}
       keybind={props.control.keybind?.() ?? props.keybind}
       options={props.control.options()}
       current={current()}
