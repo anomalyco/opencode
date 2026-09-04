@@ -7,7 +7,6 @@ import {
   type StatsModelComparisonInput,
   type StatsModelComparisonEntry,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams, useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -46,6 +45,7 @@ import {
   type ResolvedComparisonFamily,
 } from "../lib/comparison-pages"
 import { baseUrl } from "../lib/language"
+import { runStatsEffect } from "../stats-runtime"
 
 const compareHeaderLinks: readonly HeaderLink[] = [
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
@@ -110,7 +110,7 @@ export type ModelCompareDetailPageProps = {
 
 const getComparisonData = query(async (models: StatsModelComparisonInput[]) => {
   "use server"
-  return runtime.runPromise(getStatsModelsComparisonData(models))
+  return runStatsEffect(getStatsModelsComparisonData(models))
 }, "getStatsModelComparisonDetailData")
 
 export default function ModelCompareDetailPage(props: ModelCompareDetailPageProps = {}) {

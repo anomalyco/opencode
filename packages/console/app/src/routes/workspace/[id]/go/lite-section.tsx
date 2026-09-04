@@ -652,6 +652,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>LongCat-2.0</li>
             <li>MiniMax M3</li>
             <li>MiniMax M2.7</li>
+            <li>Muse Spark 1.3 Contributor</li>
             <li>Muse Spark 1.2 Contributor</li>
             <li>Qwen3.8 Max</li>
             <li>Qwen3.8 Flash</li>
@@ -663,7 +664,9 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>DeepSeek V4 Flash Vision Exp</li>
             <li>MiMo-V2.5</li>
             <li>MiMo-V2.5-Pro</li>
+            <li>Hy4 preview</li>
             <li>Hy3</li>
+            <li>Omen Alpha</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <div data-slot="subscribe-actions">
