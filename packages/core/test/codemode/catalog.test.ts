@@ -131,6 +131,7 @@ describe("CodeModeInstructions.render", () => {
     expect(partial).toContain("## Available tools")
     expect(partial).toContain("- orders (1 tool, none shown)")
     expect(partial).toContain("## Search")
+    expect(partial).toContain("Call `search(...)` to discover exact paths and signatures for additional tools:")
     expect(partial).toContain("The Code Mode tool catalog below is partial.")
     expect(partial).toContain(
       "The Code Mode catalog and `search` results are the complete set of tools available within Code Mode.",

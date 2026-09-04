@@ -12,7 +12,7 @@ ${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalo
 
 ## Search
 
-Use \`search\` to discover exact paths and signatures for additional tools:
+Call \`search(...)\` to discover exact paths and signatures for additional tools:
 
 - ${searchSignature}` : ""}
 
