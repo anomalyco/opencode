@@ -918,6 +918,7 @@ export const dict: Record<string, string> = {
   "settings.plugins.source.all": "सबै स्रोत",
   "settings.plugins.source.ecosystem": "पारिस्थितिकी प्रणाली",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "प्लगइन खोज्नुहोस्…",
   "settings.plugins.detail.install": "स्थापना गर्नुहोस्…",
   "settings.plugins.detail.copy": "कन्फिग स्निपेट प्रतिलिपि गर्नुहोस्",

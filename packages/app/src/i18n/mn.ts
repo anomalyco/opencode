@@ -926,6 +926,7 @@ export const dict = {
   "settings.plugins.source.all": "Бүх эх сурвалж",
   "settings.plugins.source.ecosystem": "Экосистем",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Плагин хайх…",
   "settings.plugins.detail.install": "Суулгах…",
   "settings.plugins.detail.copy": "Тохиргооны хэсгийг хуулах",

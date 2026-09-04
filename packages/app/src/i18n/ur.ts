@@ -928,6 +928,7 @@ export const dict = {
   "settings.plugins.source.all": "تمام ذرائع",
   "settings.plugins.source.ecosystem": "ماحولیاتی نظام",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "پلگ ان تلاش کریں…",
   "settings.plugins.detail.install": "انسٹال کریں…",
   "settings.plugins.detail.copy": "کنفیگ سنیپٹ کاپی کریں",

@@ -587,6 +587,7 @@ export const dict = {
   "settings.plugins.source.all": "모든 소스",
   "settings.plugins.source.ecosystem": "에코시스템",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "플러그인 검색…",
   "settings.plugins.detail.install": "설치…",
   "settings.plugins.detail.copy": "설정 스니펫 복사",

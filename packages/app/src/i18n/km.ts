@@ -916,6 +916,7 @@ export const dict = {
   "settings.plugins.source.all": "ប្រភពទាំងអស់",
   "settings.plugins.source.ecosystem": "ប្រព័ន្ធអេកូ",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "ស្វែងរកប្លាកអ៊ីន…",
   "settings.plugins.detail.install": "ដំឡើង…",
   "settings.plugins.detail.copy": "ចម្លងកំណត់រចនាសម្ព័ន្ធ",

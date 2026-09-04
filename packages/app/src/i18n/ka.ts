@@ -918,6 +918,7 @@ export const dict = {
   "settings.plugins.source.all": "ყველა წყარო",
   "settings.plugins.source.ecosystem": "ეკოსისტემა",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "პლაგინების ძიება…",
   "settings.plugins.detail.install": "ინსტალაცია…",
   "settings.plugins.detail.copy": "კონფიგურაციის ფრაგმენტის კოპირება",

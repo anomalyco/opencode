@@ -933,6 +933,7 @@ export const dict = {
   "settings.plugins.source.all": "ހުންނާ އެންމެން",
   "settings.plugins.source.ecosystem": "އެކޮސިސްޓަމް",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "ޕްލަގިން ހޯދާ…",
   "settings.plugins.detail.install": "އެންސްޓޯލް",
   "settings.plugins.detail.copy": "ކޮނފިގް ސްނިޕެޓް ކޮޕީ",

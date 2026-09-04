@@ -1011,6 +1011,7 @@ export const dict = {
   "settings.plugins.source.all": "Усі джерела",
   "settings.plugins.source.ecosystem": "Екосистема",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Пошук плагінів…",
   "settings.plugins.detail.install": "Встановити…",
   "settings.plugins.detail.copy": "Копіювати фрагмент конфігурації",

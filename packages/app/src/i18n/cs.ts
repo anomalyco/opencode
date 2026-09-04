@@ -924,6 +924,7 @@ export const dict = {
   "settings.plugins.source.all": "Všechny zdroje",
   "settings.plugins.source.ecosystem": "Ekosystém",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Hledat pluginy…",
   "settings.plugins.detail.install": "Nainstalovat…",
   "settings.plugins.detail.copy": "Zkopírovat úryvek konfigurace",

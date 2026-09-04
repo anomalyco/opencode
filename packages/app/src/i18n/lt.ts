@@ -933,6 +933,7 @@ export const dict = {
   "settings.plugins.source.all": "Visi šaltiniai",
   "settings.plugins.source.ecosystem": "Ekosistema",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Ieškoti įskiepių…",
   "settings.plugins.detail.install": "Įdiegti…",
   "settings.plugins.detail.copy": "Kopijuoti konfigūracijos fragmentą",

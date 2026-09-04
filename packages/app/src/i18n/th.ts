@@ -891,6 +891,7 @@ export const dict = {
   "settings.plugins.source.all": "แหล่งที่มาทั้งหมด",
   "settings.plugins.source.ecosystem": "ระบบนิเวศ",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "ค้นหาปลั๊กอิน…",
   "settings.plugins.detail.install": "ติดตั้ง…",
   "settings.plugins.detail.copy": "คัดลอกข้อความคอนฟิก",

@@ -838,6 +838,7 @@ export const dict = {
   "settings.plugins.source.all": "جميع المصادر",
   "settings.plugins.source.ecosystem": "المنظومة",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "البحث في الإضافات…",
   "settings.plugins.detail.install": "تثبيت…",
   "settings.plugins.detail.copy": "نسخ مقتطف الإعدادات",

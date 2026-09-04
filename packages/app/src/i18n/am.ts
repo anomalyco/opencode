@@ -900,6 +900,7 @@ export const dict = {
   "settings.plugins.source.all": "ሁሉንም ምንጮች",
   "settings.plugins.source.ecosystem": "ኢኮሲስተም",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "ተሰኪዎችን ይፈልጉ…",
   "settings.plugins.detail.install": "ይጫኑ…",
   "settings.plugins.detail.copy": "የውቅር ነገር መቀየሪያ ቅንጣት ቅዳ",

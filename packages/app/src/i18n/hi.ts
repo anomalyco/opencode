@@ -927,6 +927,7 @@ export const dict = {
   "settings.plugins.source.all": "सभी स्रोत",
   "settings.plugins.source.ecosystem": "इकोसिस्टम",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "प्लगइन खोजें…",
   "settings.plugins.detail.install": "इंस्टॉल करें…",
   "settings.plugins.detail.copy": "कॉन्फ़िग स्निपेट कॉपी करें",

@@ -926,6 +926,7 @@ export const dict = {
   "settings.plugins.source.all": "Barcha manbalar",
   "settings.plugins.source.ecosystem": "Ekosistem",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Plaginlarni qidirish…",
   "settings.plugins.detail.install": "Oʻrnatish…",
   "settings.plugins.detail.copy": "Konfiguratsiya boʻlagini nusxalash",

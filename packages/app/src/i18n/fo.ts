@@ -918,6 +918,7 @@ export const dict = {
   "settings.plugins.source.all": "Allar keldur",
   "settings.plugins.source.ecosystem": "Økosystem",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Leita eftir íviðkunum…",
   "settings.plugins.detail.install": "Set upp…",
   "settings.plugins.detail.copy": "Avrita uppsetingarbrot",

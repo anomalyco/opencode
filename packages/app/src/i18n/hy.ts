@@ -926,6 +926,7 @@ export const dict = {
   "settings.plugins.source.all": "Բոլոր աղբյուրները",
   "settings.plugins.source.ecosystem": "Էկոհամակարգ",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Որոնել հավելումներ…",
   "settings.plugins.detail.install": "Տեղադրել…",
   "settings.plugins.detail.copy": "Պատճենել կոնֆիգի հատվածը",

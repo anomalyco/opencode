@@ -767,6 +767,7 @@ export const dict = {
   "settings.plugins.source.all": "Alle kilder",
   "settings.plugins.source.ecosystem": "Økosystem",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Søk etter pluginer…",
   "settings.plugins.detail.install": "Installer…",
   "settings.plugins.detail.copy": "Kopier konfigurasjonsutdrag",

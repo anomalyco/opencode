@@ -930,6 +930,7 @@ export const dict = {
   "settings.plugins.source.all": "Tất cả nguồn",
   "settings.plugins.source.ecosystem": "Hệ sinh thái",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Tìm kiếm plugin…",
   "settings.plugins.detail.install": "Cài đặt…",
   "settings.plugins.detail.copy": "Sao chép đoạn cấu hình",

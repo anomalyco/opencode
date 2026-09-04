@@ -52,7 +52,7 @@ export const SettingsPluginsV2: Component<{}> = () => {
 
   const [view, setView] = createSignal<"browse" | "installed">("browse")
   const [query, setQuery] = createSignal("")
-  const [sourceFilter, setSourceFilter] = createSignal<"all" | "ecosystem" | "awesome">("all")
+  const [sourceFilter, setSourceFilter] = createSignal<"all" | "ecosystem" | "awesome" | "cafe">("all")
   const [busy, setBusy] = createSignal(false)
   const [copied, setCopied] = createSignal<string | undefined>()
   const [configsError, setConfigsError] = createSignal<string | undefined>()
@@ -250,6 +250,13 @@ export const SettingsPluginsV2: Component<{}> = () => {
                 onClick={() => setSourceFilter("awesome")}
               >
                 {language.t("settings.plugins.source.awesome")}
+              </ButtonV2>
+              <ButtonV2
+                size="normal"
+                variant={sourceFilter() === "cafe" ? "neutral" : "ghost-muted"}
+                onClick={() => setSourceFilter("cafe")}
+              >
+                {language.t("settings.plugins.source.cafe")}
               </ButtonV2>
             </div>
             <TextInputV2

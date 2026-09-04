@@ -922,6 +922,7 @@ export const dict = {
   "settings.plugins.source.all": "Сви извори",
   "settings.plugins.source.ecosystem": "Екосистем",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Тражи додатке…",
   "settings.plugins.detail.install": "Инсталирај…",
   "settings.plugins.detail.copy": "Копирај исечак конфигурације",

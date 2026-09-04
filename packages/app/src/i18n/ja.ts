@@ -826,6 +826,7 @@ export const dict = {
   "settings.plugins.source.all": "すべてのソース",
   "settings.plugins.source.ecosystem": "エコシステム",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "プラグインを検索…",
   "settings.plugins.detail.install": "インストール…",
   "settings.plugins.detail.copy": "設定スニペットをコピー",

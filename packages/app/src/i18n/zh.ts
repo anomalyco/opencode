@@ -889,6 +889,7 @@ export const dict = {
   "settings.plugins.source.all": "全部来源",
   "settings.plugins.source.ecosystem": "生态系统",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "搜索插件…",
   "settings.plugins.detail.install": "安装…",
   "settings.plugins.detail.copy": "复制配置片段",

@@ -3,10 +3,13 @@ import { join } from "node:path"
 
 const ECOSYSTEM_URL = "https://opencode.ai/docs/ecosystem/"
 const AWESOME_URL = "https://raw.githubusercontent.com/awesome-opencode/awesome-opencode/main/README.md"
+const CAFE_URL = "https://raw.githubusercontent.com/R44VC0RP/opencode.cafe/main/bulk/plugins.json"
 const NPM_REGISTRY = "https://registry.npmjs.org/"
 const NPM_DOWNLOADS = "https://api.npmjs.org/downloads/point/last-week/"
 const CACHE_FILE = "plugin-catalog-cache.json"
 const TTL_MS = 24 * 60 * 60 * 1000
+
+export type CatalogSource = "ecosystem" | "awesome" | "cafe"
 
 export type CatalogEntry = {
   name: string
@@ -16,12 +19,12 @@ export type CatalogEntry = {
   updatedAt?: string
   repository?: string
   onNpm: boolean
-  source: "ecosystem" | "awesome"
+  source: CatalogSource
 }
 
 export type CatalogResult = { entries: CatalogEntry[]; fetchedAt: number; stale: boolean }
 
-type RawEntry = { name: string; description?: string; url?: string; source: "ecosystem" | "awesome" }
+type RawEntry = { name: string; description?: string; url?: string; source: CatalogSource }
 
 const NPM_CONCURRENCY = 12
 
@@ -87,6 +90,36 @@ export function createCatalogFetcher(deps: {
       out.push({ name, description: m[3].trim(), url: m[2], source: "awesome" })
     }
     return out
+  }
+
+  const parseCafe = (raw: string): RawEntry[] => {
+    // opencode.cafe publishes a structured JSON list of marketplace entries.
+    // Only entries with type "plugin" belong in the plugin catalog.
+    try {
+      const parsed = JSON.parse(raw)
+      const items = Array.isArray(parsed) ? parsed : (parsed?.plugins ?? [])
+      if (!Array.isArray(items)) return []
+      const out: RawEntry[] = []
+      for (const item of items) {
+        if (typeof item !== "object" || item === null) continue
+        const type = (item as { type?: unknown }).type
+        if (type !== "plugin") continue
+        const productId = (item as { productId?: unknown }).productId
+        const name = typeof productId === "string" ? productId : (item as { displayName?: unknown }).displayName
+        if (typeof name !== "string" || !name.trim()) continue
+        const description = (item as { description?: unknown }).description
+        const repoUrl = (item as { repoUrl?: unknown }).repoUrl
+        out.push({
+          name: name.trim(),
+          description: typeof description === "string" ? description : undefined,
+          url: typeof repoUrl === "string" ? repoUrl : undefined,
+          source: "cafe",
+        })
+      }
+      return out
+    } catch {
+      return []
+    }
   }
 
   const stripTags = (s: string) =>
@@ -166,7 +199,8 @@ export function createCatalogFetcher(deps: {
   }
 
   async function fetchFresh(): Promise<CatalogResult> {
-    const [ecoRes, awesomeRes] = await Promise.all([
+    // cafe is optional: a failure there must not take down the curated sources.
+    const [ecoRes, awesomeRes, cafeRes] = await Promise.all([
       doFetch(ECOSYSTEM_URL).then((r) => {
         if (!r.ok) throw new Error(`ecosystem source returned ${r.status}`)
         return r.text()
@@ -175,8 +209,11 @@ export function createCatalogFetcher(deps: {
         if (!r.ok) throw new Error(`awesome source returned ${r.status}`)
         return r.text()
       }),
+      doFetch(CAFE_URL)
+        .then((r) => (r.ok ? r.text() : ""))
+        .catch(() => ""),
     ])
-    const raw = [...parseEcosystem(ecoRes), ...parseAwesome(awesomeRes)]
+    const raw = [...parseEcosystem(ecoRes), ...parseAwesome(awesomeRes), ...parseCafe(cafeRes)]
 
     // Dedupe by npm-ish name, ecosystem wins
     const byName = new Map<string, RawEntry>()

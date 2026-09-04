@@ -928,6 +928,7 @@ export const dict = {
   "settings.plugins.source.all": "Alle bronnen",
   "settings.plugins.source.ecosystem": "Ecosysteem",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Plugins zoeken…",
   "settings.plugins.detail.install": "Installeren…",
   "settings.plugins.detail.copy": "Configfragment kopiëren",

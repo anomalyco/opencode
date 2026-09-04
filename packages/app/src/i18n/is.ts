@@ -921,6 +921,7 @@ export const dict = {
   "settings.plugins.source.all": "Allar heimildir",
   "settings.plugins.source.ecosystem": "Vistkerfi",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Leita að viðbótum…",
   "settings.plugins.detail.install": "Setja upp…",
   "settings.plugins.detail.copy": "Afrita stillingabrot",

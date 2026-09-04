@@ -918,6 +918,7 @@ export const dict = {
   "settings.plugins.source.all": "Semua sumber",
   "settings.plugins.source.ecosystem": "Ekosistem",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Cari plugin…",
   "settings.plugins.detail.install": "Pasang…",
   "settings.plugins.detail.copy": "Salin petikan konfigurasi",

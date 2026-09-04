@@ -922,6 +922,7 @@ export const dict = {
   "settings.plugins.source.all": "Ҳамаи манбаъҳо",
   "settings.plugins.source.ecosystem": "Экосистема",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Ҷустуҷӯи плагинҳо…",
   "settings.plugins.detail.install": "Насб кардан…",
   "settings.plugins.detail.copy": "Нусхаи фрагменти конфигуратсия",

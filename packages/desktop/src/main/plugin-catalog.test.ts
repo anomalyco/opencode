@@ -7,6 +7,24 @@ import { createCatalogFetcher } from "./plugin-catalog"
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
+const CAFE_JSON = JSON.stringify([
+  {
+    productId: "opencode-helicone-session",
+    type: "plugin",
+    displayName: "OpenCode Helicone Session",
+    description: "Automatically inject Helicone session headers",
+    repoUrl: "https://github.com/H2Shami/opencode-helicone-session",
+  },
+  {
+    productId: "cafe-only-plugin",
+    type: "plugin",
+    displayName: "Cafe Only Plugin",
+    description: "Only on the cafe",
+    repoUrl: "https://github.com/example/cafe-only-plugin",
+  },
+  { productId: "not-a-plugin", type: "mcp-server", displayName: "Skip me", repoUrl: "https://github.com/x/y" },
+])
+
 const ECOSYSTEM_HTML = `
 <section id="plugins">
   <table>
@@ -328,5 +346,50 @@ describe("createCatalogFetcher", () => {
     // but never exceed the cap (12).
     expect(peak).toBeGreaterThan(1)
     expect(peak).toBeLessThanOrEqual(12)
+  })
+
+  test("opencode.cafe entries are merged with source 'cafe', deduped by npm name", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(ECOSYSTEM_HTML)
+      if (url.includes("awesome-opencode")) return new Response(AWESOME_MD)
+      if (url.includes("opencode.cafe") && url.includes("plugins.json")) return new Response(CAFE_JSON)
+      if (url.startsWith("https://registry.npmjs.org/opencode-helicone-session"))
+        return json(npmPackument("opencode-helicone-session", "0.1.0", "Inject Helicone session headers"))
+      if (url.startsWith("https://registry.npmjs.org/opencode-daytona"))
+        return json(npmPackument("opencode-daytona", "1.2.3", "Run sessions in Daytona sandboxes"))
+      if (url.startsWith("https://registry.npmjs.org/")) return new Response("nf", { status: 404 })
+      if (url.startsWith("https://api.npmjs.org/")) return json({ downloads: 1 })
+      throw new Error("unexpected fetch: " + url)
+    }
+    const f = createCatalogFetcher({ fetchImpl, cacheDir: dir })
+    const result = await f.fetchCatalog()
+    // cafe-only entry exists with source cafe
+    const cafeOnly = result.entries.find((e) => e.name === "cafe-only-plugin")
+    expect(cafeOnly?.source).toBe("cafe")
+    expect(cafeOnly?.description).toBe("Only on the cafe")
+    expect(cafeOnly?.repository).toBe("https://github.com/example/cafe-only-plugin")
+    // non-plugin types are skipped
+    expect(result.entries.find((e) => e.name === "not-a-plugin")).toBeUndefined()
+    // dedupe: helicone exists on both awesome and cafe; cafe entry enriched from npm
+    const helicone = result.entries.filter((e) => e.name === "opencode-helicone-session")
+    expect(helicone).toHaveLength(1)
+    expect(helicone[0].onNpm).toBe(true)
+  })
+
+  test("cafe source failure does not break the rest of the catalog", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes("opencode.ai/docs/ecosystem")) return new Response(ECOSYSTEM_HTML)
+      if (url.includes("awesome-opencode")) return new Response(AWESOME_MD)
+      if (url.includes("opencode.cafe")) return new Response("boom", { status: 500 })
+      if (url.startsWith("https://registry.npmjs.org/")) return new Response("nf", { status: 404 })
+      if (url.startsWith("https://api.npmjs.org/")) return json({ downloads: 1 })
+      throw new Error("unexpected fetch: " + url)
+    }
+    const f = createCatalogFetcher({ fetchImpl, cacheDir: dir })
+    const result = await f.fetchCatalog()
+    expect(result.entries.length).toBeGreaterThan(0)
+    expect(result.entries.find((e) => e.name === "opencode-daytona")).toBeDefined()
   })
 })

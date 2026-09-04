@@ -915,6 +915,7 @@ export const dict = {
   "settings.plugins.source.all": "Kõik allikad",
   "settings.plugins.source.ecosystem": "Ökosüsteem",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Otsi pluginaid…",
   "settings.plugins.detail.install": "Paigalda…",
   "settings.plugins.detail.copy": "Kopeeri konfiguratsioonilõik",

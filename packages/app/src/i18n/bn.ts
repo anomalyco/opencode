@@ -917,6 +917,7 @@ export const dict: Record<string, string> = {
   "settings.plugins.source.all": "সব উৎস",
   "settings.plugins.source.ecosystem": "ইকোসিস্টেম",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "প্লাগইন খুঁজুন…",
   "settings.plugins.detail.install": "ইনস্টল করুন…",
   "settings.plugins.detail.copy": "কনফিগ স্নিপেট কপি করুন",

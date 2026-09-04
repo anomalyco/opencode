@@ -919,6 +919,7 @@ export const dict = {
   "settings.plugins.source.all": "Ähli çeşmeler",
   "settings.plugins.source.ecosystem": "Ekosistem",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Plaginleri gözle…",
   "settings.plugins.detail.install": "Gurna…",
   "settings.plugins.detail.copy": "Konfigurasiýa bölejini göçüriň",

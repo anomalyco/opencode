@@ -927,6 +927,7 @@ export const dict = {
   "settings.plugins.source.all": "Minden forrás",
   "settings.plugins.source.ecosystem": "Ökoszisztéma",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Pluginok keresése…",
   "settings.plugins.detail.install": "Telepítés…",
   "settings.plugins.detail.copy": "Konfigurációrészlet másolása",

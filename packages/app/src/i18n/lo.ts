@@ -913,6 +913,7 @@ export const dict = {
   "settings.plugins.source.all": "ແຫຼ່ງທັງໝົດ",
   "settings.plugins.source.ecosystem": "ລະບົບນິເວດ",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "ຄົ້ນຫາປລັກອິນ…",
   "settings.plugins.detail.install": "ຕິດຕັ້ງ…",
   "settings.plugins.detail.copy": "ສຳເນົາຊິ້ນສ່ວນການຕັ້ງຄ່າ",

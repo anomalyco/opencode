@@ -922,6 +922,7 @@ export const dict = {
   "settings.plugins.source.all": "Të gjitha burimet",
   "settings.plugins.source.ecosystem": "Ekosistemi",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Kërko shtojca…",
   "settings.plugins.detail.install": "Instalo…",
   "settings.plugins.detail.copy": "Kopjo fragmentin e konfigurimit",

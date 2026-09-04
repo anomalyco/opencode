@@ -923,6 +923,7 @@ export const dict = {
   "settings.plugins.source.all": "Toate sursele",
   "settings.plugins.source.ecosystem": "Ecosistem",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Caută pluginuri…",
   "settings.plugins.detail.install": "Instalează…",
   "settings.plugins.detail.copy": "Copiază fragmentul de configurare",

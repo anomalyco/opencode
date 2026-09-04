@@ -928,6 +928,7 @@ export const dict = {
   "settings.plugins.source.all": "Bütün mənbələr",
   "settings.plugins.source.ecosystem": "Ekosistem",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Plaqin axtar…",
   "settings.plugins.detail.install": "Quraşdır…",
   "settings.plugins.detail.copy": "Konfiqurasiya parçasını kopyala",

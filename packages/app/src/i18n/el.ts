@@ -929,6 +929,7 @@ export const dict = {
   "settings.plugins.source.all": "Όλες οι πηγές",
   "settings.plugins.source.ecosystem": "Οικοσύστημα",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Αναζήτηση πρόσθετων…",
   "settings.plugins.detail.install": "Εγκατάσταση…",
   "settings.plugins.detail.copy": "Αντιγραφή τμήματος ρυθμίσεων",

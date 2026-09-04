@@ -931,6 +931,7 @@ export const dict = {
   "settings.plugins.source.all": "အရင်းအမြစ်အားလုံး",
   "settings.plugins.source.ecosystem": "ဂေဟစနစ်",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "ပလပ်ဂင် ရှာဖွေ…",
   "settings.plugins.detail.install": "ထည့်သွင်း…",
   "settings.plugins.detail.copy": "config အပိုင်းကို ကူးယူ",

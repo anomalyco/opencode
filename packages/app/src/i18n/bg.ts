@@ -925,6 +925,7 @@ export const dict = {
   "settings.plugins.source.all": "Всички източници",
   "settings.plugins.source.ecosystem": "Екосистема",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Търсене на приставки…",
   "settings.plugins.detail.install": "Инсталиране…",
   "settings.plugins.detail.copy": "Копиране на откъс от конфигурацията",

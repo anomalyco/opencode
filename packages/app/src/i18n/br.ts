@@ -841,6 +841,7 @@ export const dict = {
   "settings.plugins.source.all": "An holl vammenoù",
   "settings.plugins.source.ecosystem": "Ekoreizhiad",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Klask pelestradurioù…",
   "settings.plugins.detail.install": "Staliañ…",
   "settings.plugins.detail.copy": "Eilañ ar framm kefluniañ",

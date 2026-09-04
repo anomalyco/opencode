@@ -818,6 +818,7 @@ export const dict = {
   "settings.plugins.source.all": "Kaikki lähteet",
   "settings.plugins.source.ecosystem": "Ekosysteemi",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Etsi liitännäisiä…",
   "settings.plugins.detail.install": "Asenna…",
   "settings.plugins.detail.copy": "Kopioi määrityskatkelma",

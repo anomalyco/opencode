@@ -928,6 +928,7 @@ export const dict = {
   "settings.plugins.source.all": "Totes les fonts",
   "settings.plugins.source.ecosystem": "Ecosistema",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Cerca complements…",
   "settings.plugins.detail.install": "Instal·la…",
   "settings.plugins.detail.copy": "Copia el fragment de configuració",

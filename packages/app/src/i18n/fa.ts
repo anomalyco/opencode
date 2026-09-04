@@ -916,6 +916,7 @@ export const dict = {
   "settings.plugins.source.all": "همه منابع",
   "settings.plugins.source.ecosystem": "اکوسیستم",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "جستجوی افزونه‌ها…",
   "settings.plugins.detail.install": "نصب…",
   "settings.plugins.detail.copy": "کپی قطعه پیکربندی",

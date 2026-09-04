@@ -924,6 +924,7 @@ export const dict = {
   "settings.plugins.source.all": "Visi avoti",
   "settings.plugins.source.ecosystem": "Ekosistēma",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "Meklēt spraudņus…",
   "settings.plugins.detail.install": "Uzstādīt…",
   "settings.plugins.detail.copy": "Kopēt konfigurācijas fragmentu",

@@ -883,6 +883,7 @@ export const dict = {
   "settings.plugins.source.all": "全部來源",
   "settings.plugins.source.ecosystem": "生態系統",
   "settings.plugins.source.awesome": "Awesome",
+  "settings.plugins.source.cafe": "Cafe",
   "settings.plugins.search.placeholder": "搜尋外掛…",
   "settings.plugins.detail.install": "安裝…",
   "settings.plugins.detail.copy": "複製設定片段",
