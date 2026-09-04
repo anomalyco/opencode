@@ -3,10 +3,10 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
   getStatsModelsComparisonData,
   type ModelUsagePoint,
+  type RetentionEntry,
   type StatsModelComparisonInput,
   type StatsModelComparisonEntry,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams, useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -45,6 +45,7 @@ import {
   type ResolvedComparisonFamily,
 } from "../lib/comparison-pages"
 import { baseUrl } from "../lib/language"
+import { runStatsEffect } from "../stats-runtime"
 
 const compareHeaderLinks: readonly HeaderLink[] = [
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
@@ -109,7 +110,7 @@ export type ModelCompareDetailPageProps = {
 
 const getComparisonData = query(async (models: StatsModelComparisonInput[]) => {
   "use server"
-  return runtime.runPromise(getStatsModelsComparisonData(models))
+  return runStatsEffect(getStatsModelsComparisonData(models))
 }, "getStatsModelComparisonDetailData")
 
 export default function ModelCompareDetailPage(props: ModelCompareDetailPageProps = {}) {
@@ -949,6 +950,17 @@ function buildComparisonDetailSections(models: readonly ComparisonModel[]): Comp
       ],
       usage: models.map((model) => model.stats?.usage ?? []),
     },
+    {
+      title: "Retention",
+      badge: "Week 1",
+      rows: [
+        comparisonDetailRow(
+          "Returning users",
+          models.map((model) => retentionCell(model.stats?.weeklyRetention)),
+          "higher",
+        ),
+      ],
+    },
   ]
 }
 
@@ -1029,6 +1041,15 @@ function usageMetricCell(value: number | undefined, format: "compact" | "integer
 
 function percentCell(value: number | undefined): ComparisonDetailCell {
   return value === undefined ? { value: "No usage" } : { value: formatPercent(value), score: value }
+}
+
+function retentionCell(value: RetentionEntry | null | undefined): ComparisonDetailCell {
+  if (!value || value.rank === null) return { value: "Pending" }
+  return {
+    value: formatPercent(value.rate),
+    unit: `${formatTokens(value.eligibleUserWeeks)} user-weeks`,
+    score: value.rate,
+  }
 }
 
 function tokenCell(value: number | undefined, trend: number | undefined): ComparisonDetailCell {

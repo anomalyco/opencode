@@ -1,0 +1,3 @@
+{
+  "mcp": { "timeout": { "startup": 1000, "catalog": 2000 } },
+}

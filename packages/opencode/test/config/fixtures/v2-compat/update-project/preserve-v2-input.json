@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "username": "before",
+  "mcp": {
+    "servers": {
+      "modern": {
+        "type": "local",
+        "command": ["modern-mcp"],
+        "disabled": true
+      }
+    }
+  },
+  "providers": {
+    "example": {
+      "settings": { "apiKey": "fixture-secret" }
+    }
+  }
+}

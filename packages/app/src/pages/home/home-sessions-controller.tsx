@@ -219,13 +219,15 @@ export function createHomeSessionsController(home: HomeController) {
               directory: session.directory,
               time: { archived: Date.now() },
             }),
-          remove: () =>
+          remove: () => {
             setStore(
               produce((draft) => {
                 const match = Binary.search(draft.session, session.id, (item) => item.id)
                 if (match.found) draft.session.splice(match.index, 1)
               }),
-            ),
+            )
+            homeSessions().remove(session.id)
+          },
           onError: (cause) =>
             showToast({
               title: language.t("common.requestFailed"),
