@@ -299,7 +299,7 @@ describe("OpenAI Responses route", () => {
       ).pipe(Effect.flip)
 
       expect(error.reason._tag).toBe("InvalidRequest")
-      expect(error.message).toContain("requires string input property patchText")
+      expect(error.message).toContain('Expected string\n  at ["patchText"]')
     }),
   )
 
@@ -4121,6 +4121,11 @@ describe("OpenAI Responses route", () => {
         { type: "response.custom_tool_call_input.delta", item_id: "ctc_1", delta: "*** Begin Patch\n" },
         { type: "response.custom_tool_call_input.delta", item_id: "ctc_1", delta: "*** End Patch" },
         {
+          type: "response.custom_tool_call_input.done",
+          item_id: "ctc_1",
+          input: "*** Begin Patch\n*** End Patch",
+        },
+        {
           type: "response.output_item.done",
           item: {
             type: "custom_tool_call",
@@ -4171,17 +4176,16 @@ describe("OpenAI Responses route", () => {
         {
           expected: "authoritative",
           events: [
-            {
-              ...added,
-              item: { ...added.item, id: undefined },
-            },
-            { type: "response.custom_tool_call_input.delta", item_id: "call_patch", delta: "partial" },
-            {
-              type: "response.completed",
-              response: {
-                output: [{ ...added.item, input: "authoritative" }],
-              },
-            },
+            added,
+            { type: "response.custom_tool_call_input.delta", item_id: "ctc_1", delta: "partial" },
+            { type: "response.completed", response: { output: [{ ...added.item, input: "authoritative" }] } },
+          ],
+        },
+        {
+          expected: "done only",
+          events: [
+            { type: "response.output_item.done", item: { ...added.item, id: undefined, input: "done only" } },
+            { type: "response.completed", response: {} },
           ],
         },
         { expected: "", events: [added, { type: "response.completed", response: {} }] },

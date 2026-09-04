@@ -153,8 +153,8 @@ const OpenResponsesFunctionCallOutputContent = Schema.Union([
   OpenResponsesInputVideo,
 ])
 
-const FunctionCallOutput = Schema.Union([Schema.String, Schema.Array(OpenResponsesFunctionCallOutputContent)])
-type FunctionCallOutput = Schema.Schema.Type<typeof FunctionCallOutput>
+export const FunctionCallOutput = Schema.Union([Schema.String, Schema.Array(OpenResponsesFunctionCallOutputContent)])
+export type FunctionCallOutput = Schema.Schema.Type<typeof FunctionCallOutput>
 
 export const CompactionItem = Schema.Struct({
   type: Schema.Literal("compaction"),
@@ -440,10 +440,7 @@ export interface ParserState {
   readonly name: string
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<string>
-  readonly freeformTools: Readonly<Record<string, FreeformTool>>
-  readonly freeformInputs: Readonly<Record<string, string>>
-  // Call ids stay independent of item ids, which may be omitted or reused.
-  readonly completedTools: ReadonlySet<string>
+  readonly freeformTools: ReadonlyArray<FreeformTool>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly outputItems: Readonly<Record<number, string>>
@@ -513,18 +510,16 @@ const lowerToolCall = Effect.fnUntraced(function* (
 ) {
   const id = itemID(part.providerMetadata, providerMetadataKey)
   const freeform = freeformTool(request, adapter, part.name)
-  const freeformInput = freeform && ProviderShared.isRecord(part.input) ? part.input[freeform.input] : undefined
   if (freeform) {
-    if (typeof freeformInput !== "string")
-      return yield* ProviderShared.invalidRequest(
-        `${adapter.name} freeform tool call ${part.name} requires string input property ${freeform.input}`,
-      )
+    const input = yield* ProviderShared.validateWith(
+      Schema.decodeUnknownEffect(Schema.Struct({ [freeform.input]: Schema.String })),
+    )(part.input)
     return {
       type: "custom_tool_call",
       ...(id === undefined ? {} : { id }),
       call_id: part.id,
       name: freeform.wireName,
-      input: freeformInput,
+      input: input[freeform.input],
     } satisfies LoweredInputItem
   }
   return {
@@ -985,6 +980,7 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
   message: "msg",
   reasoning: "rs",
   function_call: "fc",
+  custom_tool_call: "ctc",
   compaction: "cmp",
 }
 
@@ -1145,57 +1141,36 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
       events,
     ]
   }
-  if (item.type === "custom_tool_call" && item.call_id && item.name) {
-    const freeform = state.freeformTools[item.name]
-    if (!freeform || state.completedTools.has(item.call_id)) return [state, NO_EVENTS]
-    const metadata = providerMetadata(state, { itemId: item.id })
-    const events: LLMEvent[] = []
-    return [
-      {
-        ...state,
-        lifecycle: Lifecycle.stepStart(state.lifecycle, events),
-        tools: ToolStream.start(state.tools, item.id, {
-          id: item.call_id,
-          name: freeform.name,
-          input:
-            item.input === undefined || item.input === ""
-              ? ""
-              : `{${JSON.stringify(freeform.input)}:${JSON.stringify(item.input).slice(0, -1)}`,
-          providerMetadata: metadata,
-        }),
-        freeformInputs: { ...state.freeformInputs, [item.id]: item.input ?? "" },
-      },
-      [...events, LLMEvent.toolInputStart({ id: item.call_id, name: freeform.name, providerMetadata: metadata })],
-    ]
+  if (item.type !== "function_call" && item.type !== "custom_tool_call") return [state, NO_EVENTS]
+  if (!item.call_id || state.tools[item.id] !== undefined) return [state, NO_EVENTS]
+  const freeform = freeformByWireName(state, item)
+  if (item.type === "custom_tool_call" && !freeform) return [state, NO_EVENTS]
+  const tool = {
+    id: item.call_id,
+    name: freeform?.name ?? item.name ?? "",
+    namespace: freeform ? undefined : item.namespace,
+    providerMetadata: providerMetadata(state, { itemId: item.id }),
   }
-  if (item.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
-  if (state.tools[item.id] !== undefined) return [state, NO_EVENTS]
-  const metadata = providerMetadata(state, { itemId: item.id })
+  const started = ToolStream.start(state.tools, item.id, { ...tool, input: freeform ? "" : (item.arguments ?? "") })
+  // Custom input streams as a bare string, so open the canonical JSON object
+  // here and let later deltas append escaped string content.
+  const seeded = freeform
+    ? ToolStream.append(
+        started,
+        item.id,
+        `{${JSON.stringify(freeform.input)}:${JSON.stringify(item.input ?? "").slice(0, -1)}`,
+      )
+    : undefined
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   return [
-    {
-      ...state,
-      lifecycle,
-      tools: ToolStream.start(state.tools, item.id, {
-        id: item.call_id,
-        name: item.name ?? "",
-        namespace: item.namespace,
-        input: item.arguments ?? "",
-        providerMetadata: metadata,
-      }),
-    },
-    [
-      ...events,
-      LLMEvent.toolInputStart({
-        id: item.call_id,
-        name: item.name ?? "",
-        namespace: item.namespace,
-        providerMetadata: metadata,
-      }),
-    ],
+    { ...state, lifecycle, tools: seeded?.tools ?? started },
+    [...events, LLMEvent.toolInputStart(tool), ...(seeded?.events ?? [])],
   ]
 }
+
+const freeformByWireName = (state: ParserState, item: { readonly type: string; readonly name?: string }) =>
+  item.type === "custom_tool_call" ? state.freeformTools.find((tool) => tool.wireName === item.name) : undefined
 
 const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResult => {
   if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
@@ -1225,27 +1200,26 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
   ]
 }
 
-const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgumentsDelta")(function* (
+// A `final` value replaces accumulated arguments unless it merely extends them,
+// in which case only the missing suffix is emitted as a delta.
+const onToolArgumentsUpdate = Effect.fn("OpenResponses.onToolArgumentsUpdate")(function* (
   state: ParserState,
-  event: Event,
+  itemId: string,
+  update: { readonly delta?: string; readonly final?: string },
 ) {
-  if (event.item_id === undefined) return [state, NO_EVENTS] satisfies StepResult
-  const tool = state.tools[event.item_id]
+  const tool = state.tools[itemId]
   if (!tool) return [state, NO_EVENTS] satisfies StepResult
-  const final = event.type === "response.function_call_arguments.done" ? event.arguments : undefined
-  if (event.type === "response.function_call_arguments.done" && final === undefined)
-    return [state, NO_EVENTS] satisfies StepResult
-  if (final !== undefined && !final.startsWith(tool.input))
+  if (update.final !== undefined && !update.final.startsWith(tool.input))
     return [
-      { ...state, tools: ToolStream.start(state.tools, event.item_id, { ...tool, input: final }) },
+      { ...state, tools: ToolStream.start(state.tools, itemId, { ...tool, input: update.final }) },
       NO_EVENTS,
     ] satisfies StepResult
-  const delta = final === undefined ? event.delta : final.slice(tool.input.length)
+  const delta = update.final === undefined ? update.delta : update.final.slice(tool.input.length)
   if (!delta) return [state, NO_EVENTS] satisfies StepResult
   const result = ToolStream.appendExisting(
     state.id,
     state.tools,
-    event.item_id,
+    itemId,
     delta,
     `${state.name} tool argument delta is missing its tool call`,
   )
@@ -1256,106 +1230,24 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onCustomToolInputDelta = Effect.fn("OpenResponses.onCustomToolInputDelta")(function* (
-  state: ParserState,
-  event: Event,
-) {
-  if (event.item_id === undefined || event.delta === undefined) return [state, NO_EVENTS] satisfies StepResult
-  const tool = state.tools[event.item_id]
-  if (!tool) return [state, NO_EVENTS] satisfies StepResult
-  const freeform = Object.values(state.freeformTools).find((item) => item.name === tool.name)
-  if (!freeform) return [state, NO_EVENTS] satisfies StepResult
-  const prefix = tool.input === "" ? `{${JSON.stringify(freeform.input)}:"` : ""
-  const delta = `${prefix}${JSON.stringify(event.delta).slice(1, -1)}`
-  const result = ToolStream.appendExisting(
-    state.id,
-    state.tools,
-    event.item_id,
-    delta,
-    `${state.name} custom tool input delta is missing its tool call`,
-  )
-  if (ToolStream.isError(result)) return yield* result
-  const events: LLMEvent[] = []
-  const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
-  events.push(...result.events)
-  return [
-    {
-      ...state,
-      lifecycle,
-      tools: result.tools,
-      freeformInputs: {
-        ...state.freeformInputs,
-        [event.item_id]: `${state.freeformInputs[event.item_id] ?? ""}${event.delta}`,
-      },
-    },
-    events,
-  ] satisfies StepResult
-})
+const onFunctionCallArgumentsDelta = (state: ParserState, event: Event, itemId: string) => {
+  if (event.type !== "response.function_call_arguments.done")
+    return onToolArgumentsUpdate(state, itemId, { delta: event.delta })
+  if (event.arguments === undefined) return Effect.succeed<StepResult>([state, NO_EVENTS])
+  return onToolArgumentsUpdate(state, itemId, { final: event.arguments })
+}
 
-const onCustomToolDone = Effect.fn("OpenResponses.onCustomToolDone")(function* (
-  state: ParserState,
-  item: NonNullable<Event["item"]>,
-) {
-  if (item.type !== "custom_tool_call" || !item.call_id || !item.name || item.input === undefined)
-    return [state, NO_EVENTS] satisfies StepResult
-  const freeform = state.freeformTools[item.name]
-  if (!freeform || state.completedTools.has(item.call_id)) return [state, NO_EVENTS] satisfies StepResult
-  const fallback = item.id ?? item.call_id
-  const registered =
-    state.tools[fallback] !== undefined
-      ? fallback
-      : Object.keys(state.tools).find((key) => state.tools[key]?.id === item.call_id)
-  const id = registered ?? fallback
-  const metadata = item.id !== undefined ? providerMetadata(state, { itemId: item.id }) : undefined
-  const current = registered === undefined ? "" : (state.freeformInputs[id] ?? "")
-  const started =
-    registered === undefined
-      ? ToolStream.start(state.tools, id, { id: item.call_id, name: freeform.name, providerMetadata: metadata })
-      : state.tools
-  const pending = started[id]
-  if (!pending) return [state, NO_EVENTS] satisfies StepResult
-  const appended = item.input.startsWith(current)
-    ? (() => {
-        const prefix = pending.input === "" ? `{${JSON.stringify(freeform.input)}:"` : ""
-        const suffix = JSON.stringify(item.input.slice(current.length)).slice(1, -1)
-        return ToolStream.appendExisting(
-          state.id,
-          started,
-          id,
-          `${prefix}${suffix}"}`,
-          `${state.name} custom tool completion is missing its tool call`,
-        )
-      })()
-    : undefined
-  if (appended && ToolStream.isError(appended)) return yield* appended
-  const tools =
-    appended?.tools ??
-    ToolStream.start(started, id, {
-      ...pending,
-      input: JSON.stringify({ [freeform.input]: item.input }),
+// Custom input arrives as raw string content; re-encode it as the canonical
+// JSON object so the shared argument accumulator can parse it.
+const onCustomToolInputDelta = (state: ParserState, event: Event, itemId: string) => {
+  if (event.type !== "response.custom_tool_call_input.done")
+    return onToolArgumentsUpdate(state, itemId, {
+      delta: event.delta === undefined ? undefined : JSON.stringify(event.delta).slice(1, -1),
     })
-  const result = yield* ToolStream.finish(state.id, tools, id)
-  const resultEvents: LLMEvent[] = []
-  if (registered === undefined)
-    resultEvents.push(LLMEvent.toolInputStart({ id: item.call_id, name: freeform.name, providerMetadata: metadata }))
-  resultEvents.push(...(appended?.events ?? []), ...(result.events ?? []))
-  const freeformInputs = { ...state.freeformInputs }
-  delete freeformInputs[id]
-  const events: LLMEvent[] = []
-  const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
-  events.push(...resultEvents)
-  return [
-    {
-      ...state,
-      lifecycle,
-      hasFunctionCall: true,
-      tools: result.tools,
-      freeformInputs,
-      completedTools: new Set([...state.completedTools, item.call_id]),
-    },
-    events,
-  ] satisfies StepResult
-})
+  const freeform = state.freeformTools.find((entry) => entry.name === state.tools[itemId]?.name)
+  if (!freeform || event.input === undefined) return Effect.succeed<StepResult>([state, NO_EVENTS])
+  return onToolArgumentsUpdate(state, itemId, { final: JSON.stringify({ [freeform.input]: event.input }) })
+}
 
 const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   state: ParserState,
@@ -1407,37 +1299,31 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     ] satisfies StepResult
   }
 
-  if (item.type === "function_call") {
-    if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
-    const metadata = providerMetadata(state, { itemId: item.id })
+  if (item.type === "function_call" || item.type === "custom_tool_call") {
+    const freeform = freeformByWireName(state, item)
+    if (!item.call_id || !item.name || (item.type === "custom_tool_call" && !freeform))
+      return [state, NO_EVENTS] satisfies StepResult
+    const tool = {
+      id: item.call_id,
+      name: freeform?.name ?? item.name,
+      namespace: freeform ? undefined : item.namespace,
+      providerMetadata: providerMetadata(state, { itemId: item.id }),
+    }
+    const final = freeform
+      ? item.input === undefined
+        ? undefined
+        : JSON.stringify({ [freeform.input]: item.input })
+      : item.arguments
     const registered = state.tools[item.id] !== undefined
-    const tools = registered
-      ? state.tools
-      : ToolStream.start(state.tools, item.id, {
-          id: item.call_id,
-          name: item.name,
-          namespace: item.namespace,
-          providerMetadata: metadata,
-        })
+    const tools = registered ? state.tools : ToolStream.start(state.tools, item.id, tool)
     const result =
-      item.arguments === undefined
+      final === undefined
         ? yield* ToolStream.finish(state.id, tools, item.id)
-        : yield* ToolStream.finishWithInput(state.id, tools, item.id, item.arguments)
+        : yield* ToolStream.finishWithInput(state.id, tools, item.id, final)
     const events: LLMEvent[] = []
     const finished = result.events ?? []
     // A done-only call never streamed a start event, so open its lifecycle here.
-    const resultEvents =
-      registered || finished.length === 0
-        ? finished
-        : [
-            LLMEvent.toolInputStart({
-              id: item.call_id,
-              name: item.name,
-              namespace: item.namespace,
-              providerMetadata: metadata,
-            }),
-            ...finished,
-          ]
+    const resultEvents = registered || finished.length === 0 ? finished : [LLMEvent.toolInputStart(tool), ...finished]
     const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
     events.push(...resultEvents)
     return [
@@ -1452,8 +1338,6 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
       events,
     ] satisfies StepResult
   }
-
-  if (item.type === "custom_tool_call") return yield* onCustomToolDone(state, item)
 
   if (item.type === "reasoning") {
     const metadata = reasoningMetadata(state, item)
@@ -1509,25 +1393,9 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
         )
       const recoverable =
         item.type === "compaction" ||
-        ((item.type === "function_call" || item.type === "custom_tool_call") &&
-          (current.tools[item.id] !== undefined ||
-            Object.values(current.tools).some((tool) => tool?.id === item.call_id)))
+        ((item.type === "function_call" || item.type === "custom_tool_call") && current.tools[item.id] !== undefined)
       if (!recoverable) continue
       const [next, emitted] = yield* onOutputItemDone(current, item)
-      current = next
-      events.push(...emitted)
-    }
-    for (const [id, raw] of Object.entries(current.freeformInputs)) {
-      const tool = current.tools[id]
-      const freeform = tool ? Object.values(current.freeformTools).find((item) => item.name === tool.name) : undefined
-      if (!tool || !freeform) continue
-      const [next, emitted] = yield* onCustomToolDone(current, {
-        type: "custom_tool_call",
-        id,
-        call_id: tool.id,
-        name: freeform.wireName,
-        input: raw,
-      })
       current = next
       events.push(...emitted)
     }
@@ -1652,23 +1520,12 @@ export const step = (state: ParserState, event: NormalizedEvent) => {
   }
   if (event.type === "response.function_call_arguments.delta" || event.type === "response.function_call_arguments.done")
     return event.item_id !== undefined
-      ? onFunctionCallArgumentsDelta(state, event)
+      ? onFunctionCallArgumentsDelta(state, event, event.item_id)
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
-  if (event.type === "response.custom_tool_call_input.delta") return onCustomToolInputDelta(state, event)
-  if (event.type === "response.custom_tool_call_input.done") {
-    if (event.item_id === undefined || event.input === undefined)
-      return ProviderShared.eventError(state.id, `${event.type} is missing item_id or input`)
-    const tool = state.tools[event.item_id]
-    const freeform = tool ? Object.values(state.freeformTools).find((item) => item.name === tool.name) : undefined
-    if (!tool || !freeform) return Effect.succeed<StepResult>([state, NO_EVENTS])
-    return onCustomToolDone(state, {
-      type: "custom_tool_call",
-      id: event.item_id,
-      call_id: tool.id,
-      name: freeform.wireName,
-      input: event.input,
-    })
-  }
+  if (event.type === "response.custom_tool_call_input.delta" || event.type === "response.custom_tool_call_input.done")
+    return event.item_id !== undefined
+      ? onCustomToolInputDelta(state, event, event.item_id)
+      : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done") return onOutputItemDone(state, event.item)
   if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
   if (event.type === "response.failed") return providerFailure(event, `${state.name} response failed`)
@@ -1702,9 +1559,7 @@ export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADA
   providerMetadataKey: metadataKey(request.model),
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
-  freeformTools: Object.fromEntries((adapter.freeformTools?.(request) ?? []).map((tool) => [tool.wireName, tool])),
-  freeformInputs: {},
-  completedTools: new Set<string>(),
+  freeformTools: adapter.freeformTools?.(request) ?? [],
   lifecycle: Lifecycle.initial(),
   outputItems: {},
   message: undefined,
