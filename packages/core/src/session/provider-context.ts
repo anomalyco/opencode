@@ -3,7 +3,7 @@ export * as SessionProviderContext from "./provider-context.js"
 import { Message } from "@opencode-ai/ai"
 import { SessionProviderContext } from "@opencode-ai/schema/session-provider-context"
 import { Schema } from "effect"
-import { createHash } from "node:crypto"
+import { Hash } from "@opencode-ai/util/hash"
 import type { SessionRunnerModel } from "./runner/model.js"
 
 export type Provenance = SessionProviderContext.Provenance
@@ -23,26 +23,24 @@ export function provenance(resolved: Pick<SessionRunnerModel.Resolved, "model" |
     modelID: model.id,
     route: model.route.id,
     protocol: model.route.protocol,
-    endpoint: createHash("sha256")
-      .update(
-        JSON.stringify([
-          endpoint.baseURL,
-          endpoint.path,
-          Object.entries(endpoint.query ?? {}).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)),
-        ]),
-      )
-      .digest("hex"),
+    endpoint: Hash.sha256(
+      JSON.stringify([
+        endpoint.baseURL,
+        endpoint.path,
+        Object.entries(endpoint.query ?? {}).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)),
+      ]),
+    ),
   }
 }
 
-export const compatible = (context: Info, target: Provenance | undefined) =>
+export const compatible = (source: Provenance, target: Provenance | undefined) =>
   target !== undefined &&
-  context.provenance.providerID === target.providerID &&
-  context.provenance.provider === target.provider &&
-  context.provenance.modelID === target.modelID &&
-  context.provenance.route === target.route &&
-  context.provenance.protocol === target.protocol &&
-  context.provenance.endpoint === target.endpoint
+  source.providerID === target.providerID &&
+  source.provider === target.provider &&
+  source.modelID === target.modelID &&
+  source.route === target.route &&
+  source.protocol === target.protocol &&
+  source.endpoint === target.endpoint
 
 /** Stores the canonical replacement, not a local summary or transport continuation.
  * Provider and attachment metadata can contain optional undefined entries. Use JSON's

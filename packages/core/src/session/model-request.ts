@@ -76,7 +76,7 @@ interface PrepareInput {
     readonly system: Array<SystemPart>
     readonly messages: Array<Message>
     /** Selected durable window, checked again after model request hooks resolve the route. */
-    readonly providerContext?: SessionProviderContext.Info
+    readonly providerContext?: SessionProviderContext.Provenance
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /**
@@ -102,7 +102,7 @@ export const baseTranscript = (input: {
   )
   return {
     providerMetadataKey,
-    providerContext: checkpoint?.providerContext,
+    providerContext: checkpoint?.providerContext?.provenance,
     system: [
       input.agent.system
         ? input.agent.system
