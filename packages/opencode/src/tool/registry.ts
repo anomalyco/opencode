@@ -262,19 +262,30 @@ const layer = Layer.effect(
       return (yield* all()).map((tool) => tool.id)
     })
 
-    const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (agent: Agent.Info) {
-      const items = (yield* agents.list()).filter((item) => item.mode !== "primary")
-      const filtered = items.filter(
-        (item) => Permission.evaluate("task", item.name, agent.permission).action !== "deny",
-      )
+    const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (input: {
+      agent: Agent.Info
+      permission?: PermissionV1.Ruleset
+    }) {
+      // Merge agent + session rules so model-facing guidance matches execute-time
+      // evaluation (session ceilings can deny targets that the agent alone allows).
+      const ruleset = Permission.merge(input.agent.permission, input.permission ?? [])
+      const items = (yield* agents.list()).filter((item) => item.mode !== "primary" && item.hidden !== true)
+      const filtered = items.filter((item) => Permission.evaluate("task", item.name, ruleset).action !== "deny")
       const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
+      if (list.length === 0) {
+        return "No subagent types are available under the current permission rules. Do not call the task tool."
+      }
       const description = list
         .map(
           (item) =>
             `- ${item.name}: ${item.description ?? "This subagent should only be called manually by the user."}`,
         )
         .join("\n")
-      return ["Available agent types and the tools they have access to:", description].join("\n")
+      return [
+        "Available agent types and the tools they have access to:",
+        description,
+        "Only use subagent_type values from this list. Other types will be rejected.",
+      ].join("\n")
     })
 
     const describeCodeMode = Effect.fn("ToolRegistry.describeCodeMode")(function* (input: {
@@ -324,7 +335,9 @@ const layer = Layer.effect(
             id: tool.id,
             description: [
               output.description,
-              tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
+              tool.id === TaskTool.id
+                ? yield* describeTask({ agent: input.agent, permission: input.permission })
+                : undefined,
               tool.id === "execute" ? codeModeDescription : undefined,
             ]
               .filter(Boolean)

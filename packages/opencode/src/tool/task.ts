@@ -10,6 +10,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
+import { Permission } from "@/permission"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -116,7 +117,31 @@ export const TaskTool = Tool.define(
         )
       }
 
+      const next = yield* agent.get(params.subagent_type)
+      if (!next) {
+        return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
+      }
+      // Primary agents are user-facing modes, not delegatable task targets (#35238).
+      if (next.mode === "primary") {
+        return yield* Effect.fail(
+          new Error(
+            `Agent type "${params.subagent_type}" is a primary agent and cannot be used as a task subagent`,
+          ),
+        )
+      }
+
       if (!ctx.extra?.bypassAgentCheck) {
+        // Hard-deny before ask so per-target deny rules are a runtime boundary even
+        // when the model invents a subagent_type name that is not listed in guidance.
+        const caller = yield* agent.get(ctx.agent)
+        const ruleset = Permission.merge(caller.permission, parent.permission ?? [])
+        if (Permission.evaluate(id, params.subagent_type, ruleset).action === "deny") {
+          return yield* Effect.fail(
+            new Error(
+              `Subagent type "${params.subagent_type}" is denied by permission rules for agent "${ctx.agent}"`,
+            ),
+          )
+        }
         yield* ctx.ask({
           permission: id,
           patterns: [params.subagent_type],
@@ -126,11 +151,6 @@ export const TaskTool = Tool.define(
             subagent_type: params.subagent_type,
           },
         })
-      }
-
-      const next = yield* agent.get(params.subagent_type)
-      if (!next) {
-        return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
 
       const session = params.task_id

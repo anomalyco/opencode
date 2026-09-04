@@ -19,6 +19,7 @@ import { SessionStatus } from "@/session/status"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
+import { Permission } from "../../src/permission"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -243,6 +244,141 @@ describe("tool.task", () => {
         },
       },
     },
+  )
+
+  it.instance(
+    "description applies session permission ceilings on top of agent rules",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* Agent.Service
+        const build = yield* agent.get("build")
+        const registry = yield* ToolRegistry.Service
+        const description =
+          (
+            yield* registry.tools({
+              ...ref,
+              agent: build,
+              permission: Permission.fromConfig({
+                task: {
+                  alpha: "deny",
+                },
+              }),
+            })
+          ).find((tool) => tool.id === TaskTool.id)?.description ?? ""
+
+        expect(description).toContain("- beta: Beta agent")
+        expect(description).not.toContain("- alpha: Alpha agent")
+      }),
+    {
+      config: {
+        permission: {
+          task: {
+            "*": "allow",
+          },
+        },
+        agent: {
+          alpha: {
+            description: "Alpha agent",
+            mode: "subagent",
+          },
+          beta: {
+            description: "Beta agent",
+            mode: "subagent",
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "execute rejects denied subagent_type without creating a child session",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const promptOps = stubOps()
+
+        const exit = yield* def
+          .execute(
+            {
+              description: "not allowed",
+              prompt: "do something",
+              subagent_type: "zebra",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          const text = String(exit.cause)
+          expect(text).toContain("denied by permission rules")
+        }
+        expect(yield* sessions.children(chat.id)).toHaveLength(0)
+      }),
+    {
+      config: {
+        permission: {
+          task: {
+            "*": "allow",
+            zebra: "deny",
+          },
+        },
+        agent: {
+          zebra: {
+            description: "Zebra agent",
+            mode: "subagent",
+          },
+        },
+      },
+    },
+  )
+
+  it.instance("execute rejects primary agents as task subagent targets", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "wrong mode",
+            prompt: "plan something",
+            subagent_type: "build",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(String(exit.cause)).toContain("primary agent")
+      }
+      expect(yield* sessions.children(chat.id)).toHaveLength(0)
+    }),
   )
 
   it.instance("execute resumes an existing task session from task_id", () =>
