@@ -11,6 +11,7 @@ import {
 } from "../storybook/current-session-fixtures"
 import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-session-scenarios"
 import { SessionTimeline } from "./session-timeline"
+import { ToolDisplay } from "../tools/tool-renderer"
 
 export default {
   title: "OpenCode/Work/File changes",
@@ -260,4 +261,49 @@ export const CreatedANewFile = {
       editToolDefaultOpen
     />
   ),
+}
+
+export const FileToolFallbacks = {
+  args: { tool: "edit", empty: false, forceOpen: false, controlled: true },
+  argTypes: {
+    tool: { control: "select", options: ["edit", "write"] },
+    empty: { control: "boolean" },
+    forceOpen: { control: "boolean" },
+    controlled: { control: "boolean" },
+  },
+  render: (args: { tool: string; empty: boolean; forceOpen: boolean; controlled: boolean }) => {
+    const [state, setState] = createStore({ completed: false, open: false })
+    return (
+      <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
+        <button type="button" onClick={() => setState("completed", true)}>
+          Complete file tool
+        </button>
+        <CurrentSessionProviders document={storyDocument([])}>
+          <ToolDisplay
+            id="tool_file_fallback"
+            tool={args.tool}
+            status={state.completed ? "completed" : "running"}
+            input={{
+              path: "src/example.ts",
+              oldString: "export const before = true\n",
+              newString: "export const after = true\n",
+              content: args.empty ? "" : "export const written = true\n",
+            }}
+            metadata={{
+              diagnostics: state.completed
+                ? {
+                    "src/example.ts": [
+                      { severity: 1, message: "Example diagnostic", range: { start: { line: 0, character: 0 } } },
+                    ],
+                  }
+                : {},
+            }}
+            open={args.controlled ? state.open : undefined}
+            onOpenChange={(open) => setState("open", open)}
+            forceOpen={args.forceOpen}
+          />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
 }
