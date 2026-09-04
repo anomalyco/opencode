@@ -33,11 +33,14 @@
     "@opencode-ai/simulation": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "drizzle-orm": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@types/web-push": "3.6.4",
+    "@typescript/native-preview": "catalog:",
+    "http_ece": "1.2.0"
   }
 }

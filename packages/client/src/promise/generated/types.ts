@@ -6145,6 +6145,65 @@ export type WorkspaceDestroyInput = { readonly workspaceID: { readonly workspace
 
 export type WorkspaceDestroyOutput = WorkspaceDestroyResult
 
+export type PushGetOutput = { publicKey: string }
+
+export type PushSubscribeInput = {
+  readonly id: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly notifications: { readonly agent: boolean; readonly errors: boolean }
+    readonly titles: { readonly agent: string; readonly errors: string }
+  }["id"]
+  readonly endpoint: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly notifications: { readonly agent: boolean; readonly errors: boolean }
+    readonly titles: { readonly agent: string; readonly errors: string }
+  }["endpoint"]
+  readonly keys: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly notifications: { readonly agent: boolean; readonly errors: boolean }
+    readonly titles: { readonly agent: string; readonly errors: string }
+  }["keys"]
+  readonly url: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly notifications: { readonly agent: boolean; readonly errors: boolean }
+    readonly titles: { readonly agent: string; readonly errors: string }
+  }["url"]
+  readonly notifications: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly notifications: { readonly agent: boolean; readonly errors: boolean }
+    readonly titles: { readonly agent: string; readonly errors: string }
+  }["notifications"]
+  readonly titles: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly notifications: { readonly agent: boolean; readonly errors: boolean }
+    readonly titles: { readonly agent: string; readonly errors: string }
+  }["titles"]
+}
+
+export type PushSubscribeOutput = void
+
+export type PushUnsubscribeInput = { readonly id: { readonly id: string }["id"] }
+
+export type PushUnsubscribeOutput = void
+
 export type VcsGetInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined

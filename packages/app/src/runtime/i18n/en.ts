@@ -941,6 +941,28 @@ export const dict = {
   "settings.appearance.row.projectName.title": "Show project names",
   "settings.appearance.row.projectName.description": "Show project names in vertical tabs and the mobile tab drawer",
   "settings.notifications.description": "Choose when to receive notifications and hear sounds",
+  "settings.notifications.push.title": "Push notifications",
+  "settings.notifications.push.server": "Notifications from {{server}}",
+  "settings.notifications.push.description":
+    "Receive agent responses and errors on this browser even when OpenCode is closed. Push notifications also appear while the app is open. The server must stay running. The notification switches below apply to push too; permissions and sounds require an open app.",
+  "settings.notifications.push.enable": "Enable push",
+  "settings.notifications.push.disable": "Disable push",
+  "settings.notifications.push.updating": "Updating push notifications…",
+  "settings.notifications.push.enabled": "Push notifications are enabled for this server on this browser.",
+  "settings.notifications.push.disabled": "Push notifications are off for this server on this browser.",
+  "settings.notifications.push.insecure": "Open OpenCode over HTTPS or localhost to enable push notifications.",
+  "settings.notifications.push.install":
+    "On iPhone or iPad, use Add to Home Screen, open the installed app, then enable push notifications. Requires iOS or iPadOS 16.4 or later.",
+  "settings.notifications.push.unsupported":
+    "This browser does not support Web Push. Try a supported browser or installed web app.",
+  "settings.notifications.push.denied":
+    "Notification permission is not granted. Allow notifications in your browser or device settings, then enable push again.",
+  "settings.notifications.push.serverUnsupported":
+    "This server does not support push notifications. Update the server and try again.",
+  "settings.notifications.push.subscription":
+    "The browser subscription could not be verified or updated. Enable push again to reconnect. If disabling failed, retry to finish removing the browser subscription.",
+  "settings.notifications.push.failed":
+    "Push notifications could not be updated. Check your server connection and try again. Changes are not confirmed until the update succeeds.",
   "settings.shortcuts.description": "Customize shortcuts for common actions",
   "settings.servers.description": "Manage server connections",
   "settings.projects.title": "Projects",

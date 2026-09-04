@@ -250,6 +250,11 @@ import type {
   WorkspaceCreateOutput,
   WorkspaceDestroyInput,
   WorkspaceDestroyOutput,
+  PushGetOutput,
+  PushSubscribeInput,
+  PushSubscribeOutput,
+  PushUnsubscribeInput,
+  PushUnsubscribeOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -1508,6 +1513,34 @@ const adaptGroupWorkspace = (raw: RawClient["server.workspace"]) => ({
   destroy: EndpointWorkspaceDestroy(raw),
 })
 
+const EndpointPushGet = (raw: RawClient["server.push"]) => () =>
+  preserveEffect<PushGetOutput>()(raw["push.get"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointPushSubscribe = (raw: RawClient["server.push"]) => (input: PushSubscribeInput) =>
+  preserveEffect<PushSubscribeOutput>()(
+    raw["push.subscribe"]({
+      payload: {
+        id: input["id"],
+        endpoint: input["endpoint"],
+        keys: input["keys"],
+        url: input["url"],
+        notifications: input["notifications"],
+        titles: input["titles"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointPushUnsubscribe = (raw: RawClient["server.push"]) => (input: PushUnsubscribeInput) =>
+  preserveEffect<PushUnsubscribeOutput>()(
+    raw["push.unsubscribe"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupPush = (raw: RawClient["server.push"]) => ({
+  get: EndpointPushGet(raw),
+  subscribe: EndpointPushSubscribe(raw),
+  unsubscribe: EndpointPushUnsubscribe(raw),
+})
+
 const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =>
   preserveEffect<VcsGetOutput>()(
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1615,6 +1648,7 @@ const adaptClient = (raw: RawClient) => ({
   reference: adaptGroupReference(raw["server.reference"]),
   worktree: adaptGroupWorktree(raw["server.worktree"]),
   workspace: adaptGroupWorkspace(raw["server.workspace"]),
+  push: adaptGroupPush(raw["server.push"]),
   vcs: adaptGroupVcs(raw["server.vcs"]),
   debug: adaptGroupDebug(raw["server.debug"]),
   migration: adaptGroupMigration(raw["server.migration"]),

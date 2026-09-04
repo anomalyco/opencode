@@ -42,6 +42,7 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
               "public/large.bin": Buffer.alloc(2 * 1024 * 1024 + 1, version === "old" ? 1 : 2),
               "public/_headers": "/*\n  Cache-Control: no-cache",
               "public/_redirects": "/* /index.html 200",
+              "public/push-sw.js": await readFile(new URL("../../public/push-sw.js", import.meta.url)),
             }).map(([path, contents]) => writeFile(join(root, path), contents)),
           )
           await build({
@@ -181,6 +182,36 @@ async function waiting(page: Page) {
     .poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.waiting?.state))
     .toBe("installed")
 }
+
+fixture("per-server push workers coexist without taking over offline pages", async ({ page, context, site }) => {
+  await install(page, site.url)
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.register("/push-sw.js", { scope: "/push/server-a/" })
+    await navigator.serviceWorker.register("/push-sw.js", { scope: "/push/server-b/" })
+  })
+  await expect
+    .poll(() =>
+      page.evaluate(async () =>
+        (await navigator.serviceWorker.getRegistrations())
+          .filter((registration) => new URL(registration.scope).pathname.startsWith("/push/"))
+          .map((registration) => ({ scope: new URL(registration.scope).pathname, state: registration.active?.state }))
+          .sort((a, b) => a.scope.localeCompare(b.scope)),
+      ),
+    )
+    .toEqual([
+      { scope: "/push/server-a/", state: "activated" },
+      { scope: "/push/server-b/", state: "activated" },
+    ])
+  expect(await page.evaluate(() => new URL(navigator.serviceWorker.controller!.scriptURL).pathname)).toBe("/sw.js")
+  await page.getByLabel("Draft").fill("Push registration must not reload this draft")
+  await expect(page.getByLabel("Draft")).toHaveValue("Push registration must not reload this draft")
+  await context.setOffline(true)
+  await page.goto(`${site.url}/server/server-a/session/ses_never_visited`)
+  await expect(page.getByRole("heading")).toHaveText("old")
+  await page.getByRole("button", { name: "Load lazy" }).click()
+  await expect(page.getByRole("status")).toHaveText("old nested lazy loaded")
+  expect(await page.evaluate(() => new URL(navigator.serviceWorker.controller!.scriptURL).pathname)).toBe("/sw.js")
+})
 
 fixture(
   "opens an uncached route offline and executes never-used nested lazy chunks",

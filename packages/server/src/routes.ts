@@ -47,6 +47,7 @@ import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
+import { Push } from "./push"
 
 const applicationServiceNodes = [
   Global.node,
@@ -72,6 +73,7 @@ const applicationServiceNodes = [
   LocationActivity.node,
   SessionRestart.node,
   Workspace.node,
+  Push.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 
@@ -99,7 +101,13 @@ export function createEmbeddedRoutes(
   overrides: LayerNode.Replacements = [],
   instances?: InstanceNode,
 ) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, instances)
+  return makeRoutes(
+    ServerAuth.Config.configLayer({ password: Option.none() }),
+    { ...options, password: undefined },
+    () => [],
+    overrides,
+    instances,
+  )
 }
 
 function makeRoutes<AuthError, AuthServices>(
@@ -114,6 +122,7 @@ function makeRoutes<AuthError, AuthServices>(
     Database.node.replace(Database.configured(options.database)),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
+    Push.node.replace(Push.configured({ password: options.password })),
     App.node.replace(App.configured(options.app)),
     ModelsDev.node.replace(ModelsDev.configured(options.models)),
     Watcher.node.replace(Watcher.configured({ enabled: options.fs?.filewatcher })),

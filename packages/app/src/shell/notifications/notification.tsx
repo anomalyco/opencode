@@ -18,6 +18,7 @@ import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import type { ServerScope } from "@/runtime/server/scope"
 import { useServer } from "@/runtime/server/current"
+import { createServerPush } from "./push-state"
 
 const NotificationBase = {
   directory: Schema.optional(Schema.String),
@@ -119,6 +120,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   const settings = useSettings()
   const language = useLanguage()
   const tabs = useTabs()
+  const push = createServerPush(input)
   const empty: Notification[] = []
 
   const [store, setStore, _, ready] = persisted(
@@ -234,7 +236,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
         session: sessionID,
       })
 
-      if (settings.notifications.agent()) {
+      if (settings.notifications.agent() && !push?.state.enabled) {
         void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
           openNotificationSession(tabs, input.key, sessionID),
         )
@@ -262,7 +264,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
       const description =
         session?.title ??
         (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
-      if (settings.notifications.errors()) {
+      if (settings.notifications.errors() && !push?.state.enabled) {
         void platform.notify(language.t("notification.session.error.title"), description, () =>
           openNotificationSession(tabs, input.key, sessionID),
         )
@@ -287,6 +289,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
 
   return {
     ready,
+    push,
     session: {
       all(session: string) {
         return index.session.all[session] ?? empty

@@ -32,6 +32,7 @@ test("exposes every standard HTTP API group", () => {
     "reference",
     "worktree",
     "workspace",
+    "push",
     "vcs",
     "debug",
     "migration",
@@ -47,6 +48,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.oauth)).toEqual(["connect", "status", "complete", "cancel"])
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
+  expect(Object.keys(client.push)).toEqual(["get", "subscribe", "unsubscribe"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
   expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branches", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
