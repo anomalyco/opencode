@@ -37,6 +37,8 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
+import { SessionClosure } from "../../src/session/closure/coordinator"
+import { SessionClosureModel as ClosureModel } from "../../src/session/closure/model"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -308,6 +310,29 @@ const requestOnlyPrompt = testEffect(
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const refusalLog: Array<{ readonly session: string; readonly origin: string; readonly source: string }> = []
+const refusingClosure = Layer.mock(SessionClosure.Service)({
+  acquire: (input) =>
+    Effect.sync(() => {
+      refusalLog.push({ session: input.session, origin: input.origin, source: input.source })
+      return {
+        type: "fenced" as const,
+        state: "closing" as const,
+        operation: ClosureModel.id("operation", "operation_cp033_prompt"),
+        epoch: 0n,
+      }
+    }),
+})
+const refusedLoopNoLLMServer = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [SessionClosure.node, refusingClosure],
+    [SessionProcessor.node, blockingProcessor],
+  ]),
+)
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -509,6 +534,53 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
 })
 
 // Loop semantics
+
+refusedLoopNoLLMServer.instance(
+  "a standing fence refuses direct SessionPrompt.loop as internal before F publication (CP-033)",
+  () =>
+    Effect.gen(function* () {
+      refusalLog.length = 0
+      processorCreateStarted.length = 0
+      const created = { value: 0 }
+      processorCreateStarted.push(() => {
+        created.value += 1
+      })
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          refusalLog.length = 0
+          processorCreateStarted.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const run = yield* SessionRunState.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      const refused = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.flip)
+      expect(refused._tag).toBe("SessionClosureAdmissionRefused")
+      expect(refusalLog).toEqual([{ session: chat.id, origin: "internal", source: "SessionPrompt.loop" }])
+      expect(created.value).toBe(0)
+      expect((yield* run.listActive()).some((entry) => entry.session === chat.id)).toBe(false)
+    }),
+)
+
+noLLMServer.instance("noReply persists without publishing an F entry (CP-033)", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const run = yield* SessionRunState.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    const result = yield* prompt.prompt({
+      sessionID: chat.id,
+      noReply: true,
+      parts: [{ type: "text", text: "no FIFO publication" }],
+    })
+    expect(result.info.role).toBe("user")
+    expect((yield* run.listActive()).some((entry) => entry.session === chat.id)).toBe(false)
+  }),
+)
 
 noLLMServer.instance(
   "loop exits immediately when last assistant has stop finish",
@@ -1544,7 +1616,7 @@ it.instance("concurrent loop callers all receive same error result", () =>
   }),
 )
 
-it.instance("prompt submitted during an active run is included in the next LLM input", () =>
+it.instance("prompt submitted before the next history read shares the B-causal result (CP-033 T-03)", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
     const gate = yield* Deferred.make<void>()
@@ -1592,6 +1664,7 @@ it.instance("prompt submitted during an active run is included in the next LLM i
     const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
     expect(Exit.isSuccess(ea)).toBe(true)
     expect(Exit.isSuccess(eb)).toBe(true)
+    if (Exit.isSuccess(ea) && Exit.isSuccess(eb)) expect(ea.value.info.id).toBe(eb.value.info.id)
     expect(yield* llm.calls).toBe(2)
 
     const msgs = yield* sessions.messages({ sessionID: chat.id })

@@ -108,6 +108,9 @@ const prompt = Layer.succeed(
     cancel: () => Effect.void,
     prompt: () => Effect.die("unused prompt"),
     loop: () => Effect.sync(() => trace.push("loop")).pipe(Effect.as(reply)),
+    admitLoop: () =>
+      Effect.sync(() => trace.push("loop")).pipe(Effect.as({ type: "completed", value: reply } as const)),
+    awaitPublished: (published) => (published.type === "completed" ? Effect.succeed(published.value) : published.await),
     shell: () => Effect.die("unused shell"),
     command: () => Effect.die("unused command"),
     resolvePromptParts: () => Effect.die("unused resolvePromptParts"),

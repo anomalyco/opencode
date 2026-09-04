@@ -19,7 +19,7 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
-import { Cause, Effect, Option, Schema, Scope } from "effect"
+import { Cause, Deferred, Effect, Option, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { InstanceState } from "@/effect/instance-state"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -287,10 +287,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* requireSession(ctx.params.sessionID)
     })
 
-    const summarizeAdmitted = Effect.fn("SessionHttpApi.summarizeAdmitted")(function* (ctx: {
-      params: { sessionID: SessionID }
-      payload: typeof SummarizePayload.Type
-    }) {
+    const summarizeAdmitted = Effect.fn("SessionHttpApi.summarizeAdmitted")(function* (
+      ctx: {
+        params: { sessionID: SessionID }
+        payload: typeof SummarizePayload.Type
+      },
+      release: Deferred.Deferred<void>,
+    ) {
       const current = yield* requireSession(ctx.params.sessionID)
       yield* revertSvc.cleanup(current)
       const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
@@ -308,28 +311,38 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         },
         auto: ctx.payload.auto ?? false,
       })
-      yield* promptSvc.loop({ sessionID: ctx.params.sessionID })
-      return true
+      return yield* promptSvc.admitLoop({ sessionID: ctx.params.sessionID }, release).pipe(SessionError.mapAdmission)
     })
 
     const summarize = Effect.fn("SessionHttpApi.summarize")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof SummarizePayload.Type
     }) {
-      // The lease is acquired at handler entry, *before* `revertSvc.cleanup` deletes rows — previously
-      // the only refusal point was the `loop` call, by which time the destruction had already happened.
-      // The inner `loop` runs under this same context and takes no second lease.
+      // §7.3's summarize row and audit IR-5. The lease is acquired at handler entry, *before*
+      // `revertSvc.cleanup` deletes rows — previously the only refusal point was the `loop` call,
+      // by which time the destruction had already happened. `summarizeAdmitted` now returns after
+      // FIFO publication; only after this wrapper retires does the selected fiber take its fresh
+      // execution admission and run the loop.
       //
-      // This seam is external and does not opt out of retry, so an admission arriving after a fence
-      // JOINS the intersecting operation, waits for release, and runs exactly once — the ordinary
-      // fenced case no longer produces a refusal here at all.
-      return yield* SessionError.mapAdmission(
+      // Slice J narrows what reaches the terminator below. This seam is external and does not opt
+      // out of §7.2's retry, so an admission arriving after a fence now JOINS the intersecting
+      // operation, waits for release, and runs exactly once — the ordinary fenced case no longer
+      // produces a refusal here at all. `Effect.die` is retained for the residual refusals that
+      // survive the join: a second closure conflict, and a wrong-Instance answer.
+      //
+      // It is still `die` rather than a typed error only because this endpoint's declared errors
+      // cannot change yet; §12.6 declares its typed 500 for `abort` alone. That mapping remains a
+      // Gate 6 item, now scoped to those residual cases rather than to every fenced summarize.
+      const release = yield* Deferred.make<void>()
+      const published = yield* SessionError.mapAdmission(
         SessionAdmission.admitted(
           closureSvc,
           { session: ctx.params.sessionID, origin: "external", source: "SessionHttpApi.summarize" },
-          () => summarizeAdmitted(ctx),
-        ),
+          () => summarizeAdmitted(ctx, release),
+        ).pipe(Effect.ensuring(Deferred.succeed(release, undefined).pipe(Effect.asVoid))),
       )
+      yield* SessionError.mapAdmission(promptSvc.awaitPublished(published))
+      return true
     })
 
     const prompt = Effect.fn("SessionHttpApi.prompt")(function* (ctx: {

@@ -51,7 +51,7 @@ import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Latch, Layer, Option, Schema, Scope, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
@@ -127,6 +127,13 @@ export interface Interface {
     input: PromptInput,
   ) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError | Session.ReservedMetadataError>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts, AdmissionError>
+  /** @internal Admission-only FIFO publication used by the outer loop and HTTP summarize wrappers. */
+  readonly admitLoop: (
+    input: LoopInput,
+    release: Deferred.Deferred<void>,
+  ) => Effect.Effect<SessionRunState.Published, AdmissionError>
+  /** @internal Wait only after the wrapper that published the entry has exited its admission region. */
+  readonly awaitPublished: (published: SessionRunState.Published) => Effect.Effect<SessionV1.WithParts, AdmissionError>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError | AdmissionError>
   readonly command: (
     input: CommandInput,
@@ -188,20 +195,31 @@ const layer = Layer.effect(
         // may wait for a closing branch and retry; internal admission must reject instead. Fixed
         // here rather than left to be discovered once external retry exists.
         //
-        // Refusals: an admission or mutation refusal is a reachable, expected condition that the
-        // task tool has to be able to act on, so it survives this boundary as a typed failure.
+        // ROW 14: `ops.prompt({ sessionID: nextSession.id })` is the Task target's publication
+        // boundary. It persists and publishes under this internal wrapper; the selected FIFO fiber
+        // later strips any ambient authority and acquires the target's fresh execution lease.
+        //
+        // Result injection is causally LATER than the continuation's acquisition, so §7.1's
+        // no-duplicate rule does not let it inherit the old fence decision. `"revalidate"` performs
+        // §7.2's pull-side current-fence check against that SAME continuation lease: it creates no
+        // duplicate, but a standing fence refuses the injection and settles the lease suppressed.
+        // Admission and mutation refusals remain reachable typed failures for Task to handle;
         // Image failures keep their existing die-on-error behaviour.
         prompt: (input: TaskPromptInput) =>
-          SessionAdmission.admitted(
-            closure,
-            {
-              session: input.sessionID,
-              origin: "internal",
-              source: "TaskPromptOps.prompt",
-              reuseAmbient: "revalidate",
-            },
-            () => prompt(input),
-          ).pipe(
+          Effect.gen(function* () {
+            const release = yield* Deferred.make<void>()
+            const published = yield* SessionAdmission.admitted(
+              closure,
+              {
+                session: input.sessionID,
+                origin: "internal",
+                source: "TaskPromptOps.prompt",
+                reuseAmbient: "revalidate",
+              },
+              () => admitPrompt(input, release),
+            ).pipe(Effect.ensuring(Deferred.succeed(release, undefined).pipe(Effect.asVoid)))
+            return yield* awaitAdmission(published)
+          }).pipe(
             Effect.catch((error) =>
               "_tag" in error &&
               (error._tag === "SessionClosureAdmissionRefused" ||
@@ -1155,10 +1173,15 @@ const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const promptAdmitted = Effect.fn("SessionPrompt.promptAdmitted")(function* (input: TaskPromptInput) {
-      // An attachment scope is a private capability handed to one delegated call, never resolved
-      // from a registry here. Generic ingress is unaffected: only a caller that was given a scope
-      // can pass one, and it must be the scope for this very session.
+    // Everything here is ordinary Session ingress unless the private Task input carries one exact
+    // attachment capability. Generic ingress never queries the attachment registry: reply-required
+    // prompts publish one FIFO pass, noReply only persists, and shell retains its queue-or-Busy
+    // behavior. The coordinator validates only the private capability it was explicitly handed,
+    // which keeps its jurisdiction local to that invocation.
+    const admitPrompt = Effect.fn("SessionPrompt.admitPrompt")(function* (
+      input: TaskPromptInput,
+      release: Deferred.Deferred<void>,
+    ) {
       const claimed = input.attachmentScope
       if (claimed && claimed.sessionID !== input.sessionID) {
         yield* claimed.degrade()
@@ -1219,8 +1242,9 @@ const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
-      if (input.noReply === true) return message
-      return yield* loopWithAttachment({ sessionID: input.sessionID }, claimed)
+      if (input.noReply === true)
+        return { type: "completed", value: message } as const satisfies SessionRunState.Published
+      return yield* admitLoopWithAttachment({ sessionID: input.sessionID }, release, claimed)
     })
 
     const prompt: (
@@ -1229,14 +1253,16 @@ const layer = Layer.effect(
       SessionV1.WithParts,
       Image.Error | AdmissionError | Session.ReservedMetadataError | ScopeOwnRefused
     > = Effect.fn("SessionPrompt.prompt")(function* (input: TaskPromptInput) {
-      // Acquire at function entry, before the private attachment-scope mismatch check and well
-      // before revert cleanup. `admitted` retires in a finalizer, so even a wrong-session defect
-      // releases its lease rather than stranding it.
-      return yield* SessionAdmission.admitted(
+      // §7.3 rows 2-3. The lease is acquired at function entry, before the private attachment-scope
+      // mismatch check and well before `revert.cleanup`. `admitted` retires in a finalizer, so that
+      // wrong-session defect releases the lease rather than stranding it.
+      const release = yield* Deferred.make<void>()
+      const published = yield* SessionAdmission.admitted(
         closure,
         { session: input.sessionID, origin: "external", source: "SessionPrompt.prompt" },
-        () => promptAdmitted(input),
-      )
+        () => admitPrompt(input, release),
+      ).pipe(Effect.ensuring(Deferred.succeed(release, undefined).pipe(Effect.asVoid)))
+      return yield* awaitAdmission(published)
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1571,6 +1597,31 @@ const layer = Layer.effect(
         return yield* lastAssistant(sessionID)
       })
 
+    const awaitAdmission = Effect.fn("SessionPrompt.awaitAdmission")(function* (published: SessionRunState.Published) {
+      return yield* state.awaitPublished(published)
+    })
+
+    // Reply-required publication is distinct from legacy join. The selected fiber owns a fresh
+    // execution admission; the queuer's wrapper owns only persistence and publication.
+    const admitLoopWithAttachment = Effect.fn("SessionPrompt.admitLoopWithAttachment")(function* (
+      input: LoopInput,
+      release: Deferred.Deferred<void>,
+      attachment?: AttachmentCoordinator.Scope,
+    ) {
+      if (attachment && attachment.sessionID !== input.sessionID) {
+        yield* attachment.degrade()
+        return yield* Effect.die(new Error(`Attachment scope does not belong to session ${input.sessionID}`))
+      }
+      return yield* state.publish(
+        input.sessionID,
+        lastAssistant(input.sessionID),
+        runLoop(input.sessionID, attachment).pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die)),
+        release,
+      )
+    })
+
+    const admitLoop: Interface["admitLoop"] = (input, release) => admitLoopWithAttachment(input, release)
+
     // Attachment carriage is an invocation-private Task seam, not part of the generic SessionPrompt
     // service. Validate the handed capability before Runner arbitration so even a joined Runner cannot
     // let a wrong-Session scope reach Task execution or observer state. This observes no registry and
@@ -1595,10 +1646,14 @@ const layer = Layer.effect(
 
     // The public loop stays capability-free: an attachment scope is only ever carried in, never
     // discovered, so a generic caller cannot join a delegated call's turn observation.
-    const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts, AdmissionError> = Effect.fn(
-      "SessionPrompt.loop",
-    )(function* (input: LoopInput) {
-      return yield* loopWithAttachment(input)
+    const loop: Interface["loop"] = Effect.fn("SessionPrompt.loop")(function* (input: LoopInput) {
+      const release = yield* Deferred.make<void>()
+      const published = yield* SessionAdmission.admitted(
+        closure,
+        { session: input.sessionID, origin: "internal", source: "SessionPrompt.loop" },
+        () => admitLoop(input, release),
+      ).pipe(Effect.ensuring(Deferred.succeed(release, undefined).pipe(Effect.asVoid)))
+      return yield* awaitAdmission(published)
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError | AdmissionError> =
@@ -1633,18 +1688,34 @@ const layer = Layer.effect(
       // keeps the existing "Command not found" error exact without opening a window for executable
       // work. Nothing above this point is plugin, model or template work.
       //
-      // The inner `prompt` call finds this ambient context for the same session and takes no second
-      // lease, so a command stays one logical admission rather than two.
-      return yield* SessionAdmission.admitted(
+      // The registry lookup stays AHEAD of admission for the same reason Permission's
+      // unknown-request check and `Session.remove`'s `get` do: it is a read-only precondition, so
+      // deciding it first keeps the existing "Command not found" error exact without opening a
+      // window for executable work. Nothing above this point is plugin, model, or template work.
+      //
+      // `admitCommand` publishes directly rather than entering the public prompt wrapper. The
+      // command wrapper therefore owns only pre-publication work; the selected FIFO fiber later
+      // strips any ambient service and acquires its fresh execution admission.
+      const release = yield* Deferred.make<void>()
+      const published = yield* SessionAdmission.admitted(
         closure,
         { session: input.sessionID, origin: "external", source: "SessionPrompt.command" },
-        () => commandAdmitted(input, cmd),
-      )
+        () => admitCommand(input, cmd, release),
+      ).pipe(Effect.ensuring(Deferred.succeed(release, undefined).pipe(Effect.asVoid)))
+      const result = yield* awaitAdmission(published)
+      yield* events.publish(Command.Event.Executed, {
+        name: input.command,
+        sessionID: input.sessionID,
+        arguments: input.arguments,
+        messageID: result.info.id,
+      })
+      return result
     })
 
-    const commandAdmitted = Effect.fn("SessionPrompt.commandAdmitted")(function* (
+    const admitCommand = Effect.fn("SessionPrompt.admitCommand")(function* (
       input: CommandInput,
       cmd: Command.Info,
+      release: Deferred.Deferred<void>,
     ) {
       const agentName = cmd.agent ?? input.agent
 
@@ -1742,21 +1813,17 @@ const layer = Layer.effect(
         { parts },
       )
 
-      const result = yield* prompt({
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-        model: userModel,
-        agent: userAgent,
-        parts,
-        variant: input.variant,
-      })
-      yield* events.publish(Command.Event.Executed, {
-        name: input.command,
-        sessionID: input.sessionID,
-        arguments: input.arguments,
-        messageID: result.info.id,
-      })
-      return result
+      return yield* admitPrompt(
+        {
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          model: userModel,
+          agent: userAgent,
+          parts,
+          variant: input.variant,
+        },
+        release,
+      )
     })
 
     return Service.of({
@@ -1767,6 +1834,8 @@ const layer = Layer.effect(
       // external consumer's error union.
       prompt: (input: PromptInput) => prompt(input).pipe(Effect.catchTag("SessionScopeOwnRefused", Effect.die)),
       loop,
+      admitLoop,
+      awaitPublished: awaitAdmission,
       shell,
       command: (input: CommandInput) => command(input).pipe(Effect.catchTag("SessionScopeOwnRefused", Effect.die)),
       resolvePromptParts,

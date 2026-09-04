@@ -3,7 +3,7 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Config, Effect, Layer } from "effect"
+import { Config, Deferred, Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { SessionClosure } from "@/session/closure/coordinator"
@@ -30,6 +30,7 @@ import {
 
 const trace: string[] = []
 const compactAgents: string[] = []
+const promptRelease: { value?: Deferred.Deferred<void> } = {}
 let refused: SessionID | undefined
 let sequence = 0
 let routedDatabase: Database.Interface | undefined
@@ -105,6 +106,19 @@ const prompt = Layer.succeed(
     cancel: () => Effect.void,
     prompt: () => Effect.die("unused prompt"),
     loop: () => Effect.sync(() => trace.push("loop")).pipe(Effect.as(reply)),
+    admitLoop: (_input, release) =>
+      Effect.gen(function* () {
+        promptRelease.value = release
+        trace.push(`loop:${(yield* Deferred.isDone(release)) ? "open" : "closed"}`)
+        return { type: "completed", value: reply } as const
+      }),
+    awaitPublished: (published) =>
+      Effect.gen(function* () {
+        const release = promptRelease.value
+        if (!release) return yield* Effect.die("summarize did not publish a loop release")
+        trace.push(`await:${(yield* Deferred.isDone(release)) ? "open" : "closed"}`)
+        return yield* published.type === "completed" ? Effect.succeed(published.value) : published.await
+      }),
     shell: () => Effect.die("unused shell"),
     command: () => Effect.die("unused command"),
     resolvePromptParts: () => Effect.die("unused resolvePromptParts"),
@@ -152,6 +166,7 @@ afterEach(async () => {
   refused = undefined
   trace.length = 0
   compactAgents.length = 0
+  delete promptRelease.value
   routedDatabase = undefined
   await disposeAllInstances()
 })
@@ -186,8 +201,9 @@ describe("summarize handler closure admission (CP-023 K38)", () => {
           "cleanup",
           "mutation:retire",
           "compact",
-          "loop",
+          "loop:closed",
           "retire",
+          "await:open",
         ])
 
         const blocked = yield* create()
