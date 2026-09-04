@@ -1,0 +1,84 @@
+---
+title: Deep links
+description: Open projects and start sessions in the OpenCode desktop app from a custom opencode:// URL.
+---
+
+OpenCode supports `opencode://` links that jump straight into a project or a new session from a browser, shell, or any other app. Clicking a link opens (or focuses) the OpenCode desktop app and takes you to the right place.
+
+---
+
+## Supported links
+
+| Link                                                   | Purpose                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `opencode://open-project?directory=<path>`             | Open (or focus) the project at `<path>` in the desktop app.        |
+| `opencode://new-session?directory=<path>`              | Open the project at `<path>` and start a new session.              |
+| `opencode://new-session?directory=<path>&prompt=<text>` | Open the project at `<path>` and start a new session with `<text>` pre-filled as the prompt. |
+
+Both links require a `directory`. `new-session` also accepts an optional `prompt` to pre-fill the first message — the prompt is placed in the composer and is not sent until you submit it.
+
+:::tip
+URL-encode the `prompt` value so spaces and special characters survive the trip through the browser or shell. For example, `explain the entrypoint` becomes `explain%20the%20entrypoint`.
+:::
+
+---
+
+## Open a project
+
+Use `open-project` to launch OpenCode focused on a specific directory. If the project is already open, the existing window is focused instead of opening a duplicate.
+
+```text
+opencode://open-project?directory=/home/me/repos/my-app
+```
+
+On Windows, use the Windows-style path of the directory:
+
+```text
+opencode://open-project?directory=C:\Users\me\repos\my-app
+```
+
+---
+
+## Start a new session
+
+Use `new-session` to open a project and immediately start a new session. Add a `prompt` to pre-fill the first message.
+
+```text
+opencode://new-session?directory=/home/me/repos/my-app&prompt=explain%20the%20entrypoint
+```
+
+Without a `prompt`, the session view opens with an empty composer:
+
+```text
+opencode://new-session?directory=/home/me/repos/my-app
+```
+
+---
+
+## Triggering deep links
+
+### From a browser or HTML
+
+Use an anchor tag and the browser will hand the URL to the desktop app:
+
+```html
+<a href="opencode://new-session?directory=/home/me/repos/my-app&prompt=fix%20the%20build">
+  Open in OpenCode
+</a>
+```
+
+### From a shell
+
+Use `start` (Windows), `open` (macOS), or `xdg-open` (Linux):
+
+```bash
+# macOS / Linux
+xdg-open "opencode://open-project?directory=$HOME/repos/my-app"
+
+# Windows
+start "" "opencode://open-project?directory=C:\Users\me\repos\my-app"
+```
+
+### From another app
+
+Any tool that can open a URL — launchers, note apps, CI dashboards — can emit an `opencode://` link. Combine `new-session` with a `prompt` to wire "open this repo and ask X" buttons into your existing workflows.
