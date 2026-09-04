@@ -1,0 +1,171 @@
+---
+title: "Lifecycle hooks"
+description: "React to session and turn boundaries from your plugin"
+---
+
+Plugins can subscribe to lifecycle events to react when a session starts, when
+the agent finishes a turn, and when a session is about to end. All three hooks
+are optional; declare only the ones you need.
+
+## `session.start`
+
+Fires once when a session is created, before any tool calls. Use this to set up
+per-session state in your plugin (background workers, telemetry handles, audit
+log entries).
+
+```ts
+import type { Hooks } from "@opencode-ai/plugin"
+
+const plugin: Hooks = {
+  "session.start": async (input, output) => {
+    console.log(`session ${input.sessionID} starting in ${input.cwd}`)
+    // Tag the session for downstream consumers
+    output.metadata.tenant = "acme"
+    output.metadata.tier = "pro"
+  },
+}
+
+export default async () => plugin
+```
+
+### Input
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sessionID` | `string` | Unique session identifier |
+| `cwd` | `string` | Working directory of the session |
+| `agent` | `string` | Agent name (empty string if unset) |
+| `timestamp` | `number` | Unix epoch (ms) when the session was created |
+
+### Output
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `metadata` | `Record<string, unknown>` | Plugin tags merged into the session record. Reserved keys (`sessionID`, `cwd`, `agent`, `timestamp`) are rejected. |
+
+## `stop`
+
+Fires once at the end of an agent turn, after the LLM produces its final
+message (or the turn aborts/errors). The most common use is post-turn work
+(commit, summarize, notify) or requesting another turn.
+
+```ts
+import type { Hooks } from "@opencode-ai/plugin"
+
+const plugin: Hooks = {
+  stop: async (input, output) => {
+    if (input.reason === "completed") {
+      console.log(`turn complete in session ${input.sessionID}`)
+    }
+    // Re-run the loop with the same context (advanced)
+    output.continue = false
+  },
+}
+
+export default async () => plugin
+```
+
+### Input
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sessionID` | `string` | Session the turn belongs to |
+| `agent` | `string` | Agent name that produced the turn |
+| `messageID` | `string` | ID of the final assistant message |
+| `reason` | `"completed" \| "aborted" \| "error"` | How the turn ended |
+
+### Output
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `continue` | `boolean` | If `true`, the loop re-iterates with the same context instead of returning. Honored only when `reason === "completed"`. Defaults to `false`. |
+
+<Warning>
+  Setting `output.continue = true` re-runs the same `lastUser` through the LLM
+  with no synthetic prompt. Use sparingly — the loop will not re-ask the user
+  for input. To break out of a continued loop, your plugin must not set
+  `output.continue = true` on a subsequent turn.
+</Warning>
+
+## `session.end`
+
+Fires once before a session is deleted, before the existing `dispose` lifecycle.
+Use this for cleanup (flush buffers, close connections, write final audit
+entries). The hook is hard-capped at 5 seconds; slow plugins are timed out, not
+allowed to block shutdown.
+
+```ts
+import type { Hooks } from "@opencode-ai/plugin"
+
+const plugin: Hooks = {
+  "session.end": async (input) => {
+    console.log(
+      `session ${input.sessionID} ended after ${input.duration_ms}ms (${input.reason})`,
+    )
+  },
+}
+
+export default async () => plugin
+```
+
+### Input
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sessionID` | `string` | Session being deleted |
+| `duration_ms` | `number` | Wall-clock time since `session.start` |
+| `turn_count` | `number` | Number of agent turns completed in this session |
+| `reason` | `"user_exit" \| "error" \| "timeout"` | Why the session is ending |
+
+### Output
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cleanup` | `boolean` | If `false`, the runtime defers forced cleanup for up to 5 seconds (hard ceiling). Defaults to `true`. |
+
+## Error handling
+
+A plugin that throws inside any lifecycle hook is logged via `Effect.logError`
+and the session/loop continues normally. Lifecycle hooks are **observers, not
+gatekeepers** — they cannot block a session from starting, ending, or stopping
+a turn. If you need to enforce a policy, use the permission system instead.
+
+## Example: a telemetry plugin
+
+```ts
+import type { Hooks } from "@opencode-ai/plugin"
+
+const startTimes = new Map<string, number>()
+
+const hooks: Hooks = {
+  "session.start": async (input) => {
+    startTimes.set(input.sessionID, input.timestamp)
+    fetch("https://telemetry.example.com/sessions", {
+      method: "POST",
+      body: JSON.stringify({ id: input.sessionID, cwd: input.cwd, agent: input.agent }),
+    })
+  },
+  "session.end": async (input) => {
+    const start = startTimes.get(input.sessionID) ?? input.timestamp
+    fetch("https://telemetry.example.com/sessions/end", {
+      method: "POST",
+      body: JSON.stringify({
+        id: input.sessionID,
+        duration_ms: input.duration_ms,
+        reason: input.reason,
+        start,
+      }),
+    })
+    startTimes.delete(input.sessionID)
+  },
+  stop: async (input) => {
+    if (input.reason !== "completed") return
+    fetch("https://telemetry.example.com/turns", {
+      method: "POST",
+      body: JSON.stringify({ sessionID: input.sessionID, messageID: input.messageID }),
+    })
+  },
+}
+
+export default async () => hooks
+```

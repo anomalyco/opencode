@@ -1316,7 +1316,34 @@ const layer = Layer.effect(
               }
             }
 
-            if (result === "stop") return "break" as const
+            if (result === "stop") {
+              // Emit `stop` hook at natural end of turn. If a plugin sets
+              // `output.continue = true`, the loop re-iterates instead of
+              // breaking. Honored only on `reason: "completed"` to prevent
+              // infinite loops on aborted or errored turns. The same
+              // `lastUser` is reprocessed — the LLM re-evaluates the
+              // conversation with the new plugin context.
+              const stopInput = {
+                sessionID,
+                agent: lastUser.agent,
+                messageID: handle.message.id,
+                reason: "completed" as const,
+              }
+              const stopOutput = { continue: false }
+              yield* plugin
+                .trigger("stop", stopInput, stopOutput)
+                .pipe(Effect.catch((err) => Effect.logError("stop hook failed", { sessionID, err })))
+
+              if (stopOutput.continue) {
+                yield* Effect.logInfo("stop hook requested continue", {
+                  "session.id": sessionID,
+                  step,
+                  messageID: stopInput.messageID,
+                })
+                return "continue" as const
+              }
+              return "break" as const
+            }
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,
@@ -1336,6 +1363,7 @@ const layer = Layer.effect(
         }
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
+
         return yield* lastAssistant(sessionID)
       },
     )

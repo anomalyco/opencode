@@ -332,4 +332,52 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+
+  /**
+   * Fires once at end of agent turn, after the last tool call resolves
+   * and the LLM has produced its final message (or aborted/errored).
+   *
+   * - `reason` indicates how the turn ended.
+   * - `output.continue` allows a plugin to request another turn
+   *   (advanced; default false). Only honored when `reason === "completed"`.
+   */
+  "stop"?: (
+    input: {
+      sessionID: string
+      agent: string
+      messageID: string
+      reason: "completed" | "aborted" | "error"
+    },
+    output: { continue: boolean },
+  ) => Promise<void>
+
+  /**
+   * Fires once when a session is created, before any tool calls.
+   * Plugin may add to `output.metadata` (reserved keys blocked).
+   */
+  "session.start"?: (
+    input: {
+      sessionID: string
+      cwd: string
+      agent: string
+      timestamp: number
+    },
+    output: { metadata: Record<string, unknown> },
+  ) => Promise<void>
+
+  /**
+   * Fires once before session shutdown, before existing `dispose` lifecycle.
+   *
+   * - `output.cleanup` defaults to true; if a plugin sets false, the
+   *   runtime defers forced cleanup for up to 5s (hard ceiling).
+   */
+  "session.end"?: (
+    input: {
+      sessionID: string
+      duration_ms: number
+      turn_count: number
+      reason: "user_exit" | "error" | "timeout"
+    },
+    output: { cleanup: boolean },
+  ) => Promise<void>
 }

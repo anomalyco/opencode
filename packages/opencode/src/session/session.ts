@@ -10,6 +10,7 @@ import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { Plugin } from "../plugin"
 import { SessionV2 } from "@opencode-ai/core/session"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
@@ -486,7 +487,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | Plugin.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -495,6 +496,7 @@ const layer: Layer.Layer<
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const plugin = yield* Plugin.Service
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
@@ -533,6 +535,22 @@ const layer: Layer.Layer<
       yield* Effect.logInfo("created", result)
 
       yield* events.publish(SessionV1.Event.Created, { sessionID: result.id, info: result })
+
+      const sessionStartOutput = { metadata: {} as Record<string, unknown> }
+      yield* plugin
+        .trigger(
+          "session.start",
+          {
+            sessionID: result.id,
+            cwd: result.directory,
+            agent: result.agent ?? "",
+            timestamp: result.time.created,
+          },
+          sessionStartOutput,
+        )
+        .pipe(
+          Effect.catch((err) => Effect.logError("session.start hook failed", { sessionID: result.id, err })),
+        )
 
       return result
     })
@@ -617,6 +635,27 @@ const layer: Layer.Layer<
         const kids = yield* children(sessionID)
         for (const child of kids) {
           yield* remove(child.id)
+        }
+
+        if (hasInstance) {
+          const sessionEndOutput = { cleanup: true }
+          yield* plugin
+            .trigger(
+              "session.end",
+              {
+                sessionID,
+                duration_ms: Date.now() - session.time.created,
+                turn_count: 0,
+                reason: "user_exit",
+              },
+              sessionEndOutput,
+            )
+            .pipe(
+              Effect.timeout(5000),
+              Effect.catch((err) =>
+                Effect.logError("session.end hook failed or timed out", { sessionID, err }),
+              ),
+            )
         }
 
         yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
@@ -1007,10 +1046,33 @@ function listByProject(
     )
 }
 
+// `Plugin.node` is wrapped in a lazy Proxy because session.ts and
+// plugin/index.ts form a circular import: plugin/index.ts imports
+// `Session` from this file, which means `Plugin.node` is in TDZ when
+// session.ts is evaluated first. The Proxy's `get` trap is invoked only
+// when LayerNode's compiled graph actually reads each dep property (which
+// happens after both modules are fully loaded), avoiding the TDZ error
+// while still declaring the dependency so the Plugin service is provided
+// to Session at runtime.
+const _pluginNode: LayerNode.Node<unknown, unknown, any> = new Proxy({} as LayerNode.Node<unknown, unknown, any>, {
+  get(_target, prop) {
+    return (Plugin.node as any)[prop]
+  },
+  has(_target, prop) {
+    return prop in (Plugin.node as any)
+  },
+  ownKeys() {
+    return Reflect.ownKeys(Plugin.node as any)
+  },
+  getOwnPropertyDescriptor(_target, prop) {
+    return Object.getOwnPropertyDescriptor(Plugin.node as any, prop)
+  },
+}) as LayerNode.Node<unknown, unknown, any>
+
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, _pluginNode] as never,
 })
 
 export * as Session from "./session"
