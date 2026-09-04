@@ -389,7 +389,7 @@ export const layer = Layer.effect(
     })
     const executeProvider = Effect.fn("SessionCompaction.executeProvider")(function* (
       input: ExecuteInput,
-      retained: readonly SessionMessage.Info[],
+      retained: Effect.Effect<readonly SessionMessage.Info[]>,
     ) {
       const context = input.context
       const reject = (message: string) =>
@@ -429,12 +429,7 @@ export const layer = Layer.effect(
       if (!provenance) return yield* reject("Provider compaction requires a stable, configured endpoint")
       // History is selected before request hooks. Until that interface can select on the final route,
       // require routing in the catalog; never install a checkpoint that the next request would skip.
-      if (
-        !SessionProviderContext.compatible(
-          { version: 1, provenance, messages: [] },
-          SessionProviderContext.provenance(context.model),
-        )
-      )
+      if (!SessionProviderContext.compatible(provenance, SessionProviderContext.provenance(context.model)))
         return yield* reject(
           "Provider compaction requires the endpoint in provider/model settings, not a model.request rewrite",
         )
@@ -455,10 +450,11 @@ export const layer = Layer.effect(
           const result = yield* restore(
             Effect.gen(function* () {
               if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
+                const messages = yield* retained
                 const result = yield* llm.compact(request, { ...prepared.options, mechanism: "trigger" })
                 return {
                   replacement: [
-                    ...retainUsers(retained, { ...context.model, model: request.model }),
+                    ...retainUsers(messages, { ...context.model, model: request.model }),
                     Message.assistant([result.checkpoint]),
                   ],
                   usage: result.usage,
@@ -734,7 +730,7 @@ export const layer = Layer.effect(
               started: input.started,
             }
             return context.model.compaction?.mode === "provider"
-              ? executeProvider(request, input.messages)
+              ? executeProvider(request, Effect.succeed(input.messages))
               : execute(request)
           },
         }),
