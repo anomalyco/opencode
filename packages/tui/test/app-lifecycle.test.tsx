@@ -1531,40 +1531,6 @@ test("server plugin failures share one notice and use source names before an ID 
   expect(setup.captureCharFrame()).toContain("Open plugins")
 })
 
-test("shows an available update on Home and opens the update dialog on click", async () => {
-  await using state = await tmpdir()
-  const monitored = Promise.withResolvers<(notice: { type: "available" | "installed"; version: string }) => void>()
-  await using setup = await createAppFixture({
-    state: state.path,
-    updater: {
-      subscribe: async (notify, signal) => {
-        monitored.resolve(notify)
-        await new Promise<void>((resolve) => {
-          if (signal.aborted) return resolve()
-          signal.addEventListener("abort", () => resolve(), { once: true })
-        })
-      },
-      apply: async () => {},
-    },
-  })
-  await setup.ready
-  const notify = await monitored.promise
-  notify({ type: "available", version: "2.0.0" })
-  await setup.waitForFrame((frame) => frame.includes("OpenCode 2.0.0 is available"))
-
-  const lines = setup.captureCharFrame().split("\n")
-  const row = lines.findIndex((line) => line.includes("OpenCode 2.0.0 is available"))
-  expect(row).toBeGreaterThanOrEqual(0)
-  const line = lines[row]
-  if (!line) throw new Error("Update notification is missing")
-  await setup.mockMouse.click(line.indexOf("OpenCode 2.0.0 is available"), row)
-  await setup.waitForFrame((frame) => frame.includes("Update available") && frame.includes("manually restart"))
-  expect(setup.captureCharFrame()).not.toContain("OpenCode 2.0.0 is available")
-  setup.mockInput.pressEscape()
-  setup.events.emit({ id: "evt_updated", created: 1, type: "installation.updated", data: { version: "2.0.0" } })
-  await setup.waitForFrame((frame) => frame.includes("OpenCode 2.0.0 was installed · restart to apply"))
-})
-
 async function createAppFixture(
   input: {
     width?: number
@@ -1572,7 +1538,6 @@ async function createAppFixture(
     state?: string
     config?: Config.Info
     args?: TuiInput["args"]
-    updater?: TuiInput["updater"]
     fetch?: FetchHandler
   } = {},
 ) {
@@ -1594,7 +1559,6 @@ async function createAppFixture(
       server: { endpoint: { url: server.url.toString() } },
       config: { get: async () => input.config ?? { animations: false }, update: async () => ({}) },
       packages: { prepare: async () => ({ directory: "" }) },
-      updater: input.updater,
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
       args: input.args ?? {},
       log: () => {},

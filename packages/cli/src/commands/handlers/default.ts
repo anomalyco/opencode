@@ -84,6 +84,7 @@ export default Runtime.handler(Commands, (input) =>
         update: (update) => runPromise(config.update(update)),
       },
       updater: {
+        remote: requestedServer !== undefined,
         subscribe: (notify, signal) =>
           runPromise(
             Fiber.join(update).pipe(
