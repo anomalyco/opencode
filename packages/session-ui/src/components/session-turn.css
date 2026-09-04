@@ -83,6 +83,48 @@
     overflow-y: auto;
   }
 
+  [data-component="card"]:is([data-kind="session-retry-card"], [data-kind="session-error-card"]) {
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+  }
+
+  [data-component="card"][data-kind="session-retry-card"] {
+    --card-pad-l: 0px;
+    --card-pad-r: 0px;
+
+    &::before {
+      display: none;
+    }
+
+    [data-slot="session-turn-retry-message"] {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    [data-slot="session-turn-retry-info"] {
+      margin-top: 4px;
+      color: var(--v2-text-text-faint);
+      font-family: var(--v2-font-family-sans);
+      font-size: 13px;
+      font-weight: 440;
+      line-height: var(--line-height-compact);
+      letter-spacing: -0.04px;
+    }
+  }
+
+  [data-component="card"][data-kind="session-error-card"] {
+    --card-pad-y: 0px;
+    --card-pad-l: 0px;
+    --card-pad-r: 0px;
+
+    &::before {
+      display: none;
+    }
+  }
+
   [data-slot="session-turn-assistant-content"] {
     width: 100%;
     min-width: 0;

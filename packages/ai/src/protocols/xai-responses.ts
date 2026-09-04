@@ -46,9 +46,12 @@ const adapter = {
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(XAIResponsesBody))
 const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LLMRequest) {
   if (request.providerOptions?.contextManagement !== undefined)
-    return yield* ProviderShared.invalidRequest(
-      "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
-    )
+    return yield* ProviderShared.unsupportedOperation({
+      operation: "in-band-compaction",
+      provider: request.model.provider,
+      route: request.model.route.id,
+      message: "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
+    })
   return yield* decodeBody(yield* OpenResponses.fromRequestWithAdapter(request, adapter))
 })
 

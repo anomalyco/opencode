@@ -4,7 +4,10 @@ import { describe, expect } from "bun:test"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
 import { Directory, Document, Event, Info } from "@opencode-ai/schema/config"
-import { Session } from "@opencode-ai/schema/session"
+import { Session } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { Job } from "@opencode-ai/core/job"
+import { Agent } from "@opencode-ai/core/agent"
 import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Command } from "@opencode-ai/core/command"
@@ -27,6 +30,8 @@ import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes
 import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
+import { tempGlobalLayer } from "../fixture/global"
+import { offlineModels } from "../fixture/models"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
@@ -41,12 +46,25 @@ const shellLayer = Layer.succeed(
 
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Command.node, Bus.node, FSUtil.node, AppProcess.node, Location.node, ShellSelect.node]),
+    LayerNode.group([
+      Command.node,
+      Bus.node,
+      FSUtil.node,
+      AppProcess.node,
+      Location.node,
+      ShellSelect.node,
+      Session.node,
+      Job.node,
+      Agent.node,
+    ]),
     [
       Mcp.node.replace(emptyMcpLayer),
       Config.node.replace(emptyConfigLayer),
       Location.node.replace(testLocationLayer),
       ShellSelect.node.replace(shellLayer),
+      Global.node.replace(tempGlobalLayer),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      offlineModels,
     ],
   ),
 )

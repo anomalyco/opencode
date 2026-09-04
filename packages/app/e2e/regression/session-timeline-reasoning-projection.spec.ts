@@ -42,7 +42,7 @@ test("changes timeline presets and saves custom thinking details", async ({ page
     .toEqual({ placement: "grouped", details: "collapsed" })
   await settings.getByRole("button", { name: "Back to app", exact: true }).click()
   await expect(settings).toBeHidden()
-  await page.getByRole("button", { name: "Reasoning", exact: true }).click()
+  await page.getByRole("button", { name: "Used 1 Thought", exact: true }).click()
   await expect(part.getByRole("button")).toHaveAttribute("aria-expanded", "false")
   await part.getByRole("button").click()
   await expect(part.getByText("The selected mode controls these details.", { exact: true })).toBeVisible()

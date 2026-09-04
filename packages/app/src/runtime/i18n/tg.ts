@@ -134,6 +134,7 @@ export const dict = {
   "command.language.cycle": "Забони даврӣ",
   "command.language.set": "Истифодаи забон: {{language}}",
   "command.session.new": "Сеанси нав",
+  "command.session.import": "Воридоти сеанс",
   "command.file.open": "Файлро кушоед",
   "command.tab.close": "Варақаро пӯшед",
   "command.tab.reopenClosed": "Варақаи пӯшидаро аз нав кушоед",

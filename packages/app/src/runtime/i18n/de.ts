@@ -44,6 +44,7 @@ export const dict = {
   "command.language.cycle": "Sprache wechseln",
   "command.language.set": "Sprache verwenden: {{language}}",
   "command.session.new": "Neue Sitzung",
+  "command.session.import": "Sitzung importieren",
   "command.file.open": "Datei öffnen",
   "command.tab.close": "Tab schließen",
   "command.tab.reopenClosed": "Geschlossenen Tab wieder öffnen",

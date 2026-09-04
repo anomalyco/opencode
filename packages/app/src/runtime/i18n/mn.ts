@@ -135,6 +135,7 @@ export const dict = {
   "command.language.cycle": "Циклийн хэл",
   "command.language.set": "Хэл ашиглах: {{language}}",
   "command.session.new": "Шинэ сесс",
+  "command.session.import": "Сесс импортлох",
   "command.file.open": "Файлыг нээх",
   "command.tab.close": "Табыг хаах",
   "command.tab.reopenClosed": "Хаагдсан табыг дахин нээнэ үү",

@@ -8,13 +8,11 @@ import {
   userMessage,
 } from "../performance/timeline-stability/fixture"
 
-test("transitions shell and question through running error outcomes", async ({ page }) => {
+test("keeps shell and question failures in their Used group", async ({ page }) => {
   const shellID = "prt_transition_error_shell"
   const questionID = "prt_transition_error_question"
   const timeline = await setupTimeline(page, {
-    settings: {
-      timelineDetail: { ...timelinePresets[2].value, shell: { placement: "separate", details: "expanded" } },
-    },
+    settings: { timelineDetail: timelinePresets[2].value },
     messages: [
       userMessage(),
       assistantMessage(
@@ -26,13 +24,24 @@ test("transitions shell and question through running error outcomes", async ({ p
       ),
     ],
   })
+  const group = page.locator('[data-component="collapsed-tool-group"]')
+  const used = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+  await used.click()
   await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
   await timeline.send(partUpdated(toolPart(shellID, "shell", "running", { command: "exit 1" })))
   await expect(page.locator(`[data-timeline-part-id="${shellID}"]`)).toContainText("exit 1")
   await timeline.send(partUpdated(toolPart(questionID, "question", "running", questionInput())))
   await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
   await timeline.send(
-    partUpdated(toolPart(shellID, "shell", "error", { command: "exit 1" }, { error: "Command exited 1" })),
+    partUpdated(
+      toolPart(
+        shellID,
+        "shell",
+        "completed",
+        { command: "exit 1" },
+        { output: "Command exited 1", metadata: { exit: 1 } },
+      ),
+    ),
   )
   await timeline.send(
     partUpdated(
@@ -40,17 +49,21 @@ test("transitions shell and question through running error outcomes", async ({ p
     ),
   )
 
-  await expect(page.locator(`[data-timeline-part-id="${shellID}"] [data-kind="tool-error-card"]`)).toBeVisible()
-  await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toContainText(/dismissed/i)
+  await expect(group).toHaveAttribute("data-timeline-part-ids", `${shellID},${questionID}`)
+  await expect(used).toHaveAttribute("aria-expanded", "true")
+  const shell = group.locator(`[data-timeline-part-id="${shellID}"]`)
+  await expect(shell.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "false")
+  await shell.locator('[data-slot="collapsible-trigger"]').click()
+  await expect(shell).toContainText("Command exited 1")
+  const question = group.locator(`[data-timeline-part-id="${questionID}"]`)
+  await expect(question).toContainText(/dismissed/i)
 })
 
-test("preserves surviving grouped patch state when its first patch fails", async ({ page }) => {
+test("keeps a failed patch in Used without losing the surviving file choice", async ({ page }) => {
   const failed = "prt_grouped_patch_failed"
   const surviving = "prt_grouped_patch_surviving"
   const timeline = await setupTimeline(page, {
-    settings: {
-      timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
-    },
+    settings: { timelineDetail: timelinePresets[2].value },
     messages: [
       userMessage(),
       assistantMessage(
@@ -81,7 +94,9 @@ test("preserves surviving grouped patch state when its first patch fails", async
     ],
   })
 
-  const group = page.locator(`[data-timeline-part-ids="${failed},${surviving}"]`)
+  const group = page.locator('[data-component="collapsed-tool-group"]')
+  const used = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+  await used.click()
   const file = group.locator('[data-scope="apply-patch"] button')
   await expect(file).toBeVisible()
   await expect(file).toHaveAttribute("aria-expanded", "false")
@@ -104,18 +119,14 @@ test("preserves surviving grouped patch state when its first patch fails", async
   const survivingRow = page.locator("[data-timeline-key]", {
     has: page.locator(`[data-timeline-part-id="${surviving}"]`),
   })
-  await expect(failedRow).toHaveAttribute("data-timeline-key", /^assistant-part:part:/)
-  await expect(survivingRow).toHaveAttribute("data-timeline-key", /^assistant-part:file:/)
+  await expect(group).toHaveAttribute("data-timeline-part-ids", `${failed},${surviving}`)
+  await expect(used).toHaveAttribute("aria-expanded", "true")
+  await expect(failedRow).toHaveAttribute("data-timeline-key", /^assistant-part:context:/)
+  await expect(survivingRow).toHaveAttribute("data-timeline-key", /^assistant-part:context:/)
+  await group.locator(`[data-timeline-part-id="${failed}"] [data-slot="collapsible-trigger"]`).click()
   await expect(failedRow.getByText("Patch failed visibly")).toBeVisible()
   await expect(survivingRow).toHaveAttribute("data-group-identity", "preserved")
   await expect(survivingRow.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "true")
-  await expect
-    .poll(async () => {
-      const previous = await failedRow.boundingBox()
-      const next = await survivingRow.boundingBox()
-      return previous && next ? next.y - (previous.y + previous.height) : Number.NEGATIVE_INFINITY
-    })
-    .toBeGreaterThanOrEqual(-0.5)
 })
 
 test("groups instruction files loaded by the same read", async ({ page }) => {

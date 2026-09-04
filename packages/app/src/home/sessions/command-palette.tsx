@@ -52,10 +52,9 @@ export function HomeCommandPalette(props: {
     }
     if (item.type === "session") props.onSelectSession(item)
   }
-  const loadItems = async (text: string) => {
-    const query = text.trim()
+  const items = (query: string) => {
     if (!query) return commandEntries().slice(0, 5)
-    return [...commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, query)), ...(await sessions(query))]
+    return commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, query))
   }
 
   onCleanup(() => {
@@ -66,7 +65,8 @@ export function HomeCommandPalette(props: {
   return (
     <CommandPaletteView
       placeholder={language.t("palette.search.placeholder.home")}
-      loadItems={loadItems}
+      items={items}
+      sources={[sessions]}
       highlight={highlight}
       select={select}
       close={() => dialog.close()}

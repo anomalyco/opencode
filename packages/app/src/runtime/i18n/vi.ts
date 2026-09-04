@@ -140,6 +140,7 @@ export const dict = {
   "command.language.cycle": "Chuyển ngôn ngữ",
   "command.language.set": "Sử dụng ngôn ngữ: {{language}}",
   "command.session.new": "Phiên mới",
+  "command.session.import": "Nhập phiên",
   "command.file.open": "Mở tệp",
   "command.tab.close": "Đóng tab",
   "command.tab.reopenClosed": "Mở lại tab đã đóng",

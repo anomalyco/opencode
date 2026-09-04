@@ -367,6 +367,7 @@ export const layer = Layer.effect(
       const chunks: string[] = []
       let failure: SessionError.Error | undefined
       let usage: SessionUsage.Recorded | undefined
+      let providerState: SessionMessage.ProviderState | undefined
       const recordUsage = Effect.suspend(() =>
         usage
           ? bus.publish(SessionEvent.UsageRecorded, {
@@ -407,6 +408,7 @@ export const layer = Layer.effect(
       // Ignored tool calls never enter the follow-up history or need fabricated results.
       for (let attempt = 0; attempt < 2; attempt++) {
         chunks.length = 0
+        providerState = undefined
         yield* llm
           .stream(
             attempt === 0
@@ -436,6 +438,10 @@ export const layer = Layer.effect(
                 })
               }
               if (LLMEvent.is.stepFinish(event)) {
+                providerState =
+                  event.providerMetadata?.[
+                    context.model.model.route.providerMetadataKey ?? context.model.model.provider
+                  ]
                 const step = SessionUsage.record(event.usage, context.model.cost)
                 usage = usage ? SessionUsage.add(usage, step) : step
               }
@@ -482,6 +488,8 @@ export const layer = Layer.effect(
       yield* bus.publish(SessionEvent.Compaction.Ended, {
         sessionID: context.session.id,
         reason: input.reason,
+        model: context.model.ref,
+        providerState,
         text: summary,
         recent: history.recent,
       })

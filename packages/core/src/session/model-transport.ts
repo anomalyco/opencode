@@ -28,11 +28,9 @@ const events = Metric.counter("opencode_session_websocket_events_total", {
 const metric = (event: string, attributes: Record<string, string> = {}) =>
   Metric.update(events.pipe(Metric.withAttributes({ event, ...attributes })), 1)
 
-type Delivery = "queued" | "connecting" | "ready" | "send-attempted" | "provider-observed" | "terminal"
-
 interface Active {
   readonly queue: Queue.Queue<string, AIError>
-  readonly lifecycle: { delivery: Delivery }
+  delivery: "send-attempted" | "provider-observed" | "terminal"
 }
 
 interface Channel {
@@ -130,14 +128,9 @@ export const makeLayer = (connector: WebSocketConnector) =>
                 code: "close",
                 phase: "close",
                 delivery:
-                  channel.active.lifecycle.delivery === "queued" ||
-                  channel.active.lifecycle.delivery === "connecting" ||
-                  channel.active.lifecycle.delivery === "ready"
-                    ? "not-sent"
-                    : channel.active.lifecycle.delivery === "provider-observed" ||
-                        channel.active.lifecycle.delivery === "terminal"
-                      ? "accepted"
-                      : "ambiguous",
+                  channel.active.delivery === "provider-observed" || channel.active.delivery === "terminal"
+                    ? "accepted"
+                    : "ambiguous",
               }),
             ),
           )
@@ -198,7 +191,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                       code: "idle-data",
                       phase: "receive",
                     })
-                  active.lifecycle.delivery = "provider-observed"
+                  active.delivery = "provider-observed"
                   if (typeof message !== "string")
                     return yield* transportError("Unsupported binary WebSocket frame", {
                       url: exchange.connect.url,
@@ -226,8 +219,8 @@ export const makeLayer = (connector: WebSocketConnector) =>
                         phase:
                           error.reason._tag === "Transport" && error.reason.phase === "close" ? "close" : "receive",
                         delivery:
-                          channel.active?.lifecycle.delivery === "provider-observed" ||
-                          channel.active?.lifecycle.delivery === "terminal" ||
+                          channel.active?.delivery === "provider-observed" ||
+                          channel.active?.delivery === "terminal" ||
                           (error.reason._tag === "Transport" && error.reason.code === "queue-overflow")
                             ? "accepted"
                             : error.reason._tag === "Transport" && error.reason.code === "1009"
@@ -256,7 +249,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
       const start = Effect.fn("SessionModelTransport.start")(function* (
         owner: State,
         exchange: WebSocketChannelExchange,
-        lifecycle: { delivery: Delivery },
       ) {
         if (owner.closed)
           return yield* transportError("Session WebSocket owner is closed", {
@@ -288,7 +280,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
           yield* closeChannel(owner, current)
         }
 
-        lifecycle.delivery = owner.channel ? "ready" : "connecting"
         if (owner.channel)
           yield* Effect.logDebug("session websocket reused", {
             sessionTransport: "websocket",
@@ -314,7 +305,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
               ),
             )
         if (!channel) return fallback(exchange)
-        lifecycle.delivery = "ready"
 
         if (channel.pending) {
           channel.pending = undefined
@@ -326,9 +316,11 @@ export const makeLayer = (connector: WebSocketConnector) =>
           Effect.onInterrupt(() => closeChannel(owner, channel)),
         )
         if (create.mode === "full") channel.checkpoint = undefined
-        const active: Active = { queue: yield* Queue.bounded<string, AIError>(INBOUND_CAPACITY), lifecycle }
+        const active: Active = {
+          queue: yield* Queue.bounded<string, AIError>(INBOUND_CAPACITY),
+          delivery: "send-attempted",
+        }
         channel.active = active
-        lifecycle.delivery = "send-attempted"
         const sent = yield* channel.connection.sendText(create.message).pipe(
           Effect.withSpan("SessionModelTransport.send"),
           Effect.onInterrupt(() => closeChannel(owner, channel)),
@@ -366,7 +358,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                   operation: "read",
                   code: "idle-timeout",
                   phase: "receive",
-                  delivery: lifecycle.delivery === "provider-observed" ? "accepted" : "ambiguous",
+                  delivery: active.delivery === "provider-observed" ? "accepted" : "ambiguous",
                 }),
               ),
           }),
@@ -375,7 +367,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
             Effect.sync(() => {
               if (!observationTerminal(observation)) return
               terminal = observation
-              lifecycle.delivery = "terminal"
+              active.delivery = "terminal"
               const staged = observation.type === "completed" ? observation.checkpoint : undefined
               if (staged) channel.pending = { token, checkpoint: staged }
               if (observation.type !== "completed" || !staged) channel.checkpoint = undefined
@@ -411,7 +403,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                     operation: "read",
                     code: "incomplete",
                     phase: "receive",
-                    delivery: lifecycle.delivery === "provider-observed" ? "accepted" : "ambiguous",
+                    delivery: active.delivery === "provider-observed" ? "accepted" : "ambiguous",
                   })
               yield* poison(owner, channel, error)
             }),
@@ -448,7 +440,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
       const bind = (sessionID: SessionSchema.ID): WebSocketChannelExecutor => ({
         execute: (exchange) => {
           const owner = state(sessionID)
-          const lifecycle = { delivery: "queued" as Delivery }
           let execution: WebSocketChannelExecution | undefined
           return Effect.succeed({
             get http() {
@@ -456,7 +447,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
             },
             frames: Stream.unwrap(
               Effect.acquireRelease(owner.lock.take(1), () => owner.lock.release(1), { interruptible: true }).pipe(
-                Effect.andThen(start(owner, exchange, lifecycle)),
+                Effect.andThen(start(owner, exchange)),
                 Effect.tap((started) =>
                   Effect.sync(() => {
                     execution = started

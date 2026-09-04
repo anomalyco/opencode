@@ -430,7 +430,9 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         key: id,
         options,
       }
-      setStore("registrations", (arr) => addCommandRegistration(arr, entry))
+      // Register only committed owners. Updating the registry during a transition
+      // can restore its pending snapshot after the outgoing owner's cleanup.
+      onMount(() => setStore("registrations", (arr) => addCommandRegistration(arr, entry)))
       onCleanup(() => {
         setStore("registrations", (arr) => arr.filter((x) => x !== entry))
       })

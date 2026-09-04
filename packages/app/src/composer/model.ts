@@ -251,6 +251,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const submission = createComposerSubmit({
     adapter,
     mode,
+    commands: () => data.location.command.list({ directory: sdk().directory }),
     editor: () => editor,
     queueScroll: () => requestAnimationFrame(() => editor?.scrollIntoView({ block: "nearest" })),
     addToHistory: (value, mode) => controller.addHistory(value, mode),

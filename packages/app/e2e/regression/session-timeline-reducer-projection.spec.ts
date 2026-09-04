@@ -138,7 +138,7 @@ test("combines follow-up patches into one three-file stack inside Used", async (
   await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts", "c.ts"])
 })
 
-test("keeps failed search calls and their error cards outside the collapsed stack", async ({ page }) => {
+test("keeps failed search calls and their error cards inside the collapsed stack", async ({ page }) => {
   const parts = [
     toolPart(
       "prt_error_glob",
@@ -161,14 +161,19 @@ test("keeps failed search calls and their error cards outside the collapsed stac
   ]
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
-  await expect(page.locator('[data-component="collapsed-tool-group"]')).toHaveCount(0)
-  await expect(page.locator('[data-kind="tool-error-card"]')).toHaveCount(2)
-  const glob = page.locator('[data-timeline-part-id="prt_error_glob"]')
+  const group = page.locator('[data-component="collapsed-tool-group"]')
+  const summary = group.getByRole("button", { name: "Used 1 Glob, 1 Grep", exact: true })
+  await expect(summary).toHaveAttribute("aria-expanded", "false")
+  await summary.click()
+  await expect(group.locator('[data-kind="tool-error-card"]')).toHaveCount(2)
+  const glob = group.locator('[data-timeline-part-id="prt_error_glob"]')
+  await expect(glob.getByRole("button")).toHaveAttribute("aria-expanded", "false")
+  await glob.getByRole("button").click()
   await expect(glob).toContainText("Invalid tool input")
   await expect(glob.locator('[data-component="tool-error-card-icon"]')).toBeVisible()
   await expect(glob.locator('[data-component="tool-error-card-icon"] use')).toHaveAttribute(
     "href",
-    "#opencode-v2-icon-circle-exclamation",
+    "#opencode-v2-icon-outline-hexagonal-warning",
   )
   await expect
     .poll(() =>
@@ -177,7 +182,8 @@ test("keeps failed search calls and their error cards outside the collapsed stac
         .evaluate((element) => getComputedStyle(element, "::before").display),
     )
     .toBe("none")
-  await expect(page.locator('[data-timeline-part-id="prt_error_grep"]')).toContainText(
+  await group.locator('[data-timeline-part-id="prt_error_grep"]').getByRole("button").click()
+  await expect(group.locator('[data-timeline-part-id="prt_error_grep"]')).toContainText(
     "Search timed out after 30 seconds",
   )
 })

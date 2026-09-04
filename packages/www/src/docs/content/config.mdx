@@ -129,15 +129,13 @@ agents.
 
 ### Updates
 
-Control updates from the global config. Set `update` to `"disable"` to skip
-updates, `"notify"` to report available updates without installing them, or
-`"auto"` to automatically install compatible non-major updates.
-Major updates are reported but never installed automatically.
+Control update checks from the global config. Set `update` to `"disable"` to
+skip them or `"notify"` to show available updates before installing them.
 Project-level values are ignored.
 
 ```jsonc
 {
-  "update": "auto",
+  "update": "notify",
 }
 ```
 

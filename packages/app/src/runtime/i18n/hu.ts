@@ -137,6 +137,7 @@ export const dict = {
   "command.language.cycle": "Nyelv váltása",
   "command.language.set": "Nyelv használata: {{language}}",
   "command.session.new": "Új munkamenet",
+  "command.session.import": "Munkamenet importálása",
   "command.file.open": "Nyissa meg a fájlt",
   "command.tab.close": "Lap bezárása",
   "command.tab.reopenClosed": "Nyissa meg újra a bezárt lapot",

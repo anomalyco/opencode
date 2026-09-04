@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "Tukar bahasa",
   "command.language.set": "Guna bahasa: {{language}}",
   "command.session.new": "Sesi baharu",
+  "command.session.import": "Import sesi",
   "command.file.open": "Buka fail",
   "command.tab.close": "Tutup tab",
   "command.tab.reopenClosed": "Buka semula tab tertutup",
