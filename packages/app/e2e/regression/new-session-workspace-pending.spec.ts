@@ -134,7 +134,7 @@ for (const viewport of [
       await expect(page).toHaveURL(pending.url)
       await expect(pending.message).toHaveAttribute("data-timeline-part-id", `${pending.messageID}:text:0`)
       await expect(pending.shimmer).toHaveAttribute("data-active", "true")
-      await expect(pending.title).toHaveText("New session")
+      await expect(pending.title).toHaveText("Session")
       await expect(editor).toHaveText(followUp)
       expect(mock.calls).toEqual(["worktree"])
 
@@ -238,7 +238,7 @@ for (const direction of ["ltr", "rtl"]) {
           !frame.message ||
           !frame.spinner ||
           frame.draft !== followUp ||
-          !["New session", "Created workspace session"].includes(frame.title ?? ""),
+          !["Session", "Created workspace session"].includes(frame.title ?? ""),
       ),
     ).toEqual([])
     const after = await title.boundingBox()
@@ -598,7 +598,7 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDra
   const shimmer = preparing.getByRole("status").locator('[data-component="text-shimmer"]')
   const title = preparing.getByRole("heading", { level: 1 })
   await expect(preparing).toBeVisible()
-  await expect(title).toHaveText("New session")
+  await expect(title).toHaveText("Session")
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   await expect(page.locator('[data-action="composer-submit"]')).toBeDisabled()
   await expect(preparing.locator('[data-component="user-message"]')).toHaveCount(1)
