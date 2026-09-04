@@ -35,6 +35,11 @@ desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.
 Server-local file IO stays in `files.ts`. The public `rpc.ts` entrypoint remains
 pure and does not load any of these runtime modules.
 
+## Tests
+
+Run `bun test` and `bun typecheck` from this package for its contract checks.
+Native browser coverage lives in `packages/desktop/test/browser-native.test.ts`.
+
 ## RPC
 
 The plugin-owned contract is `@opencode-ai/plugin-browser/rpc`. This entrypoint

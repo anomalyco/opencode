@@ -689,7 +689,6 @@
       "devDependencies": {
         "@opencode-ai/ai": "workspace:*",
         "@opencode-ai/httpapi-codegen": "workspace:*",
-        "@opencode-ai/plugin-browser": "workspace:*",
         "@opencode-ai/protocol": "workspace:*",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
