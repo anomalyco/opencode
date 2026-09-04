@@ -11,6 +11,7 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
   const page = createBrowserPage(win, {
     id: tabID,
     partition: `target-test-${crypto.randomUUID()}`,
+    network: null,
     publish() {},
     fail() {
       throw new Error("Target test page failed")

@@ -43,6 +43,7 @@ test("browser suite over authenticated HTTP RPC with separate server and desktop
   void server.exited.then((code) => ready.reject(new Error(`Fixture server exited: ${code}`)))
   let native: ReturnType<typeof Bun.spawn> | undefined
   let proxy: Bun.Server<undefined> | undefined
+  let tunnels = 0
   try {
     const url = await Promise.race([
       ready.promise,
@@ -58,6 +59,7 @@ test("browser suite over authenticated HTTP RPC with separate server and desktop
       idleTimeout: 0,
       async fetch(request) {
         const incoming = new URL(request.url)
+        if (incoming.pathname.endsWith("/tunnel.open")) tunnels++
         if (incoming.pathname.endsWith("/experimental.browser/state"))
           await new Promise((resolve) => setTimeout(resolve, 75))
         return fetch(new Request(new URL(incoming.pathname + incoming.search, url), request), { decompress: false })
@@ -84,6 +86,7 @@ test("browser suite over authenticated HTTP RPC with separate server and desktop
         ),
       ]),
     ).toBe(0)
+    expect(tunnels).toBeGreaterThan(0)
   } finally {
     if (native?.exitCode === null) {
       native.kill()

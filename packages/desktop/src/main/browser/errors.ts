@@ -21,15 +21,15 @@ export function browserFailure(action: Browser.Action, error: unknown): Extract<
   const network = navigation ? detail.match(/\bERR_[A-Z_]+\b/)?.[0] : undefined
   const hint =
     network === "ERR_CONNECTION_REFUSED"
-      ? "The desktop could not connect to the site. Check its hostname/port and that the site is reachable from the desktop. localhost means the desktop, not the remote server."
+      ? "The browser could not connect to the site. Check its hostname/port on the connected server. localhost means that server, not the desktop."
       : network === "ERR_NAME_NOT_RESOLVED"
-        ? "The desktop could not resolve the hostname. Check the URL spelling and the desktop's DNS/network connection."
+        ? "The connected server could not resolve the hostname. Check the URL spelling and the server's DNS/network connection."
         : network?.startsWith("ERR_CERT_") || network?.startsWith("ERR_SSL_")
           ? "The desktop rejected the site's TLS connection. Ask the user to fix the certificate or trust configuration; do not bypass certificate checks."
           : network === "ERR_ABORTED"
             ? "Navigation was interrupted or became a download. Inspect browser.tabs.list({}) and browser.files.list({tabID}) before deciding to navigate again."
             : network
-              ? "The site failed to load from the desktop. Check the URL and desktop connectivity before retrying; inspect the current tab first."
+              ? "The site failed to load through the connected server. Check its URL/network and the OC2 connection before retrying; inspect the current tab first."
               : action.type === "screenshot" && /UnknownVizError|capture.*(?:failed|unavailable)/i.test(detail)
                 ? "Chromium could not capture a rendered frame. Call browser.tabs.focus({tabID}) and keep the desktop window visible. If it is already visible, report the capture failure instead of repeating it unchanged."
                 : undefined
