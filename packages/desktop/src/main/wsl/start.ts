@@ -3,6 +3,7 @@ export * as Wsl from "./start"
 import { Context, Effect, Exit, FileSystem, Layer, Path } from "effect"
 import { Shutdown } from "../lifecycle/shutdown"
 import { DesktopCli } from "../service/desktop-cli"
+import { WSL_SERVERS_KEY } from "../storage/keys"
 import { WslIpc } from "./ipc"
 
 export interface Interface extends WslIpc.Interface {
@@ -27,7 +28,8 @@ export const layer = Layer.effect(
 const makeWsl = Effect.fn("Wsl.make")(function* (cli: DesktopCli.Resolved) {
   if (process.platform !== "win32") return { ...WslIpc.create(), stop: Effect.void }
 
-  const { createWslServersController } = yield* Effect.promise(() => import("./servers"))
+  const { createWslServersController, wslServerIdForDistro } = yield* Effect.promise(() => import("./servers"))
+  const { getStore } = yield* Effect.promise(() => import("../storage/store"))
   const { spawnWslSidecar } = yield* Effect.promise(() => import("./sidecar"))
   const { installWslCli, installWslDistro } = yield* Effect.promise(() => import("./runtime"))
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>()
@@ -36,6 +38,21 @@ const makeWsl = Effect.fn("Wsl.make")(function* (cli: DesktopCli.Resolved) {
   const local = cli.wslBuild
   const controller = yield* createWslServersController({
     cli: { version: cli.version },
+    readServers: () => {
+      const existing = getStore().get(WSL_SERVERS_KEY)
+      if (!existing || typeof existing !== "object") return []
+      const record = existing as { servers?: unknown }
+      const list = Array.isArray(record.servers) ? record.servers : []
+      return list.flatMap((value: unknown) => {
+        if (!value || typeof value !== "object") return []
+        const record = value as Record<string, unknown>
+        const distro = typeof record.distro === "string" && record.distro.length > 0 ? record.distro : null
+        if (!distro) return []
+        const id = typeof record.id === "string" && record.id.length > 0 ? record.id : wslServerIdForDistro(distro)
+        return [{ id, distro }]
+      })
+    },
+    writeServers: (servers) => getStore().set(WSL_SERVERS_KEY, { servers }),
     installDistro: (distro) => run(installWslDistro(distro)),
     installCli: local
       ? async (distro) => {

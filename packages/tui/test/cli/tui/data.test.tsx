@@ -5,6 +5,7 @@ import type { OpenCodeEvent } from "@opencode-ai/client"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
+import { Expected } from "../../../../core/test/lib/session-message"
 import { createEffect, onMount, type ParentProps } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
 import { ClientProvider, useClient } from "../../../src/context/client"
@@ -14,6 +15,8 @@ import { LocationProvider, useLocation } from "../../../src/context/location"
 import { RouteProvider } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
+import { DialogProvider } from "../../../src/ui/dialog"
+import { ToastProvider } from "../../../src/ui/toast"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
 import { emptyThemeSource } from "../../fixture/fixture"
@@ -40,12 +43,12 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
   events.emit({ ...event, location: { directory } })
 }
 
-const config = createTuiResolvedConfig()
+const config = createTuiResolvedConfig({ session: { terminal: false } })
 
 function DataProvider(props: ParentProps) {
   return (
     <ConfigProvider config={config}>
-      <DataProviderBase>
+      <DataProviderBase directory={process.cwd()}>
         <LocationProvider>
           <SyncLocation />
           {props.children}
@@ -1128,6 +1131,10 @@ test("removes committed revert messages from local state", async () => {
     expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_001"])
     expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
     expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
+    // The projector also drops inbox items enqueued at or after the boundary, without a cancel event.
+    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_001"])
+    expect(data.session.input.list(sessionID)).toEqual(["msg_001"])
+    expect(data.session.input.has(sessionID, "msg_002")).toBe(false)
   } finally {
     app.renderer.destroy()
   }
@@ -1728,6 +1735,7 @@ test("refreshes integrations after integration updates", async () => {
                 id: "openai",
                 name: "OpenAI",
                 methods: [{ type: "key" }],
+                connections: [{ type: "credential", id: "cred_openai", label: "OpenAI" }],
               },
             ],
     })
@@ -1766,6 +1774,16 @@ test("refreshes integrations after integration updates", async () => {
     await wait(() => data.location.integration.list()?.length === 1)
     await wait(() => requests.model > before.model && requests.provider > before.provider)
     expect(data.location.integration.list()?.[0]).toMatchObject({ id: "openai", name: "OpenAI" })
+
+    const previous = { ...requests }
+    events.emit({
+      id: "evt_credential",
+      created: 0,
+      type: "credential.switched",
+      data: { credentialID: "cred_openai", integrationID: "openai" },
+    })
+    await wait(() => requests.model > previous.model && requests.provider > previous.provider)
+    expect(requests.integration).toBe(previous.integration)
   } finally {
     app.renderer.destroy()
   }
@@ -2004,7 +2022,11 @@ test("keeps shell state scoped to location", async () => {
       <RouteProvider initialRoute={{ type: "session", sessionID: "ses_shared" }}>
         <Keymap.Provider>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+            <ToastProvider>
+              <DialogProvider>
+                <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+              </DialogProvider>
+            </ToastProvider>
           </ThemeProvider>
         </Keymap.Provider>
       </RouteProvider>
@@ -2814,7 +2836,7 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     })
     await wait(() => sync.session.message.list(sessionID)?.length === 1)
     const admitted = sync.session.message.list(sessionID)?.[0]
-    expect(admitted).toMatchObject({ id: messageID, type: "user", text: "hello" })
+    expect(admitted).toMatchObject({ id: messageID, ...Expected.user("hello") })
     expect(admitted?.metadata).toBeUndefined()
     expect(sync.session.pending.list(sessionID)).toEqual([
       {
@@ -3239,7 +3261,7 @@ test("hydrates durable pending prompts into the visible transcript", async () =>
     await mounted
     await sync.session.pending.sync(sessionID)
     expect(sync.session.message.list(sessionID)).toEqual([
-      { id: item.id, type: "user", text: "waiting", time: { created: 5 } },
+      { id: item.id, ...Expected.user("waiting"), time: { created: 5 } },
     ])
 
     await sync.session.message.sync(sessionID)

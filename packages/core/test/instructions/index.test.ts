@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit, Option, Schema } from "effect"
 import { Instructions } from "@opencode-ai/core/instructions/index"
 import { it } from "../lib/effect"
@@ -177,73 +177,63 @@ describe("Instructions", () => {
     }),
   )
 
-  it.effect("hashes objects independently of key order", () =>
-    Effect.sync(() => {
-      expect(Instructions.hash({ a: 1, b: { x: true, y: false } })).toBe(
-        Instructions.hash({ b: { y: false, x: true }, a: 1 }),
-      )
-    }),
-  )
+  test("hashes objects independently of key order", () => {
+    expect(Instructions.hash({ a: 1, b: { x: true, y: false } })).toBe(
+      Instructions.hash({ b: { y: false, x: true }, a: 1 }),
+    )
+  })
 
-  it.effect("renders sources in composition order", () =>
-    Effect.sync(() => {
-      const instructions = Instructions.combine([
-        source({ key: "core/date", value: "date" }),
-        source({ key: "core/location", value: "location" }),
-      ])
+  test("renders sources in composition order", () => {
+    const instructions = Instructions.combine([
+      source({ key: "core/date", value: "date" }),
+      source({ key: "core/location", value: "location" }),
+    ])
 
-      expect(Instructions.renderInitial(instructions, { "core/date": "date", "core/location": "location" })).toBe(
-        "date\n\nlocation",
-      )
-    }),
-  )
+    expect(Instructions.renderInitial(instructions, { "core/date": "date", "core/location": "location" })).toBe(
+      "date\n\nlocation",
+    )
+  })
 
-  it.effect("rejects duplicate source keys", () =>
-    Effect.sync(() => {
-      expect(() =>
-        Instructions.combine([source({ key: "core/date", value: "one" }), source({ key: "core/date", value: "two" })]),
-      ).toThrow(new Instructions.DuplicateKeyError({ key: key("core/date") }))
-    }),
-  )
+  test("rejects duplicate source keys", () => {
+    expect(() =>
+      Instructions.combine([source({ key: "core/date", value: "one" }), source({ key: "core/date", value: "two" })]),
+    ).toThrow(new Instructions.DuplicateKeyError({ key: key("core/date") }))
+  })
 
-  it.effect("rejects empty model-visible renderings", () =>
-    Effect.sync(() => {
-      const instructions = source({ key: "core/empty", value: "value", initial: () => "" })
+  test("rejects empty model-visible renderings", () => {
+    const instructions = source({ key: "core/empty", value: "value", initial: () => "" })
 
-      expect(() => Instructions.renderInitial(instructions, { "core/empty": "value" })).toThrow(
-        "Instruction source core/empty rendered an empty initial",
-      )
-    }),
-  )
+    expect(() => Instructions.renderInitial(instructions, { "core/empty": "value" })).toThrow(
+      "Instruction source core/empty rendered an empty initial",
+    )
+  })
 
-  it.effect("diffs list values by key", () =>
-    Effect.sync(() => {
-      const previous = [
-        { name: "effect", description: "Build with Effect" },
-        { name: "retired", description: "Old" },
-      ]
-      const current = [
-        { name: "effect", description: "Build with Effect v4" },
-        { name: "writing", description: "Write prose" },
-      ]
+  test("diffs list values by key", () => {
+    const previous = [
+      { name: "effect", description: "Build with Effect" },
+      { name: "retired", description: "Old" },
+    ]
+    const current = [
+      { name: "effect", description: "Build with Effect v4" },
+      { name: "writing", description: "Write prose" },
+    ]
 
-      expect(
-        Instructions.diffByKey(
-          previous,
-          current,
-          (value) => value.name,
-          (before, after) => before.description !== after.description,
-        ),
-      ).toEqual({
-        added: [{ name: "writing", description: "Write prose" }],
-        removed: [{ name: "retired", description: "Old" }],
-        changed: [
-          {
-            previous: { name: "effect", description: "Build with Effect" },
-            current: { name: "effect", description: "Build with Effect v4" },
-          },
-        ],
-      })
-    }),
-  )
+    expect(
+      Instructions.diffByKey(
+        previous,
+        current,
+        (value) => value.name,
+        (before, after) => before.description !== after.description,
+      ),
+    ).toEqual({
+      added: [{ name: "writing", description: "Write prose" }],
+      removed: [{ name: "retired", description: "Old" }],
+      changed: [
+        {
+          previous: { name: "effect", description: "Build with Effect" },
+          current: { name: "effect", description: "Build with Effect v4" },
+        },
+      ],
+    })
+  })
 })

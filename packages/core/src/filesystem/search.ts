@@ -5,7 +5,7 @@ import path from "path"
 import { Clock, Context, Deferred, Duration, Effect, Layer, Schema, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
-import { FileSystem } from "../filesystem.js"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Location } from "../location.js"
 import { Ripgrep } from "../ripgrep.js"
 import { RelativePath } from "../schema.js"
@@ -135,7 +135,7 @@ export const fffLayer = Layer.effect(
         find: () => Effect.succeed([]),
       })
     }
-    yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
+    yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()))
     return Service.of({
       find: (input) =>
         Effect.sync(() => {

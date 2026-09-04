@@ -122,6 +122,10 @@
   outline: none;
 }
 
+[data-color-scheme="dark"] .command-palette-row:is([data-active], :focus-visible) {
+  background: var(--v2-alpha-light-10);
+}
+
 .command-palette-row-main {
   display: flex;
   min-width: 0;

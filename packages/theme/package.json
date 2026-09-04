@@ -21,6 +21,7 @@
   },
   "scripts": {
     "build": "bun run script/build.ts",
+    "test": "bun test --timeout 30000",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

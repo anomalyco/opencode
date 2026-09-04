@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "provider": "cerebras",
+    "route": "cerebras-chat",
+    "transport": "http",
+    "model": "gpt-oss-120b",
+    "tags": ["prefix:cerebras-chat", "provider:cerebras", "tool", "tool-call", "golden"],
+    "name": "cerebras-chat/cerebras-gpt-oss-120b-tool-call",
+    "recordedAt": "2026-08-25T23:55:28.454Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gpt-oss-120b\",\"messages\":[{\"role\":\"system\",\"content\":\"Call tools exactly as requested.\"},{\"role\":\"user\",\"content\":\"Call get_weather with city exactly Paris.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}},\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":512}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"chatcmpl-402a09cc-8668-446d-8f9c-3e4121f5fa51\",\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_4cfabdd6620dc0120785\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-402a09cc-8668-446d-8f9c-3e4121f5fa51\",\"choices\":[{\"delta\":{\"reasoning\":\"We\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_4cfabdd6620dc0120785\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-402a09cc-8668-446d-8f9c-3e4121f5fa51\",\"choices\":[{\"delta\":{\"reasoning\":\" need to call the function get_weather with city \\\"\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_4cfabdd6620dc0120785\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-402a09cc-8668-446d-8f9c-3e4121f5fa51\",\"choices\":[{\"delta\":{\"reasoning\":\"Paris\\\".\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_4cfabdd6620dc0120785\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-402a09cc-8668-446d-8f9c-3e4121f5fa51\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"},\"type\":\"function\",\"id\":\"3d860cefe\",\"index\":0}]},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_4cfabdd6620dc0120785\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-402a09cc-8668-446d-8f9c-3e4121f5fa51\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},\"type\":\"function\",\"index\":0}]},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_4cfabdd6620dc0120785\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-402a09cc-8668-446d-8f9c-3e4121f5fa51\",\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_4cfabdd6620dc0120785\",\"object\":\"chat.completion.chunk\",\"usage\":{\"total_tokens\":174,\"completion_tokens\":37,\"completion_tokens_details\":{\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0,\"reasoning_tokens\":13},\"prompt_tokens\":137,\"prompt_tokens_details\":{\"cached_tokens\":0}},\"time_info\":{\"created\":1787702127.8019717,\"queue_time\":0.31196235,\"prompt_time\":0.005234764,\"completion_time\":0.020198402,\"total_time\":0.702225923538208}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

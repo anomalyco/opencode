@@ -40,6 +40,7 @@ export type RunPromptPart =
       url: string
       filename?: string
       mime?: string
+      description?: string
       source?: {
         type: string
         text: { start: number; end: number; value: string }
@@ -93,9 +94,10 @@ export type FooterQueuedPrompt = {
   messageID: string
   prompt: RunPrompt
   delivery: RunDelivery
+  skills?: ReadonlyArray<{ id: string; name: string }>
 }
 
-export type QueuedPromptAction = "steer" | "cancel"
+export type QueuedPromptAction = "steer" | "queue" | "cancel"
 
 export type RunAgent = {
   id: string
@@ -118,6 +120,7 @@ export type RunInput = {
 }
 
 export type MiniHost = {
+  version: string
   terminal: {
     stdin: NodeJS.ReadStream
   }
@@ -175,7 +178,7 @@ export type FooterState = {
   status: string
   notice: string
   model: string
-  usage: string
+  usage: { tokens: number; percent?: number; cost?: number } | undefined
   first: boolean
   interrupt: number
   exit: number
@@ -392,7 +395,10 @@ export type FormCancel = {
   location?: LocationRef
 }
 
-export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "mini" | "session" | "cursor">
+export type RunTuiConfig = Pick<
+  Config.Resolved,
+  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations"
+>
 
 export type MiniSettings = {
   thinking: "show" | "hide"
@@ -400,6 +406,7 @@ export type MiniSettings = {
   turn_summary: "show" | "hide"
   footer: "show" | "hide"
   splash: "show" | "hide"
+  work_spinner: Config.MiniWorkSpinner
   mono: boolean
 }
 
@@ -422,6 +429,7 @@ type StreamToolState = "running" | "completed" | "error"
 export type StreamCommit = {
   kind: EntryKind
   text: string
+  image?: string
   phase: StreamPhase
   source: StreamSource
   compaction?: true

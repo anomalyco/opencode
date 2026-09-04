@@ -22,6 +22,36 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  affected:
+    name: affected packages
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      app: ${{ steps.packages.outputs.app }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Find affected packages
+        id: packages
+        env:
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          bun x turbo@2.10.2 ls --affected --filter=@opencode-ai/app --output=json > affected.json
+          bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
+
   unit:
     name: unit (${{ matrix.settings.name }})
     strategy:
@@ -41,6 +71,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -80,9 +111,16 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 20
-        run: GITHUB_ACTIONS=false bun turbo test
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            GITHUB_ACTIONS=false bun turbo test
+            exit 0
+          fi
+          GITHUB_ACTIONS=false bun turbo test --affected
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify published codemode package
         if: runner.os == 'Linux'
@@ -92,8 +130,15 @@ jobs:
       - name: Verify packed workerd SDK
         if: runner.os == 'Linux'
         timeout-minutes: 15
-        working-directory: packages/sdk
-        run: bun run verify:package
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            bun turbo verify:package --filter=@opencode-ai/sdk
+            exit 0
+          fi
+          bun turbo verify:package --affected --filter=@opencode-ai/sdk
+        env:
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify compiled service lifecycle
         if: always()
@@ -133,7 +178,7 @@ jobs:
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
-    if: github.ref_name != 'v2' && github.head_ref != 'v2'
+    needs: affected
     strategy:
       fail-fast: false
       matrix:
@@ -144,32 +189,38 @@ jobs:
             host: blacksmith-4vcpu-windows-2025
     runs-on: ${{ matrix.settings.host }}
     env:
+      E2E_ENABLED: ${{ needs.affected.outputs.app == 'true' && github.ref_name != 'v2' && github.head_ref != 'v2' }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
     defaults:
       run:
         shell: bash
     steps:
       - name: Checkout repository
+        if: env.E2E_ENABLED == 'true'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
+        if: env.E2E_ENABLED == 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           # Playwright 1.59 hangs while extracting Chromium with Node 24.16.
           node-version: "24.15"
 
       - name: Setup Bun
+        if: env.E2E_ENABLED == 'true'
         uses: ./.github/actions/setup-bun
 
       - name: Read Playwright version
+        if: env.E2E_ENABLED == 'true'
         id: playwright-version
         run: |
           version=$(node -e 'console.log(require("./package.json").workspaces.catalog["@playwright/test"])')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
+        if: env.E2E_ENABLED == 'true'
         id: playwright-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -177,23 +228,30 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
 
       - name: Install Playwright system dependencies
-        if: runner.os == 'Linux'
+        if: env.E2E_ENABLED == 'true' && runner.os == 'Linux'
         working-directory: packages/app
         run: bunx playwright install-deps chromium
 
       - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        if: env.E2E_ENABLED == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: packages/app
         run: bunx playwright install chromium
 
-      - name: Run app e2e tests
-        run: bun --cwd packages/app test:e2e:local
+      - name: Run app e2e tests against production build
+        if: env.E2E_ENABLED == 'true'
+        run: bun --cwd packages/app test:e2e:built
         env:
           CI: true
         timeout-minutes: 30
 
+      - name: Verify service worker precaching and upgrades
+        if: env.E2E_ENABLED == 'true'
+        working-directory: packages/app
+        run: bunx playwright test --config e2e/service-worker/playwright.config.ts
+        timeout-minutes: 5
+
       - name: Upload Playwright artifacts
-        if: always()
+        if: always() && env.E2E_ENABLED == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}

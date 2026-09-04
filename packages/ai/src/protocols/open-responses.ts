@@ -1,11 +1,11 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { Content } from "@opencode-ai/schema/tool"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
 import {
   AIError,
   LLMEvent,
-  ProviderInternalReason,
+  ProviderInternalError,
   Usage,
   type FinishReason,
   type JsonSchema,
@@ -32,17 +32,19 @@ export const PATH = "/responses"
 // =============================================================================
 // Request Body Schema
 // =============================================================================
-const OpenResponsesInputText = Schema.Struct({
+export const OpenResponsesInputText = Schema.Struct({
   type: Schema.tag("input_text"),
   text: Schema.String,
 })
-const OpenResponsesInputImage = Schema.Struct({
+export const OpenResponsesInputImage = Schema.Struct({
   type: Schema.tag("input_image"),
   image_url: Schema.String,
+  detail: Schema.optional(Schema.String),
 })
-const OpenResponsesInputFile = Schema.Struct({
+export const OpenResponsesInputFile = Schema.Struct({
   type: Schema.tag("input_file"),
   filename: Schema.String,
+  detail: Schema.optional(Schema.String),
   file_data: Schema.optional(Schema.String),
   file_url: Schema.optional(Schema.String),
 })
@@ -54,13 +56,20 @@ const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile
 export type MediaInput = Schema.Schema.Type<typeof MediaInput>
 const OpenResponsesInputContent = Schema.Union([OpenResponsesInputText, MediaInput])
 
-const OpenResponsesOutputText = Schema.Struct({
+export const OpenResponsesOutputText = Schema.Struct({
   type: Schema.tag("output_text"),
   text: Schema.String,
 })
 
 export const MessagePhase = Schema.NullOr(Schema.Literals(["commentary", "final_answer"]))
 type MessagePhase = Schema.Schema.Type<typeof MessagePhase>
+
+export const MessageMetadata = Schema.Struct({
+  itemId: Schema.optional(Schema.String),
+  type: Schema.optional(Schema.Literal("message")),
+  status: Schema.optional(Schema.String),
+  phase: Schema.optional(MessagePhase),
+})
 
 const messagePhase = (value: unknown): MessagePhase | undefined => {
   if (value === null || value === "commentary" || value === "final_answer") return value
@@ -72,17 +81,67 @@ const OpenResponsesReasoningSummaryText = Schema.Struct({
   text: Schema.String,
 })
 
-const OpenResponsesReasoningItem = Schema.Struct({
+export const OpenResponsesReasoningItem = Schema.Struct({
   type: Schema.tag("reasoning"),
   id: Schema.optionalKey(Schema.String),
   summary: Schema.Array(OpenResponsesReasoningSummaryText),
   encrypted_content: optionalNull(Schema.String),
 })
 
-const OpenResponsesItemReference = Schema.Struct({
-  type: Schema.tag("item_reference"),
-  id: Schema.String,
-})
+const OpenResponsesWebSearchCall = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.tag("web_search_call"),
+    id: Schema.String,
+    status: Schema.optional(Schema.String),
+    action: optionalNull(JsonObject),
+  }),
+  [JsonObject],
+)
+
+const OpenResponsesFileSearchCall = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.tag("file_search_call"),
+    id: Schema.String,
+    status: Schema.optional(Schema.String),
+    queries: Schema.optional(Schema.Array(Schema.String)),
+    results: optionalNull(Schema.Array(JsonObject)),
+  }),
+  [JsonObject],
+)
+
+const OpenResponsesCodeInterpreterCall = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.tag("code_interpreter_call"),
+    id: Schema.String,
+    status: Schema.optional(Schema.String),
+    code: optionalNull(Schema.String),
+    container_id: optionalNull(Schema.String),
+    outputs: optionalNull(Schema.Array(JsonObject)),
+  }),
+  [JsonObject],
+)
+
+const OpenResponsesMCPCall = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.tag("mcp_call"),
+    id: Schema.String,
+    status: Schema.optional(Schema.String),
+    server_label: Schema.optional(Schema.String),
+    name: Schema.optional(Schema.String),
+    arguments: Schema.optional(Schema.String),
+    output: optionalNull(Schema.String),
+    error: Schema.optional(Schema.Unknown),
+  }),
+  [JsonObject],
+)
+
+export const HostedToolItem = Schema.Union([
+  OpenResponsesWebSearchCall,
+  OpenResponsesFileSearchCall,
+  OpenResponsesCodeInterpreterCall,
+  OpenResponsesMCPCall,
+])
+export type HostedToolItem = Schema.Schema.Type<typeof HostedToolItem>
 
 // `function_call_output.output` accepts either a plain string or an ordered
 // array of content items so tools can return images and files in addition to text.
@@ -99,24 +158,38 @@ const OpenResponsesFunctionCallOutput = Schema.Union([
   Schema.Array(OpenResponsesFunctionCallOutputContent),
 ])
 
+export const CompactionItem = Schema.Struct({
+  type: Schema.Literal("compaction"),
+  id: optionalNull(Schema.String),
+  encrypted_content: Schema.String,
+})
+
 export const InputItem = Schema.Union([
+  CompactionItem,
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("developer"), content: Schema.String }),
-  Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenResponsesInputContent) }),
+  Schema.Struct({
+    role: Schema.tag("user"),
+    content: Schema.Array(OpenResponsesInputContent),
+    type: Schema.optional(Schema.Literal("message")),
+    id: Schema.optional(Schema.String),
+    status: Schema.optional(Schema.String),
+  }),
   Schema.Struct({
     type: Schema.tag("message"),
     id: Schema.optionalKey(Schema.String),
     role: Schema.tag("assistant"),
     content: Schema.Array(OpenResponsesOutputText),
     phase: Schema.optionalKey(MessagePhase),
+    status: Schema.optional(Schema.String),
   }),
   OpenResponsesReasoningItem,
-  OpenResponsesItemReference,
   Schema.Struct({
     type: Schema.tag("function_call"),
     id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     name: Schema.String,
+    namespace: Schema.optional(Schema.String),
     arguments: Schema.String,
   }),
   Schema.Struct({
@@ -124,10 +197,17 @@ export const InputItem = Schema.Union([
     call_id: Schema.String,
     output: OpenResponsesFunctionCallOutput,
   }),
+  HostedToolItem,
 ])
 type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
+export type HostedToolReplayItem = {
+  readonly type: string
+  readonly id: string
+  readonly [key: string]: unknown
+}
 type LoweredInputItem =
   | OpenResponsesInputItem
+  | HostedToolReplayItem
   | {
       readonly type: "message"
       readonly id?: string
@@ -140,7 +220,7 @@ type LoweredInputItem =
 // multiple streamed summary parts into the same item before flushing.
 type OpenResponsesReasoningInput = {
   type: "reasoning"
-  id: string
+  id?: string
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
@@ -211,7 +291,7 @@ const OpenResponsesBody = Schema.Struct({
 })
 export type OpenResponsesBody = Schema.Schema.Type<typeof OpenResponsesBody>
 
-const OpenResponsesUsage = Schema.Struct({
+export const OpenResponsesUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
   input_tokens_details: optionalNull(
     Schema.Struct({
@@ -225,18 +305,25 @@ const OpenResponsesUsage = Schema.Struct({
 })
 type OpenResponsesUsage = Schema.Schema.Type<typeof OpenResponsesUsage>
 
+// The spec requires `id` on every output item, but some gateways drop it from
+// later item events (Bedrock Mantle renames it to `item_id` on
+// `output_item.done` and `response.completed.output`). Decode it as optional
+// and let `normalize` recover or mint it once before the parser runs.
+// https://www.openresponses.org/specification#extending-items
 export const StreamItem = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
     id: Schema.optional(Schema.String),
     call_id: Schema.optional(Schema.String),
     name: Schema.optional(Schema.String),
+    namespace: Schema.optional(Schema.String),
     arguments: Schema.optional(Schema.String),
     encrypted_content: optionalNull(Schema.String),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 export type StreamItem = Schema.Schema.Type<typeof StreamItem>
+export type OutputItem = StreamItem & { readonly id: string }
 
 // The Responses schema puts streaming error details at the top level and
 // response failures under `response.error`. WebSocket failures use an
@@ -285,16 +372,20 @@ export const Event = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
     delta: Schema.optional(Schema.String),
+    arguments: Schema.optional(Schema.String),
     text: Schema.optional(Schema.String),
     item_id: Schema.optional(Schema.String),
+    output_index: Schema.optional(Schema.Number),
     summary_index: Schema.optional(Schema.Number),
-    item: Schema.optional(StreamItem),
+    // OutputItemAdded/Done permit a null item in the Open Responses OpenAPI schema.
+    item: optionalNull(StreamItem),
     response: Schema.optional(
       Schema.StructWithRest(
         Schema.Struct({
           id: Schema.optional(Schema.String),
           service_tier: optionalNull(Schema.String),
           incomplete_details: optionalNull(Schema.Struct({ reason: Schema.optional(Schema.String) })),
+          output: Schema.optional(Schema.Array(StreamItem)),
           usage: optionalNull(OpenResponsesUsage),
           error: optionalNull(OpenResponsesErrorPayload),
         }),
@@ -312,11 +403,9 @@ export const Event = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 export type Event = Schema.Schema.Type<typeof Event>
+export type NormalizedEvent = Event & { readonly item?: OutputItem | null }
 
-// Which lowered input item a persisted item id is about to be attached to.
-export type ItemKind = "message" | "reasoning" | "function-call" | "reference"
-
-export interface Extension {
+export interface ProviderAdapter {
   readonly id: string
   readonly name: string
   readonly lowerMedia?: (input: {
@@ -324,25 +413,23 @@ export interface Extension {
     readonly media: ProviderShared.NormalizedMedia
     readonly request: LLMRequest
   }) => MediaInput | undefined
-  // Optional grammar check applied before a persisted item id is resent as
-  // part of replayed history. Returning false drops the id; every lowered
-  // item treats a dropped id the same as an absent one.
-  readonly acceptsItemID?: (kind: ItemKind, id: string) => boolean
+  readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
 }
 
-const BASE: Extension = { id: ADAPTER, name: NAME }
+const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
 
 export interface ParserState {
+  readonly provider: LLMRequest["model"]["provider"]
+  readonly completedCompactions: ReadonlySet<string>
   readonly id: string
   readonly name: string
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<string>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
-  readonly messageItems: ReadonlySet<string>
-  readonly messagePhases: Readonly<Record<string, MessagePhase | null>>
+  readonly outputItems: Readonly<Record<number, string>>
+  readonly message: { readonly id: string; readonly phase: MessagePhase | null | undefined } | undefined
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
-  readonly store: boolean | undefined
 }
 
 type ReasoningSummaryStatus = "active" | "can-conclude" | "concluded"
@@ -387,53 +474,38 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
     tool: (toolName) => ({ type: "function" as const, name: toolName }),
   })
 
-// Servers validate item ids on replayed history, and a malformed or oversized
-// id can fail an otherwise valid request. Only server-issued tokens are worth
-// resending; anything else is treated as absent so the item is resent without
-// an id (or skipped, for items that cannot be expressed without one).
-const ITEM_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+// Server-issued item ids need a nonempty prefix and suffix, but the prefix is
+// provider-defined and does not necessarily identify the item's semantic type.
 const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
   const metadata = providerMetadata?.[providerMetadataKey]
-  return ProviderShared.isRecord(metadata) &&
-    typeof metadata.itemId === "string" &&
-    ITEM_ID_PATTERN.test(metadata.itemId)
-    ? metadata.itemId
-    : undefined
+  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
+  const separator = metadata.itemId.indexOf("_")
+  return separator > 0 && separator < metadata.itemId.length - 1 ? metadata.itemId : undefined
 }
 
-const acceptsItemID = (extension: Extension, kind: ItemKind, id: string | undefined): id is string =>
-  id !== undefined && (extension.acceptsItemID?.(kind, id) ?? true)
-
-const lowerToolCall = (
-  part: ToolCallPart,
-  providerMetadataKey: string,
-  extension: Extension,
-): OpenResponsesInputItem => {
+const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {
   const id = itemID(part.providerMetadata, providerMetadataKey)
   return {
     type: "function_call",
-    ...(acceptsItemID(extension, "function-call", id) ? { id } : {}),
+    ...(id === undefined ? {} : { id }),
     call_id: part.id,
     name: part.name,
+    namespace: part.namespace,
     arguments: ProviderShared.encodeJson(part.input),
   }
 }
 
-const lowerReasoning = (
-  part: ReasoningPart,
-  providerMetadataKey: string,
-  extension: Extension,
-): OpenResponsesReasoningInput | undefined => {
+const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
+  if (!ProviderShared.isRecord(metadata)) return undefined
   const id = itemID(part.providerMetadata, providerMetadataKey)
-  if (!ProviderShared.isRecord(metadata) || !acceptsItemID(extension, "reasoning", id)) return undefined
   const encryptedContent =
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
       : undefined
   return {
     type: "reasoning",
-    id,
+    ...(id === undefined ? {} : { id }),
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
     encrypted_content: encryptedContent,
   }
@@ -442,12 +514,15 @@ const lowerReasoning = (
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   part: MediaPart,
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
   target: "message" | "tool-result",
 ) {
   const media = ProviderShared.normalizeMedia(part)
-  const extended = extension.lowerMedia?.({ part, media, request })
-  if (extended) return extended
+  const providerMedia = adapter.lowerMedia?.({ part, media, request })
+  if (providerMedia) return providerMedia
+  const detail = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))(
+    part.providerMetadata?.[metadataKey(request.model)]?.detail,
+  )
   const url =
     typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
       ? part.data
@@ -458,26 +533,31 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
     return {
       type: "input_file" as const,
       filename: part.filename ?? (media.mime === "application/pdf" ? "document.pdf" : "file"),
+      detail,
       ...(url ? { file_url: url } : { file_data: media.dataUrl }),
     }
   }
-  return { type: "input_image" as const, image_url: url ?? media.dataUrl }
+  return {
+    type: "input_image" as const,
+    image_url: url ?? media.dataUrl,
+    detail,
+  }
 })
 
 const lowerUserContent = Effect.fnUntraced(function* (
   part: LLMRequest["messages"][number]["content"][number],
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMessageMedia(part, request, extension)
-  return yield* ProviderShared.unsupportedContent(extension.name, "user", ["text", "media"])
+  if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
+  return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
 })
 
-const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, extension: Extension) {
-  const lowered = yield* lowerMedia(part, request, extension, "message")
+const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
+  const lowered = yield* lowerMedia(part, request, adapter, "message")
   if (lowered.type === "input_video")
-    return yield* ProviderShared.invalidRequest(`${extension.name} user messages do not support input_video`)
+    return yield* ProviderShared.invalidRequest(`${adapter.name} user messages do not support input_video`)
   return lowered
 })
 
@@ -486,13 +566,13 @@ const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request:
 const lowerToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMedia(
     { type: "media", mediaType: item.mime, data: item.uri, filename: item.name },
     request,
-    extension,
+    adapter,
     "tool-result",
   )
 })
@@ -500,67 +580,68 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
 const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMessageMedia(
     { type: "media", mediaType: item.mime, data: item.uri, filename: item.name },
     request,
-    extension,
+    adapter,
   )
 })
 
 const lowerToolResultOutput = Effect.fnUntraced(function* (
   part: ToolResultPart,
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
   // Text/json/error results are encoded as a plain string for backward
   // compatibility with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
   // Preserve the narrowed array element type when compiled through a consumer package.
   const content: ReadonlyArray<Content> = part.result.value
-  return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, extension))
+  return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter))
 })
 
-const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (request: LLMRequest, extension: Extension) {
-  const system: LoweredInputItem[] =
-    request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
-  const input: LoweredInputItem[] = [...system]
-  const store = OpenResponsesOptions.resolve(request).store
-  const providerMetadataKey = request.model.route.providerMetadataKey ?? "openresponses"
+const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
+  request: LLMRequest,
+  adapter: ProviderAdapter,
+) {
+  const input: LoweredInputItem[] = []
+  const providerMetadataKey = metadataKey(request.model)
 
   for (const message of request.messages) {
+    const metadata = yield* ProviderShared.validateWith(
+      Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
+    )(message.providerMetadata?.[providerMetadataKey])
     if (message.role === "system") {
       input.push({
         role: "developer",
-        content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(extension.name, message)),
+        content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(adapter.name, message)),
       })
       continue
     }
 
     if (message.role === "user") {
-      input.push({
-        role: "user",
-        content: yield* Effect.forEach(message.content, (part) => lowerUserContent(part, request, extension)),
-      })
+      const content = yield* Effect.forEach(message.content, (part) => lowerUserContent(part, request, adapter))
+      if (content.length > 0)
+        input.push({ role: "user", content, type: metadata?.type, id: metadata?.itemId, status: metadata?.status })
       continue
     }
 
     if (message.role === "assistant") {
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenResponsesReasoningInput> = {}
-      const reasoningReferences = new Set<string>()
-      const hostedToolReferences = new Set<string>()
+      const hostedToolItems = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
         const groups = content.reduce<
           Array<{ id: string | undefined; phase: MessagePhase | null | undefined; parts: TextPart[] }>
         >((groups, part) => {
-          const metadata = part.providerMetadata?.[providerMetadataKey]
-          const rawID = itemID(part.providerMetadata, providerMetadataKey)
-          const id = acceptsItemID(extension, "message", rawID) ? rawID : undefined
-          const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase) : undefined
+          const partMetadata = part.providerMetadata?.[providerMetadataKey]
+          const id = itemID(part.providerMetadata, providerMetadataKey) ?? metadata?.itemId
+          const partPhase = messagePhase(partMetadata?.phase)
+          const phase = partPhase === undefined ? metadata?.phase : partPhase
           const group = groups.at(-1)
           if (group && group.id === id && group.phase === phase) group.parts.push(part)
           else groups.push({ id, phase, parts: [part] })
@@ -571,6 +652,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
             type: "message" as const,
             ...(group.id === undefined ? {} : { id: group.id }),
             role: "assistant" as const,
+            status: metadata?.status,
             content: group.parts.map((part) => ({ type: "output_text" as const, text: part.text })),
             ...(group.phase === undefined ? {} : { phase: group.phase }),
           })),
@@ -578,60 +660,67 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         content.splice(0, content.length)
       }
       for (const part of message.content) {
+        if (part.type === "compaction") {
+          flushText()
+          if (part.provider !== request.model.provider || part.encrypted === undefined)
+            return yield* ProviderShared.invalidRequest(
+              "Compaction state must be replayed to its originating provider and API",
+            )
+          input.push({ type: "compaction", id: part.id, encrypted_content: part.encrypted })
+          continue
+        }
         if (part.type === "text") {
           content.push(part)
           continue
         }
         if (part.type === "reasoning") {
           flushText()
-          const reasoning = lowerReasoning(part, providerMetadataKey, extension)
+          const reasoning = lowerReasoning(part, providerMetadataKey)
           if (!reasoning) continue
-          if (store !== false) {
-            if (!reasoningReferences.has(reasoning.id)) input.push({ type: "item_reference", id: reasoning.id })
-            reasoningReferences.add(reasoning.id)
-            continue
-          }
-          const existing = reasoningItems[reasoning.id]
+          const existing = reasoning.id === undefined ? undefined : reasoningItems[reasoning.id]
           if (existing) {
             existing.summary.push(...reasoning.summary)
             if (typeof reasoning.encrypted_content === "string")
               existing.encrypted_content = reasoning.encrypted_content
             continue
           }
-          reasoningItems[reasoning.id] = reasoning
+          if (reasoning.id !== undefined) reasoningItems[reasoning.id] = reasoning
           input.push(reasoning)
           continue
         }
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey, extension))
+          input.push(lowerToolCall(part, providerMetadataKey))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
           const id = itemID(part.providerMetadata, providerMetadataKey)
-          const reference = acceptsItemID(extension, "reference", id) ? id : undefined
-          if (store !== false && reference && !hostedToolReferences.has(reference))
-            input.push({ type: "item_reference", id: reference })
-          if (store === false) {
-            // The server is not storing this exchange, so the tool outcome has to
-            // travel in the input. Non-content results degrade to their text form.
-            const content: ReadonlyArray<Content> =
-              part.result.type === "content"
+          const hosted =
+            part.result.type !== "json"
+              ? undefined
+              : Schema.is(HostedToolItem)(part.result.value)
                 ? part.result.value
-                : [{ type: "text", text: ProviderShared.toolResultText(part) }]
-            input.push({
-              role: "user",
-              content: yield* Effect.forEach(content, (item) =>
-                lowerHostedToolResultContentItem(item, request, extension),
-              ),
-            })
+                : adapter.restoreHostedToolItem?.(part.result.value)
+          if (id !== undefined && hosted?.id === id) {
+            if (!hostedToolItems.has(id)) {
+              input.push(hosted)
+              hostedToolItems.add(id)
+            }
+            continue
           }
-          if (reference) hostedToolReferences.add(reference)
+          const content: ReadonlyArray<Content> =
+            part.result.type === "content"
+              ? part.result.value
+              : [{ type: "text", text: ProviderShared.toolResultText(part) }]
+          input.push({
+            role: "user",
+            content: yield* Effect.forEach(content, (item) => lowerHostedToolResultContentItem(item, request, adapter)),
+          })
           continue
         }
-        return yield* ProviderShared.unsupportedContent(extension.name, "assistant", [
+        return yield* ProviderShared.unsupportedContent(adapter.name, "assistant", [
           "text",
           "reasoning",
           "tool-call",
@@ -644,30 +733,42 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent(extension.name, "tool", ["tool-result"])
+        return yield* ProviderShared.unsupportedContent(adapter.name, "tool", ["tool-result"])
       input.push({
         type: "function_call_output",
         call_id: part.id,
-        output: yield* lowerToolResultOutput(part, request, extension),
+        output: yield* lowerToolResultOutput(part, request, adapter),
       })
     }
   }
 
-  // With store:false, Responses APIs only accept previous reasoning items when the
-  // complete item has encrypted state. Summary blocks for one item may carry
-  // that state only on the last block, so filter after they have been joined.
-  return store === false
-    ? input.filter(
-        (item) => !("type" in item) || item.type !== "reasoning" || typeof item.encrypted_content === "string",
-      )
-    : input
+  return input
 })
 
-const lowerOptions = (request: LLMRequest) => {
-  const options = OpenResponsesOptions.resolve(request)
-  const cacheKey = ProviderShared.clampPromptCacheKey(request.promptCacheKey)
+export const lowerConversation = Effect.fn("OpenResponses.lowerConversation")(function* (
+  request: LLMRequest,
+  adapter: ProviderAdapter,
+) {
+  const instructions = ProviderShared.joinText(request.system)
   return {
-    ...(options.instructions ? { instructions: options.instructions } : {}),
+    model: request.model.id,
+    input: yield* lowerMessages(request, adapter),
+    ...(instructions ? { instructions } : {}),
+  }
+})
+
+export const lowerGeneration = (request: LLMRequest) => {
+  const options = OpenResponsesOptions.resolve(request)
+  const generation = request.generation
+  const cacheKey = ProviderShared.promptCacheKey(request)
+  const parallelToolCalls = resolveParallelToolCalls(request)
+  return {
+    stream: true as const,
+    max_output_tokens: generation?.maxTokens,
+    temperature: generation?.temperature,
+    top_p: generation?.topP,
+    presence_penalty: generation?.presencePenalty,
+    frequency_penalty: generation?.frequencyPenalty,
     ...(options.store !== undefined ? { store: options.store } : {}),
     ...(options.metadata ? { metadata: options.metadata } : {}),
     ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
@@ -683,12 +784,19 @@ const lowerOptions = (request: LLMRequest) => {
     ...(options.textVerbosity ? { text: { verbosity: options.textVerbosity } } : {}),
     ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
     ...(options.maxToolCalls !== undefined ? { max_tool_calls: options.maxToolCalls } : {}),
-    ...(options.parallelToolCalls !== undefined ? { parallel_tool_calls: options.parallelToolCalls } : {}),
+    ...(parallelToolCalls !== undefined ? { parallel_tool_calls: parallelToolCalls } : {}),
     ...(options.truncation ? { truncation: options.truncation } : {}),
   }
 }
 
-const allowedToolChoice = (request: LLMRequest) => {
+export const resolveParallelToolCalls = (request: LLMRequest) => {
+  const configured = OpenResponsesOptions.resolve(request).parallelToolCalls
+  if (configured !== undefined) return configured
+  const disabled = request.toolChoice?.disableParallelToolUse
+  return disabled === undefined ? undefined : !disabled
+}
+
+export const allowedToolChoice = (request: LLMRequest) => {
   const allowed = OpenResponsesOptions.resolve(request).allowedTools
   if (!allowed) return undefined
   return {
@@ -698,42 +806,35 @@ const allowedToolChoice = (request: LLMRequest) => {
   }
 }
 
-export const fromRequestWithExtension = Effect.fn("OpenResponses.fromRequestWithExtension")(function* (
+export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAdapter")(function* (
   request: LLMRequest,
-  extension: Extension,
+  adapter: ProviderAdapter,
 ) {
-  const generation = request.generation
+  const projected = ProviderShared.flattenToolRequest(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
-    model: request.model.id,
-    input: yield* lowerMessages(request, extension),
+    ...(yield* lowerConversation(projected.request, adapter)),
+    ...lowerGeneration(request),
     tools:
-      request.tools.length === 0
+      projected.tools.length === 0
         ? undefined
-        : yield* Effect.forEach(request.tools, (tool) =>
+        : yield* Effect.forEach(projected.tools, (tool) =>
             lowerTool(
-              extension.name,
+              adapter.name,
               tool,
               ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
             ),
           ),
     tool_choice:
       allowedToolChoice(request) ??
-      (request.toolChoice ? yield* lowerToolChoice(extension.name, request.toolChoice) : undefined),
-    stream: true as const,
-    max_output_tokens: generation?.maxTokens,
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    presence_penalty: generation?.presencePenalty,
-    frequency_penalty: generation?.frequencyPenalty,
-    ...lowerOptions(request),
+      (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),
   }
 })
 
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesBody))
 
 export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (request: LLMRequest) {
-  return yield* decodeBody(yield* fromRequestWithExtension(request, BASE))
+  return yield* decodeBody(yield* fromRequestWithAdapter(request, BASE_ADAPTER))
 })
 
 // =============================================================================
@@ -743,7 +844,7 @@ export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (req
 // cached-read and cache-write subsets, and `output_tokens` (inclusive total)
 // with a `reasoning_tokens` subset. Pass the totals through and derive the
 // non-cached breakdown.
-const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadataKey: string) => {
+export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadataKey: string) => {
   if (!usage) return undefined
   const cached = usage.input_tokens_details?.cached_tokens
   const cacheWrite = usage.input_tokens_details?.cache_write_tokens
@@ -773,12 +874,11 @@ const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason =
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
 
+export const metadataKey = (model: LLMRequest["model"]) => model.route.providerMetadataKey ?? "openresponses"
+
 export const providerMetadata = (state: ParserState, metadata: Record<string, unknown>): ProviderMetadata => ({
   [state.providerMetadataKey]: metadata,
 })
-
-const isReasoningItem = (item: StreamItem): item is StreamItem & { type: "reasoning"; id: string } =>
-  item.type === "reasoning" && typeof item.id === "string" && item.id.length > 0
 
 export type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 
@@ -791,16 +891,16 @@ const TERMINAL_TYPES = new Set(["error", "response.completed", "response.incompl
 export const terminal = (event: Event) => TERMINAL_TYPES.has(event.type)
 
 const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepResult => {
-  if (!event.delta || !state.messageItems.has(id)) return [state, NO_EVENTS]
+  if (!event.delta || state.message?.id !== id) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
-  const phase = state.messagePhases[id]
+  const phase = state.message.phase
   const metadata = providerMetadata(state, { itemId: id, ...(phase === undefined ? {} : { phase }) })
   const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, metadata)
   return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
 }
 
 const onOutputTextDone = (state: ParserState, event: Event, id: string): StepResult => {
-  if (state.messageItems.has(id)) {
+  if (state.message?.id === id) {
     if (state.lifecycle.text.has(id) || event.text === undefined) return [state, NO_EVENTS]
     return onOutputTextDelta(state, { ...event, delta: event.text }, id)
   }
@@ -808,18 +908,105 @@ const onOutputTextDone = (state: ParserState, event: Event, id: string): StepRes
   return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, id) }, events]
 }
 
+const decodeMessagePart = Schema.decodeUnknownOption(
+  Schema.Union([OpenResponsesOutputText, Schema.Struct({ type: Schema.tag("refusal"), refusal: Schema.String })]),
+)
+
+const decodeSummaryPart = Schema.decodeUnknownOption(OpenResponsesReasoningSummaryText)
+
+const decodeReasoningPart = Schema.decodeUnknownOption(
+  Schema.Struct({ type: Schema.tag("reasoning_text"), text: Schema.String }),
+)
+
+const joinReasoningText = (parts: ReadonlyArray<string | undefined>) => {
+  if (!parts.some((part) => part !== undefined && part.length > 0)) return undefined
+  return parts.filter((part) => part !== undefined).join("\n\n")
+}
+
+const outputItemID = (state: ParserState, event: Event) =>
+  event.output_index === undefined ? event.item_id : (state.outputItems[event.output_index] ?? event.item_id)
+
+const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
+  message: "msg",
+  reasoning: "rs",
+  function_call: "fc",
+  compaction: "cmp",
+}
+
+// An item without an id adopts the id already open in its output slot,
+// otherwise it gets a locally minted one.
+const resolveItem = (state: ParserState, item: StreamItem, index: number | undefined): OutputItem => ({
+  ...item,
+  id:
+    item.id ??
+    (index === undefined ? undefined : state.outputItems[index]) ??
+    `${ITEM_ID_PREFIX[item.type] ?? "item"}_${crypto.randomUUID().replaceAll("-", "")}`,
+})
+
+// Registered output slots are authoritative for `item_id` routing, and items
+// are resolved here so everything downstream can rely on `item.id`.
+export const normalize = (state: ParserState, input: Event): NormalizedEvent => ({
+  ...input,
+  item_id: input.item_id === undefined ? undefined : outputItemID(state, input),
+  item: input.item ? resolveItem(state, input.item, input.output_index) : input.item,
+})
+
+const startReasoningSummaryPart = (state: ParserState, itemID: string, index: number): StepResult => {
+  const item = state.reasoningItems[itemID]
+  if (!item || index === 0 || item.summaryParts[index] !== undefined) return [state, NO_EVENTS]
+
+  const events: LLMEvent[] = []
+  const lifecycle = Object.entries(item.summaryParts)
+    .filter((entry) => entry[1] !== "concluded")
+    .reduce(
+      (lifecycle, entry) =>
+        Lifecycle.reasoningEnd(lifecycle, events, `${itemID}:${entry[0]}`, providerMetadata(state, { itemId: itemID })),
+      state.lifecycle,
+    )
+  return [
+    {
+      ...state,
+      lifecycle: Lifecycle.reasoningStart(
+        lifecycle,
+        events,
+        `${itemID}:${index}`,
+        providerMetadata(state, { itemId: itemID, reasoningEncryptedContent: item.encryptedContent ?? null }),
+      ),
+      reasoningItems: {
+        ...state.reasoningItems,
+        [itemID]: {
+          ...item,
+          summaryParts: {
+            ...Object.fromEntries(
+              Object.entries(item.summaryParts).map((entry) =>
+                entry[1] === "concluded" ? entry : [entry[0], "concluded" as const],
+              ),
+            ),
+            [index]: "active",
+          },
+        },
+      },
+    },
+    events,
+  ]
+}
+
 export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
   if (!event.delta || !item) return [state, NO_EVENTS]
   const index = event.summary_index ?? 0
-  const events: LLMEvent[] = []
+  if (item.summaryParts[index] === "concluded") return [state, NO_EVENTS]
+  const [started, emitted] = startReasoningSummaryPart(state, itemID, index)
+  const current = started.reasoningItems[itemID]
+  if (!current) return [started, emitted]
+  const events: LLMEvent[] = [...emitted]
   return [
     {
-      ...state,
-      lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, `${itemID}:${index}`, event.delta),
+      ...started,
+      lifecycle: Lifecycle.reasoningDelta(started.lifecycle, events, `${itemID}:${index}`, event.delta),
       reasoningItems: {
-        ...state.reasoningItems,
-        [itemID]: { ...item, deltaIndexes: new Set([...item.deltaIndexes, index]) },
+        ...started.reasoningItems,
+        [itemID]: { ...current, deltaIndexes: new Set([...current.deltaIndexes, index]) },
       },
     },
     events,
@@ -837,35 +1024,51 @@ export const onReasoningDone = (state: ParserState, event: Event, itemID: string
   return onReasoningDelta(state, { ...event, delta: event.text }, itemID)
 }
 
-const reasoningMetadata = (state: ParserState, item: StreamItem & { id: string }) =>
+const reasoningMetadata = (state: ParserState, item: OutputItem) =>
   providerMetadata(state, { itemId: item.id, reasoningEncryptedContent: item.encrypted_content ?? null })
 
-// Responses APIs stream reasoning items in a stable order:
+// Responses APIs normally stream reasoning items in this order:
 //   `output_item.added` (reasoning) →
 //     `reasoning_summary_part.added` (index=0) →
 //     `reasoning_summary_text.delta` →
 //     `reasoning_summary_part.done` (index=0) →
 //     (repeat for index>0) →
 //   `output_item.done` (reasoning).
-// The handlers below rely on this ordering: `onOutputItemAdded` seeds the
-// per-item entry, `onReasoningSummaryPartAdded` for `summary_index === 0`
-// short-circuits when the entry already exists, and higher-index handlers
-// fold against the same entry. Behaviour for out-of-order events is
-// best-effort, not guaranteed.
-const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
+// `onOutputItemAdded` seeds the per-item entry, while each later part start is
+// also an implicit boundary for the previous part. This keeps the common event
+// lifecycle ordered when a compatible provider omits or delays a part-done event.
+const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResult => {
   const item = event.item
-  if (item?.type === "message" && item.id) {
+  if (!item) return [state, NO_EVENTS]
+  if (item.type === "message") {
     const phase = messagePhase(item.phase)
+    // A new message closes earlier messages, including ones that never streamed.
+    const events: LLMEvent[] = []
+    const lifecycle = [...state.lifecycle.text]
+      .filter((id) => id !== item.id)
+      .reduce((lifecycle, id) => {
+        const openPhase = state.message?.id === id ? state.message.phase : undefined
+        return Lifecycle.textEnd(
+          lifecycle,
+          events,
+          id,
+          providerMetadata(state, { itemId: id, ...(openPhase === undefined ? {} : { phase: openPhase }) }),
+        )
+      }, state.lifecycle)
     return [
       {
         ...state,
-        messageItems: new Set([...state.messageItems, item.id]),
-        messagePhases: phase === undefined ? state.messagePhases : { ...state.messagePhases, [item.id]: phase },
+        lifecycle,
+        message: {
+          id: item.id,
+          phase: phase === undefined && state.message?.id === item.id ? state.message.phase : phase,
+        },
       },
-      NO_EVENTS,
+      events,
     ]
   }
-  if (item && isReasoningItem(item)) {
+  if (item.type === "reasoning") {
+    if (state.reasoningItems[item.id] !== undefined) return [state, NO_EVENTS]
     const events: LLMEvent[] = []
     return [
       {
@@ -883,7 +1086,8 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
       events,
     ]
   }
-  if (item?.type !== "function_call" || !item.id) return [state, NO_EVENTS]
+  if (item.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
+  if (state.tools[item.id] !== undefined) return [state, NO_EVENTS]
   const metadata = providerMetadata(state, { itemId: item.id })
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
@@ -892,95 +1096,50 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
       ...state,
       lifecycle,
       tools: ToolStream.start(state.tools, item.id, {
-        id: item.call_id ?? item.id,
+        id: item.call_id,
         name: item.name ?? "",
+        namespace: item.namespace,
         input: item.arguments ?? "",
         providerMetadata: metadata,
       }),
     },
     [
       ...events,
-      LLMEvent.toolInputStart({ id: item.call_id ?? item.id, name: item.name ?? "", providerMetadata: metadata }),
+      LLMEvent.toolInputStart({
+        id: item.call_id,
+        name: item.name ?? "",
+        namespace: item.namespace,
+        providerMetadata: metadata,
+      }),
     ],
   ]
 }
 
 const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResult => {
-  if (!event.item_id || event.summary_index === undefined) return [state, NO_EVENTS]
-  const item = state.reasoningItems[event.item_id]
-  if (!item) return [state, NO_EVENTS]
-  if (event.summary_index === 0) return [state, NO_EVENTS]
-
-  const events: LLMEvent[] = []
-  const closed = Object.entries(item.summaryParts)
-    .filter((entry) => entry[1] === "can-conclude")
-    .reduce(
-      (lifecycle, entry) =>
-        Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          `${event.item_id}:${entry[0]}`,
-          providerMetadata(state, { itemId: event.item_id }),
-        ),
-      state.lifecycle,
-    )
-  return [
-    {
-      ...state,
-      lifecycle: Lifecycle.reasoningStart(
-        closed,
-        events,
-        `${event.item_id}:${event.summary_index}`,
-        providerMetadata(state, { itemId: event.item_id, reasoningEncryptedContent: item.encryptedContent ?? null }),
-      ),
-      reasoningItems: {
-        ...state.reasoningItems,
-        [event.item_id]: {
-          ...item,
-          summaryParts: {
-            ...Object.fromEntries(
-              Object.entries(item.summaryParts).map((entry) =>
-                entry[1] === "can-conclude" ? [entry[0], "concluded" as const] : entry,
-              ),
-            ),
-            [event.summary_index]: "active",
-          },
-        },
-      },
-    },
-    events,
-  ]
+  if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
+  return startReasoningSummaryPart(state, event.item_id, event.summary_index)
 }
 
 const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResult => {
-  if (!event.item_id || event.summary_index === undefined) return [state, NO_EVENTS]
+  if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
   const item = state.reasoningItems[event.item_id]
   if (!item) return [state, NO_EVENTS]
-  const events: LLMEvent[] = []
+  if (item.summaryParts[event.summary_index] !== "active") return [state, NO_EVENTS]
   return [
     {
       ...state,
-      lifecycle:
-        state.store !== false
-          ? Lifecycle.reasoningEnd(
-              state.lifecycle,
-              events,
-              `${event.item_id}:${event.summary_index}`,
-              providerMetadata(state, { itemId: event.item_id }),
-            )
-          : state.lifecycle,
       reasoningItems: {
         ...state.reasoningItems,
         [event.item_id]: {
           ...item,
           summaryParts: {
             ...item.summaryParts,
-            [event.summary_index]: state.store !== false ? "concluded" : "can-conclude",
+            [event.summary_index]: "can-conclude",
           },
         },
       },
     },
-    events,
+    NO_EVENTS,
   ]
 }
 
@@ -988,12 +1147,24 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   state: ParserState,
   event: Event,
 ) {
-  if (!event.item_id || !event.delta || !state.tools[event.item_id]) return [state, NO_EVENTS] satisfies StepResult
+  if (event.item_id === undefined) return [state, NO_EVENTS] satisfies StepResult
+  const tool = state.tools[event.item_id]
+  if (!tool) return [state, NO_EVENTS] satisfies StepResult
+  const final = event.type === "response.function_call_arguments.done" ? event.arguments : undefined
+  if (event.type === "response.function_call_arguments.done" && final === undefined)
+    return [state, NO_EVENTS] satisfies StepResult
+  if (final !== undefined && !final.startsWith(tool.input))
+    return [
+      { ...state, tools: ToolStream.start(state.tools, event.item_id, { ...tool, input: final }) },
+      NO_EVENTS,
+    ] satisfies StepResult
+  const delta = final === undefined ? event.delta : final.slice(tool.input.length)
+  if (!delta) return [state, NO_EVENTS] satisfies StepResult
   const result = ToolStream.appendExisting(
     state.id,
     state.tools,
     event.item_id,
-    event.delta,
+    delta,
     `${state.name} tool argument delta is missing its tool call`,
   )
   if (ToolStream.isError(result)) return yield* result
@@ -1003,48 +1174,87 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (state: ParserState, event: Event) {
-  const item = event.item
+const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
+  state: ParserState,
+  item: NormalizedEvent["item"],
+) {
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
-  if (item.type === "message" && item.id) {
-    const itemPhase = messagePhase(item.phase)
-    const phase = itemPhase === undefined ? state.messagePhases[item.id] : itemPhase
+  if (item.type === "compaction") {
+    if (typeof item.encrypted_content !== "string")
+      return yield* ProviderShared.eventError(state.id, "Compaction output is missing its encrypted content")
+    if (state.completedCompactions.has(item.id)) return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
-    const messageItems = new Set(state.messageItems)
-    messageItems.delete(item.id)
-    const { [item.id]: _phase, ...messagePhases } = state.messagePhases
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    events.push(
+      LLMEvent.compaction({
+        provider: state.provider,
+        id: item.id,
+        encrypted: item.encrypted_content,
+      }),
+    )
+    return [
+      { ...state, lifecycle, completedCompactions: new Set([...state.completedCompactions, item.id]) },
+      events,
+    ] satisfies StepResult
+  }
+
+  if (item.type === "message") {
+    const active = state.message?.id === item.id
+    const itemPhase = messagePhase(item.phase)
+    const phase = itemPhase === undefined && active ? state.message?.phase : itemPhase
+    const parts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
+    const content: string[] = []
+    for (const part of parts) {
+      const decoded = Option.getOrUndefined(decodeMessagePart(part))
+      if (!decoded) continue
+      content.push(decoded.type === "output_text" ? decoded.text : decoded.refusal)
+    }
+    const text = content.length > 0 ? content.join("") : undefined
+    const metadata = providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) })
+    const events: LLMEvent[] = []
+    const lifecycle = text ? Lifecycle.textStart(state.lifecycle, events, item.id, metadata) : state.lifecycle
     return [
       {
         ...state,
-        lifecycle: Lifecycle.textEnd(
-          state.lifecycle,
-          events,
-          item.id,
-          providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) }),
-        ),
-        messageItems,
-        messagePhases,
+        lifecycle: Lifecycle.textEnd(lifecycle, events, item.id, metadata, text),
+        message: active ? undefined : state.message,
       },
       events,
     ] satisfies StepResult
   }
 
   if (item.type === "function_call") {
-    if (!item.id || !item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
-    const tools = state.tools[item.id]
+    if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
+    const metadata = providerMetadata(state, { itemId: item.id })
+    const registered = state.tools[item.id] !== undefined
+    const tools = registered
       ? state.tools
       : ToolStream.start(state.tools, item.id, {
           id: item.call_id,
           name: item.name,
-          providerMetadata: providerMetadata(state, { itemId: item.id }),
+          namespace: item.namespace,
+          providerMetadata: metadata,
         })
     const result =
       item.arguments === undefined
         ? yield* ToolStream.finish(state.id, tools, item.id)
         : yield* ToolStream.finishWithInput(state.id, tools, item.id, item.arguments)
     const events: LLMEvent[] = []
-    const resultEvents = result.events ?? []
+    const finished = result.events ?? []
+    // A done-only call never streamed a start event, so open its lifecycle here.
+    const resultEvents =
+      registered || finished.length === 0
+        ? finished
+        : [
+            LLMEvent.toolInputStart({
+              id: item.call_id,
+              name: item.name,
+              namespace: item.namespace,
+              providerMetadata: metadata,
+            }),
+            ...finished,
+          ]
     const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
     events.push(...resultEvents)
     return [
@@ -1060,60 +1270,91 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     ] satisfies StepResult
   }
 
-  if (isReasoningItem(item)) {
-    const events: LLMEvent[] = []
+  if (item.type === "reasoning") {
     const metadata = reasoningMetadata(state, item)
+    const summaryParts: ReadonlyArray<unknown> = Array.isArray(item.summary) ? item.summary : []
+    const summary: Array<string | undefined> = []
+    for (const part of summaryParts) {
+      const decoded = Option.getOrUndefined(decodeSummaryPart(part))
+      // Keep missing entries so the array still matches the provider's summary indexes.
+      summary.push(decoded?.text)
+    }
+    const reasoningParts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
+    const content: string[] = []
+    for (const part of reasoningParts) {
+      const decoded = Option.getOrUndefined(decodeReasoningPart(part))
+      if (decoded) content.push(decoded.text)
+    }
+    const itemText = joinReasoningText(summary) ?? joinReasoningText(content)
+    const events: LLMEvent[] = []
     const reasoningItem = state.reasoningItems[item.id]
     if (reasoningItem) {
-      const lifecycle = Object.entries(reasoningItem.summaryParts)
-        .filter((entry) => entry[1] === "active" || entry[1] === "can-conclude")
-        .reduce(
-          (lifecycle, entry) => Lifecycle.reasoningEnd(lifecycle, events, `${item.id}:${entry[0]}`, metadata),
-          state.lifecycle,
-        )
-      const { [item.id]: _removed, ...reasoningItems } = state.reasoningItems
+      const fragments = Object.entries(reasoningItem.summaryParts)
+      let lifecycle = state.lifecycle
+      for (const [index, status] of fragments) {
+        if (status === "concluded") continue
+        // Do not repeat earlier summaries that were already emitted as separate fragments.
+        const finalText = fragments.length === 1 ? itemText : summary[Number(index)]
+        lifecycle = Lifecycle.reasoningEnd(lifecycle, events, `${item.id}:${index}`, metadata, finalText || undefined)
+      }
+      const reasoningItems = { ...state.reasoningItems }
+      delete reasoningItems[item.id]
       return [{ ...state, lifecycle, reasoningItems }, events] satisfies StepResult
     }
-    if (!state.lifecycle.reasoning.has(item.id)) {
-      const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
-      events.push(LLMEvent.reasoningStart({ id: item.id, providerMetadata: metadata }))
-      events.push(LLMEvent.reasoningEnd({ id: item.id, providerMetadata: metadata }))
-      return [{ ...state, lifecycle }, events] satisfies StepResult
-    }
-    return [
-      { ...state, lifecycle: Lifecycle.reasoningEnd(state.lifecycle, events, item.id, metadata) },
-      events,
-    ] satisfies StepResult
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    events.push(LLMEvent.reasoningStart({ id: item.id, providerMetadata: metadata }))
+    events.push(LLMEvent.reasoningEnd({ id: item.id, providerMetadata: metadata, text: itemText }))
+    return [{ ...state, lifecycle }, events] satisfies StepResult
   }
 
   return [state, NO_EVENTS] satisfies StepResult
 })
 
 const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (state: ParserState, event: Event) {
-  // Some compatible providers omit output_item.done even after completing the response.
-  const pending =
-    event.type === "response.completed"
-      ? yield* ToolStream.finishAll(state.id, state.tools)
-      : { tools: state.tools, events: NO_EVENTS }
-  const events: LLMEvent[] = [...pending.events]
-  const hasFunctionCall =
-    pending.events.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
-    state.hasFunctionCall
-  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
+  let current = state
+  const events: LLMEvent[] = []
+  if (event.type === "response.completed") {
+    // An output item's array position is its output index.
+    for (const item of (event.response?.output ?? []).map((item, index) => resolveItem(state, item, index))) {
+      // Terminal recovery cannot insert a checkpoint before already-emitted content.
+      if (item.type === "compaction" && state.lifecycle.stepStarted && !state.completedCompactions.has(item.id))
+        return yield* ProviderShared.eventError(
+          state.id,
+          "Cannot recover a compaction checkpoint after output has been emitted",
+        )
+      const recoverable =
+        item.type === "compaction" || (item.type === "function_call" && current.tools[item.id] !== undefined)
+      if (!recoverable) continue
+      const [next, emitted] = yield* onOutputItemDone(current, item)
+      current = next
+      events.push(...emitted)
+    }
+    // Some compatible providers omit output_item.done even after completing the response.
+    const pending = yield* ToolStream.finishAll(current.id, current.tools)
+    current = {
+      ...current,
+      tools: pending.tools,
+      hasFunctionCall:
+        current.hasFunctionCall ||
+        pending.events.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)),
+    }
+    events.push(...pending.events)
+  }
+  const lifecycle = Lifecycle.finish(current.lifecycle, events, {
     reason: {
-      normalized: mapFinishReason(event, hasFunctionCall),
+      normalized: mapFinishReason(event, current.hasFunctionCall),
       raw: event.response?.incomplete_details?.reason,
     },
-    usage: mapUsage(event.response?.usage, state.providerMetadataKey),
+    usage: mapUsage(event.response?.usage, current.providerMetadataKey),
     providerMetadata:
       event.response?.id || event.response?.service_tier
-        ? providerMetadata(state, {
+        ? providerMetadata(current, {
             responseId: event.response.id,
             serviceTier: event.response.service_tier,
           })
         : undefined,
   })
-  return [{ ...state, lifecycle, hasFunctionCall, tools: pending.tools }, events] satisfies StepResult
+  return [{ ...current, lifecycle }, events] satisfies StepResult
 })
 
 // Build the prettiest summary available from whatever the provider supplied.
@@ -1129,11 +1370,8 @@ const providerErrorMessage = (event: Event, nested: OpenResponsesErrorPayload | 
   return message || code
 }
 
-export const providerFailure = (id: string, event: Event, fallback: string) => {
+export const providerFailure = (event: Event, fallback: string, body = ProviderShared.encodeJson(event)) => {
   const nested = event.error ?? event.response?.error ?? undefined
-  const code = event.code || nested?.code || undefined
-  // Keep the full raw payload on the error even when the message is a summary.
-  const body = JSON.stringify(nested ?? event) ?? ""
   const summary = providerErrorMessage(event, nested)
   const message = summary ?? (body === "{}" ? fallback : body)
   const status =
@@ -1148,21 +1386,16 @@ export const providerFailure = (id: string, event: Event, fallback: string) => {
     event.response === undefined &&
     summary === undefined &&
     status === undefined
-      ? new ProviderInternalReason({ message })
-      : classifyProviderFailure({ message, code, status, rawBody: body })
-  return new AIError({
-    module: id,
-    method: "stream",
-    body,
-    reason,
-  })
+      ? new ProviderInternalError({ message, body })
+      : classifyProviderFailure({ message, status, rawBody: body })
+  return new AIError({ reason })
 }
 
-const providerError = (state: ParserState, event: Event, fallback: string) => providerFailure(state.id, event, fallback)
-
-export const step = (state: ParserState, event: Event) => {
+// Callers must pass events through `normalize` first. The OpenAPI requires
+// string IDs but imposes no minLength; empty is not missing.
+export const step = (state: ParserState, event: NormalizedEvent) => {
   if (event.type === "response.output_text.delta" || event.type === "response.output_text.done") {
-    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(
       event.type === "response.output_text.delta"
         ? onOutputTextDelta(state, event, event.item_id)
@@ -1171,7 +1404,7 @@ export const step = (state: ParserState, event: Event) => {
   }
   if (event.type === "response.refusal.delta" || event.type === "response.refusal.done") {
     const value = event.type === "response.refusal.delta" ? event.delta : event.refusal
-    if (!event.item_id || typeof value !== "string")
+    if (event.item_id === undefined || typeof value !== "string")
       return ProviderShared.eventError(state.id, `${event.type} is malformed`)
     return Effect.succeed(
       event.type === "response.refusal.delta"
@@ -1180,46 +1413,59 @@ export const step = (state: ParserState, event: Event) => {
     )
   }
   if (event.type === "response.reasoning.delta" || event.type === "response.reasoning_summary_text.delta") {
-    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(onReasoningDelta(state, event, event.item_id))
   }
   if (
     event.type === "response.reasoning.done" ||
     event.type === "response.reasoning_summary_text.done" ||
-    event.type === "response.reasoning_summary.done" ||
     event.type === "response.reasoning_text.done"
   ) {
-    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(onReasoningDone(state, event, event.item_id))
   }
   if (event.type === "response.reasoning_summary_part.added")
-    return event.item_id
+    return event.item_id !== undefined
       ? Effect.succeed(onReasoningSummaryPartAdded(state, event))
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.reasoning_summary_part.done")
-    return event.item_id
+    return event.item_id !== undefined
       ? Effect.succeed(onReasoningSummaryPartDone(state, event))
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.added") {
-    if (event.item?.type === "message" && !event.item.id)
-      return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
-    return Effect.succeed(onOutputItemAdded(state, event))
+    if (
+      event.item?.type === "reasoning" &&
+      state.reasoningItems[event.item.id] === undefined &&
+      state.lifecycle.reasoning.size > 0
+    )
+      return ProviderShared.eventError(state.id, `${event.type} started reasoning before the previous item ended`)
+    return Effect.succeed(
+      onOutputItemAdded(
+        event.output_index !== undefined && event.item
+          ? { ...state, outputItems: { ...state.outputItems, [event.output_index]: event.item.id } }
+          : state,
+        event,
+      ),
+    )
   }
-  if (event.type === "response.function_call_arguments.delta")
-    return event.item_id
+  if (event.type === "response.function_call_arguments.delta" || event.type === "response.function_call_arguments.done")
+    return event.item_id !== undefined
       ? onFunctionCallArgumentsDelta(state, event)
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
-  if (event.type === "response.output_item.done") {
-    if (event.item?.type === "message" && !event.item.id)
-      return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
-    return onOutputItemDone(state, event)
-  }
+  if (event.type === "response.output_item.done") return onOutputItemDone(state, event.item)
   if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
-  if (event.type === "response.failed") return providerError(state, event, `${state.name} response failed`)
+  if (event.type === "response.failed") return providerFailure(event, `${state.name} response failed`)
   if (event.type === "error")
     return decodeKnownErrorEvent(event).pipe(
-      Effect.mapError(() => ProviderShared.eventError(state.id, `${state.name} returned a malformed error event`)),
-      Effect.flatMap(() => providerError(state, event, `${state.name} stream error`)),
+      Effect.mapError((cause) =>
+        ProviderShared.eventError(
+          state.id,
+          `${state.name} returned a malformed error event`,
+          ProviderShared.encodeJson(event),
+          cause,
+        ),
+      ),
+      Effect.flatMap(() => providerFailure(event, `${state.name} stream error`)),
     )
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }
@@ -1231,17 +1477,18 @@ export const step = (state: ParserState, event: Event) => {
  * The provider-neutral Open Responses protocol. Provider-specific Responses
  * implementations compose this baseline with their own tools and event variants.
  */
-export const initial = (request: LLMRequest, extension: Extension = BASE): ParserState => ({
-  id: extension.id,
-  name: extension.name,
-  providerMetadataKey: request.model.route.providerMetadataKey ?? "openresponses",
+export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADAPTER): ParserState => ({
+  provider: request.model.provider,
+  completedCompactions: new Set<string>(),
+  id: adapter.id,
+  name: adapter.name,
+  providerMetadataKey: metadataKey(request.model),
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
   lifecycle: Lifecycle.initial(),
-  messageItems: new Set<string>(),
-  messagePhases: {},
+  outputItems: {},
+  message: undefined,
   reasoningItems: {},
-  store: OpenResponsesOptions.resolve(request).store,
 })
 
 export const protocol = Protocol.make({
@@ -1253,7 +1500,7 @@ export const protocol = Protocol.make({
   stream: {
     event: Protocol.jsonEvent(Event),
     initial,
-    step,
+    step: (state: ParserState, event: Event) => step(state, normalize(state, event)),
     terminal,
   },
 })

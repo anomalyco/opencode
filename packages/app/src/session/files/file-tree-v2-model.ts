@@ -76,6 +76,12 @@ export function flattenFileTreeV2(model: FileTreeV2Model, expanded: (path: strin
   return rows
 }
 
+export function sortFileTreeV2Paths(paths: readonly string[]) {
+  return flattenFileTreeV2(buildFileTreeV2Model(paths), () => true)
+    .filter((row) => row.node.type === "file")
+    .map((row) => row.node.originalPath)
+}
+
 export function flattenLiveFileTreeV2(
   children: (path: string) => readonly FileNode[],
   expanded: (path: string) => boolean,

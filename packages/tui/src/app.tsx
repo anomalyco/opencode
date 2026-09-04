@@ -8,14 +8,13 @@ import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
-import * as Selection from "./util/selection"
+import { Selection } from "./util/selection"
 import {
   CliRenderEvents,
   createCliRenderer,
   MouseButton,
   type CliRenderer,
   type CliRendererConfig,
-  type MouseEvent,
   type ThemeMode,
 } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
@@ -31,7 +30,6 @@ import {
   batch,
   Show,
 } from "solid-js"
-import { createStore } from "solid-js/store"
 import {
   TuiLifecycleProvider,
   TuiAppProvider,
@@ -39,7 +37,6 @@ import {
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
   useTuiApp,
-  useTuiPaths,
   useTuiStartup,
   useTuiTerminalEnvironment,
   type TuiApp,
@@ -67,17 +64,19 @@ import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair, type DialogPairCredentials } from "./component/dialog-pair"
+import { DialogUpdate } from "./component/dialog-update"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { DialogOpen, DialogOpenKey, loadDialogOpen } from "./component/dialog-open"
+import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
+import { createPaneResize } from "./ui/pane-resize"
+import { PaneResizeHandle } from "./ui/pane-resize-handle"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
-import { Session } from "./routes/session"
 import { PromptHistoryProvider } from "./prompt/history"
 import { FrecencyProvider } from "./prompt/frecency"
 import { PromptStashProvider } from "./prompt/stash"
@@ -89,8 +88,8 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { newSessionLocation } from "./config/new-session-location"
-import { PluginProvider, usePlugin, type PackageResolver } from "./plugin/context"
-import { tuiPluginDirectories } from "./plugin/discovery"
+import { PluginProvider, usePlugin, type PackageSource } from "./plugin/context"
+import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
 import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
@@ -100,6 +99,8 @@ import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
+import { SessionTerminalsProvider } from "./context/session-terminals"
+import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
 registerOpencodeSpinner()
@@ -184,7 +185,11 @@ export type TuiInput = {
   }
   args: Args
   config: Config.Interface
-  packages: PackageResolver
+  updater?: {
+    monitor: (notify: (version: string) => void, signal: AbortSignal) => Promise<void>
+    apply: (version: string) => Promise<void>
+  }
+  packages: PackageSource
   environment?: Readonly<Record<string, string>>
   terminalHandoff?: () => Promise<
     | {
@@ -210,7 +215,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.catch(() => Effect.tryPromise(() => api.location.get())),
   )
   const directory = location.directory
-  const pluginDirectories = yield* Effect.promise(() => tuiPluginDirectories(process.cwd(), global.config))
+  const pluginDirectories = yield* Effect.promise(() => localPluginDirectories(process.cwd(), global.config))
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service
   const service = managed
@@ -218,7 +223,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         reconnect: async (signal: AbortSignal) => {
           const endpoint = await managed.reconnect(signal)
           const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
-          return { api: OpenCode.make(next) }
+          return { api: OpenCode.make(next), url: endpoint.url }
         },
         restart: managed.restart,
       }
@@ -373,48 +378,51 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                 : undefined
                                             }
                                           >
-                                            <ClientProvider api={api} service={service}>
+                                            <ClientProvider api={api} url={input.server.endpoint.url} service={service}>
                                               <PermissionProvider>
-                                                <DataProvider>
+                                                <DataProvider directory={directory}>
                                                   <LocationProvider>
                                                     <SessionTabsProvider>
-                                                      <ThemeProvider
-                                                        mode={mode}
-                                                        source={createThemeSource(global.config)}
-                                                      >
-                                                        <ThemeErrorToast />
-                                                        <LocalProvider>
-                                                          <PromptStashProvider>
-                                                            <DialogProvider>
-                                                              <FrecencyProvider>
-                                                                <PromptHistoryProvider>
-                                                                  <PromptRefProvider>
-                                                                    <EditorContextProvider>
-                                                                      <AttentionProvider>
-                                                                        <PluginProvider
-                                                                          packages={input.packages}
-                                                                          directories={pluginDirectories}
-                                                                        >
-                                                                          <App
-                                                                            pair={
-                                                                              input.server.endpoint.auth
-                                                                                ? input.server.endpoint.auth
-                                                                                : {
-                                                                                    username: "opencode",
-                                                                                    password: "",
-                                                                                  }
-                                                                            }
-                                                                          />
-                                                                        </PluginProvider>
-                                                                      </AttentionProvider>
-                                                                    </EditorContextProvider>
-                                                                  </PromptRefProvider>
-                                                                </PromptHistoryProvider>
-                                                              </FrecencyProvider>
-                                                            </DialogProvider>
-                                                          </PromptStashProvider>
-                                                        </LocalProvider>
-                                                      </ThemeProvider>
+                                                      <SessionTerminalsProvider>
+                                                        <ThemeProvider
+                                                          mode={mode}
+                                                          source={createThemeSource(global.config)}
+                                                        >
+                                                          <ThemeErrorToast />
+                                                          <LocalProvider>
+                                                            <PromptStashProvider>
+                                                              <DialogProvider>
+                                                                <FrecencyProvider>
+                                                                  <PromptHistoryProvider>
+                                                                    <PromptRefProvider>
+                                                                      <EditorContextProvider>
+                                                                        <AttentionProvider>
+                                                                          <PluginProvider
+                                                                            packages={input.packages}
+                                                                            directories={pluginDirectories}
+                                                                          >
+                                                                            <App
+                                                                              updater={input.updater}
+                                                                              pair={
+                                                                                input.server.endpoint.auth
+                                                                                  ? input.server.endpoint.auth
+                                                                                  : {
+                                                                                      username: "opencode",
+                                                                                      password: "",
+                                                                                    }
+                                                                              }
+                                                                            />
+                                                                          </PluginProvider>
+                                                                        </AttentionProvider>
+                                                                      </EditorContextProvider>
+                                                                    </PromptRefProvider>
+                                                                  </PromptHistoryProvider>
+                                                                </FrecencyProvider>
+                                                              </DialogProvider>
+                                                            </PromptStashProvider>
+                                                          </LocalProvider>
+                                                        </ThemeProvider>
+                                                      </SessionTerminalsProvider>
                                                     </SessionTabsProvider>
                                                   </LocationProvider>
                                                 </DataProvider>
@@ -454,11 +462,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { pair?: DialogPairCredentials }) {
+function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"] }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
-  const paths = useTuiPaths()
   const config = useConfig()
   const devtools = createMemo(() => config.data.debug?.devtools ?? app.channel === "local")
   const route = useRoute()
@@ -472,7 +479,6 @@ function App(props: { pair?: DialogPairCredentials }) {
   const client = useClient()
   const toast = useToast()
   const theme = useTheme()
-  const tabsTheme = useTheme("elevated")
   const { mode, supports, setMode, locked, lock, unlock } = useThemes()
   const data = useData()
   const location = useLocation()
@@ -495,39 +501,53 @@ function App(props: { pair?: DialogPairCredentials }) {
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
   })
-  const [preferredTabsWidth, setPreferredTabsWidth] = createSignal(layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH)
-  const [tabsResizeHovered, setTabsResizeHovered] = createSignal(false)
-  const [tabsResizing, setTabsResizing] = createSignal(false)
-  let requestedTabsWidth = layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH
-  createEffect(() => {
-    if (tabsResizing()) return
-    requestedTabsWidth = layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH
-    setPreferredTabsWidth(requestedTabsWidth)
+  const [updateNotifications, markUpdateNotification] = useStorage().store<{ versions: string[] }>(
+    "update-notifications",
+    { initial: { versions: [] } },
+  )
+  const showUpdate = (version: string) => {
+    const updater = props.updater
+    if (!updater || updateNotifications.versions.includes(version)) return
+    void markUpdateNotification((draft) => {
+      draft.versions = [...draft.versions, version].slice(-100)
+    }).catch((error) => log.error("failed to persist update notification", { error }))
+    const key = `update:${version}`
+    dialog.replace(
+      () => (
+        <DialogUpdate
+          dialogKey={key}
+          version={version}
+          install={() => updater.apply(version)}
+          restart={client.restart}
+        />
+      ),
+      undefined,
+      { key },
+    )
+    dialog.setCentered(true)
+  }
+  onMount(() => {
+    const updater = props.updater
+    if (!updater) return
+    const controller = new AbortController()
+    onCleanup(() => controller.abort())
+    void updater.monitor(showUpdate, controller.signal).catch((error) => {
+      if (!controller.signal.aborted) log.error("update monitor failed", { error })
+    })
   })
-  const verticalTabsWidth = () => clampSessionTabsWidth(preferredTabsWidth(), dimensions().width)
-  const resizeVerticalTabs = (width: number) => setPreferredTabsWidth(clampSessionTabsWidth(width, dimensions().width))
-  const commitVerticalTabsWidth = (width: number) => {
-    const next = clampSessionTabsWidth(width, dimensions().width)
-    setPreferredTabsWidth(next)
-    if (requestedTabsWidth === next) return
-    requestedTabsWidth = next
-    void updateLayout((draft) => {
-      draft.verticalTabsWidth = next
-    }).catch((error) => console.error("Failed to persist TUI layout", error))
-  }
-  let tabsResizeMoved = false
-  let lastTabsBoundaryClick = 0
-  const finishTabsResize = (event: MouseEvent) => {
-    if (!tabsResizing()) return
-    const next = tabsResizeMoved ? event.x + 1 : verticalTabsWidth()
-    setTabsResizing(false)
-    lastTabsBoundaryClick = tabsResizeMoved ? 0 : Date.now()
-    commitVerticalTabsWidth(next)
-    const width = clampSessionTabsWidth(next, dimensions().width)
-    setTabsResizeHovered(event.x >= width - 1 && event.x <= width)
-    event.stopPropagation()
-  }
-  let openingOpen: Promise<SessionInfo[]> | undefined
+  const tabsResize = createPaneResize({
+    value: () => layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH,
+    defaultValue: () => SESSION_SIDEBAR_WIDTH,
+    clamp: (width) => clampSessionTabsWidth(width, dimensions().width),
+    fromMouse: (event) => event.x + 1,
+    contains: (event, width) => event.x >= width - 1 && event.x <= width,
+    onCommit: (width) => {
+      void updateLayout((draft) => {
+        draft.verticalTabsWidth = width
+      }).catch((error) => console.error("Failed to persist TUI layout", error))
+    },
+  })
+  const [openSessions, setOpenSessions] = createSignal<SessionInfo[]>([])
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
   // the same problem on every refresh while still re-alerting if the state changes.
@@ -558,14 +578,16 @@ function App(props: { pair?: DialogPairCredentials }) {
     }
   })
 
-  // Let selection copy/dismiss win ahead of normal bindings when explicit copy is required.
+  const copyOnSelectEnabled = () =>
+    (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
+
+  // Selection copy/dismiss must precede both app bindings and the terminal pane's raw key forwarding.
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
-      if ((config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select") return
-      Selection.handleSelectionKey(renderer, toast, event, clipboard)
+      Selection.handleSelectionKey(renderer, toast, event, clipboard, copyOnSelectEnabled())
     },
-    { priority: 1 },
+    { priority: 101 },
   )
   onCleanup(() => {
     offSelectionKeys()
@@ -583,11 +605,9 @@ function App(props: { pair?: DialogPairCredentials }) {
     renderer.clearSelection()
   }
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
-  const copyOnSelectEnabled = () =>
-    (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
   const tabsVertical = () =>
-    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, preferredTabsWidth())
+    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, tabsResize.preferredSize())
   const tabsVisible = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
 
@@ -614,7 +634,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         return
       }
 
-      renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
+      renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "…" : title}`)
       return
     }
 
@@ -716,6 +736,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         category: "Session",
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
+          const model = local.model.current()
           const current =
             route.data.type === "session"
               ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
@@ -724,11 +745,12 @@ function App(props: { pair?: DialogPairCredentials }) {
             type: "home",
             location: newSessionLocation(
               config.data.session.new_location,
-              paths.cwd,
+              data.location.default().directory,
               current,
               location.error?.location,
             ),
           })
+          if (model) local.model.set(model)
           dialog.clear()
         },
       },
@@ -737,14 +759,12 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Open session or project",
         category: "Session",
         slash: { name: "open", aliases: ["projects", "project"] },
-        run: async () => {
-          if (dialog.key === DialogOpenKey || openingOpen) return
-          const previous = dialog.stack.at(-1)
-          openingOpen = loadDialogOpen(data, client)
-          const sessions = await openingOpen
-          openingOpen = undefined
-          if (dialog.stack.at(-1) !== previous) return
-          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: DialogOpenKey, size: "large" })
+        run: () => {
+          if (dialog.key === DialogOpenKey) return
+          dialog.replace(() => <DialogOpen sessions={openSessions()} onLoad={setOpenSessions} />, undefined, {
+            key: DialogOpenKey,
+            size: "large",
+          })
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
@@ -969,7 +989,7 @@ function App(props: { pair?: DialogPairCredentials }) {
                 const restart = client.restart
                 if (!restart) return
                 dialog.clear()
-                toast.show({ variant: "info", message: "Restarting service...", duration: 30000 })
+                toast.show({ variant: "info", message: "Restarting service…", duration: 30000 })
                 // restart resolves once the replacement service is healthy; the
                 // event stream reattaches through the reconnect loop.
                 await restart()
@@ -1231,7 +1251,14 @@ function App(props: { pair?: DialogPairCredentials }) {
     })
   })
 
+  event.on("session.moved", (evt) => {
+    setOpenSessions((sessions) =>
+      sessions.map((session) => (session.id !== evt.data.sessionID ? session : moveOpenSession(session, evt))),
+    )
+  })
+
   event.on("session.deleted", (evt) => {
+    setOpenSessions((sessions) => sessions.filter((session) => session.id !== evt.data.sessionID))
     if (route.data.type === "session" && route.data.sessionID === evt.data.sessionID) {
       const title = active?.id === evt.data.sessionID ? active.title : undefined
       route.navigate({ type: "home" })
@@ -1291,18 +1318,12 @@ function App(props: { pair?: DialogPairCredentials }) {
         minHeight={0}
         flexDirection="row"
         position="relative"
-        onMouseDrag={(event) => {
-          if (!tabsResizing()) return
-          tabsResizeMoved = true
-          lastTabsBoundaryClick = 0
-          resizeVerticalTabs(event.x + 1)
-          event.stopPropagation()
-        }}
-        onMouseDragEnd={finishTabsResize}
-        onMouseUp={finishTabsResize}
+        onMouseDrag={tabsResize.onMouseDrag}
+        onMouseDragEnd={tabsResize.onMouseDragEnd}
+        onMouseUp={tabsResize.onMouseUp}
       >
         <Show when={verticalTabsVisible()}>
-          <SessionTabs orientation="vertical" width={verticalTabsWidth()} />
+          <SessionTabs orientation="vertical" width={tabsResize.size()} />
         </Show>
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
@@ -1316,7 +1337,12 @@ function App(props: { pair?: DialogPairCredentials }) {
                 </Match>
                 <Match when={route.data.type === "session"}>
                   <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
-                    {(_) => <Session verticalTabsWidth={verticalTabsVisible() ? verticalTabsWidth() : 0} />}
+                    {(sessionID) => (
+                      <SessionFrame
+                        sessionID={sessionID}
+                        verticalTabsWidth={verticalTabsVisible() ? tabsResize.size() : 0}
+                      />
+                    )}
                   </Show>
                 </Match>
                 <Match when={route.data.type === "plugin"}>
@@ -1332,44 +1358,10 @@ function App(props: { pair?: DialogPairCredentials }) {
           </Show>
         </box>
         <Show when={verticalTabsVisible()}>
-          <box
-            position="absolute"
-            left={verticalTabsWidth() - 1}
-            top={0}
-            zIndex={10}
-            width={2}
-            height="100%"
-            onMouseOver={() => setTabsResizeHovered(true)}
-            onMouseOut={() => setTabsResizeHovered(false)}
-            onMouseDown={(event) => {
-              if (event.button !== MouseButton.LEFT) return
-              const now = Date.now()
-              if (now - lastTabsBoundaryClick < 300) {
-                lastTabsBoundaryClick = 0
-                setTabsResizing(false)
-                setTabsResizeHovered(false)
-                commitVerticalTabsWidth(SESSION_SIDEBAR_WIDTH)
-                event.preventDefault()
-                event.stopPropagation()
-                return
-              }
-              tabsResizeMoved = false
-              setTabsResizing(true)
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-          >
-            <box
-              width={1}
-              height="100%"
-              backgroundColor={
-                tabsResizeHovered() || tabsResizing() ? tabsTheme.background.action.primary.hovered : undefined
-              }
-            />
-          </box>
+          <PaneResizeHandle resize={tabsResize} left={tabsResize.size() - 1} />
         </Show>
       </box>
-      <Show when={devtools()}>
+      <Show when={devtools() && !(route.data.type === "plugin" && route.data.id === "opencode.stats")}>
         <DevToolsBar />
       </Show>
       <Show when={!startup.skipInitialLoading}>

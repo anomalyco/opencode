@@ -1,6 +1,7 @@
 export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
+import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Option, Schema } from "effect"
 import { Info } from "@opencode-ai/schema/config"
 import { ConfigAgent } from "@opencode-ai/schema/config/agent"
@@ -23,6 +24,7 @@ import { ConfigMCPV1 } from "../v1/config/mcp.js"
 import { ConfigPermissionV1 } from "../v1/config/permission.js"
 import { ConfigPluginV1 } from "../v1/config/plugin.js"
 import { ConfigProviderV1 } from "../v1/config/provider.js"
+import { ConfigV1 } from "../v1/config/config.js"
 import { ConfigMigrateV1 } from "../v1/config/migrate.js"
 import { PositiveInt } from "../schema.js"
 
@@ -68,6 +70,14 @@ export function normalize(input: unknown): Result {
   const legacySnapshots = own(input, "snapshot")
     ? decodeEncoded(Schema.Boolean, input.snapshot, ["snapshot"], diagnostics)
     : undefined
+  const legacyUpdate = own(input, "autoupdate")
+    ? decodeValue(ConfigV1.Info.fields.autoupdate, input.autoupdate, ["autoupdate"], diagnostics)
+    : undefined
+  const nativeUpdate = own(input, "update")
+    ? input.update === "auto"
+      ? "notify"
+      : decodeEncoded(Info.fields.update, input.update, ["update"], diagnostics)
+    : undefined
   const legacyShare = own(input, "autoshare")
     ? decodeValue(Schema.Boolean, input.autoshare, ["autoshare"], diagnostics) === true
       ? "auto"
@@ -81,6 +91,10 @@ export function normalize(input: unknown): Result {
     if (migrated !== undefined) encoded.media = canonical(ConfigMedia.Info, migrated)
   }
   if (legacySnapshots !== undefined) encoded.snapshots = legacySnapshots
+  const migratedUpdate =
+    legacyUpdate === undefined ? undefined : ConfigMigrateV1.migrate({ autoupdate: legacyUpdate }).update
+  const update = prefer(migratedUpdate, nativeUpdate, ["update"], diagnostics)
+  if (update !== undefined) encoded.update = update
   if (legacyShare !== undefined) encoded.share = legacyShare
 
   const legacyReferences = decodeMap(input.reference, ConfigReference.Entry, ["reference"], diagnostics, decodeEncoded)
@@ -190,7 +204,6 @@ export function normalize(input: unknown): Result {
     shell: Info.fields.shell,
     model: Info.fields.model,
     default_agent: Info.fields.default_agent,
-    autoupdate: Info.fields.autoupdate,
     share: Info.fields.share,
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,
@@ -291,18 +304,13 @@ function normalizeMcpTimeout(
     invalid(path, diagnostics)
     return
   }
-  const recognized = ["startup", "catalog", "execution"].filter((key) => own(value, key))
+  const recognized = Object.entries(ConfigMCP.Timeout.fields).filter(([key]) => own(value, key))
   if (Object.keys(value).length && !recognized.length) {
     invalid(path, diagnostics)
     return
   }
-  recognized.forEach((key) => {
-    const leaf = decodeEncoded(
-      ConfigMCP.Timeout.fields[key as keyof typeof ConfigMCP.Timeout.fields],
-      value[key],
-      [...path, key],
-      diagnostics,
-    )
+  recognized.forEach(([key, field]) => {
+    const leaf = decodeEncoded(field, value[key], [...path, key], diagnostics)
     if (leaf === undefined) return
     overlay(timeout, key, leaf, [...path, key], diagnostics)
   })
@@ -780,10 +788,6 @@ function isDirectLegacyMcp(value: unknown) {
 
 function isEnabledOnlyMcp(value: unknown) {
   return isRecord(value) && !own(value, "type") && typeof value.enabled === "boolean"
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

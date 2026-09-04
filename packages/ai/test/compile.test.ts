@@ -1,8 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLM, mergeProviderOptions } from "../src/index.js"
-import { AnthropicMessages, OpenAIChat } from "../src/protocols.js"
+import {
+  LLM,
+  LLMRequest,
+  Message,
+  ToolCallPart,
+  ToolDefinition,
+  ToolNamespace,
+  mergeProviderOptions,
+} from "../src/index.js"
+import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
@@ -66,7 +74,7 @@ describe("request option precedence", () => {
       expect(prepared.body).toMatchObject({
         model: "gpt-4o-mini",
         stream: true,
-        max_tokens: 30,
+        max_completion_tokens: 30,
         temperature: 0.5,
         top_p: 0.9,
         frequency_penalty: 0.25,
@@ -74,6 +82,107 @@ describe("request option precedence", () => {
         reasoning_effort: "medium",
       })
       expect(prepared.body.stop).toEqual(["request"])
+    }),
+  )
+
+  it.effect("keeps the last tool definition for duplicate names", () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+        prompt: "Use a tool.",
+      })
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          tools: [
+            ToolDefinition.make({ name: "lookup", description: "old", inputSchema: { type: "object" } }),
+            ToolDefinition.make({ name: "search", description: "search", inputSchema: { type: "object" } }),
+            ToolDefinition.make({ name: "lookup", description: "new", inputSchema: { type: "object" } }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          function: { name: "lookup", description: "new", parameters: { type: "object" }, strict: false },
+        },
+        {
+          type: "function",
+          function: { name: "search", description: "search", parameters: { type: "object" }, strict: false },
+        },
+      ])
+    }),
+  )
+
+  it.effect("deduplicates tools within each namespace", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAIResponses.route.model({ id: "gpt-5.4" }),
+          tools: [
+            ToolDefinition.make({ name: "crm", description: "Top-level CRM tool", inputSchema: {} }),
+            ToolNamespace.make({
+              name: "crm",
+              description: "CRM tools",
+              tools: [
+                ToolDefinition.make({ name: "lookup", description: "old", inputSchema: {} }),
+                ToolDefinition.make({ name: "search", description: "search", inputSchema: {} }),
+                ToolDefinition.make({ name: "lookup", description: "new", inputSchema: {} }),
+              ],
+            }),
+            ToolNamespace.make({
+              name: "support",
+              description: "Support tools",
+              tools: [ToolDefinition.make({ name: "lookup", description: "support", inputSchema: {} })],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "crm",
+          description: "Top-level CRM tool",
+          parameters: {},
+          strict: false,
+        },
+        {
+          type: "namespace",
+          name: "crm",
+          description: "CRM tools",
+          tools: [
+            { type: "function", name: "lookup", description: "new", parameters: {}, strict: false },
+            { type: "function", name: "search", description: "search", parameters: {}, strict: false },
+          ],
+        },
+        {
+          type: "namespace",
+          name: "support",
+          description: "Support tools",
+          tools: [{ type: "function", name: "lookup", description: "support", parameters: {}, strict: false }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("normalizes tool history before protocol lowering", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+          messages: [
+            Message.assistant(ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })),
+            Message.user("Continue."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toMatchObject([
+        { role: "assistant", tool_calls: [{ id: "call_1", function: { name: "lookup" } }] },
+        { role: "tool", tool_call_id: "call_1", content: "Tool result missing" },
+        { role: "user", content: "Continue." },
+      ])
     }),
   )
 
@@ -245,6 +354,73 @@ describe("request option precedence", () => {
       expect(response.text).toBe("retried")
       expect(yield* Ref.get(attempts)).toBe(2)
     }),
+  )
+
+  it.effect("sanitizes outbound JSON without an HTTP overlay", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: OpenAIChat.route
+          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+          .model({ id: "gpt-4o-mini" }),
+        prompt: "hello \uD800 \u{1F600}",
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            expect(decodeJson(input.text)).toMatchObject({
+              messages: [{ role: "user", content: "hello \uFFFD \u{1F600}" }],
+            })
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("sanitizes unpaired surrogates throughout outbound JSON", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: OpenAIChat.route
+          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+          .model({ id: "gpt-4o-mini" }),
+        system: "system \uD800 \u{1F600}",
+        messages: [
+          Message.user("user \uDC00"),
+          Message.assistant([
+            Message.text("assistant \uD800"),
+            ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "input \uDC00" } }),
+          ]),
+          Message.tool({ id: "call_1", name: "lookup", result: { output: "result \uD800" } }),
+        ],
+        http: { body: { metadata: { "key\uD800": ["overlay \uDC00", "valid \u{1F600}"] } } },
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            expect(decodeJson(input.text)).toMatchObject({
+              messages: [
+                { role: "system", content: "system \uFFFD \u{1F600}" },
+                { role: "user", content: "user \uFFFD" },
+                {
+                  role: "assistant",
+                  content: "assistant \uFFFD",
+                  tool_calls: [{ function: { arguments: '{"query":"input \uFFFD"}' } }],
+                },
+                { role: "tool", content: '{"output":"result \uFFFD"}' },
+              ],
+              metadata: { "key\uFFFD": ["overlay \uFFFD", "valid \u{1F600}"] },
+            })
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
   )
 
   it.effect("applies raw body overlays after protocol lowering", () =>

@@ -1,0 +1,101 @@
+---
+title: "Effect"
+---
+
+`@opencode-ai/sdk/effect` is the Effect-native embedded SDK. Operations return typed Effects and Streams, and closing
+the owning Scope releases the router, Location services, fibers, and plugin registrations.
+
+```sh
+bun add @opencode-ai/sdk@dev effect
+```
+
+## Create a host
+
+Create the host inside `Effect.scoped`, then use its generated API groups or the `sessions` alias.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode-ai/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+The embedded host uses the same schema values, declared errors, request options, and Streams as
+`@opencode-ai/client/effect`.
+
+```ts
+const health = yield* opencode.health.get()
+const sessions = yield* opencode.sessions.list()
+```
+
+## Stream events
+
+Streaming endpoints return Effect `Stream` values. Fork consumers in the host Scope when they should run in the
+background.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## Customize
+
+Customize your OpenCode instance by registering Effect plugins. Use the embedded
+host to customize agents, models, tools, and other behavior:
+
+```ts
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+See the [full Effect plugins documentation](/build/plugins/effect) for plugin
+hooks, transforms, tools, and the complete plugin context.
+
+## Layer
+
+Use `OpenCode.layer()` when the embedded host should be an application service.
+
+```ts
+import { OpenCode } from "@opencode-ai/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.health.get()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

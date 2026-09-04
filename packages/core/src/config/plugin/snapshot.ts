@@ -12,10 +12,10 @@ export const Plugin = define({
     const config = yield* Config.Service
     const snapshot = yield* Snapshot.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, snapshot.reload())
-    yield* snapshot.transform((draft) => {
+    yield* snapshot.transform((editor) => {
       const configured = Config.latest(loaded.entries, "snapshots")
       if (configured === undefined) return
-      draft.configure(configured)
+      editor.configure(configured)
     })
   }),
 })

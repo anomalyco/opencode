@@ -69,7 +69,7 @@ const frame = createJSXDecorator((Story, context) => {
     <MetaProvider>
       <Font />
       <ThemeProvider>
-        <LanguageProvider locale="en">
+        <LanguageProvider locale={typeof context.globals?.locale === "string" ? context.globals.locale : "en"}>
           <UiI18nBridge>
             <Scheme value={scheme} />
             <Direction value={context.globals?.direction} />
@@ -108,6 +108,11 @@ export default definePreview({
       name: "Direction",
       description: "Interface direction",
       defaultValue: "ltr",
+    },
+    locale: {
+      name: "Locale",
+      description: "Interface language",
+      defaultValue: "en",
     },
   },
   parameters: {

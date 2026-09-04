@@ -13,3 +13,9 @@ export function clampSessionTabsWidth(width: number, total: number) {
     Math.min(width, SESSION_SIDEBAR_MAX_WIDTH, total - SESSION_CONTENT_MIN_WIDTH),
   )
 }
+
+export function clampTerminalPaneWidth(width: number, total: number) {
+  const half = Math.max(1, Math.floor(total / 2))
+  // Preserve the equal split when there is not enough room for both pane minima.
+  return Math.max(Math.min(24, half), Math.min(width, Math.max(half, total - SESSION_CONTENT_MIN_WIDTH)))
+}

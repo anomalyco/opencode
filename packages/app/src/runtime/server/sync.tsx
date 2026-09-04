@@ -11,7 +11,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { formatServerError } from "@/runtime/server/errors"
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
-import { directoryKey } from "./global-sync/utils"
+import { directoryKey, updateProjectInfo } from "./global-sync/utils"
 import { PathKey } from "@/workspaces/path-key"
 import type { ServerScope } from "@/runtime/server/scope"
 import { persisted } from "@/runtime/persistence/storage"
@@ -66,11 +66,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
-      if (pathQuery.isLoading) return EMPTY
+      if (pathQuery.isPending) return EMPTY
       return pathQuery.data ?? EMPTY
     },
     get config() {
-      if (configQuery.isLoading) return {}
+      if (configQuery.isPending) return {}
       return configQuery.data ?? {}
     },
     get reload() {
@@ -79,39 +79,19 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const queryClient = useQueryClient()
-  const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
-    setGlobalStore("project", next)
-  }
-
-  const setBootStore = ((...input: unknown[]) => {
-    if (input[0] === "project" && Array.isArray(input[1])) {
-      setProjects(input[1] as Project[])
-      return input[1]
-    }
-    return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
-  }) as typeof setGlobalStore
-
   const bootstrap = useQuery(() => ({
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
       await bootstrapGlobal({
         serverAPI: serverSDK.api,
         scope: serverSDK.scope,
-        setGlobalStore: setBootStore,
+        setGlobalStore,
         queryClient,
       })
       return Date.now()
     },
     enabled: connected(),
   }))
-
-  const set = ((...input: unknown[]) => {
-    if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
-      return input[1]
-    }
-    return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
-  }) as typeof setGlobalStore
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
 
@@ -215,8 +195,15 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     return promise
   }
 
+  function applyProjectUpdate(update: Parameters<typeof updateProjectInfo>[1]) {
+    setGlobalStore("project", (projects) =>
+      projects.map((project) => (project.id === update.id ? updateProjectInfo(project, update) : project)),
+    )
+  }
+
   const unsub = serverSDK.event.listen((event) => {
     connection.handleEvent({ type: event.type })
+    if (event.type === "project.updated") applyProjectUpdate(event.data)
 
     if (!event.location) {
       if (event.type === "config.updated" || event.type === "agent.updated" || event.type === "worktree.updated")
@@ -230,8 +217,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     children.mark(key)
     if (event.type === "config.updated" || event.type === "agent.updated") queue.push(key)
     if (event.type === "worktree.updated") void bootstrap.refetch()
-    if (event.type === "reference.updated" && children.active(key))
-      void data.location.reference.sync({ directory: key }).catch(() => undefined)
   })
 
   onCleanup(unsub)
@@ -245,6 +230,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const projectApi = {
+    update: applyProjectUpdate,
     meta(directory: string, patch: ProjectMeta) {
       children.projectMeta(directory, patch)
     },
@@ -269,7 +255,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   return {
     data: globalStore,
-    set,
+    set: setGlobalStore,
     child: children.child,
     disableMcp: children.disableMcp,
     // bootstrap,

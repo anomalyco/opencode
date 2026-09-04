@@ -87,6 +87,7 @@ test("clears the terminal line with Command+Delete", async ({ page }) => {
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
   await expect(terminal.locator("textarea")).toHaveCount(1)
+  await expect.poll(() => sendPtyOutput).toBeDefined()
 
   await page.keyboard.press("Meta+Backspace")
 
@@ -126,6 +127,8 @@ test("routes typing to the composer unless the open terminal is focused", async 
 
   const composer = page.locator('[data-component="composer-editor"]')
   const terminal = page.locator('[data-component="terminal"]')
+  await composer.click()
+  await expect(composer).toBeFocused()
   await page.keyboard.press("Control+Backquote")
   await expect(terminal).toBeVisible()
   await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
@@ -249,8 +252,15 @@ test("focuses a terminal created from the new-terminal button", async ({ page })
 
 function seedCachedTerminal(page: Page) {
   return page.addInitScript(
-    ({ terminalKey, ptyID }) => {
-      localStorage.setItem("opencode.global.dat:layout", JSON.stringify({ terminal: { height: 320, opened: true } }))
+    ({ terminalKey, ptyID, tabKey, server, sessionID }) => {
+      localStorage.setItem(
+        "opencode.window.browser.dat:tabs.panes",
+        JSON.stringify({ [tabKey]: { terminal: true, terminalHeight: 320 } }),
+      )
+      localStorage.setItem(
+        "opencode.window.browser.dat:tabs",
+        JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
+      )
       localStorage.setItem(
         terminalKey,
         JSON.stringify({
@@ -259,7 +269,13 @@ function seedCachedTerminal(page: Page) {
         }),
       )
     },
-    { terminalKey: terminalStorageKey(), ptyID },
+    {
+      terminalKey: terminalStorageKey(),
+      ptyID,
+      tabKey: `${server}\n/server/${base64Encode(server)}/session/${sessionID}`,
+      server,
+      sessionID,
+    },
   )
 }
 

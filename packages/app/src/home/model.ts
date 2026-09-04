@@ -4,6 +4,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
 import { createEffect, createMemo, startTransition } from "solid-js"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 
 export function createHomeController() {
   const layout = useLayout()
@@ -45,12 +46,23 @@ export function createHomeController() {
     void tabs.newDraft({ server: ServerConnection.key(conn), directory })
   }
 
+  function openProjectSession(conn: ServerConnection.Any, directory: string, session: SessionInfo) {
+    const ctx = global.ensureServerCtx(conn)
+    void ctx.data.session.message.sync(session.id).catch(() => undefined)
+    void startTransition(() => {
+      const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
+      tabs.select(tab)
+      ctx.data.session.remember(session)
+      ctx.projects.open(directory)
+      ctx.projects.touch(directory)
+    })
+  }
+
   return {
     selection: {
       value: selection,
       set: setSelection,
-      focusServer: (conn: ServerConnection.Any) =>
-        void startTransition(() => setSelection({ server: ServerConnection.key(conn) })),
+      focusServer: (conn: ServerConnection.Any) => setSelection({ server: ServerConnection.key(conn) }),
     },
     server: {
       list: () => servers.visible,
@@ -106,6 +118,7 @@ export function createHomeController() {
         openProjectNewSession(conn, project.worktree)
       },
       openProjectNewSession,
+      openProjectSession,
     },
   }
 }

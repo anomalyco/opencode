@@ -25,13 +25,14 @@
     height: 40px;
     padding-bottom: 8px;
     flex-shrink: 0;
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     align-self: stretch;
   }
 
   [data-slot="session-review-title"] {
+    justify-self: start;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-large);
     font-weight: var(--font-weight-medium);
@@ -40,6 +41,8 @@
   }
 
   [data-slot="session-review-actions"] {
+    grid-column: 3;
+    justify-self: end;
     display: flex;
     align-items: center;
     column-gap: 12px;
@@ -130,19 +133,25 @@
     color: var(--text-base);
     cursor: pointer;
     border-radius: 4px;
-    opacity: 0;
+    opacity: 1;
     will-change: opacity;
     transform: translateZ(0);
     transition: opacity 0.15s ease;
 
-    &:hover {
-      color: var(--text-strong);
-      background: var(--surface-base);
+    @media (hover: hover) {
+      opacity: 0;
+
+      &:hover {
+        color: var(--text-strong);
+        background: var(--surface-base);
+      }
     }
   }
 
-  [data-slot="accordion-trigger"]:hover [data-slot="session-review-view-button"] {
-    opacity: 1;
+  @media (hover: hover) {
+    [data-slot="accordion-trigger"]:hover [data-slot="session-review-view-button"] {
+      opacity: 1;
+    }
   }
 
   [data-slot="session-review-trigger-actions"] {
@@ -170,10 +179,31 @@
     gap: 12px;
   }
 
+  [data-slot="session-review-change-summary"] {
+    position: sticky;
+    top: calc(32px + var(--sticky-accordion-offset, 0px));
+    z-index: 9;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 32px;
+    padding-block: 8px;
+    padding-inline: 12px;
+    line-height: var(--line-height-compact);
+    background-color: var(--v2-background-bg-base);
+    border-bottom: 0.5px solid var(--v2-border-border-base);
+  }
+
   [data-slot="session-review-change"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-medium);
+  }
+
+  [data-slot="session-review-summary-open-file"] {
+    margin-inline-start: auto;
+    flex-shrink: 0;
   }
 
   [data-slot="session-review-change"][data-type="added"] {

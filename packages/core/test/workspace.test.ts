@@ -41,7 +41,7 @@ const driver = WorkspaceDriver.make({
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Workspace.configured({ idleThreshold: "5 minutes", pollInterval: "1 minute" })]),
-    [[WorkspaceDriver.node, WorkspaceDriver.registryNode({ fake: driver })]],
+    [WorkspaceDriver.node.replace(WorkspaceDriver.registryNode({ fake: driver, other: driver }))],
   ),
 )
 
@@ -77,7 +77,7 @@ it.effect("rejects unregistered workspace providers", () =>
 it.effect("creates and persists an ID without provisioning", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
 
     expect(workspaceID.startsWith("wrk_")).toBe(true)
     expect(calls).toEqual([])
@@ -89,12 +89,76 @@ it.effect("creates and persists an ID without provisioning", () =>
   }),
 )
 
+it.effect("creates a workspace with a caller-supplied ID", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const id = Workspace.ID.create()
+
+    expect(yield* workspace.create({ id, provider: "fake" })).toBe(id)
+    expect(
+      yield* Database.Service.use(({ db }) =>
+        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get(),
+      ).pipe(Effect.orDie),
+    ).toMatchObject({ id, provider: "fake", binding: null })
+  }),
+)
+
+it.effect("reuses a caller-supplied ID with the same provider", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const id = Workspace.ID.create()
+
+    expect(yield* workspace.create({ id, provider: "fake" })).toBe(id)
+    expect(yield* workspace.create({ id, provider: "fake" })).toBe(id)
+    expect(
+      yield* Database.Service.use(({ db }) =>
+        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).all(),
+      ).pipe(Effect.orDie),
+    ).toHaveLength(1)
+    expect(calls).toEqual([])
+  }),
+)
+
+it.effect("rejects a caller-supplied ID already assigned to another provider", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const id = Workspace.ID.create()
+    yield* workspace.create({ id, provider: "fake" })
+
+    expect(yield* workspace.create({ id, provider: "other" }).pipe(Effect.flip)).toEqual(
+      new Workspace.CreateConflict({ workspaceID: id, provider: "other", existingProvider: "fake" }),
+    )
+  }),
+)
+
+it.effect("resolves an existing caller-supplied ID before provider lookup", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const id = Workspace.ID.create()
+    yield* Database.Service.use(({ db }) =>
+      db
+        .insert(WorkspaceTable)
+        .values({ id, provider: "missing", binding: null, created_at: 0, last_used_at: 0 })
+        .run(),
+    ).pipe(Effect.orDie)
+
+    expect(yield* workspace.create({ id, provider: "missing" })).toBe(id)
+    expect(yield* workspace.create({ id, provider: "another-missing" }).pipe(Effect.flip)).toEqual(
+      new Workspace.CreateConflict({
+        workspaceID: id,
+        provider: "another-missing",
+        existingProvider: "missing",
+      }),
+    )
+  }),
+)
+
 it.effect("destroys an unprovisioned workspace through the driver with a null binding", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
 
-    yield* workspace.destroy(workspaceID)
+    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: true })
     expect(calls).toEqual([{ operation: "destroy", binding: null }])
     expect(
       yield* Database.Service.use(({ db }) =>
@@ -104,10 +168,31 @@ it.effect("destroys an unprovisioned workspace through the driver with a null bi
   }),
 )
 
+it.effect("succeeds without calling the driver when the workspace does not exist", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const workspaceID = Workspace.ID.create()
+
+    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: false })
+    expect(calls).toEqual([])
+  }),
+)
+
+it.effect("reports whether destroy removed an existing workspace", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const workspaceID = yield* workspace.create({ provider: "fake" })
+
+    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: true })
+    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: false })
+    expect(calls).toEqual([{ operation: "destroy", binding: null }])
+  }),
+)
+
 it.effect("starts eager provisioning in the background and lets callers join it", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
     const gate = yield* gateCreate()
 
     const eager = yield* workspace.provision(workspaceID).pipe(Effect.forkScoped({ startImmediately: true }))
@@ -126,7 +211,7 @@ it.effect("starts eager provisioning in the background and lets callers join it"
 it.effect("starts lazy provisioning on the first spawn", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
     const environment = yield* workspace.connect(workspaceID)
     const gate = yield* gateCreate()
 
@@ -145,7 +230,7 @@ it.effect("starts lazy provisioning on the first spawn", () =>
 it.effect("shares provisioning between concurrent first spawns", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
     const environment = yield* workspace.connect(workspaceID)
     const gate = yield* gateCreate()
 
@@ -169,7 +254,7 @@ it.effect("shares provisioning between concurrent first spawns", () =>
 it.effect("keeps shared provisioning alive when a waiter is interrupted", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
     const gate = yield* gateCreate()
 
     const owner = yield* workspace.provision(workspaceID).pipe(Effect.forkScoped({ startImmediately: true }))
@@ -187,7 +272,7 @@ it.effect("keeps shared provisioning alive when a waiter is interrupted", () =>
 it.effect("interrupts in-flight provisioning on destroy and fails waiters with NotFound", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
     const gate = yield* gateCreate()
 
     const waiter = yield* workspace.provision(workspaceID).pipe(Effect.forkScoped({ startImmediately: true }))
@@ -208,7 +293,7 @@ it.effect("interrupts in-flight provisioning on destroy and fails waiters with N
 it.effect("shares a failed attempt and retries the same workspace ID", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
     const started = yield* Deferred.make<void>()
     const release = yield* Deferred.make<void>()
     let fail = true
@@ -242,7 +327,7 @@ it.effect("shares a failed attempt and retries the same workspace ID", () =>
 it.effect("persists the workspace lifecycle and reconnects after idle suspension", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
     const created = yield* workspace.provision(workspaceID)
 
     expect(created.id).toBe(workspaceID)
@@ -277,7 +362,7 @@ it.effect("persists the workspace lifecycle and reconnects after idle suspension
 it.effect("surfaces wake failures through the spawn error channel", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const created = yield* workspace.provision(yield* workspace.create("fake"))
+    const created = yield* workspace.provision(yield* workspace.create({ provider: "fake" }))
     const environment = yield* workspace.connect(created.id)
     yield* Effect.scoped(environment.spawner.spawn(ChildProcess.make("connect"))).pipe(Effect.exit)
 

@@ -137,6 +137,19 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
+@media (max-width: 767px) {
+  /* File annotations share the code column; reclaim the measured number gutter. */
+  [data-file] [data-line-annotation] {
+    margin-inline-start: calc(-1 * var(--diffs-column-number-width, 0px));
+    z-index: 4;
+  }
+
+  [data-file] [data-annotation-content] {
+    width: var(--diffs-column-width, auto);
+    inset-inline-start: 0;
+  }
+}
+
 @media (pointer: fine) {
   [data-gutter-utility-slot] {
     opacity: 0;
@@ -197,7 +210,7 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     disableBackground: false,
     expansionLineCount: 20,
     hunkSeparators: "line-info-basic",
-    lineDiffType: style === "split" ? "word-alt" : "none",
+    lineDiffType: "word-alt",
     maxLineDiffLength: 1000,
     maxLineLengthForHighlighting: 1000,
     disableFileHeader: true,

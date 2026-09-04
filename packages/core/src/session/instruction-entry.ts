@@ -131,11 +131,7 @@ const layer = Layer.effect(
       return (yield* rows(sessionID, false)).map((row) => ({ key: row.key, value: row.value }))
     })
 
-    const put = Effect.fn("InstructionEntry.put")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly key: Key
-      readonly value: Schema.Json
-    }) {
+    const put = Effect.fn("InstructionEntry.put")(function* (input: Parameters<Interface["put"]>[0]) {
       const actualBytes = Buffer.byteLength(JSON.stringify(input.value), "utf8")
       if (actualBytes > MaxValueBytes)
         yield* new ValueTooLargeError({
@@ -159,10 +155,7 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
     })
 
-    const remove = Effect.fn("InstructionEntry.remove")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly key: Key
-    }) {
+    const remove = Effect.fn("InstructionEntry.remove")(function* (input: Parameters<Interface["remove"]>[0]) {
       yield* db
         .update(InstructionEntryTable)
         .set({ value: null, removed: true, time_updated: Date.now() })

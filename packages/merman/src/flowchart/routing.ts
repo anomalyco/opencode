@@ -878,9 +878,35 @@ function avoidNodeObstacles(
   bounds: Map<string, FlowchartNodeBounds>,
   subgraphBounds: ReadonlyMap<string, FlowchartSubgraphBounds> | undefined,
   routeIndex: number,
+  diagram: FlowchartDiagram,
 ): FlowchartEdgeRoute {
   const allNodeBounds = [...bounds.values()]
   const allSubgraphBounds = [...(subgraphBounds?.values() ?? [])]
+  const subgraphs = diagram.subgraphs ?? []
+  const contains = (subgraph: FlowchartSubgraph, nodeId: string): boolean =>
+    subgraph.nodeIds.includes(nodeId) ||
+    subgraphs.some((child) => child.parentId === subgraph.id && contains(child, nodeId))
+  const owner = [...subgraphs].reverse().find((subgraph) => {
+    if (!contains(subgraph, route.edge.from) || !contains(subgraph, route.edge.to)) return false
+    const children = subgraphs.filter((child) => child.parentId === subgraph.id)
+    return (
+      children.some((child) => contains(child, route.edge.from)) &&
+      children.some((child) => contains(child, route.edge.to)) &&
+      !children.some((child) => contains(child, route.edge.from) && contains(child, route.edge.to))
+    )
+  })
+  const ownerBounds = owner ? subgraphBounds?.get(owner.id) : undefined
+  const leavesOwner = (candidate: FlowchartEdgeRoute): boolean =>
+    Boolean(
+      ownerBounds &&
+        candidate.points.some(
+          (point) =>
+            point.x <= ownerBounds.left ||
+            point.x >= ownerBounds.left + ownerBounds.width - 1 ||
+            point.y <= ownerBounds.top ||
+            point.y >= ownerBounds.top + ownerBounds.height - 1,
+        ),
+    )
   const otherRoutes = routes.filter((_, index) => index !== routeIndex)
   const otherLabels = otherRoutes.flatMap((otherRoute) =>
     otherRoute.edge.label ? [flowchartRouteLabelLayout(otherRoute, diagramTextWidth)] : [],
@@ -908,6 +934,7 @@ function avoidNodeObstacles(
   const intersectsObstacle = (candidate: FlowchartEdgeRoute): boolean => {
     const label = candidate.edge.label ? flowchartRouteLabelLayout(candidate, diagramTextWidth) : undefined
     return (
+      leavesOwner(candidate) ||
       intersectsRoutingObstacle(candidate) ||
       allNodeBounds.some((bound) => labelIntersectsBounds(label, bound)) ||
       allSubgraphBounds.some((bound) => labelIntersectsSubgraphFrame(label, bound)) ||
@@ -929,18 +956,28 @@ function avoidNodeObstacles(
   const rightBusXs = [
     ...new Set([
       rightBusX,
+      ...(ownerBounds ? [ownerBounds.left + ownerBounds.width - 2] : []),
       ...otherLabels.map((label) => Math.max(rightBusX, label.point.x + label.width - 1 + NODE_CLEARANCE)),
     ]),
   ].sort((left, right) => left - right)
   const leftBusXs = [
-    ...new Set([leftBusX, ...otherLabels.map((label) => Math.min(leftBusX, label.point.x - NODE_CLEARANCE))]),
+    ...new Set([
+      leftBusX,
+      ...(ownerBounds ? [ownerBounds.left + 1] : []),
+      ...otherLabels.map((label) => Math.min(leftBusX, label.point.x - NODE_CLEARANCE)),
+    ]),
   ].sort((left, right) => right - left)
   const topBusYs = [
-    ...new Set([topBusY, ...otherLabels.map((label) => Math.min(topBusY, label.point.y - NODE_CLEARANCE))]),
+    ...new Set([
+      topBusY,
+      ...(ownerBounds ? [ownerBounds.top + 1] : []),
+      ...otherLabels.map((label) => Math.min(topBusY, label.point.y - NODE_CLEARANCE)),
+    ]),
   ].sort((left, right) => right - left)
   const bottomBusYs = [
     ...new Set([
       bottomBusY,
+      ...(ownerBounds ? [ownerBounds.top + ownerBounds.height - 2] : []),
       ...otherLabels.map((label) => Math.max(bottomBusY, label.point.y + label.height - 1 + NODE_CLEARANCE)),
     ]),
   ].sort((left, right) => left - right)
@@ -1253,7 +1290,7 @@ export function routeFlowchartEdges(
     routes.push({ edge, points: edgePath(from, to, directionForEdge(edge), leftBoundary) })
   }
   for (let index = routes.length - 1; index >= 0; index--) {
-    routes[index] = avoidNodeObstacles(routes[index]!, routes, bounds, subgraphBounds, index)
+    routes[index] = avoidNodeObstacles(routes[index]!, routes, bounds, subgraphBounds, index, routedDiagram)
   }
   const subgraphs = diagram.subgraphs ?? []
   const subgraphById = new Map(subgraphs.map((subgraph) => [subgraph.id, subgraph]))

@@ -1,7 +1,7 @@
 export * as GlobTool from "./glob.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { Environment } from "../../environment/index.js"
@@ -18,6 +18,9 @@ export const Input = Schema.Struct({
   pattern: FileSystem.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
   path: Schema.optionalKey(RelativePath).annotate({
     description: "Directory to search. Defaults to the current working directory.",
+  }),
+  hidden: FileSystem.GlobInput.fields.hidden.annotate({
+    description: "Include hidden files and directories (default: false).",
   }),
   limit: FileSystem.GlobInput.fields.limit.annotate({
     description: `Maximum number of matching files to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
@@ -41,7 +44,7 @@ export const toModelContent = (entries: EncodedOutput, truncated = false) => {
 /** Glob leaf that defaults its filesystem root to the active Location. */
 export const Plugin = {
   id: "opencode.tool.glob",
-  effect: Effect.fn("GlobTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("GlobTool.Plugin")(function* (ctx: Context) {
     const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
@@ -49,8 +52,8 @@ export const Plugin = {
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description: 'Search file paths using a glob pattern (examples: "**/*.ts", "src/**/*.tsx").',
@@ -76,6 +79,7 @@ export const Plugin = {
                 metadata: {
                   root: searchPath ?? ".",
                   path: searchPath,
+                  hidden: input.hidden,
                   limit: input.limit,
                 },
                 sessionID: context.sessionID,
@@ -97,6 +101,7 @@ export const Plugin = {
                 .glob({
                   cwd: root,
                   pattern: input.pattern,
+                  hidden: input.hidden,
                   limit: limit + 1,
                 })
                 .pipe(

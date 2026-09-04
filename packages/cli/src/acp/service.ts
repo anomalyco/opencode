@@ -326,6 +326,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         cwd: state.cwd,
         start: prepared.start,
         writeTextFile: capabilities.writeTextFile,
+        action: prepared.command !== undefined,
         control,
         connectionSignal: input.connection.signal,
         sessionSignal: state.abort.signal,
@@ -377,9 +378,8 @@ async function submitPrompt(client: OpenCodeClient, session: Attached, prompt: P
     return client.session.command(
       {
         sessionID: session.id,
-        id: prompt.start.id,
         command: prompt.command.name,
-        arguments: prompt.slash?.args,
+        text: prompt.slash?.args ?? "",
         files: prompt.files,
         delivery: "steer",
       },
@@ -400,7 +400,8 @@ function turnStart(messageID: string, slash: PreparedPrompt["slash"], skill: Ski
 
 async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog> {
   const location = { directory: cwd }
-  // Location plugins initialize asynchronously, so the first ACP request may observe an empty catalog.
+  await client.plugin.awaitActivation({ location })
+  // Some providers discover models in the background after activation has settled.
   const deadline = Date.now() + 5_000
   let missing = "No models are available"
   while (Date.now() < deadline) {
@@ -412,7 +413,11 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
       client.skill.list({ location }),
     ])
     const models = modelResult.data.filter((model) => model.enabled)
-    const defaultModel = defaultResult.data ?? models[0]
+    const preferred = defaultResult.data
+    // Parallel reads can straddle initialization; select only from this model list.
+    const defaultModel = preferred
+      ? models.find((model) => model.providerID === preferred.providerID && model.id === preferred.id)
+      : models[0]
     const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
     const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
     if (defaultModel && defaultAgent) {

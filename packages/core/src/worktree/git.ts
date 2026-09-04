@@ -16,7 +16,7 @@ export const make = Effect.gen(function* () {
     create: Effect.fn("Worktree.Git.create")(function* (input) {
       const repository = yield* git.repo.discover(input.sourceDirectory)
       if (!repository) return yield* new DirectoryUnavailableError({ directory: input.sourceDirectory })
-      yield* git.worktree.create({ repository, directory: input.directory })
+      yield* git.worktree.create({ repository, directory: input.directory, ref: input.branch })
       return { directory: yield* canonical(fs, input.directory) }
     }),
     remove: Effect.fn("Worktree.Git.remove")(function* (input) {

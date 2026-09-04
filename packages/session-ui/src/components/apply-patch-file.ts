@@ -1,5 +1,4 @@
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import { diffLines } from "diff"
 import { completePatchContents, normalize, type ViewDiff } from "./session-diff"
 
 type Kind = "add" | "update" | "delete"
@@ -28,12 +27,15 @@ export function changedFileDiff(value: unknown): value is FileDiffInfo {
 
 export function patchFile(value: unknown): ApplyPatchFile | undefined {
   if (!changedFileDiff(value)) return
+  let view: ViewDiff | undefined
   return {
     path: value.file,
     type: value.status === "added" ? "add" : value.status === "deleted" ? "delete" : "update",
     additions: value.additions,
     deletions: value.deletions,
-    view: normalize(value),
+    get view() {
+      return (view ??= normalize(value))
+    },
     contents: completePatchContents(value.patch),
   }
 }
@@ -67,12 +69,22 @@ export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
       }
     }
 
-    const before = first.contents!.before
-    const after = last.contents!.after
-    const counts = diffLines(before, after).reduce(
-      (result, item) => ({
-        additions: result.additions + (item.added ? (item.count ?? 0) : 0),
-        deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
+    const view =
+      files.length === 1
+        ? first.view
+        : normalize({
+            file: path,
+            before: first.contents!.before,
+            after: last.contents!.after,
+            status: type === "add" ? "added" : type === "delete" ? "deleted" : "modified",
+            additions: 0,
+            deletions: 0,
+          })
+    // Parsed hunks already contain net change counts, excluding unchanged context.
+    const counts = view.fileDiff.hunks.reduce(
+      (result, hunk) => ({
+        additions: result.additions + hunk.additionLines,
+        deletions: result.deletions + hunk.deletionLines,
       }),
       { additions: 0, deletions: 0 },
     )
@@ -80,15 +92,7 @@ export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
       path,
       type,
       ...counts,
-      views: [
-        normalize({
-          file: path,
-          before,
-          after,
-          status: type === "add" ? "added" : type === "delete" ? "deleted" : "modified",
-          ...counts,
-        }),
-      ],
+      views: [{ ...view, ...counts }],
     }
   })
 }

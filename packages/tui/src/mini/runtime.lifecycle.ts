@@ -9,10 +9,16 @@
 // Also wires SIGINT so Ctrl-c clears a live prompt draft first, then falls
 // back to the usual two-press exit sequence through RunFooter.requestExit().
 import path from "path"
-import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
+import {
+  CliRenderEvents,
+  buildKittyKeyboardFlags,
+  createCliRenderer,
+  type CliRenderer,
+  type ScrollbackWriter,
+} from "@opentui/core"
 import { isFallbackTitle } from "@opencode-ai/util/session-title-fallback"
 import { monoSnapshot } from "./mono"
-import { entrySplash, exitSplash, splashMeta } from "./splash"
+import { entrySplash, exitSplash } from "./splash"
 import { resolveRunTheme } from "./theme"
 import type {
   FooterApi,
@@ -81,7 +87,7 @@ export type Lifecycle = {
   onResize(fn: () => void): () => void
   refreshTheme(): void
   setTitle(title?: string): void
-  resetForReplay(input: { sessionTitle?: string; sessionID?: string; history: RunPrompt[] }): Promise<void>
+  resetForReplay(): Promise<void>
   close(input: { showExit: boolean; sessionTitle?: string; sessionID?: string; history?: RunPrompt[] }): Promise<void>
 }
 
@@ -106,19 +112,9 @@ function shutdown(renderer: CliRenderer): void {
   }
 }
 
-function splashInfo(title: string | undefined, history: RunPrompt[]) {
-  if (title && !isFallbackTitle(title)) {
-    return {
-      title,
-      showSession: true,
-    }
-  }
-
-  const next = history.find((item) => item.text.trim().length > 0)
-  return {
-    title: next?.text ?? title,
-    showSession: !!next,
-  }
+function splashTitle(title: string | undefined, history: RunPrompt[]) {
+  if (title && !isFallbackTitle(title)) return title
+  return history.find((item) => item.text.trim().length > 0)?.text ?? title
 }
 
 function directoryLabel(directory: string, home: string) {
@@ -179,7 +175,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   const setTitle = (title?: string) => {
     if (input.host.platform !== "linux") return
     if (!title || isFallbackTitle(title)) return renderer.setTerminalTitle("OpenCode")
-    renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
+    renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "…" : title}`)
   }
   setTitle(input.sessionTitle)
   const theme = await resolveRunTheme(renderer, tuiConfig.theme, mono)
@@ -188,27 +184,25 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     entry: false,
     exit: false,
   }
-  const splash = splashInfo(input.sessionTitle, input.history)
-  const meta = splashMeta({
-    title: splash.title,
-    session_id: input.sessionID,
-    mono,
-  })
-  const wrote = queueSplash(
+  const startup =
+    miniSettings.splash === "show" && !mono && tuiConfig.animations !== false
+      ? { version: input.host.version, detail: directoryLabel(input.getDirectory(), input.host.paths.home) }
+      : undefined
+  queueSplash(
     renderer,
     state,
     "entry",
-    miniSettings.splash === "show"
+    miniSettings.splash === "show" && !startup
       ? entrySplash({
-          ...meta,
+          version: input.host.version,
           theme: theme.splash,
-          showSession: splash.showSession,
           detail: directoryLabel(input.getDirectory(), input.host.paths.home),
           mono,
         })
       : undefined,
   )
   await renderer.idle().catch(() => {})
+  if (mono) renderer.off(CliRenderEvents.EXTERNAL_OUTPUT, monoSnapshot)
 
   const { RunFooter } = await footerTask
   let closed = false
@@ -227,14 +221,21 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     first: input.first,
     history: input.history,
     theme,
-    mono,
     // The transcript always starts one row below the terminal's prior output,
     // even when the entry splash itself is hidden.
-    wrote: wrote || miniSettings.splash === "hide",
+    wrote: true,
+    startup,
     tuiConfig,
     miniSettings: {
       current: miniSettings,
       update: input.onMiniSettingChange,
+    },
+    onMonoChange: (mono) => {
+      if (mono) {
+        renderer.disableKittyKeyboard()
+        return
+      }
+      renderer.enableKittyKeyboard(buildKittyKeyboardFlags({ events: input.host.platform === "win32" }))
     },
     onPermissionReply: input.onPermissionReply,
     onFormReply: input.onFormReply,
@@ -311,23 +312,20 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     let wroteExit = false
 
     try {
+      footer.finishStartup()
       await footer.idle().catch(() => {})
 
       if (!renderer.isDestroyed && next.showExit && footer.currentMiniSettings().splash === "show") {
         const sessionID = next.sessionID || input.getSessionID?.() || input.sessionID
-        const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history ?? input.history)
         wroteExit = queueSplash(
           renderer,
           state,
           "exit",
           exitSplash({
-            ...splashMeta({
-              title: splash.title,
-              session_id: sessionID,
-              mono,
-            }),
+            title: splashTitle(next.sessionTitle ?? input.sessionTitle, next.history ?? input.history),
+            session_id: sessionID,
             theme: footer.currentTheme().splash,
-            mono,
+            mono: footer.currentMiniSettings().mono,
           }),
         )
         await renderer.idle().catch(() => {})
@@ -337,7 +335,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       await footer.idle().catch(() => {})
       footer.destroy()
       if (input.host.platform === "linux") renderer.setTerminalTitle("")
-      if (mono) renderer.off(CliRenderEvents.EXTERNAL_OUTPUT, monoSnapshot)
       shutdown(renderer)
       if (!wroteExit) {
         input.host.stdout.write("\n")
@@ -366,7 +363,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       renderer.on(CliRenderEvents.RESIZE, resize)
       return () => renderer.off(CliRenderEvents.RESIZE, resize)
     },
-    async resetForReplay(next) {
+    async resetForReplay() {
       if (closed || renderer.isDestroyed || footer.isClosed) {
         throw new Error("runtime closed")
       }
@@ -378,18 +375,12 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
 
       footer.resetForReplay(true)
       renderer.resetSplitFooterForReplay({ clearSavedLines: true })
-      const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history)
       renderer.writeToScrollback(
         entrySplash({
-          ...splashMeta({
-            title: splash.title,
-            session_id: next.sessionID ?? input.getSessionID?.() ?? input.sessionID,
-            mono,
-          }),
+          version: input.host.version,
           theme: footer.currentTheme().splash,
-          showSession: splash.showSession,
           detail: directoryLabel(input.getDirectory(), input.host.paths.home),
-          mono,
+          mono: footer.currentMiniSettings().mono,
         }),
       )
       renderer.requestRender()

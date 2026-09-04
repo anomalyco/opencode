@@ -1,10 +1,9 @@
 export * as PatchTool from "./patch.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
-import path from "path"
 import { Bom } from "@opencode-ai/util/bom"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
@@ -36,7 +35,7 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-export const toModelOutput = (output: Output) =>
+export const toModelContent = (output: Output) =>
   [
     "Success. Updated the following files:",
     ...output.applied.map(
@@ -66,7 +65,7 @@ type Prepared =
 
 export const Plugin = {
   id: "opencode.tool.patch",
-  effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("PatchTool.Plugin")(function* (ctx: Context) {
     const environment = yield* Environment.Service
     const mutation = yield* LocationMutation.Service
     const fileMutation = yield* FileMutation.Service
@@ -75,8 +74,8 @@ export const Plugin = {
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false, permission: "edit" },
           description: DESCRIPTION,
@@ -87,8 +86,10 @@ export const Plugin = {
             const parsed = Patch.parse(input.patchText)
             const lockTargets = Result.isSuccess(parsed)
               ? parsed.success.flatMap((hunk) => [
-                  path.resolve(location.directory, hunk.path),
-                  ...(hunk.type === "update" && hunk.movePath ? [path.resolve(location.directory, hunk.movePath)] : []),
+                  LocationMutation.resolvePath(location.directory, hunk.path),
+                  ...(hunk.type === "update" && hunk.movePath
+                    ? [LocationMutation.resolvePath(location.directory, hunk.movePath)]
+                    : []),
                 ])
               : []
             const fail = (operation: string, error: unknown) => {
@@ -215,17 +216,6 @@ export const Plugin = {
                 prepared,
                 (change) =>
                   Effect.gen(function* () {
-                    if (change.type === "add") {
-                      yield* environment.files
-                        .write(change.target.absolute, new TextEncoder().encode(change.content))
-                        .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
-                      applied.push({
-                        type: change.type,
-                        resource: change.target.resource,
-                        target: change.target.absolute,
-                      })
-                      return
-                    }
                     if (change.type === "delete") {
                       yield* environment.files
                         .remove(change.target.absolute)
@@ -237,7 +227,7 @@ export const Plugin = {
                       })
                       return
                     }
-                    if (change.moveTarget) {
+                    if (change.type === "update" && change.moveTarget) {
                       const moveTarget = change.moveTarget
                       yield* environment.files
                         .write(moveTarget.absolute, new TextEncoder().encode(change.content))
@@ -296,7 +286,7 @@ export const Plugin = {
               fileMutation.withLock(lockTargets),
               Effect.map((output) => ({
                 output,
-                content: toModelOutput(output),
+                content: toModelContent(output),
                 metadata: { files: output.files },
               })),
               Effect.mapError((error) =>

@@ -1,11 +1,12 @@
 ---
-import { docsHref, docsSections } from "../lib/navigation"
+import { docsHref, docsSections, getDocsSection } from "../lib/navigation"
 
 interface Props {
   currentSlug: string
 }
 
 const currentSlug = Astro.props.currentSlug
+const currentSection = getDocsSection(currentSlug)
 const searchEnabled = import.meta.env.PROD
 ---
 
@@ -17,7 +18,7 @@ const searchEnabled = import.meta.env.PROD
     <nav aria-label="Documentation sections">
       {
         docsSections.map((section) => (
-          <a href={docsHref(section.landingSlug)} aria-current={currentSlug === section.key || currentSlug.startsWith(`${section.key}/`) || (section.key === "docs" && !currentSlug.includes("/") && currentSlug !== "api") ? "page" : undefined}>
+          <a href={docsHref(section.landingSlug)} aria-current={currentSection.key === section.key ? "page" : undefined}>
             {section.title}
           </a>
         ))

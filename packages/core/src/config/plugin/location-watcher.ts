@@ -12,10 +12,10 @@ export const Plugin = define({
     const config = yield* Config.Service
     const policy = yield* LocationWatcherPolicy.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, policy.reload())
-    yield* policy.transform((draft) => {
+    yield* policy.transform((editor) => {
       for (const entry of loaded.entries) {
         if (entry.type !== "document" || !entry.info.watcher?.ignore) continue
-        draft.add(entry.info.watcher.ignore)
+        editor.add(entry.info.watcher.ignore)
       }
     })
   }),

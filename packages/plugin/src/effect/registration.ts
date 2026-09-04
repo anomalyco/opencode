@@ -21,7 +21,7 @@ export type ModelHooks<Spec, Failures extends Record<keyof Spec, unknown> = Reco
 >(
   name: Name,
   callback: (input: Spec[Name]) => Effect.Effect<void, Failures[Name]>,
-  options?: ModelHookOptions,
+  options?: Spec[Name] extends { readonly model: unknown } ? ModelHookOptions : never,
 ) => Effect.Effect<Registration, never, Scope.Scope>
 
 export type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Registration, never, Scope.Scope>

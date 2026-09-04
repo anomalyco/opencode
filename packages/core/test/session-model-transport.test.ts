@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, TransportReason } from "@opencode-ai/ai"
+import { AIError, HttpContext, TransportError } from "@opencode-ai/ai"
 import type {
   ChannelObservation,
   WebSocketChannelExchange,
@@ -8,7 +8,7 @@ import type {
 } from "@opencode-ai/ai/route"
 import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
 import { Session } from "@opencode-ai/schema/session"
-import { Deferred, Effect, Fiber, Metric, Queue, Stream } from "effect"
+import { Cause, Deferred, Effect, Fiber, Metric, Queue, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Headers } from "effect/unstable/http"
 
@@ -16,11 +16,9 @@ const session = Session.ID.make("ses_transport")
 const otherSession = Session.ID.make("ses_transport_other")
 const queue = <A, E = never>() => Effect.runSync(Queue.unbounded<A, E>())
 
-const error = (message: string, delivery?: TransportReason["delivery"]) =>
+const error = (message: string, delivery?: TransportError["delivery"]) =>
   new AIError({
-    module: "test",
-    method: "websocket",
-    reason: new TransportReason({ message, transport: "websocket", operation: "write", phase: "send", delivery }),
+    reason: new TransportError({ message, transport: "websocket", operation: "write", phase: "send", delivery }),
   })
 
 const exchange = (
@@ -106,6 +104,34 @@ const automatic = () => {
 }
 
 describe("SessionModelTransport", () => {
+  test("exposes response metadata once the lazy connection opens", async () => {
+    const http = new HttpContext({
+      url: "https://provider.test/responses",
+      status: 101,
+      headers: { "x-request-id": "upgrade-request" },
+    })
+    const messages = queue<string | Uint8Array, AIError>()
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.succeed({
+          http,
+          sendText: () => Effect.sync(() => Queue.offerUnsafe(messages, "completed")).pipe(Effect.asVoid),
+          messages: Stream.fromQueue(messages),
+          close: Queue.shutdown(messages).pipe(Effect.asVoid),
+        }),
+    }
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const execution = yield* transport.bind(session).execute(exchange("first"))
+        expect(execution.http).toBeUndefined()
+        yield* execution.frames.pipe(Stream.runForEach(() => Effect.sync(() => expect(execution.http).toBe(http))))
+        expect(execution.http).toBe(http)
+      }).pipe(Effect.scoped),
+    )
+  })
+
   test("commits checkpoints only after successful outer completion", async () => {
     const messages = queue<string | Uint8Array, AIError>()
     const checkpoints: Array<unknown> = []
@@ -193,9 +219,7 @@ describe("SessionModelTransport", () => {
                 type: "rejected",
                 recovery: "retry-full",
                 error: new AIError({
-                  module: "test",
-                  method: "stream",
-                  reason: new TransportReason({
+                  reason: new TransportError({
                     message: "missing response",
                     transport: "websocket",
                     operation: "read",
@@ -235,9 +259,7 @@ describe("SessionModelTransport", () => {
             type: "rejected",
             recovery: "rotate-and-retry-full",
             error: new AIError({
-              module: "test",
-              method: "stream",
-              reason: new TransportReason({
+              reason: new TransportError({
                 message: "connection limit",
                 transport: "websocket",
                 operation: "read",
@@ -423,14 +445,17 @@ describe("SessionModelTransport", () => {
     )
   })
 
-  test("closes an active exchange without waiting for its Session permit", async () => {
+  test.each([false, true])("classifies active and queued close (observed: %s)", async (observed) => {
     const started = Deferred.makeUnsafe<void>()
     const messages = queue<string | Uint8Array, AIError>()
     let closed = 0
     const connector: WebSocketConnector = {
       open: () =>
         Effect.succeed({
-          sendText: () => Deferred.succeed(started, undefined),
+          sendText: () =>
+            observed
+              ? Queue.offer(messages, "frame").pipe(Effect.asVoid)
+              : Deferred.succeed(started, undefined).pipe(Effect.asVoid),
           messages: Stream.fromQueue(messages),
           close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
         }),
@@ -440,17 +465,30 @@ describe("SessionModelTransport", () => {
       connector,
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
-        const running = yield* collect(transport.bind(session), exchange("active")).pipe(
+        const executor = transport.bind(session)
+        const item = exchange("active")
+        const running = yield* collect(executor, {
+          ...item,
+          driver: {
+            ...item.driver,
+            observe: (_create, frame) => Deferred.succeed(started, undefined).pipe(Effect.as({ type: "frame", frame })),
+          },
+        }).pipe(Effect.result, Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(started)
+        const queued = yield* collect(executor, exchange("queued")).pipe(
+          Effect.result,
           Effect.forkChild({ startImmediately: true }),
         )
-        yield* Deferred.await(started)
 
         yield* transport.close(session)
-        const result = yield* Effect.result(Fiber.join(running))
 
-        expect(result).toMatchObject({
+        expect(yield* Fiber.join(running)).toMatchObject({
           _tag: "Failure",
-          failure: { reason: { _tag: "Transport", code: "close", delivery: "ambiguous" } },
+          failure: { reason: { _tag: "Transport", code: "close", delivery: observed ? "accepted" : "ambiguous" } },
+        })
+        expect(yield* Fiber.join(queued)).toMatchObject({
+          _tag: "Failure",
+          failure: { reason: { _tag: "Transport", code: "owner-closed", phase: "queue", delivery: "not-sent" } },
         })
         expect(closed).toBe(1)
       }),
@@ -523,6 +561,43 @@ describe("SessionModelTransport", () => {
     )
   })
 
+  test("closes a connection returned after its owner closes during setup", async () => {
+    const connecting = Deferred.makeUnsafe<void>()
+    const release = Deferred.makeUnsafe<void>()
+    let closed = 0
+    const connector: WebSocketConnector = {
+      open: () =>
+        Deferred.succeed(connecting, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+          Effect.as({
+            sendText: () => Effect.die("Unexpected send after owner close"),
+            messages: Stream.never,
+            close: Effect.sync(() => closed++).pipe(Effect.asVoid),
+          }),
+        ),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const running = yield* collect(
+          transport.bind(session),
+          exchange("first", { fallback: () => Stream.die("Unexpected fallback after owner close") }),
+        ).pipe(Effect.result, Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(connecting)
+        yield* transport.close(session)
+        yield* Deferred.succeed(release, undefined)
+
+        expect(yield* Fiber.join(running)).toMatchObject({
+          _tag: "Failure",
+          failure: { reason: { _tag: "Transport", code: "owner-closed", phase: "connect", delivery: "not-sent" } },
+        })
+        expect(closed).toBe(1)
+      }),
+    )
+  })
+
   test("falls back once when connection setup fails before send", async () => {
     let fallbacks = 0
     const connector: WebSocketConnector = { open: () => Effect.fail(error("upgrade rejected", "not-sent")) }
@@ -546,43 +621,134 @@ describe("SessionModelTransport", () => {
     )
   })
 
-  test("does not fall back after an ambiguous send failure", async () => {
+  test("falls back to HTTP after close code 1009 and keeps the Session on HTTP", async () => {
     const messages = queue<string | Uint8Array, AIError>()
+    let opened = 0
     let fallbacks = 0
     let closed = 0
     const connector: WebSocketConnector = {
       open: () =>
-        Effect.succeed({
-          sendText: () => Effect.fail(error("send failed")),
-          messages: Stream.fromQueue(messages),
-          close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+        Effect.sync(() => {
+          opened++
+          return {
+            sendText: () =>
+              Effect.sync(() => {
+                Queue.failCauseUnsafe(
+                  messages,
+                  Cause.fail(
+                    new AIError({
+                      reason: new TransportError({
+                        message: "message too big",
+                        transport: "websocket",
+                        operation: "read",
+                        code: "1009",
+                        phase: "close",
+                      }),
+                    }),
+                  ),
+                )
+              }),
+            messages: Stream.fromQueue(messages),
+            close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+          }
         }),
     }
+    const item = (id: string) =>
+      exchange(id, {
+        fallback: () => {
+          fallbacks++
+          return Stream.make(`http:${id}`)
+        },
+      })
 
     await run(
       connector,
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
-        const result = yield* Effect.result(
-          collect(
-            transport.bind(session),
-            exchange("first", {
-              fallback: () => {
-                fallbacks++
-                return Stream.make("http")
-              },
-            }),
-          ),
-        )
-        expect(result).toMatchObject({
-          _tag: "Failure",
-          failure: { reason: { _tag: "Transport", phase: "send", delivery: "ambiguous" } },
-        })
-        expect(fallbacks).toBe(0)
+        const executor = transport.bind(session)
+
+        expect(yield* collect(executor, item("first"))).toEqual(["http:first"])
+        expect(yield* collect(executor, item("second"))).toEqual(["http:second"])
+        expect(opened).toBe(1)
+        expect(fallbacks).toBe(2)
         expect(closed).toBe(1)
       }),
     )
   })
+
+  for (const fromConnection of [false, true]) {
+    test(`preserves ${fromConnection ? "connection" : "error"} HTTP context on an ambiguous send failure without fallback`, async () => {
+      const messages = queue<string | Uint8Array, AIError>()
+      const cause = new Error("socket write failed")
+      const http = new HttpContext({
+        url: "https://provider.test/responses",
+        status: 101,
+        headers: { "x-request-id": "one" },
+      })
+      const failure = new AIError({
+        reason: new TransportError({
+          message: "send failed",
+          transport: "websocket",
+          operation: "write",
+          code: "ECONNRESET",
+          body: '{"error":"connection reset"}',
+          http: fromConnection ? undefined : http,
+          cause,
+        }),
+      })
+      let fallbacks = 0
+      let closed = 0
+      const connector: WebSocketConnector = {
+        open: () =>
+          Effect.succeed({
+            http: fromConnection ? http : undefined,
+            sendText: () => Effect.fail(failure),
+            messages: Stream.fromQueue(messages),
+            close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+          }),
+      }
+
+      await run(
+        connector,
+        Effect.gen(function* () {
+          const transport = yield* SessionModelTransport.Service
+          const result = yield* Effect.result(
+            collect(
+              transport.bind(session),
+              exchange("first", {
+                fallback: () => {
+                  fallbacks++
+                  return Stream.make("http")
+                },
+              }),
+            ),
+          )
+          expect(result).toMatchObject({
+            _tag: "Failure",
+            failure: {
+              message: "send failed",
+              reason: {
+                _tag: "Transport",
+                message: "send failed",
+                body: failure.reason.body,
+                http,
+                phase: "send",
+                delivery: "ambiguous",
+                code: "ECONNRESET",
+              },
+            },
+          })
+          if (result._tag !== "Failure") throw new Error("Expected transport failure")
+          expect(result.failure.reason).toBeInstanceOf(TransportError)
+          expect(result.failure.reason).toBeInstanceOf(Error)
+          expect(result.failure.cause).toBe(result.failure.reason)
+          expect(result.failure.reason.cause).toBe(cause)
+          expect(fallbacks).toBe(0)
+          expect(closed).toBe(1)
+        }),
+      )
+    })
+  }
 
   test("rotates when refreshed authorization changes handshake affinity", async () => {
     const fixture = automatic()
@@ -641,16 +807,22 @@ describe("SessionModelTransport", () => {
 
   test("poisons instead of dropping data when the inbound queue overflows", async () => {
     const messages = queue<string | Uint8Array, AIError>()
+    const poisoned = Deferred.makeUnsafe<void>()
     let closed = 0
     const connector: WebSocketConnector = {
       open: () =>
         Effect.succeed({
           sendText: () =>
+            // Hold consumption at the send boundary until the reader fills and poisons the inbound queue.
             Effect.sync(() => {
               for (let index = 0; index <= 129; index++) Queue.offerUnsafe(messages, `frame:${index}`)
-            }),
-          messages: Stream.fromQueue(messages),
-          close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+            }).pipe(Effect.andThen(Deferred.await(poisoned))),
+          messages: Stream.fromQueue(messages).pipe(Stream.tap(() => Effect.yieldNow)),
+          close: Effect.sync(() => closed++).pipe(
+            Effect.andThen(Deferred.succeed(poisoned, undefined)),
+            Effect.andThen(Queue.shutdown(messages)),
+            Effect.asVoid,
+          ),
         }),
     }
 
@@ -664,7 +836,7 @@ describe("SessionModelTransport", () => {
             ...item,
             driver: {
               create: item.driver.create,
-              observe: (_create, frame) => Effect.sleep("1 millis").pipe(Effect.as({ type: "frame" as const, frame })),
+              observe: (_create, frame) => Effect.succeed({ type: "frame" as const, frame }),
             },
           }),
         )
@@ -738,8 +910,7 @@ describe("SessionModelTransport", () => {
   test("records metadata-only lifecycle metrics", async () => {
     const fixture = automatic()
 
-    await run(
-      fixture.connector,
+    await Effect.runPromise(
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
         const executor = transport.bind(session)
@@ -755,7 +926,11 @@ describe("SessionModelTransport", () => {
         )
         expect(JSON.stringify(lifecycle)).not.toContain("secret-one")
         expect(JSON.stringify(lifecycle)).not.toContain("secret-two")
-      }),
+      }).pipe(
+        Effect.provide(SessionModelTransport.makeLayer(fixture.connector)),
+        Effect.scoped,
+        Effect.provideService(Metric.MetricRegistry, new Map()),
+      ),
     )
   })
 })

@@ -1,6 +1,7 @@
 export * as Config from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
+import { Vcs } from "@opencode-ai/schema/vcs"
 import { Schema } from "effect"
 import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
@@ -24,6 +25,24 @@ export const AttentionSoundName = Schema.Literals([
 ])
 export type AttentionSoundName = Schema.Schema.Type<typeof AttentionSoundName>
 export type AttentionSoundPaths = Partial<Record<AttentionSoundName, string>>
+
+export const MiniWorkSpinner = Schema.Literals([
+  "block-soft-slide",
+  "block-soft-sweep",
+  "block-low-comet",
+  "block-low-duet",
+  "block-shuttle",
+  "block-bridge",
+  "block-squeeze",
+  "small-toggle",
+  "square-toggle",
+  "grow-shrink",
+  "quadrant-orbit",
+  "crosshatch",
+  "density-wave",
+  "seed",
+])
+export type MiniWorkSpinner = Schema.Schema.Type<typeof MiniWorkSpinner>
 
 export const Plugin = Schema.Union([
   Schema.String,
@@ -66,7 +85,7 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Leader key behavior" }),
   scroll: Schema.optional(
     Schema.Struct({
-      speed: Schema.optional(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0.001))).annotate({
+      speed: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0.001))).annotate({
         description: "Distance scrolled per input tick",
       }),
       acceleration: Schema.optional(Schema.Boolean).annotate({
@@ -80,7 +99,7 @@ export const Info = Schema.Struct({
       notifications: Schema.optional(Schema.Boolean).annotate({ description: "Show system notifications" }),
       sound: Schema.optional(Schema.Boolean).annotate({ description: "Play attention sounds" }),
       volume: Schema.optional(
-        Schema.Number.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1)),
+        Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1)),
       ).annotate({ description: "Attention sound volume from 0 to 1" }),
       sound_pack: Schema.optional(Schema.String).annotate({ description: "Active attention sound pack ID" }),
       sounds: Schema.optional(Schema.Record(AttentionSoundName, Schema.optionalKey(Schema.String))).annotate({
@@ -90,6 +109,9 @@ export const Info = Schema.Struct({
   ).annotate({ description: "System notification and sound settings" }),
   diffs: Schema.optional(
     Schema.Struct({
+      source: Schema.optional(Vcs.Mode).annotate({
+        description: "Initial diff source; defaults to 'branch' (branch and uncommitted changes)",
+      }),
       wrap: Schema.optional(Schema.Literals(["word", "none"])).annotate({
         description: "Line wrapping behavior in diff output",
       }),
@@ -126,6 +148,7 @@ export const Info = Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
+      terminal: Schema.optional(Schema.Boolean).annotate({ description: "Enable persistent session terminal panes" }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning by default",
@@ -135,6 +158,9 @@ export const Info = Schema.Struct({
       }),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show user attachment and tool-result images in the session transcript",
+      }),
+      tps: Schema.optional(Schema.Boolean).annotate({
+        description: "Show output tokens per second in assistant footers",
       }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
@@ -155,6 +181,9 @@ export const Info = Schema.Struct({
       layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
         description: "Show tabs in a horizontal strip or vertical sidebar",
       }),
+      indicators: Schema.optional(Schema.Literals(["status", "numbers"])).annotate({
+        description: "Show status icons or always show tab numbers",
+      }),
     }),
   ).annotate({ description: "Tab strip settings" }),
   mini: Schema.optional(
@@ -173,6 +202,9 @@ export const Info = Schema.Struct({
       }),
       splash: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide the entry and exit splash banners",
+      }),
+      work_spinner: Schema.optional(MiniWorkSpinner).annotate({
+        description: "Work spinner animation in the Mini footer (default: block-soft-slide)",
       }),
       mono: Schema.optional(Schema.Boolean).annotate({
         description: "Use monochrome ASCII output",
@@ -219,13 +251,15 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
-  session: Omit<NonNullable<Info["session"]>, "new_location"> & {
+  session: Omit<NonNullable<Info["session"]>, "new_location" | "tps"> & {
     new_location: "launch" | "inherit"
+    tps: boolean
   }
   tabs: {
     enabled: boolean
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
+    indicators: "status" | "numbers"
   }
 }
 
@@ -265,12 +299,16 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
+      // Persistent terminal panes need the opencode-pty daemon, which does not ship Windows binaries.
+      terminal: input.session?.terminal ?? process.platform !== "win32",
+      tps: input.session?.tps ?? true,
     },
     tabs: {
       ...input.tabs,
       enabled: input.tabs?.enabled ?? true,
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
+      indicators: input.tabs?.indicators ?? "status",
     },
   }
 }

@@ -35,23 +35,14 @@ export function make(input: {
       )
       .pipe(Effect.option)
 
-  const gofmt: Info = {
-    name: "gofmt",
-    extensions: [".go"],
-    enabled: Effect.sync(() => {
-      const match = findExecutable("gofmt")
-      return match ? [match, "-w", "$FILE"] : disabled
-    }),
-  }
+  const gofmt = executable("gofmt", [".go"], ["-w", "$FILE"], findExecutable)
 
-  const mix: Info = {
-    name: "mix",
-    extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
-    enabled: Effect.sync(() => {
-      const match = findExecutable("mix")
-      return match ? [match, "format", "$FILE"] : disabled
-    }),
-  }
+  const mix = executable(
+    "mix",
+    [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
+    ["format", "$FILE"],
+    findExecutable,
+  )
 
   const prettier: Info = {
     name: "prettier",
@@ -147,14 +138,7 @@ export function make(input: {
     }).pipe(Effect.orElseSucceed(() => disabled)),
   }
 
-  const zig: Info = {
-    name: "zig",
-    extensions: [".zig", ".zon"],
-    enabled: Effect.sync(() => {
-      const match = findExecutable("zig")
-      return match ? [match, "fmt", "$FILE"] : disabled
-    }),
-  }
+  const zig = executable("zig", [".zig", ".zon"], ["fmt", "$FILE"], findExecutable)
 
   const clang: Info = {
     name: "clang-format",
@@ -166,14 +150,7 @@ export function make(input: {
     }).pipe(Effect.orElseSucceed(() => disabled)),
   }
 
-  const ktlint: Info = {
-    name: "ktlint",
-    extensions: [".kt", ".kts"],
-    enabled: Effect.sync(() => {
-      const match = findExecutable("ktlint")
-      return match ? [match, "-F", "$FILE"] : disabled
-    }),
-  }
+  const ktlint = executable("ktlint", [".kt", ".kts"], ["-F", "$FILE"], findExecutable)
 
   const ruff: Info = {
     name: "ruff",

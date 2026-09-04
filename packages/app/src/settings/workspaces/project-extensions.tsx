@@ -97,10 +97,12 @@ export const ProjectSettingsExtensions: Component = () => {
   const [globalPluginList] = createResource(
     () => serverSDK.connection.status() === "connected",
     () => serverSDK.api.plugin.list().then((result) => result.data),
+    { initialValue: [] },
   )
   const [projectPluginList] = createResource(
     () => (serverSDK.connection.status() === "connected" ? directorySDK().directory : undefined),
     (directory) => serverSDK.api.plugin.list({ location: { directory } }).then((result) => result.data),
+    { initialValue: [] },
   )
   const globalPlugins = createMemo(() => pluginLabels(globalPluginList.latest ?? []))
   const projectPlugins = createMemo(() => {

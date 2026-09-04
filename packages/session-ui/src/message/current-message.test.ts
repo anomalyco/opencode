@@ -26,7 +26,8 @@ describe("current content default open", () => {
   test("uses the file-change disclosure preference", () => {
     expect(currentContentDefaultOpen(tool("edit"), false, true)).toBe(true)
     expect(currentContentDefaultOpen(tool("write"), false, false)).toBe(false)
-    expect(currentContentDefaultOpen(tool("patch"), false, false)).toBe(true)
+    expect(currentContentDefaultOpen(tool("patch"), false, false)).toBe(false)
+    expect(currentContentDefaultOpen(tool("patch"), false, true)).toBe(true)
   })
 
   test("collapses errored tools regardless of disclosure preferences", () => {

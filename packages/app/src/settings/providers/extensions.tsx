@@ -27,6 +27,7 @@ export const SettingsExtensions: Component = () => {
   const [mcpList, { refetch: refetchMcp }] = createResource(
     () => serverSdk.connection.status() === "connected",
     () => serverSdk.api.mcp.list().then((result) => result.data),
+    { initialValue: [] },
   )
   const toggleMcp = useMcpToggle(() => undefined, refetchMcp)
   const mcps = createMemo<McpRowItem[]>(() => {
@@ -44,6 +45,7 @@ export const SettingsExtensions: Component = () => {
   const [pluginList] = createResource(
     () => serverSdk.connection.status() === "connected",
     () => serverSdk.api.plugin.list().then((result) => result.data),
+    { initialValue: [] },
   )
   const plugins = createMemo<PluginRowItem[]>(() => pluginLabels(pluginList.latest ?? []).map((name) => ({ name })))
 

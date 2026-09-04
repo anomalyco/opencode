@@ -1,11 +1,12 @@
-import { Component, createEffect, createMemo, createSignal, startTransition } from "solid-js"
-import { Dialog } from "@opencode-ai/ui/dialog"
+import { Component, createEffect, createMemo, For, Show, onMount, startTransition } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Menu } from "@opencode-ai/ui/menu"
+import { Button } from "@opencode-ai/ui/button"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsGeneral } from "./general/general"
 import { SettingsAppearance } from "./appearance/appearance"
+import { SettingsExperimental } from "./experimental/experimental"
 import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
 import { SettingsProviders } from "./providers/providers"
@@ -14,27 +15,53 @@ import { SettingsServers } from "./servers/servers"
 import { SettingsWorkspaces } from "./workspaces/workspaces"
 import { SettingsProjects } from "./workspaces/projects"
 import { SettingsExtensions } from "./providers/extensions"
+import { SettingsAbout } from "./about/about"
 import { SettingsServerScope } from "./server-scope"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { useSettingsSurface } from "./surface"
 import "@/settings/settings.css"
 
-export const DialogSettings: Component<{
-  defaultValue?: string
-}> = (props) => {
+const sections = [
+  [
+    { value: "general", icon: "sliders", label: "settings.tab.preferences" },
+    { value: "appearance", icon: "appearance", label: "settings.general.section.appearance" },
+    { value: "notifications", icon: "notifications", label: "settings.tab.notifications" },
+    { value: "shortcuts", icon: "keyboard", label: "settings.tab.shortcuts" },
+  ],
+  [
+    { value: "servers", icon: "server", label: "status.popover.tab.servers" },
+    { value: "projects", icon: "folder", label: "settings.tab.projects" },
+    { value: "workspaces", icon: "workspace-isolated", label: "settings.tab.workspaces" },
+  ],
+  [
+    { value: "providers", icon: "providers", label: "settings.providers.title" },
+    { value: "models", icon: "models", label: "settings.models.title" },
+    { value: "extensions", icon: "extensions", label: "settings.tab.extensions" },
+  ],
+  [{ value: "experimental", icon: "flask", label: "settings.tab.experimental" }],
+  [{ value: "about", icon: "info", label: "settings.tab.about" }],
+] as const
+
+export const SettingsScreen: Component = () => {
   const language = useLanguage()
-  const platform = usePlatform()
   const dialog = useDialog()
+  const surface = useSettingsSurface()
   const layout = useLayout()
   const servers = useServers()
   const tabs = useTabs()
   const global = useGlobal()
-  const [tab, setTab] = createSignal(props.defaultValue ?? "general")
+  let root: HTMLDivElement | undefined
+
+  onMount(() => {
+    root?.focus({ preventScroll: true })
+  })
+
   const server = createMemo(() => {
-    const route = layout.route()
+    const route = surface.route()
     switch (route.type) {
       case "draft": {
         const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
@@ -57,7 +84,7 @@ export const DialogSettings: Component<{
     const selected = global.settings.server.selected()
     const current = server()
     if (!selected || !current || ServerConnection.key(selected) !== ServerConnection.key(current)) return
-    const route = layout.route()
+    const route = surface.route()
     if (route.type === "draft") {
       const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
       return draft?.type === "draft" ? draft.directory : undefined
@@ -67,77 +94,93 @@ export const DialogSettings: Component<{
   })
 
   const showProviders = () => {
-    void dialog.show(() => <DialogSettings defaultValue="providers" />)
+    dialog.close()
+    surface.open("providers")
   }
 
   return (
-    <Dialog size="x-large" variant="settings" class="settings-dialog">
+    <div
+      ref={root}
+      data-testid="settings-screen"
+      class="settings-screen"
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || event.defaultPrevented || dialog.active) return
+        event.preventDefault()
+        surface.close()
+      }}
+    >
       <Tabs
         orientation="vertical"
         variant="settings"
-        value={tab()}
-        onChange={(value) => void startTransition(() => setTab(value))}
+        value={surface.tab()}
+        onChange={(value) => void startTransition(() => surface.open(value))}
         class="settings"
       >
+        <div class="settings-mobile-nav">
+          <button type="button" class="settings-back" onClick={surface.close}>
+            <Icon name="arrow-left" size="small" class="settings-back-icon" />
+            <span>{language.t("settings.backToApp")}</span>
+          </button>
+          <Menu placement="bottom-end" gutter={8}>
+            <Menu.Trigger as={Button} size="normal" variant="outline" class="settings-mobile-menu-trigger">
+              <span>
+                {language.t(
+                  sections.flat().find((section) => section.value === surface.tab())?.label ??
+                    "settings.tab.preferences",
+                )}
+              </span>
+              <Icon name="chevron-down" size="small" />
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content class="settings-mobile-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
+                <Menu.RadioGroup
+                  value={surface.tab()}
+                  onChange={(value) => void startTransition(() => surface.open(value))}
+                >
+                  <For each={sections}>
+                    {(group, index) => (
+                      <>
+                        <Show when={index() > 0}>
+                          <Menu.Separator />
+                        </Show>
+                        <For each={group}>
+                          {(section) => (
+                            <Menu.RadioItem value={section.value} closeOnSelect>
+                              <Icon name={section.icon} />
+                              {language.t(section.label)}
+                            </Menu.RadioItem>
+                          )}
+                        </For>
+                      </>
+                    )}
+                  </For>
+                </Menu.RadioGroup>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
+        </div>
         <Tabs.List>
-          <div class="flex flex-col justify-between h-full w-full">
+          <div class="settings-nav">
+            <button type="button" class="settings-back" onClick={surface.close}>
+              <Icon name="arrow-left" size="small" class="settings-back-icon" />
+              <span>{language.t("settings.backToApp")}</span>
+            </button>
             <div class="flex flex-col gap-4 w-full">
-              {/* Group 1: Preferences */}
-              <div class="flex flex-col gap-1 w-full">
-                <Tabs.Trigger value="general">
-                  <Icon name="sliders" />
-                  {language.t("settings.tab.preferences")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="appearance">
-                  <Icon name="appearance" />
-                  {language.t("settings.general.section.appearance")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="notifications">
-                  <Icon name="notifications" />
-                  {language.t("settings.tab.notifications")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="shortcuts">
-                  <Icon name="keyboard" />
-                  {language.t("settings.tab.shortcuts")}
-                </Tabs.Trigger>
-              </div>
-
-              {/* Group 2: Environment & Workspaces */}
-              <div class="flex flex-col gap-1 w-full">
-                <Tabs.Trigger value="servers">
-                  <Icon name="server" />
-                  {language.t("status.popover.tab.servers")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="projects">
-                  <Icon name="folder" />
-                  {language.t("settings.tab.projects")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="workspaces">
-                  <Icon name="workspace-isolated" />
-                  {language.t("settings.tab.workspaces")}
-                </Tabs.Trigger>
-              </div>
-
-              {/* Group 3: Capabilities & Extensions */}
-              <div class="flex flex-col gap-1 w-full">
-                <Tabs.Trigger value="providers">
-                  <Icon name="providers" />
-                  {language.t("settings.providers.title")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="models">
-                  <Icon name="models" />
-                  {language.t("settings.models.title")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="extensions">
-                  <Icon name="extensions" />
-                  {language.t("settings.tab.extensions")}
-                </Tabs.Trigger>
-              </div>
-            </div>
-
-            <div class="settings-nav-footer">
-              <span>{language.t("app.name.desktop")}</span>
-              <span>v{platform.version}</span>
+              <For each={sections}>
+                {(group) => (
+                  <div class="flex flex-col gap-1 w-full">
+                    <For each={group}>
+                      {(section) => (
+                        <Tabs.Trigger value={section.value}>
+                          <Icon name={section.icon} />
+                          {language.t(section.label)}
+                        </Tabs.Trigger>
+                      )}
+                    </For>
+                  </div>
+                )}
+              </For>
             </div>
           </div>
         </Tabs.List>
@@ -153,6 +196,9 @@ export const DialogSettings: Component<{
         </Tabs.Content>
         <Tabs.Content value="shortcuts" class="settings-panel">
           <SettingsKeybinds />
+        </Tabs.Content>
+        <Tabs.Content value="experimental" class="settings-panel">
+          <SettingsExperimental />
         </Tabs.Content>
         <Tabs.Content value="servers" class="settings-panel">
           <SettingsServers />
@@ -174,7 +220,10 @@ export const DialogSettings: Component<{
             <SettingsExtensions />
           </Tabs.Content>
         </SettingsServerScope>
+        <Tabs.Content value="about" class="settings-panel settings-about">
+          <SettingsAbout active={surface.tab() === "about"} />
+        </Tabs.Content>
       </Tabs>
-    </Dialog>
+    </div>
   )
 }

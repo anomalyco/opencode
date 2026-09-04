@@ -15,7 +15,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"anthropic/claude-sonnet-4.6\",\"messages\":[{\"role\":\"system\",\"content\":\"Think through the arithmetic, then reply with only the final integer.\"},{\"role\":\"user\",\"content\":\"What is 173 multiplied by 219?\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":1536,\"temperature\":0,\"reasoning\":{\"max_tokens\":1024}}"
+        "body": "{\"model\":\"anthropic/claude-sonnet-4.6\",\"messages\":[{\"role\":\"system\",\"content\":\"Think through the arithmetic, then reply with only the final integer.\"},{\"role\":\"user\",\"content\":\"What is 173 multiplied by 219?\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0,\"reasoning\":{\"max_tokens\":1024},\"max_completion_tokens\":1536,\"store\":false,\"usage\":{\"include\":true}}"
       },
       "response": {
         "status": 200,

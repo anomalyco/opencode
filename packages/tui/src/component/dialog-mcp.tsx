@@ -157,6 +157,9 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
           <DialogErrorDetails
             title={`MCP server: ${server().name}`}
             error={statusError(server().status) ?? "Unknown MCP connection error"}
+            context={`Status: failed\nConfiguration: mcp.servers.${server().name}${
+              server().integrationID ? `\nIntegration: ${server().integrationID}` : ""
+            }`}
             onBack={() => {
               setDetail(undefined)
               dialog.setSize("medium")

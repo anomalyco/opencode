@@ -1,3 +1,12 @@
 [data-component="composer-editor"]:empty::before {
   content: "\200B";
 }
+
+[data-color-scheme="dark"] [data-component="composer"][data-dock-border-underlay="true"],
+[data-color-scheme="dark"] [data-component="new-session"] [data-component="composer"] {
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-color-scheme="dark"] [data-component="composer-suggestions"] [data-active] {
+  background: var(--v2-alpha-light-10);
+}

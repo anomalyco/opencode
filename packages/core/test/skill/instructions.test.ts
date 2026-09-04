@@ -41,7 +41,7 @@ const manual = Skill.Info.make({
 
 const layer = (list: () => Skill.Info[]) =>
   AppNodeBuilder.build(SkillInstructions.node, [
-    [Skill.node, Layer.mock(Skill.Service, { list: () => Effect.succeed(list()) })],
+    Skill.node.replace(Layer.mock(Skill.Service, { list: () => Effect.succeed(list()) })),
   ])
 
 describe("SkillInstructions", () => {
@@ -59,7 +59,6 @@ describe("SkillInstructions", () => {
         [
           "Skills provide specialized instructions and workflows for specific tasks.",
           "Use the skill tool to load a skill when a task matches its description.",
-          "When the user references a skill with @skill-id, load that skill with the skill tool.",
           "<available_skills>",
           "  <skill>",
           "    <id>effect</id>",

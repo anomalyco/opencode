@@ -249,11 +249,9 @@ describe("ConfigNormalize", () => {
     expect(JSON.stringify(result.diagnostics)).not.toContain("TOPSECRET")
   })
 
-  test("recovers list items for skills, plugins, instructions, and permissions", () => {
+  test("recovers list items for skills, instructions, and permissions", () => {
     const result = normalized({
       skills: { paths: ["./skills", 1], urls: [false, "https://example.com/skills"] },
-      plugin: ["legacy", ["tuple", {}], [1, {}]],
-      plugins: ["native", { package: "object" }, { package: 1 }],
       instructions: ["one", 2, "three"],
       permissions: [
         { action: "read", resource: "*", effect: "allow" },
@@ -261,15 +259,9 @@ describe("ConfigNormalize", () => {
       ],
     })
     expect(result.encoded.skills).toEqual(["./skills", "https://example.com/skills"])
-    expect(result.encoded.plugins).toEqual([
-      "legacy",
-      { package: "tuple", options: {} },
-      "native",
-      { package: "object" },
-    ])
     expect(result.encoded.instructions).toEqual(["one", "three"])
     expect(result.encoded.permissions).toEqual([{ action: "read", resource: "*", effect: "allow" }])
-    expect(result.diagnostics.filter((item) => item.kind === "invalid")).toHaveLength(6)
+    expect(result.diagnostics.filter((item) => item.kind === "invalid")).toHaveLength(4)
   })
 
   test("omits malformed collection roots instead of synthesizing empty values", () => {
@@ -278,7 +270,6 @@ describe("ConfigNormalize", () => {
       providers: "invalid",
       references: false,
       agents: 1,
-      plugins: {},
       permissions: {},
       instructions: {},
     })
@@ -289,7 +280,6 @@ describe("ConfigNormalize", () => {
       ["agents"],
       ["providers"],
       ["permissions"],
-      ["plugins"],
       ["instructions"],
     ])
   })
@@ -360,6 +350,20 @@ describe("ConfigNormalize", () => {
       ["unsupported", ["mcp", "servers"]],
       ["unsupported", ["mcp", "timeout"]],
     ])
+  })
+
+  test("normalizes MCP timeout fields in schema order with per-leaf recovery", () => {
+    const result = normalized({ mcp: { timeout: { execution: 3000, startup: "invalid", catalog: 2000 } } })
+
+    expect(result.encoded.mcp).toEqual({ timeout: { catalog: 2000, execution: 3000 } })
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["mcp", "timeout", "startup"]],
+    ])
+    expect(normalized({ mcp: { timeout: {} } }).encoded.mcp).toBeUndefined()
+
+    const unknown = normalized({ mcp: { timeout: { unknown: 1000 } } })
+    expect(unknown.encoded.mcp).toBeUndefined()
+    expect(unknown.diagnostics.map((item) => [item.kind, item.path])).toEqual([["invalid", ["mcp", "timeout"]]])
   })
 
   test("merges bounded compaction leaves and omits unsupported leaves", () => {
@@ -502,7 +506,6 @@ describe("ConfigNormalize", () => {
       commands: {},
       agents: {},
       providers: {},
-      plugins: [],
       instructions: [],
       experimental: { subagent_depth: 0 },
     })
@@ -512,7 +515,6 @@ describe("ConfigNormalize", () => {
       commands: {},
       agents: {},
       providers: {},
-      plugins: [],
       instructions: [],
       experimental: { subagent_depth: 0 },
     })

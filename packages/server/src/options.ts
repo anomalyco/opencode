@@ -1,5 +1,6 @@
 import { Database } from "@opencode-ai/core/database/database"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { PersistentPty } from "@opencode-ai/core/persistent-pty"
 import { Schema } from "effect"
 
 export const ServerOptions = Schema.Struct({
@@ -13,8 +14,10 @@ export const ServerOptions = Schema.Struct({
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
+  cors: Schema.optional(Schema.Array(Schema.String)),
   simulation: Schema.optional(Schema.Boolean),
   database: Schema.optional(Database.Options),
+  pty: Schema.optional(PersistentPty.Options),
   events: Schema.optional(
     Schema.Struct({
       persist: Schema.optional(Schema.Boolean),

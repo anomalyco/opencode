@@ -1,5 +1,5 @@
 import { Content, Portal, Root, Trigger } from "@kobalte/core/tooltip"
-import { createEffect, Match, onCleanup, splitProps, Switch, type JSX } from "solid-js"
+import { createEffect, Match, onCleanup, splitProps, Switch, untrack, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import "./tooltip.css"
@@ -45,7 +45,7 @@ export function Tooltip(props: TooltipProps) {
   }
 
   const drop = (expand = state.expand) => {
-    if (expand) return
+    if (expand || !state.block) return
     if (ref?.matches(":hover")) return
     if (inside()) return
     setState("block", false)
@@ -74,7 +74,7 @@ export function Tooltip(props: TooltipProps) {
 
   createEffect(() => {
     if (!ref) return
-    sync()
+    untrack(sync)
     const obs = new MutationObserver(sync)
     obs.observe(ref, {
       subtree: true,

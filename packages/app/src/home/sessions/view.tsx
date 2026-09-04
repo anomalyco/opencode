@@ -1,6 +1,6 @@
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { Key } from "@solid-primitives/keyed"
-import { createMemo, For, Index, onCleanup, Show, Suspense } from "solid-js"
+import { createMemo, For, Index, onCleanup, Show } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -15,6 +15,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { sessionLabel } from "@/session/title"
 import { shouldOpenSessionInBackground } from "./open"
+import "./view.css"
 import {
   HomeSessionStatusController,
   homeSessionSearchKey,
@@ -44,6 +45,7 @@ function isBackgroundOpen(event: MouseEvent) {
 export type HomeSessionsViewProps = {
   language: ReturnType<typeof useLanguage>
   groups: HomeSessionGroup[]
+  loading: boolean
   showProjectName: boolean
   server: ServerConnection.Key
   canCreateSession: boolean
@@ -95,36 +97,38 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
       class="min-h-0 min-w-0 flex-1 flex flex-col"
       aria-label={props.language.t("sidebar.project.recentSessions")}
     >
-      <div class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-3 pt-6 lg:pt-12" onWheel={props.onWheel}>
+      <div
+        class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 lg:pt-12"
+        onWheel={props.onWheel}
+      >
         <HomeSessionSearch {...props} />
-        <Suspense>
-          <Show when={props.groups.length > 0 && props.canCreateSession}>
-            <div class="pointer-events-none absolute right-0 top-[84px] z-20 flex lg:top-[108px]">
-              <Button
-                data-action="home-new-session"
-                variant="ghost-muted"
-                size="normal"
-                icon="edit"
-                class="pointer-events-auto h-7 px-2 [font-weight:530]"
-                onClick={props.onCreateSession}
-              >
-                {props.language.t("command.session.new")}
-              </Button>
-            </div>
-          </Show>
-        </Suspense>
+        <Show when={props.groups.length > 0 && props.canCreateSession}>
+          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
+            <Button
+              data-action="home-new-session"
+              variant="ghost-muted"
+              size="normal"
+              icon="edit"
+              class="pointer-events-auto h-7 px-2 [font-weight:530]"
+              onClick={props.onCreateSession}
+            >
+              {props.language.t("command.session.new")}
+            </Button>
+          </div>
+        </Show>
       </div>
-      <div class="pointer-events-none sticky top-[84px] z-40 h-0 -mr-3 lg:top-[108px]">
+      <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[84px] lg:top-[108px]">
         <div
           ref={props.onSetThumbTrack}
           data-component="home-session-scroll-track"
-          class="relative ml-auto h-[calc(100cqh-84px)] w-3 lg:h-[calc(100cqh-108px)]"
+          class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-84px)] lg:h-[calc(100cqh-108px)]"
         />
       </div>
-      <div class="-mr-3 min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]">
-        <Suspense
+      <div class="-mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]">
+        <Show
+          when={!props.loading}
           fallback={
-            <div class="pt-3">
+            <div class="pt-1 md:pt-3">
               <HomeSessionSkeleton label={props.language.t("common.loading")} />
             </div>
           }
@@ -138,7 +142,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
               />
             }
           >
-            <div ref={props.onSetContent} class="flex flex-col pt-3 pr-3 pb-16">
+            <div ref={props.onSetContent} class="flex flex-col pt-1 pr-3 pb-16 md:pt-3">
               {/* Index keeps group subtrees mounted when the group arrays are
                   rebuilt, so store updates cannot recreate rows mid-gesture. */}
               <Index each={props.groups}>
@@ -150,7 +154,9 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                       onSetRef={(element) => props.onSetHeader(group().id, element)}
                       elevated={index === 0}
                     />
-                    <div class={`flex min-w-0 flex-col gap-px pt-4 ${index === props.groups.length - 1 ? "" : "mb-6"}`}>
+                    <div
+                      class={`flex min-w-0 flex-col gap-px pt-2 md:pt-4 ${index === props.groups.length - 1 ? "" : "mb-6"}`}
+                    >
                       {/* Rows key by session ID: session.sync replaces the
                           stored session object wholesale, so reference-keyed
                           rows would be disposed mid-interaction whenever a
@@ -164,7 +170,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
               </Index>
             </div>
           </Show>
-        </Suspense>
+        </Show>
       </div>
     </section>
   )
@@ -235,7 +241,11 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
               absolute flex flex-col overflow-hidden rounded-[12px]
               bg-v2-background-bg-base shadow-[var(--v2-elevation-floating)]
             `}
-            style={{ top: "-6px", left: "-6px", width: "calc(100% + 12px)" }}
+            style={{
+              top: "-6px",
+              "inset-inline-start": "-6px",
+              width: "calc(100% + 12px)",
+            }}
           >
             <div class="flex flex-col pt-9">
               <div id={HOME_SESSION_SEARCH_RESULTS_ID} role="listbox" class="flex flex-col gap-4 pt-4">
@@ -269,7 +279,7 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
                       >
                         {props.language.t("home.sessions.search.sessions")}
                       </p>
-                      <ScrollView class="max-h-80" viewportRef={props.onSetSearchList}>
+                      <ScrollView class="max-h-[min(20rem,40dvh)]" viewportRef={props.onSetSearchList}>
                         <div class="flex flex-col gap-px pb-2">
                           <For each={props.searchResults}>
                             {(record) => (
@@ -291,7 +301,7 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
         </Show>
         <label
           class={`
-            relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] py-1 pl-3 pr-2
+            relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] py-1 ps-3 pe-2
             bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow]
             duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02
           `}
@@ -375,6 +385,7 @@ function HomeSessionSearchResultRow(
       id={`home-session-search-option-${key()}`}
       data-key={key()}
       data-component="home-session-search-row"
+      data-project-name={!!showProjectName()}
       role="option"
       aria-selected={props.selected}
       class={`
@@ -403,7 +414,7 @@ function HomeSessionSearchResultRow(
         record={props.record}
         revealProjectOnHover={!!showProjectName()}
       />
-      <div class="flex min-w-0 flex-1 items-center gap-1.5">
+      <div data-slot="home-session-labels" class="flex min-w-0 flex-1 items-center gap-1.5">
         <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} search />
         <Show when={showProjectName()}>
           <HomeSessionProjectName name={props.record.projectName} search />
@@ -423,8 +434,8 @@ function HomeSessionGroupHeader(props: {
     <div
       ref={props.onSetRef}
       class={`
-        pointer-events-none sticky top-[84px] flex h-7 min-w-0 items-center justify-between
-        bg-v2-background-bg-base pl-3 lg:top-[108px]
+        pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
+        bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]
       `}
       classList={{ "home-session-group-header z-[5]": !!props.elevated, "z-10": !props.elevated }}
     >
@@ -510,6 +521,7 @@ function HomeSessionRow(
   return (
     <div
       data-component="home-session-row-container"
+      data-project-name={!!showProjectName()}
       data-session-id={props.record.session.id}
       class="group/session relative flex h-10 min-w-0 items-center rounded-[6px] outline-none focus:outline-none focus-visible:outline-none"
       classList={{ group: !!showProjectName() }}
@@ -523,51 +535,56 @@ function HomeSessionRow(
       <Show
         when={!editor()}
         fallback={
-          <div class="flex h-10 min-w-0 w-full flex-1 items-center gap-2 py-3 pl-3 pr-10">
+          <div
+            data-slot="home-session-editor"
+            class="flex h-10 min-w-0 w-full flex-1 items-center gap-2 py-3 ps-1.5 pe-3 md:ps-3 md:pe-10"
+          >
             <HomeSessionLeadingController
               server={props.server}
               isOpenTab={props.isOpenTab}
               record={props.record}
               revealProjectOnHover={false}
             />
-            <InlineInput
-              data-component="home-session-rename"
-              aria-label={props.language.t("common.rename")}
-              dir="auto"
-              value={editor()?.draft ?? ""}
-              disabled={editor()?.renaming ?? false}
-              class={`
+            <div data-slot="home-session-labels" class="contents">
+              <InlineInput
+                data-component="home-session-rename"
+                aria-label={props.language.t("common.rename")}
+                dir="auto"
+                value={editor()?.draft ?? ""}
+                disabled={editor()?.renaming ?? false}
+                class={`
                 block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base
                 [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
                 ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
               `}
-              style={{ "--inline-input-shadow": "none", "text-align": "start" }}
-              onInput={(event) => {
-                const draft = event.currentTarget.value
-                props.setRowUI("editor", (value) => (value?.id === sessionID() ? { ...value, draft } : value))
-              }}
-              onKeyDown={(event) => {
-                event.stopPropagation()
-                // Enter and Escape during IME composition commit or cancel
-                // the composition, not the rename. Safari can report the
-                // composition-confirming keydown with isComposing false but
-                // keyCode 229.
-                if (event.isComposing || event.keyCode === 229) return
-                if (event.key === "Enter") {
+                style={{ "--inline-input-shadow": "none", "text-align": "start" }}
+                onInput={(event) => {
+                  const draft = event.currentTarget.value
+                  props.setRowUI("editor", (value) => (value?.id === sessionID() ? { ...value, draft } : value))
+                }}
+                onKeyDown={(event) => {
+                  event.stopPropagation()
+                  // Enter and Escape during IME composition commit or cancel
+                  // the composition, not the rename. Safari can report the
+                  // composition-confirming keydown with isComposing false but
+                  // keyCode 229.
+                  if (event.isComposing || event.keyCode === 229) return
+                  if (event.key === "Enter") {
+                    event.preventDefault()
+                    void saveEditor()
+                    return
+                  }
+                  if (event.key !== "Escape") return
                   event.preventDefault()
-                  void saveEditor()
-                  return
-                }
-                if (event.key !== "Escape") return
-                event.preventDefault()
-                closeEditor()
-                requestAnimationFrame(() => rowButton()?.focus())
-              }}
-              onBlur={closeEditor}
-            />
-            <Show when={showProjectName()}>
-              <HomeSessionProjectName name={props.record.projectName} />
-            </Show>
+                  closeEditor()
+                  requestAnimationFrame(() => rowButton()?.focus())
+                }}
+                onBlur={closeEditor}
+              />
+              <Show when={showProjectName()}>
+                <HomeSessionProjectName name={props.record.projectName} />
+              </Show>
+            </div>
           </div>
         }
       >
@@ -578,7 +595,7 @@ function HomeSessionRow(
           aria-expanded={!!menu()}
           class={`
             flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
-            bg-transparent py-3 pl-3 pr-10 text-left text-v2-text-text-muted [font-weight:530]
+            bg-transparent py-3 ps-1.5 pe-3 md:ps-3 md:pe-10 text-start text-v2-text-text-muted [font-weight:530]
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
             hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
           `}
@@ -641,10 +658,12 @@ function HomeSessionRow(
             record={props.record}
             revealProjectOnHover={!!showProjectName()}
           />
-          <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
-          <Show when={showProjectName()}>
-            <HomeSessionProjectName name={props.record.projectName} />
-          </Show>
+          <div data-slot="home-session-labels" class="contents">
+            <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
+            <Show when={showProjectName()}>
+              <HomeSessionProjectName name={props.record.projectName} />
+            </Show>
+          </div>
         </button>
       </Show>
       <Menu
@@ -683,11 +702,11 @@ function HomeSessionRow(
           >
             <Menu.Item onSelect={openEditor}>{props.language.t("common.rename")}</Menu.Item>
             <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
-              {props.language.t("common.export")}...
+              {props.language.t("common.export")}…
             </Menu.Item>
             <Menu.Separator />
             <Menu.Item onSelect={() => props.onDeleteSession(props.server, props.record.session)}>
-              {props.language.t("common.delete")}...
+              {props.language.t("common.delete")}…
             </Menu.Item>
           </Menu.Content>
         </Menu.Portal>
@@ -723,6 +742,7 @@ function HomeSessionTitle(props: { title: string; showProjectName: boolean; sear
   return (
     <span
       data-component="home-session-title"
+      dir="auto"
       class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530]"
       classList={{
         "text-[13px] leading-4 tracking-[-0.04px]": !!props.search,
@@ -738,6 +758,8 @@ function HomeSessionTitle(props: { title: string; showProjectName: boolean; sear
 function HomeSessionProjectName(props: { name: string; search?: boolean }) {
   return (
     <span
+      data-component="home-session-project-name"
+      dir="auto"
       class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]"
       classList={{ "text-[13px] leading-4 tracking-[-0.04px]": !!props.search }}
     >
@@ -779,7 +801,7 @@ function HomeSessionsEmpty(props: { onNewSession?: () => void; language: ReturnT
 function HomeSessionSkeleton(props: { label: string }) {
   return (
     <div class="flex min-w-0 flex-col gap-4">
-      <div class="flex h-7 min-w-0 items-center justify-between px-4">
+      <div class="flex h-7 min-w-0 items-center justify-between ps-1.5 pe-4 md:ps-4">
         <div class={HOME_SECTION_LABEL}>{props.label}</div>
       </div>
       <div class="flex min-w-0 flex-col gap-px" aria-hidden="true">

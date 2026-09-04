@@ -257,6 +257,21 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("reads after a newline at the first chunk boundary", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "boundary.txt")
+      yield* files.writeFileString(file, `${"a".repeat(256 * 1024 - 1)}\nsecond\n`)
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "boundary.txt", {
+        offset: 2,
+        limit: 1,
+      })
+
+      expect(result).toMatchObject({ type: "text-page", content: "second", offset: 2, truncated: false })
+    }),
+  )
+
   it.effect("preserves the media ingestion limit message", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture

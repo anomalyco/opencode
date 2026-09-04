@@ -1,8 +1,12 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { LanguageModel } from "@opencode-ai/ai"
+import { OpenAIChat } from "@opencode-ai/ai/protocols"
+import { TestLLM } from "@opencode-ai/ai/testing"
 import path from "path"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -15,21 +19,24 @@ import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Agent } from "@opencode-ai/core/agent"
 import { Job } from "@opencode-ai/core/job"
+import { KV } from "@opencode-ai/core/kv"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Permission } from "@opencode-ai/core/permission"
 import { SubagentTool } from "@opencode-ai/core/tool/plugin/subagent"
 import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
@@ -86,9 +93,10 @@ const executionNode = makeGlobalNode({
       })
       return SessionExecution.Service.of({
         active: Effect.succeed(new Set()),
+        isActive: () => Effect.succeed(false),
         resume: complete,
         wake: () => Effect.void,
-        interrupt: () => Effect.void,
+        interrupt: () => Effect.succeed(false),
         awaitIdle: (sessionID) => complete(sessionID).pipe(Effect.exit, Effect.asVoid),
       })
     }),
@@ -97,12 +105,9 @@ const executionNode = makeGlobalNode({
 })
 
 const subagentPluginSupervisor = makeLocationNode({
-  service: PluginSupervisor.Service,
-  layer: Layer.effect(
-    PluginSupervisor.Service,
-    registerToolPlugin(SubagentTool.Plugin).pipe(Effect.as(PluginSupervisor.Service.of({ flush: Effect.void }))),
-  ),
-  deps: [Agent.node, Config.node, Permission.node, PluginRuntime.node, Tool.node],
+  name: "test/subagent-plugins",
+  layer: Layer.effectDiscard(registerToolPlugin(SubagentTool.Plugin)),
+  deps: [Agent.node, Config.node, Permission.node, Session.node, Job.node, Tool.node],
 })
 
 const nodes = LayerNode.group([
@@ -111,35 +116,60 @@ const nodes = LayerNode.group([
   Job.node,
   Session.node,
   SessionExecution.node,
-  PluginRuntime.providerNode,
   LocationServiceMap.node,
 ])
 const replacements = [
-  [SessionExecution.node, executionNode],
-  [Global.node, tempGlobalLayer],
+  SessionExecution.node.replace(executionNode),
+  Global.node.replace(tempGlobalLayer),
+  offlineModels,
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
-const it = testEffect(AppNodeBuilder.build(nodes, [...replacements, [PluginSupervisor.node, subagentPluginSupervisor]]))
+const it = testEffect(
+  AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(subagentPluginSupervisor)]),
+)
+const completionIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
+    Global.node.replace(tempGlobalLayer),
+    offlineModels,
+    PluginSupervisor.node.replace(subagentPluginSupervisor),
+    LayerNodePlatform.llmClient.replace(TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })),
+    SessionRunnerModel.node.replace(
+      Layer.succeed(SessionRunnerModel.Service, {
+        resolve: () =>
+          Effect.succeed(
+            SessionRunnerModel.resolved(
+              LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
+              {
+                capabilities: { tools: true, input: ["text"], output: ["text"] },
+                cost: [],
+                limit: { context: 200_000, output: 32_000 },
+              },
+            ),
+          ),
+      }),
+    ),
+  ]),
+)
 
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
-    yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(locations.get(location)))
+    yield* Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(Effect.provide(locations.get(location)))
     yield* Agent.Service.use((agents) =>
-      agents.transform((draft) => {
+      agents.transform((editor) => {
         // The caller identity used by executeTool; subagent permission asserts against it.
-        draft.update(toolIdentity.agent, (agent) => {
+        editor.update(toolIdentity.agent, (agent) => {
           agent.mode = "primary"
           agent.permissions.push({ action: "*", resource: "*", effect: "allow" })
         })
-        draft.update(Agent.ID.make("reviewer"), (agent) => {
+        editor.update(Agent.ID.make("reviewer"), (agent) => {
           agent.mode = "subagent"
           agent.model = childModel
         })
-        draft.update(Agent.ID.make("fallback"), (agent) => {
+        editor.update(Agent.ID.make("fallback"), (agent) => {
           agent.mode = "subagent"
         })
-        draft.update(Agent.ID.make("primary"), (agent) => {
+        editor.update(Agent.ID.make("primary"), (agent) => {
           agent.mode = "primary"
         })
       }),
@@ -147,6 +177,81 @@ const withSubagent = (location: Location.Ref) =>
   })
 
 describe("SubagentTool", () => {
+  completionIt.live("admits one durable completion across live delivery and restart replay", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+            title: "Completion recipient",
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const bus = yield* Bus.Service
+          const admitted = yield* Deferred.make<Job.Background>()
+          const notifications: SessionMessage.ID[] = []
+          yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+            Effect.gen(function* () {
+              if (event.data.sessionID !== parent.id || event.data.item.type !== "synthetic") return
+              notifications.push(event.data.inboxID)
+              const marker = (yield* jobs.pendingBackground).find((job) => job.notificationID === event.data.inboxID)
+              // The marker must survive until admission commits, not merely until delivery starts.
+              expect(marker?.status).toBe("completed")
+              if (marker) yield* Deferred.succeed(admitted, marker)
+            }),
+          )
+
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-completion-replay",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
+            },
+          })
+          const marker = yield* Deferred.await(admitted)
+          yield* jobs.pendingBackground.pipe(Effect.repeat({ until: (pending) => pending.length === 0 }))
+          yield* sessions.wait(parent.id)
+          const messages = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
+          expect(messages).toEqual([
+            expect.objectContaining({
+              id: marker.notificationID,
+              description: "background review",
+              text: `<subagent sessionID="${outputSessionID(result.metadata)}" state="completed" description="background review">\n${childText}\n</subagent>`,
+              metadata: {
+                source: "subagent",
+                childID: outputSessionID(result.metadata),
+                agent: "reviewer",
+                state: "completed",
+              },
+            }),
+          ])
+
+          // Reproduce a crash after admission but before acknowledgment using the real persisted marker.
+          const kv = yield* KV.Service
+          yield* kv.set(`job.background/${marker.notificationID}`, marker)
+          const restart = yield* SessionRestart.Service
+          yield* restart.resumeSuspendedSessions
+          yield* sessions.wait(parent.id)
+          expect(notifications).toEqual([marker.notificationID])
+          expect((yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")).toEqual(
+            messages,
+          )
+          expect(yield* jobs.pendingBackground).toEqual([])
+        }),
+      ),
+    ),
+  )
+
   productionIt.live("registers globally while resolving agents from the caller location", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

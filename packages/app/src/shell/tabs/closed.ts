@@ -1,9 +1,7 @@
 import type { SessionTab, Tab } from "./tabs"
+import type { TabStorage } from "./schema"
 
-export type ClosedTab = {
-  tab: SessionTab
-  index: number
-}
+export type ClosedTab = typeof TabStorage.ClosedTab.Type
 
 const CLOSED_TAB_LIMIT = 25
 

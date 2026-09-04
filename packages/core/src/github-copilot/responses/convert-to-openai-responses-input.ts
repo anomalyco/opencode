@@ -1,9 +1,4 @@
-import {
-  type LanguageModelV3Prompt,
-  type LanguageModelV3ToolCallPart,
-  type SharedV3Warning,
-  UnsupportedFunctionalityError,
-} from "@ai-sdk/provider"
+import { type LanguageModelV3Prompt, type SharedV3Warning, UnsupportedFunctionalityError } from "@ai-sdk/provider"
 import { convertToBase64, parseProviderOptions } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 import type { OpenAIResponsesInput, OpenAIResponsesReasoning } from "./openai-responses-api-types.js"
@@ -116,7 +111,6 @@ export async function convertToOpenAIResponsesInput({
 
       case "assistant": {
         const reasoningMessages: Record<string, OpenAIResponsesReasoning> = {}
-        const toolCallParts: Record<string, LanguageModelV3ToolCallPart> = {}
 
         for (const part of content) {
           switch (part.type) {
@@ -129,8 +123,6 @@ export async function convertToOpenAIResponsesInput({
               break
             }
             case "tool-call": {
-              toolCallParts[part.toolCallId] = part
-
               if (part.providerExecuted) {
                 break
               }

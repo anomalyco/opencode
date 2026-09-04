@@ -12,6 +12,7 @@ export const emptyCredentialNode = makeGlobalNode({
       list: () => Effect.succeed([]),
       get: () => Effect.undefined,
       create: () => Effect.die("unused Credential.create"),
+      activate: () => Effect.die("unused Credential.activate"),
       update: () => Effect.die("unused Credential.update"),
       remove: () => Effect.die("unused Credential.remove"),
     }),

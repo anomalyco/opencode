@@ -24,7 +24,7 @@
       "transport": "http",
       "request": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://api.anthropic.com/v1/messages?beta=true",
         "headers": {
           "anthropic-version": "2023-06-01",
           "content-type": "application/json"

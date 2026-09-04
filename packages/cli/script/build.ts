@@ -9,6 +9,7 @@ import type { BunPlugin } from "bun"
 import pkg from "../package.json"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
+import { resolveOpencodePty } from "./opencode-pty"
 
 const dir = path.resolve(import.meta.dirname, "..")
 const binary = "opencode2"
@@ -61,7 +62,8 @@ const targets =
       : allTargets
 if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 
-if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+if (!skipInstall)
+  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @opencode-ai/pty@${pkg.dependencies["@opencode-ai/pty"]}`
 const appArchive = await buildAppArchive(Script.channel, { skipBuild: skipWebUi })
 const appAssetsPlugin: BunPlugin = {
   name: "opencode-app-assets",
@@ -78,6 +80,23 @@ const appAssetsPlugin: BunPlugin = {
 }
 
 for (const item of targets) {
+  const opencodePty = await resolveOpencodePty({
+    platform: item.os,
+    arch: item.arch,
+    ...(item.os === "linux" ? { libc: item.abi ?? "glibc" } : {}),
+  })
+  const opencodePtyPlugin: BunPlugin = {
+    name: "opencode-pty-binary",
+    setup(build) {
+      build.onLoad({ filter: /persistent-pty[/\\]pty-binding\.ts$/ }, () => ({
+        loader: "js",
+        contents: opencodePty
+          ? `import file from ${JSON.stringify(opencodePty.source)} with { type: "file" }
+export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sha256: ${JSON.stringify(opencodePty.sha256)} }`
+          : "export default undefined",
+      }))
+    },
+  }
   const simulationInputs = new Set<string>()
   const simulationGraphPlugin: BunPlugin = {
     name: "opencode-simulation-graph",
@@ -105,10 +124,13 @@ for (const item of targets) {
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, simulationGraphPlugin],
+    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, opencodePtyPlugin, simulationGraphPlugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
+    // Bun 1.4.0 cross-compiled bytecode can crash on Windows (oven-sh/bun#40270).
+    // Re-enable after both the builder and embedded runtime move to Bun 1.4.1.
+    bytecode: false,
     sourcemap: Script.channel === "dev" || Script.channel === "local" ? "inline" : "none",
     splitting: true,
     compile: {
@@ -119,13 +141,19 @@ for (const item of targets) {
       target: target.replace(binary, "bun") as Bun.Build.CompileTarget,
       ...(executablePath ? { executablePath } : {}),
       outfile: path.join(outdir, name, "bin", binary),
-      execArgv: [`--user-agent=${binary}/${Script.version}`, "--use-system-ca", "--no-warnings", "--"],
+      execArgv: [
+        `--user-agent=opencode/${Script.channel}/${Script.version}/cli`,
+        "--use-system-ca",
+        "--no-warnings",
+        "--",
+      ],
       windows: {},
     },
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_CLI_NAME: `'${binary}'`,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
+      OPENCODE_ARTIFACT: `'cli'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "undefined",
       // FFF_LIBC selects the fff native lib variant: "musl" or "gnu".
       FFF_LIBC: item.os === "linux" ? `'${item.abi ?? "gnu"}'` : "undefined",

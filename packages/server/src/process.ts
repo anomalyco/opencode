@@ -3,6 +3,7 @@ export * as ServerProcess from "./process"
 import { NodeHttpServer } from "@effect/platform-node"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
+import { hasPersistentPtyConnectTicketURL } from "@opencode-ai/protocol/groups/persistent-pty"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import {
   HttpMiddleware,
@@ -62,7 +63,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   yield* bound.http
     .serve(
       dispatch(password, status, application, options.app?.version ?? "unknown").pipe(
-        HttpMiddleware.cors({ allowedOrigins: isAllowedCorsOrigin, maxAge: 86_400 }),
+        HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),
       errorResponseLogger,
     )
@@ -182,7 +183,12 @@ function dispatch(
     const state = yield* status.current
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
-    if ((!ready || !hasPtyConnectTicketURL(url)) && !(yield* authorizedRequest(request, auth))) return unauthorized()
+    if (
+      (url.pathname === "/api" || url.pathname.startsWith("/api/") || url.pathname === "/openapi.json") &&
+      (!ready || (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url))) &&
+      !(yield* authorizedRequest(request, auth))
+    )
+      return unauthorized()
     if (ready) return yield* app.value
     return unavailable(state)
   })

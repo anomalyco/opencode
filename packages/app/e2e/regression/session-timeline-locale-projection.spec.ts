@@ -1,12 +1,9 @@
 import { expect, test } from "@playwright/test"
 import { assistantMessage, setupTimeline, toolPart, userMessage } from "../performance/timeline-stability/fixture"
 
-for (const profile of [
-  { locale: "de", label: "Erkundung abgeschlossen" },
-  { locale: "ar", label: "تم الاستكشاف" },
-] as const) {
-  test(`projects translated context status in ${profile.locale}`, async ({ page }) => {
-    const ids = [`prt_locale_${profile.locale}_01_read`, `prt_locale_${profile.locale}_02_glob`]
+for (const locale of ["de", "ar"] as const) {
+  test(`projects localized tool names with an English fallback in ${locale}`, async ({ page }) => {
+    const ids = [`prt_locale_${locale}_01_read`, `prt_locale_${locale}_02_glob`]
     await setupTimeline(page, {
       messages: [
         userMessage(),
@@ -15,11 +12,13 @@ for (const profile of [
           toolPart(ids[1]!, "glob", "completed", { path: ".", pattern: "**/*.ts" }),
         ]),
       ],
-      locale: profile.locale,
+      locale,
     })
 
     const group = page.locator(`[data-timeline-part-ids="${ids.join(",")}"]`)
-    await expect(group.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", profile.label)
-    await expect(page.locator("html")).toHaveAttribute("lang", profile.locale)
+    const names = locale === "de" ? "1 Lesen, 1 Glob" : "1 \u0642\u0631\u0627\u0621\u0629, 1 Glob"
+    await expect(group.getByRole("button")).toHaveAccessibleName(`Used ${names}`)
+    await expect(group.locator('[data-slot="basic-tool-tool-title"]')).toHaveText(names)
+    await expect(page.locator("html")).toHaveAttribute("lang", locale)
   })
 }

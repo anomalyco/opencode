@@ -1,8 +1,20 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
+import { z } from "zod"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Session } from "@opencode-ai/schema/session"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { Info } from "@opencode-ai/schema/tool"
 import { Tool } from "../src/tool"
 import { definition, execute } from "../src/tool/runtime"
+
+const context = {
+  sessionID: Session.ID.make("ses_tool_schema"),
+  agent: Agent.ID.make("build"),
+  messageID: SessionMessage.ID.make("msg_tool_schema"),
+  id: Tool.CallID.make("call_tool_schema"),
+  progress: () => Effect.void,
+} satisfies Tool.Context
 
 test("tools are structural values", async () => {
   const config = {
@@ -15,6 +27,7 @@ test("tools are structural values", async () => {
   const tool: Info = config
 
   expect(definition(tool)).toEqual({
+    type: "tool",
     name: "foreign",
     description: "Foreign tool",
     inputSchema: {
@@ -130,13 +143,52 @@ test("portable schemas validate and describe typed tools", async () => {
   }
 
   expect(definition(tool)).toEqual({
+    type: "tool",
     name: "portable",
     description: "Portable tool",
     inputSchema: { type: "object", properties: { count: { type: "string" } } },
     outputSchema: { type: "string" },
   })
-  const result = await Effect.runPromise(execute(tool, { count: "41" }, {} as Tool.Context))
+  const result = await Effect.runPromise(execute(tool, { count: "41" }, context))
   expect(result.output).toBe("42")
+})
+
+test("Zod schemas validate, transform, and describe typed tools", async () => {
+  const tool: Info = {
+    name: "zod",
+    description: "Zod tool",
+    input: z.object({ count: z.string().transform(Number) }),
+    output: z.object({ count: z.number() }),
+    execute: ({ count }) => Effect.succeed({ output: { count: count + 1 } }),
+  }
+
+  expect(definition(tool)).toEqual({
+    type: "tool",
+    name: "zod",
+    description: "Zod tool",
+    inputSchema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { count: { type: "string" } },
+      required: ["count"],
+    },
+    outputSchema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { count: { type: "number" } },
+      required: ["count"],
+      additionalProperties: false,
+    },
+  })
+  expect(await Effect.runPromise(execute(tool, { count: "41" }, context))).toMatchObject({
+    output: { count: 42 },
+  })
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { count: 41 }, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "zod":\n- count: Invalid input: expected string, received number\n\nArguments provided:\n{\n  "count": 41\n}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
 })
 
 test("portable schema failures become tool failures", async () => {
@@ -144,7 +196,12 @@ test("portable schema failures become tool failures", async () => {
     "~standard": {
       version: 1,
       vendor: "test",
-      validate: (_value: unknown) => ({ issues: [{ message: "expected a string" }] }),
+      validate: (_value: unknown) => ({
+        issues: [
+          { path: ["value"], message: "expected a string" },
+          { path: [{ key: "nested" }, { key: "count" }], message: "expected a positive integer" },
+        ],
+      }),
       jsonSchema: {
         input: () => ({ type: "string" }),
         output: () => ({ type: "string" }),
@@ -152,19 +209,74 @@ test("portable schema failures become tool failures", async () => {
     },
   }
 
-  const error = await Effect.runPromiseExit(
-    execute(
-      {
-        name: "invalid",
-        description: "Invalid",
-        input,
-        execute: () => Effect.succeed({ content: "unused" }),
-      },
-      1,
-      {} as Tool.Context,
+  const error = await Effect.runPromise(
+    Effect.flip(
+      execute(
+        {
+          name: "invalid",
+          description: "Invalid",
+          input,
+          execute: () => Effect.succeed({ content: "unused" }),
+        },
+        1,
+        context,
+      ),
     ),
   )
-  expect(error.toString()).toContain("Invalid tool input: expected a string")
+  expect(error).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "invalid":\n- value: expected a string\n- nested.count: expected a positive integer\n\nArguments provided:\n1\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
+})
+
+test("Effect schema failures use normalized input issues", async () => {
+  const tool: Info = {
+    name: "effect",
+    description: "Effect tool",
+    input: Schema.Struct({
+      value: Schema.String,
+      nested: Schema.Struct({ count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)) }),
+    }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1, nested: { count: 0 } }, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "effect":\n- value: Expected string\n- nested.count: Expected a value greater than or equal to 1\n\nArguments provided:\n{\n  "value": 1,\n  "nested": {\n    "count": 0\n  }\n}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
+})
+
+test("input error prompts limit normalized issues", async () => {
+  const input = {
+    "~standard": {
+      version: 1,
+      vendor: "test",
+      validate: (_value: unknown) => ({
+        issues: Array.from({ length: 6 }, (_, index) => ({ message: `issue ${index + 1}` })),
+      }),
+      jsonSchema: {
+        input: () => ({}),
+        output: () => ({}),
+      },
+    },
+  }
+  const tool: Info = {
+    name: "limited",
+    description: "Limited issues",
+    input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(await Effect.runPromise(Effect.flip(execute(tool, {}, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "limited":\n- root: issue 1\n- root: issue 2\n- root: issue 3\n- root: issue 4\n- root: issue 5\n- ...and 1 more issue\n\nArguments provided:\n{}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
 })
 
 test("canonical results carry metadata with typed output", async () => {
@@ -178,15 +290,28 @@ test("canonical results carry metadata with typed output", async () => {
     execute: ({ value }) => Effect.succeed({ output: { value, internal: true }, metadata: { value }, content: value }),
   }
 
-  expect(await Effect.runPromise(tool.execute({ value: "out" }, {} as Tool.Context))).toEqual({
+  expect(await Effect.runPromise(tool.execute({ value: "out" }, context))).toEqual({
     output: { value: "out", internal: true },
     metadata: { value: "out" },
     content: "out",
   })
 })
 
-test("raw JSON schemas are render-only and omitted output means model-only", async () => {
-  const input = { type: "object", properties: { value: { type: "string" } } }
+test("raw JSON schemas validate and decode tool input", async () => {
+  const input = {
+    type: "object",
+    properties: {
+      value: { type: "string" },
+      nested: {
+        type: "object",
+        properties: { count: { type: "integer", minimum: 1 } },
+        required: ["count"],
+        additionalProperties: false,
+      },
+    },
+    required: ["value"],
+    additionalProperties: false,
+  }
   const tool: Info = {
     name: "raw",
     description: "Raw tool",
@@ -195,13 +320,78 @@ test("raw JSON schemas are render-only and omitted output means model-only", asy
   }
 
   expect(definition(tool)).toEqual({
+    type: "tool",
     name: "raw",
     description: "Raw tool",
-    inputSchema: { type: "object", properties: { value: { type: "string" } } },
+    inputSchema: input,
   })
-  expect(await Effect.runPromise(execute(tool, { value: 1 }, {} as Tool.Context))).toEqual({
+  expect(await Effect.runPromise(execute(tool, { value: "ok", extra: true }, context))).toEqual({
     output: undefined,
-    content: [{ type: "text", text: '{"value":1}' }],
+    content: [{ type: "text", text: '{"value":"ok"}' }],
+  })
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1 }, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "raw":\n- value: Expected string\n\nArguments provided:\n{\n  "value": 1\n}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
+  expect(await Effect.runPromise(Effect.flip(execute(tool, {}, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "raw":\n- value: Missing key\n\nArguments provided:\n{}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { value: "ok", nested: { count: 0 } }, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "raw":\n- nested.count: Expected a value greater than or equal to 1\n\nArguments provided:\n{\n  "value": "ok",\n  "nested": {\n    "count": 0\n  }\n}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1, nested: { count: 0 } }, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "raw":\n- value: Expected string\n- nested.count: Expected a value greater than or equal to 1\n\nArguments provided:\n{\n  "value": 1,\n  "nested": {\n    "count": 0\n  }\n}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
+})
+
+test("raw JSON schemas resolve draft-07 definitions", async () => {
+  const tool: Info = {
+    name: "draft-07",
+    description: "Draft-07 tool",
+    input: {
+      type: "object",
+      properties: { value: { $ref: "#/definitions/value" } },
+      required: ["value"],
+      definitions: { value: { type: "string" } },
+    },
+    execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
+  }
+
+  expect(await Effect.runPromise(execute(tool, { value: "ok" }, context))).toMatchObject({
+    content: [{ type: "text", text: '{"value":"ok"}' }],
+  })
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1 }, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "draft-07":\n- value: Expected value\n\nArguments provided:\n{\n  "value": 1\n}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
+})
+
+test("raw JSON schemas pass input through when they cannot be imported", async () => {
+  const tool: Info = {
+    name: "invalid-schema",
+    description: "Invalid schema tool",
+    input: {
+      type: "object",
+      properties: { value: { $ref: "#/$defs/missing" } },
+    },
+    execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
+  }
+
+  expect(await Effect.runPromise(execute(tool, { value: 1, extra: true }, context))).toMatchObject({
+    content: [{ type: "text", text: '{"value":1,"extra":true}' }],
   })
 })
 
@@ -214,6 +404,7 @@ test("missing external input schemas fall back to an empty schema", () => {
   } as unknown as Info
 
   expect(definition(tool)).toEqual({
+    type: "tool",
     name: "external",
     description: "External tool",
     inputSchema: {},

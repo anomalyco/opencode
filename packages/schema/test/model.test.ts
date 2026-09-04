@@ -40,13 +40,17 @@ describe("Model.Compatibility", () => {
     expect(
       decode({
         reasoningField: "vendor_reasoning",
+        requireReasoning: true,
         maxTokensField: "max_completion_tokens",
         requireFinishReason: false,
+        requireAssistantAfterTool: true,
       }),
     ).toEqual({
       reasoningField: "vendor_reasoning",
+      requireReasoning: true,
       maxTokensField: "max_completion_tokens",
       requireFinishReason: false,
+      requireAssistantAfterTool: true,
     })
   })
 })

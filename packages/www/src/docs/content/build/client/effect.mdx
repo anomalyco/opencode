@@ -1,0 +1,150 @@
+---
+title: "Effect"
+---
+
+`@opencode-ai/client/effect` is the Effect-native client for the OpenCode HTTP API. It returns typed Effects and Streams
+and decodes responses into OpenCode schema values.
+
+```sh
+bun add @opencode-ai/client@beta effect
+```
+
+## Create a client
+
+Create a client with the server URL, then call methods grouped by API resource.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode-ai/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## Headers and requests
+
+Configure default headers on the supplied `HttpClient`. Native operations use
+normal Effect interruption for cancellation. RPC methods additionally accept
+per-call location, header, and signal options.
+
+```ts
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+
+const httpClient = yield * HttpClient.HttpClient
+const client =
+  yield *
+  OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+      ),
+    ),
+  )
+
+const sessions = yield * client.session.list()
+```
+
+## Stream events
+
+Streaming operations such as `event.subscribe()` and `session.log()` return Effect Streams.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield *
+  client.event.subscribe().pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+Native and RPC event Streams share one lazy connection per client. Constructing
+a Stream does not connect; consuming it does. Stopping one consumer leaves others
+running, and the last consumer leaving closes the source. Source EOF or failure
+ends current subscriptions without automatic retry or replay. Late native consumers
+receive the current connection marker before live events.
+
+## Plugin RPC
+
+Use the same shared contract as Promise clients and server plugins:
+
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield * acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield *
+  acme.events
+    .subscribe("updated")
+    .pipe(
+      Stream.runForEach((event) =>
+        Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+      ),
+    )
+```
+
+Method arguments and results are inferred from the contract. The second optional
+argument holds `location`, `signal`, and `headers`; omitted location uses the
+normal request defaults. Calls are interrupted with their consuming Effect.
+Method error maps are inferred in the Effect error channel. Declared errors are
+decoded through their data schemas. The typed subclient removes the generic HTTP
+RPC error wrapper; reserved `rpc.*` types identify framework failures.
+
+RPC events are typed Streams, not callback-style `on` listeners. They receive the
+RPC's events from all locations, each with required `location` and a normal
+prefixed type such as `rpc.acme.updated`. This differs from server-plugin handles,
+which are fixed to their own location. See [Effect plugin RPC](/build/plugins/effect/rpc) for
+definitions, schemas, registration, and live subscription semantics.
+
+## Local background service
+
+The Node-only `@opencode-ai/client/effect/service` entrypoint discovers, starts, authenticates, and stops the local
+background service as Effects.
+
+```sh
+bun add @effect/platform-node
+```
+
+Create an authenticated client for the ensured service.
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode-ai/client/effect"
+import { Service } from "@opencode-ai/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) => HttpClientRequest.setHeaders(request, Service.headers(endpoint))),
+    ),
+  )
+  return yield* client.health.get()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+Discover without starting, or stop the exact registered service.
+
+```ts
+const endpoint = yield * Service.discover()
+yield * Service.stop()
+```

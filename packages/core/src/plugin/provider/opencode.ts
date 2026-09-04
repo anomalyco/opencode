@@ -6,17 +6,14 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstab
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
-import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
-import { ConfigProviderV1 } from "../../v1/config/provider.js"
+import { ConfigProvider } from "@opencode-ai/schema/config/provider"
 import { Money } from "@opencode-ai/schema/money"
-import { ConfigProviderOptionsV1 } from "../../v1/config/provider-options.js"
-import { ConfigV1 } from "../../v1/config/config.js"
 
 const defaultServer = "https://opencode.ai/console"
 const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
-const RemoteResponse = Schema.Struct({ config: ConfigV1.Info })
+const RemoteResponse = Schema.Struct({ providers: Schema.Record(Schema.String, ConfigProvider.Info) })
 const Device = Schema.Struct({
   device_code: Schema.String,
   user_code: Schema.String,
@@ -89,7 +86,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
     const http = yield* HttpClient.HttpClient
     const loading = Semaphore.makeUnsafe(1)
     let connected = false
-    let providers: typeof ConfigV1.Info.Type.provider | undefined
+    let providers: typeof RemoteResponse.Type.providers | undefined
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
@@ -106,70 +103,84 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
         : undefined
     })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.update("opencode", (integration) => {
+    yield* ctx.integration.transform((editor) => {
+      editor.update("opencode", (integration) => {
         integration.name = "OpenCode"
       })
-      draft.method.update(oauth(http))
-      draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
+      editor.method.update(oauth(http))
+      editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
     yield* load()
     yield* ctx.catalog.transform((catalog) => {
       for (const [providerID, item] of Object.entries(providers ?? {})) {
+        const source = catalog.provider.get(item.canonical ?? providerID)
         catalog.provider.update(providerID, (provider) => {
+          if (source && source.provider !== provider)
+            Object.assign(provider, structuredClone(source.provider), { id: provider.id })
           provider.integrationID = Integration.ID.make("opencode")
+          if (item.canonical !== undefined) provider.canonical = item.canonical
           if (item.name !== undefined) provider.name = item.name
-          provider.package = item.npm ? Provider.aisdk(item.npm) : ""
-          provider.settings = {
-            ...provider.settings,
-            ...withoutCredentials(item.options),
-            ...(item.api ? { baseURL: item.api } : {}),
-          }
-          provider.headers = { ...provider.headers, ...item.options?.headers }
+          provider.package = item.package ?? provider.package
+          provider.settings = Provider.mergeOverlay(
+            withoutCredentials(provider.settings),
+            withoutCredentials(item.settings),
+          )
+          provider.headers = Provider.mergeHeaders(provider.headers, item.headers)
+          provider.body = Provider.mergeOverlay(provider.body, item.body)
         })
 
         for (const [modelID, config] of Object.entries(item.models ?? {})) {
+          const base = source?.models.get(config.modelID ?? modelID) ?? source?.models.get(modelID)
           catalog.model.update(providerID, modelID, (model) => {
-            if (config.family !== undefined) model.family = Model.Family.make(config.family)
+            Object.assign(model, structuredClone(base ?? model))
+            if (config.family !== undefined) model.family = config.family
             if (config.name !== undefined) model.name = config.name
-            if (config.id !== undefined) model.modelID = Model.ID.make(config.id)
-            model.compatibility = Model.compatibility(config.interleaved) ?? model.compatibility
-            if (config.provider !== undefined) {
-              model.package = config.provider.npm ? Provider.aisdk(config.provider.npm) : undefined
-              if (config.provider.api) model.settings = { ...model.settings, baseURL: config.provider.api }
-            }
-            if (config.tool_call !== undefined) model.capabilities.tools = config.tool_call
-            if (config.modalities?.input !== undefined) model.capabilities.input = [...config.modalities.input]
-            if (config.modalities?.output !== undefined) model.capabilities.output = [...config.modalities.output]
-            model.headers = { ...model.headers, ...config.headers }
-            model.settings = { ...model.settings, ...ConfigProviderOptionsV1.model(withoutCredentials(config.options)) }
-            if (config.variants !== undefined) {
-              model.variants ??= []
-              for (const [id, options] of Object.entries(config.variants)) {
-                const variantID = Model.VariantID.make(id)
-                let existing = model.variants.find((item) => item.id === variantID)
-                if (!existing) {
-                  existing = { id: variantID }
-                  model.variants.push(existing)
-                }
-                existing.headers = { ...existing.headers, ...options.headers }
-                existing.settings = {
-                  ...existing.settings,
-                  ...ConfigProviderOptionsV1.model(withoutCredentials(options)),
-                }
+            if (config.modelID !== undefined) model.modelID = config.modelID
+            if (config.compatibility !== undefined)
+              model.compatibility = { ...model.compatibility, ...config.compatibility }
+            model.package = config.package ?? (item.package !== undefined ? undefined : model.package)
+            if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
+            if (config.capabilities !== undefined)
+              model.capabilities = {
+                ...config.capabilities,
+                input: [...config.capabilities.input],
+                output: [...config.capabilities.output],
               }
+            model.settings = Provider.mergeOverlay(
+              withoutCredentials(model.settings),
+              withoutCredentials(config.settings),
+            )
+            model.headers = Provider.mergeHeaders(model.headers, config.headers)
+            model.body = Provider.mergeOverlay(model.body, config.body)
+            for (const variant of config.variants ?? []) {
+              let existing = model.variants.find((item) => item.id === variant.id)
+              if (!existing) {
+                existing = { id: variant.id }
+                model.variants.push(existing)
+              }
+              if (variant.settings !== undefined)
+                existing.settings = Provider.mergeOverlay(existing.settings, withoutCredentials(variant.settings))
+              if (variant.headers !== undefined)
+                existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
+              if (variant.body !== undefined)
+                existing.body = Provider.mergeOverlay(
+                  existing.body,
+                  variantBody(variant.body, model.package ?? item.package ?? source?.provider.package),
+                )
             }
-            if (config.release_date !== undefined) {
-              const released = Date.parse(config.release_date)
-              model.time.released = Number.isFinite(released) ? released : 0
-            }
-            if (config.cost !== undefined) {
-              model.cost = remoteCost(config.cost)
-            }
-            model.status = config.status ?? "active"
-            model.enabled = config.status !== "deprecated"
-            if (config.limit !== undefined) model.limit = { ...config.limit }
+            if (config.cost !== undefined)
+              model.cost = (Array.isArray(config.cost) ? config.cost : [config.cost]).map((cost) => ({
+                tier: cost.tier && { ...cost.tier },
+                input: cost.input,
+                output: cost.output,
+                cache: {
+                  read: cost.cache?.read ?? Money.USDPerMillionTokens.zero,
+                  write: cost.cache?.write ?? Money.USDPerMillionTokens.zero,
+                },
+              }))
+            model.enabled = !config.disabled
+            if (config.limit !== undefined) model.limit = { ...model.limit, ...config.limit }
           })
         }
       }
@@ -193,7 +204,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
     })
 
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
-    yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
+    yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
@@ -208,7 +219,7 @@ function fetchProviders(http: HttpClient.HttpClient, value: Credential.Value) {
   const token = value.type === "oauth" ? value.access : value.key
   return http
     .execute(
-      HttpClientRequest.get(`${server}/api/config`).pipe(
+      HttpClientRequest.get(`${server}/api/v2/config`).pipe(
         HttpClientRequest.acceptJson,
         HttpClientRequest.bearerToken(token),
         HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
@@ -219,14 +230,29 @@ function fetchProviders(http: HttpClient.HttpClient, value: Credential.Value) {
         if (response.status === 404) return Effect.undefined
         return HttpClientResponse.filterStatusOk(response).pipe(
           Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
-          Effect.map((remote) => remote.config.provider),
+          Effect.map((remote) => remote.providers),
         )
       }),
     )
 }
 
-function withoutCredentials(body: Readonly<Record<string, unknown>> | undefined) {
-  return Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => key !== "apiKey" && key !== "headers"))
+function variantBody(body: Readonly<Record<string, unknown>>, packageName: string | undefined) {
+  if (packageName !== Provider.aisdk("@ai-sdk/openai")) return body
+  const { reasoningEffort, reasoningSummary, ...native } = body
+  const reasoning = {
+    ...(typeof reasoningEffort === "string" ? { effort: reasoningEffort } : {}),
+    ...(typeof reasoningSummary === "string" ? { summary: reasoningSummary } : {}),
+  }
+  if (Object.keys(reasoning).length === 0) return body
+  // Existing Console variants stored SDK options here before V2 consumed raw bodies.
+  return Provider.mergeOverlay({ reasoning }, native)
+}
+
+function withoutCredentials<Value>(body: Readonly<Record<string, Value>> | undefined) {
+  return (
+    body &&
+    Object.fromEntries(Object.entries(body).filter(([key]) => !["apiKey", "authToken", "accessToken"].includes(key)))
+  )
 }
 
 function normalizeServer(input: unknown) {
@@ -240,30 +266,6 @@ function normalizeServer(input: unknown) {
     catch: (cause) =>
       new Error(`Invalid OpenCode server URL: ${cause instanceof Error ? cause.message : String(cause)}`),
   })
-}
-
-function remoteCost(input: NonNullable<(typeof ConfigProviderV1.Model.Type)["cost"]>) {
-  const base = {
-    input: Money.USDPerMillionTokens.make(input.input),
-    output: Money.USDPerMillionTokens.make(input.output),
-    cache: {
-      read: Money.USDPerMillionTokens.make(input.cache_read ?? 0),
-      write: Money.USDPerMillionTokens.make(input.cache_write ?? 0),
-    },
-  }
-  if (!input.context_over_200k) return [base]
-  return [
-    base,
-    {
-      tier: { type: "context" as const, size: 200_000 },
-      input: Money.USDPerMillionTokens.make(input.context_over_200k.input),
-      output: Money.USDPerMillionTokens.make(input.context_over_200k.output),
-      cache: {
-        read: Money.USDPerMillionTokens.make(input.context_over_200k.cache_read ?? 0),
-        write: Money.USDPerMillionTokens.make(input.context_over_200k.cache_write ?? 0),
-      },
-    },
-  ]
 }
 
 function poll(http: HttpClient.HttpClient, server: string, deviceCode: string, interval: Duration.Duration) {

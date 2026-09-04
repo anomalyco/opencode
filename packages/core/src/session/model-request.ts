@@ -2,12 +2,14 @@ export * as SessionModelRequest from "./model-request.js"
 
 import { HttpOptions, LanguageModel, LLM, LLMRequest, Message, SystemPart } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
+import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
+import type { Agent } from "@opencode-ai/schema/agent"
+import type { Model } from "@opencode-ai/schema/model"
 import type { Content } from "@opencode-ai/schema/tool"
 import { Cause, Config, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app.js"
-import { Model } from "../model.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
@@ -18,7 +20,6 @@ import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import type { SessionMessage } from "./message.js"
-import type { Agent } from "../agent.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
@@ -45,22 +46,29 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
   return decline ? Result.succeed(decline) : Result.fail(cause)
 }
 
-interface Prepared {
+export interface Prepared {
   readonly request: LLMRequest
   readonly options: StreamOptions
+  readonly retry: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
   /**
    * One request-scoped execution operation. Unknown and hook-removed calls
    * fail individually through the same seam.
    */
-  readonly executeTool: (input: Parameters<Tool.Snapshot["execute"]>[0]) => Effect.Effect<Tool.Result, ExecuteError>
+  readonly executeTool: (
+    input: Parameters<Tool.Snapshot["execute"]>[0],
+  ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
 }
 
 interface PrepareInput {
+  /** Which Session flow issues this request; request hooks receive it alongside the Session identity. */
+  readonly kind: SessionRequestKind
   readonly scope: {
     readonly session: SessionSchema.Info
     readonly agentID: Agent.ID
+    /** Agent whose context an auxiliary request reuses, without changing its request-hook identity. */
+    readonly contextAgentID?: Agent.ID
     readonly model: SessionRunnerModel.Resolved
-    /** Omitted for requests that carry no tools (title, compaction). */
+    /** Omitted for requests that carry no tool definitions, such as titles. */
     readonly tools?: Tool.Snapshot
   }
   readonly transcript: {
@@ -69,9 +77,8 @@ interface PrepareInput {
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /**
-   * Session context hooks shape the agent conversation. Requests that are not
-   * part of the conversation (title, compaction) opt out: their transcripts
-   * pass through unchanged.
+   * Session context hooks shape the agent conversation. Standalone requests
+   * such as titles opt out; compaction uses the selected Session context.
    */
   readonly contextHooks?: false
   /** Stateful Session WebSocket channels require an explicit durable-runner opt-in. */
@@ -193,6 +200,7 @@ interface HookScope {
   readonly sessionID: SessionSchema.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
 }
 
 const sessionHeaders = (session: Pick<SessionSchema.Info, "id" | "parentID" | "projectID">, app: App.Info) => ({
@@ -297,17 +305,17 @@ export const layer = Layer.effect(
       )
       // Hooks mutate this record in place: edit descriptions and schemas, rename, or remove.
       const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
-      const context =
-        input.contextHooks === false
-          ? { system: input.transcript.system, messages: input.transcript.messages, tools: definitions }
-          : yield* hooks.trigger("session", "context", {
-              sessionID: session.id,
-              agent: input.scope.agentID,
-              model: resolved.ref,
-              system: input.transcript.system,
-              messages: input.transcript.messages,
-              tools: definitions,
-            })
+      const context: PluginHooks.Domains["session"]["context"] = {
+        sessionID: session.id,
+        agent: input.scope.contextAgentID ?? input.scope.agentID,
+        model: resolved.ref,
+        system: input.transcript.system,
+        messages: input.transcript.messages,
+        tools: definitions,
+        generation: {},
+        providerOptions: {},
+      }
+      if (input.contextHooks !== false) yield* hooks.trigger("session", "context", context)
       // Match each surviving entry back to its tool, by recognizing a moved definition or
       // by key. Identity wins so a definition moved onto another tool's name still executes
       // the tool it describes. Entries matching neither were invented by a hook and dropped.
@@ -321,7 +329,7 @@ export const layer = Layer.effect(
       )
       const request = yield* applyModelHooks(
         hooks,
-        { sessionID: session.id, agent: input.scope.agentID, model: resolved.ref },
+        { sessionID: session.id, agent: input.scope.agentID, model: resolved.ref, kind: input.kind },
         LLM.request({
           model,
           http: {
@@ -333,6 +341,8 @@ export const layer = Layer.effect(
           messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
           tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
           toolChoice: input.toolChoice,
+          generation: Object.keys(context.generation).length === 0 ? undefined : context.generation,
+          providerOptions: Object.keys(context.providerOptions).length === 0 ? undefined : context.providerOptions,
         }),
       )
       const hasHttpHooks =
@@ -350,6 +360,7 @@ export const layer = Layer.effect(
             sessionID: session.id,
             agent: input.scope.agentID,
             model: resolved.ref,
+            kind: input.kind,
           })
         : undefined
       const options: StreamOptions = {
@@ -358,18 +369,15 @@ export const layer = Layer.effect(
           ? { webSocket: transport.bind(session.id) }
           : {}),
       }
-      const executeTool: Prepared["executeTool"] = (input) => {
-        const tool = hooked.get(input.call.name)
-        // A registered tool absent from the hooked set was removed or renamed by a hook.
-        if (!tool && registry.has(input.call.name))
-          return new Tool.Error({ message: `Tool is not available for this request: ${input.call.name}` })
-        return tools
-          .execute(tool ? { ...input, call: { ...input.call, name: tool.name } } : input)
+      const executeTool: Prepared["executeTool"] = (input) =>
+        tools
+          .execute({ ...input, definitions: hooked })
           .pipe(Effect.catchCauseFilter(declineDefect, (decline) => Effect.fail(decline)))
-      }
+      const retry: Prepared["retry"] = (event) => hooks.trigger("session", "retry", event).pipe(Effect.asVoid)
       return {
         request,
         options,
+        retry,
         executeTool,
       }
     })

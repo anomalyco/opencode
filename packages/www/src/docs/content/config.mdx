@@ -40,13 +40,15 @@ Project-specific configuration can use either form:
 /home/user/projects/my-app/.opencode/opencode.json(c)
 ```
 
-When OpenCode starts, it searches for configuration files from the current
-directory upward to the project root. It merges direct `opencode.json(c)` files
-from the project root toward the current directory, then does the same for
-files inside `.opencode` directories. A `.opencode` config therefore overrides
-every direct config, even when the direct config is closer to the current
-directory. Avoid mixing the two forms across one project hierarchy unless this
-precedence is intentional.
+During ordinary project discovery, OpenCode searches for configuration files
+from the current Location directory through every ancestor to the filesystem
+root, including directories above the detected project or repository root. It
+merges direct `opencode.json(c)` files from the farthest ancestor toward the
+current directory, then does the same for files inside `.opencode` directories.
+A discovered `.opencode` config therefore overrides every discovered direct
+config, even when the direct config is closer to the current directory. Avoid
+mixing the two forms across one directory hierarchy unless this precedence is
+intentional.
 
 For example, consider a monorepo with OpenCode started from
 `/home/user/projects/acme/packages/web`:
@@ -125,16 +127,15 @@ Choose the primary agent used when a session does not select one explicitly.
 See the [agents guide](/agents) for built-in and custom
 agents.
 
-### Autoupdate
+### Updates
 
-Control automatic updates from the global config. Set this to `false` to
-disable updates. The current beta treats `true` and `"notify"` identically and
-automatically installs compatible non-major updates; project-level values are
-ignored.
+Control update checks from the global config. Set `update` to `"disable"` to
+skip them or `"notify"` to show available updates before installing them.
+Project-level values are ignored.
 
 ```jsonc
 {
-  "autoupdate": false,
+  "update": "notify",
 }
 ```
 
@@ -417,7 +418,7 @@ See the [references guide](/references) for shorthand, visibility, and path reso
 
 ### Plugins
 
-Load plugins from packages or local files. Use the object form when a plugin
+Load plugins from packages or local plugin directories. Use the object form when a plugin
 accepts options.
 
 ```jsonc
@@ -425,7 +426,7 @@ accepts options.
   "plugins": [
     "opencode-example-plugin",
     {
-      "package": "./plugins/local.ts",
+      "package": "./plugins/local",
       "options": {
         "enabled": true,
       },
@@ -434,7 +435,7 @@ accepts options.
 }
 ```
 
-See the [plugins guide](/build/plugins) for plugin development and configuration.
+See the [plugins guide](/plugins) for plugin loading and configuration.
 
 ### Providers
 

@@ -13,11 +13,16 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
+import { TextReveal } from "@opencode-ai/ui/text-reveal"
+import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { BasicTool } from "../components/basic-tool"
+import { reasoningHeading } from "../timeline/projection"
 import { Card } from "@opencode-ai/ui/card"
 import type {
   PromptAgentAttachment,
   PromptFileAttachment,
   SessionMessageAssistant,
+  SessionMessageAssistantReasoning,
   SessionMessageCompaction,
   SessionMessageUser,
 } from "@opencode-ai/client/promise"
@@ -490,12 +495,72 @@ export function AssistantTextContent(props: {
   )
 }
 
-export function AssistantReasoningContent(props: { id: string; text: string; streaming: boolean }) {
+export function AssistantReasoningContent(props: {
+  id: string
+  content: SessionMessageAssistantReasoning
+  streaming: boolean
+  defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  onContentRendered?: () => void
+}) {
+  const i18n = useI18n()
+  const [state, setState] = createStore<{ open?: boolean }>({})
+  const open = () => props.open ?? state.open ?? props.defaultOpen ?? false
+  const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
+  const duration = createMemo(() => {
+    const time = props.content.time
+    if (time?.completed === undefined) return undefined
+    const total = Math.max(0, Math.round((time.completed - time.created) / 1000))
+    const numfmt = new Intl.NumberFormat(i18n.locale())
+    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
+    return i18n.t("ui.message.duration.minutesSeconds", {
+      minutes: numfmt.format(Math.floor(total / 60)),
+      seconds: numfmt.format(total % 60),
+    })
+  })
   return (
-    <Show when={props.text}>
-      <div data-component="reasoning-part" data-timeline-part-id={props.id}>
-        <PacedMarkdown text={props.text} cacheKey={props.id} streaming={props.streaming} />
-      </div>
-    </Show>
+    <div data-component="reasoning-part" data-timeline-part-id={props.id}>
+      <BasicTool
+        icon="mcp"
+        status={props.streaming ? "running" : "completed"}
+        compact
+        hasContent
+        allowOpenWhilePending
+        hideDetails={!props.content.text.trim()}
+        open={open()}
+        onOpenChange={(value) => {
+          setState("open", value)
+          props.onOpenChange?.(value)
+          props.onContentRendered?.()
+        }}
+        trigger={
+          <div data-slot="basic-tool-tool-info-structured">
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title">
+                <TextShimmer
+                  text={i18n.t(props.streaming ? "ui.sessionTurn.status.thinking" : "ui.message.thought")}
+                  active={props.streaming}
+                />
+              </span>
+              <Show
+                when={props.streaming && !open()}
+                fallback={
+                  <Show when={!props.streaming && duration()}>
+                    {(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}
+                  </Show>
+                }
+              >
+                <span data-slot="basic-tool-tool-subtitle">
+                  <TextReveal text={heading()} />
+                </span>
+              </Show>
+            </div>
+          </div>
+        }
+      >
+        <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
+      </BasicTool>
+    </div>
   )
 }

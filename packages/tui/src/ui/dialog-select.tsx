@@ -112,7 +112,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const [store, setStore] = createStore({
     selected: 0,
     filter: "",
-    input: "keyboard" as "keyboard" | "mouse",
   })
   const [focusedAction, setFocusedAction] = createSignal<number>()
   const actionFocused = createMemo(() => focusedAction() !== undefined)
@@ -201,12 +200,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return result
   })
 
-  // When the filter changes due to how TUI works, the mousemove might still be triggered
-  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard
-  // that the mouseover event doesn't trigger when filtering.
   createEffect(() => {
     filtered()
-    setStore("input", "keyboard")
     setFocusedAction(undefined)
   })
 
@@ -284,8 +279,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           selection = option
           if (!moved) return
           if (
-            (!props.preserveSelection && (props.current === undefined || props.focusCurrent === false)) ||
-            store.filter.length > 0
+            !props.preserveSelection &&
+            (props.current === undefined || props.focusCurrent === false || store.filter.length > 0)
           )
             return
           scrollAfterLayout(false, option.value)
@@ -384,7 +379,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   function submit() {
     if (props.locked) return
-    setStore("input", "keyboard")
     const index = focusedAction()
     if (index !== undefined) {
       trigger(actionItems()[index])
@@ -418,7 +412,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "Previous item",
           group: "Dialog",
           run() {
-            setStore("input", "keyboard")
             move(-1)
           },
         },
@@ -427,7 +420,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "Next item",
           group: "Dialog",
           run() {
-            setStore("input", "keyboard")
             move(1)
           },
         },
@@ -436,7 +428,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "Page up",
           group: "Dialog",
           run() {
-            setStore("input", "keyboard")
             move(-10)
           },
         },
@@ -445,7 +436,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "Page down",
           group: "Dialog",
           run() {
-            setStore("input", "keyboard")
             move(10)
           },
         },
@@ -455,7 +445,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           group: "Dialog",
           run() {
             if (props.locked) return
-            setStore("input", "keyboard")
             moveTo(0)
           },
         },
@@ -465,7 +454,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           group: "Dialog",
           run() {
             if (props.locked) return
-            setStore("input", "keyboard")
             moveTo(flat().length - 1)
           },
         },
@@ -538,7 +526,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   function trigger(item: Action | undefined) {
     if (props.locked || !item || isActionDisabled(item)) return
-    setStore("input", "keyboard")
     if (item.selection === "none") {
       item.onTrigger()
       return
@@ -709,20 +696,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           position="relative"
                           onMouseMove={() => {
                             if (props.locked) return
-                            setStore("input", "mouse")
                             setFocusedAction(undefined)
+                            const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
+                            if (index === -1 || index === store.selected) return
+                            moveTo(index)
                           }}
                           onMouseUp={() => {
                             if (props.locked) return
                             option.onSelect?.(dialog)
                             props.onSelect?.(option)
-                          }}
-                          onMouseOver={() => {
-                            if (props.locked) return
-                            if (store.input !== "mouse") return
-                            const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
-                            if (index === -1) return
-                            moveTo(index)
                           }}
                           onMouseDown={() => {
                             if (props.locked) return

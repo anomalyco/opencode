@@ -101,29 +101,42 @@ Unknown command IDs are rejected.
 
 ## Diff Viewer
 
-| ID                      | Default           | Description                              |
-| ----------------------- | ----------------- | ---------------------------------------- |
-| `diff.open`             | `none`            | Open diff viewer                         |
-| `diff.close`            | `escape,q`        | Close diff viewer                        |
-| `diff.down`             | `j,down`          | Move diff viewer down                    |
-| `diff.up`               | `k,up`            | Move diff viewer up                      |
-| `diff.page.down`        | `pagedown,ctrl+f` | Page diff viewer down                    |
-| `diff.page.up`          | `pageup,ctrl+b`   | Page diff viewer up                      |
-| `diff.toggle`           | `enter,space`     | Toggle diff viewer item                  |
-| `diff.expand`           | `right`           | Expand diff viewer item                  |
-| `diff.expand_all`       | `E`               | Expand all diff viewer folders           |
-| `diff.collapse`         | `left`            | Collapse diff viewer item                |
-| `diff.switch_focus`     | `tab`             | Switch diff viewer focus                 |
-| `diff.next_hunk`        | `]`               | Jump to next diff hunk                   |
-| `diff.previous_hunk`    | `[`               | Jump to previous diff hunk               |
-| `diff.next_file`        | `n`               | Jump to next diff file                   |
-| `diff.previous_file`    | `p`               | Jump to previous diff file               |
-| `diff.toggle_file_tree` | `b`               | Toggle diff viewer file tree             |
-| `diff.single_patch`     | `s`               | Toggle single patch view                 |
-| `diff.switch_source`    | `d`               | Switch diff viewer source                |
-| `diff.toggle_view`      | `v`               | Toggle diff viewer split or unified view |
-| `diff.mark_reviewed`    | `m`               | Toggle selected diff file reviewed       |
-| `diff.help`             | `?`               | Show more diff viewer shortcuts          |
+Press `d` (`diff.switch_source`) to choose **All**, **Committed**, or **Uncommitted**, or select **Base** to change the comparison branch. Choices are remembered until the TUI exits. Set the initial scope with [`diffs.source` in `cli.json`](/cli/config#diffs).
+
+Scrolling, paging, and start/end shortcuts always control the diff. There is no keyboard focus switch: click files to open them, click folders to expand or collapse them, and use the mouse wheel to scroll the file tree.
+
+Use `n` / `p` or `alt+down` / `alt+up` (Option on macOS) to move between files. Inside the diff viewer, the Alt shortcuts navigate files rather than session tabs.
+
+Press `m` to mark a file reviewed and collapse its patch body. In all-files view, press `m` again to unmark it and reopen the patch. Single-file view automatically advances to the next file when marking reviewed, but stays on the last file rather than wrapping. Unmarking a file never advances.
+
+Right-click a file in the sidebar or its diff heading for **Mark complete** (or **Mark incomplete**). This changes the same reviewed state as `m`. Completing a different file from its menu does not select it or advance the file currently being read.
+
+The shifted `diff.help` alternatives support terminals that report the Shift modifier when you press `?`.
+
+| ID                      | Default             | Description                              |
+| ----------------------- | ------------------- | ---------------------------------------- |
+| `diff.open`             | `none`              | Open diff viewer                         |
+| `diff.close`            | `escape,q`          | Close diff viewer                        |
+| `diff.down`             | `j,down`            | Move diff viewer down                    |
+| `diff.up`               | `k,up`              | Move diff viewer up                      |
+| `diff.page.down`        | `pagedown,ctrl+f`   | Page diff viewer down                    |
+| `diff.page.up`          | `pageup,ctrl+b`     | Page diff viewer up                      |
+| `diff.half_page.down`   | `ctrl+d`            | Scroll diff viewer down half a page      |
+| `diff.half_page.up`     | `ctrl+u`            | Scroll diff viewer up half a page        |
+| `diff.first`            | `gg,home`           | Go to the start of the diff              |
+| `diff.last`             | `shift+g,end`       | Go to the end of the diff                |
+| `diff.next_hunk`        | `]`                 | Jump to next diff hunk                   |
+| `diff.previous_hunk`    | `[`                 | Jump to previous diff hunk               |
+| `diff.next_file`        | `n,alt+down`        | Jump to next diff file                   |
+| `diff.previous_file`    | `p,alt+up`          | Jump to previous diff file               |
+| `diff.toggle_file_tree` | `b`                 | Toggle diff viewer file tree             |
+| `diff.single_patch`     | `s`                 | Toggle single patch view                 |
+| `diff.switch_source`    | `d`                 | Choose the diff review scope             |
+| `diff.toggle_view`      | `v`                 | Toggle diff viewer split or unified view |
+| `diff.mark_reviewed`    | `m`                 | Toggle selected diff file reviewed       |
+| `diff.help`             | `?,shift+?,shift+/` | Show more diff viewer shortcuts          |
+
+The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, and `diff.switch_focus` configuration entries are still accepted, but no longer register shortcuts.
 
 ## Appearance And Navigation
 
@@ -304,7 +317,12 @@ Unknown command IDs are rejected.
 | `composer.subagent.interrupt` | `ctrl+d` | Interrupt subagent   |
 | `composer.shell.up`           | `up`     | Previous shell       |
 | `composer.shell.down`         | `down`   | Next shell           |
+| `composer.shell.select`       | `return` | View shell output    |
 | `composer.shell.kill`         | `ctrl+d` | Kill shell command   |
+
+Select a running command in the **Shell** tab and press **Enter**, or click it, to view captured stdout and stderr.
+Use **↑/↓**, **Page Up/Down**, or **Home** to scroll, **End** to follow new output, and **Esc** to return without stopping the command.
+The viewer shows recent output and stays open after exit; output redirected to a file is not included.
 
 ## Dialogs And Autocomplete
 
@@ -331,6 +349,8 @@ Unknown command IDs are rejected.
 | `plugins.toggle`               | `space`       | Toggle plugin                       |
 | `dialog.mcp.toggle`            | `space`       | Toggle MCP server                   |
 | `dialog.plugins.install`       | `shift+i`     | Install plugin from plugin dialog   |
+| `dialog.plugins.update`        | `ctrl+u`      | Update plugin from plugin dialog    |
+| `dialog.plugins.check`         | `ctrl+r`      | Check for plugin updates            |
 
 ## Terminal And Plugins
 

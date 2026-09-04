@@ -329,7 +329,13 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
   usePaste((event) => {
     if (keymap.mode.current() !== FORM_MODE) return
-    if (!pasteCustom(stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))) return
+    const value = stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n")
+    if (store.editing && renderer.currentFocusedEditor === textarea) {
+      textarea.insertText(value)
+      event.preventDefault()
+      return
+    }
+    if (!pasteCustom(value)) return
     event.preventDefault()
   })
 
@@ -534,6 +540,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         run() {
           const text = textarea?.plainText ?? ""
           if (!text) {
+            if (textual()) {
+              cancel()
+              return
+            }
             setStore("editing", false)
             return
           }
@@ -897,7 +907,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                     }
                     return (
                       <box
-                        onMouseOver={() => setStore("selected", i())}
+                        onMouseMove={() => setStore("selected", i())}
                         onMouseDown={() => setStore("selected", i())}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
@@ -951,7 +961,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 </For>
                 <Show when={custom()}>
                   <box
-                    onMouseOver={() => setStore("selected", rows().length)}
+                    onMouseMove={() => setStore("selected", rows().length)}
                     onMouseDown={() => setStore("selected", rows().length)}
                     onMouseUp={() => {
                       if (renderer.getSelection()?.getSelectedText()) return

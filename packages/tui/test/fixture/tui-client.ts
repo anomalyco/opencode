@@ -135,6 +135,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       })
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/active") return json({ data: {} })
+    if (request.method === "POST" && /^\/api\/session\/[^/]+\/model$/.test(url.pathname))
+      return new Response(null, { status: 204 })
     if (url.pathname === "/api/permission/request")
       return json({
         location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
@@ -143,6 +145,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/api/form/request")
       return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
     if (/^\/api\/session\/[^/]+\/form$/.test(url.pathname)) return json({ data: [] })
+    if (/^\/api\/experimental\/session\/[^/]+\/terminal$/.test(url.pathname)) return json({ data: [] })
     if (
       ["/api/agent", "/api/model", "/api/provider", "/api/integration", "/api/command", "/api/skill"].includes(
         url.pathname,

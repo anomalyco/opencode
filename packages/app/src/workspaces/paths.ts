@@ -106,6 +106,10 @@ export function isWorkspaceSelection(project: WorkspaceProject | undefined, sele
   return isWorkspaceDirectory(project, selection)
 }
 
+export function workspaceSelectionDestination(selection: string, projectWorktree: string) {
+  return selection === "main" || sameDirectory(selection, projectWorktree) ? "main" : "create"
+}
+
 export function workspaceDefaultSelection(
   setting: WorkspaceDefaultDestination,
   lastUsed: WorkspaceLastUsed | undefined,

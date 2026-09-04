@@ -6,19 +6,22 @@ import type {
   PermissionRequest,
   SessionMessageAssistantTool,
   SessionMessageInfo,
+  SessionMessageUser,
   SessionInboxInfo,
 } from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { formatContextUsage } from "../util/session"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
+import { toolImageCommits, userImageCommits, type ImageCommit } from "./stream-v2.image"
+import { messagePrompt } from "./session.shared"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import { normalizeTool, toolOutputText } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
 import type {
   FooterApi,
+  FooterPatch,
   FooterView,
   LocalReplayRow,
   MiniPermissionRequest,
@@ -123,12 +126,17 @@ type ToolState = {
   started: boolean
 }
 
+type PendingPrompt = FooterQueuedPrompt & { files: SessionMessageUser["files"] }
+
 type State = {
   permissions: MiniPermissionRequest[]
   forms: MiniFormRequest[]
   globalForms: MiniFormRequest[]
   view: FooterView
   messageIDs: Set<string>
+  // Delivery can arrive before the admission response supplies the user content.
+  promotedMessages: Set<string>
+  imageIDs: Set<string>
   fragments: FragmentReconciler
   tools: Map<string, ToolState>
   toolSources: Map<string, SessionMessageAssistantTool>
@@ -147,13 +155,11 @@ type State = {
   executionEpoch: number
   buffered?: ReplayBuffer
   errors: Set<string>
-  pending: Map<string, FooterQueuedPrompt>
+  pending: Map<string, PendingPrompt>
   admitted: Set<string>
   stepModel: RunInput["model"]
   activeCompaction?: string
 }
-
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
 export function formatUnknownError(error: unknown): string {
   if (typeof error === "string") return error
@@ -184,12 +190,16 @@ function errorMessage(error: { message?: string; _tag?: string }) {
   return error.message || error._tag || "Session execution failed"
 }
 
-function pendingPrompt(item: SessionInboxInfo): FooterQueuedPrompt | undefined {
+function pendingPrompt(item: SessionInboxInfo): PendingPrompt | undefined {
   if (item.type !== "user") return undefined
   return {
     messageID: item.id,
-    prompt: { messageID: item.id, text: item.payload.text, parts: [] },
+    prompt: { messageID: item.id, ...messagePrompt(item.payload) },
+    files: item.payload.files,
     delivery: item.delivery,
+    ...(item.payload.skills?.length
+      ? { skills: item.payload.skills.map((skill) => ({ id: skill.id, name: skill.name })) }
+      : {}),
   }
 }
 
@@ -250,6 +260,7 @@ function promptFiles(next: SessionTurnInput) {
           {
             uri: part.url,
             name: part.filename,
+            ...(part.description === undefined ? {} : { description: part.description }),
             mention: promptFileMention(part),
           },
         ]
@@ -365,6 +376,7 @@ function messageIDFromEvent(id: string) {
 const catalogEvents = new Set([
   "catalog.updated",
   "integration.updated",
+  "credential.switched",
   "agent.updated",
   "command.updated",
   "skill.updated",
@@ -385,6 +397,12 @@ function skillCommit(messageID: string, name: string, skillID = messageID): Stre
     text: `→ Skill "${name}"`,
     phase: "start",
   }
+}
+
+function skillCommits(messageID: string, skills: FooterQueuedPrompt["skills"] = []) {
+  return Array.from(new Map(skills.map((skill) => [skill.id, skill])).values(), (skill) =>
+    skillCommit(messageID, skill.name, skill.id),
+  )
 }
 
 function compactionCommit(messageID: string): StreamCommit {
@@ -464,6 +482,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     globalForms: [],
     view: { type: "prompt" },
     messageIDs: new Set(),
+    promotedMessages: new Set(),
+    imageIDs: new Set(),
     fragments: createFragmentReconciler(),
     tools: new Map(),
     toolSources: new Map(),
@@ -522,7 +542,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     write([], { phase: "idle", status })
   }
 
-  const write = (commits: StreamCommit[], patch?: { phase?: "idle" | "running"; status?: string; usage?: string }) => {
+  const write = (commits: StreamCommit[], patch?: Pick<FooterPatch, "phase" | "status" | "usage">) => {
     if (state.closed || controller.signal.aborted || input.footer.isClosed) return
     if (!state.initial && state.buffered === undefined)
       commits.forEach((commit) => {
@@ -544,17 +564,49 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   let syncedPending: string[] | undefined
   const syncPending = () => {
-    const prompts = [...state.pending.values()].filter((item) => item.delivery === "queue")
-    const ids = prompts.map((item) => item.messageID)
+    const prompts = [...state.pending.values()]
+    const ids = prompts.map((item) => `${item.messageID}:${item.delivery}`)
     if (syncedPending?.length === ids.length && syncedPending.every((id, index) => id === ids[index])) return
     syncedPending = ids
     input.trace?.write("ui.patch", { pending: prompts.length })
     input.footer.event({ type: "queued.prompts", prompts })
   }
 
+  const freshImages = (commits: ImageCommit[], render = true) =>
+    commits.filter((commit) => {
+      const key = streamPartKey(commit.messageID, commit.partID)
+      if (state.imageIDs.has(key)) return false
+      state.imageIDs.add(key)
+      return render
+    })
+
+  const renderUser = (
+    messageID: string,
+    text: string,
+    files: SessionMessageUser["files"],
+    skills: FooterQueuedPrompt["skills"],
+    render = true,
+  ) => {
+    const visible = state.messageIDs.has(messageID)
+    state.messageIDs.add(messageID)
+    const images = freshImages(userImageCommits(messageID, files), render)
+    if (!render) return
+    write([
+      ...(!visible ? skillCommits(messageID, skills) : []),
+      ...(!visible && text.trim()
+        ? [{ kind: "user", source: "system", text, phase: "start", messageID } as const]
+        : []),
+      ...images,
+    ])
+  }
+
   const mergePending = (item: SessionInboxInfo) => {
     const prompt = pendingPrompt(item)
-    if (!prompt || state.messageIDs.has(prompt.messageID)) return
+    if (!prompt) return
+    if (state.promotedMessages.has(prompt.messageID)) {
+      renderUser(prompt.messageID, prompt.prompt.text, prompt.files, prompt.skills)
+      return
+    }
     state.admitted.add(prompt.messageID)
     state.pending.set(prompt.messageID, prompt)
     syncPending()
@@ -645,30 +697,26 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     state.finishedTools.add(key)
     state.tools.delete(key)
     if (!sourcePending(key)) state.toolSources.delete(key)
+    const images = freshImages(toolImageCommits(part, messageID), render)
     if (!render) return
     const phase = toolFinalPhase(part)
     if (part.state.status === "error" && delta)
       write([toolCommit(part, messageID, "progress", delta, input.location?.directory, version)])
     write([
       toolCommit(part, messageID, phase, phase === "progress" ? delta : undefined, input.location?.directory, version),
+      ...images,
     ])
   }
 
-  const renderMessage = (message: SessionMessageInfo, render: boolean, reuseVisibleWait: boolean) => {
+  const renderMessage = (message: SessionMessageInfo, render: boolean) => {
     if (message.type === "user") {
       const waiting = state.wait?.messageID === message.id
       const admitted = state.admitted.delete(message.id)
       if (state.wait && (admitted || (waiting && state.wait.failureMessageID === message.id)))
         promoteWait(state.wait, false, message.id)
       if (state.pending.delete(message.id)) syncPending()
-      if (state.messageIDs.has(message.id)) return
-      state.messageIDs.add(message.id)
-      if (!render) return
-      if (reuseVisibleWait && waiting) return
-      write([
-        ...(message.skills ?? []).map((skill) => skillCommit(message.id, skill.name, skill.id)),
-        { kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id },
-      ])
+      state.promotedMessages.add(message.id)
+      renderUser(message.id, message.text, message.files, message.skills, render)
       return
     }
     if (message.type === "skill") {
@@ -799,7 +847,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   const settleSession = async (client: OpenCodeClient) => {
     await client.session.wait({ sessionID: input.sessionID }, { signal: controller.signal })
-    for (const message of await projectedMessages(client, controller.signal)) renderMessage(message, true, true)
+    for (const message of await projectedMessages(client, controller.signal)) renderMessage(message, true)
     paintIdle(blockerStatus(state.view))
     await input.footer.idle()
   }
@@ -840,10 +888,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     return permissions.map((request) => permissionTool(request, state.toolSources))
   }
 
-  const hydrate = async (
-    attempt: Attempt,
-    next: { render: boolean; reuseVisibleWait: boolean; reconnect?: boolean },
-  ) => {
+  const hydrate = async (attempt: Attempt, next: { render: boolean; reconnect?: boolean }) => {
     const client = attempt.client
     const options = { signal: attempt.signal }
     const [projected, pending, permissions, forms, globals, active] = await Promise.all([
@@ -871,7 +916,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     syncPending()
     state.permissions = permissions
     pruneToolSources()
-    for (const message of projected) renderMessage(message, next.render, next.reuseVisibleWait)
+    for (const message of projected) renderMessage(message, next.render)
     state.permissions = await resolvePermissionSources(client, permissions, attempt)
     if (!current(attempt)) return
     pruneToolSources()
@@ -947,25 +992,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.inbox.delivered") {
-      const waiting = state.wait?.messageID === event.data.inboxID
       if (state.wait) promoteWait(state.wait, true, event.data.inboxID)
       state.admitted.delete(event.data.inboxID)
+      state.promotedMessages.add(event.data.inboxID)
       const pending = state.pending.get(event.data.inboxID)
       state.pending.delete(event.data.inboxID)
       syncPending()
-      const visible = state.messageIDs.has(event.data.inboxID)
-      if (waiting || pending) state.messageIDs.add(event.data.inboxID)
-      if (!waiting && pending && !visible) {
-        write([
-          {
-            kind: "user",
-            source: "system",
-            text: pending.prompt.text,
-            phase: "start",
-            messageID: event.data.inboxID,
-          },
-        ])
-      }
+      if (pending) renderUser(pending.messageID, pending.prompt.text, pending.files, pending.skills)
       write([], { phase: "running", status: "waiting for assistant" })
       return
     }
@@ -974,18 +1007,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!pending) return
       state.pending.set(event.data.inboxID, { ...pending, delivery: event.data.delivery })
       syncPending()
-      if (event.data.delivery === "queue") return
-      if (state.messageIDs.has(event.data.inboxID)) return
-      state.messageIDs.add(event.data.inboxID)
-      write([
-        {
-          kind: "user",
-          source: "system",
-          text: pending.prompt.text,
-          phase: "start",
-          messageID: event.data.inboxID,
-        },
-      ])
       return
     }
     if (event.type === "session.inbox.cancelled") {
@@ -1282,9 +1303,15 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         event.data.tokens.cache.write
       const limit = state.stepModel ? input.contextLimit?.(state.stepModel) : undefined
       state.stepModel = undefined
-      const usage = total > 0 ? formatContextUsage(total, limit ? Math.round((total / limit) * 100) : undefined) : ""
       write([], {
-        usage: event.data.cost ? `${usage} · ${money.format(event.data.cost)}` : usage,
+        usage:
+          total > 0 || event.data.cost
+            ? {
+                tokens: total,
+                percent: limit ? Math.round((total / limit) * 100) : undefined,
+                cost: event.data.cost || undefined,
+              }
+            : undefined,
       })
       return
     }
@@ -1415,7 +1442,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             serializeHydration(attempt, () =>
               hydrate(attempt, {
                 render: state.initial ? input.replay === true : true,
-                reuseVisibleWait: !state.initial,
                 reconnect: !state.initial,
               }),
             ),
@@ -1574,6 +1600,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!current(attempt)) return false
       reset = true
       state.messageIDs.clear()
+      state.imageIDs.clear()
       state.fragments.clear()
       state.tools.clear()
       state.toolSources.clear()
@@ -1584,7 +1611,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.activeCompaction = undefined
       state.shellEnded.clear()
       state.errors.clear()
-      await hydrate(attempt, { render: true, reuseVisibleWait: false })
+      await hydrate(attempt, { render: true })
     } catch (error) {
       failure = error
     } finally {
@@ -1594,6 +1621,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     try {
       if (reset) {
         for (const row of localRows) {
+          if (row.commit.image && row.commit.messageID && row.commit.partID) {
+            const key = streamPartKey(row.commit.messageID, row.commit.partID)
+            if (state.imageIDs.has(key)) continue
+            state.imageIDs.add(key)
+            input.footer.append(row.commit)
+            continue
+          }
           if (
             row.commit.messageID &&
             row.commit.partID &&
@@ -1657,17 +1691,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       )
     }
 
-    const selected = await resolveSelectedModel(input, client, next)
-    if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
     input.trace?.write("send.command", { sessionID: input.sessionID, messageID, command: command.name, delivery })
     return client.session.command(
       {
         sessionID: input.sessionID,
-        id: messageID,
         command: command.name,
-        arguments: command.arguments,
-        agent: next.agent,
-        model: selected,
+        text: command.arguments,
         files: attachments.files.length ? attachments.files : undefined,
         agents: agents.length ? agents : undefined,
         skills: skills.length ? skills : undefined,
@@ -1708,7 +1737,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         throw new Error("This prompt cannot be queued")
       if (!state.connected) throw new Error("Event stream is reconnecting")
       const client = sdk
-      if (next.agent)
+      if (!next.prompt.command && next.agent)
         await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
       if (!next.prompt.command) {
         const selected = await resolveSelectedModel(input, client, next)
@@ -1716,7 +1745,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         if (selected)
           await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
       }
-      mergePending(await admitPrompt(next, client, delivery))
+      const admitted = await admitPrompt(next, client, delivery)
+      if (admitted) mergePending(admitted)
       settlementClient = client
     },
     async waitForIdle() {
@@ -1754,13 +1784,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (command) {
-        await runTurnWait(
-          next,
-          messageID,
-          client,
-          () => admitPrompt(next, client, next.prompt.delivery ?? "steer"),
-          admitted,
-        )
+        await admitPrompt(next, client, next.prompt.delivery ?? "steer")
+        admitted?.()
         return
       }
 

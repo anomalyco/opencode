@@ -4,6 +4,9 @@
   "compatibility_date": "2026-07-25",
   "workers_dev": false,
   "preview_urls": false,
+  "cache": {
+    "enabled": true,
+  },
   "assets": {
     "binding": "ASSETS",
     "directory": "./dist/client",

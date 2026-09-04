@@ -1,18 +1,18 @@
 export * as SessionProjector from "./projector.js"
 
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Agent } from "../agent.js"
-import { Model } from "../model.js"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Model } from "@opencode-ai/schema/model"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
-import { Workspace } from "../workspace.js"
+import { Workspace } from "@opencode-ai/schema/workspace"
 import { InstructionState } from "./instruction-state.js"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { InstructionEntry } from "./instruction-entry.js"
@@ -23,10 +23,13 @@ import { Worktree } from "@opencode-ai/schema/worktree"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
+import { ProjectTable } from "../project/sql.js"
 
 type DatabaseService = Database.Interface["db"]
-type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
-type MessageEvent = Exclude<CurrentDurableEvent, typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type>
+type MessageEvent = Exclude<
+  SessionEvent.DurableEvent,
+  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type
+>
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
@@ -52,16 +55,16 @@ const forkTitle = (value?: string) => {
   return `${value} (fork #1)`
 }
 
-function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usage, sign = 1) {
+function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usage) {
   return db
     .update(SessionTable)
     .set({
-      cost: sql`${SessionTable.cost} + ${value.cost * sign}`,
-      tokens_input: sql`${SessionTable.tokens_input} + ${value.tokens.input * sign}`,
-      tokens_output: sql`${SessionTable.tokens_output} + ${value.tokens.output * sign}`,
-      tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning * sign}`,
-      tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read * sign}`,
-      tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write * sign}`,
+      cost: sql`${SessionTable.cost} + ${value.cost}`,
+      tokens_input: sql`${SessionTable.tokens_input} + ${value.tokens.input}`,
+      tokens_output: sql`${SessionTable.tokens_output} + ${value.tokens.output}`,
+      tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning}`,
+      tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read}`,
+      tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write}`,
       time_updated: sql`${SessionTable.time_updated}`,
     })
     .where(eq(SessionTable.id, sessionID))
@@ -72,7 +75,7 @@ function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usa
 const publishSessionUsage = Effect.fn("SessionProjector.publishUsage")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
-  sessionID: (typeof SessionEvent.Step.Ended.Type)["data"]["sessionID"],
+  sessionID: SessionSchema.ID,
 ) {
   const row = yield* db
     .select({
@@ -156,6 +159,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       title: forkTitle(parent.title ?? undefined),
       agent: parent.agent,
       model: parent.model,
+      metadata: parent.metadata,
       version: parent.version,
       cost: 0,
       tokens_input: 0,
@@ -445,6 +449,7 @@ const layer = Layer.effectDiscard(
             title: event.data.title,
             agent: event.data.agent,
             model: event.data.model,
+            metadata: event.data.metadata,
             version: event.data.version,
             time_created: event.created,
             time_updated: event.created,
@@ -478,18 +483,34 @@ const layer = Layer.effectDiscard(
     // are untouched: the session did not move, its directory got identified.
     yield* bus.project(Worktree.Event.Resolved, (event) =>
       Effect.gen(function* () {
-        const stale = [event.data.previous, Project.ID.global].filter((id) => id !== event.data.projectID)
-        if (stale.length === 0) return
+        const candidates = [
+          ...new Set(
+            [event.data.previous, Project.ID.global, ...(event.data.adopted ?? [])].filter(
+              (id) => id !== event.data.projectID,
+            ),
+          ),
+        ]
+        if (candidates.length === 0) return
         const rows = yield* db
-          .select({ id: SessionTable.id, directory: SessionTable.directory })
+          .select({
+            id: SessionTable.id,
+            directory: SessionTable.directory,
+            projectID: SessionTable.project_id,
+            canonical: ProjectTable.worktree,
+          })
           .from(SessionTable)
+          .innerJoin(ProjectTable, eq(SessionTable.project_id, ProjectTable.id))
           .where(
             and(
-              inArray(SessionTable.project_id, stale),
-              // Lexicographic range narrows the scan to prefix neighbors without
-              // LIKE escaping; FSUtil.contains below decides containment exactly.
-              gte(SessionTable.directory, event.data.directory),
-              lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
+              inArray(SessionTable.project_id, candidates),
+              isNull(SessionTable.workspace_id),
+              or(
+                event.data.adopted?.length ? inArray(SessionTable.project_id, event.data.adopted) : undefined,
+                and(
+                  gte(SessionTable.directory, event.data.directory),
+                  lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
+                ),
+              ),
             ),
           )
           .all()
@@ -497,12 +518,15 @@ const layer = Layer.effectDiscard(
         yield* Effect.forEach(
           rows,
           (row) => {
-            if (!FSUtil.contains(event.data.directory, row.directory)) return Effect.void
+            const directory = event.data.adopted?.includes(row.projectID)
+              ? row.canonical
+              : AbsolutePath.make(path.resolve(row.directory))
+            if (!FSUtil.contains(event.data.directory, directory)) return Effect.void
             return db
               .update(SessionTable)
               .set({
                 project_id: event.data.projectID,
-                path: RelativePath.make(path.relative(event.data.directory, row.directory).replaceAll("\\", "/")),
+                path: RelativePath.make(path.relative(event.data.directory, directory).replaceAll("\\", "/")),
                 // Self-assignment suppresses the column's $onUpdate: adoption is not activity.
                 time_updated: sql`${SessionTable.time_updated}`,
               })
@@ -561,6 +585,7 @@ const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie)
     })
+    yield* bus.project(SessionEvent.MessageContentUpdated, (event) => run(db, event))
     yield* bus.project(SessionEvent.UsageRecorded, (event) => applyUsage(db, event.data.sessionID, event.data))
     yield* bus.project(SessionEvent.Forked, (event) => projectFork(db, event))
     yield* bus.project(SessionEvent.InboxDelivered, (event) =>
@@ -639,6 +664,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Started, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)

@@ -12,7 +12,9 @@ import { AbsolutePath } from "../src/schema"
 const args = process.argv.slice(2)
 const iterationsIndex = args.indexOf("--iterations")
 const iterations = iterationsIndex === -1 ? 10 : Number(args[iterationsIndex + 1])
-const directory = args.find((arg, index) => !arg.startsWith("--") && index !== iterationsIndex + 1) ?? process.cwd()
+const directory =
+  args.find((arg, index) => !arg.startsWith("--") && (iterationsIndex === -1 || index !== iterationsIndex + 1)) ??
+  process.cwd()
 
 if (!Number.isInteger(iterations) || iterations < 1) {
   console.error("--iterations must be a positive integer")

@@ -9,9 +9,10 @@ import { WellKnown } from "@opencode-ai/core/wellknown"
 const authorize = <A, R>(effect: Effect.Effect<A, Integration.AuthorizationError, R>) =>
   effect.pipe(
     Effect.mapError(
-      () =>
+      (error) =>
         new InvalidRequestError({
-          message: "Authentication failed",
+          message:
+            error.cause instanceof Error && error.cause.message.trim() ? error.cause.message : "Authentication failed",
           kind: "integration_authorization",
         }),
     ),

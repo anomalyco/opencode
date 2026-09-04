@@ -89,10 +89,10 @@ function init() {
         setClosing = setClosingSignal
         return (
           <Kobalte
-            modal={stack().length <= layer + 1}
+            modal={stack().at(-1)?.id === id}
             open={!closing()}
             onOpenChange={(open: boolean) => {
-              if (open) return
+              if (open || stack().at(-1)?.id !== id) return
               close(id)
             }}
           >

@@ -1,0 +1,7 @@
+// A 96 x 48 PNG fixture: a golden sun over blue mountains and a lake.
+export const diffImageFixture = Uint8Array.from(
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAGAAAAAwCAIAAABhdOiYAAABX0lEQVR42u3XwQkCMRCF4eljwVoET3r1YAGCbCcebMMCrMEW7MWrLiysi+4ms5PJJDEP/lsu4WMGEtpf78gRgQBAAAIQgCSttse5o9ej/a0uoE6nj6kjNqKidX6NHDoyIypdZ2zk1REY6QPtDhdjncGoAKBOp89Ypy9roIFmnKUO3ygB0KSOohFTh2lkCuSg0WJapMMxsgNi6oQYCXS8RkZAi3RkRmIdh5HFO0hAI2AK1Jk0snhJB+owjVR0voyi/8VUaLxMijRz35EoQOo6k0aRdEKMKKHOl1FUHbERJaQZZ6AjM6KqdARGlJbGXmepEVWos8iI6tThG1ESmhx0mEZUsw7HiCrX8RoRdPrmLkxNe0aOAAQgAE32vJ3GAQgTBKBIyxW4aNSsN58wMh4gSHGBipVy7Jdsy3xA1Y8VgBSB8hb0Lpds0VSB/nESUwAVhZgrUDaOhQPFR6wAKMzxDTghptXEGbWAAAAAAElFTkSuQmCC",
+  ),
+  (character) => character.charCodeAt(0),
+)

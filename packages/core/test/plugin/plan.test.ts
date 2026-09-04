@@ -72,6 +72,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
       },
       tool: {
         transform: () => Effect.die("unused tool.transform"),
+        reload: () => Effect.die("unused tool.reload"),
         hook: (name, callback) => {
           if (name === "execute.after") {
             // Hook names and callbacks are correlated, but TypeScript does not narrow this generic registration API.
@@ -123,6 +124,8 @@ const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => (
   system: [],
   messages,
   tools: {},
+  generation: {},
+  providerOptions: {},
 })
 
 type ToolErrorEvent = Extract<ToolHooks["execute.after"], { readonly status: "error" }>
@@ -163,7 +166,7 @@ describe("plan plugin reminders", () => {
       const { persisted } = yield* run([agentSelected(plan, build), agentSelected(build, plan)])
       yield* settle(persisted, 2)
       expect(persisted[0]).toContain("You are in Plan mode")
-      expect(persisted[0]).toContain("optionally create or update plan documents")
+      expect(persisted[0]).toContain("Do not create or update plan files unless the user explicitly asks you to")
       expect(persisted[0]).toContain(planDirectory)
       expect(persisted[0]).toContain("Do not modify any other files")
       expect(persisted[1]).toContain("NO LONGER in Plan mode")

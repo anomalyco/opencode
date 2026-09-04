@@ -34,8 +34,8 @@ describe("built-in web search providers", () => {
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const websearch = yield* WebSearch.Service
-      const registration = yield* webSearchHost(websearch).transform((draft) => {
-        draft.add({
+      const registration = yield* webSearchHost(websearch).transform((editor) => {
+        editor.add({
           id: "test-websearch",
           name: "Test Web Search",
           execute: (input) => Effect.succeed([{ url: "https://example.com", content: input.query, time: {} }]),

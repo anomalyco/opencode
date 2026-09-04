@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "openai/gpt-oss-20b",
+    "tags": ["prefix:groq-chat", "provider:groq", "protocol:groq-chat", "text", "usage"],
+    "name": "groq-chat/streams-text-with-usage",
+    "recordedAt": "2026-08-26T14:40:09.833Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"openai/gpt-oss-20b\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly one word: hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"reasoning_effort\":\"low\",\"max_completion_tokens\":512,\"include_reasoning\":false,\"service_tier\":\"on_demand\",\"user\":\"recorded-test\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"chatcmpl-660048b0-3c99-4215-a582-e116b77eb881\",\"object\":\"chat.completion.chunk\",\"created\":1787755209,\"model\":\"openai/gpt-oss-20b\",\"system_fingerprint\":\"fp_66891002f6\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"logprobs\":null,\"finish_reason\":null}],\"x_groq\":{\"id\":\"req_01m0z87915eep9bpf10gg7331e\",\"seed\":94036161}}\n\ndata: {\"id\":\"chatcmpl-660048b0-3c99-4215-a582-e116b77eb881\",\"object\":\"chat.completion.chunk\",\"created\":1787755209,\"model\":\"openai/gpt-oss-20b\",\"system_fingerprint\":\"fp_66891002f6\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-660048b0-3c99-4215-a582-e116b77eb881\",\"object\":\"chat.completion.chunk\",\"created\":1787755209,\"model\":\"openai/gpt-oss-20b\",\"system_fingerprint\":\"fp_66891002f6\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"x_groq\":{\"id\":\"req_01m0z87915eep9bpf10gg7331e\",\"usage\":{\"queue_time\":0.10886435,\"prompt_tokens\":78,\"prompt_time\":0.003693734,\"completion_tokens\":20,\"completion_time\":0.020459983,\"total_tokens\":98,\"total_time\":0.024153717,\"completion_tokens_details\":{\"reasoning_tokens\":10}}},\"usage\":{\"queue_time\":0.10886435,\"prompt_tokens\":78,\"prompt_time\":0.003693734,\"completion_tokens\":20,\"completion_time\":0.020459983,\"total_tokens\":98,\"total_time\":0.024153717,\"completion_tokens_details\":{\"reasoning_tokens\":10}}}\n\ndata: {\"id\":\"chatcmpl-660048b0-3c99-4215-a582-e116b77eb881\",\"object\":\"chat.completion.chunk\",\"created\":1787755209,\"model\":\"openai/gpt-oss-20b\",\"system_fingerprint\":\"fp_66891002f6\",\"choices\":[],\"usage\":{\"queue_time\":0.10886435,\"prompt_tokens\":78,\"prompt_time\":0.003693734,\"completion_tokens\":20,\"completion_time\":0.020459983,\"total_tokens\":98,\"total_time\":0.024153717,\"completion_tokens_details\":{\"reasoning_tokens\":10}},\"service_tier\":\"on_demand\"}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

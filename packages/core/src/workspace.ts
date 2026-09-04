@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm"
 import { Clock, Context, Deferred, Duration, Effect, Exit, FiberSet, Layer, Ref, Schedule, Schema, Scope } from "effect"
 import { systemError } from "effect/PlatformError"
 import { make } from "effect/unstable/process/ChildProcessSpawner"
-import type { Driver as EnvironmentDriver } from "./environment/driver.js"
+import type { EnvironmentDriver } from "./environment/driver.js"
 import { Database } from "./database/database.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { WorkspaceDriver } from "./workspace/driver.js"
@@ -25,19 +25,29 @@ export class Info extends Schema.Class<Info>("Workspace.Info")({
 
 export class NotFound extends Schema.TaggedError<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {}
 
+export class CreateConflict extends Schema.TaggedError<CreateConflict>()("Workspace.CreateConflict", {
+  workspaceID: ID,
+  provider: Schema.String,
+  existingProvider: Schema.String,
+}) {}
+
 export interface Interface {
   /** Instantly commits a logical workspace ID. No provider work happens here. */
-  readonly create: (provider: string) => Effect.Effect<ID, WorkspaceDriver.ProviderNotFound>
+  readonly create: (input: {
+    readonly id?: ID
+    readonly provider: string
+  }) => Effect.Effect<ID, CreateConflict | WorkspaceDriver.ProviderNotFound>
   /** Starts or joins the shared attempt that makes the backing resource real, then returns it. */
   readonly provision: (
     workspaceID: ID,
   ) => Effect.Effect<Info, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
   readonly connect: (
     workspaceID: ID,
-  ) => Effect.Effect<EnvironmentDriver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  ) => Effect.Effect<EnvironmentDriver.Driver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  /** Makes the workspace absent; reports whether this call destroyed an existing workspace. */
   readonly destroy: (
     workspaceID: ID,
-  ) => Effect.Effect<void, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  ) => Effect.Effect<Workspace.DestroyResult, WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
 }
 
 export interface Options {
@@ -49,7 +59,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Wo
 
 interface Connection {
   readonly driver: WorkspaceDriver.Interface
-  readonly environment: EnvironmentDriver
+  readonly environment: EnvironmentDriver.Driver
   readonly saveBinding: (binding: WorkspaceDriver.Binding) => Effect.Effect<void>
   readonly lastActivity: Ref.Ref<number>
   readonly active: Ref.Ref<number>
@@ -79,13 +89,11 @@ const layer = (options: Options) =>
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       const idleThreshold = Duration.toMillis(options.idleThreshold ?? Duration.minutes(20))
 
+      const find = (workspaceID: ID) =>
+        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie)
+
       const load = Effect.fn("Workspace.load")(function* (workspaceID: ID) {
-        const row = yield* db
-          .select()
-          .from(WorkspaceTable)
-          .where(eq(WorkspaceTable.id, workspaceID))
-          .get()
-          .pipe(Effect.orDie)
+        const row = yield* find(workspaceID)
         if (!row) return yield* new NotFound({ workspaceID })
         return row
       })
@@ -207,15 +215,39 @@ const layer = (options: Options) =>
       }).pipe(Effect.repeat(Schedule.spaced(options.pollInterval ?? Duration.minutes(1))), Effect.forkScoped)
 
       return Service.of({
-        create: Effect.fn("Workspace.create")(function* (provider) {
-          yield* registry.get(provider)
-          const workspaceID = ID.create()
-          const now = yield* Clock.currentTimeMillis
-          yield* db
-            .insert(WorkspaceTable)
-            .values({ id: workspaceID, provider, binding: null, created_at: now, last_used_at: now })
-            .run()
+        create: Effect.fn("Workspace.create")(function* (input) {
+          const workspaceID = input.id ?? ID.create()
+          const existing = yield* db
+            .select({ provider: WorkspaceTable.provider })
+            .from(WorkspaceTable)
+            .where(eq(WorkspaceTable.id, workspaceID))
+            .get()
             .pipe(Effect.orDie)
+          if (existing) {
+            if (existing.provider === input.provider) return workspaceID
+            return yield* new CreateConflict({
+              workspaceID,
+              provider: input.provider,
+              existingProvider: existing.provider,
+            })
+          }
+          yield* registry.get(input.provider)
+          const now = yield* Clock.currentTimeMillis
+          const inserted = yield* db
+            .insert(WorkspaceTable)
+            .values({ id: workspaceID, provider: input.provider, binding: null, created_at: now, last_used_at: now })
+            .onConflictDoNothing()
+            .returning({ id: WorkspaceTable.id })
+            .get()
+            .pipe(Effect.orDie)
+          if (inserted) return workspaceID
+          const row = yield* load(workspaceID).pipe(Effect.orDie)
+          if (row.provider !== input.provider)
+            return yield* new CreateConflict({
+              workspaceID,
+              provider: input.provider,
+              existingProvider: row.provider,
+            })
           return workspaceID
         }),
         provision,
@@ -267,9 +299,10 @@ const layer = (options: Options) =>
             attempts.delete(workspaceID)
             Deferred.doneUnsafe(attempt, Exit.fail(new NotFound({ workspaceID })))
           }
-          yield* locks.withLock(workspaceID)(
+          return yield* locks.withLock(workspaceID)(
             Effect.gen(function* () {
-              const row = yield* load(workspaceID)
+              const row = yield* find(workspaceID)
+              if (!row) return { destroyed: false }
               const connection = connections.get(workspaceID)
               connections.delete(workspaceID)
               if (connection) yield* Scope.close(connection.scope, Exit.void)
@@ -284,6 +317,7 @@ const layer = (options: Options) =>
                 ),
               )
               yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).run().pipe(Effect.orDie)
+              return { destroyed: true }
             }),
           )
         }),

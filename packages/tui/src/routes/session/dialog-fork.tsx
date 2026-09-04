@@ -75,7 +75,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
       when={!pending()}
       fallback={
         <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
-          <Spinner>Forking session...</Spinner>
+          <Spinner>Forking session…</Spinner>
         </box>
       }
     >

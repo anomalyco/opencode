@@ -515,7 +515,10 @@ describe("Gemini route", () => {
         {
           role: "model",
           parts: [
-            { functionCall: { id: "call_image", name: "read", args: { path: "pixel.png" } }, thoughtSignature: "sig_1" },
+            {
+              functionCall: { id: "call_image", name: "read", args: { path: "pixel.png" } },
+              thoughtSignature: "sig_1",
+            },
           ],
         },
         {
@@ -606,10 +609,7 @@ describe("Gemini route", () => {
       expect(prepared.body.contents).toEqual([
         {
           role: "model",
-          parts: [
-            { functionCall: { name: "shot", args: {} } },
-            { functionCall: { name: "shot", args: {} } },
-          ],
+          parts: [{ functionCall: { name: "shot", args: {} } }, { functionCall: { name: "shot", args: {} } }],
         },
         {
           role: "user",
@@ -906,6 +906,142 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("assigns unique ids to separated reasoning blocks", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [{ text: "A", thought: true, thoughtSignature: "reasoning_sig_a" }],
+              },
+            },
+          ],
+        },
+        {
+          candidates: [
+            {
+              content: { role: "model", parts: [{ text: "X", thoughtSignature: "text_sig_x" }] },
+            },
+          ],
+        },
+        {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [{ text: "B", thought: true, thoughtSignature: "reasoning_sig_b" }],
+              },
+            },
+          ],
+        },
+        {
+          candidates: [
+            {
+              content: { role: "model", parts: [{ text: "Y", thoughtSignature: "text_sig_y" }] },
+              finishReason: "STOP",
+            },
+          ],
+        },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+      const starts = response.events.filter((event) => event.type === "reasoning-start")
+      const deltas = response.events.filter((event) => event.type === "reasoning-delta")
+      const ends = response.events.filter((event) => event.type === "reasoning-end")
+
+      expect(starts.map((event) => event.id)).toEqual(["reasoning-0", "reasoning-1"])
+      expect(starts[0]?.id).not.toBe(starts[1]?.id)
+      expect(deltas.map((event) => ({ id: event.id, text: event.text }))).toEqual([
+        { id: "reasoning-0", text: "A" },
+        { id: "reasoning-1", text: "B" },
+      ])
+      expect(ends.map((event) => event.id)).toEqual(["reasoning-0", "reasoning-1"])
+      expect(response.events.filter((event) => event.type === "text-start").map((event) => event.id)).toEqual([
+        "text-0",
+        "text-1",
+      ])
+      expect(response.events.filter((event) => event.type === "text-delta").map((event) => event.id)).toEqual([
+        "text-0",
+        "text-1",
+      ])
+      expect(response.events.filter((event) => event.type === "text-end").map((event) => event.id)).toEqual([
+        "text-0",
+        "text-1",
+      ])
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "A",
+          providerMetadata: { google: { thoughtSignature: "reasoning_sig_a" } },
+        },
+        {
+          type: "text",
+          text: "X",
+          providerMetadata: { google: { thoughtSignature: "text_sig_x" } },
+        },
+        {
+          type: "reasoning",
+          text: "B",
+          providerMetadata: { google: { thoughtSignature: "reasoning_sig_b" } },
+        },
+        {
+          type: "text",
+          text: "Y",
+          providerMetadata: { google: { thoughtSignature: "text_sig_y" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("ignores unknown response parts", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                {
+                  content: {
+                    role: "model",
+                    parts: [
+                      { text: "Hello " },
+                      { executableCode: { language: "PYTHON", code: "print('ignored')" } },
+                      { text: "world" },
+                    ],
+                  },
+                  finishReason: "STOP",
+                },
+              ],
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello world")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "STOP" })
+    }),
+  )
+
+  it.effect("rejects malformed recognized response parts", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [{ content: { role: "model", parts: [{ text: 42 }] } }],
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error).toBeInstanceOf(AIError)
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
+      expect(error.message).toContain("Invalid google/gemini stream event")
+    }),
+  )
+
   it.effect("preserves thoughtSignature for reasoning and tool-call continuation", () =>
     Effect.gen(function* () {
       const body = sseEvents({
@@ -1023,7 +1159,9 @@ describe("Gemini route", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
-          messages: [Message.assistant([{ type: "text", text: "All done.", providerMetadata: delta?.providerMetadata }])],
+          messages: [
+            Message.assistant([{ type: "text", text: "All done.", providerMetadata: delta?.providerMetadata }]),
+          ],
         }),
       )
       expect(prepared.body.contents).toEqual([
@@ -1227,6 +1365,56 @@ describe("Gemini route", () => {
           usage,
         },
       ])
+    }),
+  )
+
+  it.effect("separates text blocks around streamed tool calls", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                { text: "before" },
+                { functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } } },
+                { text: "after" },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.slice(1, 8)).toEqual([
+        { type: "text-start", id: "text-0" },
+        { type: "text-delta", id: "text-0", text: "before" },
+        { type: "text-end", id: "text-0" },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "text-start", id: "text-1" },
+        { type: "text-delta", id: "text-1", text: "after" },
+        { type: "text-end", id: "text-1" },
+      ])
+      const textStarts = response.events.filter((event) => event.type === "text-start")
+      expect(textStarts[0]?.id).not.toBe(textStarts[1]?.id)
+      expect(response.message.content).toEqual([
+        { type: "text", text: "before" },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        { type: "text", text: "after" },
+      ])
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "STOP" })
     }),
   )
 
@@ -1524,9 +1712,7 @@ describe("Gemini route", () => {
               { candidates: [{ content: { role: "model", parts: null } }] },
               { candidates: [{ content: null, finishReason: null }] },
               {
-                candidates: [
-                  { content: { role: "model", parts: [{ text: "Hello" }] }, finishReason: "STOP" as const },
-                ],
+                candidates: [{ content: { role: "model", parts: [{ text: "Hello" }] }, finishReason: "STOP" as const }],
               },
             ),
           ),

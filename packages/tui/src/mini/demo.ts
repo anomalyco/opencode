@@ -32,6 +32,7 @@ import type {
 } from "./types"
 
 const KINDS = [
+  "motion",
   "markdown",
   "table",
   "text",
@@ -152,6 +153,7 @@ type State = {
   perms: Map<string, Perm>
   forms: Map<string, FormRequest>
   started: Set<string>
+  motion?: AbortController
 }
 
 type Input = {
@@ -814,6 +816,17 @@ function emitForm(state: State, kind: FormKind = "question"): void {
 }
 
 async function emitFmt(state: State, kind: string, body: string, signal?: AbortSignal): Promise<boolean> {
+  if (kind === "motion") {
+    note(state.footer, "Working indicator demo: 70 seconds, no model calls. Interrupt to stop early.")
+    const controller = new AbortController()
+    state.motion = controller
+    try {
+      await wait(70_000, signal ? AbortSignal.any([controller.signal, signal]) : controller.signal)
+    } finally {
+      state.motion = undefined
+    }
+    return true
+  }
   if (kind === "text") {
     await emitText(state, body || SAMPLE_MARKDOWN, signal)
     return true
@@ -900,6 +913,7 @@ function intro(state: State): void {
       "- /form question",
       "- /form external",
       "- /fmt markdown",
+      "- /fmt motion",
       "- /fmt table",
       "- /fmt text your custom text",
     ].join("\n"),
@@ -932,6 +946,16 @@ export function createRunDemo(input: Input) {
     const cmd = head ? `/${head.name}` : ""
 
     clearSubagent(state.footer)
+
+    if (line.mode !== "shell" && ["/help", "/permission", "/form", "/fmt"].includes(cmd)) {
+      state.footer.append({
+        kind: "user",
+        text: line.text,
+        phase: "start",
+        source: "system",
+        messageID: line.messageID,
+      })
+    }
 
     if (cmd === "/help") {
       intro(state)
@@ -1037,6 +1061,11 @@ export function createRunDemo(input: Input) {
   return {
     start,
     prompt,
+    interrupt() {
+      if (!state.motion) return false
+      state.motion.abort()
+      return true
+    },
     permission,
     formReply,
     formCancel,

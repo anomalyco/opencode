@@ -74,6 +74,8 @@ export interface GrepInput {
   readonly pattern: string
   readonly file?: string
   readonly include?: string
+  readonly literal?: boolean
+  readonly caseSensitive?: boolean
   readonly limit: number
   readonly signal?: AbortSignal
 }
@@ -134,10 +136,9 @@ const layer = Layer.effect(
             }),
             Stream.take(input.limit + 1),
             Stream.runCollect,
-            Effect.map((chunk) => [...chunk]),
           )
           const truncated = rows.length > input.limit
-          if (truncated) return { items: rows.slice(0, input.limit), truncated, partial: false }
+          if (truncated) return rows.slice(0, input.limit)
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
@@ -147,7 +148,7 @@ const layer = Layer.effect(
           if (code !== 0 && code !== 1 && code !== 2) {
             return yield* failure(stderr.trim() || `ripgrep failed with code ${code}`)
           }
-          return { items: code === 1 ? [] : rows, truncated: false, partial: code === 2 }
+          return code === 1 ? [] : rows
         }),
       )
       const abortable = input.signal ? program.pipe(Effect.raceFirst(waitForAbort(input.signal))) : program
@@ -178,7 +179,7 @@ const layer = Layer.effect(
           parse: (line) => Effect.succeed(normalizePath(line)),
         }).pipe(
           Effect.map((result) =>
-            result.items.map((relative) =>
+            result.map((relative) =>
               Entry.make({
                 path: RelativePath.make(relative),
                 type: "file",
@@ -212,10 +213,7 @@ const layer = Layer.effect(
             )
           },
           onItem: input.onEntry,
-        }).pipe(
-          Effect.map((result) => result.items),
-          Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
-        ),
+        }).pipe(Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause)))),
       grep: (input) =>
         run<RawMatchData>({
           ...input,
@@ -224,6 +222,8 @@ const layer = Layer.effect(
             "--json",
             "--hidden",
             "--no-messages",
+            ...(input.literal ? ["--fixed-strings"] : []),
+            ...(input.caseSensitive === false ? ["--ignore-case"] : []),
             ...(input.include ? [`--glob=${input.include}`] : []),
             "--glob=!**/.git/**",
             "--",
@@ -248,7 +248,7 @@ const layer = Layer.effect(
             ),
         }).pipe(
           Effect.map((result) =>
-            result.items.map((match) =>
+            result.map((match) =>
               Match.make({
                 entry: Entry.make({
                   path: RelativePath.make(match.path.text),

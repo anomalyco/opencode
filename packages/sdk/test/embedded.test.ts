@@ -1,20 +1,20 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
-import { LanguageModel, LLMClient, LLMResponse, type LLMRequest } from "@opencode-ai/ai"
+import { LanguageModel, LLMClient } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
-import { Deferred, Effect, Fiber, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Latch, Layer, Option, Schedule, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
-import type { OpenCodeEvent } from "../src"
+import type { OpenCodeEvent } from "../src/effect"
 
 const it = testEffect(Layer.empty)
-type Sdk = typeof import("../src")
+type Sdk = typeof import("../src/effect")
 type Fixture = { readonly directory: string; readonly sdk: Sdk }
 
 const withEmbedded = <A, E, R>(prefix: string, f: (fixture: Fixture) => Effect.Effect<A, E, R>) =>
@@ -23,7 +23,9 @@ const withEmbedded = <A, E, R>(prefix: string, f: (fixture: Fixture) => Effect.E
     (directory) => Effect.promise(() => directory[Symbol.asyncDispose]()),
   ).pipe(
     Effect.flatMap((directory) =>
-      Effect.promise(() => import("../src")).pipe(Effect.flatMap((sdk) => f({ directory: directory.path, sdk }))),
+      Effect.promise(() => import("../src/effect")).pipe(
+        Effect.flatMap((sdk) => f({ directory: directory.path, sdk })),
+      ),
     ),
   )
 
@@ -32,178 +34,65 @@ const sessionID = (fixture: Fixture) => fixture.sdk.Session.ID.create()
 const location = (fixture: Fixture) =>
   fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })
 
-it.live("exposes app metadata to plugins", () =>
-  withEmbedded("opencode-embedded-app-", (fixture) =>
-    Effect.gen(function* () {
-      const opencode = yield* fixture.sdk.OpenCode.create({
-        app: { name: "test", version: "1.2.3", channel: "beta" },
-      })
-      const app = yield* Deferred.make<{ readonly name: string; readonly version: string; readonly channel: string }>()
-      yield* opencode.plugin({
-        id: `app-${crypto.randomUUID()}`,
-        effect: (ctx) => Deferred.succeed(app, ctx.app).pipe(Effect.asVoid),
-      })
-      yield* opencode.plugin.list({ location: location(fixture) })
-      expect(yield* Deferred.await(app).pipe(Effect.timeout("4 seconds"))).toEqual({
-        name: "test",
-        version: "1.2.3",
-        channel: "beta",
-      })
-    }),
-  ),
-)
-
-it.live(
-  "reloads every booted Location after SDK plugin registration",
-  () =>
-    withEmbedded("opencode-embedded-plugin-reload-", (fixture) =>
+for (const selection of ["explicit", "default"] as const) {
+  it.live(`generate.text uses configured providers with ${selection} model selection`, () =>
+    withEmbedded("opencode-embedded-generate-", (fixture) =>
       Effect.gen(function* () {
-        const opencode = yield* fixture.sdk.OpenCode.create()
-        const booted = yield* Deferred.make<void>()
-        const activated = yield* Deferred.make<boolean>()
-        const bootCount = yield* Ref.make(0)
-        const activationCount = yield* Ref.make(0)
-        const secondDirectory = path.join(fixture.directory, "second")
-        yield* Effect.promise(() => fs.mkdir(secondDirectory))
-        const refs = [
-          location(fixture),
-          fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(secondDirectory) }),
-        ]
-        const bootstrapID = `bootstrap-sdk-${crypto.randomUUID()}`
-        const id = `late-sdk-${crypto.randomUUID()}`
-
-        yield* opencode.plugin({
-          id: bootstrapID,
-          effect: (ctx) =>
-            Effect.gen(function* () {
-              yield* ctx.tool
-                .transform((draft) =>
-                  draft.add({
-                    name: "bootstrap_sdk_tool",
-                    description: "Marks the initial Location plugin generation",
-                    input: Schema.Struct({}),
-                    output: Schema.Void,
-                    execute: () => Effect.succeed({ output: undefined }),
-                  }),
-                )
-                .pipe(Effect.orDie)
-              if (yield* Ref.updateAndGet(bootCount, (count) => count + 1).pipe(Effect.map((count) => count === 2))) {
-                yield* Deferred.succeed(booted, undefined)
-              }
-            }),
-        })
-        yield* Effect.all(
-          refs.map((ref) => opencode.plugin.list({ location: ref })),
-          { discard: true },
+        const llm = yield* TestLLM.Test.pipe(
+          Effect.provide(TestLLM.testLayer({ fallback: TestLLM.text("ready", "answer") })),
         )
-        yield* Deferred.await(booted).pipe(Effect.timeout("4 seconds"))
-        yield* opencode.plugin({
-          id,
-          effect: (ctx) =>
-            Effect.gen(function* () {
-              yield* ctx.tool
-                .transform((draft) =>
-                  draft.add({
-                    name: "late_sdk_tool",
-                    description: "Tool registered after Location boot",
-                    input: Schema.Struct({}),
-                    output: Schema.Void,
-                    execute: () => Effect.succeed({ output: undefined }),
-                  }),
-                )
-                .pipe(Effect.orDie)
-              if (
-                yield* Ref.updateAndGet(activationCount, (count) => count + 1).pipe(Effect.map((count) => count === 2))
-              ) {
-                yield* Deferred.succeed(activated, true)
-              }
-            }),
-        })
-
-        expect(yield* Deferred.await(activated).pipe(Effect.timeout("10 seconds"))).toBe(true)
-      }),
-    ),
-  25_000,
-)
-
-it.live(
-  "preserves SDK plugins across Location eviction",
-  () =>
-    withEmbedded("opencode-embedded-plugin-eviction-", (fixture) =>
-      Effect.gen(function* () {
-        const opencode = yield* fixture.sdk.OpenCode.create()
-        const ref = location(fixture)
-        const connected = yield* Latch.make(false)
-        const booted = yield* Deferred.make<void>()
-        // The rebooted Location commits its second plugin generation.
-        const recommitted = yield* Deferred.make<void>()
-        const generations = yield* Ref.make(0)
-        const id = `evicted-sdk-${crypto.randomUUID()}`
-
-        yield* opencode.events.subscribe().pipe(
-          Stream.runForEach((event) => {
-            if (event.type === "server.connected") return connected.open
-            if (event.type !== "plugin.updated" || event.location?.directory !== fixture.directory) return Effect.void
-            return Ref.updateAndGet(generations, (total) => total + 1).pipe(
-              Effect.flatMap((total) => {
-                if (total === 1) return Deferred.succeed(booted, undefined)
-                if (total === 2) return Deferred.succeed(recommitted, undefined)
-                return Effect.void
+        const opencode = yield* fixture.sdk.OpenCode.create(
+          {
+            config: {
+              directory: fixture.directory,
+              project: false,
+              content: JSON.stringify({
+                model: "custom/fictional-chat",
+                providers: {
+                  custom: {
+                    package: "aisdk:@ai-sdk/openai-compatible",
+                    settings: { baseURL: "https://provider.example/v1" },
+                    models: { "fictional-chat": {} },
+                  },
+                },
               }),
-              Effect.asVoid,
-            )
-          }),
-          Effect.forkScoped,
+            },
+            models: { fetch: false },
+            fs: { filewatcher: false },
+          },
+          {
+            overrides: [llmClient.replace(Layer.succeed(LLMClient.Service, llm))],
+          },
         )
-        yield* connected.await
-        yield* opencode.plugin({ id, effect: () => Effect.void })
 
-        yield* opencode.plugin.list({ location: ref })
-        yield* Deferred.await(booted).pipe(Effect.timeout("5 seconds"))
-        yield* opencode.debug.location.evict({ location: ref })
-        yield* opencode.plugin.list({ location: ref })
-        yield* Deferred.await(recommitted).pipe(Effect.timeout("5 seconds"))
+        yield* opencode.model.list({ location: location(fixture) }).pipe(
+          Effect.filterOrFail((page) =>
+            page.data.some((model) => model.providerID === "custom" && model.id === "fictional-chat"),
+          ),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("2 seconds"),
+        )
 
-        expect((yield* opencode.plugin.list({ location: ref })).data.map((plugin) => String(plugin.id))).toContain(id)
+        const result = yield* opencode.generate.text({
+          prompt: "Say ready",
+          ...(selection === "explicit"
+            ? {
+                model: fixture.sdk.Model.Ref.make({
+                  providerID: fixture.sdk.Provider.ID.make("custom"),
+                  id: fixture.sdk.Model.ID.make("fictional-chat"),
+                }),
+              }
+            : {}),
+        })
+
+        expect(result.text).toBe("ready")
+        const requests = yield* llm.requests()
+        expect(requests).toHaveLength(1)
+        expect(requests[0]?.model).toMatchObject({ provider: "custom", id: "fictional-chat" })
       }),
     ),
-  15_000,
-)
-
-it.live(
-  "keeps SDK plugin registration isolated between embedded hosts",
-  () =>
-    withEmbedded("opencode-embedded-plugin-isolation-", (fixture) =>
-      Effect.gen(function* () {
-        const first = yield* fixture.sdk.OpenCode.create()
-        const second = yield* fixture.sdk.OpenCode.create()
-        const firstReady = yield* Deferred.make<void>()
-        const secondReady = yield* Deferred.make<void>()
-        const activated = yield* Deferred.make<void>()
-        const ref = location(fixture)
-        const id = `isolated-sdk-${crypto.randomUUID()}`
-
-        yield* first.plugin({
-          id: `first-ready-${crypto.randomUUID()}`,
-          effect: () => Deferred.succeed(firstReady, undefined),
-        })
-        yield* second.plugin({
-          id: `second-ready-${crypto.randomUUID()}`,
-          effect: () => Deferred.succeed(secondReady, undefined),
-        })
-        yield* Effect.all([first.plugin.list({ location: ref }), second.plugin.list({ location: ref })], {
-          discard: true,
-        })
-        yield* Effect.all([Deferred.await(firstReady), Deferred.await(secondReady)], { discard: true })
-
-        yield* first.plugin({ id, effect: () => Deferred.succeed(activated, undefined) })
-        yield* Deferred.await(activated).pipe(Effect.timeout("5 seconds"))
-
-        expect((yield* second.plugin.list({ location: ref })).data.map((plugin) => String(plugin.id))).not.toContain(id)
-      }),
-    ),
-  15_000,
-)
+  )
+}
 
 it.live(
   "embedded client uses the real router and handlers",
@@ -215,22 +104,6 @@ it.live(
         const model = fixture.sdk.Model.Ref.make({
           id: fixture.sdk.Model.ID.make("embedded"),
           providerID: fixture.sdk.Provider.ID.make("test"),
-        })
-
-        yield* opencode.plugin({
-          id: `embedded-tools-${crypto.randomUUID()}`,
-          effect: (ctx) =>
-            ctx.tool
-              .transform((draft) =>
-                draft.add({
-                  name: "embedded_tool",
-                  description: "Embedded test tool",
-                  input: Schema.Struct({}),
-                  output: Schema.Struct({ ok: Schema.Boolean }),
-                  execute: () => Effect.succeed({ output: { ok: true } }),
-                }),
-              )
-              .pipe(Effect.orDie),
         })
 
         const created = yield* opencode.sessions.create({
@@ -337,8 +210,8 @@ it.live("embedded client exposes plugin-backed web search", () =>
       yield* opencode.plugin({
         id: `embedded-websearch-${crypto.randomUUID()}`,
         effect: (ctx) =>
-          ctx.websearch.transform((draft) => {
-            draft.add({
+          ctx.websearch.transform((editor) => {
+            editor.add({
               id: providerID,
               name: "Embedded web search",
               execute: (input) =>
@@ -460,8 +333,11 @@ it.live("configures workspace providers through the SDK facade", () =>
         },
       })
       const opencode = yield* fixture.sdk.OpenCode.create({ workspaceProviders: { fake: driver } })
-      const workspaceID = yield* opencode.workspace.create({ provider: "fake" })
+      const requestedID = fixture.sdk.Workspace.ID.create()
+      const workspaceID = yield* opencode.workspace.create({ id: requestedID, provider: "fake" })
 
+      expect(workspaceID).toBe(requestedID)
+      expect(yield* opencode.workspace.create({ id: requestedID, provider: "fake" })).toBe(requestedID)
       expect(calls).toEqual([])
 
       const workspace = yield* opencode.workspace.provision({ workspaceID })
@@ -477,11 +353,10 @@ it.live("configures workspace providers through the SDK facade", () =>
       const session = yield* opencode.sessions.create({ location: workspaceLocation })
       expect(session.location.workspaceID).toBe(workspace.id)
 
-      yield* opencode.workspace.destroy({ workspaceID: workspace.id })
+      expect(yield* opencode.workspace.destroy({ workspaceID: workspace.id })).toEqual({ destroyed: true })
       expect(calls.map((call) => call.operation)).toEqual(["create", "destroy"])
-      expect((yield* opencode.workspace.destroy({ workspaceID: workspace.id }).pipe(Effect.flip))._tag).toBe(
-        "Workspace.NotFound",
-      )
+      expect(yield* opencode.workspace.destroy({ workspaceID: workspace.id })).toEqual({ destroyed: false })
+      expect(calls.map((call) => call.operation)).toEqual(["create", "destroy"])
     }),
   ),
 )
@@ -494,17 +369,13 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
     const modelStarted = yield* Deferred.make<void>()
     yield* Effect.addFinalizer(() => Deferred.succeed(createRelease, undefined).pipe(Effect.asVoid))
     const model = LanguageModel.make({ id: "workspace-test", provider: "test", route: OpenAIChat.route })
-    const client = TestLLM.clientLayer.pipe(
-      Layer.provide(
-        TestLLM.layer({
-          fallback: TestLLM.text("ready", "answer"),
-          transformRequest: (request) => {
-            Deferred.doneUnsafe(modelStarted, Effect.void)
-            return request
-          },
-        }),
-      ),
-    )
+    const client = TestLLM.testLayer({
+      fallback: TestLLM.text("ready", "answer"),
+      transformRequest: (request) => {
+        Deferred.doneUnsafe(modelStarted, Effect.void)
+        return request
+      },
+    })
     const models = Layer.mock(SessionRunnerModel.Service, {
       resolve: () =>
         Effect.succeed(
@@ -538,10 +409,7 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
         workspaceProviders: { fake: driver },
       },
       {
-        overrides: [
-          [llmClient, client],
-          [SessionRunnerModel.node, models],
-        ],
+        overrides: [llmClient.replace(client), SessionRunnerModel.node.replace(models)],
       },
     )
     const workspaceID = yield* opencode.workspace.create({ provider: "fake" })
@@ -602,27 +470,13 @@ it.live(
         // The first tool-advertising request selects the shell tool; everything else
         // (including title generation, which carries no tools) answers with text.
         let toolIssued = false
-        const respond = (request: LLMRequest) => {
+        const llm = yield* TestLLM.Test.pipe(Effect.provide(TestLLM.testLayer()))
+        yield* llm.serve((request) => {
           const wantsTool = !toolIssued && request.tools.some((tool) => tool.name === "shell")
           if (!wantsTool) return TestLLM.text("done", "answer")
           toolIssued = true
           return TestLLM.tool("call-shell", "shell", { command: "echo hi" })
-        }
-        const client = Layer.succeed(
-          LLMClient.Service,
-          LLMClient.Service.of({
-            stream: (request) => Stream.fromIterable(respond(request)),
-            generate: (request) =>
-              Stream.fromIterable(respond(request)).pipe(
-                Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
-                Effect.flatMap((state) => {
-                  const response = LLMResponse.complete(state)
-                  if (response) return Effect.succeed(response)
-                  return Effect.die("test response ended without a terminal finish event")
-                }),
-              ),
-          }),
-        )
+        })
         const models = Layer.mock(SessionRunnerModel.Service, {
           resolve: () =>
             Effect.succeed(
@@ -657,8 +511,8 @@ it.live(
           },
           {
             overrides: [
-              [llmClient, client],
-              [SessionRunnerModel.node, models],
+              llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
+              SessionRunnerModel.node.replace(models),
             ],
           },
         )

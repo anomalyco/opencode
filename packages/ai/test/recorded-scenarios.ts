@@ -164,6 +164,7 @@ export const expectGoldenWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => 
 export interface GoldenScenarioContext {
   readonly id: string
   readonly model: LanguageModel
+  readonly prompt?: string
   readonly maxTokens?: number
   readonly temperature?: number | false
 }
@@ -298,7 +299,7 @@ const runGeneratedConversation = (context: GoldenScenarioContext, steps: Readonl
 
 const runTextScenario = (context: GoldenScenarioContext) =>
   runGeneratedConversation(context, [
-    user("Reply exactly with: Hello!"),
+    user(context.prompt ?? "Reply exactly with: Hello!"),
     assistant.expectText(/^Hello!?$/, {
       system: "You are concise.",
       maxTokens: context.maxTokens ?? 40,

@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test"
+import { Schema } from "effect"
 import {
   Agent,
   Config,
+  Credential,
   FileSystem,
   Form,
   Integration,
   Permission,
+  PersistentPty,
   Project,
   Reference,
   Session,
@@ -15,7 +18,6 @@ import { EventManifest } from "../src/event-manifest.js"
 import { FileSystemV1 } from "../src/filesystem-v1.js"
 import { IdeEvent } from "../src/ide-event.js"
 import { McpEvent } from "../src/mcp-event.js"
-import { Plugin } from "../src/plugin.js"
 import { SessionEvent } from "../src/session-event.js"
 import { SessionID } from "../src/session-id.js"
 import { SessionMessage } from "../src/session-message.js"
@@ -35,11 +37,11 @@ describe("public event manifest", () => {
       Array.from(new Set(EventManifest.Definitions.map((definition) => definition.type))),
     )
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
-    expect(EventManifest.Latest.get("plugin.updated")).toBe(Plugin.Event.Updated)
     expect(EventManifest.Server.get("mcp.status.changed")).toBe(McpEvent.StatusChanged)
     expect(EventManifest.Server.get("mcp.resources.changed")).toBe(McpEvent.ResourcesChanged)
     expect(EventManifest.Server.get("session.created")).toBe(SessionEvent.Created)
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
+    expect(EventManifest.Server.get("project.updated")).toBe(Project.Event.Updated)
     expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
     expect(EventManifest.Server.has("question.asked")).toBe(false)
     expect(EventManifest.Server.has("question.replied")).toBe(false)
@@ -57,21 +59,51 @@ describe("public event manifest", () => {
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(EventManifest.Latest.get("project.updated")).toBe(Project.Event.Updated)
     expect(Agent.Event.Definitions).toEqual([Agent.Event.Updated])
+    expect(Credential.Event.Definitions).toEqual([Credential.Event.Updated, Credential.Event.Switched])
     expect(Project.Event.Definitions).toEqual([Project.Event.Updated])
     expect(Config.Event.Definitions).toEqual([Config.Event.Updated])
     expect(FileSystem.Event.Definitions).toEqual([FileSystem.Event.Changed])
     expect(FileSystemV1.Event.Definitions).toEqual([FileSystemV1.Event.Edited])
-    expect(Integration.Event.Definitions).toEqual([Integration.Event.Updated, Integration.Event.ConnectionUpdated])
+    expect(Integration.Event.Definitions).toEqual([Integration.Event.Updated])
     expect(Permission.Event.Definitions).toEqual([Permission.Event.Asked, Permission.Event.Replied])
+    expect(PersistentPty.Event.Definitions).toEqual([PersistentPty.Event.Added, PersistentPty.Event.Removed])
     expect(Form.Event.Definitions).toEqual([Form.Event.Created, Form.Event.Replied, Form.Event.Cancelled])
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
-    expect(Plugin.Event.Definitions).toEqual([Plugin.Event.Added, Plugin.Event.Updated])
     expect(McpEvent.Definitions).toEqual([McpEvent.ToolsChanged, McpEvent.ResourcesChanged, McpEvent.StatusChanged])
     expect(EventManifest.Latest.has("mcp.browser.open.failed")).toBe(false)
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)
     expect(IdeEvent.Definitions).toEqual([IdeEvent.Installed])
     expect(EventManifest.Durable.get("session.step.ended.1")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Durable.has("session.step.ended.2")).toBe(false)
+  })
+
+  test("keeps credential events public, canonical, and ephemeral", () => {
+    const credentialID = Credential.ID.make("cred_test")
+    const integrationID = Integration.ID.make("integration_test")
+
+    for (const definition of Credential.Event.Definitions) {
+      expect(EventManifest.ServerDefinitions).toContain(definition)
+      expect(EventManifest.Definitions).toContain(definition)
+      expect(EventManifest.Server.get(definition.type)).toBe(definition)
+      expect(EventManifest.Latest.get(definition.type)).toBe(definition)
+      expect(definition.durability).toBe("ephemeral")
+      expect(EventManifest.Durable.has(definition.type)).toBe(false)
+    }
+
+    expect(Credential.Event.Updated.data.make({})).toEqual({})
+    expect(Credential.Event.Switched.data.make({ integrationID, credentialID })).toEqual({
+      integrationID,
+      credentialID,
+    })
+    expect(Credential.Event.Switched.data.make({ integrationID, credentialID: null })).toEqual({
+      integrationID,
+      credentialID: null,
+    })
+    expect(EventManifest.Server.has("credential.created")).toBe(false)
+    expect(EventManifest.Server.has("credential.activated")).toBe(false)
+    expect(EventManifest.Server.has("credential.deleted")).toBe(false)
+    expect(EventManifest.Server.has("integration.connection.updated")).toBe(false)
+    expect(EventManifest.Latest.has("integration.connection.updated")).toBe(false)
   })
 
   test("derives durable definitions from explicit definition durability", () => {
@@ -84,6 +116,7 @@ describe("public event manifest", () => {
         "session.moved.1",
         "session.renamed.1",
         "session.viewed.1",
+        "session.message.content.updated.1",
         "session.usage.recorded.1",
         "session.forked.2",
         "session.inbox.delivered.1",
@@ -100,6 +133,7 @@ describe("public event manifest", () => {
         "session.shell.started.1",
         "session.shell.ended.1",
         "session.step.started.1",
+        "session.step.streamed.1",
         "session.step.ended.1",
         "session.step.failed.1",
         "session.text.started.1",

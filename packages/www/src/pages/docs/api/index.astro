@@ -1,4 +1,5 @@
 ---
+import OpenApiReference from "../../../docs/components/OpenApiReference.astro"
 import DocsLayout from "../../../docs/layouts/DocsLayout.astro"
 
 export const prerender = true
@@ -10,10 +11,7 @@ export const prerender = true
   currentSlug="api"
   headings={[]}
   showTableOfContents={false}
+  fullWidth
 >
-  <p>
-    OpenCode exposes an HTTP API from its server. Use <code>opencode2 api</code> for authenticated local requests, or
-    build against the generated OpenAPI specification.
-  </p>
-  <p><a href={`${import.meta.env.BASE_URL}openapi.json`}>View the OpenAPI specification</a>.</p>
+  <OpenApiReference />
 </DocsLayout>

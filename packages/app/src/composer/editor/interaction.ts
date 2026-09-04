@@ -19,6 +19,7 @@ import {
   type ComposerInteractionEvent,
 } from "../suggestions/machine"
 import { clonePrompt, promptLength } from "../prompt-parts"
+import type { ComposerQueue } from "../adapter"
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -28,6 +29,7 @@ export type ComposerSelectControl = {
 }
 
 export type ComposerEditorView = {
+  draftOnly?: boolean
   placeholder?: Accessor<string>
   add?: {
     onAttach: () => void
@@ -37,7 +39,8 @@ export type ComposerEditorView = {
   submit: {
     stopping: Accessor<boolean>
     working?: Accessor<boolean>
-    onSubmit: () => void
+    queue?: ComposerQueue
+    onSubmit: (options?: { alternate?: boolean }) => void
     onStop: () => void
   }
   shell?: {
@@ -212,6 +215,11 @@ export function createComposerEditor(input: {
       )
     }
     if (handled) return true
+    if (event.key === "Escape" && input.view.submit.queue?.editing()) {
+      event.preventDefault()
+      input.view.submit.queue.cancelEdit()
+      return true
+    }
     const stop =
       input.view.submit.working?.() &&
       ((event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") ||
@@ -325,6 +333,7 @@ export function createComposerEditor(input: {
       draft.removeAttachment(id)
     },
     canSubmit() {
+      if (input.view.draftOnly) return false
       const persisted = draft.state
       if (state.mode === "shell") {
         return persisted.prompt.some((part) => "content" in part && !!part.content.trim())
@@ -340,6 +349,7 @@ export function createComposerEditor(input: {
     restoreFocus,
     onInput(value: string, prompt?: ComposerPersistedState["prompt"], cursor?: number) {
       if (prompt) draft.setPrompt(prompt, cursor)
+      if (input.view.draftOnly) return
       dispatch({ type: "input.changed", value, persist: !prompt })
     },
     onCursor(cursor: number) {
@@ -354,8 +364,9 @@ export function createComposerEditor(input: {
     openShell() {
       dispatch({ type: "mode.shell" })
     },
-    submit() {
-      input.view.submit.onSubmit()
+    submit(options?: { alternate?: boolean }) {
+      if (input.view.draftOnly) return
+      input.view.submit.onSubmit(options)
       dispatch({ type: "popover.close" })
     },
     stop() {
@@ -377,10 +388,18 @@ export function createComposerEditor(input: {
         void attachments.handlePaste(event)
         return
       }
-      const text = clipboard?.getData("text/plain")
+      const text = clipboard?.getData("text/plain").replace(/\r\n?/g, "\n")
       if (!text) return
       event.preventDefault()
-      if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
+      // insertText emits input events per line, repeatedly parsing and saving the draft.
+      // Escaped HTML inserts multiline text once and preserves native selection and undo.
+      const multiline = text.includes("\n")
+      const value = multiline ? text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") : text
+      if (
+        typeof document.execCommand === "function" &&
+        document.execCommand(multiline ? "insertHTML" : "insertText", false, value)
+      )
+        return
       const target = event.currentTarget
       const selection = window.getSelection()
       if (!(target instanceof HTMLElement) || !selection?.rangeCount || !target.contains(selection.anchorNode)) return

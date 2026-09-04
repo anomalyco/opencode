@@ -25,7 +25,7 @@ export const DialogSelectMcp: Component = () => {
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const toggle = useMcpToggle()
+  const toggle = useMcpToggle(() => sdk().directory)
 
   const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
   const totalCount = createMemo(() => items().length)

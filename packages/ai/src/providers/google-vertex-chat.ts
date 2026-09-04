@@ -27,6 +27,7 @@ export interface Settings extends ProviderPackage.Settings {
 const route = OpenAICompatibleChat.route.with({
   id: "google-vertex-chat",
   provider: id,
+  providerMetadataKey: "vertex",
 })
 
 export const routes = [route]

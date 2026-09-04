@@ -3,7 +3,7 @@ import { expect, test, type Page, type Route } from "@playwright/test"
 import { installSseTransport } from "../utils/sse-transport"
 import { currentSession } from "../utils/mock-server"
 
-const serverA = `http://127.0.0.1:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+const serverA = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const serverB = "http://127.0.0.1:4097"
 const directoryA = "C:/server-a"
 const directoryB = "/home/server-b"
@@ -24,11 +24,19 @@ test("session settings use the remote server context", async ({ page }) => {
   await configureServers(page)
 
   await page.goto(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
-  await expect(page.getByRole("heading", { name: sessionB.title, exact: true })).toBeVisible()
+  const sessionHeading = page.getByRole("heading", { name: sessionB.title, exact: true, includeHidden: true })
+  await expect(sessionHeading).toBeVisible()
   await page.keyboard.press("Control+,")
 
-  const dialog = page.locator(".settings-dialog")
-  const autoAccept = dialog.locator('[data-action="settings-auto-accept-permissions"]')
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings).toBeVisible()
+  await expect(page).toHaveURL("/settings")
+  await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Home", exact: true })).toHaveAttribute("aria-pressed", "false")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(settings.getByRole("tablist")).toHaveCSS("width", "328px")
+  await expect(sessionHeading).toBeHidden()
+  const autoAccept = settings.locator('[data-action="settings-auto-accept-permissions"]')
   const input = autoAccept.getByRole("switch")
   await expect(autoAccept).toBeVisible()
   await expect(input).toBeEnabled()
@@ -55,9 +63,21 @@ test("session settings use the remote server context", async ({ page }) => {
       },
     ])
 
-  await dialog.getByRole("tab", { name: "Models" }).click()
-  await expect(dialog.getByRole("switch", { name: "Server B Model" })).toBeEnabled()
-  await expect(dialog.getByRole("switch", { name: "Server A Model" })).toHaveCount(0)
+  await settings.getByRole("tab", { name: "Models" }).click()
+  await expect(settings.getByRole("switch", { name: "Server B Model" })).toBeEnabled()
+  await expect(settings.getByRole("switch", { name: "Server A Model" })).toHaveCount(0)
+  await settings.getByRole("button", { name: "Back to app" }).click()
+  await expect(settings).toBeHidden()
+  await expect(page).toHaveURL(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
+  await expect(sessionHeading).toBeVisible()
+  await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toContainText(sessionB.title)
+  await page.keyboard.press("Control+]")
+  await expect(page).toHaveURL("/settings")
+  await expect(settings.getByRole("tab", { name: "Models", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toHaveCount(0)
+  await page.keyboard.press("Escape")
+  await expect(page).toHaveURL(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
+  await expect(sessionHeading).toBeVisible()
 })
 
 test("auto-accept responds for an unfocused server session", async ({ page }) => {
@@ -78,7 +98,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
   await page.goto(`/server/${base64Encode(serverA)}/session/${sessionA.id}`)
   await expect(page.getByRole("heading", { name: sessionA.title, exact: true })).toBeVisible()
   await page.keyboard.press("Control+,")
-  const autoAccept = page.locator(".settings-dialog").locator('[data-action="settings-auto-accept-permissions"]')
+  const autoAccept = page.getByTestId("settings-screen").locator('[data-action="settings-auto-accept-permissions"]')
   await autoAccept.locator('[data-slot="switch-control"]').click()
   await expect(autoAccept.getByRole("switch")).toBeChecked()
   await expect
@@ -178,7 +198,7 @@ test("auto-accept sweeps again after a reconnect", async ({ page }) => {
   const first = await transport.waitForConnection()
 
   await page.keyboard.press("Control+,")
-  const autoAccept = page.locator(".settings-dialog").locator('[data-action="settings-auto-accept-permissions"]')
+  const autoAccept = page.getByTestId("settings-screen").locator('[data-action="settings-auto-accept-permissions"]')
   await autoAccept.locator('[data-slot="switch-control"]').click()
   await expect(autoAccept.getByRole("switch")).toBeChecked()
   await expect
@@ -234,7 +254,7 @@ test("auto-accept approves a request discovered by opening a session", async ({ 
   await expect(page.getByRole("heading", { name: sessionA.title, exact: true })).toBeVisible()
 
   await page.keyboard.press("Control+,")
-  const autoAccept = page.locator(".settings-dialog").locator('[data-action="settings-auto-accept-permissions"]')
+  const autoAccept = page.getByTestId("settings-screen").locator('[data-action="settings-auto-accept-permissions"]')
   await autoAccept.locator('[data-slot="switch-control"]').click()
   await expect(autoAccept.getByRole("switch")).toBeChecked()
 
@@ -299,7 +319,7 @@ async function mockServers(
   permissionResponses: PermissionResponse[] = [],
   options: MockServerOptions = {},
 ) {
-  await page.route("**/*", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
     const remote = url.origin === serverB

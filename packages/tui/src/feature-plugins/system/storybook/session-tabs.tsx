@@ -2,7 +2,15 @@ import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { batch, createSignal, For } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { EMPTY_SESSION_TAB_STATUS, SessionTabs, type SessionTabsController } from "../../../component/session-tabs"
+import {
+  EMPTY_SESSION_TAB_STATUS,
+  SessionTabs,
+  TAB_SPINNERS,
+  TAB_UNREAD_MARKERS,
+  type SessionTabsController,
+  type TabSpinner,
+  type TabUnreadMarker,
+} from "../../../component/session-tabs"
 import { closeSessionTab, cycleSessionTab, moveSessionTab } from "../../../context/session-tabs-model"
 import { StoryFooter } from "./footer"
 import type { Story } from "./index"
@@ -23,6 +31,15 @@ const FIXTURE_TABS = [
   { sessionID: "fixture-11", title: "Run focused tests", project: "opencode" },
   { sessionID: "fixture-12", title: "Prepare review", project: "opencode-drive" },
 ]
+
+const FIXTURE_STATUSES: Record<string, FixtureStatus> = {
+  "fixture-2": { ...EMPTY_SESSION_TAB_STATUS, busy: true },
+  "fixture-3": { ...EMPTY_SESSION_TAB_STATUS, busy: true, attention: "question" },
+  "fixture-4": { ...EMPTY_SESSION_TAB_STATUS, busy: true, attention: "permission" },
+  "fixture-5": { ...EMPTY_SESSION_TAB_STATUS, unread: "activity" },
+  "fixture-6": { ...EMPTY_SESSION_TAB_STATUS, unread: "error" },
+}
+const FIXTURE_OUTCOMES = { "fixture-5": "completed", "fixture-6": "failed" } as const
 
 // Plausible targets for the fake transcript's tool calls, picked per fixture index.
 const TRANSCRIPT_FILES = [
@@ -45,23 +62,26 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   const setItems = (next: { sessionID: string; title?: string }[]) =>
     setTabStore("items", reconcile(next, { key: "sessionID" }))
   const [active, setActive] = createSignal<string | undefined>("fixture-1")
-  const [lastEvent, setLastEvent] = createSignal("press space to start a random tab")
-  const [statuses, setStatuses] = createSignal<Record<string, FixtureStatus>>({})
+  const [lastEvent, setLastEvent] = createSignal("idle / working / question / permission / complete / error")
+  const [statuses, setStatuses] = createSignal<Record<string, FixtureStatus>>(FIXTURE_STATUSES)
   const [orientation, setOrientation] = createSignal<"horizontal" | "vertical">("vertical")
+  const spinners = Object.keys(TAB_SPINNERS) as TabSpinner[]
+  const [spinner, setSpinner] = createSignal<TabSpinner>("dots")
+  const markers = Object.keys(TAB_UNREAD_MARKERS) as TabUnreadMarker[]
+  const [marker, setMarker] = createSignal<TabUnreadMarker>("small-dot")
+  const [animations, setAnimations] = createSignal(true)
   // Unread clears on select, so the transcript remembers how each session's last run ended.
-  const [outcomes, setOutcomes] = createSignal<Record<string, "completed" | "failed">>({})
+  const [outcomes, setOutcomes] = createSignal<Record<string, "completed" | "failed">>(FIXTURE_OUTCOMES)
   const number = (sessionID: string) => tabs().findIndex((tab) => tab.sessionID === sessionID) + 1
 
-  function finishRun(sessionID: string) {
+  function finishRun(sessionID: string, failed = Math.random() >= 0.75) {
     if (!tabs().some((item) => item.sessionID === sessionID)) return
-    const roll = Math.random()
-    const failed = roll >= 0.75
     const unread = active() === sessionID ? undefined : failed ? ("error" as const) : ("activity" as const)
     batch(() => {
       setOutcomes((current) => ({ ...current, [sessionID]: failed ? "failed" : "completed" }))
       setStatuses((current) => ({
         ...current,
-        [sessionID]: { ...(current[sessionID] ?? EMPTY_SESSION_TAB_STATUS), busy: false, unread },
+        [sessionID]: { ...(current[sessionID] ?? EMPTY_SESSION_TAB_STATUS), busy: false, attention: false, unread },
       }))
       // An untitled session earns its title after its first completed run, like a real summarization.
       const index = number(sessionID) - 1
@@ -77,8 +97,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     const status = statuses()[sessionID]
     batch(() => {
       setActive(sessionID)
-      if (status && (status.unread || status.attention))
-        setStatuses((current) => ({ ...current, [sessionID]: { ...status, unread: undefined, attention: false } }))
+      if (status?.unread) setStatuses((current) => ({ ...current, [sessionID]: { ...status, unread: undefined } }))
     })
   }
 
@@ -134,7 +153,12 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   const startRun = (sessionID: string) => {
     setStatuses((current) => ({
       ...current,
-      [sessionID]: { ...(current[sessionID] ?? EMPTY_SESSION_TAB_STATUS), busy: true, unread: undefined },
+      [sessionID]: {
+        ...(current[sessionID] ?? EMPTY_SESSION_TAB_STATUS),
+        busy: true,
+        attention: false,
+        unread: undefined,
+      },
     }))
     setOutcomes((current) => {
       const next = { ...current }
@@ -170,7 +194,10 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     return pool[Math.floor(Math.random() * pool.length)]
   }
   const randomRunningTab = () => {
-    const candidates = tabs().filter((tab) => controller.status(tab.sessionID).busy)
+    const candidates = tabs().filter((tab) => {
+      const status = controller.status(tab.sessionID)
+      return status.busy && !status.attention
+    })
     return candidates[Math.floor(Math.random() * candidates.length)]
   }
   // A fake transcript for the selected session so tab switches feel like moving between real
@@ -190,7 +217,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       { text: `> ${fixture.title}`, color: theme.text.default },
       { text: "", color: theme.text.default },
     ]
-    if (!status.busy && outcome === undefined) {
+    if (!status.busy && !status.attention && outcome === undefined) {
       lines.push({ text: "no activity yet — press s to run this session", color: theme.text.subdued })
       return lines
     }
@@ -202,7 +229,11 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       { text: `  ✱ Bash bun run test`, color: theme.text.subdued },
       { text: "", color: theme.text.default },
     )
-    if (status.busy) lines.push({ text: "● Working…", color: theme.text.subdued })
+    if (status.attention === "question")
+      lines.push({ text: "? Which approach should I take?", color: theme.text.status.question })
+    else if (status.attention === "permission")
+      lines.push({ text: "! Waiting for permission to run the command", color: theme.text.status.permission })
+    else if (status.busy) lines.push({ text: "● Working…", color: theme.text.status.running })
     else if (outcome === "failed")
       lines.push({
         text: `✗ bun run test failed — 3 tests failing in ${file}`,
@@ -218,9 +249,26 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
 
   const stateSummary = () => {
     const values = tabs().map((tab) => controller.status(tab.sessionID))
-    const running = values.filter((status) => status.busy).length
+    const running = values.filter((status) => status.busy && !status.attention).length
+    const waiting = values.filter((status) => status.attention).length
     const unread = values.filter((status) => status.unread !== undefined).length
-    return [`selected ${number(active() ?? "")}`, `${running} running`, `${unread} unread`].join("  ·  ")
+    return [`selected ${number(active() ?? "")}`, `${running} running`, `${waiting} waiting`, `${unread} unread`].join(
+      "  ·  ",
+    )
+  }
+
+  const reset = (showcase = false) => {
+    batch(() => {
+      setItems(FIXTURE_TABS.slice(0, 6).map((tab) => ({ ...tab })))
+      setStatuses(showcase ? FIXTURE_STATUSES : {})
+      setOutcomes(showcase ? FIXTURE_OUTCOMES : {})
+      setActive("fixture-1")
+      setSpinner("dots")
+      setMarker("small-dot")
+      setAnimations(true)
+      setOrientation("vertical")
+    })
+    setLastEvent(showcase ? "all six states are visible" : "reset; all tabs idle")
   }
 
   props.context.keymap.layer(() => ({
@@ -236,7 +284,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       { bind: "up,k,left,h", title: "Previous tab", group: "Storybook", run: () => cycle(-1) },
       { bind: "down,j,right,l", title: "Next tab", group: "Storybook", run: () => cycle(1) },
       ...Array.from({ length: 10 }, (_, index) => ({
-        bind: String((index + 1) % 10),
+        bind: `${(index + 1) % 10},ctrl+${(index + 1) % 10}`,
         title: `Select tab ${index + 1}`,
         group: "Storybook",
         run() {
@@ -281,21 +329,72 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         },
       },
       {
-        // Random runs stay off the selected tab, so this is the way to watch the edge flash
-        // and running sweep under the cursor.
+        // Random runs may select any eligible tab; this command guarantees the edge flash
+        // and running sweep can be watched under the cursor.
         bind: "s",
         title: "Run selected tab",
         group: "Storybook",
         run() {
           const current = active()
           if (!current) return
-          if (controller.status(current).busy) {
+          if (controller.status(current).busy && !controller.status(current).attention) {
             setLastEvent(`tab ${number(current)} is already running`)
             return
           }
           startRun(current)
         },
       },
+      ...(
+        [
+          { bind: "q", title: "Ask a question", attention: "question" },
+          { bind: "a", title: "Request permission", attention: "permission" },
+          { bind: "i", title: "Set idle", attention: false },
+        ] as const
+      ).map((state) => ({
+        bind: state.bind,
+        title: state.title,
+        group: "Storybook",
+        run() {
+          const current = active()
+          if (!current) return
+          startRun(current)
+          setStatuses((statuses) => ({
+            ...statuses,
+            [current]: { ...EMPTY_SESSION_TAB_STATUS, busy: Boolean(state.attention), attention: state.attention },
+          }))
+          setLastEvent(`tab ${number(current)} ${state.attention || "idle"}`)
+        },
+      })),
+      ...(
+        [
+          { bind: "f", title: "Complete selected tab", failed: false },
+          { bind: "x", title: "Fail selected tab", failed: true },
+        ] as const
+      ).map((state) => ({
+        bind: state.bind,
+        title: state.title,
+        group: "Storybook",
+        run() {
+          const current = active()
+          if (!current) return
+          // Leave the result unread so its indicator can be inspected before selecting it again.
+          cycle(1)
+          finishRun(current, state.failed)
+        },
+      })),
+      {
+        bind: "c",
+        title: "Cycle spinner shape",
+        group: "Storybook",
+        run: () => setSpinner((value) => spinners[(spinners.indexOf(value) + 1) % spinners.length]),
+      },
+      {
+        bind: "u",
+        title: "Cycle unread marker",
+        group: "Storybook",
+        run: () => setMarker((value) => markers[(markers.indexOf(value) + 1) % markers.length]),
+      },
+      { bind: "m", title: "Toggle animations", group: "Storybook", run: () => setAnimations((value) => !value) },
       { bind: "t", title: "Add tab", group: "Storybook", run: addTab },
       { bind: "d", title: "Close tab", group: "Storybook", run: () => controller.close() },
       {
@@ -306,20 +405,8 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           setOrientation((value) => (value === "vertical" ? "horizontal" : "vertical"))
         },
       },
-      {
-        bind: "r",
-        title: "Reset",
-        group: "Storybook",
-        run() {
-          batch(() => {
-            setItems(FIXTURE_TABS.slice(0, 6).map((tab) => ({ ...tab })))
-            setStatuses({})
-            setOutcomes({})
-            setActive("fixture-1")
-          })
-          setLastEvent("reset; press space to start a random tab")
-        },
-      },
+      { bind: "r,shift+r", title: "Reset to idle", group: "Storybook", run: () => reset() },
+      { bind: "v", title: "Show all states", group: "Storybook", run: () => reset(true) },
     ],
   }))
 
@@ -331,7 +418,13 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       backgroundColor={theme.background.default}
     >
       <box flexGrow={1} flexDirection={orientation() === "vertical" ? "row" : "column"}>
-        <SessionTabs controller={controller} orientation={orientation()} />
+        <SessionTabs
+          controller={controller}
+          orientation={orientation()}
+          spinner={spinner()}
+          unreadMarker={marker()}
+          animations={animations()}
+        />
         <box flexGrow={1} paddingLeft={2} paddingRight={2} paddingTop={1} flexDirection="column">
           <For each={transcript()}>
             {(line) => (
@@ -345,16 +438,30 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       <StoryFooter
         context={props.context}
         title="storybook / tabs"
-        details={[orientation() === "vertical" ? "left rail" : "top strip"]}
+        details={[
+          orientation() === "vertical" ? "left rail" : "top strip",
+          spinner(),
+          `${TAB_UNREAD_MARKERS[marker()]} ${marker()}`,
+          animations() ? "animated" : "still",
+        ]}
         status={stateSummary()}
         message={lastEvent()}
         controls={[
-          { shortcut: "space", label: "start" },
+          { shortcut: "s", label: "work" },
+          { shortcut: "space/e", label: "random work" },
           { shortcut: "p", label: "prompt" },
-          { shortcut: "e", label: "end" },
+          { shortcut: "q", label: "question" },
+          { shortcut: "a", label: "permission" },
+          { shortcut: "i", label: "idle" },
+          { shortcut: "f/x", label: "complete/fail" },
+          { shortcut: "t/d", label: "add/close" },
+          { shortcut: "c", label: "spinner" },
+          { shortcut: "u", label: "unread marker" },
+          { shortcut: "m", label: "motion" },
           { shortcut: "↑/↓", label: "select" },
           { shortcut: "o", label: "layout" },
-          { shortcut: "r", label: "reset" },
+          { shortcut: "r", label: "reset idle" },
+          { shortcut: "v", label: "all states" },
           { shortcut: "esc", label: "back" },
         ]}
       />

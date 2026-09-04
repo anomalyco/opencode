@@ -21,15 +21,20 @@ export default function NewSessionPage(props: { draftId: string }) {
     tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
   )
   const workspace = createNewSessionWorkspaceController({
-    selected: () => draftTab()?.worktree,
-    setSelected: (worktree) => {
+    selectedWorktree: () => draftTab()?.worktree,
+    selectedBranch: () => draftTab()?.branch,
+    setSelectedWorktree: (worktree) => {
       if (search.draftId) tabs.updateDraft(search.draftId, { worktree })
+    },
+    setSelectedBranch: (branch) => {
+      if (search.draftId) tabs.updateDraft(search.draftId, { branch })
     },
     onViewAll: openWorkspaces,
   })
   const composer = createNewSessionComposerAdapter({
     draftID: props.draftId,
     worktree: workspace.selection.value,
+    branch: workspace.bar.branch,
     submitted: workspace.selection.remember,
   })
   const model = createComposerModel(composer.adapter)
@@ -68,7 +73,7 @@ export default function NewSessionPage(props: { draftId: string }) {
     <div class="relative size-full overflow-hidden flex flex-col">
       {suspendUntilPromptReady()}
       <NewSessionStatus visible={settings.visibility.status()} />
-      <div class="flex-1 min-h-0 flex flex-col gap-2 p-2">
+      <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <NewSessionView composer={model} project={project} workspace={workspace} />
       </div>
     </div>

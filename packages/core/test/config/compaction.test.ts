@@ -9,6 +9,7 @@ import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { Session } from "@opencode-ai/core/session"
 import { Agent } from "@opencode-ai/core/agent"
@@ -38,20 +39,13 @@ const config = Config.testLayer()
 const it = testEffect(
   Layer.merge(
     config,
-    AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, Config.node, Bus.node]), [
-      [
-        llmClient,
+    AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, SessionModelRequest.node, Config.node, Bus.node]), [
+      llmClient.replace(
         Layer.mock(LLMClient.Service)({
-          stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "summary" })),
+          stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "## Objective\n- summary" })),
         }),
-      ],
-      [
-        SessionRunnerModel.node,
-        Layer.mock(SessionRunnerModel.Service)({
-          resolve: () => Effect.succeed(resolved),
-        }),
-      ],
-      [Config.node, config],
+      ),
+      Config.node.replace(config),
     ]),
   ),
 )
@@ -59,6 +53,7 @@ describe("ConfigCompactionPlugin.Plugin", () => {
   it.live("merges settings and reloads changed config", () =>
     Effect.gen(function* () {
       const compaction = yield* SessionCompaction.Service
+      const modelRequests = yield* SessionModelRequest.Service
       const config = yield* Config.Test
       const bus = yield* Bus.Service
       yield* config.setEntries([
@@ -82,23 +77,26 @@ describe("ConfigCompactionPlugin.Plugin", () => {
       const started = yield* bus
         .subscribe(SessionEvent.Compaction.Started)
         .pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+      const messages = [
+        SessionMessage.User.make({
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text: "Older context",
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+        SessionMessage.User.make({
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text: "Recent context",
+          time: { created: DateTime.makeUnsafe(1) },
+        }),
+      ]
       expect(
         yield* compaction.compactManual({
           session,
-          messages: [
-            {
-              id: SessionMessage.ID.create(),
-              type: "user",
-              text: "Older context",
-              time: { created: DateTime.makeUnsafe(0) },
-            },
-            {
-              id: SessionMessage.ID.create(),
-              type: "user",
-              text: "Recent context",
-              time: { created: DateTime.makeUnsafe(1) },
-            },
-          ],
+          resolveContext: () => Effect.succeed({ ...nearInput.context, messages, instructionUpdate: "" }),
+          prepare: modelRequests.prepare,
+          messages,
           inputID: SessionMessage.ID.make("msg_compaction_manual"),
         }),
       ).toEqual({ status: "completed" })
@@ -148,10 +146,8 @@ const session = Session.Info.make({
   time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
   location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
 })
-const input = (tokens: number) => ({
-  session,
-  resolved,
-  messages: [
+const input = (tokens: number) => {
+  const messages = [
     Schema.decodeUnknownSync(SessionMessage.Assistant)({
       id: SessionMessage.ID.make("msg_compaction_config"),
       type: "assistant",
@@ -161,7 +157,20 @@ const input = (tokens: number) => ({
       tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 0, completed: 0 },
     }),
-  ],
-})
+  ]
+  return {
+    session,
+    resolved,
+    messages,
+    context: {
+      session,
+      model: resolved,
+      messages,
+      agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
+      initial: "",
+      tools: { definitions: [], execute: () => Effect.die("unused") },
+    },
+  }
+}
 const bufferedInput = input(85_000)
 const nearInput = input(95_000)

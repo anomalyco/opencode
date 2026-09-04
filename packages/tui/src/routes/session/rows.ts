@@ -35,6 +35,8 @@ export type SessionRow =
   | { type: "assistant-footer"; messageID: string }
   | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
 
+export type BackgroundToolTarget = { source: "shell"; id: string }
+
 export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
   const data = useData()
   const client = useClient()
@@ -344,13 +346,41 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
   return drop > 0 ? drop : undefined
 }
 
-export function turnDuration(message: SessionMessageAssistant, messages: SessionMessageInfo[]) {
+export function turnDuration(message: SessionMessageAssistant, messages: SessionMessageInfo[], position?: number) {
   if (message.time.completed === undefined) return 0
-  const index = messages.findIndex((item) => item.id === message.id)
-  const input = messages
-    .slice(0, index === -1 ? messages.length : index)
-    .findLast((item) => item.type === "user" || item.type === "synthetic")
+  const index = position ?? messages.findIndex((item) => item.id === message.id)
+  const input = messages[inputIndex(messages, index === -1 ? messages.length : index)]
   return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
+}
+
+export function turnTokensPerSecond(
+  message: SessionMessageAssistant,
+  messages: SessionMessageInfo[],
+  position?: number,
+) {
+  const index = position ?? messages.findIndex((item) => item.id === message.id)
+  const end = index === -1 ? messages.length : index + 1
+  const start = inputIndex(messages, end)
+  const steps = messages
+    .slice(start + 1, end)
+    .filter((item): item is SessionMessageAssistant => item.type === "assistant")
+  const durations = steps.flatMap((step) =>
+    step.time.streamed === undefined ? [] : [Math.max(0, step.time.streamed - step.time.created)],
+  )
+  if (steps.length === 0 || durations.length !== steps.length) return
+  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0), 0)
+  const duration = durations.reduce((total, value) => total + value, 0)
+  if (output <= 0 || duration <= 0) return
+  return output / (duration / 1_000)
+}
+
+function inputIndex(messages: SessionMessageInfo[], end: number) {
+  // Reading a sliced prefix subscribes every footer to unrelated historical messages.
+  for (let index = end - 1; index >= 0; index--) {
+    const message = messages[index]
+    if (message.type === "user" || message.type === "synthetic") return index
+  }
+  return -1
 }
 
 function hasTokenUsage(
@@ -371,6 +401,34 @@ export function messageBoundaryIDs(rows: SessionRow[], messages: SessionMessageI
     if (!id || seen.has(id)) return undefined
     seen.add(id)
     return id
+  })
+}
+
+export function sessionRowID(row: SessionRow, boundaryID?: string) {
+  if (boundaryID) return boundaryID
+  if (row.type === "part") return `session-part:${row.ref.messageID}:${row.ref.partID}`
+}
+
+export function backgroundToolRowIndex(
+  rows: SessionRow[],
+  messages: SessionMessageInfo[],
+  target: BackgroundToolTarget,
+  beforeMessageID: string,
+) {
+  const byID = new Map(messages.map((message) => [message.id, message]))
+  const end = rows.findIndex((row) => row.type === "message" && row.messageID === beforeMessageID)
+  return rows.slice(0, end === -1 ? rows.length : end).findLastIndex((row) => {
+    if (row.type !== "part") return false
+    if (row.ref.partID === target.id) return true
+    const message = byID.get(row.ref.messageID)
+    if (message?.type !== "assistant") return false
+    const part = resolvePart(message, row.ref.partID)
+    return (
+      part?.type === "tool" &&
+      part.name.toLowerCase() === "shell" &&
+      part.state.status !== "streaming" &&
+      part.state.metadata?.shellID === target.id
+    )
   })
 }
 

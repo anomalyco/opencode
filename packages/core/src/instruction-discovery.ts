@@ -25,7 +25,7 @@ export type Data = {
   available: boolean
 }
 
-export type Draft = {
+export type Editor = {
   list: () => readonly Types.DeepMutable<File>[]
   // Map insertion order is render order: config adds global then nearest-to-farthest project files;
   // sibling contributors interleave by transform registration order.
@@ -35,16 +35,18 @@ export type Draft = {
   unavailable: () => void
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   // Discovery policy lives here because internal plugins have no per-composition options channel.
   // Move it into plugin config once plugins can consume their own options.
   readonly project: boolean
+  readonly global: boolean
   readonly list: () => Effect.Effect<File[] | Instructions.Unavailable>
   readonly load: () => Effect.Effect<Instructions.List>
 }
 
 export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
+  global: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -55,24 +57,24 @@ export const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
-      const state = State.create<Data, Draft>({
+      const state = State.create<Data, Editor>({
         name: "instruction-discovery",
         initial: () => ({ files: new Map(), available: true }),
-        draft: (draft) => ({
-          list: () => Array.from(draft.files.values()),
-          add: (file) => draft.files.set(file.path, new File(file) as Types.DeepMutable<File>),
+        editor: (editor) => ({
+          list: () => Array.from(editor.files.values()),
+          add: (file) => editor.files.set(file.path, new File(file) as Types.DeepMutable<File>),
           update: (path, update) => {
-            const current = draft.files.get(AbsolutePath.make(path))
+            const current = editor.files.get(AbsolutePath.make(path))
             if (!current) return
             update(current)
             current.path = AbsolutePath.make(path)
           },
-          remove: (path) => draft.files.delete(AbsolutePath.make(path)),
+          remove: (path) => editor.files.delete(AbsolutePath.make(path)),
           unavailable: () => {
-            draft.available = false
+            editor.available = false
           },
         }),
-        finalize: () => bus.publish(Event.Updated, {}).pipe(Effect.asVoid),
+        notify: () => bus.publish(Event.Updated, {}).pipe(Effect.asVoid),
       })
 
       const source = (value: ReadonlyArray<File> | Instructions.Unavailable | Instructions.Removed) =>
@@ -95,6 +97,7 @@ export const layer = (options?: Options) =>
 
       return Service.of({
         project: options?.project !== false,
+        global: options?.global !== false,
         transform: state.transform,
         reload: state.reload,
         list,

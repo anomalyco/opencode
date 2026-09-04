@@ -1,10 +1,11 @@
 import { Agent } from "@opencode-ai/core/agent"
+import { CodeModeCatalog } from "@opencode-ai/core/codemode/catalog"
 import type { Permission } from "@opencode-ai/core/permission"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import type { SessionError } from "@opencode-ai/schema/session-error"
 import { Tool } from "@opencode-ai/core/tool"
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, type Scope } from "effect"
 import { host } from "../plugin/host"
 
@@ -15,6 +16,9 @@ export const toolIdentity = {
 
 export const toolDefinitions = (registry: Tool.Interface, permissions?: Permission.Ruleset) =>
   registry.snapshot(permissions).pipe(Effect.map((toolSet) => toolSet.definitions))
+
+export const codeModeListings = (catalog: CodeModeCatalog.Inventory) =>
+  CodeModeCatalog.summarize(catalog, { budget: Infinity }).namespaces.flatMap((namespace) => namespace.entries)
 
 export function waitForTool(registry: Tool.Interface, name: string, remaining = 1000): Effect.Effect<void, Error> {
   return Effect.gen(function* () {
@@ -35,7 +39,8 @@ export function waitForCodeModeTool(
 ): Effect.Effect<Tool.Snapshot, Error> {
   return Effect.gen(function* () {
     const toolSet = yield* registry.snapshot()
-    if (toolSet.codeModeCatalog?.some((tool) => tool.path === path)) return toolSet
+    if (toolSet.codeModeCatalog && codeModeListings(toolSet.codeModeCatalog).some((tool) => tool.path === path))
+      return toolSet
     if (remaining === 0) {
       return yield* Effect.fail(new Error(`Timed out waiting for Code Mode tool: ${path}`))
     }
@@ -52,7 +57,7 @@ export function waitForCodeModeTool(
 export const registerToolPlugin = <R>(
   plugin: {
     readonly id: string
-    readonly effect: (context: PluginContext) => Effect.Effect<void, never, R>
+    readonly effect: (context: Context) => Effect.Effect<void, never, R>
   },
   overrides: Parameters<typeof host>[0] = {},
 ): Effect.Effect<void, never, R | Tool.Service | Scope.Scope> =>
@@ -64,10 +69,8 @@ export const registerToolPlugin = <R>(
         hook: () => Effect.succeed({ dispose: Effect.void }),
       },
       tool: {
-        transform: (callback) =>
-          tools
-            .transform((draft) => callback({ add: (tool) => draft.add(tool) }))
-            .pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
+        transform: tools.transform,
+        reload: tools.reload,
         hook: () => Effect.die("registerToolPlugin does not support tool hooks"),
       },
     })

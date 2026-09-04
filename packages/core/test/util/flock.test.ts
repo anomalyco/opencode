@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
-import { spawn } from "child_process"
 import path from "path"
-import os from "os"
 import { Flock } from "@opencode-ai/util/flock"
 import { Hash } from "@opencode-ai/util/hash"
+import { runLockWorker, spawnLockWorker, stopLockWorker, waitForFile } from "../fixture/lock-worker"
+import { tmpdir } from "../fixture/tmpdir"
 
 type Msg = {
   key: string
@@ -19,27 +19,10 @@ type Msg = {
   done?: string
 }
 
-const root = path.join(import.meta.dir, "../..")
 const worker = path.join(import.meta.dir, "../fixture/flock-worker.ts")
-
-async function tmpdir() {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "flock-test-"))
-  return {
-    path: dir,
-    async [Symbol.asyncDispose]() {
-      await fs.rm(dir, { recursive: true, force: true })
-    },
-  }
-}
 
 function lock(dir: string, key: string) {
   return path.join(dir, Hash.fast(key) + ".lock")
-}
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms)
-  })
 }
 
 async function exists(file: string) {
@@ -49,73 +32,13 @@ async function exists(file: string) {
     .catch(() => false)
 }
 
-async function wait(file: string, timeout = 3_000) {
-  const stop = Date.now() + timeout
-  while (Date.now() < stop) {
-    if (await exists(file)) return
-    await sleep(20)
-  }
-
-  throw new Error(`Timed out waiting for file: ${file}`)
-}
-
-function run(msg: Msg) {
-  return new Promise<{ code: number; stdout: Buffer; stderr: Buffer }>((resolve) => {
-    const proc = spawn(process.execPath, [worker, JSON.stringify(msg)], {
-      cwd: root,
-    })
-
-    const stdout: Buffer[] = []
-    const stderr: Buffer[] = []
-
-    proc.stdout?.on("data", (data) => stdout.push(Buffer.from(data)))
-    proc.stderr?.on("data", (data) => stderr.push(Buffer.from(data)))
-
-    proc.on("close", (code) => {
-      resolve({
-        code: code ?? 1,
-        stdout: Buffer.concat(stdout),
-        stderr: Buffer.concat(stderr),
-      })
-    })
-  })
-}
-
-function spawnWorker(msg: Msg) {
-  return spawn(process.execPath, [worker, JSON.stringify(msg)], {
-    cwd: root,
-    stdio: ["ignore", "pipe", "pipe"],
-  })
-}
-
-async function stopWorker(proc: ReturnType<typeof spawnWorker>) {
-  if (proc.exitCode !== null || proc.signalCode !== null) return
-
-  const closed = new Promise<void>((resolve) => proc.once("close", () => resolve()))
-
-  if (process.platform !== "win32" || !proc.pid) {
-    proc.kill()
-    await closed
-    return
-  }
-
-  await new Promise<void>((resolve) => {
-    const killProc = spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"])
-    killProc.on("close", () => {
-      proc.kill()
-      resolve()
-    })
-  })
-  await closed
-}
-
 async function readJson<T>(p: string): Promise<T> {
   return JSON.parse(await fs.readFile(p, "utf8"))
 }
 
 describe("util.flock", () => {
   test("enforces mutual exclusion under process contention", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const done = path.join(tmp.path, "done.log")
     const active = path.join(tmp.path, "active")
@@ -124,7 +47,7 @@ describe("util.flock", () => {
 
     const out = await Promise.all(
       Array.from({ length: n }, () =>
-        run({
+        runLockWorker(worker, {
           key,
           dir,
           done,
@@ -132,7 +55,7 @@ describe("util.flock", () => {
           holdMs: 30,
           staleMs: 1_000,
           timeoutMs: 15_000,
-        }),
+        } satisfies Msg),
       ),
     )
 
@@ -147,21 +70,21 @@ describe("util.flock", () => {
   }, 20_000)
 
   test("times out while waiting when lock is still healthy", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const key = "flock:timeout"
     const ready = path.join(tmp.path, "ready")
-    const proc = spawnWorker({
+    const proc = spawnLockWorker(worker, {
       key,
       dir,
       ready,
       holdMs: 20_000,
       staleMs: 10_000,
       timeoutMs: 30_000,
-    })
+    } satisfies Msg)
 
     try {
-      await wait(ready, 5_000)
+      await waitForFile(ready, 5_000)
       const seen: string[] = []
       const err = await Flock.withLock(key, async () => {}, {
         dir,
@@ -178,45 +101,49 @@ describe("util.flock", () => {
       expect(seen.length).toBeGreaterThan(0)
       expect(seen.every((x) => x === key)).toBe(true)
     } finally {
-      await stopWorker(proc).catch(() => undefined)
+      await stopLockWorker(proc).catch(() => undefined)
     }
   }, 15_000)
 
   test("recovers after a crashed lock owner", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const key = "flock:crash"
     const ready = path.join(tmp.path, "ready")
-    const proc = spawnWorker({
+    const proc = spawnLockWorker(worker, {
       key,
       dir,
       ready,
       holdMs: 20_000,
       staleMs: 500,
       timeoutMs: 30_000,
-    })
+    } satisfies Msg)
 
-    await wait(ready, 5_000)
-    await stopWorker(proc)
+    try {
+      await waitForFile(ready, 5_000)
+      await stopLockWorker(proc)
 
-    let hit = false
-    await Flock.withLock(
-      key,
-      async () => {
-        hit = true
-      },
-      {
-        dir,
-        staleMs: 500,
-        timeoutMs: 8_000,
-      },
-    )
+      let hit = false
+      await Flock.withLock(
+        key,
+        async () => {
+          hit = true
+        },
+        {
+          dir,
+          staleMs: 500,
+          timeoutMs: 8_000,
+        },
+      )
 
-    expect(hit).toBe(true)
+      expect(hit).toBe(true)
+    } finally {
+      await stopLockWorker(proc)
+    }
   }, 20_000)
 
   test("breaks stale lock dirs when heartbeat is missing", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const key = "flock:missing-heartbeat"
     const lockDir = lock(dir, key)
@@ -242,7 +169,7 @@ describe("util.flock", () => {
   })
 
   test("recovers when a stale breaker claim was left behind", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const key = "flock:stale-breaker"
     const lockDir = lock(dir, key)
@@ -273,7 +200,7 @@ describe("util.flock", () => {
   })
 
   test("fails clearly if lock dir is removed while held", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const key = "flock:compromised"
     const lockDir = lock(dir, key)
@@ -313,7 +240,7 @@ describe("util.flock", () => {
   })
 
   test("writes owner metadata while lock is held", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const key = "flock:meta"
     const file = path.join(lock(dir, key), "meta.json")
@@ -342,7 +269,7 @@ describe("util.flock", () => {
   })
 
   test("supports acquire with await using", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const key = "flock:acquire"
     const lockDir = lock(dir, key)
@@ -360,7 +287,7 @@ describe("util.flock", () => {
   })
 
   test("refuses token mismatch release and recovers from stale", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const key = "flock:token"
     const lockDir = lock(dir, key)
@@ -403,7 +330,7 @@ describe("util.flock", () => {
   test("fails clearly on unwritable lock roots", async () => {
     if (process.platform === "win32") return
 
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")
     const key = "flock:perm"
 

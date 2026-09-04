@@ -1,11 +1,12 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Encoding, Ref, Stream } from "effect"
 import {
   CacheHint,
   GenerationOptions,
   LLM,
+  LLMEvent,
   LLMRequest,
   Message,
   ToolCallPart,
@@ -83,6 +84,17 @@ const eventStreamBody = (...payloads: ReadonlyArray<readonly [string, object]>) 
 const fixedBytes = (bytes: Uint8Array) =>
   fixedResponse(bytes.slice().buffer, { headers: { "content-type": "application/vnd.amazon.eventstream" } })
 
+const fixedByteChunks = (...chunks: ReadonlyArray<Uint8Array>) =>
+  fixedResponse(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        chunks.forEach((chunk) => controller.enqueue(chunk))
+        controller.close()
+      },
+    }),
+    { headers: { "content-type": "application/vnd.amazon.eventstream" } },
+  )
+
 const model = AmazonBedrock.configure({
   baseURL: "https://bedrock-runtime.test",
   apiKey: "test-bearer",
@@ -110,6 +122,50 @@ describe("Bedrock Converse route", () => {
         messages: [{ role: "user", content: [{ text: "Say hello." }] }],
         inferenceConfig: { maxTokens: 64, temperature: 0 },
       })
+    }),
+  )
+
+  it.effect("omits empty initial system blocks", () =>
+    Effect.gen(function* () {
+      const empty = yield* compileRequest(LLM.request({ model, system: "", prompt: "hello" }))
+      const cachedEmpty = yield* compileRequest(
+        LLM.request({
+          model,
+          system: [{ type: "text", text: "", cache: new CacheHint({ type: "ephemeral" }) }],
+          prompt: "hello",
+          cache: "none",
+        }),
+      )
+
+      expect(empty.body.system).toBeUndefined()
+      expect(cachedEmpty.body.system).toBeUndefined()
+    }),
+  )
+
+  it.effect("omits empty system blocks while preserving order and cache hints", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          system: [
+            { type: "text", text: "", cache },
+            { type: "text", text: "First." },
+            { type: "text", text: " " },
+            { type: "text", text: "" },
+            { type: "text", text: "Second.", cache },
+          ],
+          prompt: "hello",
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.system).toEqual([
+        { text: "First." },
+        { text: " " },
+        { text: "Second." },
+        { cachePoint: { type: "default" } },
+      ])
     }),
   )
 
@@ -255,6 +311,79 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("removes empty keys recursively from outbound tool inputs without mutating history", () =>
+    Effect.gen(function* () {
+      const input = {
+        path: "file.ts",
+        edits: [
+          { oldText: "a", newText: "b", "": "" },
+          null,
+          true,
+          7,
+          "text",
+          ["kept", { "": false, nested: { "": null, value: "ok" } }],
+        ],
+        nested: { "": "drop", empty: {}, onlyEmpty: { "": 1 } },
+        " ": "preserve whitespace key",
+        "": "drop",
+      }
+      const original = structuredClone(input)
+      const call = ToolCallPart.make({ id: "tool_1", name: "edit", input })
+      const prepared = yield* compileRequest(
+        LLM.request({ model, messages: [Message.assistant([call])], cache: "none" }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            {
+              toolUse: {
+                toolUseId: "tool_1",
+                name: "edit",
+                input: {
+                  path: "file.ts",
+                  edits: [{ oldText: "a", newText: "b" }, null, true, 7, "text", ["kept", { nested: { value: "ok" } }]],
+                  nested: { empty: {}, onlyEmpty: {} },
+                  " ": "preserve whitespace key",
+                },
+              },
+            },
+          ],
+        },
+      ])
+      expect(input).toEqual(original)
+      expect(call.input).toBe(input)
+    }),
+  )
+
+  it.effect("keeps empty tool inputs and empties inputs containing only empty keys", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "tool_empty_key", name: "first", input: { "": { value: true } } }),
+              ToolCallPart.make({ id: "tool_empty_object", name: "second", input: {} }),
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { toolUse: { toolUseId: "tool_empty_key", name: "first", input: {} } },
+            { toolUse: { toolUseId: "tool_empty_object", name: "second", input: {} } },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("merges parallel tool results into one user message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -385,19 +514,77 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("maps truncation and malformed output stop reasons", () =>
+  it.effect("rejects truncated event-stream frames after message stop", () =>
     Effect.gen(function* () {
-      const reasons = [
-        ["model_context_window_exceeded", "length"],
-        ["malformed_model_output", "error"],
-        ["malformed_tool_use", "error"],
-      ] as const
+      const partialFrames = [
+        eventFrame("metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }).subarray(0, 3),
+        exceptionFrame("modelStreamErrorException", { originalMessage: "Upstream model failed" }).subarray(0, -1),
+      ]
 
-      for (const [raw, normalized] of reasons) {
-        const response = yield* LLMClient.generate(baseRequest).pipe(
-          Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: raw }]))),
+      for (const partial of partialFrames) {
+        const error = yield* LLMClient.generate(baseRequest).pipe(
+          Effect.provide(fixedBytes(concat([eventFrame("messageStop", { stopReason: "end_turn" }), partial]))),
+          Effect.flip,
         )
-        expect(response.finishReason).toEqual({ normalized, raw })
+
+        expect(error).toMatchObject({
+          reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream" },
+          message: `Incomplete Bedrock Converse event-stream frame: ${partial.length} buffered bytes remain at end of stream`,
+        })
+        expect(error.reason.body).toBe(Encoding.encodeBase64(partial))
+      }
+    }),
+  )
+
+  it.effect("decodes frames split across transport chunks through exact-boundary EOF", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["messageStart", { role: "assistant" }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { text: "Hello" } }],
+        ["messageStop", { stopReason: "end_turn" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedByteChunks(body.subarray(0, 2), body.subarray(2, 17), body.subarray(17))),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("maps model context window exhaustion to length", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "model_context_window_exceeded" }]))),
+      )
+
+      expect(response.finishReason).toEqual({
+        normalized: "length",
+        raw: "model_context_window_exceeded",
+      })
+    }),
+  )
+
+  it.effect("fails malformed output stop reasons", () =>
+    Effect.gen(function* () {
+      for (const reason of ["malformed_model_output", "malformed_tool_use"] as const) {
+        const events = yield* Ref.make<ReadonlyArray<LLMEvent>>([])
+        const error = yield* LLMClient.stream(baseRequest).pipe(
+          Stream.tap((event) => Ref.update(events, (current) => [...current, event])),
+          Stream.runDrain,
+          Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: reason }]))),
+          Effect.flip,
+        )
+
+        expect(error).toMatchObject({
+          reason: { _tag: "InvalidProviderOutput" },
+          message: `Bedrock Converse stopped with ${reason}`,
+        })
+        expect(JSON.parse(error.reason.body ?? "")).toMatchObject({
+          headers: { ":event-type": { value: "messageStop" } },
+          body: JSON.stringify({ stopReason: reason }),
+        })
+        expect((yield* Ref.get(events)).some((event) => event.type === "finish")).toBeFalse()
       }
     }),
   )
@@ -444,7 +631,42 @@ describe("Bedrock Converse route", () => {
       )
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
+      expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+    }),
+  )
+
+  it.effect("retains metadata usage that arrives before messageStop", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
+        ["messageStop", { stopReason: "end_turn" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+    }),
+  )
+
+  it.effect("rejects metadata-only streams as incomplete with HTTP context", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(eventStreamBody(["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }])),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        classification: "incomplete-stream",
+        http: {
+          status: 200,
+          headers: { "content-type": "application/vnd.amazon.eventstream" },
+        },
+      })
     }),
   )
 
@@ -475,8 +697,14 @@ describe("Bedrock Converse route", () => {
       ])
       const events = response.events.filter((event) => event.type === "tool-input-delta")
       expect(events).toEqual([
-        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"' },
-        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: ':"weather"}' },
+        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"', input: {} },
+        {
+          type: "tool-input-delta",
+          id: "tool_1",
+          name: "lookup",
+          text: ':"weather"}',
+          input: { query: "weather" },
+        },
       ])
       expect(response.events.at(-1)).toMatchObject({
         type: "finish",
@@ -485,7 +713,40 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("emits malformed tool input as an unexecuted tool error", () =>
+  it.effect("ignores tool deltas without an open tool block", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["contentBlockDelta", { contentBlockIndex: 5, delta: { toolUse: { input: "{}" } } }],
+        [
+          "contentBlockStart",
+          {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: "tool_1", name: "lookup" } },
+          },
+        ],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: '{"query":"weather"}' } } }],
+        ["contentBlockStop", { contentBlockIndex: 0 }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: '{"late":true}' } } }],
+        ["messageStop", { stopReason: "tool_use" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.toolCalls).toEqual([
+        { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "weather" } },
+      ])
+      expect(response.events.filter((event) => event.type === "tool-input-delta")).toEqual([
+        {
+          type: "tool-input-delta",
+          id: "tool_1",
+          name: "lookup",
+          text: '{"query":"weather"}',
+          input: { query: "weather" },
+        },
+      ])
+    }),
+  )
+
+  it.effect("recovers incomplete tool input at finalization", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
         ["messageStart", { role: "assistant" }],
@@ -502,10 +763,10 @@ describe("Bedrock Converse route", () => {
       )
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
-      expect(response.events.find((event) => event.type === "tool-input-error")).toMatchObject({
+      expect(response.events.find((event) => event.type === "tool-call")).toMatchObject({
         id: "tool_1",
         name: "lookup",
-        raw: '{"query":"partial',
+        input: { query: "partial" },
       })
       expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "end_turn" })
     }),
@@ -522,6 +783,104 @@ describe("Bedrock Converse route", () => {
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
       expect(response.reasoning).toBe("Let me think.")
+    }),
+  )
+
+  for (const signature of [undefined, "", "   "]) {
+    for (const cache of ["none", "auto"] as const) {
+      it.effect(`demotes unsigned reasoning to text (${JSON.stringify(signature)}, cache: ${cache})`, () =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model,
+              messages: [
+                Message.user("Think"),
+                Message.assistant([
+                  {
+                    type: "reasoning",
+                    text: "Partial thought",
+                    providerMetadata: signature === undefined ? undefined : { bedrock: { signature } },
+                    cache: new CacheHint({ type: "ephemeral" }),
+                  },
+                ]),
+                Message.user("Continue"),
+              ],
+              cache,
+            }),
+          )
+          expect(prepared.body.messages[1]).toEqual({
+            role: "assistant",
+            content: [{ text: "Partial thought" }, { cachePoint: { type: "default" } }],
+          })
+        }),
+      )
+    }
+  }
+
+  it.effect("omits empty unsigned reasoning without leaving an empty or cache-only assistant", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Think"),
+            Message.assistant([
+              { type: "reasoning", text: "", cache },
+              { type: "reasoning", text: "  ", providerMetadata: { bedrock: { signature: "" } }, cache },
+            ]),
+            Message.user([{ type: "text", text: "Continue", cache }]),
+          ],
+          cache: "none",
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [{ text: "Think" }, { text: "Continue" }, { cachePoint: { type: "default" } }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("demotes foreign reasoning while preserving signed, redacted, text, and tool blocks", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "Foreign thought", providerMetadata: { anthropic: { signature: "old" } } },
+              {
+                type: "reasoning",
+                text: "Signed thought",
+                providerMetadata: { bedrock: { signature: "sig_1" } },
+                cache,
+              },
+              { type: "reasoning", text: "", encrypted: "sig_2", cache },
+              { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "cmVkYWN0ZWQ=" } }, cache },
+              { type: "text", text: "Checking" },
+              ToolCallPart.make({ id: "call_1", name: "lookup", input: {} }),
+            ]),
+          ],
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          cache: "none",
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { text: "Foreign thought" },
+            { reasoningContent: { reasoningText: { text: "Signed thought", signature: "sig_1" } } },
+            { reasoningContent: { reasoningText: { text: "", signature: "sig_2" } } },
+            { reasoningContent: { redactedContent: "cmVkYWN0ZWQ=" } },
+            { text: "Checking" },
+            { toolUse: { toolUseId: "call_1", name: "lookup", input: {} } },
+          ],
+        },
+      ])
     }),
   )
 
@@ -558,6 +917,57 @@ describe("Bedrock Converse route", () => {
         {
           role: "assistant",
           content: [{ reasoningContent: { reasoningText: { text: "Let me think.", signature: "sig_1" } } }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("round-trips reassigned provider reasoning and usage metadata in its own namespace", () =>
+    Effect.gen(function* () {
+      const compatible = model.route.with({ provider: "custom-bedrock" }).model({ id: model.id })
+      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const response = yield* LLMClient.generate(LLMRequest.update(baseRequest, { model: compatible })).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { signature: "custom_sig" } } }],
+              ["contentBlockStop", { contentBlockIndex: 0 }],
+              [
+                "contentBlockDelta",
+                { contentBlockIndex: 1, delta: { reasoningContent: { redactedContent: redactedData } } },
+              ],
+              ["contentBlockStop", { contentBlockIndex: 1 }],
+              ["messageStop", { stopReason: "end_turn" }],
+              ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Let me think.",
+          providerMetadata: { "custom-bedrock": { signature: "custom_sig" } },
+        },
+        { type: "reasoning", text: "", providerMetadata: { "custom-bedrock": { redactedData } } },
+      ])
+      expect(response.usage?.providerMetadata).toEqual({
+        "custom-bedrock": { inputTokens: 5, outputTokens: 2, totalTokens: 7 },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { reasoningContent: { reasoningText: { text: "Let me think.", signature: "custom_sig" } } },
+            { reasoningContent: { redactedContent: redactedData } },
+          ],
         },
       ])
     }),
@@ -645,7 +1055,7 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       // Bedrock represents redactedContent blobs as base64 strings on its JSON
       // wire. The provider owns the payload and requires byte-exact replay.
-      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const redactedData = "AQID"
       const response = yield* LLMClient.generate(
         LLMRequest.update(baseRequest, {
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
@@ -655,10 +1065,8 @@ describe("Bedrock Converse route", () => {
           fixedBytes(
             eventStreamBody(
               ["messageStart", { role: "assistant" }],
-              [
-                "contentBlockDelta",
-                { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: redactedData } } },
-              ],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "AQ==" } } }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "AgM=" } } }],
               ["contentBlockStop", { contentBlockIndex: 0 }],
               [
                 "contentBlockStart",
@@ -674,10 +1082,15 @@ describe("Bedrock Converse route", () => {
           ),
         ),
       )
-      expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toEqual({
+      expect(response.events.filter((event) => event.type === "reasoning-delta" && event.text === "").at(-1)).toEqual({
         type: "reasoning-delta",
         id: "reasoning-0",
         text: "",
+        providerMetadata: { bedrock: { redactedData } },
+      })
+      expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
+        type: "reasoning-end",
+        id: "reasoning-0",
         providerMetadata: { bedrock: { redactedData } },
       })
       const prepared = yield* compileRequest(
@@ -710,15 +1123,121 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("classifies throttlingException as a rate limit", () =>
+  it.effect("keeps redacted reasoning accumulation separate by content block index", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              ["contentBlockDelta", { contentBlockIndex: 2, delta: { reasoningContent: { redactedContent: "AQ==" } } }],
+              ["contentBlockDelta", { contentBlockIndex: 2, delta: { reasoningContent: { redactedContent: "Ag==" } } }],
+              ["contentBlockStop", { contentBlockIndex: 2 }],
+              ["contentBlockDelta", { contentBlockIndex: 7, delta: { reasoningContent: { redactedContent: "Aw==" } } }],
+              ["contentBlockDelta", { contentBlockIndex: 7, delta: { reasoningContent: { redactedContent: "BA==" } } }],
+              ["contentBlockStop", { contentBlockIndex: 7 }],
+              ["messageStop", { stopReason: "end_turn" }],
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AQI=" } } },
+        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AwQ=" } } },
+      ])
+    }),
+  )
+
+  it.effect("preserves split redacted reasoning when contentBlockStop is missing", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "AQ==" } } }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "AgM=" } } }],
+              ["messageStop", { stopReason: "end_turn" }],
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AQID" } } },
+      ])
+    }),
+  )
+
+  it.effect("rejects invalid redacted reasoning base64 with the triggering event", () =>
+    Effect.gen(function* () {
+      const payload = { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "%%==" } } }
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(eventStreamBody(["contentBlockDelta", payload]))),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
+        message: "Bedrock Converse reasoningContent.redactedContent contains invalid base64 data",
+      })
+      expect(JSON.parse(error.reason.body ?? "")).toMatchObject({
+        headers: { ":event-type": { value: "contentBlockDelta" } },
+        body: JSON.stringify(payload),
+      })
+      expect(error.reason.cause).toBeInstanceOf(Error)
+    }),
+  )
+
+  it.effect("ignores unknown normal stream events", () =>
     Effect.gen(function* () {
       const body = concat([
         eventFrame("messageStart", { role: "assistant" }),
-        exceptionFrame("throttlingException", { message: "Slow down" }),
+        eventFrame("futureEvent", { message: "Ignore this" }),
+        eventFrame("messageStop", { stopReason: "end_turn" }),
+      ])
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("fails unknown stream exceptions after message stop", () =>
+    Effect.gen(function* () {
+      const body = concat([
+        eventFrame("messageStart", { role: "assistant" }),
+        eventFrame("messageStop", { stopReason: "end_turn" }),
+        exceptionFrame("futureException", { message: "A future provider failure" }),
       ])
       const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
 
-      expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "Slow down" })
+      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: "A future provider failure" })
+    }),
+  )
+
+  it.effect("classifies throttlingException as a rate limit", () =>
+    Effect.gen(function* () {
+      const payload = { message: "Slow down", details: { opaque: [1, 2] }, trace: "outer", p: "padding" }
+      const body = concat([
+        eventFrame("messageStart", { role: "assistant" }),
+        exceptionFrame("throttlingException", payload),
+      ])
+      const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
+
+      expect(error).toMatchObject({ reason: { _tag: "RateLimit" }, message: "Slow down" })
+      expect(JSON.parse(error.reason.body ?? "")).toEqual({
+        headers: {
+          ":message-type": { type: "string", value: "exception" },
+          ":exception-type": { type: "string", value: "throttlingException" },
+          ":content-type": { type: "string", value: "application/json" },
+        },
+        body: JSON.stringify(payload),
+      })
+      expect(error.reason.http).toMatchObject({
+        status: 200,
+        headers: { "content-type": "application/vnd.amazon.eventstream" },
+      })
     }),
   )
 
@@ -731,10 +1250,9 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "Input is too long for requested model",
-        classification: "context-overflow",
       })
     }),
   )
@@ -753,7 +1271,7 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Upstream model failed" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "Upstream model failed" })
     }),
   )
 
@@ -764,10 +1282,32 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "BadStream: Stream failed",
       })
+      expect(JSON.parse(error.reason.body ?? "")).toMatchObject({
+        headers: { ":error-code": { value: "BadStream" } },
+        body: "",
+      })
+    }),
+  )
+
+  it.effect("retains malformed AWS payloads with headers and decode cause", () =>
+    Effect.gen(function* () {
+      const headers = {
+        ":message-type": { type: "string" as const, value: "event" },
+        ":event-type": { type: "string" as const, value: "messageStart" },
+      }
+      const body = '{"malformed":'
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(codec.encode({ headers, body: utf8Encoder.encode(body) }))),
+        Effect.flip,
+      )
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(JSON.parse(error.reason.body ?? "")).toEqual({ headers, body })
+      expect(error.reason.cause).toBeInstanceOf(Error)
+      expect(error.reason.http?.status).toBe(200)
     }),
   )
 
@@ -904,6 +1444,20 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("rejects image media that is not valid base64", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.user({ type: "media", mediaType: "image/png", data: "https://example.test/image.png" })],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
+      expect(error.message).toContain("Bedrock Converse media data must be valid base64")
+    }),
+  )
+
   it.effect("lowers document media into Bedrock document blocks with format and name", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1024,6 +1578,37 @@ describe("Bedrock Converse route", () => {
           ],
         },
       ])
+    }),
+  )
+
+  it.effect("rejects remote media URLs in tool results", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  {
+                    type: "file",
+                    uri: "https://example.test/report.pdf",
+                    mime: "application/pdf",
+                    name: "report.pdf",
+                  },
+                ],
+              },
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
+      expect(error.message).toContain("Bedrock Converse media data must be valid base64")
     }),
   )
 

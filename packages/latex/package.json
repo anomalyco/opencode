@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/latex",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./markdown": "./src/markdown.ts",
+    "./plugin": "./src/plugin.ts"
+  },
+  "scripts": {
+    "test": "bun test --timeout 30000 --only-failures",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "workspace:*",
+    "@opentui/core": "catalog:",
+    "string-width": "catalog:"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

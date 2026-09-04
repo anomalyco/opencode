@@ -104,6 +104,20 @@ describe("DiagramCanvas", () => {
     expect(runs).toEqual(["AB:state:A", "CD:state:B"])
   })
 
+  test("retains styled trailing padding in render runs without changing plain text", () => {
+    const canvas = new DiagramCanvas<"label">(8, 1)
+    const runs: string[] = []
+    canvas.setText(1, 0, " start ", "label")
+
+    canvas.forEachRun(
+      (run) => runs.push(run.text),
+      () => {},
+    )
+
+    expect(canvas.toString()).toBe("  start")
+    expect(runs).toEqual([" ", " start "])
+  })
+
   test("can trim bottom whitespace for renderers with dynamic height", () => {
     const canvas = new DiagramCanvas<"label">(3, 3)
     const runs: string[] = []

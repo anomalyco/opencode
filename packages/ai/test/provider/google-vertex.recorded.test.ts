@@ -26,9 +26,7 @@ const recorded = recordedTests({
 describe("Google Vertex Gemini recorded", () => {
   recorded.effect("streams text", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLM.request({ model, prompt: "Reply with exactly one word: hello" }),
-      )
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Reply with exactly one word: hello" }))
 
       expect(response.text.toLowerCase()).toContain("hello")
     }),

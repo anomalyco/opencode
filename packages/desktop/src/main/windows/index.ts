@@ -15,6 +15,7 @@ import {
   setDockIcon,
   setPinchZoomEnabled,
   setTitlebar,
+  setZoomFactor,
   updateTitlebar,
   windowAppearance,
   wireFullscreen,
@@ -44,6 +45,7 @@ export {
   setDockIcon,
   setPinchZoomEnabled,
   setTitlebar,
+  setZoomFactor,
   updateTitlebar,
 }
 

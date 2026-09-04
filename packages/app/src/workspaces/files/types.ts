@@ -1,18 +1,22 @@
 import type { FileContent } from "@/runtime/server/types"
+import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 
-export type FileSelection = {
-  startLine: number
-  startChar: number
-  endLine: number
-  endChar: number
-}
+export const FileSelection = Persistence.struct({
+  startLine: Schema.Number,
+  startChar: Schema.Number,
+  endLine: Schema.Number,
+  endChar: Schema.Number,
+})
+export type FileSelection = typeof FileSelection.Type
 
-export type SelectedLineRange = {
-  start: number
-  end: number
-  side?: "additions" | "deletions"
-  endSide?: "additions" | "deletions"
-}
+export const SelectedLineRange = Persistence.struct({
+  start: Schema.Number,
+  end: Schema.Number,
+  side: Persistence.optional(Schema.Literals(["additions", "deletions"])),
+  endSide: Persistence.optional(Schema.Literals(["additions", "deletions"])),
+})
+export type SelectedLineRange = typeof SelectedLineRange.Type
 
 export type FileViewState = {
   scrollTop?: number

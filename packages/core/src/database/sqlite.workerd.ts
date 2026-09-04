@@ -212,7 +212,7 @@ const nativeLayer = (config: Config) =>
     : Layer.effect(
         Sqlite.Native,
         Effect.die(
-          "workerd sqlite cannot open a database from a path; use Database.layerWith(sqliteLayer({ storage }))",
+          "workerd sqlite cannot open a database from a path; use Database.layerFromClient.pipe(Layer.provide(sqliteLayer({ storage })))",
         ),
       )
 

@@ -155,6 +155,16 @@ describe("isSessionNotFoundError", () => {
     expect(isSessionNotFoundError(new Error(body.message, { cause: { body, status: 404 } }), body.sessionID)).toBe(true)
   })
 
+  test("matches a structured error stored directly as the cause", () => {
+    const body = {
+      _tag: "SessionNotFoundError",
+      sessionID: "ses_missing",
+      message: "Session not found",
+    } satisfies SessionNotFoundError
+
+    expect(isSessionNotFoundError(new Error("Unknown error", { cause: body }), body.sessionID)).toBe(true)
+  })
+
   test("rejects errors for other sessions and other 404 responses", () => {
     const body = {
       _tag: "SessionNotFoundError",

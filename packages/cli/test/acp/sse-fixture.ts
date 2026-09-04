@@ -20,7 +20,7 @@ type FixtureOptions = {
   readonly onInterrupt?: (input: {
     readonly sessionID: string
     readonly send: (event: unknown) => void
-  }) => void | Promise<void>
+  }) => boolean | Promise<boolean>
   readonly onPermissionReply?: (input: {
     readonly sessionID: string
     readonly requestID: string
@@ -152,8 +152,9 @@ export function createSseFixture(options: FixtureOptions = {}) {
 
       const interrupt = /^\/api\/session\/([^/]+)\/interrupt$/.exec(url.pathname)
       if (interrupt?.[1]) {
-        await options.onInterrupt?.({ sessionID: decodeURIComponent(interrupt[1]), send })
-        return new Response(null, { status: 204 })
+        const interrupted =
+          (await options.onInterrupt?.({ sessionID: decodeURIComponent(interrupt[1]), send })) ?? false
+        return Response.json({ interrupted })
       }
 
       return new Response(null, { status: 404 })

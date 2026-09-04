@@ -3,6 +3,7 @@ import {
   moveSelection,
   moveSelectionOffset,
   reconcileSelection,
+  reconcileSelectionWindow,
   revealSelectionOffset,
 } from "../../src/ui/select-controller"
 
@@ -23,6 +24,14 @@ test("reveals selections within bounded windows", () => {
     revealSelectionOffset(3, { count: 20, limit: 8, selected: 10 }),
     revealSelectionOffset(20, { count: 20, limit: 8, selected: 19 }),
   ]).toEqual([3, 4, 3, 12])
+})
+
+test("keeps the selection inside a manually scrolled window", () => {
+  expect([
+    reconcileSelectionWindow(5, { count: 40, limit: 10, offset: 17 }),
+    reconcileSelectionWindow(25, { count: 40, limit: 10, offset: 10 }),
+    reconcileSelectionWindow(12, { count: 40, limit: 10, offset: 10 }),
+  ]).toEqual([17, 19, 12])
 })
 
 test("keeps movement offsets and preview margins in bounds", () => {

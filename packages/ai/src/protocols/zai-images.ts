@@ -2,13 +2,7 @@ import { Effect, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image.js"
 import { Auth, type Definition as AuthDefinition } from "../route/auth.js"
-import {
-  InvalidProviderOutputReason,
-  AIError,
-  mergeHttpOptions,
-  mergeJsonRecords,
-  type HttpOptions,
-} from "../schema/index.js"
+import { mergeHttpOptions, mergeJsonRecords, type HttpOptions } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
 import { ImageInputs } from "./utils/image-input.js"
 
@@ -63,13 +57,6 @@ const nativeOptions = (options: ZAIImageOptions | undefined) => {
   }
 }
 
-const invalidOutput = (message: string) =>
-  new AIError({
-    module: ADAPTER,
-    method: "generate",
-    reason: new InvalidProviderOutputReason({ message, route: ADAPTER }),
-  })
-
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   if (!query) return url
   const next = new URL(url)
@@ -82,7 +69,7 @@ export const model = (input: ModelInput) => {
     id: ADAPTER,
     generate: Effect.fn("ZAIImages.generate")(function* (request: ImageRequestFor<ZAIImageOptions>, execute) {
       if ((request.images?.length ?? 0) > 0)
-        return yield* ImageInputs.invalid(ADAPTER, "Z.ai hosted image generation does not support image inputs")
+        return yield* ImageInputs.invalid("Z.ai hosted image generation does not support image inputs")
       const http = mergeHttpOptions(request.model.http, request.http)
       const requestBody = mergeJsonRecords(
         { model: request.model.id, prompt: request.prompt },
@@ -104,13 +91,11 @@ export const model = (input: ModelInput) => {
           HttpClientRequest.bodyText(text, "application/json"),
         ),
       )
-      const payload = yield* response.json.pipe(
-        Effect.mapError(() => invalidOutput("Failed to read the Z.ai Images response")),
+      const output = yield* ProviderShared.imageResponse(ADAPTER, "Z.ai Images", response)
+      const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ZAIImageResponse))(output.body).pipe(
+        Effect.mapError((cause) => output.invalid("Z.ai Images returned an invalid response", cause)),
       )
-      const decoded = yield* Schema.decodeUnknownEffect(ZAIImageResponse)(payload).pipe(
-        Effect.mapError(() => invalidOutput("Z.ai Images returned an invalid response")),
-      )
-      if (decoded.data.length === 0) return yield* invalidOutput("Z.ai Images returned no images")
+      if (decoded.data.length === 0) return yield* output.invalid("Z.ai Images returned no images")
       return new ImageResponse({
         images: decoded.data.map(
           (item) =>

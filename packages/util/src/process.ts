@@ -193,7 +193,7 @@ const layer = Layer.effect(
             ),
           )
         : timed
-      return aborted.pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause))))
+      return aborted.pipe(Effect.mapError((cause) => wrapError(description, cause)))
     }
 
     const run = Effect.fn("AppProcess.run")(function* (command: ChildProcess.Command, options?: RunOptions) {
@@ -220,11 +220,22 @@ const layer = Layer.effect(
       const built: Stream.Stream<string, AppProcessError | PlatformError> = Stream.unwrap(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
+          const streams =
+            options?.includeStderr === true
+              ? yield* handle.stderr.pipe(
+                  Stream.broadcastN({ n: 2, capacity: 16 }),
+                  Effect.map((copies) => ({
+                    source: Stream.merge(handle.stdout, copies[0]),
+                    diagnostics: copies[1],
+                  })),
+                )
+              : { source: handle.stdout, diagnostics: handle.stderr }
           const stderrFiber = yield* Effect.forkScoped(
-            collectStream(handle.stderr, options?.maxErrorBytes).pipe(Effect.map((x) => x.buffer.toString("utf8"))),
+            collectStream(streams.diagnostics, options?.maxErrorBytes).pipe(
+              Effect.map((x) => x.buffer.toString("utf8")),
+            ),
           )
-          const source = options?.includeStderr === true ? handle.all : handle.stdout
-          const lines = source.pipe(
+          const lines = streams.source.pipe(
             Stream.decodeText,
             Stream.splitLines,
             Stream.filter((line) => line.length > 0),
@@ -242,9 +253,7 @@ const layer = Layer.effect(
           return Stream.concat(lines, tail) as Stream.Stream<string, AppProcessError | PlatformError>
         }),
       )
-      const mapped = built.pipe(
-        Stream.catch((cause): Stream.Stream<string, AppProcessError> => Stream.fail(wrapError(description, cause))),
-      )
+      const mapped = built.pipe(Stream.mapError((cause) => wrapError(description, cause)))
       if (!options?.signal) return mapped
       const signal = options.signal
       return mapped.pipe(

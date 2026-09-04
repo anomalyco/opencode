@@ -21,6 +21,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { fromRow } from "@opencode-ai/core/session/info"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { Shell } from "@opencode-ai/schema/shell"
 import {
   InstructionStateTable,
@@ -32,11 +33,12 @@ import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
-    [Bus.node, Bus.configured({ persist: true })],
-  ]),
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionInbox.node, SessionStore.node]),
+    [Bus.node.replace(Bus.configured({ persist: true }))],
+  ),
 )
-const sessionsLayer = AppNodeBuilder.build(Session.node, [[SessionExecution.node, SessionExecution.noopLayer]])
+const sessionsLayer = AppNodeBuilder.build(Session.node, [SessionExecution.node.replace(SessionExecution.noopLayer)])
 const sessionID = Session.ID.make("ses_projector_test")
 const created = DateTime.makeUnsafe(0)
 const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }
@@ -60,28 +62,36 @@ const assistantRow = (
   return { id, session_id: sessionID, type, seq, time_created: DateTime.toEpochMillis(time.created), data }
 }
 
+const seedSession = (overrides?: Partial<typeof SessionTable.$inferInsert>) =>
+  Effect.gen(function* () {
+    const db = (yield* Database.Service).db
+    yield* db
+      .insert(ProjectTable)
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .run()
+    yield* db
+      .insert(SessionTable)
+      .values({
+        id: sessionID,
+        project_id: Project.ID.global,
+        slug: "test",
+        directory: "/project",
+        title: "test",
+        version: "test",
+        ...overrides,
+      })
+      .run()
+    return db
+  })
+
 describe("SessionProjector", () => {
   it.effect("does not settle a pending manual compaction on an auto failure", () =>
     Effect.gen(function* () {
-      const db = (yield* Database.Service).db
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
+      const db = yield* seedSession()
       const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
       const inputID = SessionMessage.ID.make("msg_manual_compaction")
-      yield* SessionInbox.admitCompaction(db, bus, { id: inputID, sessionID, delivery: "queue" })
+      yield* inbox.admitCompaction({ id: inputID, sessionID, delivery: "queue" })
 
       yield* bus.publish(SessionEvent.Compaction.Failed, {
         sessionID,
@@ -95,22 +105,7 @@ describe("SessionProjector", () => {
 
   it.effect("loads legacy revert storage into canonical state", () =>
     Effect.gen(function* () {
-      const db = (yield* Database.Service).db
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
+      const db = yield* seedSession()
       const legacy = JSON.stringify({
         messageID: "msg_boundary",
         snapshot: "tree",
@@ -131,28 +126,14 @@ describe("SessionProjector", () => {
 
   it.effect("projects staged, cleared, and committed reverts", () =>
     Effect.gen(function* () {
-      const db = (yield* Database.Service).db
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-          cost: 1.25,
-          tokens_input: 10,
-          tokens_output: 4,
-          tokens_reasoning: 2,
-          tokens_cache_read: 3,
-          tokens_cache_write: 1,
-        })
-        .run()
+      const db = yield* seedSession({
+        cost: 1.25,
+        tokens_input: 10,
+        tokens_output: 4,
+        tokens_reasoning: 2,
+        tokens_cache_read: 3,
+        tokens_cache_write: 1,
+      })
       const boundary = SessionMessage.ID.make("msg_boundary")
       const earlier = SessionMessage.ID.make("msg_earlier")
       yield* db
@@ -227,24 +208,7 @@ describe("SessionProjector", () => {
 
   it.effect("orders projected messages and context by durable aggregate sequence", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
+      yield* seedSession()
       const bus = yield* Bus.Service
 
       yield* bus.publish(SessionEvent.InboxEnqueued, {
@@ -300,24 +264,7 @@ describe("SessionProjector", () => {
 
   it.effect("maps malformed persisted rows consistently while single-message lookup defects", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
+      const db = yield* seedSession()
       const messageID = SessionMessage.ID.make("msg_malformed")
       yield* db
         .insert(SessionMessageTable)
@@ -333,7 +280,9 @@ describe("SessionProjector", () => {
       yield* db.run(sql`update session_message set data = '{"time":{"created":0}}' where id = ${messageID}`)
 
       const sessions = yield* Session.Service
+      const store = yield* SessionStore.Service
       const expected = { _tag: "Session.MessageDecodeError", sessionID, messageID }
+      expect(yield* store.messages({ sessionID }).pipe(Effect.flip)).toMatchObject(expected)
       expect(yield* sessions.messages({ sessionID }).pipe(Effect.flip)).toMatchObject(expected)
       expect(yield* sessions.context(sessionID).pipe(Effect.flip)).toMatchObject(expected)
       expect(yield* sessions.message({ sessionID, messageID }).pipe(Effect.catchDefect(Effect.succeed))).toMatchObject(
@@ -342,29 +291,28 @@ describe("SessionProjector", () => {
     }).pipe(Effect.provide(sessionsLayer)),
   )
 
+  it.effect("checks session existence before resolving a missing message cursor", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const missing = Session.ID.make("ses_missing")
+      expect(
+        yield* sessions
+          .messages({
+            sessionID: missing,
+            cursor: { id: SessionMessage.ID.make("msg_missing"), direction: "next" },
+          })
+          .pipe(Effect.flip),
+      ).toEqual(new Session.NotFoundError({ sessionID: missing }))
+    }).pipe(Effect.provide(sessionsLayer)),
+  )
+
   it.effect("consumes the pending row and projects the message at promotion", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
+      const db = yield* seedSession()
       const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
       const id = SessionMessage.ID.make("msg_admitted")
-      const admitted = yield* SessionInbox.admit(db, bus, {
+      const admitted = yield* inbox.admit({
         id,
         sessionID,
         item: { type: "user", payload: { text: "promote me" }, delivery: "steer" },
@@ -387,26 +335,7 @@ describe("SessionProjector", () => {
 
   it.effect("projects durable context messages supported by the updater", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-          agent: "plan",
-          model: previousModel,
-        })
-        .run()
-        .pipe(Effect.orDie)
+      const db = yield* seedSession({ agent: "plan", model: previousModel })
       const bus = yield* Bus.Service
 
       yield* bus.publish(SessionEvent.AgentSelected, {
@@ -422,18 +351,26 @@ describe("SessionProjector", () => {
         text: "synthetic context",
         metadata: { source: "projector-test" },
       })
-      yield* bus.publish(SessionEvent.Shell.Started, {
-        sessionID,
-        shell: Shell.Info.make({
-          id: Shell.ID.make("sh_projector"),
-          status: "running",
-          command: "pwd",
-          cwd: "/project",
-          shell: "/bin/sh",
-          file: "/tmp/sh_projector.out",
-          metadata: {},
-          time: { started: 0 },
-        }),
+      // Serialized events have no transient envelope metadata to supply the background marker.
+      yield* bus.replay({
+        id: Event.ID.create(),
+        created: 0,
+        aggregateID: sessionID,
+        seq: 3,
+        type: Bus.versionedType(SessionEvent.Shell.Started.type, 1),
+        data: {
+          sessionID,
+          shell: Shell.Info.make({
+            id: Shell.ID.make("sh_projector"),
+            status: "running",
+            command: "pwd",
+            cwd: "/project",
+            shell: "/bin/sh",
+            file: "/tmp/sh_projector.out",
+            metadata: { background: true },
+            time: { started: 0 },
+          }),
+        },
       })
       yield* bus.publish(SessionEvent.Shell.Ended, {
         sessionID,
@@ -513,6 +450,7 @@ describe("SessionProjector", () => {
         command: "pwd",
         status: "exited",
         exit: 0,
+        metadata: { background: true },
         output: { output: "/project", truncated: false },
         time: { completed: DateTime.makeUnsafe(0) },
       })
@@ -532,24 +470,7 @@ describe("SessionProjector", () => {
 
   it.effect("rejects distinct creator events that reuse one projected message ID", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
+      const db = yield* seedSession()
       const bus = yield* Bus.Service
       const id = SessionMessage.ID.make("msg_creator_collision")
       const { id: _, type, ...data } = encodeMessage({ id, type: "synthetic", text: "existing", time: { created } })
@@ -576,24 +497,7 @@ describe("SessionProjector", () => {
 
   it.effect("projects retry state and clears it at the next step or execution terminal", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
+      const db = yield* seedSession()
       const bus = yield* Bus.Service
       const first = SessionMessage.ID.make("msg_retry_first")
       const second = SessionMessage.ID.make("msg_retry_second")
@@ -643,24 +547,7 @@ describe("SessionProjector", () => {
 
   it.effect("does not infer restart continuation from lifecycle history", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
+      const db = yield* seedSession()
       const bus = yield* Bus.Service
       const suspended = () =>
         db
@@ -680,24 +567,7 @@ describe("SessionProjector", () => {
 
   it.effect("updates only the newest incomplete assistant projection", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
+      const db = yield* seedSession()
       yield* db
         .insert(SessionMessageTable)
         .values([
@@ -757,24 +627,7 @@ describe("SessionProjector", () => {
 
   it.effect("projects ended and failed step terminal state", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
+      const db = yield* seedSession()
       const endedID = SessionMessage.ID.make("msg_ended")
       const failedID = SessionMessage.ID.make("msg_failed")
       yield* db
@@ -784,6 +637,10 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
 
       const service = yield* Bus.Service
+      yield* service.publish(SessionEvent.Step.Streamed, {
+        sessionID,
+        assistantMessageID: endedID,
+      })
       yield* service.publish(SessionEvent.Step.Ended, {
         sessionID,
         assistantMessageID: endedID,
@@ -824,7 +681,7 @@ describe("SessionProjector", () => {
         cost: Money.USD.make(1),
         tokens: { input: 2, output: 3, reasoning: 4, cache: { read: 5, write: 6 } },
         snapshot: { end: "snap_ended", files: ["src/ended.ts"] },
-        time: { completed: created },
+        time: { streamed: created, completed: created },
       })
       expect(messages[1]).toMatchObject({
         type: "assistant",
@@ -840,24 +697,7 @@ describe("SessionProjector", () => {
 
   it.effect("does not revive a stale incomplete assistant projection", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
+      const db = yield* seedSession()
       yield* db
         .insert(SessionMessageTable)
         .values([

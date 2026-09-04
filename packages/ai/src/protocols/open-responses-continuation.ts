@@ -1,4 +1,4 @@
-import { AIError, TransportReason } from "../schema/index.js"
+import { AIError, TransportError } from "../schema/index.js"
 import type { ChannelCheckpoint, ChannelObservation, WebSocketChannelDriver } from "../route/transport/index.js"
 import { Effect, Option, Schema } from "effect"
 import * as ProviderShared from "./shared.js"
@@ -99,17 +99,17 @@ const incremental = (
 const code = (event: OpenResponses.Event) => event.code || event.error?.code || event.response?.error?.code || undefined
 
 const rejected = (
-  input: DriverInput,
   observation: Extract<ChannelObservation, { readonly type: "provider-failure" }>,
   recovery: "retry-full" | "rotate-and-retry-full",
 ): ChannelObservation => ({
   type: "rejected",
   recovery,
   error: new AIError({
-    module: input.id,
-    method: "stream",
-    reason: new TransportReason({
+    reason: new TransportError({
       message: observation.error.message,
+      body: observation.error.reason.body,
+      http: observation.error.reason.http,
+      cause: observation.error.reason.cause,
       transport: "websocket",
       operation: "read",
       phase: "receive",
@@ -137,15 +137,16 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
     observe: (create, frame) =>
       Effect.gen(function* () {
         const event = yield* decodeEvent(frame).pipe(
-          Effect.mapError(() => ProviderShared.eventError(input.id, `Invalid ${input.name} WebSocket event`, frame)),
+          Effect.mapError((cause) =>
+            ProviderShared.eventError(input.id, `Invalid ${input.name} WebSocket event`, frame, cause),
+          ),
         )
         const observation = yield* input.base.observe(create, frame)
         if (event.type === "response.output_item.done" && event.item) output.push(event.item)
         if (observation.type === "provider-failure") {
           const rejection = code(event)
-          if (rejection === "previous_response_not_found") return rejected(input, observation, "retry-full")
-          if (rejection === "websocket_connection_limit_reached")
-            return rejected(input, observation, "rotate-and-retry-full")
+          if (rejection === "previous_response_not_found") return rejected(observation, "retry-full")
+          if (rejection === "websocket_connection_limit_reached") return rejected(observation, "rotate-and-retry-full")
         }
         if (observation.type !== "completed") return observation
         const responseID = event.response?.id
@@ -154,7 +155,12 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
           ...observation,
           checkpoint: {
             protocol: PROTOCOL,
-            value: { version: VERSION, responseID, request, output: output.slice() } satisfies CheckpointValue,
+            value: {
+              version: VERSION,
+              responseID,
+              request,
+              output: event.response?.output ? [...event.response.output] : output.slice(),
+            } satisfies CheckpointValue,
           },
         }
       }),

@@ -100,6 +100,7 @@ function clientProtocol(value: MessagePort) {
           Effect.forkScoped,
         )
         return {
+          codecFor: serialization.codecFor,
           send: (_clientId, request) =>
             Effect.sync(() => {
               const encoded = parser.encode(request)

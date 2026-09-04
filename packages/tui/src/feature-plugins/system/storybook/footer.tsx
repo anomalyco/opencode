@@ -26,26 +26,23 @@ export function StoryFooter(props: {
       </box>
       <Show when={props.status || props.message}>
         <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
-          <text fg={theme.text.default}>{props.status ?? ""}</text>
-          <Show when={props.status && props.message}>
-            <text fg={theme.text.subdued}> · </text>
-          </Show>
-          <text fg={theme.text.subdued}>{props.message ?? ""}</text>
+          <text fg={theme.text.default} wrapMode="none">
+            {props.status ?? ""}
+            <span style={{ fg: theme.text.subdued }}>
+              {props.status && props.message ? " · " : ""}
+              {props.message ?? ""}
+            </span>
+          </text>
         </box>
       </Show>
-      <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
-        <text fg={theme.text.default} wrapMode="none">
-          <For each={props.controls}>
-            {(control, index) => (
-              <>
-                <Show when={index() > 0}>
-                  <span> </span>
-                </Show>
-                {control.shortcut} <span style={{ fg: theme.text.subdued }}>{control.label}</span>
-              </>
-            )}
-          </For>
-        </text>
+      <box paddingLeft={1} paddingRight={1} flexDirection="row" flexWrap="wrap" columnGap={1}>
+        <For each={props.controls}>
+          {(control) => (
+            <text fg={theme.text.default} wrapMode="none" flexShrink={0}>
+              {control.shortcut} <span style={{ fg: theme.text.subdued }}>{control.label}</span>
+            </text>
+          )}
+        </For>
       </box>
       {/* The app-wide feature footer overlays the terminal's final row. */}
       <box height={1} />

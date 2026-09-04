@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { VariantPlugin } from "@opencode-ai/core/plugin/variant"
@@ -16,7 +15,7 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
 )
-const it = testEffect(AppNodeBuilder.build(Catalog.node, [[Location.node, locationLayer]]))
+const it = testEffect(AppNodeBuilder.build(Catalog.node, [Location.node.replace(locationLayer)]))
 
 describe("VariantPlugin", () => {
   it.effect("adds GLM 5.2 variants after catalog sources", () =>

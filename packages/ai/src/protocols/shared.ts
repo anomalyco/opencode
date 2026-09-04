@@ -2,15 +2,21 @@ import { Buffer } from "node:buffer"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import {
-  InvalidProviderOutputReason,
-  InvalidRequestReason,
+  InvalidProviderOutputError,
+  InvalidRequestError,
+  UnsupportedOperationError,
   AIError,
+  HttpContext,
+  LLMRequest,
+  Message,
+  ToolDefinition,
   type ContentPart,
-  type LLMRequest,
   type MediaPart,
+  type ProviderID,
   type TextPart,
+  type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
 import { isRecord } from "../utils/record.js"
@@ -28,10 +34,10 @@ export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 
 // OpenAI limits `prompt_cache_key` to 64 chars; DeepSeek and Zai inherit the same
 // limit via their OpenAI-compatible APIs. Clamp with unicode-aware slicing.
-export const clampPromptCacheKey = (key: string | undefined): string | undefined => {
-  if (key === undefined) return undefined
-  const chars = Array.from(key)
-  if (chars.length <= OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH) return key
+export const promptCacheKey = (request: LLMRequest): string | undefined => {
+  if (request.cache === "none" || request.promptCacheKey === undefined) return undefined
+  const chars = Array.from(request.promptCacheKey)
+  if (chars.length <= OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH) return request.promptCacheKey
   return chars.slice(0, OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH).join("")
 }
 
@@ -43,6 +49,7 @@ export const clampPromptCacheKey = (key: string | undefined): string | undefined
 export interface ToolAccumulator {
   readonly id: string
   readonly name: string
+  readonly namespace?: string
   readonly input: string
 }
 
@@ -96,17 +103,15 @@ export const sumTokens = (...values: ReadonlyArray<number | undefined>): number 
   return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
 
-export const eventError = (route: string, message: string, raw?: string) =>
+export const eventError = (route: string, message: string, body?: string, cause?: unknown) =>
   new AIError({
-    module: "ProviderShared",
-    method: "stream",
-    reason: new InvalidProviderOutputReason({ route, message, raw }),
+    reason: new InvalidProviderOutputError({ route, message, body, cause }),
   })
 
 export const parseJson = (route: string, input: string, message: string) =>
   Effect.try({
     try: () => decodeJson(input),
-    catch: () => eventError(route, message, input),
+    catch: (cause) => eventError(route, message, input, cause),
   })
 
 /**
@@ -208,27 +213,41 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, optionally filters named events, and drops empty / `[DONE]`
- * keep-alive events so the protocol event schema sees one JSON string per
- * element. The SSE channel emits a
- * `Retry` control event on its error channel; we drop it here (we don't
- * implement client-driven retries). Decoder failures become provider output
- * errors so the public error channel stays `AIError`.
+ * decoder, optionally filters named events, and drops empty events. `[DONE]`
+ * is dropped by default or retained for protocols that use it as their stream
+ * boundary. Retry control events are ignored without interrupting the stream.
+ * Decoder failures become provider output errors so the public error channel
+ * stays `AIError`.
  */
 export const sseFraming = (
   bytes: Stream.Stream<Uint8Array, AIError>,
   events?: ReadonlySet<string>,
+  includeDone = false,
 ): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
-    Stream.pipeThroughChannel(Sse.decode()),
-    Stream.catchTag("Retry", () => Stream.empty),
-    Stream.catchTag("SseError", (error) => Stream.fail(eventError("sse", error.message))),
+    Stream.mapAccumEffect(
+      () => {
+        const output: Sse.Event[] = []
+        return {
+          output,
+          parser: Sse.makeParser((event) => {
+            if (event._tag === "Event") output.push(event)
+          }),
+        }
+      },
+      (state, chunk) =>
+        Effect.gen(function* () {
+          const error = state.parser.feed(chunk)
+          if (error) return yield* eventError("sse", error.message, chunk, error)
+          return [state, state.output.splice(0)] as const
+        }),
+    ),
     Stream.filter(
       (event) =>
         (events === undefined || events.has(event.event)) &&
         event.data.length > 0 &&
-        (event.data !== "[DONE]" || (events !== undefined && event.event !== "message")),
+        (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message")),
     ),
     Stream.map((event) => event.data),
   )
@@ -236,12 +255,93 @@ export const sseFraming = (
 /**
  * Canonical invalid-request constructor shared by protocol lowering.
  */
-export const invalidRequest = (message: string) =>
+export const invalidRequest = (message: string, cause?: unknown) =>
   new AIError({
-    module: "ProviderShared",
-    method: "request",
-    reason: new InvalidRequestReason({ message }),
+    reason: new InvalidRequestError({ message, cause }),
   })
+
+/**
+ * Canonical constructor for operations the selected route does not implement.
+ * Prefer this over `invalidRequest` when the failure is a missing route
+ * capability rather than a malformed caller input, so consumers can branch on
+ * `reason._tag` plus `reason.operation` instead of matching message text.
+ */
+export const unsupportedOperation = (input: {
+  readonly operation: string
+  readonly message: string
+  readonly provider?: ProviderID
+  readonly route?: string
+  readonly cause?: unknown
+}) =>
+  new AIError({
+    reason: new UnsupportedOperationError({
+      operation: input.operation,
+      message: input.message,
+      provider: input.provider,
+      route: input.route,
+      cause: input.cause,
+    }),
+  })
+
+/**
+ * Lower namespaces to flat definitions for protocols without a native
+ * namespace construct. Leaf names join their namespace path with `_` because
+ * `.` is not broadly accepted in provider tool names.
+ */
+export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string> = []) => {
+  const flat = tools.flatMap((tool): ReadonlyArray<ToolDefinition> => {
+    if (tool.type === "namespace") return flattenTools(tool.tools, [...path, tool.name])
+    if (path.length === 0) return [tool]
+    return [new ToolDefinition({ ...tool, name: [...path, tool.name].join("_") })]
+  })
+  return [...new Map(flat.map((tool) => [tool.name, tool])).values()]
+}
+
+export const flattenToolRequest = (request: LLMRequest) => {
+  const messages = request.messages.map((message) => {
+    const content = message.content.map((part) => {
+      if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
+      return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
+    })
+    return content.every((part, index) => part === message.content[index])
+      ? message
+      : new Message({ ...message, content })
+  })
+  return {
+    tools: flattenTools(request.tools),
+    request: messages.every((message, index) => message === request.messages[index])
+      ? request
+      : LLMRequest.update(request, { messages }),
+  }
+}
+
+export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function* (
+  route: string,
+  name: string,
+  response: HttpClientResponse.HttpClientResponse,
+) {
+  const http = new HttpContext({ url: response.request.url, status: response.status, headers: response.headers })
+  const body = yield* response.text.pipe(
+    Effect.mapError(
+      (cause) =>
+        new AIError({
+          reason: new InvalidProviderOutputError({
+            route,
+            message: `Failed to read the ${name} response`,
+            http,
+            cause,
+          }),
+        }),
+    ),
+  )
+  return {
+    body,
+    invalid: (message: string, cause?: unknown) =>
+      new AIError({
+        reason: new InvalidProviderOutputError({ route, message, body, http, cause }),
+      }),
+  }
+})
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
   route: string,
@@ -289,7 +389,7 @@ export const unsupportedContent = (
 export const validateWith =
   <A, I, E extends { readonly message: string }>(decode: (input: I) => Effect.Effect<A, E>) =>
   (payload: I) =>
-    decode(payload).pipe(Effect.mapError((error) => invalidRequest(error.message)))
+    decode(payload).pipe(Effect.mapError((error) => invalidRequest(error.message, error)))
 
 /**
  * Build an HTTP POST with a JSON body. Sets `content-type: application/json`

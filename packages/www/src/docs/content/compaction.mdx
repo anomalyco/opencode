@@ -67,7 +67,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
 
 | Field         | Default | V2 behavior                                                                                                                                   |
 | ------------- | ------: | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auto`        |  `true` | Runs the preflight context-size check. It does not disable manual compaction or one-shot provider-overflow recovery.                          |
+| `auto`        |  `true` | Enables preflight context-size checks and one-shot provider-overflow recovery. Disabling it does not affect manual compaction.                |
 | `keep.tokens` | `15000` | Approximate number of tokens from the newest serialized conversation context to retain beside the summary.                                    |
 | `buffer`      | `20000` | Safety reserve below an explicit input limit. Without one, it is the minimum context reserve and the model output allowance wins when larger. |
 
@@ -77,10 +77,19 @@ preserves more recent detail but leaves less room for future work. Larger
 
 ## Checkpoint contents
 
-V2 uses the session's selected or default model to generate the summary, with
-tools disabled and at most 4096 output tokens. The summary records the
-objective, important details, completed and active work, blockers, next moves,
-and relevant files.
+V2 uses the session's selected agent, model, and variant to generate the summary.
+The request reuses the normal instructions, tool definitions, and structured
+history prefix, then appends a user message requesting a checkpoint. Context
+hooks run as they do for normal session requests.
+
+Compaction does not dispatch local tool calls or override tool choice. The
+summary must contain at least one heading from the requested template, such as
+`## Objective`. If it does not, V2 makes one additional request asking the model
+to fill in the template correctly. A second invalid response fails compaction.
+Provider-hosted tools remain subject to the selected provider's behavior.
+
+The summary records the objective, requirements, decisions, completed and active
+work, blockers, next moves, relevant files, and additional context.
 
 The newest serialized context up to `keep.tokens` is retained separately. This
 is not a byte-for-byte transcript: tool output is limited to 2000 characters,

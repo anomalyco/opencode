@@ -2,9 +2,14 @@ import type { HomeProjectsController } from "./controller"
 import { HomeProjectsView } from "./view"
 import type { HomeScrollController } from "../scroll"
 
-export function HomeProjects(props: { projects: HomeProjectsController; scroll: HomeScrollController }) {
+export function HomeProjects(props: {
+  projects: HomeProjectsController
+  scroll: HomeScrollController
+  dropdown?: boolean
+}) {
   return (
     <HomeProjectsView
+      dropdown={props.dropdown}
       language={props.projects.copy.language}
       servers={props.projects.server.list()}
       projects={props.projects.project.list()}
@@ -32,6 +37,8 @@ export function HomeProjects(props: { projects: HomeProjectsController; scroll: 
       onSelectProject={props.projects.project.select}
       onAddProjects={props.projects.project.add}
       onOpenProjectNewSession={props.projects.project.openNewSession}
+      canImportSession={props.projects.project.canImportSession}
+      onImportSession={props.projects.project.importSession}
       onEditProject={props.projects.project.edit}
       onRevealProject={props.projects.project.reveal}
       onClearNotifications={props.projects.project.clearNotifications}

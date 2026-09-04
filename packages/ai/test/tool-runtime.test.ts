@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Content } from "@opencode-ai/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import {
@@ -7,6 +7,7 @@ import {
   LLMEvent,
   LLMRequest,
   LLMResponse,
+  ToolCallPart,
   ToolChoice,
   ToolOutput,
   toDefinitions,
@@ -35,6 +36,27 @@ const baseRequest = LLM.request({
   prompt: "Use the tool.",
 })
 const weatherFailureCause = new Error("weather lookup denied")
+
+test("dispatches namespaced calls by qualified identity", async () => {
+  let context: ToolExecuteContext | undefined
+  const lookup = Tool.make({
+    description: "Look up a customer.",
+    parameters: Schema.Struct({}),
+    success: Schema.String,
+    execute: (_, value) => {
+      context = value
+      return Effect.succeed("customer")
+    },
+  })
+  const call = ToolCallPart.make({ id: "call_1", namespace: "crm", name: "lookup", input: {} })
+  const result = await Effect.runPromise(
+    ToolRuntime.dispatch({ "crm.lookup": lookup, lookup: schema_only_weather }, call),
+  )
+
+  expect(result.result).toEqual({ type: "text", value: "customer" })
+  expect(context).toEqual({ id: "call_1", namespace: "crm", name: "lookup" })
+  expect(result.events).toEqual([expect.objectContaining({ type: "tool-result", namespace: "crm", name: "lookup" })])
+})
 
 const get_weather = Tool.make({
   description: "Get current weather for a city.",
@@ -101,7 +123,7 @@ describe("LLMClient tools", () => {
       const messages = Reflect.get(second, "messages")
       const tools = Reflect.get(second, "tools")
 
-      expect(Reflect.get(second, "max_tokens")).toBe(50)
+      expect(Reflect.get(second, "max_completion_tokens")).toBe(50)
       expect(Reflect.get(second, "tool_choice")).toBe("auto")
       expect(tools).toHaveLength(1)
       expect(
@@ -277,65 +299,61 @@ describe("LLMClient tools", () => {
     }),
   )
 
-  it.effect("models canonical tool files with URIs", () =>
-    Effect.sync(() => {
-      const decode = Schema.decodeUnknownSync(Content)
+  test("models canonical tool files with URIs", () => {
+    const decode = Schema.decodeUnknownSync(Content)
 
-      expect(decode({ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" })).toEqual({
-        type: "file",
-        uri: "data:image/png;base64,AAAA",
-        mime: "image/png",
-      })
-      expect(decode({ type: "file", uri: "https://example.test/image.png", mime: "image/png" })).toEqual({
-        type: "file",
-        uri: "https://example.test/image.png",
-        mime: "image/png",
-      })
-      expect(decode({ type: "file", uri: "file:///tmp/image.png", mime: "image/png" })).toEqual({
-        type: "file",
-        uri: "file:///tmp/image.png",
-        mime: "image/png",
-      })
-    }),
-  )
+    expect(decode({ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" })).toEqual({
+      type: "file",
+      uri: "data:image/png;base64,AAAA",
+      mime: "image/png",
+    })
+    expect(decode({ type: "file", uri: "https://example.test/image.png", mime: "image/png" })).toEqual({
+      type: "file",
+      uri: "https://example.test/image.png",
+      mime: "image/png",
+    })
+    expect(decode({ type: "file", uri: "file:///tmp/image.png", mime: "image/png" })).toEqual({
+      type: "file",
+      uri: "file:///tmp/image.png",
+      mime: "image/png",
+    })
+  })
 
-  it.effect("preserves canonical tool file URIs", () =>
-    Effect.sync(() => {
-      expect(
-        ToolOutput.toResultValue(
-          ToolOutput.make({}, [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }]),
-        ),
-      ).toEqual({
-        type: "content",
-        value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
-      })
-      expect(
-        ToolOutput.toResultValue(
-          ToolOutput.make({}, [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }]),
-        ),
-      ).toEqual({
+  test("preserves canonical tool file URIs", () => {
+    expect(
+      ToolOutput.toResultValue(
+        ToolOutput.make({}, [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }]),
+      ),
+    ).toEqual({
+      type: "content",
+      value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+    })
+    expect(
+      ToolOutput.toResultValue(
+        ToolOutput.make({}, [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }]),
+      ),
+    ).toEqual({
+      type: "content",
+      value: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
+    })
+    expect(
+      ToolOutput.toResultValue(
+        ToolOutput.make({}, [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }]),
+      ),
+    ).toEqual({
+      type: "content",
+      value: [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }],
+    })
+    expect(
+      ToolOutput.fromResultValue({
         type: "content",
         value: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
-      })
-      expect(
-        ToolOutput.toResultValue(
-          ToolOutput.make({}, [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }]),
-        ),
-      ).toEqual({
-        type: "content",
-        value: [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }],
-      })
-      expect(
-        ToolOutput.fromResultValue({
-          type: "content",
-          value: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
-        }),
-      ).toEqual({
-        structured: {},
-        content: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
-      })
-    }),
-  )
+      }),
+    ).toEqual({
+      structured: {},
+      content: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
+    })
+  })
 
   it.effect("settles projected URL files as canonical tool results", () =>
     Effect.gen(function* () {
@@ -364,24 +382,22 @@ describe("LLMClient tools", () => {
     }),
   )
 
-  it.effect("derives typed output schemas and preserves dynamic output schemas", () =>
-    Effect.sync(() => {
-      const [typed] = toDefinitions({ get_weather })
-      const schema = { type: "object", properties: { result: { type: "string" } } } as const
-      const [dynamic] = toDefinitions({
-        dynamic: Tool.make({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
-      })
+  test("derives typed output schemas and preserves dynamic output schemas", () => {
+    const [typed] = toDefinitions({ get_weather })
+    const schema = { type: "object", properties: { result: { type: "string" } } } as const
+    const [dynamic] = toDefinitions({
+      dynamic: Tool.make({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
+    })
 
-      expect(typed?.outputSchema).toMatchObject({
-        type: "object",
-        properties: { condition: { type: "string" } },
-        required: ["temperature", "condition"],
-        additionalProperties: false,
-      })
-      expect(Reflect.get(Reflect.get(typed?.outputSchema ?? {}, "properties") as object, "temperature")).toBeDefined()
-      expect(dynamic?.outputSchema).toEqual(schema)
-    }),
-  )
+    expect(typed?.outputSchema).toMatchObject({
+      type: "object",
+      properties: { condition: { type: "string" } },
+      required: ["temperature", "condition"],
+      additionalProperties: false,
+    })
+    expect(Reflect.get(Reflect.get(typed?.outputSchema ?? {}, "properties") as object, "temperature")).toBeDefined()
+    expect(dynamic?.outputSchema).toEqual(schema)
+  })
 
   it.effect("preserves content tool results from dynamic tools", () =>
     Effect.gen(function* () {
@@ -443,6 +459,33 @@ describe("LLMClient tools", () => {
           name: "eventful",
           result: callerOwned,
           output: { structured: { ok: true }, content: [] },
+        }),
+      ])
+    }),
+  )
+
+  it.effect("projects malformed tagged dynamic output as opaque JSON", () =>
+    Effect.gen(function* () {
+      const malformed = { type: "content", value: [{ type: "text" }] }
+      const dynamic = Tool.make({
+        description: "Return caller-defined JSON.",
+        jsonSchema: { type: "object", properties: {} },
+        execute: () => Effect.succeed(malformed),
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { dynamic },
+        LLMEvent.toolCall({ id: "call_1", name: "dynamic", input: {} }),
+      )
+
+      expect(dispatched.result).toEqual({ type: "json", value: malformed })
+      expect(dispatched.output).toEqual({ structured: malformed, content: [] })
+      expect(dispatched.events).toEqual([
+        LLMEvent.toolResult({
+          id: "call_1",
+          name: "dynamic",
+          result: { type: "json", value: malformed },
+          output: { structured: malformed, content: [] },
         }),
       ])
     }),

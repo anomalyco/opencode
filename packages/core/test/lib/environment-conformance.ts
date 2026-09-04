@@ -49,6 +49,29 @@ export const environmentConformance = <E>(
       }),
     )
 
+    check("observes filesystem state when an operation executes", (harness) =>
+      Effect.gen(function* () {
+        const target = `${harness.root}/deferred.txt`
+        const source = `${harness.root}/source.txt`
+        const destination = `${harness.root}/destination.txt`
+        const read = harness.files.read(target)
+        const stat = harness.files.stat(target)
+        const list = harness.files.list(harness.root)
+        const move = harness.files.move(source, destination)
+
+        yield* harness.files.write(target, bytes("first"))
+        yield* harness.files.write(source, bytes("moved"))
+        expect(text((yield* read).bytes)).toBe("first")
+        expect((yield* stat).size).toBe(5)
+        expect(yield* list).toContainEqual({ name: "deferred.txt", type: "file" })
+        yield* move
+        expect(text((yield* harness.files.read(destination)).bytes)).toBe("moved")
+
+        yield* harness.files.write(target, bytes("second"))
+        expect(text((yield* read).bytes)).toBe("second")
+      }),
+    )
+
     check("reports missing paths", (harness) =>
       Effect.gen(function* () {
         const target = `${harness.root}/missing`

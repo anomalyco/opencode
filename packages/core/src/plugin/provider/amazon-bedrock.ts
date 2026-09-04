@@ -4,7 +4,6 @@ import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 
 type MantleSDK = {
-  languageModel: (modelID: string) => LanguageModelV3
   chat: (modelID: string) => LanguageModelV3
   responses: (modelID: string) => LanguageModelV3
 }

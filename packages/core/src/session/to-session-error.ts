@@ -25,6 +25,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.invalid-output", cause.reason)
       case "InvalidRequest":
         return providerError("provider.invalid-request", cause.reason)
+      case "UnsupportedOperation":
+        return providerError("provider.unsupported-operation", cause.reason)
       case "NoRoute":
         return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
@@ -59,7 +61,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
 }
 
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
-  const status =
-    ("http" in reason ? reason.http?.response?.status : undefined) ?? ("status" in reason ? reason.status : undefined)
+  const status = reason.http?.status
   return { type, message: reason.message, ...(status === undefined ? {} : { status }) }
 }

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
+import { createStore } from "solid-js/store"
 import { createSessionResolution } from "@/session/session-resolution"
 
 type Session = { id: string; directory: string }
@@ -15,8 +16,10 @@ function createFixture(initial: Record<string, Session> = {}) {
   const [cache, setCache] = createSignal(initial)
   const deferred = new Map<string, PromiseWithResolvers<unknown>>()
   const resolves: string[] = []
+  const messages = { syncs: [] as string[], ...Promise.withResolvers<unknown>() }
   return {
     resolves,
+    messages,
     sessions: {
       get: (id: string) => cache()[id],
       sync: (id: string) => {
@@ -25,10 +28,17 @@ function createFixture(initial: Record<string, Session> = {}) {
         deferred.set(id, entry)
         return entry.promise
       },
+      message: {
+        sync: (id: string) => {
+          messages.syncs.push(id)
+          return messages.promise
+        },
+      },
     },
-    settle(id: string) {
-      setCache({ ...cache(), [id]: sessionOf(id) })
+    settle(id: string, directory = `/dir/${id}`) {
+      setCache({ ...cache(), [id]: { id, directory } })
       deferred.get(id)?.resolve(undefined)
+      deferred.delete(id)
     },
     fail(id: string, error: unknown) {
       deferred.get(id)?.reject(error)
@@ -51,7 +61,66 @@ const flush = async () => {
   await Promise.resolve()
 }
 
-test("resolves an uncached session", async () => {
+test("refreshes the current session on reconnect while keeping cached content visible", async () => {
+  await createRoot(async (dispose) => {
+    const fixture = createFixture({ ses_a: sessionOf("ses_a") })
+    const [connection, setConnection] = createStore({ connected: false })
+    const current = createSessionResolution(
+      () => "ses_a",
+      () => fixture.sessions,
+      { connected: () => connection.connected },
+    )
+
+    expect(current()).toEqual(sessionOf("ses_a"))
+    expect(fixture.resolves).toEqual([])
+    await flush()
+    setConnection("connected", true)
+    expect(fixture.resolves).toEqual(["ses_a"])
+    fixture.settle("ses_a")
+    await flush()
+
+    setConnection("connected", false)
+    expect(current()).toEqual(sessionOf("ses_a"))
+    expect(fixture.resolves).toEqual(["ses_a"])
+    setConnection("connected", true)
+    expect(fixture.resolves).toEqual(["ses_a", "ses_a"])
+    expect(current()).toEqual(sessionOf("ses_a"))
+    expect(fixture.messages.syncs).toEqual(["ses_a", "ses_a"])
+    fixture.settle("ses_a", "/worktrees/moved")
+    await flush()
+    expect(current()?.directory).toBe("/worktrees/moved")
+    dispose()
+  })
+})
+
+test("starts metadata and messages in parallel once the route has a session ID", async () => {
+  await createRoot(async (dispose) => {
+    const fixture = createFixture()
+    const [id, setId] = createSignal<string>()
+    const current = createSessionResolution(id, () => fixture.sessions)
+
+    expect(current()).toBeUndefined()
+    await flush()
+    expect(fixture.resolves).toEqual([])
+    expect(fixture.messages.syncs).toEqual([])
+
+    setId("ses_a")
+    expect(fixture.resolves).toEqual(["ses_a"])
+    expect(fixture.messages.syncs).toEqual(["ses_a"])
+
+    fixture.messages.resolve(undefined)
+    await flush()
+    expect(current()).toBeUndefined()
+
+    fixture.settle("ses_a")
+    await flush()
+    expect(current()?.id).toBe("ses_a")
+
+    dispose()
+  })
+})
+
+test("message failure does not fail metadata resolution", async () => {
   await createRoot(async (dispose) => {
     const fixture = createFixture()
     const current = createSessionResolution(
@@ -59,9 +128,10 @@ test("resolves an uncached session", async () => {
       () => fixture.sessions,
     )
 
-    expect(current()).toBeUndefined()
     await flush()
-    expect(fixture.resolves).toEqual(["ses_a"])
+    fixture.messages.reject(new Error("message sync failed"))
+    await flush()
+    expect(current()).toBeUndefined()
 
     fixture.settle("ses_a")
     await flush()
@@ -82,12 +152,15 @@ test("re-resolves when navigating to an uncached session without a remount", asy
 
     await flush()
     expect(current()?.id).toBe("ses_a")
+    expect(fixture.resolves).toEqual([])
+    expect(fixture.messages.syncs).toEqual(["ses_a"])
 
     expect(() => {
       setId("ses_b")
       current()
     }).not.toThrow()
     expect(fixture.resolves).toEqual(["ses_b"])
+    expect(fixture.messages.syncs).toEqual(["ses_a", "ses_b"])
 
     fixture.settle("ses_b")
     await flush()
@@ -139,6 +212,7 @@ test("returning to a pruned session re-resolves instead of throwing not found", 
       current()
     }).not.toThrow()
     expect(fixture.resolves).toEqual(["ses_a", "ses_b", "ses_a"])
+    expect(fixture.messages.syncs).toEqual(["ses_a", "ses_b", "ses_a"])
 
     fixture.settle("ses_a")
     await flush()
@@ -167,6 +241,7 @@ test("revisiting a session whose resolution failed while unfocused retries clean
       current()
     }).not.toThrow()
     expect(fixture.resolves).toEqual(["ses_a", "ses_b", "ses_a"])
+    expect(fixture.messages.syncs).toEqual(["ses_a", "ses_b", "ses_a"])
 
     fixture.settle("ses_a")
     await flush()
@@ -197,6 +272,8 @@ test("re-resolves against a replaced session store", async () => {
     }).not.toThrow()
     await flush()
     expect(second.resolves).toEqual(["ses_a"])
+    expect(first.messages.syncs).toEqual(["ses_a"])
+    expect(second.messages.syncs).toEqual(["ses_a"])
 
     second.settle("ses_a")
     await flush()

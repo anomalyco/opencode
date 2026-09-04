@@ -1,9 +1,9 @@
 export * as WebFetchTool from "./webfetch.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Duration, Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, type HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import { Permission } from "../../permission.js"
 import { convertHTMLToMarkdown, MAX_MARKDOWN_BYTES } from "../html-markdown.js"
@@ -58,18 +58,9 @@ const headers = (format: Format, userAgent: string) => ({
 const openCodeUserAgent =
   "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OpenCode-User/1.0; +https://opencode.ai"
 
-const isCloudflareChallenge = (error: unknown) => {
-  if (!error || typeof error !== "object" || !("reason" in error)) return false
-  const reason = error.reason
-  if (
-    !reason ||
-    typeof reason !== "object" ||
-    !("_tag" in reason) ||
-    reason._tag !== "StatusCodeError" ||
-    !("response" in reason)
-  )
-    return false
-  const response = reason.response as HttpClientResponse.HttpClientResponse
+const isCloudflareChallenge = (error: HttpClientError.HttpClientError) => {
+  if (error.reason._tag !== "StatusCodeError") return false
+  const response = error.reason.response
   return response.status === 403 && response.headers["cf-mitigated"] === "challenge"
 }
 
@@ -111,13 +102,13 @@ const convert = (content: string, contentType: string, format: Format) => {
 
 export const Plugin = {
   id: "opencode.tool.webfetch",
-  effect: Effect.fn("WebFetchTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("WebFetchTool.Plugin")(function* (ctx: Context) {
     const http = yield* HttpClient.HttpClient
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description,

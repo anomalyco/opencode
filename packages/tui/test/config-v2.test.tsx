@@ -9,24 +9,38 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
-test("validates mini replay settings", () => {
+test("validates the three explicit diff source defaults", () => {
+  for (const source of ["branch", "committed", "working"] as const) {
+    expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })
+  }
+  expect(decodeInfo({ diffs: {} })).toEqual({ diffs: {} })
+  expect(() => decodeInfo({ diffs: { source: "auto" } })).toThrow()
+})
+
+test("validates mini replay and work spinner settings", () => {
   expect(decodeInfo({ mini: { replay: false, replay_limit: 50 } })).toEqual({
     mini: { replay: false, replay_limit: 50 },
   })
   expect(() => decodeInfo({ mini: { replay_limit: 0 } })).toThrow()
   expect(() => decodeInfo({ mini: { replay_limit: 1.5 } })).toThrow()
+  expect(decodeInfo({ mini: { work_spinner: "quadrant-orbit" } })).toEqual({
+    mini: { work_spinner: "quadrant-orbit" },
+  })
+  expect(() => decodeInfo({ mini: { work_spinner: "unknown" } })).toThrow()
 })
 
 test("validates the session tabs setting", () => {
   const decode = Schema.decodeUnknownSync(Info)
 
-  expect(decode({ tabs: { enabled: true, layout: "vertical" } })).toEqual({
-    tabs: { enabled: true, layout: "vertical" },
+  expect(decode({ tabs: { enabled: true, layout: "vertical", indicators: "numbers" } })).toEqual({
+    tabs: { enabled: true, layout: "vertical", indicators: "numbers" },
   })
+  expect(() => decode({ tabs: { indicators: "unknown" } })).toThrow()
   expect(() => decode({ tabs: { layout: true } })).toThrow()
   expect(() => decode({ tabs: { enabled: "on" } })).toThrow()
   expect(decode({ prompt: { image_preview: true } })).toEqual({ prompt: { image_preview: true } })
   expect(decode({ session: { image_preview: true } })).toEqual({ session: { image_preview: true } })
+  expect(decode({ session: { tps: false } })).toEqual({ session: { tps: false } })
   expect(decode({ session: { new_location: "inherit" } })).toEqual({ session: { new_location: "inherit" } })
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
 })
@@ -48,18 +62,38 @@ test("resolves nested config and keybind defaults", () => {
   expect(config.scroll).toEqual({ speed: 2, acceleration: true })
   expect(config.diffs).toEqual({ view: "split" })
   expect(config.debug).toEqual({ devtools: true })
-  expect(config.tabs).toEqual({ enabled: true, scope: "cwd", layout: "horizontal" })
+  expect(config.tabs).toEqual({ enabled: true, scope: "cwd", layout: "horizontal", indicators: "status" })
   expect(config.session.new_location).toBe("launch")
+  expect(config.session.tps).toBe(true)
 })
 
 test("shows resolved tab defaults in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "tabs.enabled")?.default).toBe(true)
   expect(settings.find((setting) => setting.path.join(".") === "tabs.scope")?.default).toBe("cwd")
   expect(settings.find((setting) => setting.path.join(".") === "tabs.layout")?.default).toBe("horizontal")
+  expect(settings.find((setting) => setting.path.join(".") === "tabs.indicators")).toMatchObject({
+    default: "status",
+    values: ["status", "numbers"],
+  })
 })
 
 test("shows the new session location default in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.new_location")?.default).toBe("launch")
+})
+
+test("shows the TPS default in session settings", () => {
+  const setting = settings.find((setting) => setting.path.join(".") === "session.tps")
+  expect(setting?.category).toBe("Session")
+  expect(setting?.default).toBe(true)
+})
+
+test("names tool grouping explicitly in settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.grouping")).toMatchObject({
+    title: "Tool grouping",
+    category: "Session",
+    default: "auto",
+    values: ["none", "auto"],
+  })
 })
 
 test("validates terminal copy behavior", () => {
@@ -134,6 +168,10 @@ test("accepts every v2-only named command ID", () => {
     "diff.up",
     "diff.page.down",
     "diff.page.up",
+    "diff.half_page.down",
+    "diff.half_page.up",
+    "diff.first",
+    "diff.last",
     "diff.mark_reviewed",
     "opencode.settings",
     "service.restart",
@@ -162,7 +200,16 @@ test("centralizes named command defaults and resolves explicit none", () => {
     "diff.up": "k,up",
     "diff.page.down": "pagedown,ctrl+f",
     "diff.page.up": "pageup,ctrl+b",
+    "diff.half_page.down": "ctrl+d",
+    "diff.half_page.up": "ctrl+u",
+    "diff.first": "gg,home",
+    "diff.last": "shift+g,end",
+    "diff.next_file": "n,alt+down",
+    "diff.previous_file": "p,alt+up",
+    "diff.next_hunk": "]",
+    "diff.previous_hunk": "[",
     "diff.mark_reviewed": "m",
+    "diff.help": "?,shift+?,shift+/",
   }
   const config = resolve({}, { terminalSuspend: true })
   Object.entries(defaults).forEach(([command, key]) => expect(config.keybinds.get(command)).toMatchObject([{ key }]))
@@ -172,6 +219,14 @@ test("centralizes named command defaults and resolves explicit none", () => {
     { terminalSuspend: true },
   )
   Object.keys(defaults).forEach((command) => expect(disabled.keybinds.get(command)).toEqual([]))
+})
+
+test("retired diff tree keybinds remain accepted but have no default bindings", () => {
+  const ids = ["diff.toggle", "diff.expand", "diff.expand_all", "diff.collapse", "diff.switch_focus"]
+  const defaults = resolve({}, { terminalSuspend: true })
+  const overrides = Object.fromEntries(ids.map((id) => [id, "ctrl+alt+x"]))
+  expect(decodeInfo({ keybinds: overrides }).keybinds).toEqual(overrides)
+  ids.forEach((id) => expect(defaults.keybinds.get(id)).toEqual([]))
 })
 
 test("rejects orphaned keybind definitions", () => {

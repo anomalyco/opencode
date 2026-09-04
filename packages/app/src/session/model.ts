@@ -5,7 +5,8 @@ import { useFile } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData } from "@/runtime/server/current"
 import { same } from "@/runtime/persistence/equality"
-import { containsDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
+import { containsDirectory, isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
+import { projectForSession } from "@/shell/layout/helpers"
 import { createSessionTabs } from "./helpers"
 import {
   normalizeSessionTab,
@@ -90,7 +91,16 @@ export function useSessionModel() {
     isDesktop,
     workspace: {
       directory: createMemo(() => info()?.location.directory ?? location().directory),
-      current: createMemo(() => isWorkspaceDirectory(project(), info()?.location.directory ?? location().directory)),
+      current: createMemo(() => {
+        const current = info()
+        const directory = current?.location.directory ?? location().directory
+        // Global sync enriches projects with discovered worktrees; raw project metadata does not.
+        const projects = server.ctx.sync.data.project
+        const value = current
+          ? projectForSession(current, projects)
+          : projects.find((item) => isProjectDirectory(item, directory))
+        return isWorkspaceDirectory(value, directory)
+      }),
     },
     identity: {
       params: layout.params,
@@ -119,6 +129,7 @@ export function useSessionModel() {
     layout: {
       tabs: layout.tabs,
       view: layout.view,
+      tabKey: layout.tabKey,
     },
     ownership: createSessionOwnership(layout.sessionKey),
     tabs: {

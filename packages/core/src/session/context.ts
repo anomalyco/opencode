@@ -1,7 +1,9 @@
 export * as SessionContext from "./context.js"
 
+import { Model } from "@opencode-ai/schema/model"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
+import { Catalog } from "../catalog.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { Database } from "../database/database.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -11,7 +13,6 @@ import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
 import { McpInstructions } from "../mcp/instructions.js"
 import { McpTool } from "../tool/mcp.js"
-import { PluginSupervisor } from "../plugin/supervisor.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
@@ -19,6 +20,7 @@ import { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { SessionMessage } from "./message.js"
+import { SessionModelRequest } from "./model-request.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
@@ -42,14 +44,27 @@ export interface Loaded {
 /**
  * Resolves model-request state in two phases: `select` fixes the Session,
  * agent, instruction sources, and tool snapshot; `load` adds the model and
- * active history for that selection. This module does not build or execute the
- * model request.
+ * active history for that selection. Auxiliary operations resolve only the
+ * capabilities they need; request preparation stays separate from selection.
  */
 export interface Interface {
   /** Selects the Session, agent, instructions, and tools used by subsequent work. */
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
+  readonly resolveModel: (
+    session: SessionSchema.Info,
+  ) => Effect.Effect<SessionRunnerModel.Resolved, SessionRunnerModel.Error>
+  /** Selects auxiliary title capabilities without instruction or tool preflight. */
+  readonly selectTitle: (session: SessionSchema.Info) => Effect.Effect<
+    | {
+        readonly agent: Agent.Info
+        readonly primary: SessionRunnerModel.Resolved | undefined
+        readonly selected: SessionRunnerModel.Resolved
+      }
+    | undefined
+  >
+  readonly prepare: SessionModelRequest.Interface["prepare"]
 }
 
 /** Location-scoped model-context loader for durable Session Steps. */
@@ -60,6 +75,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const agents = yield* Agent.Service
     const builtins = yield* InstructionBuiltIns.Service
+    const catalog = yield* Catalog.Service
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
@@ -67,11 +83,39 @@ const layer = Layer.effect(
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
-    const plugins = yield* PluginSupervisor.Service
+    const modelRequests = yield* SessionModelRequest.Service
     const referenceInstructions = yield* ReferenceInstructions.Service
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
+
+    const resolveModel = (session: SessionSchema.Info) => models.resolve(session, catalog.model.available)
+
+    const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Info) {
+      const agent = yield* agents.get(Agent.ID.make("title"))
+      if (!agent) return
+      const primary = yield* resolveModel(session).pipe(Effect.orElseSucceed(() => undefined))
+      const info = yield* Effect.gen(function* () {
+        if (agent.model) return yield* catalog.model.get(agent.model.providerID, agent.model.id)
+        if (!primary) return
+        return yield* catalog.model.small(primary.ref.providerID)
+      })
+      const variant =
+        agent.model?.variant ?? MINIMAL_REASONING_VARIANTS.find((id) => info?.variants.some((item) => item.id === id))
+      const preferred =
+        info &&
+        (yield* resolveModel({
+          ...session,
+          model: Model.Ref.make({
+            providerID: info.providerID,
+            id: info.id,
+            ...(variant ? { variant } : {}),
+          }),
+        }).pipe(Effect.orElseSucceed(() => undefined)))
+      const selected = preferred ?? primary
+      if (!selected) return
+      return { agent, primary, selected }
+    })
 
     const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
@@ -79,7 +123,6 @@ const layer = Layer.effect(
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
 
-      yield* plugins.flush
       yield* mcpTools.flush
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
@@ -112,7 +155,7 @@ const layer = Layer.effect(
     })
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
-      const model = yield* models.resolve(selection.session)
+      const model = yield* resolveModel(selection.session)
       const history = yield* SessionHistory.entriesForRunner(db, selection.session.id, selection.instructions)
       return {
         session: selection.session,
@@ -124,15 +167,19 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ select, load })
+    return Service.of({ select, load, resolveModel, selectTitle, prepare: modelRequests.prepare })
   }),
 )
+
+/** Variant IDs that minimize reasoning output, in preference order. */
+const MINIMAL_REASONING_VARIANTS = ["none", "minimal", "low"].map((id) => Model.VariantID.make(id))
 
 export const node = makeLocationNode({
   service: Service,
   layer,
   deps: [
     Agent.node,
+    Catalog.node,
     Database.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
@@ -140,9 +187,9 @@ export const node = makeLocationNode({
     Location.node,
     McpInstructions.node,
     McpTool.node,
-    PluginSupervisor.node,
     ReferenceInstructions.node,
     SessionRunnerModel.node,
+    SessionModelRequest.node,
     SessionStore.node,
     SkillInstructions.node,
     Tool.node,

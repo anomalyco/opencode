@@ -48,7 +48,7 @@ export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOpti
   return Context.get(context, HttpRouter.HttpRouter)
     .asHttpEffect()
     .pipe(
-      HttpMiddleware.cors({ allowedOrigins: isAllowedCorsOrigin, maxAge: 86_400 }),
+      HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       HttpEffect.toWebHandlerWith(context),
     )
 })

@@ -36,6 +36,7 @@ export const docsSections: DocsSection[] = [
           { title: "Skills", slug: "skills" },
           { title: "Themes", slug: "themes" },
           { title: "Commands", slug: "commands" },
+          { title: "Plugins", slug: "plugins" },
           { title: "Providers", slug: "providers" },
           { title: "Snapshots", slug: "snapshots" },
           { title: "Compaction", slug: "compaction" },
@@ -60,12 +61,11 @@ export const docsSections: DocsSection[] = [
   {
     key: "cli",
     title: "CLI",
-    landingSlug: "cli/index",
+    landingSlug: "cli",
     groups: [
       {
-        title: "Intro",
         items: [
-          { title: "Intro", slug: "cli/index" },
+          { title: "Intro", slug: "cli" },
           { title: "Config", slug: "cli/config" },
         ],
       },
@@ -85,15 +85,37 @@ export const docsSections: DocsSection[] = [
   {
     key: "build",
     title: "Build",
-    landingSlug: "build/index",
+    landingSlug: "build",
     groups: [
       {
-        title: "Build",
+        items: [{ title: "Intro", slug: "build" }],
+      },
+      {
+        title: "Plugins",
         items: [
-          { title: "SDK", slug: "build/sdk" },
-          { title: "Build", slug: "build/index" },
-          { title: "Client", slug: "build/client" },
-          { title: "Plugins", slug: "build/plugins" },
+          { title: "Overview", slug: "build/plugins" },
+          { title: "RPC", slug: "build/plugins/rpc" },
+          { title: "CLI", slug: "build/plugins/cli" },
+        ],
+      },
+      {
+        title: "Client",
+        items: [{ title: "JavaScript", slug: "build/client" }],
+      },
+      {
+        title: "SDK",
+        items: [
+          { title: "Overview", slug: "build/sdk" },
+          { title: "Cloudflare", slug: "build/sdk/cloudflare" },
+        ],
+      },
+      {
+        title: "Effect",
+        items: [
+          { title: "Plugins", slug: "build/plugins/effect" },
+          { title: "RPC", slug: "build/plugins/effect/rpc" },
+          { title: "Client", slug: "build/client/effect" },
+          { title: "SDK", slug: "build/sdk/effect" },
         ],
       },
     ],

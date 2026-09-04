@@ -8,6 +8,7 @@ import { Project } from "@opencode-ai/schema/project"
 import { Provider } from "@opencode-ai/schema/provider"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { ToolMode } from "@opencode-ai/schema/session-stats"
+import { TokenUsage } from "@opencode-ai/schema/token-usage"
 import { Database } from "../database/database.js"
 import { EventTable } from "../event/sql.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
@@ -255,7 +256,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             Effect.tap((rows) =>
               Effect.sync(() => {
                 rows.forEach((row) => {
-                  addToolStatus(toolTotals, row.status, 1)
+                  addToolStatus(toolTotals, row.status)
                   if (!row.name) return
                   const tool = tools.get(row.name) ?? {
                     name: row.name,
@@ -266,7 +267,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
                     durations: [],
                   }
                   tools.set(row.name, tool)
-                  addToolStatus(tool, row.status, 1)
+                  addToolStatus(tool, row.status)
                   if (row.duration !== null) tool.durations.push(row.duration)
                 })
               }),
@@ -287,7 +288,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     batches(ids.map((row) => row.id)),
     (batch) =>
       db
-        .select({ created: EventTable.created, data: EventTable.data })
+        .select({ data: EventTable.data })
         .from(EventTable)
         .where(
           and(
@@ -341,7 +342,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     streak: longestStreak(days.map(([date]) => date)),
     activity: days.map(([date, steps]) => ({ date, steps })),
     models: [...models.values()]
-      .sort((a, b) => tokenTotal(b.tokens) - tokenTotal(a.tokens))
+      .sort((a, b) => TokenUsage.total(b.tokens) - TokenUsage.total(a.tokens))
       .map((model) => ({ ...model, cost: Money.USD.make(model.cost) })),
   }
 })
@@ -378,25 +379,20 @@ function addTokens(target: Tokens, source: Tokens) {
   target.cache.write += source.cache.write
 }
 
-function tokenTotal(tokens: Tokens) {
-  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
-}
-
 function addToolStatus(
   target: { calls: number; succeeded: number; failed: number; unfinished: number },
   status: string | null,
-  count: number,
 ) {
-  target.calls += count
+  target.calls++
   if (status === "completed") {
-    target.succeeded += count
+    target.succeeded++
     return
   }
   if (status === "error") {
-    target.failed += count
+    target.failed++
     return
   }
-  target.unfinished += count
+  target.unfinished++
 }
 
 function makeDateKey(timezone = "UTC") {

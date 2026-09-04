@@ -1,16 +1,15 @@
 export * as OpenCodeWorkerd from "./workerd"
 
-import type { DurableObjectStorage } from "@opencode-ai/core/database/sqlite.workerd"
-import { ServerWorkerd } from "@opencode-ai/server/workerd"
-import { Config, Effect, Layer, Scope } from "effect"
-import * as OpenCode from "./opencode"
+import { WorkerdProfile } from "./internal/workerd"
+import type { LogOptions } from "./logging"
+import { PromiseSdk } from "./promise"
 
-export interface CreateOptions extends Pick<OpenCode.CreateOptions, "log" | "workspaceProviders"> {
-  readonly storage: DurableObjectStorage
-  readonly app?: OpenCode.CreateOptions["app"]
-  readonly password?: string
-  readonly config?: { readonly content?: string }
-  readonly models?: OpenCode.CreateOptions["models"]
+export type Configuration = WorkerdProfile.Configuration
+
+export interface CreateOptions extends WorkerdProfile.Options {
+  readonly log?: LogOptions
+  readonly plugins?: PromiseSdk.CreateOptions["plugins"]
+  readonly instances?: PromiseSdk.CreateOptions["instances"]
 }
 
 /**
@@ -27,17 +26,9 @@ export interface CreateOptions extends Pick<OpenCode.CreateOptions, "log" | "wor
  * session operations plus the live `events.subscribe()` stream — served over
  * an in-process fetch transport, so no request leaves the isolate.
  */
-export const create: (
-  options: CreateOptions,
-) => Effect.Effect<OpenCode.Interface, Config.ConfigError | Error, Scope.Scope> = ({
-  log,
-  workspaceProviders,
-  ...options
-}) =>
-  OpenCode.create(
-    { ...ServerWorkerd.serverOptions(options), log, workspaceProviders },
-    { overrides: ServerWorkerd.replacements(options) },
-  )
+export const create = ({ log, plugins, instances, ...options }: CreateOptions) => {
+  const profile = WorkerdProfile.make(options)
+  return PromiseSdk.create({ ...profile.options, log, plugins, instances }, { overrides: profile.replacements })
+}
 
-export const layer = (options: CreateOptions): Layer.Layer<OpenCode.Service, Config.ConfigError | Error> =>
-  Layer.effect(OpenCode.Service, create(options))
+export type Interface = PromiseSdk.Interface

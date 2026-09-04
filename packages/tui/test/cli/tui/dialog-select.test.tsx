@@ -163,6 +163,48 @@ test("budgets option content for constrained and full-width large dialogs", () =
   expect(dialogSelectContentWidth(Math.min(dialogWidth("large"), 100 - 2)) - 7).toBe(69)
 })
 
+test("ctrl+c clears a dialog filter before closing the dialog", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(tmp.path, [{ title: "Alpha", value: "alpha" }])
+
+  try {
+    await select.app.mockInput.typeText("alpha")
+    await select.app.waitFor(() => select.app.renderer.currentFocusedEditor?.plainText === "alpha")
+
+    select.app.mockInput.pressKey("c", { ctrl: true })
+    await select.app.waitFor(() => select.app.renderer.currentFocusedEditor?.plainText === "")
+    expect(select.app.captureCharFrame()).toContain("Mutable options")
+
+    select.app.mockInput.pressKey("c", { ctrl: true })
+    await select.app.waitForFrame((frame) => !frame.includes("Mutable options"))
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("ctrl+c clears a dialog text selection before closing the dialog", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(tmp.path, [{ title: "Alpha", value: "alpha" }])
+
+  try {
+    const frame = select.app.captureCharFrame().split("\n")
+    const row = frame.findIndex((line) => line.includes("Alpha"))
+    const column = frame[row]!.indexOf("Alpha") + 1
+    await select.app.mockMouse.click(column, row)
+    await select.app.mockMouse.click(column, row)
+    await select.app.waitFor(() => select.app.renderer.getSelection()?.getSelectedText() === "Alpha")
+
+    select.app.mockInput.pressKey("c", { ctrl: true })
+    await select.app.waitFor(() => !select.app.renderer.getSelection())
+    expect(select.app.captureCharFrame()).toContain("Mutable options")
+
+    select.app.mockInput.pressKey("c", { ctrl: true })
+    await select.app.waitForFrame((frame) => !frame.includes("Mutable options"))
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
 test("renders the complete truncated footer within the option row", async () => {
   await using tmp = await tmpdir()
   const title = "Project"

@@ -93,7 +93,7 @@ test("rotates HTTP and PTY clients together", async () => {
     return Response.json({ healthy: true, version: "2.0.0-test", pid: 1 })
   }) as typeof globalThis.fetch
   const transport = createServerTransport({
-    http: { url: "http://127.0.0.1:4100", username: "opencode", password: "first" },
+    http: { url: "http://127.0.0.1:4100", password: "first" },
     fetch,
   })
   const initialPty = transport.pty
@@ -101,7 +101,6 @@ test("rotates HTTP and PTY clients together", async () => {
   await transport.api.health.get()
   const replacement = transport.update({
     url: "http://127.0.0.1:4200",
-    username: "opencode",
     password: "second",
   })
   await transport.api.health.get()

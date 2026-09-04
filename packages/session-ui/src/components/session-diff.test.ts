@@ -2,6 +2,43 @@ import { describe, expect, test } from "bun:test"
 import { normalize, resolveFileDiff, text } from "./session-diff"
 
 describe("session diff", () => {
+  test.each([
+    ["carriage return", "\r"],
+    ["line separator", "\u2028"],
+    ["paragraph separator", "\u2029"],
+  ])(
+    "parses adversarial patch headers containing a %s",
+    (_, separator) => {
+      // GHSA-73rr-hh4g-fpgx: isolate synchronous hangs and memory growth from the test runner.
+      const name = `a${separator}b.ts`
+      const padding = " ".repeat(10_000)
+      const patches = [
+        `--- ${name}\t\n+++ b.ts\t\n`,
+        `--- a.ts\t\n+++ ${name}\t\n`,
+        `--- ${padding}${name}\t\n+++ b.ts\t\n`,
+        `--- a.ts\t\n+++ ${padding}${name}\t\n`,
+        `Index: ${padding}${name}\n--- a.ts\t\n+++ b.ts\t\n`,
+        `diff -r abc -r def ${padding}${name}\n--- a.ts\t\n+++ b.ts\t\n`,
+      ].map((header) => `${header}@@ -1 +1 @@\n-old\n+new\n`)
+      const result = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "--eval",
+          `import { completePatchContents } from "./session-diff.ts"
+         console.log(JSON.stringify((await Bun.stdin.json()).map(completePatchContents)))`,
+        ],
+        cwd: import.meta.dir,
+        stdin: Buffer.from(JSON.stringify(patches)),
+        timeout: 5_000,
+        killSignal: "SIGKILL",
+      })
+
+      expect(result.exitCode, result.stderr.toString()).toBe(0)
+      expect(JSON.parse(result.stdout.toString())).toEqual(patches.map(() => ({ before: "old\n", after: "new\n" })))
+    },
+    10_000,
+  )
+
   test("renders whole-file unified patches as complete diffs", () => {
     const diff = {
       file: "a.ts",
@@ -88,6 +125,38 @@ describe("session diff", () => {
 
     expect(resolveFileDiff({ file: "a.ts", patch }).name).toBe("a.ts")
     expect(resolveFileDiff({ file: "b.ts", patch }).name).toBe("b.ts")
+  })
+
+  test.each([
+    "@@ -1 +1 @@\n-old\n+new\n",
+    "--- a.ts\t\n+++ a.ts\t\n@@ -1 +1 @@\n-old\n+new\n",
+  ])("reuses a highlight identity for the same cached patch: %s", (patch) => {
+    const first = resolveFileDiff({ file: "a.ts", patch })
+    expect(first.cacheKey).toBeString()
+    expect(resolveFileDiff({ file: "a.ts", patch }).cacheKey).toBe(first.cacheKey)
+    expect(resolveFileDiff({ file: "b.ts", patch }).cacheKey).not.toBe(first.cacheKey)
+    expect(resolveFileDiff({ file: "a.ts", patch: patch.replace("+new", "+next") }).cacheKey).not.toBe(first.cacheKey)
+  })
+
+  test("keys preloaded content diffs by file name and content", () => {
+    const diff = { file: "a.ts", before: "one\n", after: "two\n", additions: 1, deletions: 1 }
+    const first = normalize(diff).fileDiff
+    expect(first.cacheKey).toBeString()
+    expect(normalize(diff).fileDiff.cacheKey).toBe(first.cacheKey)
+    expect(normalize({ ...diff, file: "a.py" }).fileDiff.cacheKey).not.toBe(first.cacheKey)
+    expect(normalize({ ...diff, after: "three\n" }).fileDiff.cacheKey).not.toBe(first.cacheKey)
+  })
+
+  test("does not reuse an evicted highlight identity for different content", () => {
+    const patch = "@@ -1 +1 @@\n-old\n+new\n"
+    const first = resolveFileDiff({ file: "evicted.ts", patch })
+    const keys = Array.from({ length: 20 }, (_, index) =>
+      resolveFileDiff({ file: "evicted.ts", patch: patch.replace("+new", `+new${index}`) }).cacheKey,
+    )
+    expect(keys).not.toContain(first.cacheKey)
+    const restored = resolveFileDiff({ file: "evicted.ts", patch })
+    expect(restored.additionLines).toEqual(first.additionLines)
+    expect(restored.cacheKey).toBeString()
   })
 
   test("keeps capped header-only patches partial", () => {

@@ -5,7 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { Permission } from "../permission.js"
 import { McpTool } from "../tool/mcp.js"
-import { MCP } from "./index.js"
+import { Mcp } from "./index.js"
 import { Instructions } from "../instructions/index.js"
 
 const Summary = Schema.Struct({
@@ -63,7 +63,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mc
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const mcp = yield* MCP.Service
+    const mcp = yield* Mcp.Service
 
     return Service.of({
       load: Effect.fn("McpInstructions.load")(function* (selection) {
@@ -110,4 +110,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [MCP.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Mcp.node] })

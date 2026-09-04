@@ -1,6 +1,6 @@
 export * as ReadTool from "./read.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { basename, dirname, join } from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
@@ -15,7 +15,6 @@ import { Environment } from "../../environment/index.js"
 
 export const name = "read"
 const FILENAME = "AGENTS.md"
-const SUPPORTED_MEDIA_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"])
 const LocationInput = Schema.Struct({
   path: Schema.String.annotate({ description: "File or directory to read" }),
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
@@ -30,7 +29,7 @@ const Output = Schema.Union([ReadToolFileSystem.FileContent, ReadToolFileSystem.
 
 export const Plugin = {
   id: "opencode.tool.read",
-  effect: Effect.fn("ReadTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("ReadTool.Plugin")(function* (ctx: Context) {
     const reader = yield* ReadToolFileSystem.Service
     const mutation = yield* LocationMutation.Service
     const permission = yield* Permission.Service
@@ -39,8 +38,8 @@ export const Plugin = {
     const location = yield* Location.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description:
@@ -54,29 +53,58 @@ export const Plugin = {
                 messageID: context.messageID,
                 id: context.id,
               }
-              const target = yield* mutation.resolve({ path: input.path })
-              const external = target.externalDirectory
-              if (external)
-                yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(external),
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
+              const authorize = (target: LocationMutation.Target, authorizeExternal = true) =>
+                Effect.gen(function* () {
+                  if (target.externalDirectory && authorizeExternal)
+                    yield* permission.assert({
+                      ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
+                      sessionID: context.sessionID,
+                      agent: context.agent,
+                      source,
+                    })
+                  yield* permission.assert({
+                    action: name,
+                    resources: [target.resource],
+                    save: ["*"],
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source,
+                  })
                 })
-              const resource = target.resource
-              const absolute = AbsolutePath.make(target.absolute)
-              yield* permission.assert({
-                action: name,
-                resources: [resource],
-                save: ["*"],
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
-              })
-              const content = yield* reader.read(absolute, resource, { offset: input.offset, limit: input.limit }).pipe(
+              const read = (target: LocationMutation.Target) =>
+                reader.read(AbsolutePath.make(target.absolute), target.resource, {
+                  offset: input.offset,
+                  limit: input.limit,
+                })
+
+              const requested = yield* mutation.resolve({ path: input.path })
+              yield* authorize(requested)
+              const result = yield* read(requested).pipe(
+                Effect.map((content) => ({ content, target: requested, path: input.path })),
                 Effect.catchIf(
                   (error) => error instanceof Environment.NotFound,
-                  () => missing(input.path, target.absolute),
+                  () =>
+                    Effect.gen(function* () {
+                      const alternate = yield* alternatePath(requested.absolute).pipe(
+                        Effect.orElseSucceed(() => undefined),
+                      )
+                      if (!alternate) return yield* missing(input.path, requested.absolute)
+                      const target = yield* mutation.resolve({ path: alternate, kind: "file" })
+                      // The candidate is a sibling under the external directory already approved above.
+                      yield* authorize(target, false)
+                      const content = yield* read(target).pipe(
+                        Effect.catchIf(
+                          (error) => error instanceof Environment.NotFound,
+                          () => missing(input.path, requested.absolute),
+                        ),
+                      )
+                      if (content.type === "list-page") return yield* missing(input.path, requested.absolute)
+                      return {
+                        content,
+                        target,
+                        path: join(dirname(input.path), basename(alternate)),
+                      }
+                    }),
                 ),
               )
               // After a successful read, discover nearby AGENTS.md walking up to the Location
@@ -85,14 +113,14 @@ export const Plugin = {
               // is discovered); for a file it starts at the file's dirname. External reads are
               // skipped, and discovery failures never fail the read.
               yield* Effect.gen(function* () {
-                if (target.externalDirectory !== undefined) return
-                const resolved = yield* fs.resolve(target.absolute)
+                if (result.target.externalDirectory !== undefined) return
+                const resolved = yield* fs.resolve(result.target.absolute)
                 const root = yield* fs.resolve(location.directory)
                 // up() searches its stop directory, so the Location-root AGENTS.md (already
                 // supplied by core initial instructions) is dropped by the dirname filter.
                 const discovered = yield* fs.up({
                   targets: [FILENAME],
-                  start: content.type === "list-page" ? resolved : dirname(resolved),
+                  start: result.content.type === "list-page" ? resolved : dirname(resolved),
                   stop: root,
                 })
                 const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
@@ -104,14 +132,18 @@ export const Plugin = {
                 Effect.catch(() => Effect.void),
                 Effect.catchDefect(() => Effect.void),
               )
-              if (content.type === "file" && content.encoding === "base64" && !SUPPORTED_MEDIA_MIMES.has(content.mime))
-                return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
-              return content
+              if (
+                result.content.type === "file" &&
+                result.content.encoding === "base64" &&
+                !ReadToolFileSystem.MEDIA_MIMES.has(result.content.mime)
+              )
+                return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource: result.target.resource }))
+              return { output: result.content, path: result.path }
             }).pipe(
-              Effect.map((output) => ({
-                output,
-                content: toModelContent(input.path, input.offset, output),
-                metadata: { truncated: output.type === "file" ? false : output.truncated },
+              Effect.map((result) => ({
+                output: result.output,
+                content: toModelContent(result.path, input.offset, result.output),
+                metadata: { truncated: result.output.type === "file" ? false : result.output.truncated },
               })),
               Effect.mapError((error) => {
                 if (error instanceof ToolFailure) return error
@@ -129,6 +161,15 @@ export const Plugin = {
         }),
       )
       .pipe(Effect.orDie)
+
+    const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (absolute: string) {
+      const base = basename(absolute).replace(/[\u00a0\u202f]/g, " ")
+      const matches = (yield* reader.list(AbsolutePath.make(dirname(absolute)))).filter(
+        (entry) => entry.type === "file" && entry.name.replace(/[\u00a0\u202f]/g, " ") === base,
+      )
+      if (matches.length !== 1) return
+      return join(dirname(absolute), matches[0].name)
+    })
 
     const missing = Effect.fn("ReadTool.missing")(function* (input: string, absolute: string) {
       const base = basename(input).toLowerCase()
@@ -166,7 +207,7 @@ export const toModelContent = (path: string, offset: number | undefined, output:
     ] as const
 
   if (output.type === "list-page") {
-    const start = offset ?? 1
+    const start = offset || 1
     const content = [
       output.entries.length === 0
         ? `Read directory ${path}, 0 entries`

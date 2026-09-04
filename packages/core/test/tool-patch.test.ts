@@ -100,9 +100,8 @@ const withTool = <A, E, R>(
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, patchToolNode]), [
-        [
-          Environment.node,
-          transformEnvironmentFiles(activeLocation, (files) => ({
+        Environment.node.replace(
+          transformEnvironmentFiles((files) => ({
             read: (target, range) =>
               Effect.sync(() => {
                 if (!editApproved) readsBeforeEditApproval++
@@ -120,10 +119,10 @@ const withTool = <A, E, R>(
               return files.write(target, content)
             },
           })),
-        ],
-        [Location.node, activeLocation],
-        [Formatter.node, formatter],
-        [Permission.node, permission],
+        ),
+        Location.node.replace(activeLocation),
+        Formatter.node.replace(formatter),
+        Permission.node.replace(permission),
       ]),
     ),
   )
@@ -239,6 +238,22 @@ describe("PatchTool", () => {
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("replaces a file with a directory containing an added file", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "parent"), "before\n"))
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Delete File: parent\n*** Add File: parent/child.txt\n+after\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "parent/child.txt"), "utf8"))).toBe(
+          "after\n",
+        )
+      }),
     ),
   )
 
@@ -920,7 +935,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("treats a sibling path inside the project worktree as external to the Location", () =>
+  it.live("treats a sibling path inside the project worktree as internal", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -939,9 +954,8 @@ describe("PatchTool", () => {
                       call("*** Begin Patch\n*** Update File: ../sibling.txt\n@@\n-before\n+after\n*** End Patch"),
                     ),
                   ).toMatchObject({ status: "completed" })
-                  expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
-                  expect(assertions[0]?.resources).toEqual([path.join(tmp.path, "*").replaceAll("\\", "/")])
-                  expect(assertions[1]?.resources).toEqual([target.replaceAll("\\", "/")])
+                  expect(assertions.map((input) => input.action)).toEqual(["edit"])
+                  expect(assertions[0]?.resources).toEqual(["../sibling.txt"])
                   expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
                 }),
               tmp.path,

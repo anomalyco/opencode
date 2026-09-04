@@ -1,6 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Framing } from "../route/framing.js"
+import type { HttpContext } from "../schema/index.js"
 import {
   HttpTransport,
   WebSocketTransport,
@@ -60,8 +61,8 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
     observe: (_create, frame) =>
       Effect.gen(function* () {
         const event = yield* decodeEvent(frame).pipe(
-          Effect.mapError(() =>
-            ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame),
+          Effect.mapError((cause) =>
+            ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame, cause),
           ),
         )
         if (terminal)
@@ -73,13 +74,13 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
         if (event.type === "error") {
           terminal = true
           yield* OpenResponses.decodeKnownErrorEvent(event).pipe(
-            Effect.mapError(() =>
-              ProviderShared.eventError(options.id, `${options.name} returned a malformed error event`, frame),
+            Effect.mapError((cause) =>
+              ProviderShared.eventError(options.id, `${options.name} returned a malformed error event`, frame, cause),
             ),
           )
           return {
             type: "provider-failure",
-            error: OpenResponses.providerFailure(options.id, event, `${options.name} stream error`),
+            error: OpenResponses.providerFailure(event, `${options.name} stream error`, frame),
           }
         }
         if (event.type === "response.failed") {
@@ -92,7 +93,7 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
             )
           return {
             type: "provider-failure",
-            error: OpenResponses.providerFailure(options.id, event, `${options.name} response failed`),
+            error: OpenResponses.providerFailure(event, `${options.name} response failed`, frame),
           }
         }
         if (event.type === "response.created") {
@@ -175,23 +176,37 @@ export const transport = <Body>(options: Options): Transport<Body, Prepared, str
           channel,
         }
       }),
-    execute: (prepared, request, runtime, executeOptions) => {
-      if (!executeOptions?.webSocket || !prepared.channel) return http.execute(prepared.http, request, runtime)
-      const exchange: WebSocketChannelExchange = {
-        id: request.id ?? "request",
-        connect: {
-          url: prepared.channel.url,
-          headers: prepared.channel.headers,
-          rotateAfterMs: prepared.channel.rotateAfterMs,
-        },
-        fallback: () =>
-          Stream.unwrap(
-            http.execute(prepared.http, request, runtime).pipe(Effect.map((execution) => execution.frames)),
-          ),
-        driver: prepared.channel.driver,
-      }
-      return executeOptions.webSocket.execute(exchange)
-    },
+    execute: (prepared, request, runtime, executeOptions) =>
+      Effect.gen(function* () {
+        if (!executeOptions?.webSocket || !prepared.channel) return yield* http.execute(prepared.http, request, runtime)
+        let fallbackHttp: HttpContext | undefined
+        const exchange: WebSocketChannelExchange = {
+          id: request.id ?? "request",
+          connect: {
+            url: prepared.channel.url,
+            headers: prepared.channel.headers,
+            rotateAfterMs: prepared.channel.rotateAfterMs,
+          },
+          fallback: () =>
+            Stream.unwrap(
+              http.execute(prepared.http, request, runtime).pipe(
+                Effect.map((execution) => {
+                  fallbackHttp = execution.http
+                  return execution.frames
+                }),
+              ),
+            ),
+          driver: prepared.channel.driver,
+        }
+        const execution = yield* executeOptions.webSocket.execute(exchange)
+        return {
+          frames: execution.frames,
+          complete: execution.complete,
+          get http() {
+            return fallbackHttp ?? execution.http
+          },
+        }
+      }),
   }
 }
 

@@ -5,7 +5,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { Pty } from "@opencode-ai/core/pty"
-import type { PtyID } from "@opencode-ai/core/pty/schema"
+import { PtyID } from "@opencode-ai/core/pty/schema"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { location } from "../fixture/location"
@@ -17,7 +17,9 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/tmp") })),
 )
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [[Location.node, locationLayer]]))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [Location.node.replace(locationLayer)]),
+)
 const ptyTest = process.platform === "win32" ? it.live.skip : it.live
 
 const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
@@ -88,7 +90,7 @@ describe("pty", () => {
   it.live("returns typed not found errors for missing sessions", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service
-      const id = "pty_missing" as PtyID
+      const id = PtyID.make("pty_missing")
 
       for (const result of [
         yield* pty.get(id).pipe(Effect.asVoid, Effect.exit),
@@ -200,7 +202,7 @@ describe("pty", () => {
 
 const configuredShell = process.platform === "win32" ? undefined : Bun.which("bash")
 const configuredIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node, ShellSelect.node]), [[Location.node, locationLayer]]),
+  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node, ShellSelect.node]), [Location.node.replace(locationLayer)]),
 )
 const configuredTest = process.platform === "win32" ? configuredIt.live.skip : configuredIt.live
 
@@ -210,7 +212,7 @@ describe("pty create defaults", () => {
       if (!configuredShell) return
       const pty = yield* Pty.Service
       const shell = yield* ShellSelect.Service
-      yield* shell.transform((draft) => draft.configure(configuredShell))
+      yield* shell.transform((editor) => editor.configure(configuredShell))
       const info = yield* Effect.acquireRelease(pty.create({ title: "configured" }), (created) =>
         pty.remove(created.id).pipe(Effect.ignore),
       )

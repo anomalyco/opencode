@@ -8,6 +8,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { sessionPermissionRequest, sessionQuestionForm } from "@/session/requests/session-request-tree"
+import { createSessionBackground } from "@/session/requests/background"
 import { useData } from "@/runtime/server/current"
 
 export function createSessionRequestModel() {
@@ -46,104 +47,12 @@ export function createSessionRequestModel() {
     const id = params.id
     return !!id && !data.session.get(id)?.parentID
   }
-  const backgroundBlocking = createMemo(() => {
-    if (!primary()) return []
-    const id = params.id
-    if (!id) return []
-    const assistant = data.session.message
-      .list(id)
-      .findLast((message) => message.type === "assistant" && message.time.completed === undefined)
-    if (assistant?.type !== "assistant") return []
-    return assistant.content.flatMap((part) => {
-      if (part.type !== "tool" || part.state.status !== "running") return []
-      if (part.name !== "shell" && part.name !== "subagent") return []
-      const value = part.name === "shell" ? part.state.metadata.shellID : part.state.metadata.sessionID
-      const label = part.name === "shell" ? part.state.input.command : part.state.input.description
-      return [
-        {
-          type: part.name as "shell" | "subagent",
-          partID: part.id,
-          id: typeof value === "string" ? value : undefined,
-          label: typeof label === "string" ? label : undefined,
-        },
-      ]
-    })
-  })
-  const backgroundTasks = createMemo(() => {
-    if (!primary()) return []
-    const id = params.id
-    if (!id) return []
-    const blocking = backgroundBlocking()
-    const messages = data.session.message.list(id)
-    const completed = new Set(
-      messages.flatMap((message) => {
-        if (message.type !== "synthetic") return []
-        if (message.metadata?.source === "subagent" && typeof message.metadata.childID === "string")
-          return [message.metadata.childID]
-        if (message.metadata?.source === "shell" && typeof message.metadata.jobID === "string")
-          return [message.metadata.jobID]
-        return []
-      }),
-    )
-    const backgrounded = messages.flatMap((message) => {
-      if (message.type !== "assistant") return []
-      return message.content.flatMap((part) => {
-        if (part.type !== "tool" || part.name !== "subagent") return []
-        if (part.state.status !== "completed" || part.state.metadata?.status !== "running") return []
-        const sessionID = part.state.metadata.sessionID
-        if (typeof sessionID !== "string" || completed.has(sessionID)) return []
-        const description = part.state.input.description
-        const agent = part.state.input.agent
-        return [
-          {
-            id: sessionID,
-            type: "subagent" as const,
-            label: typeof description === "string" ? description : sessionID,
-            agent: typeof agent === "string" ? agent : undefined,
-          },
-        ]
-      })
-    })
-    const active = data.session.list().flatMap((info) => {
-      if (info?.parentID !== id) return []
-      if (data.session.status(info.id) === "idle") return []
-      if (
-        blocking.some(
-          (item) => item.type === "subagent" && (item.id === info.id || (!!item.label && info.title === item.label)),
-        )
-      )
-        return []
-      return [{ id: info.id, type: "subagent" as const, label: info.title ?? info.id }]
-    })
-    const backgroundShells = messages.flatMap((message) => {
-      if (message.type !== "assistant") return []
-      return message.content.flatMap((part) => {
-        if (part.type !== "tool" || part.name !== "shell" || completed.has(part.id)) return []
-        if (part.state.status !== "completed" || part.state.metadata?.status !== "running") return []
-        const shellID = part.state.metadata.shellID
-        const command = part.state.input.command
-        return [
-          {
-            id: typeof shellID === "string" ? shellID : part.id,
-            type: "shell" as const,
-            label: typeof command === "string" ? command : part.id,
-          },
-        ]
-      })
-    })
-    const running = data.shell.list({ directory: sdk().directory }).flatMap((shell) => {
-      if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
-      if (
-        blocking.some(
-          (item) => item.type === "shell" && (item.id === shell.id || (!!item.label && shell.command === item.label)),
-        )
-      )
-        return []
-      return [{ id: shell.id, type: "shell" as const, label: shell.command }]
-    })
-    return [
-      ...new Map([...backgrounded, ...active, ...backgroundShells, ...running].map((task) => [task.id, task])).values(),
-    ]
+  const background = createSessionBackground({
+    sessionID: () => (primary() ? params.id : undefined),
+    messages: data.session.message.list,
+    sessions: data.session.list,
+    status: data.session.status,
+    shells: () => data.shell.list({ directory: sdk().directory }),
   })
   const moveToBackground = async () => {
     if (!primary()) return
@@ -190,8 +99,8 @@ export function createSessionRequestModel() {
     permissionRequest,
     permissionResponding,
     background: {
-      blocking: backgroundBlocking,
-      tasks: backgroundTasks,
+      blocking: background.blocking,
+      tasks: background.tasks,
       move: moveToBackground,
     },
     decide,

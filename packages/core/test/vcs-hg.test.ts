@@ -4,34 +4,39 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { AppProcess } from "@opencode-ai/util/process"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Vcs } from "@opencode-ai/core/vcs"
+import { VcsHgPlugin } from "@opencode-ai/core/plugin/vcs/hg"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
+import { host } from "./plugin/host"
 
 const describeHg = Bun.which("hg") ? describe : describe.skip
 
 const provide = (directory: string) =>
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node]), [
-      [
-        Location.node,
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of(
-            location(
-              { directory: AbsolutePath.make(directory) },
-              { vcs: { type: "hg", store: AbsolutePath.make(path.join(directory, ".hg")) } },
+    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node, FSUtil.node]), {
+      replacements: [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(
+                { directory: AbsolutePath.make(directory) },
+                { vcs: { type: "hg", store: AbsolutePath.make(path.join(directory, ".hg")) } },
+              ),
             ),
           ),
         ),
       ],
-    ]),
+    }),
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
@@ -42,7 +47,19 @@ const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
 
 const withHg = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
   withTmp((directory) =>
-    Effect.promise(() => hg(directory, "init")).pipe(Effect.andThen(f(directory).pipe(provide(directory)))),
+    Effect.promise(() => hg(directory, "init")).pipe(
+      Effect.andThen(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          const context = host()
+          yield* VcsHgPlugin.Plugin.effect({
+            ...context,
+            vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+          })
+          return yield* f(directory)
+        }).pipe(provide(directory)),
+      ),
+    ),
   )
 
 async function hg(directory: string, ...args: string[]) {
@@ -56,6 +73,22 @@ async function commitAll(directory: string, message: string) {
   await hg(directory, "addremove", "-q")
   await hg(directory, "commit", "-q", "-m", message, "-u", "test")
 }
+
+it.live("Mercurial rejects unsupported review modes and bases without requiring hg", () =>
+  withTmp((directory) =>
+    Effect.gen(function* () {
+      const vcs = yield* Vcs.Service
+      const context = host()
+      yield* VcsHgPlugin.Plugin.effect({
+        ...context,
+        vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+      })
+      expect(yield* vcs.base()).toBeNull()
+      expect(yield* vcs.diff("committed").pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
+      expect(yield* vcs.diff("branch", { base: "release" }).pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
+    }).pipe(provide(directory)),
+  ),
+)
 
 describeHg("Vcs mercurial", () => {
   it.live("reports modified, missing, and untracked files", () =>

@@ -48,6 +48,8 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode-ai/ai/providers/azure", () => import("@opencode-ai/ai/providers/azure")],
   ["@opencode-ai/ai/providers/azure/chat", () => import("@opencode-ai/ai/providers/azure/chat")],
   ["@opencode-ai/ai/providers/azure/responses", () => import("@opencode-ai/ai/providers/azure/responses")],
+  ["@opencode-ai/ai/providers/cerebras", () => import("@opencode-ai/ai/providers/cerebras")],
+  ["@opencode-ai/ai/providers/deepinfra", () => import("@opencode-ai/ai/providers/deepinfra")],
   ["@opencode-ai/ai/providers/google", () => import("@opencode-ai/ai/providers/google")],
   ["@opencode-ai/ai/providers/google-vertex", () => import("@opencode-ai/ai/providers/google-vertex")],
   ["@opencode-ai/ai/providers/google-vertex/gemini", () => import("@opencode-ai/ai/providers/google-vertex/gemini")],
@@ -60,11 +62,14 @@ const builtins = new Map<string, () => Promise<unknown>>([
     "@opencode-ai/ai/providers/google-vertex/messages",
     () => import("@opencode-ai/ai/providers/google-vertex/messages"),
   ],
+  ["@opencode-ai/ai/providers/groq", () => import("@opencode-ai/ai/providers/groq")],
+  ["@opencode-ai/ai/providers/mistral", () => import("@opencode-ai/ai/providers/mistral")],
   ["@opencode-ai/ai/providers/openai", () => import("@opencode-ai/ai/providers/openai")],
   ["@opencode-ai/ai/providers/openai/chat", () => import("@opencode-ai/ai/providers/openai/chat")],
   ["@opencode-ai/ai/providers/openai/responses", () => import("@opencode-ai/ai/providers/openai/responses")],
   ["@opencode-ai/ai/providers/openai-compatible", () => import("@opencode-ai/ai/providers/openai-compatible")],
   ["@opencode-ai/ai/providers/openrouter", () => import("@opencode-ai/ai/providers/openrouter")],
+  ["@opencode-ai/ai/providers/togetherai", () => import("@opencode-ai/ai/providers/togetherai")],
   ["@opencode-ai/ai/providers/xai", () => import("@opencode-ai/ai/providers/xai")],
 ])
 
@@ -90,8 +95,7 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (specifie
   const root = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? specifier)
   const installed = yield* npm.add(root).pipe(Effect.mapError((cause) => new LoadError({ package: specifier, cause })))
   const entrypoint = yield* Effect.try({
-    try: () =>
-      specifier === root && installed.entrypoint ? installed.entrypoint : resolveModule(specifier, installed.directory),
+    try: () => resolveModule(specifier, installed.directory),
     catch: (cause) => new LoadError({ package: specifier, cause }),
   })
   return yield* importPackage(specifier, entrypoint)

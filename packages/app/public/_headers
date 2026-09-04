@@ -1,10 +1,10 @@
-/assets/*.js
+/_assets/*.js
   Content-Type: application/javascript
 
-/assets/*.mjs
+/_assets/*.mjs
   Content-Type: application/javascript
 
-/assets/*.css
+/_assets/*.css
   Content-Type: text/css
 
 /*.js

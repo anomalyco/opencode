@@ -1,21 +1,19 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Scope } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
 import { KV } from "@opencode-ai/core/kv"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { testEffect } from "./lib/effect"
+import { TestWebSearch } from "./lib/websearch"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([WebSearch.node, Bus.node, KV.node])))
+const it = testEffect(TestWebSearch.layer)
 
 const register = (id: string) =>
   Effect.gen(function* () {
     const websearch = yield* WebSearch.Service
     const providerID = WebSearch.ID.make(id)
     const calls: WebSearch.ProviderInput[] = []
-    yield* websearch.transform((draft) => {
-      draft.add({
+    yield* websearch.transform((editor) => {
+      editor.add({
         id: providerID,
         name: id.toUpperCase(),
         execute: (input) =>
@@ -36,11 +34,28 @@ const register = (id: string) =>
   })
 
 describe("WebSearch", () => {
+  it.effect("shares the normal and test interfaces without installing live providers", () =>
+    Effect.gen(function* () {
+      const websearch = yield* WebSearch.Service
+      const test = yield* TestWebSearch.Service
+
+      expect(websearch).toBe(test)
+      expect(yield* websearch.providers()).toEqual([])
+      expect(test.queries).toEqual([])
+      expect((yield* websearch.query({ query: "unconfigured" }).pipe(Effect.flip))._tag).toBe(
+        "WebSearch.ProviderRequired",
+      )
+      yield* test.wait(1)
+      expect(test.queries).toEqual([{ query: "unconfigured" }])
+    }),
+  )
+
   it.effect("executes an explicit provider without changing the default", () =>
     Effect.gen(function* () {
       yield* register("exa")
       const parallel = yield* register("parallel")
       const websearch = yield* WebSearch.Service
+      const test = yield* TestWebSearch.Service
 
       expect(yield* websearch.query({ query: "effect", providerID: parallel.providerID })).toEqual(
         new WebSearch.Response({
@@ -57,6 +72,7 @@ describe("WebSearch", () => {
       )
       expect((yield* websearch.query({ query: "default" }).pipe(Effect.flip))._tag).toBe("WebSearch.ProviderRequired")
       expect(parallel.calls).toEqual([{ query: "effect" }])
+      expect(test.queries).toEqual([{ query: "effect", providerID: parallel.providerID }, { query: "default" }])
     }),
   )
 
@@ -75,9 +91,24 @@ describe("WebSearch", () => {
       yield* register("exa")
       const parallel = yield* register("parallel")
       const websearch = yield* WebSearch.Service
-      yield* websearch.transform((draft) => draft.default.set(parallel.providerID))
+      yield* websearch.transform((editor) => editor.default.set(parallel.providerID))
 
       expect((yield* websearch.query({ query: "configured" })).providerID).toBe(parallel.providerID)
+    }),
+  )
+
+  it.effect("reloads active transforms from their current source", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const parallel = yield* register("parallel")
+      const websearch = yield* WebSearch.Service
+      const source = { providerID: exa.providerID }
+      yield* websearch.transform((editor) => editor.default.set(source.providerID))
+
+      expect((yield* websearch.default())?.id).toBe(exa.providerID)
+      source.providerID = parallel.providerID
+      yield* websearch.reload()
+      expect((yield* websearch.default())?.id).toBe(parallel.providerID)
     }),
   )
 
@@ -100,7 +131,7 @@ describe("WebSearch", () => {
       const parallel = yield* register("parallel")
       const websearch = yield* WebSearch.Service
       yield* websearch.select(parallel.providerID)
-      yield* websearch.transform((draft) => draft.default.set(exa.providerID))
+      yield* websearch.transform((editor) => editor.default.set(exa.providerID))
 
       expect((yield* websearch.query({ query: "configured" })).providerID).toBe(exa.providerID)
     }),
@@ -111,7 +142,7 @@ describe("WebSearch", () => {
       yield* register("exa")
       yield* register("parallel")
       const websearch = yield* WebSearch.Service
-      yield* websearch.transform((draft) => draft.default.set("random"))
+      yield* websearch.transform((editor) => editor.default.set("random"))
 
       expect(["exa", "parallel"]).toContain((yield* websearch.query({ query: "random" })).providerID)
     }),
@@ -121,7 +152,7 @@ describe("WebSearch", () => {
     Effect.gen(function* () {
       yield* register("exa")
       const websearch = yield* WebSearch.Service
-      yield* websearch.transform((draft) => draft.default.set(false))
+      yield* websearch.transform((editor) => editor.default.set(false))
 
       expect((yield* websearch.query({ query: "disabled" }).pipe(Effect.flip))._tag).toBe("WebSearch.Disabled")
     }),
@@ -131,7 +162,7 @@ describe("WebSearch", () => {
     Effect.gen(function* () {
       yield* register("exa")
       const websearch = yield* WebSearch.Service
-      yield* websearch.transform((draft) => draft.default.set(WebSearch.ID.make("missing")))
+      yield* websearch.transform((editor) => editor.default.set(WebSearch.ID.make("missing")))
 
       expect((yield* websearch.query({ query: "fallback" }).pipe(Effect.flip))._tag).toBe("WebSearch.ProviderRequired")
     }),

@@ -1,6 +1,4 @@
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Environment } from "@opencode-ai/core/environment/index"
-import { Location } from "@opencode-ai/core/location"
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Effect, Layer } from "effect"
@@ -40,10 +38,8 @@ export const recordingEnvironmentLayer = (spawns: Array<ChildProcess.Command>) =
 
 export type EnvironmentFilesTransform = (files: Environment.Files) => Partial<Environment.Files>
 
-export function transformEnvironmentFiles(
-  location: Layer.Layer<Location.Service>,
-  transform: EnvironmentFilesTransform = () => ({}),
-) {
+// Wrap real host filesystem operations without constructing workspace services.
+export function transformEnvironmentFiles(transform: EnvironmentFilesTransform = () => ({})) {
   return Layer.effect(
     Environment.Service,
     Effect.gen(function* () {
@@ -53,5 +49,5 @@ export function transformEnvironmentFiles(
         files: { ...current.files, ...transform(current.files) },
       })
     }),
-  ).pipe(Layer.provide(AppNodeBuilder.build(Environment.node, [[Location.node, location]])))
+  ).pipe(Layer.provide(hostEnvironmentLayer))
 }

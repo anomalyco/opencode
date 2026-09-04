@@ -1,7 +1,8 @@
-import type { ThemeTokensDefinition } from "./index.js"
+import type { Mode, ThemeTokensDefinition } from "./index.js"
+import { DEFAULT_THEME } from "./defaults.js"
 import { ActionVariant, FeedbackKind } from "./schema.js"
 
-export function fallback(): ThemeTokensDefinition {
+export function fallback(mode: Mode): ThemeTokensDefinition {
   const red = "#ff0000"
 
   return {
@@ -9,6 +10,7 @@ export function fallback(): ThemeTokensDefinition {
       default: red,
       action: Object.fromEntries(ActionVariant.literals.map((variant) => [variant, { default: red }])),
       formfield: { default: red },
+      status: DEFAULT_THEME[mode].text.status,
       feedback: Object.fromEntries(FeedbackKind.literals.map((kind) => [kind, { default: red }])),
     },
     background: {

@@ -6,7 +6,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, on, onMount } from "solid-js"
 import { Composer } from "@/composer/composer"
-import { createComposerModel } from "@/composer/model"
+import { createComposerModel, type ComposerModel } from "@/composer/model"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls } from "@/composer/selection"
 import { setCursorPosition } from "@/composer/editor/dom"
@@ -27,8 +27,11 @@ import { createSessionRevert } from "../revert"
 import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerRegionController } from "./session-composer-region-controller"
 import { createActiveComposerAdapter } from "./adapter"
+import { createSessionQueue } from "./queue"
+import { SessionQueuePanel } from "./queue-panel"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
+import { useSettings } from "@/settings/model"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
@@ -156,6 +159,7 @@ export function createActiveSessionRegion(input: {
     session: input.session,
     setActiveMessage: input.timeline.actions.setActiveMessage,
   })
+  const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
   useComposerCommands()
   useSessionCommands({
     session: input.session,
@@ -178,7 +182,13 @@ export function createActiveSessionRegion(input: {
 
   return {
     actions: {
-      timeline: { revert: ({ messageID }) => revert.to(messageID), openAttachment } satisfies SessionUserActions,
+      timeline: {
+        get revert() {
+          if (input.session.data.isChild()) return
+          return revertMessage
+        },
+        openAttachment,
+      } satisfies SessionUserActions,
     },
     region: {
       centered: input.screen.centered,
@@ -206,9 +216,9 @@ export type ActiveSessionRegionModel = ReturnType<typeof createActiveSessionRegi
 export function ActiveSessionComposerRegion(props: {
   model: ActiveSessionRegionModel
   session: SessionModel
-  accentSubmit: boolean
   onResponseSubmit: () => void
 }) {
+  const settings = useSettings()
   const region = createSessionComposerRegionController({
     state: props.model.region.state,
     parentID: props.session.data.parentID,
@@ -224,11 +234,32 @@ export function ActiveSessionComposerRegion(props: {
     submitted: props.model.submitted,
     setEditor: props.model.input.setPromptRef,
   })
-  const composer = createComposerModel(adapter)
+  let composer: ComposerModel | undefined
+  const queue = createSessionQueue({
+    sessionID: requireSessionID(props.session),
+    draft: adapter.state,
+    working: adapter.working,
+    behavior: settings.general.followUpBehavior,
+    composer: () => composer,
+  })
+  composer = createComposerModel(adapter, { queue })
   return (
     <SessionComposerRegion
       controller={region}
-      composer={<Composer model={composer} borderUnderlay accentSubmit={props.accentSubmit} />}
+      composer={
+        <div class="relative">
+          <SessionQueuePanel queue={queue} />
+          <div class="relative z-10">
+            <Composer model={composer} borderUnderlay />
+          </div>
+        </div>
+      }
     />
   )
+}
+
+function requireSessionID(session: SessionModel) {
+  const id = session.identity.params.id
+  if (!id) throw new Error("Active Composer requires a Session ID")
+  return id
 }

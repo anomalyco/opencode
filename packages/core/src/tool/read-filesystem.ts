@@ -18,7 +18,7 @@ const FIRST_CHUNK = 256 * 1024
 const MAX_LINE_LENGTH = 2_000
 const TREE_BASE = 6
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
-const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
+export const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
 
 export class BinaryFileError extends Schema.TaggedError<BinaryFileError>()("ReadTool.BinaryFileError", {
   resource: Schema.String,
@@ -101,6 +101,7 @@ export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
 }) {}
 
 export interface Interface {
+  readonly list: (path: AbsolutePath) => ReturnType<Files["list"]>
   readonly read: (
     path: AbsolutePath,
     resource: string,
@@ -361,12 +362,8 @@ const textOffset = (tree: TextNode, newline: number) => {
     if (!child) return tree.summary.bytes
     node = child
   }
-  for (const [index, byte] of node.bytes.entries()) {
-    if (byte !== 10) continue
-    remaining--
-    if (remaining === 0) return offset + index + 1
-  }
-  return tree.summary.bytes
+  const end = nthNewline(node.bytes, remaining)
+  return end === undefined ? tree.summary.bytes : offset + end
 }
 
 const nthNewline = (bytes: Uint8Array, count: number) => {
@@ -382,7 +379,10 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const environment = yield* Environment.Service
-    return Service.of({ read: (path, resource, page) => read(environment.files, path, resource, page) })
+    return Service.of({
+      list: environment.files.list,
+      read: (path, resource, page) => read(environment.files, path, resource, page),
+    })
   }),
 )
 

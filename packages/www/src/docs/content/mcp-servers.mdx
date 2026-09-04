@@ -231,6 +231,18 @@ Use permission actions to hide or deny a server's tools without stopping its con
 }
 ```
 
+## Session context
+
+When OpenCode invokes an MCP tool on behalf of a session, it includes the invoking
+session's ID in `CallToolRequest.params._meta.sessionID`. This applies to direct tool
+calls and Code Mode over both stdio and Streamable HTTP.
+
+The ID is request metadata, not a tool argument, so it does not appear in the
+model-visible tool schema. Treat it as an opaque correlation value: it identifies the
+invoking OpenCode session rather than the MCP transport session, can be absent for
+calls without session context, and must not be used by itself for authentication or
+authorization. Remote MCP servers receive the raw ID and may log or retain it.
+
 ## Manage servers
 
 OpenCode interfaces can add servers to project or global configuration, list

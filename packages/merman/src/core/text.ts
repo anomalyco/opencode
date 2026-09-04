@@ -13,6 +13,17 @@ export function diagramTextWidth(value: string): number {
   return stringWidth(value)
 }
 
+export const DIAGRAM_LABEL_PADDING_X = 1
+
+export function padDiagramLabelLine(value: string): string {
+  const padding = " ".repeat(DIAGRAM_LABEL_PADDING_X)
+  return `${padding}${value}${padding}`
+}
+
+export function measureDiagramLabelWidth(value: string, measure = diagramTextWidth): number {
+  return Math.max(...splitDiagramLines(value).map((line) => measure(line) + DIAGRAM_LABEL_PADDING_X * 2))
+}
+
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
 export function* diagramTextGraphemes(value: string): Generator<string> {

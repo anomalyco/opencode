@@ -19,7 +19,16 @@ const result = await Bun.build({
   target: "node",
   format: "esm",
   packages: "external",
-  external: ["#sqlite", "#pty", "#fff", "#photon-wasm", "#shell-parser-wasm", "#process-lock-ffi", "#v1-migration"],
+  external: [
+    "#sqlite",
+    "#pty",
+    "#persistent-pty-binary",
+    "#fff",
+    "#photon-wasm",
+    "#shell-parser-wasm",
+    "#process-lock-ffi",
+    "#v1-migration",
+  ],
   splitting: true,
   loader: {
     ".txt": "text",
@@ -51,16 +60,15 @@ const rewritten = await Promise.all(
       .replace(eagerRequire, "")
     if (/\bnew\s+__require\s*\(/.test(generatedUses))
       throw new Error(`Unsupported generated require constructor in ${output.path}`)
-    const unsupported = generatedUses
-      .replace(/\b__require\.resolve\s*\(/g, "")
-      .replace(/\b__require\s*\(/g, "")
+    const unsupported = generatedUses.replace(/\b__require\.resolve\s*\(/g, "").replace(/\b__require\s*\(/g, "")
     if (/\b__require\b/.test(unsupported)) throw new Error(`Unsupported generated require usage in ${output.path}`)
 
     if (!source.includes(eagerRequire)) return false
     if (source.indexOf(eagerRequire) !== source.lastIndexOf(eagerRequire))
       throw new Error(`Multiple eager require helpers in ${output.path}`)
     const rewrittenSource = source.replace(eagerRequire, lazyRequire)
-    if (rewrittenSource.includes(eagerRequire)) throw new Error(`Failed to rewrite eager require helper in ${output.path}`)
+    if (rewrittenSource.includes(eagerRequire))
+      throw new Error(`Failed to rewrite eager require helper in ${output.path}`)
     await Bun.write(output.path, rewrittenSource)
     return true
   }),

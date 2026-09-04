@@ -34,11 +34,13 @@
   "scripts": {
     "build": "bun run script/build.ts",
     "test": "bun test --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "typecheck:dist": "bun run build && bun typecheck --project tsconfig.dist.json"
   },
   "dependencies": {
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
     "@npmcli/arborist": "catalog:",
     "@npmcli/config": "10.8.1",
     "@opentelemetry/api": "1.9.0",
@@ -52,7 +54,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
-    "resolve.exports": "catalog:"
+    "pacote": "21.5.1"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
@@ -61,6 +63,7 @@
     "@types/node": "catalog:",
     "@types/npm-package-arg": "6.1.4",
     "@types/npmcli__arborist": "6.3.3",
+    "@types/pacote": "11.1.8",
     "@typescript/native-preview": "catalog:"
   }
 }

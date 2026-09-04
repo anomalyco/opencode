@@ -67,9 +67,13 @@ export function handlers<const Root extends Spec.Any>(root: Root, handlers: Hand
   function add(node: Spec.Any, value: RuntimeHandlers) {
     if (typeof value === "function") {
       result.push({ spec: node.spec, load: value as () => Promise<{ default: RuntimeHandler }> })
+      for (const alias of node.aliases) result.push({ spec: alias.spec, load: value as () => Promise<{ default: RuntimeHandler }> })
       return
     }
-    if (value.$) result.push({ spec: node.spec, load: value.$ as () => Promise<{ default: RuntimeHandler }> })
+    if (value.$) {
+      result.push({ spec: node.spec, load: value.$ as () => Promise<{ default: RuntimeHandler }> })
+      for (const alias of node.aliases) result.push({ spec: alias.spec, load: value.$ as () => Promise<{ default: RuntimeHandler }> })
+    }
     for (const [name, child] of Object.entries(node.commands)) add(child, value[name] as RuntimeHandlers)
   }
 
@@ -99,8 +103,12 @@ function provide(node: Spec.Any, handlers: ReadonlyArray<LazyHandler>): Provided
       )
     : node.spec
   if (!Object.keys(node.commands).length) return spec as ProvidedCommand
+  const children = Object.values(node.commands)
   return spec.pipe(
-    Command.withSubcommands(Object.values(node.commands).map((child) => provide(child, handlers))),
+    Command.withSubcommands([
+      ...children.map((child) => provide(child, handlers)),
+      ...children.flatMap((child) => child.aliases.map((alias) => provide(alias, handlers))),
+    ]),
   ) as ProvidedCommand
 }
 

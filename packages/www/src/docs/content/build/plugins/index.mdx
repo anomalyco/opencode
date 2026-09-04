@@ -1,0 +1,1395 @@
+---
+title: "Overview"
+---
+
+Plugins can modify OpenCode's behavior and add new features. To change the terminal UI, build a [CLI
+plugin](/build/plugins/cli).
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+Plugins under `.opencode/plugins/` are loaded automatically, like the local example above. To load published packages
+or plugin directories from other locations, add them to `plugins` in `opencode.json(c)`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+See [Configure plugins](/plugins) for more loading and configuration options.
+
+## Lifecycle
+
+`setup` runs when the plugin loads. It may return a cleanup function that runs when the plugin unloads.
+
+```ts
+import { Plugin } from "@opencode-ai/plugin"
+
+export default Plugin.define({
+  id: "example",
+  setup(ctx) {
+    console.log(`loaded in OpenCode ${ctx.app.version}`)
+    return () => console.log("unloaded")
+  },
+})
+```
+
+### Context
+
+The plugin context is essentially an [OpenCode server client](/build/client).
+Its read and action methods use the same inputs and responses as the client. It
+adds plugin-only methods for transforms, runtime hooks, reloads, registrations,
+and plugin options.
+
+```ts
+setup(ctx) {
+  console.log(ctx.app.version)
+}
+```
+
+`ctx.location` describes the location where this plugin instance is loaded. It
+includes `directory`, optional `workspaceID`, and `project` metadata (`id`,
+`directory`, and `canonical`). It is available in both Promise and Effect plugins.
+This is the plugin instance's location, not the location of every session it can
+access or event it receives.
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
+### Options
+
+Pass plugin options with the object form in `opencode.json(c)`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company",
+      "options": {
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Read those values from `ctx.options` during `setup`.
+
+```ts title="plugins/company/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+
+export default Plugin.define({
+  id: "company",
+  setup(ctx) {
+    const strict = ctx.options.strict === true
+  },
+})
+```
+
+## Transforms
+
+Transforms are synchronous edits to OpenCode's domain state, and each builds on earlier registrations.
+Registry reads such as `ctx.catalog.model.list()` reflect every registration so far, including during plugin setup;
+startup batching only coalesces update notifications and never delays what a read returns. Resource status APIs still
+report the state of running resources: a registered definition does not mean its connection or other resource work has
+completed.
+
+Say we have a plugin that adds one model to the catalog.
+
+```ts title="plugins/models/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    await ctx.catalog.transform((catalog) => {
+      catalog.model.update("acme", "reasoner", (model) => {
+        model.name = "Acme Reasoner"
+        model.cost = [{ input: 2, output: 12, cache: { read: 0.2, write: 2 } }]
+      })
+    })
+
+    const models = await ctx.catalog.model.list() // Includes the model registered above.
+  },
+})
+```
+
+Any registration, removal, or `reload()` marks the registry changed; the next read rebuilds it by replaying every
+active transform in registration order onto a fresh value. Keep transforms cheap and repeatable. A value you have
+already read is never modified by later rebuilds.
+
+A later plugin can enforce a maximum output price across every model, including models added by earlier plugins.
+
+```ts title="plugins/model-budget/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+
+export default Plugin.define({
+  id: "company.model-budget",
+  async setup(ctx) {
+    await ctx.catalog.transform((catalog) => {
+      for (const provider of catalog.provider.list()) {
+        for (const model of provider.models.values()) {
+          if (model.cost.some((tier) => tier.output > 20)) {
+            catalog.model.remove(model.providerID, model.id)
+          }
+        }
+      }
+    })
+  },
+})
+```
+
+Captured inputs are not watched automatically. Load external data before the synchronous callback, then call
+`reload()` after those inputs change.
+
+```ts title="plugins/models/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    let models = await loadFromSource()
+
+    await ctx.catalog.transform((catalog) => {
+      for (const item of models) {
+        catalog.model.update(item.providerID, item.id, (model) => {
+          model.name = item.name
+          model.cost = [{ input: item.input, output: item.output, cache: { read: 0, write: 0 } }]
+        })
+      }
+    })
+
+    const refresh = async () => {
+      models = await loadFromSource()
+      await ctx.catalog.reload()
+    }
+
+    const timer = setInterval(() => void refresh().catch(console.error), 60_000)
+    return () => clearInterval(timer)
+  },
+})
+```
+
+`reload` replays every catalog transform in order, so the output-price policy still filters the refreshed models.
+
+## API
+
+### Agent
+
+Read all agents or fetch one by ID.
+
+```ts
+const agents = await ctx.agent.list()
+const build = await ctx.agent.get({ agentID: "build" })
+```
+
+Register a transform to inspect, update, remove, or select the default agent.
+
+```ts
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
+
+  editor.default("build")
+  editor.update("build", (agent) => {
+    agent.description = "Builds features and fixes bugs"
+  })
+  editor.remove("legacy")
+})
+```
+
+Reload agents after external state used by a transform changes.
+
+```ts
+await ctx.agent.reload()
+```
+
+#### Reference
+
+Schema: [`Agent.Info`](/api#schema-Agent.Info)
+
+```ts
+interface AgentContext {
+  list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
+  get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface AgentEditor {
+  list(): readonly AgentInfo[]
+  get(id: string): AgentInfo | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: AgentInfo) => void): void
+  remove(id: string): void
+}
+
+interface Registration {
+  dispose(): Promise<void>
+}
+```
+
+### Catalog
+
+Read the available providers, models, and default model.
+
+```ts
+const providers = await ctx.catalog.provider.list()
+const provider = await ctx.catalog.provider.get({ providerID: "anthropic" })
+const models = await ctx.catalog.model.list()
+const defaults = await ctx.catalog.model.default()
+```
+
+Register a transform to inspect, update, remove, or select providers and models.
+
+```ts
+await ctx.catalog.transform((catalog) => {
+  const providers = catalog.provider.list()
+  const anthropic = catalog.provider.get("anthropic")
+  const sonnet = catalog.model.get("anthropic", "claude-sonnet-4-5")
+
+  catalog.provider.update("anthropic", (provider) => {
+    provider.name = "Anthropic"
+  })
+  catalog.model.update("anthropic", "claude-sonnet-4-5", (model) => {
+    model.name = "Claude Sonnet 4.5"
+  })
+  catalog.model.default.set("anthropic", "claude-sonnet-4-5")
+  catalog.model.remove("anthropic", "legacy-model")
+  catalog.provider.remove("legacy-provider")
+})
+```
+
+Reload the catalog after external state used by a transform changes.
+
+```ts
+await ctx.catalog.reload()
+```
+
+#### Reference
+
+Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface CatalogContext {
+  provider: {
+    list(input?: ProviderListInput, requestOptions?: RequestOptions): Promise<ProviderListOutput>
+    get(input: ProviderGetInput, requestOptions?: RequestOptions): Promise<ProviderGetOutput>
+  }
+  model: {
+    list(input?: ModelListInput, requestOptions?: RequestOptions): Promise<ModelListOutput>
+    default(input?: ModelDefaultInput, requestOptions?: RequestOptions): Promise<ModelDefaultOutput>
+  }
+  transform(callback: (editor: CatalogEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface CatalogEditor {
+  provider: {
+    list(): readonly CatalogProviderRecord[]
+    get(providerID: string): CatalogProviderRecord | undefined
+    update(providerID: string, update: (provider: ProviderInfo) => void): void
+    remove(providerID: string): void
+  }
+  model: {
+    get(providerID: string, modelID: string): ModelInfo | undefined
+    update(providerID: string, modelID: string, update: (model: ModelInfo) => void): void
+    remove(providerID: string, modelID: string): void
+    default: {
+      get(): { providerID: string; modelID: string } | undefined
+      set(providerID: string, modelID: string): void
+    }
+  }
+}
+
+interface CatalogProviderRecord {
+  provider: ProviderInfo
+  models: ReadonlyMap<string, ModelInfo>
+}
+```
+
+### Commands
+
+Read the commands available at a location.
+
+```ts
+const commands = await ctx.command.list()
+```
+
+Register commands with a transform. The executor receives the session, prompt attachments, and requested delivery mode.
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review",
+    description: "Review changes for security issues",
+    execute: async ({ sessionID, prompt, delivery }) => {
+      await ctx.session.prompt({
+        ...prompt,
+        sessionID,
+        text: `Review these changes for security issues.\n\n${prompt.text}`,
+        delivery,
+      })
+    },
+  })
+})
+```
+
+Reload commands after external state used by a transform changes.
+
+```ts
+await ctx.command.reload()
+```
+
+#### Reference
+
+Schemas: [`Command.Info`](/api#schema-Command.Info),
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
+
+```ts
+interface CommandContext {
+  list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDefinition {
+  name: string
+  description?: string
+  execute(input: CommandInvocation): Promise<void>
+}
+
+interface CommandInvocation {
+  sessionID: string
+  prompt: PromptInput
+  delivery: "steer" | "queue"
+}
+```
+
+### Integrations
+
+Read integrations and inspect active credentials.
+
+```ts
+const integrations = await ctx.integration.list()
+const github = await ctx.integration.get({ integrationID: "github" })
+const connection = await ctx.integration.connection.active("github")
+const credential = connection ? await ctx.integration.connection.resolve(connection) : undefined
+```
+
+Connect integrations with an API key.
+
+```ts
+await ctx.integration.connect.key({
+  integrationID: "github",
+  key: process.env.GITHUB_TOKEN!,
+})
+```
+
+Start, inspect, complete, or cancel an OAuth connection attempt.
+
+```ts
+const attempt = await ctx.integration.oauth.connect({ integrationID: "github", methodID: "oauth" })
+const status = await ctx.integration.oauth.status({ integrationID: "github", attemptID: attempt.data.attemptID })
+await ctx.integration.oauth.complete({ integrationID: "github", attemptID: attempt.data.attemptID, code })
+await ctx.integration.oauth.cancel({ integrationID: "github", attemptID: attempt.data.attemptID })
+```
+
+Command-based connections expose the same start, status, and cancel flow.
+
+```ts
+const attempt = await ctx.integration.command.connect({ integrationID: "acme", methodID: "cli" })
+const status = await ctx.integration.command.status({ integrationID: "acme", attemptID: attempt.data.attemptID })
+await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt.data.attemptID })
+```
+
+Register a transform to inspect integrations and manage their authentication methods.
+
+```ts
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
+
+  editor.update("acme", (integration) => {
+    integration.name = "Acme"
+  })
+  editor.method.update({
+    integrationID: "acme",
+    method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
+  })
+
+  const methods = editor.method.list("acme")
+  const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
+})
+```
+
+Reload integrations after external state used by a transform changes.
+
+```ts
+await ctx.integration.reload()
+```
+
+#### Reference
+
+Schemas: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
+
+```ts
+interface IntegrationContext {
+  list(input?: IntegrationListInput, requestOptions?: RequestOptions): Promise<IntegrationListOutput>
+  get(input: IntegrationGetInput, requestOptions?: RequestOptions): Promise<IntegrationGetOutput>
+  connect: {
+    key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  oauth: {
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
+    status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
+    complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  command: {
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
+    cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+  connection: {
+    active(integrationID: string): Promise<ConnectionInfo | undefined>
+    resolve(connection: ConnectionInfo): Promise<CredentialValue | undefined>
+  }
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+```
+
+### MCP
+
+List MCP servers and their current connection state.
+
+```ts
+const servers = await ctx.mcp.list()
+```
+
+Plugins manage MCP servers only through transforms. Use `editor.set` to add or replace a server, `editor.update` to
+change its configuration, and `editor.remove` to remove it. Inspect configuration with `editor.list` and `editor.get`.
+
+```ts
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
+    server.disabled = false
+  })
+  editor.remove("legacy")
+})
+```
+
+Set `disabled: true` in a transform to disable a server and disconnect it, or `disabled: false` to enable it and allow
+OpenCode to connect. OpenCode reconciles server lifecycle from the transformed configuration.
+
+Call `reload()` after external state used by a transform changes to reapply transforms and reconcile the servers.
+
+```ts
+await ctx.mcp.reload()
+```
+
+#### Reference
+
+Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
+
+```ts
+interface MCPContext {
+  list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface MCPEditor {
+  list(): readonly (readonly [string, McpServerConfig])[]
+  get(name: string): McpServerConfig | undefined
+  set(name: string, config: McpServerConfig): void
+  update(name: string, update: (config: McpServerConfig) => void): void
+  remove(name: string): void
+}
+```
+
+### Plugins
+
+List the plugins currently active for a location.
+
+```ts
+const plugins = await ctx.plugin.list()
+```
+
+#### Reference
+
+Schemas: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+
+```ts
+interface PluginContext {
+  list(input?: PluginListInput, requestOptions?: RequestOptions): Promise<PluginListOutput>
+}
+```
+
+### References
+
+Read the references available at a location.
+
+```ts
+const references = await ctx.reference.list()
+```
+
+Register a transform to inspect, add, or remove local and Git references. `get(name)` returns the current configured source,
+or `undefined` when the name is absent.
+
+```ts
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
+  editor.remove("legacy")
+})
+```
+
+Reload references after external state used by a transform changes.
+
+```ts
+await ctx.reference.reload()
+```
+
+#### Reference
+
+Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+[`Reference.GitSource`](/api#schema-Reference.GitSource)
+
+```ts
+interface ReferenceContext {
+  list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ReferenceEditor {
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+}
+```
+
+### Generate
+
+Generate text with a selected model without creating a session, invoking tools, or adding to session history.
+
+```ts
+const review = await ctx.generate.text({
+  model: { providerID: "anthropic", id: "claude-sonnet-4-6" },
+  prompt: "Review this proposed action.",
+})
+```
+
+### Permissions
+
+Inspect or resolve pending permission requests.
+
+```ts
+const pending = await ctx.permission.list({ sessionID })
+const request = await ctx.permission.get({ sessionID, requestID })
+await ctx.permission.reply({ sessionID, requestID, reply: "once" })
+```
+
+### Sessions
+
+Create or read a session.
+
+```ts
+const created = await ctx.session.create({ title: "Review" })
+const session = await ctx.session.get({ sessionID })
+const messages = await ctx.session.context({ sessionID })
+```
+
+Change the agent or model used by subsequent requests.
+
+```ts
+await ctx.session.switchAgent({ sessionID, agent: "build" })
+await ctx.session.switchModel({ sessionID, model: { providerID: "anthropic", id: "claude-sonnet-4-5" } })
+```
+
+Send user prompts, transient generation requests, commands, or synthetic messages.
+
+```ts
+const prompt = await ctx.session.prompt({ sessionID, text: "Review the current changes" })
+const generated = await ctx.session.generate({ sessionID, prompt: "Summarize this project" })
+const command = await ctx.session.command({ sessionID, command: "review", arguments: "--staged" })
+const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
+```
+
+Rename, interrupt, or wait for a session.
+
+```ts
+await ctx.session.rename({ sessionID, title: "Review" })
+await ctx.session.interrupt({ sessionID, continue: false })
+await ctx.session.wait({ sessionID })
+```
+
+#### Reference
+
+Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)
+
+```ts
+interface SessionContext {
+  create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
+  switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
+  switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
+  prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  generate(input: SessionGenerateInput, requestOptions?: RequestOptions): Promise<{ text: string }>
+  command(input: SessionCommandInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
+  interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<void>
+  rename(input: SessionRenameInput, requestOptions?: RequestOptions): Promise<void>
+  wait(input: SessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### Skills
+
+Read the skills available at a location.
+
+```ts
+const skills = await ctx.skill.list()
+```
+
+Register a transform to inspect, add, update, or remove skills. `get(id)` returns the current editor entry, or `undefined`
+when the skill is absent.
+
+```ts
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
+    id: "review",
+    name: "Review",
+    description: "Review the current changes",
+    location: "/workspace/.opencode/skills/review.md",
+    content: "Review the current changes for correctness and missing tests.",
+  })
+  const review = editor.get("review")
+  editor.update("review", (skill) => {
+    skill.autoinvoke = true
+  })
+  editor.remove("legacy")
+})
+```
+
+Reload skills after external state used by a transform changes.
+
+```ts
+await ctx.skill.reload()
+```
+
+#### Reference
+
+Schema: [`Skill.Info`](/api#schema-Skill.Info)
+
+```ts
+interface SkillContext {
+  list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface SkillEditor {
+  list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
+  add(skill: SkillInfo): void
+  update(id: string, update: (skill: SkillInfo) => void): void
+  remove(id: string): void
+}
+```
+
+### Storage
+
+Store, read, or remove durable JSON values scoped to the plugin.
+
+```ts
+await ctx.storage.set("settings", { strict: true })
+const settings = await ctx.storage.get("settings")
+await ctx.storage.remove("settings")
+```
+
+Scan keys by prefix with optional cursor pagination.
+
+```ts
+const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
+const next = page.next
+```
+
+#### Reference
+
+```ts
+interface StorageContext {
+  get(key: string): Promise<Json | undefined>
+  set(key: string, value: Json): Promise<void>
+  remove(key: string): Promise<void>
+  scan(options: StorageScanOptions): Promise<StorageScanResult>
+}
+
+interface StorageScanOptions {
+  prefix: string
+  after?: string
+  limit?: number
+}
+
+interface StorageScanResult {
+  entries: readonly { key: string; value: Json }[]
+  next?: string
+}
+```
+
+### Tools
+
+Register, update, and remove tools with a synchronous transform, including in Promise plugins. Load external data
+before registering or reloading. A later valid registration overrides the same effective tool name.
+
+```ts
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
+  editor.add({
+    name: "greeting",
+    description: "Create a greeting",
+    input: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    options: { namespace: "acme", codemode: true },
+    execute: async (input, tool) => {
+      await tool.progress({ status: "greeting" })
+      return { content: `Hello ${(input as { name: string }).name}!` }
+    },
+  })
+})
+```
+
+Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
+changing their order; it does not rerun plugin setup.
+
+```ts
+await ctx.tool.reload()
+```
+
+Use `list()` and `get()` to inspect tools currently in the editor. Tools have an `id` containing their effective name,
+and `get()` returns `undefined` when that ID is not present. Use `update` and `remove` with the effective tool name,
+including its namespace (`acme_greeting` above). Dots in
+namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
+`add` with a complete definition. Updates preserve the name and namespace. Assign new schemas or options to replace
+them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
+
+```ts
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+Updates and removals replay in order with additions, including after MCP catalog refreshes. Disposing their
+registration removes those changes and rebuilds from the remaining transforms.
+
+Dispose a registration to remove its transform and rebuild from the remaining transforms, revealing any earlier
+definition it overrode. Disposal is idempotent, and unloading the plugin also disposes its registrations.
+
+```ts
+await registration.dispose()
+```
+
+Each model request captures a stable, executable tool snapshot. Later transforms, reloads, and disposal affect future
+snapshots, not the definitions, Code Mode namespace descriptions, or executors already captured. Executors that close
+over mutable plugin data still observe that data; capture a value inside the transform when it must remain tied to
+that definition.
+
+#### Reference
+
+Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+[`Tool.FileContent`](/api#schema-Tool.FileContent)
+
+```ts
+interface ToolContext {
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ToolEditor {
+  list(): readonly (ToolInfo & { readonly id: string })[]
+  get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
+}
+```
+
+### VCS
+
+Read repository information, working-copy status, or file diffs.
+
+```ts
+const info = await ctx.vcs.get()
+const branches = await ctx.vcs.branches({ search: "feature", limit: 10 })
+const changes = await ctx.vcs.status()
+const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
+```
+
+Register a location-scoped VCS provider with a transform. A provider matching the detected repository type is selected
+automatically; use `editor.default.set` to select a different provider.
+
+```ts
+await ctx.vcs.transform((editor) => {
+  editor.add({
+    id: "custom",
+    name: "Custom VCS",
+    info: async () => ({ branch: { current: "feature", default: "main" } }),
+    branches: async (input, { signal }) => readBranches(input, signal),
+    status: async (scope, { signal }) => readStatus(scope.worktree, signal),
+    diff: async (input, { signal }) => readDiff(input, signal),
+  })
+  editor.default.set("custom")
+})
+```
+
+Provider callbacks receive the current location, working-copy root, canonical project root, and optional repository
+store. Diff callbacks also receive the selected mode, requested context, and output byte budget. Repository discovery
+continues to use OpenCode's built-in Git and Mercurial detectors.
+
+#### Reference
+
+Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsContext {
+  get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  branches(input?: VcsBranchesInput, requestOptions?: RequestOptions): Promise<VcsBranchesOutput>
+  status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
+  diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  default: {
+    get(): string | undefined
+    set(providerID: string): void
+  }
+}
+```
+
+### Websearch
+
+List websearch providers or run a query through the selected provider.
+
+```ts
+const providers = await ctx.websearch.providers()
+const results = await ctx.websearch.query({ query: "OpenCode plugins", providerID: "internal" })
+```
+
+Register a provider and select the default provider with a transform.
+
+```ts
+await ctx.websearch.transform((editor) => {
+  editor.add({
+    id: "internal",
+    name: "Internal search",
+    execute: async ({ query }, { signal }) => {
+      const response = await fetch(`https://search.example.com?q=${encodeURIComponent(query)}`, { signal })
+      const result = await response.json()
+      return [{ url: result.url, title: result.title, content: result.content, time: {} }]
+    },
+  })
+  editor.default.set("internal")
+})
+```
+
+Disable websearch by selecting `false`, or reload providers after external state changes.
+
+```ts
+await ctx.websearch.transform((editor) => editor.default.set(false))
+await ctx.websearch.reload()
+```
+
+#### Reference
+
+Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+
+```ts
+interface WebSearchContext {
+  providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
+  query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface WebSearchEditor {
+  add(provider: WebSearchDefinition): void
+  default: {
+    get(): string | false | undefined
+    set(providerID: string | false): void
+  }
+}
+```
+
+### Events
+
+Subscribe to the connected server's public event stream. Abort the stream during plugin cleanup.
+
+```ts
+const controller = new AbortController()
+void (async () => {
+  for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+    console.log(event.type)
+  }
+})()
+return () => controller.abort()
+```
+
+#### Reference
+
+Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+
+```ts
+interface EventContext {
+  subscribe(options?: { signal?: AbortSignal }): AsyncIterable<OpenCodeEvent>
+}
+```
+
+## Hooks
+
+Hooks intercept live operations. Register a hook on its domain and dispose the
+returned registration when it is no longer needed.
+
+```ts
+const registration = await ctx.session.hook("context", () => {})
+await registration.dispose()
+```
+
+Multiple plugins can register the same hook. OpenCode runs them in plugin order,
+so later hooks see changes made by earlier hooks.
+
+### Sessions
+
+Session hooks intercept prompt admission, model calls, native HTTP, and retries.
+
+#### Prompt admission
+
+Intercept incoming user prompts before attachment and skill resolution and durable inbox admission:
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+The hook receives an owned, mutable draft:
+
+- `prompt` contains `text`, `files`, agent mentions in `agents`, and selected `skills`.
+- `metadata` contains application-defined admission metadata.
+- `delivery` is `"steer"` by default and can be changed to `"queue"`.
+- Session and message IDs are readonly; a hook cannot redirect admission.
+
+Files and skills added by a hook follow the normal resolution and validation
+path. When rewriting text, update or remove attachment `mention` offsets that no
+longer match. Agent mentions do not switch the session's active agent.
+
+Prompt hooks run under these conditions:
+
+- Hooks run in registration order after the session's location plugins are ready.
+- Commands that submit through `session.prompt` run the hook.
+- Synthetic messages, shell messages, compaction controls, and move controls do not.
+- The hook runs once during admission, not before every model call.
+- Provider scoping is unavailable because model resolution happens after admission.
+
+Edits become the canonical persisted user input. If preparation fails or is
+interrupted, OpenCode does not admit the prompt.
+
+Keep prompt hooks retry-safe. They are not an exactly-once side-effect boundary:
+
+- Retrying an ID already pending or delivered returns the original admission without rerunning hooks.
+- Concurrent submissions can run hooks more than once, but only the first successful admission wins.
+- Prompt hooks transform input and do not expose a typed rejection API.
+
+#### Model context
+
+Modify assembled system instructions, messages, tools, generation settings, or provider options immediately before model
+dispatch.
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.system.push({ text: "Keep the review focused on correctness." })
+  delete event.tools.write
+  event.generation.temperature = 0.2
+  event.generation.maxTokens = 8_000
+})
+```
+
+Context changes affect only the outgoing model call, not persisted history or
+configuration. The hook runs again for subsequent calls such as tool-driven
+continuations, transient session generation, and compaction, but not for title requests.
+
+Compaction context hooks receive the selected session agent. Its model-request
+and HTTP hooks retain the `compaction` agent identity for provider-specific handling.
+
+Request overrides follow these rules:
+
+- `generation` and `providerOptions` start empty for each model call; they do not contain resolved model settings.
+- Hooks run in registration order and see overrides made by earlier hooks.
+- Request overrides take precedence over model defaults, which take precedence over route defaults.
+- Provider option objects merge recursively; arrays and scalar values replace earlier values.
+- Deleting an override or setting it to `undefined` falls back to configured defaults rather than removing them.
+- Raw HTTP body overlays apply after protocol lowering and can override the resulting fields.
+
+#### Provider options
+
+Provider options use the selected protocol's semantic option names, not raw HTTP body fields. Scope provider-specific
+settings to the matching provider. For example, OpenAI Responses uses `reasoningEffort`:
+
+```ts
+await ctx.session.hook(
+  "context",
+  (event) => {
+    event.providerOptions.reasoningEffort = "high"
+  },
+  { providerID: "openai" },
+)
+```
+
+Generation options depend on the selected protocol and model:
+
+- `maxTokens` is the semantic output-token limit.
+- Gemini supports `topK`; OpenAI Responses does not expose it.
+
+#### Model request
+
+Modify model request settings and optionally scope the hook to one provider. The event carries the same `kind`
+as the HTTP hooks below.
+
+```ts
+await ctx.session.hook(
+  "model.request",
+  (event) => {
+    event.headers["x-plugin"] = "review"
+  },
+  { providerID: "anthropic" },
+)
+```
+
+#### Native HTTP
+
+Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
+it.
+
+Both hooks run for every request a session issues. `event.kind` says which flow issued it: `"primary"` for the agent
+loop, `"compaction"` for checkpoint summaries, `"title"` for title generation, and `"generate"` for transient
+`ctx.session.generate` calls. Use it instead of the agent ID to tell auxiliary requests apart.
+
+```ts
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+  })
+})
+```
+
+#### Retry policy
+
+Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
+classifies the failure and proposes its policy, but before any retry is scheduled. It does not expose how OpenCode
+internally performs the next attempt.
+
+```ts
+await ctx.session.hook("retry", (event) => {
+  if (event.error.status === 429) {
+    event.decision = { retry: true, delay: 10_000 }
+    return
+  }
+  if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+    event.decision = { retry: true, delay: 0 }
+    return
+  }
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
+```
+
+Retry hooks can change OpenCode's initial `decision` by making a terminal failure
+retryable or vetoing a proposed retry.
+
+Retry decisions follow these rules:
+
+- Multiple hooks run in registration order, and later hooks see the current decision.
+- The built-in maximum attempt count remains a hard limit.
+- `attempt` is the physical attempt under consideration. The initial request is `1`, so the first retry is `2`.
+- Invalid delays such as `NaN`, infinity, or negative values fall back to the computed delay.
+- Context-overflow recovery is separate because it compacts the conversation instead of retrying the same request.
+
+#### Session reference
+
+```ts
+import type { SessionPrompt } from "@opencode-ai/plugin/promise/session"
+
+interface SessionHooks {
+  prompt: SessionPrompt
+  context: SessionContextHook
+  "model.request": SessionModelRequestHook
+  "http.request": SessionHttpRequestHook
+  "http.response": SessionHttpResponseHook
+  retry: SessionRetryHook
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetryHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionContextHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  tools: Record<string, { description: string; input: JsonSchema }>
+  generation: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  }
+  providerOptions: Record<string, unknown>
+}
+
+interface SessionHookContext {
+  hook<Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Promise<void> | void,
+    options?: Name extends "prompt" ? never : { providerID?: string },
+  ): Promise<Registration>
+}
+```
+
+### Permissions
+
+Review permission decisions after configured rules are evaluated and before an
+action runs or a permission prompt is published.
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action === "read") return
+
+  const messages = await ctx.session.context({ sessionID: event.sessionID })
+  const review = await ctx.generate.text({
+    model: { providerID: "anthropic", id: "claude-sonnet-4-6" },
+    prompt: buildSafetyPrompt({ messages, action: event.action, resources: event.resources }),
+  })
+  const decision = parseDecision(review.text)
+
+  event.effect = decision.effect
+  event.message = decision.reason
+})
+```
+
+Permission hooks follow these rules:
+
+- Hooks run for `allow` and `ask` decisions.
+- An explicit configured `deny` is final and does not invoke the hook.
+- A hook may change `effect` to `allow`, `ask`, or `deny`.
+- `message` appears in an escalated permission request or becomes the denial reason.
+
+#### Reference
+
+```ts
+interface PermissionEvaluation {
+  readonly sessionID: string
+  readonly agent?: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly metadata?: Record<string, unknown>
+  readonly source?: { type: "tool"; messageID: string; id: string }
+  effect: "allow" | "ask" | "deny"
+  message?: string
+}
+```
+
+### Shell
+
+Modify shell commands, working directories, timeouts, executables, or environment variables before execution.
+
+```ts
+await ctx.shell.hook("create.before", (event) => {
+  event.timeout = Math.min(event.timeout, 60_000)
+  event.env.COMPANY_ENV = "development"
+})
+```
+
+#### Reference
+
+```ts
+interface ShellHookContext {
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
+}
+
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+```
+
+### Tools
+
+Inspect or replace tool input before execution.
+
+```ts
+await ctx.tool.hook("execute.before", (event) => {
+  if (event.tool === "read") console.log(event.input)
+})
+```
+
+Inspect successful results or failures after execution.
+
+```ts
+await ctx.tool.hook("execute.after", (event) => {
+  if (event.status === "completed") event.result = { ...event.result, metadata: { observed: true } }
+  if (event.status === "error") console.error(event.error.message)
+})
+```
+
+#### Reference
+
+```ts
+interface ToolHooks {
+  "execute.before": ToolExecuteBefore
+  "execute.after": ToolExecuteCompleted | ToolExecuteFailed
+}
+
+interface ToolHookContext {
+  hook<Name extends keyof ToolHooks>(
+    name: Name,
+    callback: (event: ToolHooks[Name]) => Promise<void> | void,
+  ): Promise<Registration>
+}
+```
+
+## Publish
+
+A package plugin uses the same default export as a local plugin. A minimal
+manifest is:
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "beta"
+  }
+}
+```
+
+The `./rpc` export is optional; include it when publishing a shared
+[RPC contract](/build/plugins/rpc) for other plugins and clients to import
+without loading your implementation.
+
+Use versions compatible with the OpenCode release you target and test the
+installed package, not only a workspace-linked copy. Because the plugin API is
+beta, publish compatible plugin updates when V2 entrypoints or contracts
+change.

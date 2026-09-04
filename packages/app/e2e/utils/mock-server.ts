@@ -21,6 +21,7 @@ export interface MockServerConfig {
     cursor?: string
   }
   vcsDiff?: unknown[]
+  vcsBranches?: string[]
   messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
@@ -35,6 +36,9 @@ export interface MockServerConfig {
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
+  inbox?: unknown[] | (() => unknown[])
+  onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
+  onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => void
 }
 
 type MockStreamWindow = Window & {
@@ -43,7 +47,6 @@ type MockStreamWindow = Window & {
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
-  const state = { cursors: new Map<string, string>(), nextCursor: 0 }
   const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
   await page.addInitScript(
@@ -131,21 +134,17 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }, 50)
     page.on("close", () => clearInterval(timer))
   }
-  const transport = HttpRouter.toWebHandler(
-    HttpApiBuilder.layer(MockApi).pipe(
-      Layer.provide(mockHandlers(config, state)),
-      Layer.provide(HttpServer.layerServices),
-    ),
-    { disableLogger: true },
-  )
+  const transport = createMockServerHandler(config)
   page.on("close", () => void transport.dispose())
 
-  await page.route("**/*", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
     const appPort = new URL(
       process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
     ).port
     if (url.origin !== server && url.port !== appPort) return route.fallback()
+    // Production serves the UI and API from one origin; leave app assets to Vite.
+    if (!url.pathname.startsWith("/api/")) return route.fallback()
     if (route.request().method() === "OPTIONS") {
       return route.fulfill({ status: 204, headers: corsHeaders })
     }
@@ -165,6 +164,16 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       body: Buffer.from(await response.arrayBuffer()),
     })
   })
+}
+
+export function createMockServerHandler(config: MockServerConfig) {
+  return HttpRouter.toWebHandler(
+    HttpApiBuilder.layer(MockApi).pipe(
+      Layer.provide(mockHandlers(config, { cursors: new Map<string, string>(), nextCursor: 0 })),
+      Layer.provide(HttpServer.layerServices),
+    ),
+    { disableLogger: true },
+  )
 }
 
 const corsHeaders = {
@@ -293,6 +302,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         vcs: () =>
           Effect.succeed({ location: location(config), data: { branch: { current: "main", default: "main" } } }),
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
+        vcsBranches: () => Effect.succeed({ location: location(config), data: config.vcsBranches ?? ["main"] }),
         vcsDiff: () => Effect.succeed({ location: location(config), data: config.vcsDiff ?? [] }),
         fsList: (ctx) =>
           Effect.promise(() => Promise.resolve(config.fileList?.(ctx.query.path ?? ""))).pipe(
@@ -397,7 +407,39 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         sessionFormReply: () => noContent,
         sessionFormCancel: () => noContent,
         sessionBackground: () => noContent,
-        sessionInbox: () => Effect.succeed({ data: [] }),
+        sessionInbox: () =>
+          Effect.sync(() => ({ data: typeof config.inbox === "function" ? config.inbox() : (config.inbox ?? []) })),
+        sessionPrompt: (ctx) =>
+          Effect.sync(() => {
+            const body = record(ctx.payload) ? ctx.payload : {}
+            config.onPrompt?.({ sessionID: ctx.params.sessionID, body })
+            return {
+              data: {
+                id: typeof body.id === "string" ? body.id : `inb_mock_${Date.now()}`,
+                sessionID: ctx.params.sessionID,
+                timeCreated: Date.now(),
+                type: "user",
+                payload: {
+                  text: typeof body.text === "string" ? body.text : "",
+                  ...(body.files === undefined ? {} : { files: body.files }),
+                  ...(body.agents === undefined ? {} : { agents: body.agents }),
+                  ...(body.skills === undefined ? {} : { skills: body.skills }),
+                  ...(body.metadata === undefined ? {} : { metadata: body.metadata }),
+                },
+                delivery: body.delivery === "queue" ? "queue" : "steer",
+              },
+            }
+          }),
+        sessionInboxCancel: (ctx) =>
+          Effect.sync(() =>
+            config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "cancel" }),
+          ).pipe(Effect.andThen(noContent)),
+        sessionInboxSteer: (ctx) =>
+          Effect.sync(() =>
+            config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "steer" }),
+          ).pipe(Effect.andThen(noContent)),
+        sessionSwitchAgent: () => noContent,
+        sessionSwitchModel: () => noContent,
         sessionPermission: (ctx) => {
           const permissions =
             typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])
@@ -567,9 +609,12 @@ export function currentSession(session: { id: string } & Record<string, unknown>
     model: session.model ?? { id: "mock-model", providerID: "mock-provider" },
     cost: session.cost ?? 0,
     tokens: session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    ...(typeof session.outcome === "string" ? { outcome: session.outcome } : {}),
     time: {
       created: "created" in time && typeof time.created === "number" ? time.created : 0,
       updated: "updated" in time && typeof time.updated === "number" ? time.updated : 0,
+      ...("idle" in time && typeof time.idle === "number" ? { idle: time.idle } : {}),
+      ...("viewed" in time && typeof time.viewed === "number" ? { viewed: time.viewed } : {}),
       ...(session.time && typeof session.time === "object" && "archived" in session.time
         ? { archived: session.time.archived }
         : {}),

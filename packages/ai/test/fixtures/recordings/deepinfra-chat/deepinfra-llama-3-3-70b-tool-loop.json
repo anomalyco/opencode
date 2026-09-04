@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "metadata": {
+    "provider": "deepinfra",
+    "route": "deepinfra-chat",
+    "transport": "http",
+    "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "tags": ["prefix:deepinfra-chat", "provider:deepinfra", "tool", "tool-loop", "golden"],
+    "name": "deepinfra-chat/deepinfra-llama-3-3-70b-tool-loop",
+    "recordedAt": "2026-08-26T00:34:05.656Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.deepinfra.com/v1/openai/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"service_tier\":null,\"id\":\"chatcmpl-RxlHFSnlLbUUz6XSxqBQj7TC\",\"object\":\"chat.completion.chunk\",\"created\":1787704444,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RxlHFSnlLbUUz6XSxqBQj7TC\",\"object\":\"chat.completion.chunk\",\"created\":1787704444,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":[{\"index\":0,\"id\":\"call_W3stxe7FNHozlB4tDxlTVZou\",\"function\":{\"arguments\":\"{\\\"city\\\": \\\"Paris\\\"}\",\"name\":\"get_weather\"},\"type\":\"function\"}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RxlHFSnlLbUUz6XSxqBQj7TC\",\"object\":\"chat.completion.chunk\",\"created\":1787704444,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":243,\"total_tokens\":257,\"completion_tokens\":14,\"estimated_cost\":null,\"prompt_tokens_details\":null}}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RxlHFSnlLbUUz6XSxqBQj7TC\",\"object\":\"chat.completion.chunk\",\"created\":1787704444,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[],\"usage\":{\"prompt_tokens\":243,\"total_tokens\":257,\"completion_tokens\":14,\"estimated_cost\":0.000028780000000000002,\"prompt_tokens_details\":null}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.deepinfra.com/v1/openai/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_W3stxe7FNHozlB4tDxlTVZou\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}],\"reasoning_content\":\"\"},{\"role\":\"tool\",\"tool_call_id\":\"call_W3stxe7FNHozlB4tDxlTVZou\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"service_tier\":null,\"id\":\"chatcmpl-RHESVChSFPybgK1eUj2cLLY0\",\"object\":\"chat.completion.chunk\",\"created\":1787704445,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RHESVChSFPybgK1eUj2cLLY0\",\"object\":\"chat.completion.chunk\",\"created\":1787704445,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Paris\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RHESVChSFPybgK1eUj2cLLY0\",\"object\":\"chat.completion.chunk\",\"created\":1787704445,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\" is\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RHESVChSFPybgK1eUj2cLLY0\",\"object\":\"chat.completion.chunk\",\"created\":1787704445,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\" sunny\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RHESVChSFPybgK1eUj2cLLY0\",\"object\":\"chat.completion.chunk\",\"created\":1787704445,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\".\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RHESVChSFPybgK1eUj2cLLY0\",\"object\":\"chat.completion.chunk\",\"created\":1787704445,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":276,\"total_tokens\":281,\"completion_tokens\":5,\"estimated_cost\":null,\"prompt_tokens_details\":null}}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RHESVChSFPybgK1eUj2cLLY0\",\"object\":\"chat.completion.chunk\",\"created\":1787704445,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[],\"usage\":{\"prompt_tokens\":276,\"total_tokens\":281,\"completion_tokens\":5,\"estimated_cost\":0.0000292,\"prompt_tokens_details\":null}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import { LLMClient, Service } from "./route/client.js"
 import {
   GenerationOptions,
   HttpOptions,
-  InvalidProviderOutputReason,
+  InvalidProviderOutputError,
   AIError,
   LLMEvent,
   LLMRequest,
@@ -12,9 +12,10 @@ import {
   LanguageModel,
   SystemPart,
   ToolChoice,
-  ToolDefinition,
+  ToolEntry,
   type ContentPart,
   type LanguageModelProviderOptions,
+  type ToolEntryInput,
 } from "./schema/index.js"
 import { make as makeTool, toDefinitions, type ToolSchema } from "./tool.js"
 
@@ -27,7 +28,7 @@ export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageM
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
   readonly messages?: ReadonlyArray<Message | Message.Input>
-  readonly tools?: ReadonlyArray<ToolDefinition.Input>
+  readonly tools?: ReadonlyArray<ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
   readonly generation?: GenerationOptions.Input
   readonly providerOptions?: NoInfer<LanguageModelProviderOptions<SelectedLanguageModel>>
@@ -56,7 +57,7 @@ export const request = <const SelectedLanguageModel extends LanguageModel>(
     ...rest,
     system: SystemPart.content(requestSystem),
     messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
-    tools: tools?.map(ToolDefinition.make) ?? [],
+    tools: tools?.map(ToolEntry.make) ?? [],
     toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
     generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),
     providerOptions: requestProviderOptions,
@@ -116,9 +117,7 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
   )
   if (!call || !LLMEvent.is.toolCall(call))
     return yield* new AIError({
-      module: "LLM",
-      method: "generateObject",
-      reason: new InvalidProviderOutputReason({
+      reason: new InvalidProviderOutputError({
         message: `generateObject: model did not call the forced \`${GENERATE_OBJECT_TOOL_NAME}\` tool`,
       }),
     })
@@ -126,10 +125,9 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
     Effect.mapError(
       (error) =>
         new AIError({
-          module: "LLM",
-          method: "generateObject",
-          reason: new InvalidProviderOutputReason({
+          reason: new InvalidProviderOutputError({
             message: `generateObject: tool input failed schema decode: ${error.message}`,
+            cause: error,
           }),
         }),
     ),

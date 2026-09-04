@@ -9,7 +9,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
 import { useTerminal } from "@/session/terminal/context"
 import { showToast } from "@/shell/notifications/toast"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
@@ -104,7 +104,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         api: serverSDK.api,
       })
       const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      if (!(await saveSessionExport(filename, data, platform))) return
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -193,9 +193,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const openTerminal = () => {
+    actions.session.layout.view().terminal.open()
     if (terminal.all().length > 0) terminal.new({ focus: true })
     if (terminal.all().length === 0) terminal.requestFocus()
-    actions.session.layout.view().terminal.open()
   }
 
   const closeTerminal = () => {
@@ -321,9 +321,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       }),
       tab &&
         fileCommand({
-          id: "tab.close",
+          id: "file.close",
           title: language.t("command.tab.close"),
-          keybind: "mod+w",
+          keybind: settings.keybinds.get("tab.close") ?? "mod+w",
+          when: (event) => !(event.target instanceof Element && event.target.closest('[data-component="terminal"]')),
           onSelect: closeTab,
         }),
     ].filter((v) => !!v)
@@ -361,8 +362,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           actions.session.layout.view().terminal.close()
           return
         }
-        terminal.requestFocus(terminal.active())
         actions.session.layout.view().terminal.open()
+        terminal.requestFocus(terminal.active())
       },
     }),
     viewCommand({

@@ -2,9 +2,10 @@
   --card-pad-y: 0px;
   --card-line-pad: 0px;
   --card-pad-r: 0px;
+  --card-pad-l: 0px;
 
   &::before {
-    border-radius: 0;
+    display: none;
   }
 
   /* Figma's leading-none would clip Inter descenders at 13px; keep the compact metric. */
@@ -23,16 +24,6 @@
     font-weight: 440;
     line-height: var(--line-height-compact);
     letter-spacing: -0.04px;
-    color: var(--v2-text-text-muted);
-  }
-
-  [data-slot="tool-error-card-dot"] {
-    flex-shrink: 0;
-    font-family: var(--v2-font-family-sans);
-    font-size: 11px;
-    font-weight: 530;
-    line-height: var(--line-height-tight);
-    letter-spacing: 0.05px;
     color: var(--v2-text-text-muted);
   }
 
@@ -123,10 +114,13 @@
     position: absolute;
     top: 0;
     right: 0;
-    opacity: 0;
-    pointer-events: none;
     transition: opacity 0.15s ease;
     will-change: opacity;
+
+    @media (hover: hover) {
+      opacity: 0;
+      pointer-events: none;
+    }
   }
 
   &:hover [data-slot="tool-error-card-copy"],

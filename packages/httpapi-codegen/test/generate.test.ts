@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { Effect, FileSystem, Schema, SchemaAST, SchemaGetter } from "effect"
 import {
   HttpApi,
@@ -20,6 +21,7 @@ import {
   emitPromise,
   generate,
   GenerationError,
+  type Output,
 } from "../src"
 import { it } from "./effect"
 import { Api as FixtureApi, Missing } from "./fixture"
@@ -30,6 +32,21 @@ function api(endpoint: HttpApiEndpoint.Constraint) {
 
 function compile<Id extends string, Groups extends HttpApiGroup.Constraint>(source: HttpApi.HttpApi<Id, Groups>) {
   return emitEffect(compileContract(source))
+}
+
+async function emittedModule(output: Output) {
+  const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+  const dispose = () => rm(directory, { recursive: true, force: true })
+
+  try {
+    // Finish each write before cleanup can run, even when a later write fails.
+    await Array.fromAsync(output.files, (file) => Bun.write(join(directory, file.path), file.content))
+    const module = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
+    return { module, [Symbol.asyncDispose]: dispose }
+  } catch (cause) {
+    await dispose()
+    throw cause
+  }
 }
 
 describe("HttpApiCodegen.generate", () => {
@@ -352,27 +369,21 @@ describe("HttpApiCodegen.generate", () => {
         ),
     )
     const output = emitPromise(compileContract(source))
-    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    await using emitted = await emittedModule(output)
     const methods: Array<string> = []
 
-    try {
-      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
-      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      const client = generated.OpenCode.make({
-        baseUrl: "https://example.com",
-        fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-          methods.push(init?.method ?? "GET")
-          return Response.json("ok")
-        },
-      })
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+        methods.push(init?.method ?? "GET")
+        return Response.json("ok")
+      },
+    })
 
-      expect(await client.session.instructions.list()).toBe("ok")
-      expect(await client.session.instructions.put()).toBe("ok")
-      expect(await client.session.instructions.remove()).toBe("ok")
-      expect(methods).toEqual(["GET", "PUT", "DELETE"])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    expect(await client.session.instructions.list()).toBe("ok")
+    expect(await client.session.instructions.put()).toBe("ok")
+    expect(await client.session.instructions.remove()).toBe("ok")
+    expect(methods).toEqual(["GET", "PUT", "DELETE"])
   })
 
   test("rejects duplicate and leaf-namespace endpoint paths", () => {
@@ -659,8 +670,8 @@ describe("HttpApiCodegen.generate", () => {
     )
     const types = output.files.find((file) => file.path === "types.ts")?.content
 
-    expect(types).toContain('readonly "first": ({ readonly "value": string })')
-    expect(types).toContain('readonly "second": ({ readonly "value": string })')
+    expect(types).toContain('readonly "first": { readonly "value": string }')
+    expect(types).toContain('readonly "second": { readonly "value": string }')
     expect(types).not.toContain("export type Objects")
   })
 
@@ -825,26 +836,19 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    await using emitted = await emittedModule(output)
+    let request: Request | undefined
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async (input: RequestInfo | URL) => {
+        request = input instanceof Request ? input : new Request(input)
+        return Response.json({ data: "hello" })
+      },
+    })
 
-    try {
-      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
-      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      let request: Request | undefined
-      const client = generated.OpenCode.make({
-        baseUrl: "https://example.com",
-        fetch: async (input: RequestInfo | URL) => {
-          request = input instanceof Request ? input : new Request(input)
-          return Response.json({ data: "hello" })
-        },
-      })
-
-      expect(await client.session.get({ sessionID: "a/b" })).toBe("hello")
-      expect(request?.method).toBe("GET")
-      expect(request?.url).toBe("https://example.com/session/a%2Fb")
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    expect(await client.session.get({ sessionID: "a/b" })).toBe("hello")
+    expect(request?.method).toBe("GET")
+    expect(request?.url).toBe("https://example.com/session/a%2Fb")
   })
 
   test("maps an emitted no-content response to undefined", async () => {
@@ -858,20 +862,13 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    await using emitted = await emittedModule(output)
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async () => new Response(null, { status: 204 }),
+    })
 
-    try {
-      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
-      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      const client = generated.OpenCode.make({
-        baseUrl: "https://example.com",
-        fetch: async () => new Response(null, { status: 204 }),
-      })
-
-      expect(await client.session.interrupt({ sessionID: "session" })).toBeUndefined()
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    expect(await client.session.interrupt({ sessionID: "session" })).toBeUndefined()
   })
 
   test("executes an emitted binary wildcard GET through fetch", async () => {
@@ -885,28 +882,21 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    await using emitted = await emittedModule(output)
+    let request: Request | undefined
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async (input: RequestInfo | URL) => {
+        request = input instanceof Request ? input : new Request(input)
+        return new Response(new Uint8Array([1, 2, 3]))
+      },
+    })
 
-    try {
-      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
-      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      let request: Request | undefined
-      const client = generated.OpenCode.make({
-        baseUrl: "https://example.com",
-        fetch: async (input: RequestInfo | URL) => {
-          request = input instanceof Request ? input : new Request(input)
-          return new Response(new Uint8Array([1, 2, 3]))
-        },
-      })
-
-      const result = await client.session.read({ path: "src/a b#c.ts", token: "x/y" })
-      expect(result).toBeInstanceOf(Uint8Array)
-      expect(Array.from(result)).toEqual([1, 2, 3])
-      expect(request?.method).toBe("GET")
-      expect(request?.url).toBe("https://example.com/file/src/a%20b%23c.ts?token=x%2Fy")
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    const result = await client.session.read({ path: "src/a b#c.ts", token: "x/y" })
+    expect(result).toBeInstanceOf(Uint8Array)
+    expect(Array.from(result)).toEqual([1, 2, 3])
+    expect(request?.method).toBe("GET")
+    expect(request?.url).toBe("https://example.com/file/src/a%20b%23c.ts?token=x%2Fy")
   })
 
   test("serializes flattened query, header, and JSON payload inputs", async () => {
@@ -923,29 +913,22 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    await using emitted = await emittedModule(output)
+    let request: Request | undefined
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        request = input instanceof Request ? input : new Request(input, init)
+        return Response.json({ data: "admitted" })
+      },
+    })
 
-    try {
-      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
-      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      let request: Request | undefined
-      const client = generated.OpenCode.make({
-        baseUrl: "https://example.com",
-        fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-          request = input instanceof Request ? input : new Request(input, init)
-          return Response.json({ data: "admitted" })
-        },
-      })
-
-      expect(
-        await client.session.prompt({ sessionID: "session", resume: true, traceID: "trace", prompt: "hello" }),
-      ).toBe("admitted")
-      expect(request?.url).toBe("https://example.com/session/session?resume=true")
-      expect(request?.headers.get("traceID")).toBe("trace")
-      expect(await request?.json()).toEqual({ prompt: "hello" })
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    expect(await client.session.prompt({ sessionID: "session", resume: true, traceID: "trace", prompt: "hello" })).toBe(
+      "admitted",
+    )
+    expect(request?.url).toBe("https://example.com/session/session?resume=true")
+    expect(request?.headers.get("traceID")).toBe("trace")
+    expect(await request?.json()).toEqual({ prompt: "hello" })
   })
 
   test("serializes an opaque union payload as the direct JSON body", async () => {
@@ -962,26 +945,19 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    await using emitted = await emittedModule(output)
+    let request: Request | undefined
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        request = input instanceof Request ? input : new Request(input, init)
+        return new Response(null, { status: 204 })
+      },
+    })
 
-    try {
-      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
-      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      let request: Request | undefined
-      const client = generated.OpenCode.make({
-        baseUrl: "https://example.com",
-        fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-          request = input instanceof Request ? input : new Request(input, init)
-          return new Response(null, { status: 204 })
-        },
-      })
+    await client.session.configure({ payload: { type: "local", command: ["opencode"] } })
 
-      await client.session.configure({ payload: { type: "local", command: ["opencode"] } })
-
-      expect(await request?.json()).toEqual({ type: "local", command: ["opencode"] })
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    expect(await request?.json()).toEqual({ type: "local", command: ["opencode"] })
   })
 
   test("serializes explicit null query values", async () => {
@@ -995,26 +971,19 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    await using emitted = await emittedModule(output)
+    let request: Request | undefined
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        request = input instanceof Request ? input : new Request(input, init)
+        return Response.json({ data: [] })
+      },
+    })
 
-    try {
-      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
-      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      let request: Request | undefined
-      const client = generated.OpenCode.make({
-        baseUrl: "https://example.com",
-        fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-          request = input instanceof Request ? input : new Request(input, init)
-          return Response.json({ data: [] })
-        },
-      })
+    await client.session.list({ parentID: null })
 
-      await client.session.list({ parentID: null })
-
-      expect(request?.url).toBe("https://example.com/session?parentID=null")
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    expect(request?.url).toBe("https://example.com/session?parentID=null")
   })
 
   test("rejects with declared tagged errors and exports a type guard", async () => {
@@ -1029,22 +998,15 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    await using emitted = await emittedModule(output)
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async () => Response.json({ _tag: "Missing", message: "gone" }, { status: 404 }),
+    })
 
-    try {
-      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
-      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      const client = generated.OpenCode.make({
-        baseUrl: "https://example.com",
-        fetch: async () => Response.json({ _tag: "Missing", message: "gone" }, { status: 404 }),
-      })
-
-      const error = await client.session.get({ sessionID: "missing" }).catch((cause: unknown) => cause)
-      expect(error).toEqual({ _tag: "Missing", message: "gone" })
-      expect(generated.isMissing(error)).toBeTrue()
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    const error = await client.session.get({ sessionID: "missing" }).catch((cause: unknown) => cause)
+    expect(error).toEqual({ _tag: "Missing", message: "gone" })
+    expect(emitted.module.isMissing(error)).toBeTrue()
   })
 
   test("iterates an emitted SSE stream lazily without reconnecting", async () => {
@@ -1060,42 +1022,35 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    await using emitted = await emittedModule(output)
+    let requests = 0
+    let url: string | undefined
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async (input: RequestInfo | URL) => {
+        requests++
+        url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+        const encoder = new TextEncoder()
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode('data: {"type":"ready","count":"1"}\r'))
+              controller.enqueue(encoder.encode("\n\r\n"))
+              controller.close()
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      },
+    })
+    const events = client.session.subscribe({ after: 2 })
 
-    try {
-      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
-      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      let requests = 0
-      let url: string | undefined
-      const client = generated.OpenCode.make({
-        baseUrl: "https://example.com",
-        fetch: async (input: RequestInfo | URL) => {
-          requests++
-          url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
-          const encoder = new TextEncoder()
-          return new Response(
-            new ReadableStream({
-              start(controller) {
-                controller.enqueue(encoder.encode('data: {"type":"ready","count":"1"}\r'))
-                controller.enqueue(encoder.encode("\n\r\n"))
-                controller.close()
-              },
-            }),
-            { headers: { "content-type": "text/event-stream" } },
-          )
-        },
-      })
-      const events = client.session.subscribe({ after: 2 })
-
-      expect(requests).toBe(0)
-      const received = []
-      for await (const event of events) received.push(event)
-      expect(received).toEqual([{ type: "ready", count: "1" }])
-      expect(requests).toBe(1)
-      expect(url).toBe("https://example.com/event?after=2")
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    expect(requests).toBe(0)
+    const received = []
+    for await (const event of events) received.push(event)
+    expect(received).toEqual([{ type: "ready", count: "1" }])
+    expect(requests).toBe(1)
+    expect(url).toBe("https://example.com/event?after=2")
   })
 
   test("preserves public group and endpoint identifiers exactly", () => {
@@ -1138,11 +1093,11 @@ describe("HttpApiCodegen.generate", () => {
     for (const file of output.files) expect(() => transpiler.transformSync(file.content)).not.toThrow()
   })
 
-  it.effect("keeps the strict generated-consumer fixture current", () =>
+  it.live("keeps the strict generated-consumer fixture current", () =>
     Effect.gen(function* () {
       const output = compile(FixtureApi)
       const actual = yield* Effect.promise(() =>
-        Array.fromAsync(new Bun.Glob("*.ts").scan(new URL("generated", import.meta.url).pathname)),
+        Array.fromAsync(new Bun.Glob("*.ts").scan(fileURLToPath(new URL("generated", import.meta.url)))),
       )
       expect(actual.sort((a, b) => a.localeCompare(b))).toEqual(
         output.files.map((file) => file.path).sort((a, b) => a.localeCompare(b)),

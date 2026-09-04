@@ -1,24 +1,20 @@
 import { castDraft, produce, type WritableDraft } from "immer"
-import { DateTime, Effect, Match, pipe } from "effect"
+import { DateTime, Effect, Match, pipe, Schema } from "effect"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 
 export interface Adapter {
-  readonly getAgent: () => Effect.Effect<SessionMessage.AgentSelected["agent"] | undefined, never, never>
-  readonly getModel: () => Effect.Effect<SessionMessage.ModelSelected["model"] | undefined, never, never>
-  readonly getLocation: () => Effect.Effect<SessionMessage.LocationSwitched["previous"], never, never>
-  readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined, never, never>
-  readonly getAssistant: (
-    messageID: SessionMessage.ID,
-  ) => Effect.Effect<SessionMessage.Assistant | undefined, never, never>
-  readonly getShell: (
-    shellID: SessionMessage.Shell["shellID"],
-  ) => Effect.Effect<SessionMessage.Shell | undefined, never, never>
-  readonly getCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined, never, never>
-  readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void, never, never>
-  readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void, never, never>
-  readonly updateCompaction: (compaction: SessionMessage.Compaction) => Effect.Effect<void, never, never>
-  readonly appendMessage: (message: SessionMessage.Info) => Effect.Effect<void, never, never>
+  readonly getAgent: () => Effect.Effect<SessionMessage.AgentSelected["agent"] | undefined>
+  readonly getModel: () => Effect.Effect<SessionMessage.ModelSelected["model"] | undefined>
+  readonly getLocation: () => Effect.Effect<SessionMessage.LocationSwitched["previous"]>
+  readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined>
+  readonly getAssistant: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Assistant | undefined>
+  readonly getShell: (shellID: SessionMessage.Shell["shellID"]) => Effect.Effect<SessionMessage.Shell | undefined>
+  readonly getCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined>
+  readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void>
+  readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void>
+  readonly updateCompaction: (compaction: SessionMessage.Compaction) => Effect.Effect<void>
+  readonly appendMessage: (message: SessionMessage.Info) => Effect.Effect<void>
 }
 
 type DraftAssistant = WritableDraft<SessionMessage.Assistant>
@@ -38,16 +34,14 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
   type DraftReasoning = WritableDraft<SessionMessage.AssistantReasoning>
   const created = DateTime.makeUnsafe(event.created)
 
-  const latestTool = (assistant: DraftAssistant | undefined, id?: string) =>
-    assistant?.content.findLast(
-      (item): item is DraftTool => item.type === "tool" && (id === undefined || item.id === id),
-    )
+  const latestTool = (assistant: DraftAssistant, id: string) =>
+    assistant.content.findLast((item): item is DraftTool => item.type === "tool" && item.id === id)
 
-  const latestText = (assistant: DraftAssistant | undefined) =>
-    assistant?.content.findLast((item): item is DraftText => item.type === "text")
+  const latestText = (assistant: DraftAssistant) =>
+    assistant.content.findLast((item): item is DraftText => item.type === "text")
 
-  const latestReasoning = (assistant: DraftAssistant | undefined) =>
-    assistant?.content.findLast((item): item is DraftReasoning => item.type === "reasoning" && !item.time?.completed)
+  const latestReasoning = (assistant: DraftAssistant) =>
+    assistant.content.findLast((item): item is DraftReasoning => item.type === "reasoning" && !item.time?.completed)
 
   const updateOwnedAssistant = (messageID: SessionMessage.ID, recipe: (draft: DraftAssistant) => void) =>
     Effect.gen(function* () {
@@ -71,6 +65,12 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
     Match.discriminatorsExhaustive("type")({
       "session.created": () => Effect.void,
       "session.viewed": () => Effect.void,
+      "session.message.content.updated": (event) =>
+        updateOwnedAssistant(event.data.messageID, (draft) => {
+          draft.content = castDraft(
+            Schema.decodeUnknownSync(Schema.Array(SessionMessage.AssistantContent))(event.data.content),
+          )
+        }),
       "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) =>
         Effect.gen(function* () {
@@ -169,7 +169,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           SessionMessage.Shell.make({
             id: SessionMessage.ID.fromEvent(event.id),
             type: "shell",
-            metadata: event.metadata,
+            metadata:
+              event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
             shellID: event.data.shell.id,
             command: event.data.shell.command,
             status: event.data.shell.status,
@@ -204,6 +205,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 draft.finish = undefined
                 draft.rawFinish = undefined
                 draft.providerState = undefined
+                draft.time.streamed = undefined
                 draft.time.completed = undefined
                 if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, start: event.data.snapshot }
               }),
@@ -232,6 +234,11 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             }),
           )
         }),
+      "session.step.streamed": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.time.streamed = created
+        })
+      },
       "session.step.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = created
@@ -403,6 +410,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               ...current,
               status: "completed",
               reason: event.data.reason,
+              model: event.data.model,
+              providerState: event.data.providerState,
               summary: event.data.text,
               recent: event.data.recent,
             })
@@ -415,6 +424,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               status: "completed",
               metadata: event.metadata,
               reason: event.data.reason,
+              model: event.data.model,
+              providerState: event.data.providerState,
               summary: event.data.text,
               recent: event.data.recent,
               time: { created },

@@ -17,8 +17,19 @@ export function visibleTimelineMessages(
   const queued = new Set(
     pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
   )
-  if (queued.size === 0 && !revertMessageID) return messages
-  return messages.filter((message) => !queued.has(message.id) && (!revertMessageID || message.id < revertMessageID))
+  const steers = new Set(
+    pending.flatMap((item) => (item.type === "user" && item.delivery === "steer" ? [item.id] : [])),
+  )
+  if (queued.size === 0 && steers.size === 0 && !revertMessageID) return messages
+  const visible = messages.filter(
+    (message) => !queued.has(message.id) && (!revertMessageID || message.id < revertMessageID),
+  )
+  if (steers.size === 0) return visible
+  // Pending steers do not own assistant work until they are delivered.
+  return [
+    ...visible.filter((message) => !steers.has(message.id)),
+    ...visible.filter((message) => steers.has(message.id)),
+  ]
 }
 
 export function timelineChildTitle(input: {

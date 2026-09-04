@@ -486,6 +486,321 @@
         "summary": "List plugins"
       }
     },
+    "/api/plugin/await-activation": {
+      "post": {
+        "tags": ["plugin"],
+        "operationId": "v2.plugin.awaitActivation",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Wait for configured plugin activation at a Location to settle, including missing-package installs. Completion does not imply every plugin succeeded or background resource discovery finished. Cancelling this wait does not cancel activation.",
+        "summary": "Wait for plugin activation"
+      }
+    },
+    "/api/plugin/check": {
+      "post": {
+        "tags": ["plugin"],
+        "operationId": "v2.plugin.check",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Plugin.Info"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Check one or all package plugins for available updates.",
+        "summary": "Check plugin updates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/plugin/update": {
+      "post": {
+        "tags": ["plugin"],
+        "operationId": "v2.plugin.update",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update package plugins concurrently and notify active locations to reload them. Responds once every update has finished; fails when any update fails.",
+        "summary": "Update plugins",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "targets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["targets"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/session": {
       "get": {
         "tags": ["session"],
@@ -790,6 +1105,16 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "metadata": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Metadata"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -977,6 +1302,16 @@
               }
             }
           },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
           "409": {
             "description": "ConflictError",
             "content": {
@@ -988,7 +1323,7 @@
             }
           }
         },
-        "description": "Import a projected session transcript at the requested location.",
+        "description": "Import a projected session transcript at the requested location. If parentID is supplied, the parent session must already exist; import parents before children.",
         "summary": "Import session",
         "requestBody": {
           "content": {
@@ -1915,36 +2250,15 @@
         ],
         "security": [],
         "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Session.Inbox.User"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
+          "204": {
+            "description": "<No Content>"
           },
           "400": {
             "description": "InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
                 }
               }
             }
@@ -1979,28 +2293,18 @@
               }
             }
           },
-          "409": {
-            "description": "ConflictError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
-                }
-              }
-            }
-          },
           "500": {
-            "description": "CommandEvaluationError",
+            "description": "CommandExecutionError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CommandEvaluationErrorEncoded"
+                  "$ref": "#/components/schemas/CommandExecutionErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Resolve a slash command into prompt input, admit it durably, and schedule execution unless resume is false.",
+        "description": "Execute a slash command callback immediately.",
         "summary": "Run command",
         "requestBody": {
           "content": {
@@ -2008,49 +2312,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "id": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "pattern": "^msg_"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
                   "command": {
                     "type": "string"
                   },
-                  "arguments": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "agent": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "model": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/components/schemas/Model.Ref"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                  "text": {
+                    "type": "string"
                   },
                   "files": {
                     "type": "array",
@@ -2079,19 +2345,9 @@
                         "type": "null"
                       }
                     ]
-                  },
-                  "resume": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
-                "required": ["command"],
+                "required": ["command", "text"],
                 "additionalProperties": false
               }
             }
@@ -3832,8 +4088,15 @@
         ],
         "security": [],
         "responses": {
-          "204": {
-            "description": "<No Content>"
+          "200": {
+            "description": "SessionInterruptResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionInterruptResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "InvalidRequestError",
@@ -3873,7 +4136,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
+        "description": "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When continue=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
         "summary": "Interrupt session execution"
       }
     },
@@ -4022,6 +4285,143 @@
         },
         "description": "Retrieve one projected message owned by the Session.",
         "summary": "Get session message"
+      },
+      "patch": {
+        "tags": ["session"],
+        "operationId": "v2.session.messageUpdate",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "messageID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^msg_"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Session.Message.Assistant"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | MessageNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MessageNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionBusyError | ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionBusyErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConflictErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace the content of a completed assistant message in an idle session.",
+        "summary": "Update assistant message content",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/Session.Message.Assistant.Text"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Session.Message.Assistant.Reasoning"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Session.Message.Assistant.Tool"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["content"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/session/{sessionID}/environment": {
@@ -4520,48 +4920,7 @@
       "post": {
         "tags": ["generate"],
         "operationId": "v2.generate.text",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "200": {
@@ -4612,7 +4971,7 @@
             }
           }
         },
-        "description": "Run one stateless model generation at the requested location and return the assistant text. Uses the location's default model when none is specified.",
+        "description": "Run one stateless model generation using the server's base configuration and return the assistant text. Uses the base configuration's default model when none is specified.",
         "summary": "Generate text",
         "requestBody": {
           "content": {
@@ -6862,6 +7221,90 @@
         "summary": "Remove credential"
       }
     },
+    "/api/credential/{credentialID}/activate": {
+      "post": {
+        "tags": ["credential"],
+        "operationId": "v2.credential.activate",
+        "parameters": [
+          {
+            "name": "credentialID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Activate a stored integration credential.",
+        "summary": "Activate credential"
+      }
+    },
     "/api/project": {
       "get": {
         "tags": ["project"],
@@ -6905,6 +7348,89 @@
         },
         "description": "List known projects.",
         "summary": "List projects"
+      }
+    },
+    "/api/project/{projectID}": {
+      "patch": {
+        "tags": ["project"],
+        "operationId": "v2.project.update",
+        "parameters": [
+          {
+            "name": "projectID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update project display metadata and workspace commands.",
+        "summary": "Update project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "icon": {
+                    "$ref": "#/components/schemas/Project.Icon"
+                  },
+                  "commands": {
+                    "$ref": "#/components/schemas/Project.Commands"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/project/current": {
@@ -7147,14 +7673,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -8032,14 +8551,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -8378,7 +8890,8 @@
                 {
                   "type": "null"
                 }
-              ]
+              ],
+              "description": "An absolute path or a path relative to the requested location. Defaults to the location directory."
             },
             "required": false
           }
@@ -8429,7 +8942,7 @@
             }
           }
         },
-        "description": "List direct children of one directory relative to the requested location.",
+        "description": "List direct children using an absolute path or a path relative to the requested location, including parents and siblings outside its directory. Entry paths remain relative to the requested location; listing does not switch locations.",
         "summary": "List directory"
       }
     },
@@ -8753,6 +9266,132 @@
         "summary": "List skills"
       }
     },
+    "/api/rpc/{rpcID}/{method}": {
+      "post": {
+        "tags": ["rpc"],
+        "operationId": "v2.rpc.call",
+        "parameters": [
+          {
+            "name": "rpcID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "method",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Rpc.Output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rpc.Output"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "RpcError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RpcErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "RpcInternalError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpcInternalErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Dispatch a method to the currently registered RPC at the requested location.",
+        "summary": "Call a plugin RPC",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Rpc.Input"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/event": {
       "get": {
         "tags": ["event"],
@@ -8872,7 +9511,7 @@
             }
           }
         },
-        "description": "Subscribe to native event payloads for the server. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",
+        "description": "Subscribe to native events and plugin RPC events across all server locations. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",
         "summary": "Subscribe to events"
       }
     },
@@ -9678,6 +10317,890 @@
         },
         "description": "Establish a WebSocket connection streaming PTY output and accepting terminal input.",
         "summary": "Connect to PTY session",
+        "x-websocket": true
+      }
+    },
+    "/api/experimental/session/{sessionID}/terminal/read": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.read",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "lines",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PersistentPty.ReadLinesEncoded"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/PersistentPty.ReadResult"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read the last physical rows without changing selection or taking control. Omitted lines uses the live terminal height; larger counts include retained history. Blank rows are preserved. Screen dimensions and cursor remain relative to the live screen. Returns null when no current terminal exists. Selection is server-local and resets on restart. Experimental: may change without compatibility guarantees.",
+        "summary": "Read the session's most recently controlled terminal"
+      }
+    },
+    "/api/experimental/session/{sessionID}/terminal": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PersistentPty.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.create",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PersistentPty.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersistentPty.CreateInput"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/shutdown": {
+      "post": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.shutdown",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/handoff": {
+      "post": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.handoff",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "handoff": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/PersistentPty.Handoff"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["handoff"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/{ptyID}": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.get",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PersistentPty.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.update",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PersistentPty.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersistentPty.UpdateInput"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.remove",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/{ptyID}/snapshot": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.snapshot",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PersistentPty.Snapshot"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/{ptyID}/connect-token": {
+      "post": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.connectToken",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          },
+          {
+            "name": "x-opencode-ticket",
+            "in": "header",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PtyTicket.ConnectToken"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/{ptyID}/connect": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "v2.persistentPty.connect",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attachment_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "takeover",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "input_protocol",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ticket",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stream persistent PTY output through the OpenCode server.",
+        "summary": "Connect to a persistent PTY",
         "x-websocket": true
       }
     },
@@ -10577,7 +12100,7 @@
             }
           }
         },
-        "description": "Create a worktree for a project.",
+        "description": "Create a worktree for a project and run its configured setup script.",
         "summary": "Create worktree",
         "requestBody": {
           "content": {
@@ -10589,6 +12112,9 @@
                     "type": "string"
                   },
                   "from": {
+                    "type": "string"
+                  },
+                  "branch": {
                     "type": "string"
                   },
                   "directory": {
@@ -10727,6 +12253,166 @@
         "summary": "Refresh worktrees"
       }
     },
+    "/api/workspace": {
+      "post": {
+        "tags": ["workspace"],
+        "operationId": "v2.workspace.create",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "pattern": "^wrk"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProviderNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a logical workspace. A caller-supplied ID is idempotent when retried with the same provider; reusing it with another provider returns a conflict.",
+        "summary": "Create workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^wrk"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "provider": {
+                    "type": "string"
+                  }
+                },
+                "required": ["provider"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/workspace/{workspaceID}": {
+      "delete": {
+        "tags": ["workspace"],
+        "operationId": "v2.workspace.destroy",
+        "parameters": [
+          {
+            "name": "workspaceID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^wrk"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Reports whether this request destroyed an existing workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDestroyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Make a workspace not exist. This operation is idempotent: an already-missing workspace succeeds with `destroyed: false`, while a workspace removed by this request returns `destroyed: true`.",
+        "summary": "Destroy workspace"
+      }
+    },
     "/api/vcs": {
       "get": {
         "tags": ["vcs"],
@@ -10818,6 +12504,116 @@
         },
         "description": "Get current and default branch information for the requested location.",
         "summary": "VCS info"
+      }
+    },
+    "/api/vcs/base": {
+      "get": {
+        "tags": ["vcs"],
+        "operationId": "v2.vcs.base",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/Vcs.Base"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Infer a local review base from named branch creation history, or the repository default only when currently on that branch. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit base on diff requests.",
+        "summary": "VCS review base"
       }
     },
     "/api/vcs/status": {
@@ -10916,6 +12712,129 @@
         "summary": "VCS status"
       }
     },
+    "/api/vcs/branches": {
+      "get": {
+        "tags": ["vcs"],
+        "operationId": "v2.vcs.branches",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Vcs.BranchList"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List local and remote branches available at the requested location.",
+        "summary": "VCS branches"
+      }
+    },
     "/api/vcs/diff": {
       "get": {
         "tags": ["vcs"],
@@ -10968,6 +12887,14 @@
               "$ref": "#/components/schemas/Vcs.Mode"
             },
             "required": true
+          },
+          {
+            "name": "base",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           },
           {
             "name": "context",
@@ -11029,9 +12956,19 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Diff the working copy against HEAD (mode git) or the default-branch merge base (mode branch) for the requested location.",
+        "description": "Diff HEAD to the working copy (working), the base merge-base to the working copy (branch), or the base merge-base to HEAD (committed). Omitting base preserves repository-default comparison; supplying it overrides the comparison without saving it.",
         "summary": "VCS diff"
       }
     },
@@ -11658,31 +13595,19 @@
           "name": {
             "type": "string"
           },
-          "template": {
-            "type": "string"
-          },
           "description": {
             "type": "string"
-          },
-          "agent": {
-            "type": "string"
-          },
-          "model": {
-            "$ref": "#/components/schemas/Model.Ref"
-          },
-          "subtask": {
-            "type": "boolean"
           }
         },
-        "required": ["name", "template"],
+        "required": ["name"],
         "additionalProperties": false
       },
-      "CommandEvaluationErrorEncoded": {
+      "CommandExecutionErrorEncoded": {
         "type": "object",
         "properties": {
           "_tag": {
             "type": "string",
-            "enum": ["CommandEvaluationError"]
+            "enum": ["CommandExecutionError"]
           },
           "command": {
             "type": "string"
@@ -11853,8 +13778,12 @@
               }
             ]
           },
-          "subtask": {
+          "subagent": {
             "type": "boolean"
+          },
+          "subtask": {
+            "type": "boolean",
+            "description": "Deprecated alias for subagent."
           }
         },
         "required": ["template"],
@@ -11973,16 +13902,9 @@
           "default_agent": {
             "type": "string"
           },
-          "autoupdate": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "string",
-                "enum": ["notify"]
-              }
-            ]
+          "update": {
+            "type": "string",
+            "enum": ["disable", "notify"]
           },
           "share": {
             "type": "string",
@@ -12455,6 +14377,9 @@
       "Config.ProviderEncoded": {
         "type": "object",
         "properties": {
+          "canonical": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -13789,6 +15714,9 @@
           "name": {
             "type": "string"
           },
+          "metadata": {
+            "type": "object"
+          },
           "methods": {
             "type": "array",
             "items": {
@@ -14299,10 +16227,16 @@
           "reasoningField": {
             "$ref": "#/components/schemas/Model.ReasoningField"
           },
+          "requireReasoning": {
+            "type": "boolean"
+          },
           "maxTokensField": {
             "$ref": "#/components/schemas/Model.MaxTokensField"
           },
           "requireFinishReason": {
+            "type": "boolean"
+          },
+          "requireAssistantAfterTool": {
             "type": "boolean"
           }
         },
@@ -14358,6 +16292,9 @@
             "type": "string"
           },
           "providerID": {
+            "type": "string"
+          },
+          "canonical": {
             "type": "string"
           },
           "family": {
@@ -14546,6 +16483,9 @@
           },
           "source": {
             "$ref": "#/components/schemas/Permission.Source"
+          },
+          "message": {
+            "type": "string"
           }
         },
         "required": ["id", "sessionID", "action", "resources"],
@@ -14630,52 +16570,327 @@
         "required": ["id", "projectID", "action", "resource"],
         "additionalProperties": false
       },
-      "Plugin.Info": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "source": {
-                "$ref": "#/components/schemas/Plugin.Source"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["active"]
-              },
-              "tui": {
-                "type": "boolean"
-              }
-            },
-            "required": ["id", "source", "status", "tui"],
-            "additionalProperties": false
+      "PersistentPty.CreateInput": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
           },
-          {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "size": {
             "type": "object",
             "properties": {
-              "id": {
-                "type": "string"
+              "cols": {
+                "type": "integer",
+                "exclusiveMinimum": 0
               },
-              "source": {
-                "$ref": "#/components/schemas/Plugin.Source"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["failed"]
-              },
-              "error": {
-                "type": "string"
-              },
-              "tui": {
-                "type": "boolean"
+              "rows": {
+                "type": "integer",
+                "exclusiveMinimum": 0
               }
             },
-            "required": ["source", "status", "error", "tui"],
+            "required": ["cols", "rows"],
             "additionalProperties": false
           }
-        ]
+        },
+        "required": ["args", "title", "env"],
+        "additionalProperties": false
+      },
+      "PersistentPty.Handoff": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "instanceID": {
+            "type": "string"
+          },
+          "ticket": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": ["directory", "instanceID", "ticket", "expiresAt"],
+        "additionalProperties": false
+      },
+      "PersistentPty.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^pty"
+          },
+          "title": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "exited"]
+          },
+          "pid": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "exitCode": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "foregroundProcess": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "size": {
+            "type": "object",
+            "properties": {
+              "cols": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "rows": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["cols", "rows"],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "head": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tail": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["head", "tail"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "command",
+          "args",
+          "cwd",
+          "status",
+          "pid",
+          "sessionID",
+          "foregroundProcess",
+          "size",
+          "output"
+        ],
+        "additionalProperties": false
+      },
+      "PersistentPty.ReadLinesEncoded": {
+        "type": "string"
+      },
+      "PersistentPty.ReadResult": {
+        "type": "object",
+        "properties": {
+          "ptyID": {
+            "type": "string",
+            "pattern": "^pty"
+          },
+          "title": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "foregroundProcess": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "screen": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "cols": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "rows": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "cursor": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["text", "cols", "rows", "cursor"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["ptyID", "title", "cwd", "foregroundProcess", "screen"],
+        "additionalProperties": false
+      },
+      "PersistentPty.Snapshot": {
+        "type": "object",
+        "properties": {
+          "info": {
+            "$ref": "#/components/schemas/PersistentPty.Info"
+          },
+          "text": {
+            "type": "string"
+          },
+          "checkpoint": {
+            "type": "string",
+            "format": "byte",
+            "contentEncoding": "base64"
+          },
+          "cursor": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "y": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["x", "y"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["info", "text", "checkpoint", "cursor"],
+        "additionalProperties": false
+      },
+      "PersistentPty.UpdateInput": {
+        "type": "object",
+        "properties": {
+          "attachmentID": {
+            "type": "string"
+          },
+          "size": {
+            "type": "object",
+            "properties": {
+              "cols": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "rows": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["cols", "rows"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["size"],
+        "additionalProperties": false
+      },
+      "Plugin.Features": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "tui": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "rpc": {
+            "type": "boolean",
+            "enum": [true]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Plugin.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Plugin.Source"
+          },
+          "features": {
+            "$ref": "#/components/schemas/Plugin.Features"
+          },
+          "state": {
+            "$ref": "#/components/schemas/Plugin.State"
+          }
+        },
+        "required": ["source", "features", "state"],
+        "additionalProperties": false
       },
       "Plugin.Source": {
         "anyOf": [
@@ -14697,11 +16912,22 @@
                 "type": "string",
                 "enum": ["package"]
               },
-              "package": {
+              "target": {
                 "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "outdated": {
+                "type": "boolean",
+                "enum": [true]
+              },
+              "updating": {
+                "type": "boolean",
+                "enum": [true]
               }
             },
-            "required": ["type", "package"],
+            "required": ["type", "target"],
             "additionalProperties": false
           },
           {
@@ -14727,6 +16953,38 @@
               }
             },
             "required": ["type"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Plugin.State": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["active"]
+              }
+            },
+            "required": ["status"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["failed"]
+              },
+              "error": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "error"],
             "additionalProperties": false
           }
         ]
@@ -14827,7 +17085,24 @@
       },
       "Project.Vcs": {
         "type": "string",
-        "enum": ["git", "hg"]
+        "pattern": "^[a-z][a-z0-9._-]*$"
+      },
+      "ProjectNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ProjectNotFoundError"]
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "projectID", "message"],
+        "additionalProperties": false
       },
       "Prompt.AgentAttachment": {
         "type": "object",
@@ -14925,6 +17200,9 @@
           "name": {
             "type": "string"
           },
+          "text": {
+            "type": "string"
+          },
           "mention": {
             "$ref": "#/components/schemas/Prompt.Mention"
           }
@@ -14968,6 +17246,9 @@
         "type": "object",
         "properties": {
           "id": {
+            "type": "string"
+          },
+          "canonical": {
             "type": "string"
           },
           "integrationID": {
@@ -15181,6 +17462,71 @@
             "$ref": "#/components/schemas/Reference.GitSource"
           }
         ]
+      },
+      "Rpc.Input": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "additionalProperties": false
+      },
+      "Rpc.Output": {
+        "type": "object",
+        "properties": {
+          "output": {}
+        },
+        "additionalProperties": false
+      },
+      "RpcErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["RpcError"]
+          },
+          "type": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["_tag", "type", "message"],
+        "additionalProperties": false
+      },
+      "RpcInternalErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["RpcInternalError"]
+          },
+          "type": {
+            "type": "string",
+            "enum": ["rpc.internal", "rpc.invalid_output"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["_tag", "type", "message"],
+        "additionalProperties": false
       },
       "ServiceHealth": {
         "type": "object",
@@ -15568,6 +17914,9 @@
           "subpath": {
             "type": "string"
           },
+          "metadata": {
+            "$ref": "#/components/schemas/Session.Metadata"
+          },
           "revert": {
             "$ref": "#/components/schemas/Session.Revert"
           }
@@ -15623,6 +17972,9 @@
             "type": "object",
             "properties": {
               "created": {
+                "type": "number"
+              },
+              "streamed": {
                 "type": "number"
               },
               "completed": {
@@ -16416,6 +18768,9 @@
         "required": ["id", "time", "text", "type"],
         "additionalProperties": false
       },
+      "Session.Metadata": {
+        "type": "object"
+      },
       "Session.Revert": {
         "type": "object",
         "properties": {
@@ -16500,6 +18855,17 @@
           }
         },
         "required": ["data"],
+        "additionalProperties": false
+      },
+      "SessionInterruptResponse": {
+        "type": "object",
+        "properties": {
+          "interrupted": {
+            "type": "boolean",
+            "description": "Whether an active execution owned by this OpenCode process was interrupted."
+          }
+        },
+        "required": ["interrupted"],
         "additionalProperties": false
       },
       "SessionLogItemEncoded": {
@@ -17064,6 +19430,23 @@
         "type": "string",
         "contentMediaType": "application/json"
       },
+      "Vcs.Base": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["reflog", "default"]
+          }
+        },
+        "required": ["name", "ref", "source"],
+        "additionalProperties": false
+      },
       "Vcs.Branch": {
         "type": "object",
         "properties": {
@@ -17075,6 +19458,12 @@
           }
         },
         "additionalProperties": false
+      },
+      "Vcs.BranchList": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
       },
       "Vcs.FileStatus": {
         "type": "object",
@@ -17110,7 +19499,7 @@
       },
       "Vcs.Mode": {
         "type": "string",
-        "enum": ["working", "branch"]
+        "enum": ["working", "branch", "committed"]
       },
       "WebSearch.Provider": {
         "type": "object",
@@ -17165,6 +19554,18 @@
         },
         "required": ["url", "time"],
         "additionalProperties": false
+      },
+      "WorkspaceDestroyResult": {
+        "type": "object",
+        "properties": {
+          "destroyed": {
+            "type": "boolean",
+            "description": "True when this request transitioned the workspace from existing to destroyed."
+          }
+        },
+        "required": ["destroyed"],
+        "additionalProperties": false,
+        "description": "Reports whether this request destroyed an existing workspace."
       },
       "Worktree.Directory": {
         "type": "object",
@@ -17303,12 +19704,20 @@
       "description": "Experimental skill routes."
     },
     {
+      "name": "rpc",
+      "description": "Plugin RPC routes."
+    },
+    {
       "name": "event",
       "description": "Experimental event stream routes."
     },
     {
       "name": "pty",
       "description": "Experimental location-scoped PTY routes."
+    },
+    {
+      "name": "persistentPty",
+      "description": "Prototype persistent PTY routes."
     },
     {
       "name": "shell",
@@ -17321,6 +19730,10 @@
     {
       "name": "worktree",
       "description": "Project worktree management routes."
+    },
+    {
+      "name": "workspace",
+      "description": "Workspace lifecycle routes."
     },
     {
       "name": "vcs",

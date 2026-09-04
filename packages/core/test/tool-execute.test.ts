@@ -17,7 +17,7 @@ const context = {
 }
 
 const createCodeMode = (tools: ReadonlyMap<string, Info>) =>
-  CodeModeTool.create(tools, (_, tool, input, context) => execute(tool, input, context))
+  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context))
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
@@ -105,11 +105,9 @@ test("foreign typed failures settle as Tool.Error at the untrusted boundary", as
     execute: () => new ForeignFailure({ message: "transport died" }) as never,
   }
 
-  const exit = await Effect.runPromiseExit(execute(lying, {}, context))
-  expect(exit._tag).toBe("Failure")
-  const error = exit._tag === "Failure" ? exit.cause.reasons.find((reason) => "error" in reason)?.error : undefined
+  const error = await Effect.runPromise(execute(lying, {}, context).pipe(Effect.flip))
   expect(error).toBeInstanceOf(Tool.Error)
-  expect((error as Tool.Error).message).toBe("transport died")
+  expect(error.message).toBe("transport died")
 })
 
 test("execute supports callable namespace tools", async () => {

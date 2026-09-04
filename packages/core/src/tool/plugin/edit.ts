@@ -6,12 +6,11 @@
  */
 export * as EditTool from "./edit.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Bom } from "@opencode-ai/util/bom"
 import { Effect, Schema } from "effect"
-import path from "path"
 import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
@@ -109,7 +108,7 @@ const findLineOccurrences = (content: string, search: string) => {
 
 export const Plugin = {
   id: "opencode.tool.edit",
-  effect: Effect.fn("EditTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("EditTool.Plugin")(function* (ctx: Context) {
     const mutation = yield* LocationMutation.Service
     const fileMutation = yield* FileMutation.Service
     const environment = yield* Environment.Service
@@ -118,8 +117,8 @@ export const Plugin = {
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false, permission: "edit" },
           description:
@@ -219,7 +218,7 @@ export const Plugin = {
                 replacements,
               } satisfies Output
             }).pipe(
-              fileMutation.withLock([path.resolve(location.directory, input.path)]),
+              fileMutation.withLock([LocationMutation.resolvePath(location.directory, input.path)]),
               Effect.map((output) => ({
                 output,
                 content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,

@@ -1,16 +1,20 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
+import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMutation } from "@tanstack/solid-query"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Menu } from "@opencode-ai/ui/menu"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { displayName, projectForSession } from "@/shell/layout/helpers"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
+import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode-ai/client/promise"
-import { sessionLabel } from "@/session/title"
+import { sessionTabTitle } from "./tab-title"
+import { useSettings } from "@/settings/model"
 import { canOpenTabRename, forwardTabRef } from "./tab-gesture"
 import { TabPreviewPopover } from "./tab-popover"
 import "./tab-nav.css"
@@ -23,17 +27,21 @@ export function TabNavItem(props: {
   href: string
   server: ServerConnection.Key
   session: SessionInfo | undefined
+  preparing: boolean
   fallbackTitle?: string
   onRename: (title: string) => Promise<void>
   onClose: () => void
   onNavigate: () => void
   active?: boolean
-  forceTruncate?: boolean
   suppressNavigation?: boolean
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
+  orientation?: "horizontal" | "vertical"
 }) {
+  const language = useLanguage()
+  const settings = useSettings()
+  const [menu, setMenu] = createStore({ open: false, rename: false })
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
   let tabRoot!: HTMLDivElement
@@ -55,7 +63,7 @@ export function TabNavItem(props: {
   })
   const title = createMemo(() => {
     const session = props.session
-    return session ? sessionLabel(session) : props.fallbackTitle
+    return sessionTabTitle(session ? session.title : props.fallbackTitle, language.t("session.tab.session"))
   })
 
   const projectName = createMemo(() => {
@@ -77,7 +85,7 @@ export function TabNavItem(props: {
   })
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
-  const previewBlocked = () => !!props.dragging || editing() || !!props.pressed || !props.session
+  const previewBlocked = () => !!props.dragging || editing() || menu.open || !!props.pressed || !props.session
 
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
@@ -97,11 +105,13 @@ export function TabNavItem(props: {
 
   createEffect(() => {
     title()
-    props.forceTruncate
+    props.active
+    props.orientation
     editing()
     scheduleTitleOverflow()
   })
 
+  // The overflow fade changes title padding; observe the stable tab box, not that feedback.
   createResizeObserver(() => tabRoot, scheduleTitleOverflow)
   onCleanup(() => {
     if (measureFrame !== undefined) cancelAnimationFrame(measureFrame)
@@ -139,9 +149,9 @@ export function TabNavItem(props: {
     titleEl.textContent = value
   })
 
-  const openRename = (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
+  const openRename = (event?: MouseEvent) => {
+    event?.preventDefault()
+    event?.stopPropagation()
     if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
     const session = props.session
     if (!session) return
@@ -172,7 +182,7 @@ export function TabNavItem(props: {
     onCleanup(cleanup)
   })
 
-  const tab = (
+  const tab = () => (
     <div
       ref={(el) => {
         tabRoot = el
@@ -180,6 +190,7 @@ export function TabNavItem(props: {
       }}
       data-titlebar-tab
       data-slot="titlebar-tab-item"
+      data-orientation={props.orientation ?? "horizontal"}
       data-title-overflow={titleOverflowing()}
       data-editing={editing()}
       class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 [container-type:inline-size]"
@@ -197,7 +208,11 @@ export function TabNavItem(props: {
         closeTab(event)
       }}
     >
-      <a
+      <Menu.Context.Trigger
+        as="a"
+        disabled={editing() || props.dragging}
+        aria-haspopup="menu"
+        aria-expanded={menu.open}
         data-slot="tab-link"
         data-titlebar-tab-link
         href={props.href}
@@ -228,7 +243,14 @@ export function TabNavItem(props: {
             when={props.session}
             keyed
             fallback={
-              <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
+              <Show
+                when={props.preparing}
+                fallback={
+                  <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
+                }
+              >
+                <SessionProgressIndicatorV2 />
+              </Show>
             }
           >
             {(session) => (
@@ -278,7 +300,14 @@ export function TabNavItem(props: {
             event.preventDefault()
           }}
         />
-      </a>
+        <Show when={props.orientation === "vertical" && settings.appearance.showProjectName() && projectName()}>
+          {(name) => (
+            <span data-slot="tab-project" dir="auto">
+              {name()}
+            </span>
+          )}
+        </Show>
+      </Menu.Context.Trigger>
 
       <div data-slot="tab-close">
         <IconButton
@@ -291,26 +320,50 @@ export function TabNavItem(props: {
           }}
           onClick={closeTab}
           icon={<Icon name="xmark-small" />}
+          aria-label={language.t("common.closeTab")}
         />
       </div>
     </div>
   )
 
   return (
-    <TabPreviewPopover
-      trigger={tab}
-      open={popoverOpen() && !previewBlocked()}
-      onOpenChange={(value) => {
-        if (value && previewBlocked()) return
-        setPopoverOpen(value)
+    <Menu.Context
+      onOpenChange={(open) => {
+        setMenu("open", open)
+        if (open) setPopoverOpen(false)
       }}
-      data={{
-        projectName: projectName(),
-        title: props.session?.title,
-        path: previewPath(),
-        serverName: serverLabel(),
-      }}
-    />
+    >
+      <TabPreviewPopover
+        trigger={tab()}
+        orientation={props.orientation}
+        open={popoverOpen() && !previewBlocked()}
+        onOpenChange={(value) => {
+          if (value && previewBlocked()) return
+          setPopoverOpen(value)
+        }}
+        data={{
+          projectName: projectName(),
+          title: props.session?.title,
+          path: previewPath(),
+          serverName: serverLabel(),
+        }}
+      />
+      <Menu.Context.Portal>
+        <Menu.Context.Content
+          onCloseAutoFocus={(event) => {
+            if (!menu.rename) return
+            event.preventDefault()
+            setMenu("rename", false)
+            openRename()
+          }}
+        >
+          <Menu.Item disabled={!props.session || rename.isPending} onSelect={() => setMenu("rename", true)}>
+            {language.t("common.rename")}
+          </Menu.Item>
+          <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
+        </Menu.Context.Content>
+      </Menu.Context.Portal>
+    </Menu.Context>
   )
 }
 
@@ -325,6 +378,7 @@ export function DraftTabItem(props: {
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
+  orientation?: "horizontal" | "vertical"
 }) {
   const language = useLanguage()
   const closeTab = (event: MouseEvent) => {
@@ -337,6 +391,7 @@ export function DraftTabItem(props: {
       ref={(el) => forwardTabRef(props.ref, el)}
       data-titlebar-tab
       data-slot="titlebar-tab-item"
+      data-orientation={props.orientation ?? "horizontal"}
       data-active={props.active}
       data-dragging={props.dragging}
       data-state={props.active || props.pressed ? "pressed" : undefined}
@@ -377,7 +432,20 @@ export function DraftTabItem(props: {
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
       >
         <span class="flex size-4 shrink-0 items-center justify-center">
-          <Icon name="edit" />
+          <svg
+            class="text-v2-icon-icon-muted group-data-[active='true']:text-v2-icon-icon-base"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M9.00002 13.5H14M2.60419 10.9167V13.3958H5.08335L13.3959 5.08333L10.9167 2.60416L2.60419 10.9167Z"
+              stroke="currentColor"
+            />
+          </svg>
         </span>
         <span
           data-titlebar-tab-title

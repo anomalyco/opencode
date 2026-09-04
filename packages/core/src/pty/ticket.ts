@@ -1,6 +1,6 @@
 export * as PtyTicket from "./ticket.js"
 
-import { Workspace } from "../workspace.js"
+import type { Workspace } from "@opencode-ai/schema/workspace"
 import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
 import { PtyID } from "./schema.js"
 import { Cache, Context, Duration, Effect, Layer } from "effect"

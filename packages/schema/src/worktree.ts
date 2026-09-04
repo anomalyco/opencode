@@ -13,6 +13,7 @@ export const CreateInput = Schema.Struct({
   projectID: ProjectID,
   strategy: StrategyID,
   from: optional(AbsolutePath),
+  branch: optional(Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()))),
   directory: AbsolutePath,
   name: optional(Schema.String),
 }).annotate({ identifier: "Worktree.CreateInput" })
@@ -56,27 +57,46 @@ const Resolved = durable({
     projectID: Project.ID,
     directory: AbsolutePath,
     previous: Project.ID,
+    adopted: optional(Schema.Array(Project.ID)),
   },
 })
 
 export const Event = { Updated, Resolved, Definitions: inventory(Updated, Resolved) }
 
 export function adopt(
-  session: { readonly projectID: string; readonly directory: string },
-  event: { readonly projectID: string; readonly directory: string; readonly previous: string },
+  session: { readonly projectID: string; readonly directory: string; readonly workspaceID?: string },
+  event: {
+    readonly projectID: string
+    readonly directory: string
+    readonly previous: string
+    readonly adopted?: ReadonlyArray<string>
+  },
 ) {
-  if (session.projectID !== event.previous && session.projectID !== Project.ID.global) return
+  if (session.workspaceID) return
+  if (
+    session.projectID !== event.previous &&
+    session.projectID !== Project.ID.global &&
+    !event.adopted?.includes(session.projectID)
+  )
+    return
   if (session.projectID === event.projectID) return
-  const inside =
-    session.directory === event.directory ||
-    session.directory.startsWith(event.directory + "/") ||
-    session.directory.startsWith(event.directory + "\\")
-  if (!inside) return
+  const normalize = (value: string) =>
+    value
+      .replaceAll("\\", "/")
+      .split("/")
+      .reduce((result, segment) => {
+        if (!segment || segment === ".") return result
+        if (segment === "..") return result.slice(0, result.lastIndexOf("/"))
+        return `${result}/${segment}`
+      }, "")
+  const directory = normalize(session.directory)
+  const root = normalize(event.directory)
+  const windows = /^\/[a-z]:/i.test(root)
+  const key = windows ? directory.toLowerCase() : directory
+  const parent = windows ? root.toLowerCase() : root
+  if (key !== parent && !key.startsWith(parent + "/")) return
   return {
     projectID: event.projectID,
-    subpath:
-      session.directory === event.directory
-        ? undefined
-        : session.directory.slice(event.directory.length + 1).replaceAll("\\", "/"),
+    subpath: key === parent ? undefined : directory.slice(root.length + 1),
   }
 }

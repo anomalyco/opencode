@@ -212,7 +212,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           {
             location: { directory: sdk().directory },
             query,
-            type: dirs === "true" ? "directory" : "file",
+            type: dirs === "true" ? undefined : "file",
             limit: options?.limit,
           },
           { signal: options?.signal },

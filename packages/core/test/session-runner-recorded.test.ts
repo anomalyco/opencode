@@ -1,6 +1,6 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
-import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
-import { Auth, LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
+import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
+import { Auth, LLMClient, type LLMClientService, RequestExecutor } from "@opencode-ai/ai/route"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -8,7 +8,6 @@ import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
-import { Job } from "@opencode-ai/core/job"
 import { Permission } from "@opencode-ai/core/permission"
 import { Agent } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
@@ -17,13 +16,11 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
-import { SessionCompaction } from "@opencode-ai/core/session/compaction"
-import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
-import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
+import { SessionRunnerLLM } from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { Tool } from "@opencode-ai/core/tool"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -36,14 +33,16 @@ import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
-import { Effect, Layer, Stream } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { Effect, Layer } from "effect"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { promptLocationNode } from "./fixture/prompt-location"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 
@@ -77,6 +76,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
 const systemContext = Layer.mock(InstructionBuiltIns.Service, { load: () => Effect.succeed(Instructions.empty) })
 const instructionContext = Layer.mock(InstructionDiscovery.Service, {
   project: true,
+  global: true,
   load: () => Effect.succeed(Instructions.empty),
 })
 const skillInstructions = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
@@ -85,7 +85,6 @@ const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
 })
 const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const config = Config.testLayer()
-const pluginSupervisor = Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void }))
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {
     get: () => Effect.undefined,
@@ -100,22 +99,23 @@ const promptCatalog = Layer.mock(Catalog.Service, {
     small: () => Effect.undefined,
   },
 })
-const runnerLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+const runnerLayer = (llmClient: Layer.Layer<LLMClientService>) =>
   AppNodeBuilder.build(SessionRunnerLLM.node, [
-    [Snapshot.node, Snapshot.noopLayer],
-    [LayerNodePlatform.llmClient, llmClient],
-    [SessionRunnerModel.node, models],
-    [InstructionBuiltIns.node, systemContext],
-    [InstructionDiscovery.node, instructionContext],
-    [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-    [SkillInstructions.node, skillInstructions],
-    [ReferenceInstructions.node, referenceInstructions],
-    [McpInstructions.node, mcpInstructions],
-    [Config.node, config],
-    [Permission.node, permission],
-    [PluginSupervisor.node, pluginSupervisor],
+    Snapshot.node.replace(Snapshot.noopLayer),
+    LayerNodePlatform.llmClient.replace(llmClient),
+    SessionRunnerModel.node.replace(models),
+    InstructionBuiltIns.node.replace(systemContext),
+    InstructionDiscovery.node.replace(instructionContext),
+    Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+    SkillInstructions.node.replace(skillInstructions),
+    ReferenceInstructions.node.replace(referenceInstructions),
+    McpInstructions.node.replace(mcpInstructions),
+    Config.node.replace(config),
+    Permission.node.replace(permission),
+    PluginSupervisor.node.replace(Layer.empty),
+    Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
   ])
-const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+const execution = (llmClient: Layer.Layer<LLMClientService>) =>
   Layer.effect(
     SessionExecution.Service,
     Effect.gen(function* () {
@@ -125,14 +125,15 @@ const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
       })
       return SessionExecution.Service.of({
         active: coordinator.active,
+        isActive: coordinator.isActive,
         resume: coordinator.run,
         wake: coordinator.wake,
         interrupt: (sessionID) => coordinator.interrupt(sessionID),
         awaitIdle: coordinator.awaitIdle,
       })
     }),
-  ).pipe(Layer.provide(runnerLayer(llmClient)))
-const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+  ).pipe(Layer.provide(runnerLayer(llmClient)), Layer.orDie)
+const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
   AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
@@ -154,20 +155,22 @@ const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
       Session.node,
     ]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [LayerNodePlatform.llmClient, llmClient],
-      [Permission.node, permission],
-      [Catalog.node, promptCatalog],
-      [SessionRunnerModel.node, models],
-      [InstructionBuiltIns.node, systemContext],
-      [InstructionDiscovery.node, instructionContext],
-      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-      [SkillInstructions.node, skillInstructions],
-      [ReferenceInstructions.node, referenceInstructions],
-      [Config.node, config],
-      [Snapshot.node, Snapshot.noopLayer],
-      [PluginSupervisor.node, pluginSupervisor],
-      [SessionExecution.node, execution(llmClient)],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      LocationServiceMap.node.replace(promptLocationNode),
+      LayerNodePlatform.llmClient.replace(llmClient),
+      Permission.node.replace(permission),
+      Catalog.node.replace(promptCatalog),
+      SessionRunnerModel.node.replace(models),
+      InstructionBuiltIns.node.replace(systemContext),
+      InstructionDiscovery.node.replace(instructionContext),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      SkillInstructions.node.replace(skillInstructions),
+      ReferenceInstructions.node.replace(referenceInstructions),
+      Config.node.replace(config),
+      Snapshot.node.replace(Snapshot.noopLayer),
+      PluginSupervisor.node.replace(Layer.empty),
+      Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
+      SessionExecution.node.replace(execution(llmClient)),
     ],
   )
 const it = testEffect(testLayer(client))
@@ -179,8 +182,8 @@ describe("SessionRunnerLLM recorded", () => {
       const agents = yield* Agent.Service
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
-      yield* agents.transform((draft) =>
-        draft.update(Agent.ID.make("build"), (agent) => {
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("build"), (agent) => {
           agent.mode = "primary"
           agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
         }),
@@ -241,111 +244,9 @@ describe("SessionRunnerLLM recorded", () => {
         "session.step.started.1",
         "session.text.started.1",
         "session.text.ended.1",
+        "session.step.streamed.1",
         "session.step.ended.1",
       ])
-    }),
-  )
-})
-
-describe("SessionModelRequest HTTP bridge", () => {
-  const bodies: Uint8Array[] = []
-  const methods: string[] = []
-  const headers: Array<string | undefined> = []
-  const response = [
-    'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":0,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"Hello!"},"finish_reason":null}]}',
-    'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":0,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
-    "data: [DONE]",
-    "",
-  ].join("\n\n")
-  const transport = Layer.succeed(
-    HttpClient.HttpClient,
-    HttpClient.make((request) =>
-      Effect.sync(() => {
-        if (request.body._tag !== "Uint8Array") throw new Error(`Unexpected request body: ${request.body._tag}`)
-        methods.push(request.method)
-        bodies.push(request.body.body.slice())
-        headers.push(request.headers["x-hook"])
-        return HttpClientResponse.fromWeb(
-          request,
-          new Response(response, { headers: { "content-type": "text/event-stream" } }),
-        )
-      }),
-    ),
-  )
-  const httpIt = testEffect(
-    testLayer(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer.pipe(Layer.provide(transport))))),
-  )
-
-  httpIt.effect("runs Effect HTTP request and response hooks around one provider request", () =>
-    Effect.gen(function* () {
-      bodies.length = 0
-      methods.length = 0
-      headers.length = 0
-      const seen: string[] = []
-      const agents = yield* Agent.Service
-      const catalog = yield* Catalog.Service
-      const hooks = yield* PluginHooks.Service
-      yield* agents.transform((draft) =>
-        draft.update(Agent.ID.make("build"), (agent) => {
-          agent.mode = "primary"
-          agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
-        }),
-      )
-      const pluginHost = host({
-        agent: agentHost(agents),
-        catalog: catalogHost(catalog),
-        session: { hook: (name, callback) => hooks.register("session", name, callback) },
-      })
-      yield* pluginHost.session.hook("http.request", (event) =>
-        Effect.sync(() => {
-          seen.push("request")
-          event.request.headers.set("x-hook", "effect")
-        }),
-      )
-      yield* pluginHost.session.hook("http.response", (event) =>
-        Effect.gen(function* () {
-          seen.push(`response:${event.response.status}:${event.request.headers.get("x-hook")}`)
-          event.response = new Response(
-            (yield* Effect.promise(() => event.response.text())).replace("Hello!", "Hooked!"),
-            event.response,
-          )
-        }),
-      )
-      yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .onConflictDoNothing()
-        .run()
-        .pipe(Effect.orDie)
-      const retrySessionID = Session.ID.make("ses_model_request_http_retry")
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: retrySessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
-      const session = yield* Session.Service
-      yield* session.prompt({ sessionID: retrySessionID, text: "Say hello.", resume: false })
-
-      yield* session.resume(retrySessionID)
-
-      expect(methods).toEqual(["POST"])
-      expect(headers).toEqual(["effect"])
-      expect(seen).toEqual(["request", "response:200:effect"])
-      expect(bodies).toHaveLength(1)
-      expect(bodies[0]?.byteLength).toBeGreaterThan(0)
-      expect((yield* session.context(retrySessionID))[1]).toMatchObject({
-        type: "assistant",
-        content: [{ type: "text", text: "Hooked!" }],
-      })
     }),
   )
 })

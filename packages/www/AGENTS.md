@@ -11,6 +11,7 @@
 ## Local development
 
 - Run `bun dev` from this package and use the local URL printed by Astro.
+- Do not run `bun typecheck`, `bun run build`, or another Astro process while the dev server is running. They share the Vite dependency cache and can break the active dev server. Leave validation to the user when the dev server is active.
 
 ## Validation
 

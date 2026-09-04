@@ -8,6 +8,7 @@ import {
   fillDiagramFrameInterior,
   mergeDiagramLineGlyph,
 } from "../core/drawing.js"
+import { DIAGRAM_LABEL_PADDING_X, diagramTextWidth } from "../core/text.js"
 import {
   createStateDiagramLayout,
   expandCompositeBoundsForFeedback,
@@ -27,8 +28,8 @@ import {
   type StateTransitionRenderPlan,
 } from "./routing.js"
 import { createStateSearchBudget } from "./search.js"
+import { NOTE_CONNECTOR_RAMP_STYLES, STATE_DEPARTURE_RAMP_STYLES } from "./style.js"
 import type {
-  NoteConnectorRampStyle,
   StateCellStyle,
   StateDiagram,
   StateDiagramArrowHeadStyle,
@@ -57,7 +58,7 @@ function makeGrid(width: number, height: number): StateGrid {
     mergeCell: (existing, incoming): StateCell => {
       const existingIsTransition = existing.style === "transition" || existing.style?.startsWith("stateDepartureRamp")
       const incomingIsTransition = incoming.style === "transition" || incoming.style?.startsWith("stateDepartureRamp")
-      const shouldMerge = incomingIsTransition && (existingIsTransition || existing.style === "composite")
+      const shouldMerge = incomingIsTransition && existingIsTransition
       return {
         ...incoming,
         char: shouldMerge
@@ -89,11 +90,10 @@ function drawBox(
     setCell(grid, bounds.left, bounds.top, state.label, state.kind)
     return
   }
-  const style: StateCellStyle = "state"
-  fillDiagramFrameInterior(bounds, (x, y) => setCell(grid, x, y, " ", style))
-  drawStateFrame(grid, bounds, BorderChars[borderStyle], style)
+  fillDiagramFrameInterior(bounds, (x, y) => setCell(grid, x, y, " ", "state"))
+  drawStateFrame(grid, bounds, BorderChars[borderStyle], "stateBorder")
   lines.forEach((line, index) => {
-    setText(grid, bounds.left + 2, bounds.top + 1 + index, line, style)
+    setText(grid, bounds.left + 2, bounds.top + 1 + index, line, "state")
   })
 }
 
@@ -146,8 +146,7 @@ function drawNote(grid: StateGrid, bounds: StateNoteBounds, target: BoxBounds): 
     if (previous) directions.add(directionBetween(point, previous)!)
     if (next) directions.add(directionBetween(point, next)!)
     const distanceFromNote = points.length - index - 1
-    const style: StateCellStyle =
-      distanceFromNote < 3 ? (`noteConnectorRamp${3 - distanceFromNote}` as NoteConnectorRampStyle) : "noteConnector"
+    const style = distanceFromNote < 3 ? NOTE_CONNECTOR_RAMP_STYLES[2 - distanceFromNote]! : "noteConnector"
     setCell(grid, point.x, point.y, noteConnectorGlyph(directions), style)
   }
 
@@ -170,7 +169,7 @@ function drawTransitionRenderPlan(
 ): void {
   const departure = new Map(
     rampDeparture
-      ? plan.path.slice(0, 3).map(([x, y], index) => [`${x}:${y}`, `stateDepartureRamp${index + 1}` as StateCellStyle])
+      ? plan.path.slice(0, 3).map(([x, y], index) => [`${x}:${y}`, STATE_DEPARTURE_RAMP_STYLES[index]!])
       : [],
   )
   for (const cell of plan.cells) {
@@ -178,7 +177,14 @@ function drawTransitionRenderPlan(
     setCell(grid, cell.x, cell.y, char, departure.get(`${cell.x}:${cell.y}`) ?? "transition")
   }
   if (plan.label) {
-    plan.label.lines.forEach((line, index) => setText(grid, plan.label!.x, plan.label!.y + index, line, "label"))
+    plan.label.lines.forEach((line, index) => {
+      const y = plan.label!.y + index
+      const leftX = plan.label!.x - DIAGRAM_LABEL_PADDING_X
+      if (grid.getCell(leftX, y)?.char === " ") setCell(grid, leftX, y, " ", "label")
+      setText(grid, plan.label!.x, y, line, "label")
+      const rightX = plan.label!.x + diagramTextWidth(line) + DIAGRAM_LABEL_PADDING_X - 1
+      if (grid.getCell(rightX, y)?.char === " ") setCell(grid, rightX, y, " ", "label")
+    })
   }
 }
 
@@ -270,7 +276,10 @@ function createStateDiagramDrawingWithDirection(
     0,
     ...[...bounds.values(), ...noteBounds].map((bound) => bound.left),
     ...connectorPoints.map((point) => point.x),
-    ...transitionPlans.flatMap((plan) => [...plan.cells.map((cell) => cell.x), ...(plan.label ? [plan.label.x] : [])]),
+    ...transitionPlans.flatMap((plan) => [
+      ...plan.cells.map((cell) => cell.x),
+      ...(plan.label ? [plan.label.x - DIAGRAM_LABEL_PADDING_X] : []),
+    ]),
   )
   const contentTop = Math.min(
     0,
@@ -301,7 +310,9 @@ function createStateDiagramDrawingWithDirection(
     maxX,
     ...transitionPlans.flatMap((plan) => [
       ...plan.cells.map((cell) => cell.x + 1),
-      ...(plan.label ? [plan.label.x + measureStateTransitionLabel(plan.route.transition.label).width] : []),
+      ...(plan.label
+        ? [plan.label.x + measureStateTransitionLabel(plan.route.transition.label).width + DIAGRAM_LABEL_PADDING_X]
+        : []),
     ]),
   )
   const transitionBottom = Math.max(
@@ -337,7 +348,7 @@ function createStateDiagramDrawingWithDirection(
 
   for (const composite of diagram.composites) {
     const bound = compositeBounds.get(composite.id)
-    if (bound) drawContainerLabel(grid, bound, composite.label, "composite")
+    if (bound) drawContainerLabel(grid, bound, composite.label, "compositeLabel")
   }
 
   for (const noteBound of noteBounds) {

@@ -81,9 +81,6 @@ export const GoogleVertexPlugin = define({
             ...(typeof provider.settings?.baseURL === "string"
               ? { baseURL: replaceVertexVars(provider.settings.baseURL, project, location) }
               : {}),
-            ...(Provider.packageName(provider.package)?.includes("@ai-sdk/openai-compatible")
-              ? { fetch: authFetch(provider.settings?.fetch) }
-              : {}),
           }
         })
       }

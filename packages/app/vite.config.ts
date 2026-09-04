@@ -1,7 +1,9 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
+import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
-import { VitePWA } from "vite-plugin-pwa"
-import desktopPlugin from "./vite.js"
+import desktopPlugin, { channel } from "./vite.js"
+import { icons } from "./vite.icons"
+import { serviceWorker } from "./vite.pwa"
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -23,47 +25,8 @@ const sentry =
 export default defineConfig({
   plugins: [
     desktopPlugin,
-    VitePWA({
-      strategies: "generateSW",
-      registerType: "prompt",
-      injectRegister: false,
-      manifest: false,
-      workbox: {
-        cleanupOutdatedCaches: true,
-        clientsClaim: false,
-        skipWaiting: false,
-        inlineWorkboxRuntime: true,
-        navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api(?:\/|$)/],
-        globPatterns: [
-          "index.html",
-          "site.webmanifest",
-          "favicon*",
-          "apple-touch-icon*",
-          "web-app-manifest*",
-          "assets/index-*.{js,css}",
-          "assets/session-*.js",
-          "assets/IBMPlexMono-Text-*.woff2",
-          "assets/Inter.ttf",
-          "assets/JetBrainsMonoNerdFontMono-Regular.woff2",
-        ],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.origin === self.location.origin && url.pathname.startsWith("/assets/"),
-            handler: "CacheFirst",
-            options: {
-              cacheName: "opencode-assets",
-              cacheableResponse: {
-                statuses: [200],
-              },
-              expiration: {
-                maxEntries: 1000,
-              },
-            },
-          },
-        ],
-      },
-    }),
+    icons(channel),
+    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
     sentry,
   ] as any,
   server: {
@@ -72,6 +35,7 @@ export default defineConfig({
     port: 3000,
   },
   build: {
+    assetsDir: "_assets",
     target: "esnext",
     sourcemap: true,
   },
