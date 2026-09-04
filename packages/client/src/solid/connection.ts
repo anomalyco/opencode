@@ -24,7 +24,7 @@ export type ClientConnectionOptions = {
   }
 }
 
-const connectTimeout = 2_000
+const connectTimeout = 30_000
 const reconnectDelay = 1_000
 const connectionHistoryLimit = 50
 
