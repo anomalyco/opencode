@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import type { Model } from "@/provider/provider"
 import { ZenModels } from "@/provider/zen-models"
 
@@ -6,8 +8,8 @@ const BASE_URL = "https://opencode.ai/zen/v1"
 
 function model(id: string, npm: string): Model {
   return {
-    id,
-    providerID: "opencode",
+    id: ModelV2.ID.make(id),
+    providerID: ProviderV2.ID.opencode,
     name: id,
     family: id.startsWith("muse-spark") ? "muse-free" : "",
     api: {
