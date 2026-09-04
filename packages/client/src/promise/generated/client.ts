@@ -1037,7 +1037,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/generate`,
-            body: { prompt: input["prompt"], model: input["model"] },
+            body: { prompt: input["prompt"], model: input["model"], body: input["body"] },
             successStatus: 200,
             declaredStatuses: [400, 503, 401],
             empty: false,

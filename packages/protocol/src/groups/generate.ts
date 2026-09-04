@@ -9,6 +9,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
       payload: Schema.Struct({
         prompt: Schema.String,
         model: Model.Ref.pipe(Schema.optional),
+        body: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
       }),
       success: Schema.Struct({
         data: Schema.Struct({ text: Schema.String }),
@@ -19,7 +20,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         identifier: "v2.generate.text",
         summary: "Generate text",
         description:
-          "Run one stateless model generation using the server's base configuration and return the assistant text. Uses the base configuration's default model when none is specified.",
+          "Run one stateless model generation using the server's base configuration and return the assistant text. Uses the base configuration's default model when none is specified. Optional provider-native body fields overlay the lowered request.",
       }),
     ),
   )

@@ -1153,7 +1153,11 @@ export interface ModelApi<E = never> {
   readonly default: ModelDefaultOperation<E>
 }
 
-export type GenerateTextInput = { readonly prompt: string; readonly model?: Model.Ref | undefined }
+export type GenerateTextInput = {
+  readonly prompt: string
+  readonly model?: Model.Ref | undefined
+  readonly body?: { readonly [x: string]: Schema.Json } | undefined
+}
 export type GenerateTextOutput = { readonly text: string }
 export type GenerateTextOperation<E = never> = (input: GenerateTextInput) => Effect.Effect<GenerateTextOutput, E>
 

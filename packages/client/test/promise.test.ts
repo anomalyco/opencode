@@ -158,9 +158,9 @@ test("generate.text uses the locationless public contract", async () => {
     },
   })
 
-  expect(await client.generate.text({ prompt: "ping" })).toEqual({ text: "pong" })
+  expect(await client.generate.text({ prompt: "ping", body: { max_tokens: 321 } })).toEqual({ text: "pong" })
   expect(request?.url).toBe("http://localhost:3000/api/generate")
-  expect(await request?.json()).toEqual({ prompt: "ping" })
+  expect(await request?.json()).toEqual({ prompt: "ping", body: { max_tokens: 321 } })
 })
 
 test("websearch.query uses the public HTTP contract", async () => {

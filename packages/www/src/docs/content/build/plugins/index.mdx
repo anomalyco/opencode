@@ -631,8 +631,11 @@ Generate text with a selected model without creating a session, invoking tools, 
 const review = await ctx.generate.text({
   model: { providerID: "anthropic", id: "claude-sonnet-4-6" },
   prompt: "Review this proposed action.",
+  body: { max_tokens: 2_000 },
 })
 ```
+
+`body` overlays provider-native options on the generated request.
 
 ### Permissions
 

@@ -4766,7 +4766,7 @@
             }
           }
         },
-        "description": "Run one stateless model generation using the server's base configuration and return the assistant text. Uses the base configuration's default model when none is specified.",
+        "description": "Run one stateless model generation using the server's base configuration and return the assistant text. Uses the base configuration's default model when none is specified. Optional provider-native body fields overlay the lowered request.",
         "summary": "Generate text",
         "requestBody": {
           "content": {
@@ -4781,6 +4781,16 @@
                     "anyOf": [
                       {
                         "$ref": "#/components/schemas/Model.Ref"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "body": {
+                    "anyOf": [
+                      {
+                        "type": "object"
                       },
                       {
                         "type": "null"

@@ -4332,11 +4332,18 @@ export type GenerateTextInput = {
   readonly prompt: {
     readonly prompt: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly body?: { readonly [x: string]: JsonValue } | null
   }["prompt"]
   readonly model?: {
     readonly prompt: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly body?: { readonly [x: string]: JsonValue } | null
   }["model"]
+  readonly body?: {
+    readonly prompt: string
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly body?: { readonly [x: string]: JsonValue } | null
+  }["body"]
 }
 
 export type GenerateTextOutput = GenerateTextResponse["data"]
