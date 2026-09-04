@@ -47,6 +47,7 @@ export function TerminalPane(props: {
   let restored = false
   let wantsControl = false
   let disposed = false
+  let exited = false
   let size: TerminalSize | undefined
   let canonicalSize: TerminalSize | undefined
   let terminalSize: TerminalSize | undefined
@@ -209,6 +210,10 @@ export function TerminalPane(props: {
       if (typeof event.data !== "string") return
       const message: unknown = JSON.parse(event.data)
       if (!message || typeof message !== "object" || !("type" in message)) return
+      if (message.type === "exited") {
+        exited = true
+        return
+      }
       if (
         message.type === "resized" &&
         "cols" in message &&
@@ -272,7 +277,8 @@ export function TerminalPane(props: {
       if (disposed) return
       const focused = terminal?.focused
       terminal = undefined
-      setFailure("Terminal disconnected")
+      // The removal event arrives separately; keep the terminal visible until then.
+      if (!exited) setFailure("Terminal disconnected")
       if (focused) props.onDisconnect?.()
     })
     socket = next
