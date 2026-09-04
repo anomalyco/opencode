@@ -103,6 +103,13 @@ const api: ElectronAPI = {
   revealPath: (path) => ipcRenderer.invoke("reveal-path", path),
   readClipboardImage: () => ipcRenderer.invoke("read-clipboard-image"),
   getWindowFocused: () => ipcRenderer.invoke("get-window-focused"),
+  setTaskbarAttention: (sessions) => ipcRenderer.invoke("set-taskbar-attention", sessions),
+  markTaskbarSessionViewed: (session) => ipcRenderer.invoke("mark-taskbar-session-viewed", session),
+  onTaskbarSessionViewed: (cb) => {
+    const handler = (_: unknown, session: string) => cb(session)
+    ipcRenderer.on("taskbar-session-viewed", handler)
+    return () => ipcRenderer.removeListener("taskbar-session-viewed", handler)
+  },
   getWindowFullscreen: () => ipcRenderer.invoke("get-window-fullscreen"),
   onWindowFullscreenChanged: (cb) => {
     const handler = (_: unknown, fullscreen: boolean) => cb(fullscreen)

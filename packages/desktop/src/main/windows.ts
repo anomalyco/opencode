@@ -16,6 +16,7 @@ import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { createTaskbarAttentionRegistry } from "./taskbar-attention"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -53,6 +54,7 @@ let relaunchHandler = () => {
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 const windowIDs = new WeakMap<BrowserWindow, string>()
+const taskbarAttention = createTaskbarAttentionRegistry()
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
@@ -165,6 +167,31 @@ export function setDockIcon() {
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
+export function setTaskbarAttention(win: BrowserWindow, sessions: readonly string[]) {
+  if (process.platform !== "win32" || win.isDestroyed()) return []
+
+  const suppressed = taskbarAttention.set(win.id, sessions)
+  updateTaskbarAttention()
+  return suppressed
+}
+
+export function markTaskbarSessionViewed(session: string) {
+  if (process.platform !== "win32") return
+  taskbarAttention.viewed(session)
+  updateTaskbarAttention()
+}
+
+function updateTaskbarAttention() {
+  if (process.platform !== "win32") return
+  app.setBadgeCount(taskbarAttention.count())
+}
+
+function releaseTaskbarAttention(win: BrowserWindow) {
+  if (process.platform !== "win32") return
+  taskbarAttention.close(win.id)
+  updateTaskbarAttention()
+}
+
 export function createMainWindow(id: string = randomUUID()) {
   const state = windowState({
     file: windowStateFile(id),
@@ -270,12 +297,22 @@ function wireNavigationPolicy(win: BrowserWindow) {
 function registerWindow(win: BrowserWindow, id: string) {
   windowIDs.set(win, id)
   registry.register(id, win)
+  if (process.platform === "win32") taskbarAttention.open(win.id)
+  win.webContents.on("render-process-gone", () => releaseTaskbarAttention(win))
+  win.webContents.on("did-fail-load", (_event, _code, _description, _url, isMainFrame) => {
+    if (isMainFrame) releaseTaskbarAttention(win)
+  })
 
-  win.on("focus", () => registry.focused(id))
+  win.on("focus", () => {
+    registry.focused(id)
+  })
   // Windows never emits before-quit on OS shutdown/logoff, but each window
   // gets session-end before it closes; flag the quit so ids stay persisted.
   win.on("session-end", () => registry.setQuitting())
-  win.on("closed", () => registry.closed(id))
+  win.on("closed", () => {
+    releaseTaskbarAttention(win)
+    registry.closed(id)
+  })
 }
 
 function windowStateFile(id: string) {

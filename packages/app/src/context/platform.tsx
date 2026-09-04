@@ -50,6 +50,15 @@ type PlatformBase = {
   /** Send a system notification */
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
 
+  /** Show sessions needing attention on the native taskbar icon (desktop only) */
+  setTaskbarAttention?(sessions: readonly string[]): Promise<void> | void
+
+  /** Share a viewed taskbar session with other desktop windows. */
+  markTaskbarSessionViewed?(session: string): Promise<void> | void
+
+  /** Listen for taskbar sessions viewed in another desktop window. */
+  onTaskbarSessionViewed?(cb: (session: string) => void): () => void
+
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?(
     opts: OpenAttachmentPickerOptions,

@@ -14,9 +14,11 @@ import { getStore, removeStoreFileIfEmpty } from "./store"
 import {
   getPinchZoomEnabled,
   getWindowID,
+  markTaskbarSessionViewed,
   openExternalURL,
   openLocalFileURL,
   setPinchZoomEnabled,
+  setTaskbarAttention,
   setTitlebar,
   updateTitlebar,
 } from "./windows"
@@ -254,6 +256,24 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("get-window-focused", (event: IpcMainInvokeEvent) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win?.isFocused() ?? false
+  })
+
+  ipcMain.handle("set-taskbar-attention", (event: IpcMainInvokeEvent, sessions: unknown) => {
+    if (process.platform !== "win32") return
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || !Array.isArray(sessions) || !sessions.every((session) => typeof session === "string")) return
+    setTaskbarAttention(win, sessions).forEach((session) => win.webContents.send("taskbar-session-viewed", session))
+  })
+
+  ipcMain.handle("mark-taskbar-session-viewed", (event: IpcMainInvokeEvent, session: unknown) => {
+    if (process.platform !== "win32") return
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || typeof session !== "string") return
+    markTaskbarSessionViewed(session)
+    BrowserWindow.getAllWindows().forEach((target) => {
+      if (target.isDestroyed()) return
+      target.webContents.send("taskbar-session-viewed", session)
+    })
   })
 
   ipcMain.handle("get-window-fullscreen", (event: IpcMainInvokeEvent) => {
