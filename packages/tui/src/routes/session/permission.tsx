@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { useTheme, useThemes } from "../../context/theme"
 import type { PermissionReply, PermissionRequest } from "@opencode-ai/client"
 import { SplitBorder } from "../../ui/border"
@@ -220,13 +220,9 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
               header={header()}
-              body={(option) => (
+              body={(option, expanded) => (
                 <Show when={option === "always"} fallback={presentationBody()}>
-                  <box paddingLeft={1} gap={1}>
-                    <For each={permissionAlwaysLines(props.request)}>
-                      {(line, index) => <text fg={index() === 0 ? theme.text.subdued : theme.text.default}>{line}</text>}
-                    </For>
-                  </box>
+                  <AlwaysAllowBody request={props.request} expanded={expanded} />
                 </Show>
               )}
               options={
@@ -267,6 +263,87 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
 export function permissionSemanticLabel(action: string, title?: string) {
   return `Permission required: ${title ?? action}`
+}
+
+function AlwaysAllowBody(props: { request: PermissionRequest; expanded: boolean }) {
+  const theme = useTheme("elevated")
+  const config = useConfig().data
+  const dimensions = useTerminalDimensions()
+  const lines = createMemo(() => permissionAlwaysLines(props.request))
+  const limit = createMemo(() => (dimensions().width < 80 ? 2 : 3))
+  const remaining = createMemo(() => Math.max(0, lines().length - 1 - limit()))
+  let scroll: ScrollBoxRenderable | undefined
+
+  Keymap.createLayer(() => ({
+    mode: "base",
+    commands: props.expanded
+      ? [
+          {
+            bind: "pageup",
+            title: "Previous patterns page",
+            group: "Permission",
+            run: () => scroll?.scrollBy(-1, "viewport"),
+          },
+          {
+            bind: "pagedown",
+            title: "Next patterns page",
+            group: "Permission",
+            run: () => scroll?.scrollBy(1, "viewport"),
+          },
+          { bind: "up", title: "Previous pattern", group: "Permission", run: () => scroll?.scrollBy(-1) },
+          { bind: "down", title: "Next pattern", group: "Permission", run: () => scroll?.scrollBy(1) },
+        ]
+      : [],
+  }))
+
+  return (
+    <box paddingLeft={1} gap={1} flexGrow={1} minHeight={0} overflow="hidden">
+      <text fg={theme.text.subdued} flexShrink={0}>
+        {lines()[0]}
+      </text>
+      <Show when={lines().length > 1}>
+        <Show
+          when={props.expanded}
+          fallback={
+            <box minHeight={0}>
+              <For each={lines().slice(1, limit() + 1)}>
+                {(line) => (
+                  <text fg={theme.text.default} height={1} flexShrink={0} wrapMode="none" truncate>
+                    {line}
+                  </text>
+                )}
+              </For>
+              <Show when={remaining()}>
+                <text fg={theme.text.subdued} height={1} flexShrink={0}>
+                  +{remaining()} more
+                </text>
+              </Show>
+            </box>
+          }
+        >
+          <scrollbox
+            ref={(value) => (scroll = value)}
+            width="100%"
+            flexGrow={1}
+            minHeight={0}
+            viewportOptions={{ paddingRight: 1 }}
+            scrollAcceleration={getScrollAcceleration(config)}
+            verticalScrollbarOptions={{
+              trackOptions: { backgroundColor: theme.background.default, foregroundColor: theme.scrollbar.default },
+            }}
+          >
+            <For each={lines().slice(1)}>
+              {(line) => (
+                <text width="100%" fg={theme.text.default} wrapMode="word" flexShrink={0}>
+                  {line}
+                </text>
+              )}
+            </For>
+          </scrollbox>
+        </Show>
+      </Show>
+    </box>
+  )
 }
 
 function RejectPrompt(props: {
@@ -412,7 +489,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   group?: string
   choicesLabel?: string
   header?: JSX.Element
-  body: JSX.Element | ((option: keyof T) => JSX.Element)
+  body: JSX.Element | ((option: keyof T, expanded: boolean) => JSX.Element)
   options: T
   escapeKey?: keyof T
   fullscreen?: boolean
@@ -522,7 +599,16 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
             position: "relative",
           })}
     >
-      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1} flexGrow={1}>
+      <box
+        gap={1}
+        paddingLeft={1}
+        paddingRight={3}
+        paddingTop={1}
+        paddingBottom={1}
+        flexGrow={1}
+        minHeight={0}
+        overflow="hidden"
+      >
         <Show
           when={props.header}
           fallback={
@@ -536,7 +622,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
             {props.header}
           </box>
         </Show>
-        {typeof props.body === "function" ? props.body(store.selected) : props.body}
+        {typeof props.body === "function" ? props.body(store.selected, store.expanded) : props.body}
       </box>
       <box
         flexDirection={narrow() ? "column" : "row"}
