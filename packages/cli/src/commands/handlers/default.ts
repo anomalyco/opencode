@@ -95,7 +95,7 @@ export default Runtime.handler(Commands, (input) =>
             ),
             { signal },
           ),
-        check: () => runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.checkManual()))),
+        check: (signal) => runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.checkManual())), { signal }),
         apply: (version) => runPromise(updater.apply(version)),
       },
       packages: {
@@ -136,7 +136,7 @@ export default Runtime.handler(Commands, (input) =>
               ...(restart.sessionID ? ["--session", restart.sessionID] : []),
               ...(input.auto || input.yolo || input.dangerouslySkipPermissions ? ["--auto"] : []),
             ],
-            { stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+            { stdin: "inherit", stdout: "inherit", stderr: "inherit", detached: false },
           ),
         )
         process.exitCode = yield* child.exitCode

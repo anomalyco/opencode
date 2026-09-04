@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { createEffect, createMemo, createResource, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import type { UpdateState } from "../context/update-notification"
@@ -8,7 +8,7 @@ import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
 
 export function DialogUpdate(props: {
-  check?: () => Promise<string | undefined>
+  check?: (signal: AbortSignal) => Promise<string | undefined>
   state: () => UpdateState | undefined
   install: () => Promise<void>
   restart: () => void
@@ -17,14 +17,16 @@ export function DialogUpdate(props: {
   const theme = useTheme("elevated")
   const [error, setError] = createSignal<string>()
   const [active, setActive] = createSignal(0)
+  const controller = new AbortController()
+  onCleanup(() => controller.abort())
 
   dialog.setCentered(true)
 
   const [check] = createResource(
     () => props.check,
     (check) =>
-      check().catch((error) => {
-        setError(errorMessage(error))
+      check(controller.signal).catch((error) => {
+        if (!controller.signal.aborted) setError(errorMessage(error))
         return undefined
       }),
   )

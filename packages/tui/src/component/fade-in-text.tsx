@@ -1,14 +1,8 @@
-import {
-  OptimizedBuffer,
-  RGBA,
-  TargetChannel,
-  TextRenderable,
-  type RenderContext,
-  type TextOptions,
-} from "@opentui/core"
+import { RGBA, type OptimizedBuffer, type RenderContext, type TextOptions } from "@opentui/core"
 import { extend, type JSX } from "@opentui/solid"
 import { splitProps } from "solid-js"
 import { useConfig } from "../config"
+import { MaskedTextRenderable } from "./masked-text"
 import { coast, smootherstep } from "./tab-pulse"
 
 type FadeInTextOptions = TextOptions & {
@@ -20,19 +14,14 @@ type FadeInTextOptions = TextOptions & {
 
 const DURATION = 200
 const FEATHER = 8
-const TRANSPARENT = RGBA.fromValues(0, 0, 0, 0)
-const CONTINUATION = 0xc0000000 | 0
 const clamp = (value: number) => Math.max(0, Math.min(1, value))
 
-class FadeInTextRenderable extends TextRenderable {
+class FadeInTextRenderable extends MaskedTextRenderable {
   private _backdrop = RGBA.defaultBackground()
   private _enabled = true
   private _sweepOffset = 0
   private _sweepWidth: number | undefined
   private elapsed = 0
-  private scratch: OptimizedBuffer | undefined
-  private mask = new Float32Array(0)
-  private matrix = new Float32Array(16)
 
   constructor(ctx: RenderContext, options: FadeInTextOptions) {
     super(ctx, options)
@@ -77,47 +66,12 @@ class FadeInTextRenderable extends TextRenderable {
     if (!this._enabled || this.elapsed >= DURATION) return super.render(buffer, deltaTime)
     if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
     this.elapsed = Math.min(DURATION, this.elapsed + deltaTime)
-    if (!this.scratch)
-      this.scratch = OptimizedBuffer.create(this.width, this.height, this._ctx.widthMethod, { respectAlpha: true })
-    if (this.scratch.width !== this.width || this.scratch.height !== this.height)
-      this.scratch.resize(this.width, this.height)
-
-    this.scratch.clear(TRANSPARENT)
-    this.scratch.drawTextBuffer(this.textBufferView, 0, 0)
-    const characters = this.scratch.buffers.char
-    let end = 0
-    for (let row = 0; row < this.height; row++) {
-      let column = this.width
-      while (
-        column > 0 &&
-        (characters[row * this.width + column - 1] === 32 || characters[row * this.width + column - 1] === 0)
-      )
-        column--
-      end = Math.max(end, column)
-    }
-    const progress = this.elapsed / DURATION
-    const front = -FEATHER + coast(progress) * ((this._sweepWidth ?? end) + FEATHER * 2)
-    if (this.mask.length !== this.width * this.height * 3) this.mask = new Float32Array(this.width * this.height * 3)
-    let strength = 1
-    for (let cell = 0; cell < characters.length; cell++) {
-      const column = cell % this.width
-      if ((characters[cell] & CONTINUATION) !== CONTINUATION)
-        strength = 1 - smootherstep(clamp((front - (this._sweepOffset + column)) / FEATHER))
-      this.mask[cell * 3] = column
-      this.mask[cell * 3 + 1] = Math.floor(cell / this.width)
-      this.mask[cell * 3 + 2] = strength
-    }
-    this.scratch.colorMatrix(this.matrix, this.mask, 1, TargetChannel.FG)
-    buffer.drawFrameBuffer(this.screenX, this.screenY, this.scratch)
-    this.markClean()
-    this._ctx.addToHitGrid(this.screenX, this.screenY, this.width, this.height, this.num)
+    this.renderMasked(buffer, 1, (end) => {
+      const progress = this.elapsed / DURATION
+      const front = -FEATHER + coast(progress) * ((this._sweepWidth ?? end) + FEATHER * 2)
+      return (column) => 1 - smootherstep(clamp((front - (this._sweepOffset + column)) / FEATHER))
+    })
     if (this.elapsed >= DURATION) this.live = false
-  }
-
-  override destroy() {
-    this.scratch?.destroy()
-    this.scratch = undefined
-    super.destroy()
   }
 }
 

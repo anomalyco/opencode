@@ -121,12 +121,12 @@ const make = Effect.gen(function* () {
 
   const release = Effect.fnUntraced(function* () {
     const response = yield* Effect.tryPromise({
-      try: () =>
+      try: (signal) =>
         fetch(
           `https://update.opencode.ai/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/npm`,
           {
             headers: { "User-Agent": `opencode/${OPENCODE_VERSION}` },
-            signal: AbortSignal.timeout(10_000),
+            signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
         ),
       catch: (cause) => new Error("Failed to check for updates", { cause }),

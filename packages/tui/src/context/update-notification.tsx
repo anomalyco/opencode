@@ -19,7 +19,9 @@ export type UpdateState =
 export type UpdateSource = {
   readonly remote: boolean
   readonly subscribe: (notify: (notice: ClientNotice) => void, signal: AbortSignal) => Promise<void>
-  readonly check: () => Promise<ClientNotice | { readonly type: "unavailable"; readonly message: string } | undefined>
+  readonly check: (
+    signal: AbortSignal,
+  ) => Promise<ClientNotice | { readonly type: "unavailable"; readonly message: string } | undefined>
   readonly apply: (version: string) => Promise<void>
 }
 
@@ -71,10 +73,11 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       )
     }
 
-    const check = async () => {
+    const check = async (signal: AbortSignal) => {
       const updater = props.updater
       if (!updater || state()?.type === "installing") return
-      const result = await updater.check()
+      const result = await updater.check(signal)
+      if (signal.aborted) return
       if (result?.type === "unavailable") return result.message
       setState(result)
     }
@@ -91,7 +94,10 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       if (origin === "notification") {
         const current = notification()
         if (!current || (current.source === "server" && current.remote)) return
-        if (state()?.type !== "installing") setState({ type: current.type, version: current.version })
+        const active = state()
+        // The notification can predate an installation through /update.
+        if (active?.type !== "installing" && !(active?.type === "installed" && active.version === current.version))
+          setState({ type: current.type, version: current.version })
         dismiss()
       }
       dialog.replace(() => (

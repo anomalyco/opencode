@@ -185,24 +185,20 @@ function UpdateNotification() {
 
 function UpdateMessage(props: { title: string; description: string; backdrop: RGBA }) {
   const theme = useTheme()
-  const lines = props.description.split("\n")
-  const width = Math.max(stringWidth(props.title), ...lines.map((line) => stringWidth(line)))
-  const padding = " ".repeat(Math.floor((width - stringWidth(props.title)) / 2))
-  const description = lines.map((line) => " ".repeat(Math.floor((width - stringWidth(line)) / 2)) + line).join("\n")
+  const titleWidth = stringWidth(props.title)
+  const descriptionWidth = stringWidth(props.description)
+  const width = Math.max(titleWidth, descriptionWidth)
   return (
-    <FadeInText
-      width={width}
-      height={lines.length + 1}
-      wrapMode="none"
-      fg={theme.text.default}
-      backdrop={props.backdrop}
-    >
+    <FadeInText width={width} height={2} wrapMode="none" fg={theme.text.default} backdrop={props.backdrop}>
       <span style={{ fg: theme.text.action.primary.selected, attributes: TextAttributes.BOLD }}>
-        {padding}
+        {" ".repeat(Math.floor((width - titleWidth) / 2))}
         {props.title}
       </span>
       {"\n"}
-      <span style={{ fg: theme.text.subdued }}>{description}</span>
+      <span style={{ fg: theme.text.subdued }}>
+        {" ".repeat(Math.floor((width - descriptionWidth) / 2))}
+        {props.description}
+      </span>
     </FadeInText>
   )
 }
