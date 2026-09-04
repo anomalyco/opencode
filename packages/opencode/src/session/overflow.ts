@@ -11,12 +11,22 @@ export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outpu
   const context = input.model.limit.context
   if (context === 0) return 0
 
-  const reserved =
-    input.cfg.compaction?.reserved ??
-    Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
-  return input.model.limit.input
-    ? Math.max(0, input.model.limit.input - reserved)
-    : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
+  const outputBudget = input.model.limit.output
+  // The model's usable input budget is bounded by its explicit input cap
+  // (`limit.input`) when present, otherwise by the context window minus the
+  // output budget. We never let the ceiling exceed what still leaves room for a
+  // full response inside the context window. This is what makes auto-compaction
+  // reachable for models whose real input cap sits well below
+  // `context - reserved` — e.g. opencode-go/hy3, where the provider pins input
+  // at 262144 - 65536 = 196608 while models.dev advertises context 256000 and
+  // output 64000 (issue #45168).
+  const inputCeiling = input.model.limit.input ?? Math.max(0, context - outputBudget)
+  const effectiveCeiling = Math.max(0, Math.min(inputCeiling, context - outputBudget))
+
+  // Reserve headroom for the next response plus the configured compaction buffer.
+  const output = ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax)
+  const reserved = input.cfg.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, output)
+  return Math.max(0, effectiveCeiling - Math.min(reserved, outputBudget))
 }
 
 export function isOverflow(input: {
