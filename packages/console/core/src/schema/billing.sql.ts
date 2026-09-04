@@ -129,6 +129,7 @@ export const UsageTable = mysqlTable(
     sessionID: varchar("session_id", { length: 30 }),
     enrichment: json("enrichment").$type<{
       plan: "sub" | "byok" | "lite"
+      costMultiplier?: number
     }>(),
   },
   (table) => [...workspaceIndexes(table), index("usage_time_created").on(table.workspaceID, table.timeCreated)],

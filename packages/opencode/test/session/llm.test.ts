@@ -754,6 +754,75 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
 
 describe("session.llm.stream", () => {
   const vivgridFixture = { providerID: "vivgrid", modelID: "gemini-3.1-pro-preview" }
+  const opencodeFixture = { providerID: "opencode-test", modelID: vivgridFixture.modelID }
+
+  it.instance(
+    "sends the parent session header for opencode providers",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(opencodeFixture.providerID),
+          ModelV2.ID.make(opencodeFixture.modelID),
+        )
+        const sessionID = SessionID.make("session-child")
+        const parentSessionID = SessionID.make("session-parent")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-parent-header"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: {
+            providerID: ProviderV2.ID.make(opencodeFixture.providerID),
+            modelID: resolved.id,
+          },
+        } satisfies SessionV1.User
+
+        yield* drain({
+          user,
+          sessionID,
+          parentSessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        expect((yield* Effect.promise(() => request)).headers.get("x-parent-session-id")).toBe(parentSessionID)
+      }),
+    {
+      config: () => {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        return {
+          enabled_providers: [opencodeFixture.providerID],
+          provider: {
+            [opencodeFixture.providerID]: {
+              name: "OpenCode Test",
+              npm: "@ai-sdk/openai-compatible",
+              models: { [fixture.model.id]: configModel(fixture.model) as ConfigModel },
+              options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+            },
+          },
+        }
+      },
+    },
+  )
+
   it.instance(
     "sends temperature, tokens, and reasoning options for openai-compatible models",
     () =>

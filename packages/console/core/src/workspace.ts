@@ -97,6 +97,18 @@ export namespace Workspace {
     },
   )
 
+  export const unblock = fn(
+    z.object({
+      workspaceID: Identifier.schema("workspace"),
+    }),
+    async (input) => {
+      const result = await Database.use((tx) =>
+        tx.update(WorkspaceTable).set({ is_blocked: false }).where(eq(WorkspaceTable.id, input.workspaceID)),
+      )
+      if (result.rowsAffected === 0) throw new Error("Workspace not found")
+    },
+  )
+
   export const remove = fn(z.void(), async () => {
     await Database.use((tx) =>
       tx

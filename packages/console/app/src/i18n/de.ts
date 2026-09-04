@@ -256,9 +256,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "folgenden Ausnahmen",
 
   "go.title": "OpenCode Go | Kostengünstige Coding-Modelle für alle",
-  "go.banner.text": "Ox Alpha Free ist für begrenzte Zeit auf Go verfügbar",
+  "go.banner.text": "GLM-5.3-Flash erhält für begrenzte Zeit 2x Nutzungslimits",
   "go.meta.description":
-    "Go beginnt bei $5 für deinen ersten Monat, danach $10/Monat, mit großzügigen Nutzungslimits und zuverlässigem Zugang zu führenden Coding-Modellen.",
+    "Go kostet $10/Monat, mit großzügigen Nutzungslimits und zuverlässigem Zugang zu führenden Coding-Modellen.",
   "go.hero.title": "Kostengünstige Coding-Modelle für alle",
   "go.hero.body":
     "Go bringt Agentic Coding zu Programmierern auf der ganzen Welt. Mit großzügigen Limits und zuverlässigem Zugang zu den leistungsfähigsten Open-Source-Modellen, damit du mit leistungsstarken Agenten entwickeln kannst, ohne dir Gedanken über Kosten oder Verfügbarkeit zu machen.",
@@ -267,9 +267,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go abonnieren",
   "go.cta.price": "$10/Monat",
-  "go.cta.promo": "$5 im ersten Monat",
-  "go.pricing.body":
-    "Mit jedem Agenten nutzbar. $5 im ersten Monat, danach $10/Monat. Guthaben bei Bedarf aufladen. Jederzeit kündbar.",
+  "go.pricing.body": "Mit jedem Agenten nutzbar. $10/Monat. Guthaben bei Bedarf aufladen. Jederzeit kündbar.",
   "go.graph.free": "Kostenlos",
   "go.graph.freePill": "Big Pickle und kostenlose Modelle",
   "go.graph.go": "Go",
@@ -302,21 +300,20 @@ export const dict = {
   "go.testimonials.frank.quote": "Ich wünschte, ich wäre noch bei Nvidia.",
   "go.problem.title": "Welches Problem löst Go?",
   "go.problem.body":
-    "Wir konzentrieren uns darauf, die OpenCode-Erfahrung so vielen Menschen wie möglich zugänglich zu machen. OpenCode Go ist ein kostengünstiges Abonnement: $5 im ersten Monat, danach $10/Monat. Es bietet großzügige Limits und zuverlässigen Zugang zu den leistungsfähigsten Open-Source-Modellen.",
+    "Wir konzentrieren uns darauf, die OpenCode-Erfahrung so vielen Menschen wie möglich zugänglich zu machen. OpenCode Go ist ein kostengünstiges Abonnement für $10/Monat. Es bietet großzügige Limits und zuverlässigen Zugang zu den leistungsfähigsten Open-Source-Modellen.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Kostengünstiges Abonnement",
   "go.problem.item2": "Großzügige Limits und zuverlässiger Zugang",
   "go.problem.item3": "Für so viele Programmierer wie möglich gebaut",
   "go.problem.item4": "Eine kuratierte, für Agentic Coding getestete Modellauswahl",
   "go.how.title": "Wie Go funktioniert",
-  "go.how.body":
-    "Go beginnt bei $5 für den ersten Monat, danach $10/Monat. Du kannst es mit OpenCode oder jedem Agenten nutzen.",
+  "go.how.body": "Go kostet $10/Monat. Du kannst es mit OpenCode oder jedem Agenten nutzen.",
   "go.how.step1.title": "Konto erstellen",
   "go.how.step1.beforeLink": "folge den",
   "go.how.step1.link": "Einrichtungsanweisungen",
   "go.how.step2.title": "Go abonnieren",
-  "go.how.step2.link": "$5 im ersten Monat",
-  "go.how.step2.afterLink": "danach $10/Monat mit großzügigen Limits",
+  "go.how.step2.link": "$10/Monat",
+  "go.how.step2.afterLink": "mit großzügigen Limits",
   "go.how.step3.title": "Loslegen mit Coding",
   "go.how.step3.body": "mit zuverlässigem Zugang zu Open-Source-Modellen",
   "go.privacy.title": "Deine Privatsphäre ist uns wichtig",
@@ -333,11 +330,11 @@ export const dict = {
   "go.faq.a2": "Go umfasst die unten aufgeführten Modelle mit großzügigen Limits und zuverlässigem Zugriff.",
   "go.faq.q3": "Ist Go dasselbe wie Zen?",
   "go.faq.a3":
-    "Nein. Zen ist Pay-as-you-go, während Go bei $5 für deinen ersten Monat beginnt, danach $10/Monat, mit großzügigen Limits und zuverlässigem Zugang zu einer kuratierten Modellauswahl.",
+    "Nein. Zen ist Pay-as-you-go, während Go $10/Monat kostet, mit großzügigen Limits und zuverlässigem Zugang zu einer kuratierten Modellauswahl.",
   "go.faq.q4": "Wie viel kostet Go?",
   "go.faq.a4.p1.beforePricing": "Go kostet",
-  "go.faq.a4.p1.pricingLink": "$5 im ersten Monat",
-  "go.faq.a4.p1.afterPricing": "danach $10/Monat mit großzügigen Limits.",
+  "go.faq.a4.p1.pricingLink": "$10/Monat",
+  "go.faq.a4.p1.afterPricing": "mit großzügigen Limits.",
   "go.faq.a4.p2.beforeAccount": "Du kannst dein Abonnement in deinem",
   "go.faq.a4.p2.accountLink": "Konto verwalten",
   "go.faq.a4.p3": "Jederzeit kündbar.",
@@ -373,7 +370,7 @@ export const dict = {
 
   "go.faq.q9": "Was ist der Unterschied zwischen kostenlosen Modellen und Go?",
   "go.faq.a9":
-    "Kostenlose Modelle beinhalten Big Pickle sowie Werbemodelle, die zum jeweiligen Zeitpunkt verfügbar sind, mit einem Kontingent von 200 Anfragen/Tag. Go bietet eine kuratierte Modellauswahl mit höheren Anfragekontingenten, die über rollierende Zeitfenster (5 Stunden, wöchentlich und monatlich) durchgesetzt werden, grob äquivalent zu $12 pro 5 Stunden, $30 pro Woche und $60 pro Monat (tatsächliche Anfragezahlen variieren je nach Modell und Nutzung).",
+    "Kostenlose Modelle beinhalten Big Pickle sowie Werbemodelle, die zum jeweiligen Zeitpunkt verfügbar sind, mit einem Kontingent von 200 Anfragen/Tag. Go bietet eine kuratierte Modellauswahl mit höheren Anfragekontingenten, die über rollierende Zeitfenster (5 Stunden, wöchentlich und monatlich) durchgesetzt werden, grob äquivalent zu Basiskontingenten von $12 pro 5 Stunden, $30 pro Woche und $60 pro Monat; modellspezifische Kontingente können abweichen (tatsächliche Anfragezahlen variieren je nach Modell und Nutzung).",
 
   "zen.api.error.rateLimitExceeded": "Ratenlimit überschritten. Bitte versuche es später erneut.",
   "zen.api.error.modelNotSupported": "Modell {{model}} wird nicht unterstützt",
@@ -674,10 +671,18 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "einige Sekunden",
   "workspace.lite.subscription.message": "Du hast OpenCode Go abonniert.",
   "workspace.lite.subscription.manage": "Abo verwalten",
-  "workspace.lite.subscription.rollingUsage": "Fortlaufende Nutzung",
+  "workspace.lite.subscription.rollingUsage": "5-Stunden-Nutzung",
+  "workspace.lite.subscription.rollingQuota": "5-Stunden-Kontingent",
   "workspace.lite.subscription.weeklyUsage": "Wöchentliche Nutzung",
+  "workspace.lite.subscription.weeklyQuota": "Wöchentliches Kontingent",
   "workspace.lite.subscription.monthlyUsage": "Monatliche Nutzung",
+  "workspace.lite.subscription.monthlyQuota": "Monatliches Kontingent",
   "workspace.lite.subscription.resetsIn": "Setzt zurück in",
+  "workspace.lite.subscription.showDetails": "Details anzeigen",
+  "workspace.lite.subscription.hideDetails": "Details ausblenden",
+  "workspace.lite.subscription.model": "Modell",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "Gesamt",
   "workspace.lite.subscription.useBalance": "Nutze dein verfügbares Guthaben, nachdem die Nutzungslimits erreicht sind",
   "workspace.lite.subscription.selectProvider":
     'Wähle "OpenCode Go" als Anbieter in deiner opencode-Konfiguration, um Go-Modelle zu verwenden.',
@@ -690,8 +695,8 @@ export const dict = {
   "workspace.lite.other.message":
     "Ein anderes Mitglied in diesem Workspace hat OpenCode Go bereits abonniert. Nur ein Mitglied pro Workspace kann abonnieren.",
   "workspace.lite.promo.description":
-    "OpenCode Go startet bei {{price}}, danach $10/Monat, und bietet zuverlässigen Zugang zu beliebten offenen Coding-Modellen mit großzügigen Nutzungslimits.",
-  "workspace.lite.promo.price": "$5 im ersten Monat",
+    "OpenCode Go kostet {{price}} und bietet zuverlässigen Zugang zu beliebten offenen Coding-Modellen mit großzügigen Nutzungslimits.",
+  "workspace.lite.promo.price": "$10/Monat",
   "workspace.lite.promo.modelsTitle": "Was enthalten ist",
   "workspace.lite.promo.footer":
     "Der Plan richtet sich in erster Linie an internationale Nutzer und bietet stabilen weltweiten Zugriff. Preise und Nutzungslimits können sich ändern, wenn wir Erkenntnisse aus der ersten Nutzung und dem Feedback gewinnen.",

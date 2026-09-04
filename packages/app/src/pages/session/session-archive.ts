@@ -3,6 +3,7 @@ import { produce } from "solid-js/store"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { errorMessage } from "@/pages/layout/helpers"
@@ -15,6 +16,7 @@ export function useSessionArchive() {
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
+  const serverSync = useServerSync()
   const tabs = useTabs()
   const { params } = useSessionKey()
 
@@ -56,6 +58,7 @@ export function useSessionArchive() {
           }),
         )
         sync().session.evict(sessionID)
+        serverSync().homeSessions.remove(sessionID)
         navigateAfterRemoval(sessionID, session.parentID, nextSession?.id)
         notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [sessionID] })
       })
