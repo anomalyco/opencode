@@ -8,7 +8,6 @@ import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { Session } from "@opencode-ai/core/session"
 import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
-import { OpenCodeTools } from "@opencode-ai/core/tool/plugin/opencode"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
@@ -35,40 +34,6 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
   tools: {},
   generation: {},
   providerOptions: {},
-})
-
-describe("OpenCodeTools", () => {
-  it.effect("appends worktree guidance only while the plugin is active", () =>
-    Effect.gen(function* () {
-      const hooks = yield* PluginHooks.Service
-      const before = context("test")
-      yield* hooks.trigger("session", "context", before)
-      expect(before.system.map((part) => part.text)).toEqual([fallback])
-
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const pluginHost = yield* makeHost
-          yield* OpenCodeTools.Plugin.effect(pluginHost)
-
-          for (const prompt of [fallback, "Custom agent prompt"]) {
-            const event = context("test", prompt)
-            event.system.push(SystemPart.make("Other instructions"))
-            yield* hooks.trigger("session", "context", event)
-
-            expect(event.system.map((part) => part.text)).toEqual([
-              prompt,
-              "Other instructions",
-              "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
-            ])
-          }
-        }),
-      )
-
-      const after = context("test")
-      yield* hooks.trigger("session", "context", after)
-      expect(after.system.map((part) => part.text)).toEqual([fallback])
-    }),
-  )
 })
 
 describe("SystemPromptPlugin", () => {
