@@ -53,6 +53,7 @@ type RegisteredPlugin = {
 type Value = {
   readonly ready: () => boolean
   readonly list: () => ReadonlyArray<State>
+  readonly server: () => readonly PluginInfo[]
   readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
   readonly slots: {
@@ -90,13 +91,15 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   const lifecycle = useTuiLifecycle()
   const client = useClient()
   const data = useData()
-  const [serverPlugins, setServerPlugins] = createSignal<
-    ReadonlyArray<
-      PluginInfo & { readonly state: { readonly status: "active" } } & {
-        readonly source: { readonly type: "package" } | { readonly type: "local" }
-      }
-    >
-  >([])
+  const [serverPlugins, setServerPlugins] = createSignal<readonly PluginInfo[]>([])
+  const serverTuiPlugins = createMemo(() =>
+    serverPlugins().filter(
+      (plugin): plugin is PluginInfo & { readonly source: { readonly type: "package" } | { readonly type: "local" } } =>
+        plugin.state.status === "active" &&
+        plugin.features.tui === true &&
+        (plugin.source.type === "package" || plugin.source.type === "local"),
+    ),
+  )
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
@@ -257,7 +260,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
         install: true,
         optional: true,
       })),
-      ...serverPlugins().map((plugin) => ({
+      ...serverTuiPlugins().map((plugin) => ({
         entry: plugin.source.type === "package" ? plugin.source.target : path.dirname(plugin.source.path),
         install: false,
         optional: true,
@@ -473,7 +476,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   const resolved = createMemo(() => resolveSlots({ paths: new Set(Object.keys(mounted)), claims: claims() }))
   createEffect(
     on(
-      () => JSON.stringify([serverPlugins(), config.data.plugins ?? []]),
+      () => JSON.stringify([serverTuiPlugins(), config.data.plugins ?? []]),
       () => {
         npmFailures.clear()
         void enqueue(reconcile).then(
@@ -486,20 +489,26 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   const syncServerPlugins = () =>
     client.api.plugin
       .list({ location: data.location.default() })
-      .then((response) =>
-        setServerPlugins(
-          response.data.filter(
-            (
-              plugin,
-            ): plugin is PluginInfo & { readonly state: { readonly status: "active" } } & {
-              readonly source: { readonly type: "package" } | { readonly type: "local" }
-            } =>
-              plugin.state.status === "active" &&
-              plugin.features.tui === true &&
-              (plugin.source.type === "package" || plugin.source.type === "local"),
-          ),
-        ),
-      )
+      .then((response) => {
+        const failed = response.data.filter(
+          (plugin) =>
+            plugin.state.status === "failed" &&
+            !serverPlugins().some(
+              (previous) =>
+                serverPluginName(previous) === serverPluginName(plugin) && isDeepEqual(previous.state, plugin.state),
+            ),
+        )
+        setServerPlugins(response.data)
+        const first = failed[0]
+        if (!first) return
+        host.toast.show({
+          variant: "error",
+          title: failed.length === 1 ? `Plugin failed: ${serverPluginName(first)}` : `${failed.length} plugins failed`,
+          message:
+            (failed.length > 1 ? `${failed.map(serverPluginName).join(", ")}\n` : "") + "Run /plugins to view details.",
+          action: { label: "Open plugins", run: () => host.keymap.dispatch("plugins.list") },
+        })
+      })
       .catch(() => undefined)
   createEffect(
     on(
@@ -538,6 +547,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       value={{
         ready: () => store.ready,
         list: () => store.states,
+        server: serverPlugins,
         registered: () =>
           Object.entries(store.registrations).map(([id, plugin]) => ({
             id,
@@ -555,6 +565,17 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
     >
       {props.children}
     </PluginContext.Provider>
+  )
+}
+
+function serverPluginName(plugin: PluginInfo) {
+  return (
+    plugin.id ??
+    (plugin.source.type === "package"
+      ? plugin.source.target
+      : plugin.source.type === "local"
+        ? plugin.source.path
+        : plugin.source.type)
   )
 }
 

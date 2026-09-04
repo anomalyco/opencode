@@ -321,9 +321,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       }),
       tab &&
         fileCommand({
-          id: "tab.close",
+          id: "file.close",
           title: language.t("command.tab.close"),
-          keybind: "mod+w",
+          keybind: settings.keybinds.get("tab.close") ?? "mod+w",
+          when: (event) => !(event.target instanceof Element && event.target.closest('[data-component="terminal"]')),
           onSelect: closeTab,
         }),
     ].filter((v) => !!v)

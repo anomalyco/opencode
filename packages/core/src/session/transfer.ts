@@ -297,6 +297,9 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
       metadata: meta,
       summary: redact("compaction-summary", message.id, message.summary),
       recent: redact("compaction-recent", message.id, message.recent),
+      ...(message.status === "completed"
+        ? { providerState: metadata("compaction-provider-state", message.id, message.providerState) }
+        : {}),
     }
   }
   return { ...message, metadata: meta }

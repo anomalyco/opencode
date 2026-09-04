@@ -494,7 +494,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 8px;
   padding: 24px;
   padding-bottom: 160px;
   text-align: center;
@@ -502,25 +502,26 @@
 
 [data-slot="session-review-v2-empty-changes"] [data-slot="icon-svg"] {
   flex: none;
+  margin-bottom: 8px;
   color: var(--v2-icon-icon-muted);
 }
 
 [data-slot="session-review-v2-empty-changes-title"] {
   flex: none;
-  margin-top: 4px;
   font-size: 13px;
   font-weight: 530;
-  line-height: var(--line-height-compact);
+  line-height: 13px;
   letter-spacing: -0.04px;
   color: var(--v2-text-text-base);
 }
 
 [data-slot="session-review-v2-empty-changes-description"] {
   flex: none;
+  height: 20px;
   max-width: 282px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 20px;
+  line-height: var(--line-height-base);
   text-align: center;
   letter-spacing: -0.04px;
   color: var(--v2-text-text-muted);

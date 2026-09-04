@@ -526,6 +526,150 @@ describe("ShellTool scanner permissions", () => {
   }
 })
 
+describe("ShellTool conditional process substitution", () => {
+  const test = isWindows || !Bun.which("bash") ? permissionIt.live.skip : permissionIt.live
+  for (const portable of [false, true]) {
+    test(`${portable ? "native" : "legacy"}: a nested deny prevents the substitution from running`, () =>
+      withScanner(
+        portable,
+        (registry, directory) =>
+          Effect.gen(function* () {
+            const agents = yield* Agent.Service
+            yield* agents.transform((editor) =>
+              editor.update(toolIdentity.agent, (agent) => {
+                agent.permissions = [
+                  { action: "shell", resource: "*", effect: "allow" },
+                  { action: "shell", resource: "printf *", effect: "deny" },
+                ]
+              }),
+            )
+            const marker = path.join(directory.active, "marker")
+            const result = yield* runPermissionCommand(
+              registry,
+              '[[ -n <(printf reached > marker) ]]; wait "$!"',
+              marker,
+              [],
+            )
+            expect(result.exit).toMatchObject({
+              _tag: "Success",
+              value: { status: "error", error: { message: expect.stringContaining("Permission denied: shell") } },
+            })
+            expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+          }),
+        "bash",
+      ))
+
+    for (const reply of ["reject", "once", "always"] as const) {
+      test(`${portable ? "native" : "legacy"}: conditional substitutions respect ${reply}`, () =>
+        withScanner(
+          portable,
+          (registry, directory) =>
+            Effect.gen(function* () {
+              const saved = yield* PermissionSaved.Service
+              const location = yield* Location.Service
+              yield* saved.add({ projectID: location.project.id, action: "shell", resources: ["wait *"] })
+              const marker = path.join(directory.active, "marker")
+              const command = '[[ -n <(printf reached > marker) ]]; wait "$!"'
+              const result = yield* runPermissionCommand(registry, command, marker, [reply])
+              expect(result.requests).toMatchObject([
+                { action: "shell", resources: ["printf reached > marker", 'wait "$!"'], save: ["printf *", "wait *"] },
+              ])
+              if (reply === "reject") {
+                expect(Exit.isFailure(result.exit)).toBe(true)
+                expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+                return
+              }
+              expect(result.exit).toMatchObject({
+                _tag: "Success",
+                value: { status: "completed", metadata: { exit: 0 } },
+              })
+              expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
+              yield* Effect.promise(() => fs.unlink(marker))
+              const repeat = yield* runPermissionCommand(
+                registry,
+                command,
+                marker,
+                reply === "always" ? [] : ["reject"],
+              )
+              expect(repeat.requests).toHaveLength(reply === "always" ? 0 : 1)
+              expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(reply === "always")
+            }),
+          "bash",
+        ))
+    }
+  }
+})
+
+describe("ShellTool compound syntax approval compatibility", () => {
+  for (const fixture of [
+    {
+      shell: "zsh",
+      command: 'for value (a b) printf %s "$value"',
+      equivalent: 'for value in a b; do printf %s "$value"; done',
+      output: "ab",
+      saved: ["printf *"],
+    },
+    {
+      shell: "zsh",
+      command: 'for value (a b) { printf %s "$value"; }',
+      equivalent: 'for value in a b; do printf %s "$value"; done',
+      output: "ab",
+      saved: ["printf *"],
+    },
+    {
+      shell: "zsh",
+      command: 'for value ($(printf a)) do printf %s "$value"; done',
+      equivalent: 'for value in $(printf a); do printf %s "$value"; done',
+      output: "a",
+      saved: ["printf *"],
+    },
+    {
+      shell: "bash",
+      command: 'probe() for value in a b; do printf %s "$value"; done; probe',
+      equivalent: 'probe() { for value in a b; do printf %s "$value"; done; }; probe',
+      output: "ab",
+      saved: ["printf *", "probe *"],
+    },
+    {
+      shell: "bash",
+      command: 'printf %s "$(probe() case value in value) printf hello;; esac; probe)"',
+      equivalent: 'printf %s "$(probe() { case value in value) printf hello;; esac; }; probe)"',
+      output: "hello",
+      saved: ["printf *", "probe *"],
+    },
+  ]) {
+    const test = isWindows || !Bun.which(fixture.shell) ? permissionIt.live.skip : permissionIt.live
+    for (const portable of [false, true]) {
+      test(`${fixture.shell} ${portable ? "native" : "legacy equivalent"}: ${fixture.command}`, () =>
+        withScanner(
+          portable,
+          (registry, directory) =>
+            Effect.gen(function* () {
+              const saved = yield* PermissionSaved.Service
+              const location = yield* Location.Service
+              yield* saved.add({ projectID: location.project.id, action: "shell", resources: fixture.saved })
+              const result = yield* runPermissionCommand(
+                registry,
+                portable ? fixture.command : fixture.equivalent,
+                path.join(directory.active, "marker"),
+                [],
+              )
+              expect(result.requests).toEqual([])
+              expect(result.exit).toMatchObject({
+                _tag: "Success",
+                value: {
+                  status: "completed",
+                  metadata: { exit: 0 },
+                  content: [{ type: "text", text: fixture.output }, { type: "text" }],
+                },
+              })
+            }),
+          fixture.shell,
+        ))
+    }
+  }
+})
+
 describe("ShellTool ordinary shell syntax", () => {
   for (const shell of ["bash", "zsh"]) {
     const test = isWindows || !Bun.which(shell) ? permissionIt.live.skip : permissionIt.live

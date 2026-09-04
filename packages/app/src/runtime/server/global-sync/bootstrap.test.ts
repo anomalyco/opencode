@@ -1,11 +1,59 @@
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
-import { loadPathQuery, loadProjectsQuery } from "./bootstrap"
+import { OpenCode } from "@opencode-ai/client/promise"
+import { createStore } from "solid-js/store"
+import { bootstrapGlobal, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
+import type { ServerSync } from "@/runtime/server/sync"
 
 type ProjectApi = ServerApi["project"]
 type WorktreeApi = ServerApi["worktree"]
+
+test("bootstraps projects through the native store setter and preserves subsequent updates", async () => {
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(new Request(input, init).url)
+        if (url.pathname === "/api/location")
+          return Response.json({
+            directory: "/repo",
+            project: { id: "project", directory: "/repo", canonical: "/repo" },
+          })
+        if (url.pathname === "/api/project")
+          return Response.json([{ id: "project", canonical: "/repo", time: { created: 1, updated: 1 }, sandboxes: [] }])
+        if (url.pathname === "/api/worktree") return Response.json([{ directory: "/repo" }])
+        throw new Error(`Unexpected request: ${url.pathname}`)
+      },
+      { preconnect() {} },
+    ),
+  })
+  const [store, setStore] = createStore<ServerSync["data"]>({
+    path: { state: "", config: "", worktree: "", directory: "", home: "" },
+    project: [],
+    provider_auth: {},
+    config: {},
+    reload: undefined,
+  })
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+  try {
+    await bootstrapGlobal({ serverAPI: api, scope: ServerScope.local, setGlobalStore: setStore, queryClient })
+    expect(store.project.map((project) => [project.id, project.worktree])).toEqual([["project", "/repo"]])
+
+    setStore("project", (projects) => projects.map((project) => ({ ...project, name: "Renamed" })))
+    expect(store.project[0]?.name).toBe("Renamed")
+    setStore("project", [])
+    expect(store.project).toEqual([])
+
+    await bootstrapGlobal({ serverAPI: api, scope: ServerScope.local, setGlobalStore: setStore, queryClient })
+    expect(store.project.map((project) => [project.id, project.worktree])).toEqual([["project", "/repo"]])
+    expect(store.config).toEqual({})
+  } finally {
+    queryClient.clear()
+  }
+})
 
 describe("query keys", () => {
   test("partitions identical directories by server scope", () => {
