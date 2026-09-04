@@ -15,43 +15,38 @@ Every time an opencode agent session starts, always start a Jules agent cron job
 
 ## Tracking model
 
-The monitor tracks session IDs dynamically from `~/.jules/tracked_sessions` (one ID per line) — it does not hardcode a list. Whenever a new Jules session is spawned for background work, register its session ID so the cron job keeps monitoring it:
+The monitor tracks session IDs dynamically from `~/.jules/tracked_sessions` ("id workspace" per line) — it does not hardcode a list. Whenever a new Jules session is spawned for background work, register its session ID so the cron job keeps monitoring it for the current workspace:
 
 ```bash
-~/.config/opencode/scripts/jules_monitor.sh add <session-id>
+~/.config/opencode/scripts/jules_monitor.sh add <session-id> "$PWD"
 ```
 
 ## Procedure
 
-### 1. Pull the monitor script
+### 1. Verify monitor script
 
-The monitor script lives at `~/.config/opencode/scripts/jules_monitor.sh`. If it is missing, copy it from `/home/team/Programming/Kernelopti/scripts/agents/jules_monitor.sh`:
+The monitor script lives at `~/.config/opencode/scripts/jules_monitor.sh`. Ensure it is executable:
 
 ```bash
-mkdir -p ~/.config/opencode/scripts
-cp /home/team/Programming/Kernelopti/scripts/agents/jules_monitor.sh ~/.config/opencode/scripts/jules_monitor.sh
 chmod +x ~/.config/opencode/scripts/jules_monitor.sh
 ```
 
-### 2. Install the cron job
+### 2. Install the workspace-scoped cron job
 
-Make sure the monitor runs every 5 minutes via cron. Install the entry if it is not already present:
+Ensure the workspace-scoped cron job is installed (runs every 5 minutes, idempotent per workspace):
 
 ```bash
-crontab -l 2>/dev/null | grep -q jules_monitor.sh \
-  || (crontab -l 2>/dev/null; echo "*/5 * * * * /home/team/.config/opencode/scripts/jules_monitor.sh") | crontab -
+~/.config/opencode/scripts/jules_monitor.sh install
 ```
-
-Use the absolute path in the crontab entry (cron does not expand `~`).
 
 ### 3. Register in-flight sessions
 
-Check what the monitor is tracking and add any in-flight sessions:
+Check what the monitor is tracking for this workspace and register in-flight sessions:
 
 ```bash
-~/.config/opencode/scripts/jules_monitor.sh list
-# Add any session that should be watched:
-~/.config/opencode/scripts/jules_monitor.sh add <session-id>
+~/.config/opencode/scripts/jules_monitor.sh list "$PWD"
+# Add any session that should be watched for the current workspace:
+~/.config/opencode/scripts/jules_monitor.sh add <session-id> "$PWD"
 # Stop tracking a finished/abandoned session:
 ~/.config/opencode/scripts/jules_monitor.sh remove <session-id>
 ```

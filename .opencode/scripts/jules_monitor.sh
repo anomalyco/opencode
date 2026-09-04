@@ -8,6 +8,7 @@
 #
 # Usage:
 #   jules_monitor.sh                       poll all tracked sessions (cron mode)
+#   jules_monitor.sh install [workspace]   install workspace-scoped cron entry (defaults to $PWD)
 #   jules_monitor.sh add <id> [workspace]  start tracking a session (workspace defaults to $PWD)
 #   jules_monitor.sh remove <id>           stop tracking a session
 #   jules_monitor.sh list [workspace]      list tracked sessions (filtered to workspace if given)
@@ -69,6 +70,18 @@ normalize() {
 }
 
 case "${1:-}" in
+    install)
+        ws="${2:-${PWD}}"
+        cron_entry="*/5 * * * * cd $ws && $HOME/.config/opencode/scripts/jules_monitor.sh"
+        crontab_content="$(crontab -l 2>/dev/null || true)"
+        if printf '%s\n' "$crontab_content" | grep -Fq "cd $ws &&"; then
+            echo "cron already installed for $ws"
+        else
+            (printf '%s\n' "$crontab_content"; echo "$cron_entry") | crontab -
+            echo "installed cron for $ws"
+        fi
+        exit 0
+        ;;
     add)
         [ -n "${2:-}" ] || { echo "usage: jules_monitor.sh add <session-id> [workspace]"; exit 1; }
         ws="${3:-${PWD}}"

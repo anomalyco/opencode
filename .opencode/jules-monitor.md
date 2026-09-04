@@ -2,7 +2,7 @@
 
 Whenever this agent session starts, always set up a Jules status monitor before doing other work:
 
-1. Ensure `~/.config/opencode/scripts/jules_monitor.sh` exists (copy from `/home/team/Programming/Kernelopti/scripts/agents/jules_monitor.sh` if missing).
+1. Ensure `~/.config/opencode/scripts/jules_monitor.sh` exists and is executable.
 2. Ensure a workspace-scoped cron job runs it every 5 minutes, scoped to this session's workspace: `~/.config/opencode/scripts/jules_monitor.sh install` (idempotent — adds one `cd <workspace> && ...` entry per workspace that opencode is opened in).
 3. Run `~/.config/opencode/scripts/jules_monitor.sh list` and register any in-flight sessions with `... add <session-id> "$PWD"`. Whenever you spawn a new Jules session for background work, register its ID too.
 4. Run the script once to verify it works.

@@ -54,6 +54,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { JulesDiagnostic } from "@opencode-ai/core/session/jules-diagnostic"
 import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -81,6 +82,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     Todo.node,
     Session.node,
     SessionProjector.node,
+    JulesDiagnostic.node,
     SessionStatus.node,
     BackgroundJob.node,
     RuntimeFlags.node,

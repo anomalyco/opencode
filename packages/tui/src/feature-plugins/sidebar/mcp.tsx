@@ -1,7 +1,7 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, createResource, For, Match, Show, Switch, createSignal, onCleanup } from "solid-js"
-import { readJulesMonitor } from "../../util/jules"
+import { readJulesMonitor, type JulesJob } from "../../util/jules"
 
 const id = "internal:sidebar-mcp"
 
@@ -28,9 +28,18 @@ function View(props: { api: TuiPluginApi }) {
   )
   const timer = setInterval(() => setJulesTick((x) => x + 1), 60_000)
   onCleanup(() => clearInterval(timer))
-  const julesJobs = createMemo(() =>
-    jules().jobs.filter((job) => job.workspace === workspace() || job.workspace === undefined),
-  )
+  const julesJobs = createMemo(() => {
+    const ws = workspace()
+    const all = jules().jobs
+    const filtered = all.filter((job) => job.workspace === ws || job.workspace === undefined)
+    return filtered.length > 0 ? filtered : all
+  })
+  const jobLabel = (job: JulesJob) => {
+    const ws = workspace()
+    const wsHint =
+      job.workspace && ws && job.workspace !== ws ? ` (${job.workspace.split("/").filter(Boolean).pop()})` : ""
+    return `${job.id.slice(0, 8)}${wsHint}`
+  }
   const julesActive = createMemo(() =>
     julesJobs().filter((job) => job.status && job.status !== "COMPLETED" && job.status !== "FAILED").length,
   )
@@ -132,7 +141,7 @@ function View(props: { api: TuiPluginApi }) {
                       •
                     </text>
                     <text fg={theme().text} wrapMode="word">
-                      {job.id.slice(0, 8)}{" "}
+                      {jobLabel(job)}{" "}
                       <span style={{ fg: theme().textMuted }}>{job.status ?? "UNKNOWN"}</span>
                     </text>
                   </box>

@@ -7,8 +7,10 @@ import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { SkillV2 } from "../skill"
 import customizeOpencodeContent from "./skill/customize-opencode.md" with { type: "text" }
+import julesMonitorContent from "./skill/jules-monitor.md" with { type: "text" }
 
 export const CustomizeOpencodeContent = customizeOpencodeContent
+export const JulesMonitorContent = julesMonitorContent
 
 export const Plugin = define({
   id: "skill",
@@ -23,6 +25,18 @@ export const Plugin = define({
               "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, commands, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself.",
             location: AbsolutePath.make("/builtin/customize-opencode.md"),
             content: CustomizeOpencodeContent,
+          }),
+        }),
+      )
+      draft.source(
+        SkillV2.EmbeddedSource.make({
+          type: "embedded",
+          skill: SkillV2.Info.make({
+            name: "jules-monitor",
+            description:
+              "Set up and run a Jules session status monitor. USE WHEN starting an opencode agent session, whenever an agent session begins, when Jules sessions are running in the background, when you need to check on in-flight Jules implementation agents, when spawning a Jules session to track, or when asked to monitor Jules status.",
+            location: AbsolutePath.make("/builtin/jules-monitor.md"),
+            content: JulesMonitorContent,
           }),
         }),
       )
