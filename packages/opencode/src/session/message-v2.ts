@@ -145,17 +145,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   // Only apply this workaround if the model actually supports that media input -
   // otherwise unsupportedParts() will turn it into a user-visible error.
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
-    if (model.api.npm === "@ai-sdk/anthropic") return true
-    if (model.api.npm === "@ai-sdk/openai") return true
-    if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
-    if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
-    if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
-    if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
-    if (model.api.npm === "@ai-sdk/google") {
-      const id = model.api.id.toLowerCase()
-      return id.includes("gemini-3") && !id.includes("gemini-2")
-    }
-    return false
+    if (attachment.mime === "application/pdf") return model.capabilities.input.pdf
+    if (!attachment.mime.startsWith("image/")) return false
+    return model.capabilities.input.image
   }
 
   const toModelOutput = (options: { toolCallId: string; input: unknown; output: unknown }) => {
@@ -380,6 +372,35 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         // Inject pending media as a user message for providers that don't support
         // media (images, PDFs) in tool results
         if (media.length > 0) {
+          const mediaParts = media.flatMap((attachment) => {
+            if (attachment.mime === "application/pdf" && model.capabilities.input.pdf) {
+              return [
+                {
+                  type: "file" as const,
+                  url: attachment.url,
+                  mediaType: attachment.mime,
+                  filename: attachment.filename,
+                },
+              ]
+            }
+            if (attachment.mime.startsWith("image/") && model.capabilities.input.image) {
+              return [
+                {
+                  type: "file" as const,
+                  url: attachment.url,
+                  mediaType: attachment.mime,
+                  filename: attachment.filename,
+                },
+              ]
+            }
+
+            return [
+              {
+                type: "text" as const,
+                text: `[Attached ${attachment.mime}: ${attachment.filename ?? "file"} could not be sent to this model]`,
+              },
+            ]
+          })
           result.push({
             id: MessageID.ascending(),
             role: "user",
@@ -388,12 +409,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 type: "text" as const,
                 text: SYNTHETIC_ATTACHMENT_PROMPT,
               },
-              ...media.map((attachment) => ({
-                type: "file" as const,
-                url: attachment.url,
-                mediaType: attachment.mime,
-                filename: attachment.filename,
-              })),
+              ...mediaParts,
             ],
           })
         }

@@ -319,7 +319,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("converts assistant tool completion into tool-call + tool-result messages with attachments", async () => {
+  test("converts assistant tool completion with image attachments for text-capable models", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -397,45 +397,41 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: {
-              type: "content",
-              value: [
-                { type: "text", text: "ok" },
-                { type: "media", mediaType: "image/png", data: "Zm9v" },
-              ],
-            },
+            output: { type: "text", value: "ok" },
             providerOptions: { openai: { tool: "meta" } },
           },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          { type: "text", text: "[Attached image/png: attachment.png could not be sent to this model]" },
         ],
       },
     ])
   })
 
-  test("preserves jpeg tool-result media for anthropic models", async () => {
-    const anthropicModel: Provider.Model = {
+  test("downgrades unsupported pdf tool-result media to text for text-only models", async () => {
+    const textOnlyPdfModel: Provider.Model = {
       ...model,
-      id: ModelV2.ID.make("anthropic/claude-opus-4-7"),
-      providerID: ProviderV2.ID.make("anthropic"),
+      id: ModelV2.ID.make("test-model-pdf"),
       api: {
-        id: "claude-opus-4-7-20250805",
-        url: "https://api.anthropic.com",
-        npm: "@ai-sdk/anthropic",
+        id: "test-model-pdf",
+        url: "https://example.com",
+        npm: "@ai-sdk/openai",
       },
       capabilities: {
         ...model.capabilities,
-        attachment: true,
-        input: {
-          ...model.capabilities.input,
-          image: true,
-          pdf: true,
-        },
+        attachment: false,
+        input: { ...model.capabilities.input, image: false, pdf: false },
       },
     }
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]).toString(
       "base64",
     )
-    const userID = "m-user-anthropic"
-    const assistantID = "m-assistant-anthropic"
+    const userID = "m-user-pdf"
+    const assistantID = "m-assistant-pdf"
     const input: SessionV1.WithParts[] = [
       {
         info: userInfo(userID),
@@ -451,9 +447,9 @@ describe("session.message-v2.toModelMessage", () => {
         info: assistantInfo(assistantID, userID),
         parts: [
           {
-            ...basePart(assistantID, "a1-anthropic"),
+            ...basePart(assistantID, "a1-pdf"),
             type: "tool",
-            callID: "call-anthropic-1",
+            callID: "call-pdf-1",
             tool: "read",
             state: {
               status: "completed",
@@ -464,11 +460,11 @@ describe("session.message-v2.toModelMessage", () => {
               time: { start: 0, end: 1 },
               attachments: [
                 {
-                  ...basePart(assistantID, "file-anthropic-1"),
+                  ...basePart(assistantID, "file-pdf-1"),
                   type: "file",
-                  mime: "image/jpeg",
-                  filename: "rails-demo.png",
-                  url: `data:image/jpeg;base64,${jpeg}`,
+                  mime: "application/pdf",
+                  filename: "rails-demo.pdf",
+                  url: `data:application/pdf;base64,${jpeg}`,
                 },
               ],
             },
@@ -477,21 +473,42 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    const result = ProviderTransform.message(await MessageV2.toModelMessages(input, anthropicModel), anthropicModel, {})
-    expect(result).toHaveLength(3)
-    expect(result[2].role).toBe("tool")
-    expect(result[2].content[0]).toMatchObject({
-      type: "tool-result",
-      toolCallId: "call-anthropic-1",
-      toolName: "read",
-      output: {
-        type: "content",
-        value: [
-          { type: "text", text: "Image read successfully" },
-          { type: "media", mediaType: "image/jpeg", data: jpeg },
+    expect(await MessageV2.toModelMessages(input, textOnlyPdfModel)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-pdf-1",
+            toolName: "read",
+            input: { filePath: "/tmp/rails-demo.png" },
+            providerExecuted: undefined,
+          },
         ],
       },
-    })
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-pdf-1",
+            toolName: "read",
+            output: { type: "text", value: "Image read successfully" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          { type: "text", text: "[Attached application/pdf: rails-demo.pdf could not be sent to this model]" },
+        ],
+      },
+    ])
   })
 
   test("moves bedrock pdf tool-result media into a separate user message", async () => {
@@ -582,7 +599,89 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-bedrock-pdf-1",
             toolName: "read",
-            output: { type: "text", value: "PDF read successfully" },
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "PDF read successfully" },
+                { type: "media", mediaType: "application/pdf", data: pdf },
+              ],
+            },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("downgrades unsupported tool-result image media to text for text-only models", async () => {
+    const userID = "m-user-text-only"
+    const assistantID = "m-assistant-text-only"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1-text-only"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-text-only"),
+            type: "tool",
+            callID: "call-text-only-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/example.png" },
+              output: "Image read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-text-only-1"),
+                  type: "file",
+                  mime: "image/png",
+                  filename: "example.png",
+                  url: "data:image/png;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-text-only-1",
+            toolName: "read",
+            input: { filePath: "/tmp/example.png" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-text-only-1",
+            toolName: "read",
+            output: { type: "text", value: "Image read successfully" },
           },
         ],
       },
@@ -590,12 +689,7 @@ describe("session.message-v2.toModelMessage", () => {
         role: "user",
         content: [
           { type: "text", text: "Attached media from tool result:" },
-          {
-            type: "file",
-            mediaType: "application/pdf",
-            filename: "example.pdf",
-            data: `data:application/pdf;base64,${pdf}`,
-          },
+          { type: "text", text: "[Attached image/png: example.png could not be sent to this model]" },
         ],
       },
     ])
