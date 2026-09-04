@@ -852,6 +852,36 @@ it.instance(
 )
 
 it.instance(
+  "revert preserves unicode files that existed in snapshot",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const files = ["Doc/设计/初始设置.md", "Doc/设计/执行手册/规则与流程.md"]
+    for (const file of files) {
+      yield* write(`${tmp.path}/${file}`, `original ${file}`)
+    }
+    const hash = yield* snapshot.track()
+    expect(hash).toBeTruthy()
+    for (const file of files) {
+      yield* rm(`${tmp.path}/${file}`)
+      yield* write(`${tmp.path}/${file}`, `recreated ${file}`)
+    }
+    const patch = yield* snapshot.patch(hash!)
+    for (const file of files) {
+      expect(patch.files).toContain(fwd(tmp.path, file))
+    }
+
+    yield* snapshot.revert([patch])
+
+    for (const file of files) {
+      expect(yield* exists(`${tmp.path}/${file}`)).toBe(true)
+      expect(yield* readText(`${tmp.path}/${file}`)).toBe(`original ${file}`)
+    }
+  }),
+  { git: true },
+)
+
+it.instance(
   "diffFull sets status based on git change type",
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
