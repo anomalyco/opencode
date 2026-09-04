@@ -7,9 +7,6 @@ import { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
 import type { ServerSync } from "@/runtime/server/sync"
 
-type ProjectApi = ServerApi["project"]
-type WorktreeApi = ServerApi["worktree"]
-
 test("bootstraps projects through the native store setter and preserves subsequent updates", async () => {
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
@@ -79,26 +76,32 @@ describe("query keys", () => {
     expect(result).toMatchObject({ directory: "/repo/subpath", worktree: "/repo" })
   })
 
-  test("loads projects from the current endpoint", async () => {
+  test("loads each project's inventory through its own location using the real client", async () => {
     const calls: string[] = []
-    const projects = {
-      list: async () => [
-        { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
-        { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
-      ],
-    } as unknown as ProjectApi
-    const worktrees = {
-      list: async ({ projectID }: { projectID: string }) => {
-        calls.push(projectID)
-        return [
-          { directory: `/${projectID}` },
-          { directory: `/${projectID}/clone` },
-          { directory: `/${projectID}/copy`, strategy: "git" },
-        ]
-      },
-    } as unknown as WorktreeApi
+    const api = OpenCode.make({
+      baseUrl: "http://localhost:3000",
+      fetch: Object.assign(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = new URL(new Request(input, init).url)
+          if (url.pathname === "/api/project")
+            return Response.json([
+              { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+              { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+            ])
+          const directory = url.searchParams.get("location[directory]")
+          if (url.pathname !== "/api/worktree" || !directory) throw new Error(`Unexpected request: ${url}`)
+          calls.push(directory)
+          return Response.json([
+            { directory },
+            { directory: `${directory}/clone` },
+            { directory: `${directory}/copy`, strategy: "git" },
+          ])
+        },
+        { preconnect() {} },
+      ),
+    })
 
-    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, projects, worktrees))
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project, api.worktree))
 
     expect(result.map((project) => project.id)).toEqual(["a", "b"])
     expect(result.map((project) => project.sandboxes)).toEqual([
@@ -109,24 +112,30 @@ describe("query keys", () => {
       [{ directory: "/a" }, { directory: "/a/clone" }, { directory: "/a/copy", strategy: "git" }],
       [{ directory: "/b" }, { directory: "/b/clone" }, { directory: "/b/copy", strategy: "git" }],
     ])
-    expect(calls.toSorted()).toEqual(["a", "b"])
+    expect(calls.toSorted()).toEqual(["/a", "/b"])
   })
 
   test("keeps projects whose directory inventory cannot load", async () => {
-    const projects = {
-      list: async () => [
-        { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
-        { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
-      ],
-    } as unknown as ProjectApi
-    const worktrees = {
-      list: async ({ projectID }: { projectID: string }) => {
-        if (projectID === "b") throw new Error("unavailable")
-        return [{ directory: "/a/copy", strategy: "git" as const }]
-      },
-    } as unknown as WorktreeApi
+    const api = OpenCode.make({
+      baseUrl: "http://localhost:3000",
+      fetch: Object.assign(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = new URL(new Request(input, init).url)
+          if (url.pathname === "/api/project")
+            return Response.json([
+              { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+              { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+            ])
+          const directory = url.searchParams.get("location[directory]")
+          if (url.pathname !== "/api/worktree" || !directory) throw new Error(`Unexpected request: ${url}`)
+          if (directory === "/b") return Response.json({ message: "unavailable" }, { status: 503 })
+          return Response.json([{ directory: "/a/copy", strategy: "git" }])
+        },
+        { preconnect() {} },
+      ),
+    })
 
-    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, projects, worktrees))
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project, api.worktree))
 
     expect(result.map((project) => ({ id: project.id, sandboxes: project.sandboxes }))).toEqual([
       { id: "a", sandboxes: ["/a/copy"] },

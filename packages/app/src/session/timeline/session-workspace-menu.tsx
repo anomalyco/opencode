@@ -40,8 +40,7 @@ export function SessionWorkspaceMenu(props: {
     if (!open) return
     const sdk = serverSDK
     void sdk.api.worktree
-      .refresh({ projectID: props.project.id })
-      .then(() => sdk.api.worktree.list({ projectID: props.project.id }))
+      .list({ location: { directory: props.directory } })
       .then((items) =>
         setDirectories(
           items.map((item) => item.directory).filter((directory) => !sameDirectory(props.project.worktree, directory)),

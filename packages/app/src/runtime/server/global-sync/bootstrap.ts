@@ -79,7 +79,7 @@ export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, work
                 .filter((project) => !!project?.id)
                 .map(async (project) => {
                   const directories = await worktrees
-                    .list({ projectID: project.id })
+                    .list({ location: { directory: project.canonical } })
                     .catch(() => [
                       { directory: project.canonical },
                       ...(project.sandboxes ?? [])
