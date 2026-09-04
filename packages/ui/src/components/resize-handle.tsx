@@ -28,8 +28,17 @@ export function ResizeHandle(props: ResizeHandleProps) {
     "classList",
   ])
 
-  const handleMouseDown = (e: MouseEvent) => {
+  // Use pointer capture instead of mousedown + document listeners.
+  // Without capture the drag silently does nothing in Electron: the handle is
+  // correctly positioned and is the topmost element at that point
+  // (document.elementFromPoint returns it), and dispatching synthetic
+  // mousedown/mousemove/mouseup resizes the panel — but real pointer input
+  // never drives it, because the events after the press are not guaranteed to
+  // reach this element. setPointerCapture guarantees they do.
+  const handlePointerDown = (e: PointerEvent & { currentTarget: HTMLDivElement }) => {
     if (e.detail > 1) return
+    const target = e.currentTarget
+    target.setPointerCapture(e.pointerId)
     e.preventDefault()
     const edge = local.edge ?? (local.direction === "vertical" ? "start" : "end")
     const start = local.direction === "horizontal" ? e.clientX : e.clientY
@@ -72,8 +81,10 @@ export function ResizeHandle(props: ResizeHandleProps) {
     const onMouseUp = () => {
       document.body.style.userSelect = ""
       document.body.style.overflow = ""
-      document.removeEventListener("mousemove", onMouseMove)
-      document.removeEventListener("mouseup", onMouseUp)
+      target.releasePointerCapture?.(e.pointerId)
+      target.removeEventListener("pointermove", onMouseMove)
+      target.removeEventListener("pointerup", onMouseUp)
+      target.removeEventListener("pointercancel", onMouseUp)
 
       if (collapsed) {
         onCollapse?.()
@@ -82,8 +93,9 @@ export function ResizeHandle(props: ResizeHandleProps) {
       onCollapseChange?.(false)
     }
 
-    document.addEventListener("mousemove", onMouseMove)
-    document.addEventListener("mouseup", onMouseUp)
+    target.addEventListener("pointermove", onMouseMove)
+    target.addEventListener("pointerup", onMouseUp)
+    target.addEventListener("pointercancel", onMouseUp)
   }
 
   return (
@@ -96,7 +108,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
-      onMouseDown={handleMouseDown}
+      onPointerDown={handlePointerDown}
     />
   )
 }
