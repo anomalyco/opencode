@@ -20,6 +20,29 @@ story("declining search is an explicit disabled selection", async ({ mount }) =>
   await expect(card).toHaveCount(0)
 })
 
+story("sizes provider options to their content", async ({ mount, page }) => {
+  const component = await mount("app-current-session-surface--web-search-request")
+  await component.getByRole("button", { name: "Search provider Any", exact: true }).click()
+  const menu = page.getByRole("listbox", { name: "Search provider", exact: true })
+  await expect(menu).toBeVisible()
+  const metrics = await menu.evaluate((listbox) => {
+    const items = Array.from(listbox.querySelectorAll('[data-component="menu-v2-item"]'))
+    const longest = items
+      .flatMap((item) => {
+        const label = item.querySelector('[data-slot="menu-v2-item-content"]')?.getBoundingClientRect()
+        const check = item.querySelector('[data-slot="menu-v2-item-indicator"]')?.getBoundingClientRect()
+        return label && check ? [{ label, check }] : []
+      })
+      .toSorted((a, b) => b.label.width - a.label.width)[0]
+    return {
+      width: listbox.getBoundingClientRect().width,
+      gap: longest ? longest.check.left - longest.label.right : 0,
+    }
+  })
+  expect(metrics.width).toBeLessThan(160)
+  expect(metrics.gap).toBe(24)
+})
+
 for (const width of [360, 1200]) {
   for (const direction of ["ltr", "rtl"]) {
     for (const theme of ["light", "dark"]) {

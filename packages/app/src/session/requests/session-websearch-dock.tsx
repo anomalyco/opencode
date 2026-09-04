@@ -48,6 +48,7 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
               onSelect={(option) => option && props.model.select(option.value)}
               disabled={busy() || unavailable()}
               placeholder={language.t("session.websearch.provider")}
+              contentClass="websearch-provider-menu"
             />
           </SettingsRow>
         </div>

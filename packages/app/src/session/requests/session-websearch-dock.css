@@ -47,3 +47,12 @@
     gap: 16px;
   }
 }
+
+[data-component="menu-v2-content"][data-slot="select-v2-content"].websearch-provider-menu {
+  width: max-content;
+  min-width: 0;
+
+  [data-component="menu-v2-item"] {
+    gap: 24px;
+  }
+}
