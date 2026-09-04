@@ -27,6 +27,7 @@ export interface Decision {
 }
 
 export function isRetryable(error: AIError) {
+  if (error.reason._tag === "QuotaExceeded" && error.reason.classification === "free-tier") return false
   const override = error.reason.http?.headers["x-should-retry"]
   if (override === "true") return true
   if (override === "false") return false

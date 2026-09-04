@@ -3,6 +3,19 @@ import { isContextOverflow } from "../src/index.js"
 import { classifyProviderFailure } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
+  test("distinguishes free-tier exhaustion from transient rate limits", () => {
+    const rawBody = JSON.stringify({ error: { type: "FreeUsageLimitError", message: "Rate limit exceeded" } })
+    const reason = classifyProviderFailure({ message: "Rate limit exceeded", status: 429, rawBody })
+    expect(reason).toMatchObject({ _tag: "QuotaExceeded", classification: "free-tier", body: rawBody })
+    expect(reason.message).toBe("Rate limit exceeded")
+    expect(classifyProviderFailure({ message: rawBody })).toMatchObject({
+      _tag: "QuotaExceeded",
+      classification: "free-tier",
+    })
+    expect(classifyProviderFailure({ message: "Rate limit exceeded", status: 429 })._tag).toBe("RateLimit")
+    expect(classifyProviderFailure({ message: "FreeUsageLimitError", status: 429 })._tag).toBe("RateLimit")
+  })
+
   test("classifies provider token limit messages as context overflow", () => {
     const messages = [
       "tokens in request more than max tokens allowed",

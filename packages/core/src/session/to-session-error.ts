@@ -14,6 +14,12 @@ export function toSessionError(cause: unknown): SessionError.Error {
       case "Authentication":
         return providerError("provider.auth", cause.reason)
       case "QuotaExceeded":
+        if (cause.reason.classification === "free-tier")
+          return providerError(
+            "provider.free-tier-limit",
+            cause.reason,
+            "Free usage exceeded, subscribe to Go: https://opencode.ai/go",
+          )
         return providerError("provider.quota", cause.reason)
       case "ContentPolicy":
         return providerError("provider.content-filter", cause.reason)
@@ -60,7 +66,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
   return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
 }
 
-function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
+function providerError(type: string, reason: AIError["reason"], message = reason.message): SessionError.Error {
   const status = reason.http?.status
-  return { type, message: reason.message, ...(status === undefined ? {} : { status }) }
+  return { type, message, ...(status === undefined ? {} : { status }) }
 }

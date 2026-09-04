@@ -18,6 +18,7 @@ import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { TestLLM } from "@opencode-ai/ai/testing"
+import { classifyProviderFailure } from "@opencode-ai/ai/provider-error"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -4756,6 +4757,38 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject([
       Expected.user("Fail raw stream durably"),
       { type: "assistant", finish: "error", error: { type: "provider.invalid-request", message: "Invalid request" } },
+    ])
+  })
+
+  scenario("settles free-tier limits once with a Go signup prompt", function* (s) {
+    const failure = new AIError({
+      reason: classifyProviderFailure({
+        message: "Rate limit exceeded",
+        status: 429,
+        rawBody: JSON.stringify({ error: { type: "FreeUsageLimitError", message: "Rate limit exceeded" } }),
+        retryAfterMs: 60_000,
+      }),
+    })
+    yield* s.llm.push(Stream.fail(failure))
+
+    expect(yield* s.runPrompt("Use the free model").pipe(Effect.flip)).toBe(failure)
+    expect(s.requests).toHaveLength(1)
+    const events = yield* recordedEventTypes(sessionID)
+    expect(events).not.toContain("session.retry.scheduled.1")
+    expect(events.filter((type) => type === "session.step.failed.1")).toHaveLength(1)
+    yield* replaySessionProjection(sessionID)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Use the free model"),
+      Expected.assistant(
+        {
+          finish: "error",
+          error: {
+            type: "provider.free-tier-limit",
+            message: "Free usage exceeded, subscribe to Go: https://opencode.ai/go",
+          },
+        },
+        [],
+      ),
     ])
   })
 

@@ -110,6 +110,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   const text = [input.message, body].filter((value) => value.length > 0).join("\n")
   const clientScoped = input.status === undefined || (input.status >= 400 && input.status < 500)
 
+  if (codes.includes("freeusagelimiterror")) return new QuotaExceededError({ ...details, classification: "free-tier" })
   if (
     clientScoped &&
     (codes.includes("context_length_exceeded") ||

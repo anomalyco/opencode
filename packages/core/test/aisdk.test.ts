@@ -902,6 +902,28 @@ it.effect("preserves complete HTTP context on AI SDK call errors", () =>
   }),
 )
 
+it.effect("stops retrying free-tier limits from AI SDK providers", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        message: "Rate limit exceeded",
+        statusCode: 429,
+        responseHeaders: { "retry-after": "60" },
+        responseBody: JSON.stringify({
+          type: "error",
+          error: { type: "FreeUsageLimitError", message: "Rate limit exceeded" },
+        }),
+      }),
+    )
+    expect(SessionRunnerRetry.isRetryable(error)).toBeFalse()
+    expect(toSessionError(error)).toEqual({
+      type: "provider.free-tier-limit",
+      message: "Free usage exceeded, subscribe to Go: https://opencode.ai/go",
+      status: 429,
+    })
+  }),
+)
+
 it.effect("classifies retryable AI SDK failures with retry-after details", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(

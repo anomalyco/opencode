@@ -24,10 +24,33 @@ import { Provider } from "@opencode-ai/core/provider"
 import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
+import { classifyProviderFailure } from "@opencode-ai/ai/provider-error"
 
 const llm = (reason: AIError["reason"]) => new AIError({ reason })
 
 describe("toSessionError", () => {
+  test("stops retrying free-tier limits and prompts for OpenCode Go", () => {
+    const error = llm(
+      classifyProviderFailure({
+        message: "Rate limit exceeded",
+        status: 429,
+        rawBody: JSON.stringify({ error: { type: "FreeUsageLimitError", message: "Rate limit exceeded" } }),
+        http: new HttpContext({
+          url: "https://opencode.ai/zen/v1/chat/completions",
+          status: 429,
+          headers: { "retry-after": "60" },
+        }),
+      }),
+    )
+
+    expect(SessionRunnerRetry.isRetryable(error)).toBe(false)
+    expect(toSessionError(error)).toEqual({
+      type: "provider.free-tier-limit",
+      message: "Free usage exceeded, subscribe to Go: https://opencode.ai/go",
+      status: 429,
+    })
+  })
+
   test("maps every AI error reason to the open wire type", () => {
     expect(toSessionError(llm(new RateLimitError({ message: "rate", retryAfterMs: 123 })))).toEqual({
       type: "provider.rate-limit",
@@ -239,5 +262,16 @@ describe("toSessionError", () => {
         llm(new InvalidRequestError({ message: "retry", http: http({ "x-should-retry": "true" }) })),
       ),
     ).toBeTrue()
+    expect(
+      SessionRunnerRetry.isRetryable(
+        llm(
+          new QuotaExceededError({
+            message: "Free limit reached",
+            classification: "free-tier",
+            http: http({ "x-should-retry": "true" }),
+          }),
+        ),
+      ),
+    ).toBeFalse()
   })
 })

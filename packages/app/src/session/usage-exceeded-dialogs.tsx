@@ -1,4 +1,5 @@
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { useServerSDK } from "@/runtime/server/client"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import type { SessionStatus } from "@opencode-ai/client/promise"
 import { onCleanup } from "solid-js"
@@ -42,6 +43,7 @@ function goUpsellKeys(status: SessionStatus) {
 
 export function useUsageExceededDialogs() {
   const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const dialog = useDialog()
   const { params } = useSessionLayout()
   const { t, locale } = useI18n()
@@ -54,6 +56,41 @@ export function useUsageExceededDialogs() {
     [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: null,
   })
 
+  const showFreeTier = () => {
+    if (dialog.active) return
+    const seen = goUpsellState[GO_UPSELL_FREE_TIER_LAST_SEEN_AT]
+    if (seen && Date.now() - seen < GO_UPSELL_WINDOW) return
+    if (goUpsellState[GO_UPSELL_FREE_TIER_DONT_SHOW]) return
+
+    void dialog.show(() => (
+      <DialogUsageExceeded
+        title={t("dialog.usageExceeded.freeTier.title")}
+        description={t("dialog.usageExceeded.freeTier.description")}
+        actionLabel={t("dialog.usageExceeded.freeTier.actionLabel")}
+        link="https://opencode.ai/go"
+        onClose={(dontShowAgain) => {
+          setGoUpsellState(GO_UPSELL_FREE_TIER_LAST_SEEN_AT, Date.now())
+          if (dontShowAgain) setGoUpsellState(GO_UPSELL_FREE_TIER_DONT_SHOW, Date.now())
+          else {
+            void import("@/providers/connect/dialog").then((x) => {
+              const controller = x.useProviderConnectController()
+              controller.select("opencode-go")
+              void dialog.show(() => <x.DialogConnectProvider controller={controller} />)
+            })
+          }
+        }}
+      />
+    ))
+  }
+
+  onCleanup(
+    serverSDK.event.on("session.execution.failed", (evt) => {
+      if (evt.data.sessionID !== params.id) return
+      if (typeof evt.data.error === "string" || evt.data.error.type !== "provider.free-tier-limit") return
+      showFreeTier()
+    }),
+  )
+
   onCleanup(
     sdk().event.on("session.status", (evt) => {
       if (evt.data.sessionID !== params.id) return
@@ -64,32 +101,13 @@ export function useUsageExceededDialogs() {
 
       const keys = goUpsellKeys(evt.data.status)
       if (!keys) return
+      if (action.reason === "free_tier_limit") return showFreeTier()
 
       const seen = goUpsellState[keys.lastSeenAt]
       if (seen && Date.now() - seen < GO_UPSELL_WINDOW) return
       if (goUpsellState[keys.dontShow]) return
 
-      if (action.reason === "free_tier_limit") {
-        dialog.show(() => (
-          <DialogUsageExceeded
-            title={isEnglish() ? action.title : t("dialog.usageExceeded.freeTier.title")}
-            description={isEnglish() ? action.message : t("dialog.usageExceeded.freeTier.description")}
-            actionLabel={isEnglish() ? action.label : t("dialog.usageExceeded.freeTier.actionLabel")}
-            link={action.link}
-            onClose={(dontShowAgain) => {
-              setGoUpsellState(keys.lastSeenAt, Date.now())
-              if (dontShowAgain) setGoUpsellState(keys.dontShow, Date.now())
-              else {
-                void import("@/providers/connect/dialog").then((x) => {
-                  const controller = x.useProviderConnectController()
-                  controller.select("opencode-go")
-                  void dialog.show(() => <x.DialogConnectProvider controller={controller} />)
-                })
-              }
-            }}
-          />
-        ))
-      } else if (action.reason === "account_rate_limit") {
+      if (action.reason === "account_rate_limit") {
         dialog.show(() => (
           <DialogUsageExceeded
             title={isEnglish() ? action.title : t("dialog.usageExceeded.accountRateLimit.title")}

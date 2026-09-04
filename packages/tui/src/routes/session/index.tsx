@@ -114,6 +114,7 @@ import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { useSessionTerminals } from "../../context/session-terminals"
+import { useGoUpsell } from "./go-upsell"
 
 addDefaultParsers(parsers.parsers)
 
@@ -170,6 +171,7 @@ export function Session(props: {
     await writeFile(file, content)
   }
   const route = useRouteData("session")
+  useGoUpsell(() => route.sessionID)
   const sessionID = route.sessionID
   const { navigate } = useRoute()
   const data = useData()
