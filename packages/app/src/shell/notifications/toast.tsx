@@ -1,5 +1,6 @@
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { Toast, showToast, toaster, type ToastOptions } from "@opencode-ai/ui/toast"
+import type { JSX } from "solid-js"
 
 type AppToastOptions = Omit<ToastOptions, "icon"> & {
   icon?: IconProps["name"]
@@ -30,6 +31,7 @@ export function dismissToast(toastId: number) {
 
 function resolveIcon(icon: IconProps["name"] | undefined, variant: ToastOptions["variant"]) {
   const name = icon ?? (variant === "success" ? "check" : undefined)
-  if (!name) return
-  return <Icon name={name} />
+  if (!name) return undefined
+  // Solid resolves JSX accessors under the toast's render owner, not this imperative call site.
+  return (() => <Icon name={name} />) as unknown as JSX.Element
 }

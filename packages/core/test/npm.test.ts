@@ -69,12 +69,16 @@ async function createRegistryFixture(directory: string) {
     await Bun.$`tar -czf package.tgz package`.cwd(root)
     tarballs.set(version, await Bun.file(path.join(root, "package.tgz")).bytes())
   }
-  const state = { latest: "1.0.0" }
+  const state = { latest: "1.0.0", audits: 0 }
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch(request) {
       const url = new URL(request.url)
+      if (url.pathname.startsWith("/-/npm/v1/security/")) {
+        state.audits++
+        return Response.json({})
+      }
       if (decodeURIComponent(url.pathname) === "/@fixture/registry-plugin")
         return Response.json({
           name: "@fixture/registry-plugin",
@@ -97,7 +101,7 @@ async function createRegistryFixture(directory: string) {
       await fs.mkdir(root, { recursive: true })
       await Bun.write(
         path.join(root, ".npmrc"),
-        `@fixture:registry=${server.url}\ncache=${path.join(directory, "npm-cache")}\nfetch-retries=0\naudit=false\n`,
+        `registry=${server.url}\n@fixture:registry=${server.url}\ncache=${path.join(directory, "npm-cache")}\nfetch-retries=0\naudit=true\n`,
       )
       return root
     },
@@ -359,6 +363,25 @@ describe("Npm.resolve", () => {
 })
 
 describe("Npm.check and Npm.update", () => {
+  test("installs and updates without requesting registry audits", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/registry-plugin@latest"
+    await registry.configure(cache, spec)
+
+    await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      expect((yield* npm.add(spec)).version).toBe("1.0.0")
+      expect(registry.state.audits).toBe(0)
+
+      registry.state.latest = "1.1.0"
+      expect((yield* npm.update(spec)).version).toBe("1.1.0")
+      expect(registry.state.audits).toBe(0)
+      expect((yield* npm.resolve(spec)).version).toBe("1.1.0")
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+  })
+
   test("checks a mutable registry target without mutation and explicitly updates it", async () => {
     await using tmp = await tmpdir()
     await using registry = await createRegistryFixture(tmp.path)

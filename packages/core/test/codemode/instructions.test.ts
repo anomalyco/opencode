@@ -47,7 +47,7 @@ describe("CodeModeInstructions", () => {
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [echo] }))
       expect(initialized.text).toContain(
-        "This catalog is the complete set of tools available within Code Mode. Tools presented elsewhere are not available in this runtime.",
+        "This catalog is the complete set of tools callable inside `execute`. It does not affect tools exposed directly outside Code Mode.",
       )
       expect(initialized.text).toContain("## Available tools")
       expect(initialized.text).not.toContain("## Search")

@@ -1,11 +1,11 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { Catalog } from "../../catalog.js"
 import { Credential } from "../../credential.js"
 import { Bus } from "../../bus.js"
 import { CopilotModels } from "../../github-copilot/models.js"
 import { App } from "../../app.js"
-import { Agent } from "../../agent.js"
 import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
 import { define } from "@opencode-ai/plugin/effect/plugin"
@@ -13,7 +13,7 @@ import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
 
 const clientID = "Ov23li8tweQw6odWQebz"
-const apiVersion = "2026-06-01"
+const apiVersion = "2026-08-01"
 const userApiVersion = "2025-04-01"
 const pollingSafetyMargin = 3000
 const methodID = Integration.MethodID.make("device")
@@ -250,15 +250,26 @@ export const GithubCopilotPlugin = define({
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
     )
+    // Runs for every route, unlike http.request, which the AI SDK route bypasses.
+    yield* ctx.session.hook(
+      "model.request",
+      (evt) =>
+        Effect.gen(function* () {
+          if (evt.model.providerID !== Provider.ID.githubCopilot) return
+          const session = yield* ctx.session
+            .get({ sessionID: evt.sessionID })
+            .pipe(Effect.orElseSucceed(() => undefined))
+          const interaction = interactionType(evt.kind, session?.parentID !== undefined)
+          evt.headers["X-Interaction-Type"] = interaction
+          if (interaction !== "conversation-agent") evt.headers["x-initiator"] = "agent"
+        }),
+      { providerID: Provider.ID.githubCopilot },
+    )
     yield* ctx.session.hook(
       "http.request",
       (evt) =>
         Effect.gen(function* () {
           if (evt.model.providerID !== Provider.ID.githubCopilot) return
-          if (evt.agent === Agent.ID.make("title"))
-            evt.request.headers.set("X-Interaction-Type", "conversation-background")
-          if (evt.agent === Agent.ID.make("compaction"))
-            evt.request.headers.set("X-Interaction-Type", "conversation-compaction")
           const token = evt.request.headers.get("x-api-key")
           if (!token) return
           const text = yield* Effect.promise(() => evt.request.clone().text())
@@ -370,9 +381,21 @@ function applyHeaders(
   headers.set("User-Agent", App.useragent(app))
   headers.set("Openai-Intent", "conversation-edits")
   headers.set("X-GitHub-Api-Version", apiVersion)
-  headers.set("x-initiator", metadata.agent ? "agent" : "user")
+  // The step may already have declared itself agent-initiated (subagent, title, compaction);
+  // the body can only ever escalate to "agent", never back to "user".
+  if (metadata.agent) headers.set("x-initiator", "agent")
+  else if (!headers.has("x-initiator")) headers.set("x-initiator", "user")
   if (metadata.vision) headers.set("Copilot-Vision-Request", "true")
   if (anthropic) headers.set("anthropic-beta", "interleaved-thinking-2025-05-14")
+}
+
+// Mirrors the Copilot client's X-Interaction-Type vocabulary: the agent loop is the default,
+// nested sessions are subagents, and title/compaction are the two utility overrides.
+export function interactionType(kind: SessionRequestKind, child: boolean) {
+  if (kind === "title") return "conversation-background"
+  if (kind === "compaction") return "conversation-compaction"
+  if (child) return "conversation-subagent"
+  return "conversation-agent"
 }
 
 type RequestMetadata = ReturnType<typeof requestMetadata>

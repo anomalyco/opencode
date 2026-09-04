@@ -32,6 +32,14 @@ export interface Resize extends Schema.Schema.Type<typeof Resize> {}
 export const Event = Schema.Union([Header, Output, Resize])
 export type Event = Schema.Schema.Type<typeof Event>
 
+export const Pointer = Schema.Struct({
+  atMs: Schema.Number,
+  action: Schema.Literals(["move", "down", "up", "click", "scroll"]),
+  x: Schema.Number,
+  y: Schema.Number,
+})
+export interface Pointer extends Schema.Schema.Type<typeof Pointer> {}
+
 export class Timeline extends Writable {
   readonly isTTY = true
   readonly path: string
@@ -41,6 +49,7 @@ export class Timeline extends Writable {
   private readonly started = performance.now()
   private readonly timestamps: number[] = []
   private done?: Promise<string>
+  private pointers?: WriteStream
 
   private constructor(path: string, cols: number, rows: number, output: WriteStream) {
     super()
@@ -95,14 +104,27 @@ export class Timeline extends Writable {
   override _final(callback: (error?: Error | null) => void) {
     this.writeOutput(Buffer.alloc(0), this.elapsed(), (error) => {
       if (error) return callback(error)
-      this.output.end(callback)
+      this.output.end()
+      this.pointers?.end()
+      void Promise.all(this.streams().map((stream) => finished(stream, { cleanup: true }))).then(
+        () => callback(),
+        callback,
+      )
     })
+  }
+
+  override _destroy(error: Error | null, callback: (error: Error | null) => void) {
+    const streams = this.streams()
+    const closed = streams.map((stream) => finished(stream, { cleanup: true }))
+    streams.forEach((stream) => stream.destroy())
+    // Destroy joins both children even when one failed before finish() began.
+    void Promise.allSettled(closed).then(() => callback(error))
   }
 
   finish() {
     if (this.done) return this.done
     this.end()
-    this.done = finished(this).then(() => this.path)
+    this.done = finished(this, { cleanup: true }).then(() => this.path)
     return this.done
   }
 
@@ -110,6 +132,21 @@ export class Timeline extends Writable {
     if (this.writableEnded) return
     const event = { type: "resize", at_ms: this.elapsed(), cols, rows } satisfies Resize
     this.output.write(`${JSON.stringify(event)}\n`)
+  }
+
+  // Input and terminal output share one monotonic clock. A sidecar leaves
+  // the existing terminal timeline readable by older Drive releases.
+  pointer(action: Pointer["action"], x: number, y: number) {
+    if (this.writableEnded || this.destroyed) return
+    if (!this.pointers) {
+      this.pointers = createWriteStream(`${this.path.replace(/\.jsonl$/, "")}.pointers.jsonl`)
+      this.pointers.on("error", (error) => this.destroy(error))
+    }
+    this.pointers.write(`${JSON.stringify({ atMs: this.elapsed(), action, x, y } satisfies Pointer)}\n`)
+  }
+
+  private streams() {
+    return this.pointers ? [this.output, this.pointers] : [this.output]
   }
 
   private elapsed() {

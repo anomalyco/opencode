@@ -16,7 +16,7 @@ import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
-import { AbsolutePath, RelativePath } from "./schema.js"
+import { RelativePath } from "./schema.js"
 import { Agent } from "@opencode-ai/schema/agent"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
@@ -42,7 +42,6 @@ import {
 } from "./session/error.js"
 import { Node } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
@@ -62,7 +61,6 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { Job } from "./job.js"
 import type { Command } from "./command.js"
-import { Global } from "@opencode-ai/util/global"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 
@@ -168,15 +166,7 @@ export interface Interface {
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
-  readonly move: (input: {
-    sessionID: SessionSchema.ID
-    directory: AbsolutePath
-    workspaceID?: Location.Ref["workspaceID"]
-    delivery?: SessionInbox.Delivery
-  }) => Effect.Effect<
-    void,
-    NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError | DestinationUnavailableError
-  >
+  readonly move: SessionMove.Interface["move"]
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["prompt"]>
@@ -232,18 +222,15 @@ const layer = Layer.effect(
     const db = database.db
     const bus = yield* Bus.Service
     const projects = yield* Project.Service
-    const global = yield* Global.Service
     const execution = yield* SessionExecution.Service
     const llm = yield* LLMClient.Service
     const transport = yield* SessionModelTransport.Service
     const store = yield* SessionStore.Service
     const instances = yield* Instance.Service
-    const locations = yield* LocationServiceMap.Service
-    const fs = yield* FSUtil.Service
+    const moves = yield* SessionMove.Service
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
     const sessions = yield* Session.make()
-    const admission = yield* SessionInbox.Service
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
 
     const result = Service.of({
@@ -410,45 +397,7 @@ const layer = Layer.effect(
       switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
       switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
       rename: (input) => sessions.forSession(input.sessionID).rename(input),
-      move: Effect.fn("Session.move")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        const payload = yield* SessionMove.prepare({ ...input, session }).pipe(
-          Effect.provideService(FSUtil.Service, fs),
-          Effect.provideService(Global.Service, global),
-          Effect.provideService(Project.Service, projects),
-          Effect.provideService(LocationServiceMap.Service, locations),
-        )
-        const item = SessionInbox.Item.make({
-          type: "move",
-          payload,
-          delivery: input.delivery ?? "steer",
-        })
-        yield* SessionInbox.serialized(
-          input.sessionID,
-          Effect.gen(function* () {
-            const latest = yield* result.get(input.sessionID)
-            const source = yield* fs.stat(latest.location.directory).pipe(Effect.orElseSucceed(() => undefined))
-            // Active runners must hand off at a step boundary to retain their continuation.
-            if ((!source || source.type !== "Directory") && !(yield* execution.isActive(input.sessionID))) {
-              const cancellations = (yield* SessionInbox.moveIDs(db, input.sessionID)).map(
-                (item) => [SessionEvent.InboxCancelled, { sessionID: input.sessionID, inboxID: item.id }] as const,
-              )
-              const moved = [SessionEvent.Moved, { sessionID: input.sessionID, ...payload }] as const
-              const first = cancellations[0]
-              if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
-              return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
-            }
-            yield* admission
-              .admit({
-                id: SessionMessage.ID.create(),
-                sessionID: input.sessionID,
-                item,
-              })
-              .pipe(Effect.orDie)
-          }),
-        )
-        yield* execution.wake(input.sessionID)
-      }),
+      move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),
       active: execution.active,
@@ -499,10 +448,9 @@ export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.gl
     SessionStore.node,
     Instance.node,
     SessionInbox.node,
-    LocationServiceMap.node,
+    SessionMove.node,
     SessionProjector.node,
     FSUtil.node,
-    Global.node,
     App.node,
   ],
 })

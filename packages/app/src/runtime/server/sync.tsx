@@ -79,39 +79,19 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const queryClient = useQueryClient()
-  const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
-    setGlobalStore("project", next)
-  }
-
-  const setBootStore = ((...input: unknown[]) => {
-    if (input[0] === "project" && Array.isArray(input[1])) {
-      setProjects(input[1] as Project[])
-      return input[1]
-    }
-    return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
-  }) as typeof setGlobalStore
-
   const bootstrap = useQuery(() => ({
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
       await bootstrapGlobal({
         serverAPI: serverSDK.api,
         scope: serverSDK.scope,
-        setGlobalStore: setBootStore,
+        setGlobalStore,
         queryClient,
       })
       return Date.now()
     },
     enabled: connected(),
   }))
-
-  const set = ((...input: unknown[]) => {
-    if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
-      return input[1]
-    }
-    return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
-  }) as typeof setGlobalStore
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
 
@@ -216,7 +196,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   }
 
   function applyProjectUpdate(update: Parameters<typeof updateProjectInfo>[1]) {
-    setProjects((projects) =>
+    setGlobalStore("project", (projects) =>
       projects.map((project) => (project.id === update.id ? updateProjectInfo(project, update) : project)),
     )
   }
@@ -275,7 +255,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   return {
     data: globalStore,
-    set,
+    set: setGlobalStore,
     child: children.child,
     disableMcp: children.disableMcp,
     // bootstrap,

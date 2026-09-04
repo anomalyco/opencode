@@ -71,7 +71,7 @@ function expectLifecycle(events: ReadonlyArray<LLMEvent>, completed: boolean) {
 }
 
 describe("Open Responses basic-item lifecycles", () => {
-  it.effect("closes implicit summary boundaries and ignores late events for completed reasoning", () =>
+  it.effect("closes implicit summary boundaries", () =>
     Effect.gen(function* () {
       const item = { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" }
       const events = yield* collect(
@@ -90,12 +90,6 @@ describe("Open Responses basic-item lifecycles", () => {
           delta: "Third",
         },
         { type: "response.output_item.done", item },
-        { type: "response.output_item.done", item },
-        { type: "response.output_item.added", item },
-        { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 3 },
-        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 3, delta: "late" },
-        { type: "response.reasoning_summary_text.done", item_id: "rs_1", summary_index: 2, text: "late final" },
-        { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 3 },
         completed,
       )
 
@@ -129,7 +123,7 @@ describe("Open Responses basic-item lifecycles", () => {
     }),
   )
 
-  it.effect("preserves done-only reasoning text and encryption without replaying late events", () =>
+  it.effect("preserves done-only reasoning text and encryption", () =>
     Effect.gen(function* () {
       const item = {
         type: "reasoning",
@@ -139,11 +133,6 @@ describe("Open Responses basic-item lifecycles", () => {
       }
       const events = yield* collect(
         { type: "response.output_item.done", item },
-        { type: "response.output_item.done", item },
-        { type: "response.output_item.added", item },
-        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", delta: "late" },
-        { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
-        { type: "response.reasoning_summary_text.done", item_id: "rs_1", summary_index: 1, text: "late final" },
         completed,
         // Route termination must also prevent events after response completion.
         { type: "response.output_item.added", item: { type: "reasoning", id: "rs_after" } },
@@ -337,7 +326,6 @@ describe("Open Responses basic-item lifecycles", () => {
       ])
     }),
   )
-
   it.effect("mints an id for a done-only tool that never had one", () =>
     Effect.gen(function* () {
       const events = yield* collect(
@@ -368,9 +356,16 @@ describe("Open Responses basic-item lifecycles", () => {
       const events = yield* collect({ type: "response.output_item.done", item }, completed)
       const providerMetadata = { "openai-compatible": { itemId: "fc_1" } }
       expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
-        { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata },
-        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata },
+        { type: "tool-input-start", id: "call_1", name: "lookup", namespace: undefined, providerMetadata },
+        { type: "tool-input-end", id: "call_1", name: "lookup", namespace: undefined, providerMetadata },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          namespace: undefined,
+          input: { query: "weather" },
+          providerMetadata,
+        },
       ])
       expect(events.filter(LLMEvent.is.finish)).toEqual([
         {

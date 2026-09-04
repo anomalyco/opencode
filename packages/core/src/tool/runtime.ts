@@ -18,6 +18,7 @@ const jsonSchemas = Effect.runSync(
 )
 
 export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
+  type: "tool",
   name: effectiveName(tool),
   description: tool.description,
   inputSchema: inputJsonSchema(tool.input),

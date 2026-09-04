@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { go } from "fuzzysort"
 import { prioritizeFavorites, sortModelOptions } from "../../../../src/component/dialog-model"
 
 describe("prioritizeFavorites", () => {
@@ -23,6 +24,20 @@ describe("prioritizeFavorites", () => {
 })
 
 describe("sortModelOptions", () => {
+  test.each(["browse", "search", "provider"])("orders %s results free-first, then newest-first", (mode) => {
+    const options = [
+      { providerID: "opencode", title: "Claude Haiku 3", releaseDate: 1 },
+      { providerID: "anthropic", title: "Claude Haiku 4.5", releaseDate: 2 },
+      { providerID: "anthropic", title: "Claude Haiku Free", releaseDate: 0, footer: "Free" },
+    ].map((item) => ({ ...item, providerID: mode === "provider" ? "anthropic" : item.providerID }))
+    const matches = mode === "search" ? go("haik", options, { key: "title" }).map((item) => item.obj) : options
+    expect(sortModelOptions(matches, mode === "provider").map((item) => item.title)).toEqual([
+      "Claude Haiku Free",
+      "Claude Haiku 4.5",
+      "Claude Haiku 3",
+    ])
+  })
+
   test("orders opencode models before other providers", () => {
     const sorted = sortModelOptions([
       { providerID: "openai", providerName: "OpenAI", releaseDate: 3, title: "GPT 5" },

@@ -15,6 +15,8 @@ import { LocationProvider, useLocation } from "../../../src/context/location"
 import { RouteProvider } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
+import { DialogProvider } from "../../../src/ui/dialog"
+import { ToastProvider } from "../../../src/ui/toast"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
 import { emptyThemeSource } from "../../fixture/fixture"
@@ -2020,7 +2022,11 @@ test("keeps shell state scoped to location", async () => {
       <RouteProvider initialRoute={{ type: "session", sessionID: "ses_shared" }}>
         <Keymap.Provider>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+            <ToastProvider>
+              <DialogProvider>
+                <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+              </DialogProvider>
+            </ToastProvider>
           </ThemeProvider>
         </Keymap.Provider>
       </RouteProvider>

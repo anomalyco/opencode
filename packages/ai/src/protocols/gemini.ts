@@ -465,7 +465,8 @@ function mapSafetySettings(value: unknown) {
 }
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
-  const hasTools = request.tools.length > 0
+  const flattened = ProviderShared.flattenToolRequest(request)
+  const hasTools = flattened.tools.length > 0
   const generation = request.generation
   const options = resolveOptions(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
@@ -483,7 +484,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 
   return {
     cachedContent: options.cachedContent,
-    contents: yield* lowerMessages(request),
+    contents: yield* lowerMessages(flattened.request),
     safetySettings: options.safetySettings,
     serviceTier: options.serviceTier,
     systemInstruction:
@@ -491,7 +492,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     tools: hasTools
       ? [
           {
-            functionDeclarations: request.tools.map((tool) =>
+            functionDeclarations: flattened.tools.map((tool) =>
               lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
             ),
           },

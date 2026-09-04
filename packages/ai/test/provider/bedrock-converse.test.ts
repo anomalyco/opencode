@@ -713,9 +713,10 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("ignores late tool deltas after contentBlockStop", () =>
+  it.effect("ignores tool deltas without an open tool block", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
+        ["contentBlockDelta", { contentBlockIndex: 5, delta: { toolUse: { input: "{}" } } }],
         [
           "contentBlockStart",
           {
@@ -742,27 +743,6 @@ describe("Bedrock Converse route", () => {
           input: { query: "weather" },
         },
       ])
-    }),
-  )
-
-  it.effect("rejects tool deltas without contentBlockStart", () =>
-    Effect.gen(function* () {
-      const error = yield* LLMClient.generate(baseRequest).pipe(
-        Effect.provide(
-          fixedBytes(
-            eventStreamBody(
-              ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: "{}" } } }],
-              ["messageStop", { stopReason: "tool_use" }],
-            ),
-          ),
-        ),
-        Effect.flip,
-      )
-
-      expect(error).toMatchObject({
-        reason: { _tag: "InvalidProviderOutput" },
-        message: "Bedrock Converse tool delta is missing its tool call",
-      })
     }),
   )
 

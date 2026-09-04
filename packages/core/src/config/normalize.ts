@@ -73,6 +73,11 @@ export function normalize(input: unknown): Result {
   const legacyUpdate = own(input, "autoupdate")
     ? decodeValue(ConfigV1.Info.fields.autoupdate, input.autoupdate, ["autoupdate"], diagnostics)
     : undefined
+  const nativeUpdate = own(input, "update")
+    ? input.update === "auto"
+      ? "notify"
+      : decodeEncoded(Info.fields.update, input.update, ["update"], diagnostics)
+    : undefined
   const legacyShare = own(input, "autoshare")
     ? decodeValue(Schema.Boolean, input.autoshare, ["autoshare"], diagnostics) === true
       ? "auto"
@@ -86,7 +91,10 @@ export function normalize(input: unknown): Result {
     if (migrated !== undefined) encoded.media = canonical(ConfigMedia.Info, migrated)
   }
   if (legacySnapshots !== undefined) encoded.snapshots = legacySnapshots
-  if (legacyUpdate !== undefined) encoded.update = ConfigMigrateV1.migrate({ autoupdate: legacyUpdate }).update
+  const migratedUpdate =
+    legacyUpdate === undefined ? undefined : ConfigMigrateV1.migrate({ autoupdate: legacyUpdate }).update
+  const update = prefer(migratedUpdate, nativeUpdate, ["update"], diagnostics)
+  if (update !== undefined) encoded.update = update
   if (legacyShare !== undefined) encoded.share = legacyShare
 
   const legacyReferences = decodeMap(input.reference, ConfigReference.Entry, ["reference"], diagnostics, decodeEncoded)
@@ -196,7 +204,6 @@ export function normalize(input: unknown): Result {
     shell: Info.fields.shell,
     model: Info.fields.model,
     default_agent: Info.fields.default_agent,
-    update: Info.fields.update,
     share: Info.fields.share,
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,

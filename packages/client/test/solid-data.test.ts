@@ -355,8 +355,10 @@ test("refreshes global credential events across every loaded location and worksp
         setup.data.location.integration.sync(location),
         setup.data.location.model.sync(location),
         setup.data.location.provider.sync(location),
+        setup.data.location.reference.sync(location),
       ]),
     )
+    const references = locations.map((location) => setup.data.location.reference.list(location))
     requests.length = 0
 
     const updated: OpenCodeEvent = {
@@ -401,6 +403,9 @@ test("refreshes global credential events across every loaded location and worksp
           ["/api/model", "/other", "workspace-other"],
           ["/api/provider", "/other", "workspace-other"],
         ]),
+      )
+      locations.forEach((location, index) =>
+        expect(setup.data.location.reference.list(location)).toBe(references[index]),
       )
       requests.length = 0
     }
@@ -464,6 +469,99 @@ test("refreshes references for the location an update names", async () => {
       requests[0]!.searchParams.get("location[directory]"),
       requests[0]!.searchParams.get("location[workspace]"),
     ]).toEqual(["/api/reference", "/other", "workspace-other"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("preserves sibling catalogs through location preload, branch, shell, and websearch updates", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const location = { directory: "/project", project: { id: "project", directory: "/project", canonical: "/project" } }
+  const requests: string[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const pathname = new URL((input instanceof Request ? input : new Request(input, init)).url).pathname
+      requests.push(pathname)
+      if (pathname === "/api/session/active") return Response.json({})
+      if (pathname === "/api/project") return Response.json([])
+      if (pathname === "/api/location") return Response.json(location)
+      if (pathname === "/api/vcs")
+        return Response.json({ location, data: { branch: { current: "main", default: "main" } } })
+      if (pathname === "/api/reference")
+        return Response.json({
+          location,
+          data: [{ name: "docs", path: "/docs", source: { type: "local", path: "/docs" } }],
+        })
+      if (pathname === "/api/websearch/provider")
+        return Response.json({ location, data: [{ id: "search", name: "Search" }] })
+      throw new Error(`Unexpected request: ${pathname}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: location.directory,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  const emit = (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details }))
+  const shell = {
+    id: "sh_first",
+    status: "running" as const,
+    command: "echo hello",
+    cwd: location.directory,
+    shell: "/bin/sh",
+    file: "/shell-output",
+    metadata: {},
+    time: { started: 1 },
+  }
+
+  try {
+    // A live event may arrive before any location reads have populated this key.
+    emit({ type: "shell.created", location, data: { info: shell } })
+    expect(setup.data.shell.get(shell.id)).toMatchObject(shell)
+    const first = setup.data.shell.get(shell.id)
+    await Promise.all([setup.data.location.reference.sync(), setup.data.location.vcs.sync()])
+    const references = setup.data.location.reference.list()
+    expect(references?.map((reference) => [reference.name, reference.path])).toEqual([["docs", "/docs"]])
+    expect(setup.data.shell.get(shell.id)).toBe(first)
+
+    emit({ type: "vcs.branch.updated", location, data: { branch: "feature" } })
+    expect(setup.data.location.vcs.info()?.branch).toEqual({ current: "feature", default: "main" })
+    expect(setup.data.location.reference.list()).toBe(references)
+    emit({ type: "shell.created", location, data: { info: { ...shell, id: "sh_second" } } })
+    expect(setup.data.shell.list().map((shell) => shell.id)).toEqual(["sh_first", "sh_second"])
+    expect(setup.data.location.reference.list()).toBe(references)
+    emit({ type: "shell.deleted", location, data: { id: "sh_second" } })
+    expect(setup.data.shell.list().map((shell) => shell.id)).toEqual(["sh_first"])
+    expect(setup.data.shell.get(shell.id)).toBe(first)
+    expect(setup.data.location.reference.list()).toBe(references)
+
+    await setup.data.location.websearch.refresh()
+    expect(setup.data.location.websearch.list()).toEqual([{ id: "search", name: "Search" }])
+    expect(setup.data.location.reference.list()).toBe(references)
+    emit({ type: "server.connected", data: {} })
+    await wait(() => setup.data.location.info() !== undefined)
+    expect(setup.data.location.info()).toMatchObject(location)
+    expect(setup.data.location.reference.list()).toBe(references)
+    expect(setup.data.shell.get(shell.id)).toBe(first)
+    expect(setup.data.location.vcs.info()?.branch).toEqual({ current: "feature", default: "main" })
+    expect(requests.toSorted()).toEqual([
+      "/api/location",
+      "/api/project",
+      "/api/reference",
+      "/api/session/active",
+      "/api/vcs",
+      "/api/websearch/provider",
+    ])
   } finally {
     setup.dispose()
   }

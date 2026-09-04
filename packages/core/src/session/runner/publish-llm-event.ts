@@ -90,10 +90,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   }
   const assistantMessageID = input.assistantMessageID
   let stepStarted = false
-  let stepFailed = false
   let providerFailed = false
   let outputStarted = false
-  let stepStreamed = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
 
@@ -112,8 +110,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   const currentAssistantMessageID = () =>
     stepStarted ? Effect.succeed(assistantMessageID) : Effect.die(new Error("Tool event before assistant step start"))
   const streamed = Effect.fnUntraced(function* () {
-    if (stepStreamed) return
-    stepStreamed = true
     yield* bus.publish(SessionEvent.Step.Streamed, {
       sessionID: input.sessionID,
       assistantMessageID: yield* startAssistant(),
@@ -367,9 +363,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     readonly snapshot?: Snapshot.ID
     readonly files?: readonly RelativePath[]
   }) {
-    if (stepFailed || stepFailure === undefined) return
+    if (stepFailure === undefined) return
     const assistantMessageID = yield* startAssistant()
-    stepFailed = true
     yield* bus.publish(SessionEvent.Step.Failed, {
       sessionID: input.sessionID,
       assistantMessageID,
