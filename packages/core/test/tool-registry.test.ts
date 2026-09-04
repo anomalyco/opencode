@@ -720,6 +720,16 @@ describe("Tool", () => {
           { action: "bash", resource: "git *", effect: "deny" },
         ]),
       ).toEqual([])
+      // without a catch-all, uncovered resources fall back to ask
+      expect(yield* names([{ action: "bash", resource: "rm*", effect: "deny" }])).toEqual(["bash", "execute"])
+      // a narrow ask superseded by the same narrow deny admits nothing
+      expect(
+        yield* names([
+          { action: "*", resource: "*", effect: "deny" },
+          { action: "bash", resource: "rm*", effect: "ask" },
+          { action: "bash", resource: "rm*", effect: "deny" },
+        ]),
+      ).toEqual([])
       // a trailing narrow ask or allow still admits some calls
       expect(
         yield* names([

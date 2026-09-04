@@ -276,10 +276,10 @@ const layer = Layer.effect(
 // A tool is hidden from the model only when no resource could get past `deny`. Each rule's resource
 // pattern matches itself as a literal, so the patterns for this action are a complete set of probes:
 // a later broader rule overrides a probe exactly when it also covers every resource the probe covers.
+// The extra "*" probe stands for resources no narrow rule covers, which fall back to the default `ask`.
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
   const probes = rules.filter((rule) => Wildcard.match(action, rule.action)).map((rule) => rule.resource)
-  if (probes.length === 0) return false
-  return probes.every((resource) => Permission.evaluate(action, resource, rules).effect === "deny")
+  return [...probes, "*"].every((resource) => Permission.evaluate(action, resource, rules).effect === "deny")
 }
 
 const formatSchemaIssue = SchemaIssue.makeFormatterDefault()
