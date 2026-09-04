@@ -103,7 +103,7 @@ test.each([
         }),
         update: async () => ({}),
       },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       args: { sessionID: "ses_test" },
       log: () => {},
@@ -190,7 +190,7 @@ test.each([
       return
     }
     setup.mockInput.pressKey("HOME")
-    await setup.waitForFrame((frame) => frame.includes("Loading session history..."))
+    await setup.waitForFrame((frame) => frame.includes("Loading session history…"))
     setup.mockInput.pressKey("HOME")
     await setup.waitForVisualIdle()
     expect(pages).toEqual([

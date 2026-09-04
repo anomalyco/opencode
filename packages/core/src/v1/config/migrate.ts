@@ -26,7 +26,12 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
         shell: info.shell,
         model: modelSelection(info.model),
         default_agent: info.default_agent,
-        autoupdate: info.autoupdate,
+        update:
+          info.autoupdate === false
+            ? "disable"
+            : info.autoupdate === "notify" || info.autoupdate === true
+              ? "notify"
+              : undefined,
         share: info.share ?? (info.autoshare ? "auto" : undefined),
         enterprise: info.enterprise,
         username: info.username,
@@ -165,7 +170,7 @@ export function commands(info?: Readonly<Record<string, ConfigCommandV1.Info>>) 
         description: command.description,
         agent: command.agent,
         model: modelSelection(command.model, command.variant),
-        subtask: command.subtask,
+        subagent: command.subtask,
       },
     ]),
   )

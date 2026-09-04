@@ -184,6 +184,7 @@ function dispatch(
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
     if (
+      (url.pathname === "/api" || url.pathname.startsWith("/api/") || url.pathname === "/openapi.json") &&
       (!ready || (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url))) &&
       !(yield* authorizedRequest(request, auth))
     )

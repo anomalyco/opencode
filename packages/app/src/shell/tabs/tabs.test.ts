@@ -3,10 +3,13 @@ import { createRoot, getOwner, onCleanup } from "solid-js"
 import { createTabMemory } from "./memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed"
 import { findSessionTab, sessionIDHasOpenTab, tabHref, tabKey, type SessionTab, type Tab } from "./tabs"
-import { migrateTabs } from "./migration"
+import { Schema } from "effect"
+import { TabStorage } from "./schema"
 import type { ServerConnection } from "@/runtime/server/registry"
+import { Persistence } from "@/runtime/persistence/schema"
 
 const server = "local\nhttp://localhost:4096" as ServerConnection.Key
+const decodeTabs = Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Tabs, []))
 
 function sessionTab(sessionId: string): SessionTab {
   return { type: "session", server, sessionId }
@@ -15,27 +18,66 @@ function sessionTab(sessionId: string): SessionTab {
 describe("tab migration", () => {
   test("drops null and malformed persisted tabs", () => {
     expect(
-      migrateTabs([null, sessionTab("a"), { type: "session", server }, { type: "unknown", server }, "invalid"]),
+      decodeTabs([null, sessionTab("a"), { type: "session", server }, { type: "unknown", server }, "invalid"]),
     ).toEqual([sessionTab("a")])
   })
 
   test("drops persisted tabs without a server", () => {
-    expect(migrateTabs([{ type: "session", sessionId: "a" }])).toEqual([])
+    expect(decodeTabs([{ type: "session", sessionId: "a" }])).toEqual([])
   })
 
   test("replaces invalid top-level persisted data", () => {
-    expect(migrateTabs(null)).toEqual([])
-    expect(migrateTabs({})).toEqual([])
+    expect(decodeTabs(null)).toEqual([])
+    expect(decodeTabs({})).toEqual([])
   })
 
   test("preserves the active child route", () => {
-    expect(migrateTabs([{ ...sessionTab("root"), routeSessionId: "child", routeParentId: "parent" }])).toEqual([
+    expect(decodeTabs([{ ...sessionTab("root"), routeSessionId: "child", routeParentId: "parent" }])).toEqual([
       { ...sessionTab("root"), routeSessionId: "child", routeParentId: "parent" },
     ])
   })
 
   test("drops an invalid child route", () => {
-    expect(migrateTabs([{ ...sessionTab("parent"), routeSessionId: 1 }])).toEqual([])
+    expect(decodeTabs([{ ...sessionTab("parent"), routeSessionId: 1 }])).toEqual([sessionTab("parent")])
+    expect(decodeTabs([{ ...sessionTab("parent"), routeSessionId: "child", routeParentId: 1 }])).toEqual([
+      { ...sessionTab("parent"), routeSessionId: "child" },
+    ])
+  })
+
+  test("encodes only canonical tabs and preserves drafts", () => {
+    const draft: Tab = { type: "draft", server, draftID: "draft", directory: "/project", branch: "main" }
+    const tabs = decodeTabs([
+      { ...sessionTab("root"), routeSessionId: "root", routeParentId: "stale", legacy: true },
+      draft,
+    ])
+    expect(tabs).toEqual([sessionTab("root"), draft])
+    expect(Schema.encodeSync(TabStorage.Tabs)(tabs)).toEqual(tabs)
+    expect(decodeTabs(Schema.encodeSync(TabStorage.Tabs)(tabs))).toEqual(tabs)
+  })
+
+  test("salvages valid closed session tabs", () => {
+    expect(
+      Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Closed, []))([
+        { tab: sessionTab("a"), index: 1 },
+        { tab: sessionTab("b"), index: -1 },
+        { tab: { type: "draft", server, draftID: "d", directory: "/project" }, index: 0 },
+        null,
+      ]),
+    ).toEqual([{ tab: sessionTab("a"), index: 1 }])
+  })
+
+  test("validates auxiliary tab state", () => {
+    expect(
+      Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Recent, { key: undefined }))({ key: 1 }),
+    ).toEqual({ key: undefined })
+    expect(Schema.decodeUnknownSync(TabStorage.Infos)({})).toEqual({})
+    expect(Schema.decodeUnknownSync(TabStorage.Panes)({})).toEqual({})
+    expect(Schema.decodeUnknownSync(TabStorage.Infos)({ tab: { title: "Title", directory: "/project" } })).toEqual({
+      tab: { title: "Title", directory: "/project" },
+    })
+    const panes = Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: true, terminalHeight: 300 } })
+    expect(Schema.encodeSync(TabStorage.Panes)(panes)).toEqual({ tab: { terminal: true, terminalHeight: 300 } })
+    expect(() => Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: "yes" } })).toThrow()
   })
 })
 

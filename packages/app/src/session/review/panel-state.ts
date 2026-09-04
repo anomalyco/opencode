@@ -5,18 +5,24 @@ import {
   type SessionReviewExpandMode,
 } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { createSignal } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Schema } from "effect"
 import type { Platform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
+
+const ReviewPanel = Persistence.struct({
+  sidebarOpened: Schema.Boolean,
+  sidebarWidth: Schema.Finite.check(
+    Schema.isBetween({ minimum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, maximum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX }),
+  ),
+  expandMode: Schema.Literals(["expand", "collapse"]),
+})
 
 export function createReviewPanelState(platform?: Platform) {
   const [store, setStore, , ready] = persisted(
     Persist.global("review-panel-v2"),
-    createStore({
-      sidebarOpened: true,
-      sidebarWidth: SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
-      expandMode: "collapse" as SessionReviewExpandMode,
-    }),
+    ReviewPanel,
+    { sidebarOpened: true, sidebarWidth: SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT, expandMode: "collapse" },
     platform,
   )
   // The filter is transient by design: a persisted filter would silently hide

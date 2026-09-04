@@ -8,7 +8,7 @@ import { createEffect, createMemo, createResource, createSignal, For, onCleanup,
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
-import type { Path } from "@/runtime/server/types"
+import type { LocationRef } from "@opencode-ai/client/promise"
 import {
   absoluteTreePath,
   activeTreeNavigation,
@@ -26,16 +26,19 @@ import {
   displayPickerPath,
   pickerParent,
   pickerRoot,
+  listPickerDirectory,
+  pickerRelativePath,
+  pickerAbsolutePath,
 } from "./domain"
 import "./dialog.css"
 import { Divider } from "@opencode-ai/ui/divider"
-import { getFilename } from "@opencode-ai/util/path"
 
 interface DirectoryPickerDialogProps {
   title?: string
   multiple?: boolean
   onSelect: (result: string | string[] | null) => void
   server: ServerConnection.Any
+  location?: LocationRef
   mode?: "directory" | "file"
   start?: string
 }
@@ -67,32 +70,24 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   let navigation = 0
 
   const [fallbackPath] = createResource(
-    () => (!(sync.data.path.home || sync.data.path.directory) ? true : undefined),
-    () =>
-      sdk.api.location
-        .get()
-        .then(
-          (location): Path => ({
-            state: "",
-            config: "",
-            worktree: location.project.directory,
-            directory: location.directory,
-            home: "",
-          }),
-        )
-        .catch(() => undefined),
+    () => (props.location ? undefined : true),
+    () => sdk.api.location.get().catch(() => undefined),
     { initialValue: undefined },
   )
-  const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
+  const home = createMemo(() => sync.data.path.home || "")
+  const location = createMemo(() => {
+    const current = props.location ?? fallbackPath()
+    return current ? { directory: current.directory, workspace: current.workspaceID } : undefined
+  })
   const start = createMemo(
     () =>
       props.start ||
       sync.data.path.home ||
+      props.location?.directory ||
       sync.data.path.directory ||
-      fallbackPath()?.home ||
       fallbackPath()?.directory,
   )
-  const search = createDirectorySearch({ sdk, home, base: () => root() || start() })
+  const search = createDirectorySearch({ sdk, home, location, base: () => root() || start() })
   const [suggestions] = createResource(input, async (value) => {
     const cleaned = cleanPickerInput(value)
     const typed = cleaned.replace(/\/+$/, "")
@@ -100,12 +95,14 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     if (!cleaned || (root() && typed === current)) return { query: value, items: [] }
     const directories = (await search(value)).map((absolute) => ({ absolute, type: "directory" as const }))
     if (!policy.includeFiles) return { query: value, items: directories.slice(0, 5) }
-    const base = pickerRoot(cleaned) || root() || start()
+    const base = location()?.directory
     if (!base) return { query: value, items: directories.slice(0, 5) }
+    const query = pickerRelativePath(base, pickerAbsoluteInput(cleaned, home(), root() || base))
+    if (query === undefined) return { query: value, items: directories.slice(0, 5) }
     const files = await sdk.api.file
       .find({
-        location: { directory: base },
-        query: pickerFileSearchQuery(base, value, home()),
+        location: location(),
+        query,
         type: "file",
         limit: 20,
       })
@@ -113,7 +110,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       .catch(() => [])
     const results = [
       ...directories,
-      ...files.map((entry) => ({ absolute: absoluteTreePath(base, entry.path), type: "file" as const })),
+      ...files.map((entry) => ({ absolute: pickerAbsolutePath(entry.path, base), type: "file" as const })),
     ]
     return {
       query: value,
@@ -132,15 +129,9 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       existing ??
       loads.schedule(`${generation}:${key}`, eager ? "background" : "user", () => {
         if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
-        return sdk.api.file
-          .list({ location: { directory: absolute } })
-          .then((result) =>
-            result.data.map((entry) => ({
-              name: getFilename(entry.path.replace(/[\\/]+$/, "")),
-              type: entry.type,
-            })),
-          )
-          .catch(() => undefined)
+        const current = location()
+        if (!current) return Promise.resolve(undefined)
+        return listPickerDirectory(sdk, current, absolute).catch(() => undefined)
       })
     listings.set(key, request)
     const nodes = await request
@@ -282,7 +273,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
   createEffect(() => {
     const path = start()
-    if (!path || root()) return
+    if (!path || !location() || root()) return
     void navigate(path)
   })
 

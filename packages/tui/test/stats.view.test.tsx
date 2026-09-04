@@ -41,7 +41,7 @@ test("stats shows only this year and returns after errors or success", async () 
         get: async () => ({ animations: false, tabs: { enabled: false } }),
         update: async () => ({}),
       },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       args: {},
       log: () => {},

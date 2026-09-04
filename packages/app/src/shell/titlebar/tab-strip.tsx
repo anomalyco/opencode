@@ -27,6 +27,7 @@ function SessionTabSlot(props: {
   active: boolean
   orientation: "horizontal" | "vertical"
   session: SessionInfo | undefined
+  preparing: boolean
   fallbackTitle?: string
   onRename: (title: string) => Promise<void>
   onNavigate: (element: HTMLDivElement) => void
@@ -62,6 +63,7 @@ function SessionTabSlot(props: {
         href={tabHref(props.tab)}
         server={props.tab.server}
         session={props.session}
+        preparing={props.preparing}
         fallbackTitle={props.fallbackTitle}
         onRename={props.onRename}
         onNavigate={() => props.onNavigate(ref)}
@@ -136,8 +138,7 @@ function SessionTabEntry(props: {
       () =>
         void Promise.allSettled([
           ctx.data.session.sync(value.id, { children: true }),
-          ctx.data.session.pending.sync(value.id),
-          ctx.data.session.message.sync(value.id),
+          // The selected timeline loads transcript and inbox data; inactive tabs need only attention and metadata.
           ctx.data.session.permission.sync(value.id),
           ctx.data.session.form.sync(value.id),
         ]),
@@ -167,6 +168,7 @@ function SessionTabEntry(props: {
         active={props.active}
         orientation={props.orientation}
         session={session()}
+        preparing={!!pending()}
         fallbackTitle={
           pending()
             ? language.t("command.session.new")
@@ -375,7 +377,7 @@ export function TitlebarTabStrip(props: {
                     index={visibleIndex()}
                     active={props.currentTab === tab}
                     orientation={vertical() ? "vertical" : "horizontal"}
-                    title={language.t("command.session.new")}
+                    title={language.t("session.tab.session")}
                     onNavigate={(element) => {
                       ref = element
                       props.onNavigate(tab, element)

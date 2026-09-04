@@ -9,6 +9,44 @@ const sessionB = session("ses_tab_b", "Tab B session")
 const sessionC = session("ses_tab_c", "Tab C session")
 const unresolvedSessionID = "ses_tab_unresolved"
 
+test("new session tab matches neighboring session widths", async ({ page }, testInfo) => {
+  await mockServer(page)
+  await page.addInitScript(
+    ({ server, sessionA, sessionB, directory }) => {
+      localStorage.setItem(
+        "opencode.window.browser.dat:tabs",
+        JSON.stringify([
+          { type: "session", server, sessionId: sessionA },
+          { type: "draft", server, directory, draftID: "draft_tab_width" },
+          { type: "session", server, sessionId: sessionB },
+        ]),
+      )
+    },
+    { server, sessionA: sessionA.id, sessionB: sessionB.id, directory: sessionA.directory },
+  )
+
+  const href = `/server/${base64Encode(server)}/session/${sessionA.id}`
+  await page.goto(href)
+
+  const tabs = page.locator("[data-titlebar-tab-slot]")
+  await expect(tabs.locator("[data-titlebar-tab-title]")).toHaveText([sessionA.title, "Session", sessionB.title])
+  await testInfo.attach("new-session-between-tabs", {
+    body: await page.locator('[data-slot="titlebar-v2"]').screenshot(),
+    contentType: "image/png",
+  })
+  for (const width of [1280, 800]) {
+    await page.setViewportSize({ width, height: 720 })
+    await expect
+      .poll(() =>
+        tabs.evaluateAll((tabs) => {
+          const widths = tabs.map((tab) => tab.getBoundingClientRect().width)
+          return Math.max(...widths) - Math.min(...widths)
+        }),
+      )
+      .toBeLessThan(1)
+  }
+})
+
 test("pressing mouse down on a tab navigates before mouse up", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
@@ -121,7 +159,10 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA, sessionB }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ appearance: { tabLayout: "vertical" } }))
+      localStorage.setItem(
+        "settings.v3",
+        JSON.stringify({ appearance: { tabLayout: "vertical", showProjectName: true }, general: { showStatus: true } }),
+      )
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([
@@ -144,7 +185,26 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabA).toContainText(sessionA.title)
   await expect(tabB).toContainText(sessionB.title)
   await expect(tabB.locator('[data-slot="tab-project"]')).toHaveText("tab-project")
+  await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toHaveText("Home")
   await expect(sidebar.getByRole("button", { name: "New session" })).toBeVisible()
+  await expect(sidebar.locator('[data-slot="vertical-tabs-footer"]')).toBeVisible()
+  const status = sidebar.getByRole("button", { name: "Status", exact: true })
+  await expect(status).toBeVisible()
+  await expect
+    .poll(async () => {
+      const bounds = await sidebar.boundingBox()
+      const button = await status.boundingBox()
+      return !!bounds && !!button && button.x >= bounds.x && button.x - bounds.x <= 12
+    })
+    .toBe(true)
+  await expect(page.locator('[data-slot="titlebar-v2"]')).toBeHidden()
+  await expect
+    .poll(async () => {
+      const button = await sidebar.getByRole("button", { name: "New session" }).boundingBox()
+      const tab = await tabA.boundingBox()
+      return !!button && !!tab && button.y + button.height < tab.y
+    })
+    .toBe(true)
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 
   const handle = sidebar.locator('[data-component="resize-handle"]')
@@ -171,7 +231,7 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabB).toBeVisible()
 })
 
-test("appearance experimental setting switches tab orientation", async ({ page }) => {
+test("appearance experimental settings control vertical tab details", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA }) => {
@@ -203,6 +263,12 @@ test("appearance experimental setting switches tab orientation", async ({ page }
   await expect(layout).toContainText("Vertical")
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+  const projectNames = page.locator('[data-slot="vertical-tabs-sidebar"] [data-slot="tab-project"]')
+  await expect(projectNames).toHaveCount(0)
+  const projectNameSwitch = settings.getByRole("switch", { name: "Show project names", exact: true })
+  await settings.locator('[data-action="settings-show-project-name"] [data-slot="switch-control"]').click()
+  await expect(projectNameSwitch).toBeChecked()
+  await expect(projectNames).toHaveText(["tab-project"])
   await expect(settings.getByRole("tablist")).toHaveCSS("width", "240px")
 
   await page.setViewportSize({ width: 920, height: 720 })
@@ -226,6 +292,7 @@ test("appearance experimental setting switches tab orientation", async ({ page }
   await page.reload()
   const href = `/server/${base64Encode(server)}/session/${sessionA.id}`
   await page.getByRole("button", { name: "Tabs", exact: true }).click()
+  await expect(page.locator('[data-slot="mobile-tabs-drawer"] [data-slot="tab-project"]')).toHaveText(["tab-project"])
   await expect(
     page
       .locator('[data-slot="mobile-tabs-drawer"]')

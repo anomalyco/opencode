@@ -49,8 +49,8 @@ test("renames, exports, and deletes a home session from its context menu", async
   await row.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
   await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible()
-  await expect(page.getByRole("menuitem", { name: "Export..." })).toBeVisible()
-  await expect(page.getByRole("menuitem", { name: "Delete..." })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Export…" })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Delete…" })).toBeVisible()
   const menuBox = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menuBox?.x ?? 0) - (rowBox?.x ?? 0) - 48)).toBeLessThan(4)
 
@@ -88,13 +88,13 @@ test("renames, exports, and deletes a home session from its context menu", async
 
   await renamedRow.click({ button: "right" })
   const download = page.waitForEvent("download")
-  const exportItem = page.getByRole("menuitem", { name: "Export..." })
+  const exportItem = page.getByRole("menuitem", { name: "Export…" })
   await exportItem.click()
   expect((await download).suggestedFilename()).toBe("renamed-from-home.json")
   await expect(exportItem).toBeHidden()
 
   await renamedRow.click({ button: "right" })
-  await page.getByRole("menuitem", { name: "Delete..." }).click()
+  await page.getByRole("menuitem", { name: "Delete…" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog).toContainText('Delete session "Renamed from Home"?')
   const removed = page.waitForRequest(

@@ -149,6 +149,7 @@ function scanBash(input: string, depth: number, budget: { remaining: number }): 
     const char = input[index]
     if (!wordStarted) wordStart = index
     if (!quote && !wordStarted) {
+      if (char === " " || char === "\t") continue
       const structure = structures.at(-1)
       const token = /^[A-Za-z_][A-Za-z0-9_]*(?=[ \t\n;()<>]|$)/.exec(input.slice(index))?.[0]
       if (structure?.kind === "case" && structure.phase === "header" && token === "in") {
@@ -166,13 +167,24 @@ function scanBash(input: string, depth: number, budget: { remaining: number }): 
         segment = index + 1
         continue
       }
+      if (structure?.kind === "for" && structure.phase === "header" && char === "(" && input[index + 1] !== "(") {
+        const values = bashExpansion(input, index, depth, "array")
+        if (!values) return { kind: "opaque", reason: "compound-command" }
+        finishCommand()
+        const failure = addSubstitutions(values)
+        if (failure) return failure
+        commands.push(...nestedCommands.splice(0))
+        // Zsh permits a sublist or brace group directly after the value list, without do/done.
+        structure.phase = "do"
+        if (!/^(?:[ \t\n;]|\\\n|#[^\n]*(?:\n|$))*do(?=[ \t\n;]|$)/.test(input.slice(values.end + 1))) structures.pop()
+        index = values.end
+        segment = index + 1
+        continue
+      }
       if (!words.length && !hasRedirect && !compoundEnd) {
-        const definition =
-          /^(?:function[ \t]+[A-Za-z_][A-Za-z0-9_]*(?:[ \t]*\([ \t]*\))?|[A-Za-z_][A-Za-z0-9_]*[ \t]*\([ \t]*\))[ \t\n]*(?=[{(])/.exec(
-            input.slice(index),
-          )
+        const definition = bashFunctionHead(input, index)
         if (definition && !header()) {
-          index += definition[0].length - 1
+          index += definition.length - 1
           segment = index + 1
           continue
         }
@@ -536,6 +548,14 @@ function scanBash(input: string, depth: number, budget: { remaining: number }): 
 
 type BashExpansion = { source: string; end: number; substitutions?: string[] }
 
+function bashFunctionHead(input: string, start: number) {
+  // Share recognition with delimiter scanning so case patterns in function bodies do not close the outer group.
+  // Names need not be variable identifiers. Zsh permits anonymous functions, including in an if condition.
+  return /^(?!if(?:[ \t]|\\\n)*\()(?:function[ \t]+(?:\\\n[ \t]*)*[A-Za-z_][A-Za-z0-9_.:-]*(?:(?:[ \t]|\\\n)*\([ \t]*\))?|(?:[A-Za-z_][A-Za-z0-9_.:-]*(?:[ \t]|\\\n)*)?\([ \t]*\))(?:[ \t\n]|\\\n|#[^\n]*(?:\n|$))*(?=[{(]|\[\[(?=[ \t\n])|(?:if|while|until|for|select|case)[ \t\n])/.exec(
+    input.slice(start),
+  )?.[0]
+}
+
 function bashDelimited(input: string, start: number, depth: number): BashExpansion | undefined {
   if (depth >= MAX_SUBSTITUTION_DEPTH) return
   const close = input[start] === "{" ? "}" : ")"
@@ -544,6 +564,7 @@ function bashDelimited(input: string, start: number, depth: number): BashExpansi
   let commandStart = true
   for (let index = start + 1; index < input.length; index++) {
     const char = input[index]
+    if (char === " " || char === "\t") continue
     if (char === "\\") {
       if (input[index + 1] !== "\n") commandStart = false
       index++
@@ -566,6 +587,11 @@ function bashDelimited(input: string, start: number, depth: number): BashExpansi
       continue
     }
     const boundary = index === start + 1 || /[ \t\n;|&(){}]/.test(input[index - 1])
+    const definition = commandStart && boundary ? bashFunctionHead(input, index) : undefined
+    if (definition) {
+      index += definition.length - 1
+      continue
+    }
     if (char === "#" && boundary) {
       const newline = input.indexOf("\n", index)
       if (newline < 0) return
@@ -725,7 +751,10 @@ function bashExpansion(
       index = nested.end
       continue
     }
-    if (kind === "array" && "<>=".includes(char) && input[index + 1] === "(") {
+    if (
+      ((kind === "array" && "<>=".includes(char)) || (kind === "test" && "<>".includes(char))) &&
+      input[index + 1] === "("
+    ) {
       const nested = bashDelimited(input, index + 1, depth + 1)
       if (!nested) return
       substitutions.push(nested.source)

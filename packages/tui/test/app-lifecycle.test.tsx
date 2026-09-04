@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { EmbeddedTerminalRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
+import { EmbeddedTerminalRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -9,6 +9,7 @@ import { createEventStream, createFetch, directory, json, type FetchHandler } fr
 import { tmpdir } from "./fixture/fixture"
 import type { TuiInput } from "../src/app"
 import type { Config } from "../src/config"
+import type { PluginInfo } from "@opencode-ai/client"
 
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
   await using state = await tmpdir()
@@ -239,7 +240,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: {},
         log: () => {},
@@ -315,7 +316,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
@@ -389,7 +390,7 @@ test("session title generated while an untitled session is loading remains visib
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
@@ -688,7 +689,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
       frame.includes("Prepended instructions") &&
       frame.includes("Original answer") &&
       frame.includes("20.0 tok/s") &&
-      !frame.includes("Loading session history..."),
+      !frame.includes("Loading session history…"),
   )
   expect(prepended).toContain("Current input")
   expect(prepended).toContain("Original answer")
@@ -775,7 +776,7 @@ test("session startup prompt is submitted exactly once", async () => {
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy", prompt: "RESUME_READY" },
         log: () => {},
@@ -919,66 +920,6 @@ test("error investigations repeatedly seed editable home drafts without creating
 
   setup.mockInput.pressKey("c", { ctrl: true })
   await setup.waitForFrame((frame) => !frame.includes("Beta initialization failed"))
-})
-
-test("shows jump to latest after scrolling one line above the final message", async () => {
-  const session = {
-    id: "dummy",
-    title: "Demo session",
-    projectID: "project",
-    location: { directory },
-    agent: "build",
-    model: { providerID: "provider", id: "model" },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 0, updated: 0 },
-  }
-  const messages = Array.from({ length: 8 }, (_, index) => ({
-    id: `message-${index}`,
-    type: "user",
-    text: index === 7 ? "Final visible message" : `Earlier message ${index}`,
-    time: { created: index },
-  }))
-  await using setup = await createAppFixture({
-    width: 80,
-    height: 20,
-    config: { animations: false, keybinds: { "session.line.up": "f6", "session.line.down": "f7" } },
-    args: { sessionID: "dummy" },
-    fetch: (url) => {
-      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-      if (url.pathname === "/api/session/dummy") return json({ data: session })
-      if (url.pathname === "/api/session/dummy/message") return json({ data: messages.toReversed(), cursor: {} })
-      if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
-      if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
-    },
-  })
-
-  await setup.waitForFrame((frame) => frame.includes("Final visible message"))
-  const findScrollBox = (root: Renderable): ScrollBoxRenderable | undefined =>
-    root instanceof ScrollBoxRenderable && root.getRenderable("message-7")
-      ? root
-      : root.getChildren().map(findScrollBox).find(Boolean)
-  const scroll = findScrollBox(setup.renderer.root)
-  expect(scroll).toBeDefined()
-  if (!scroll) throw new Error("session transcript scrollbox was not found")
-  const maximum = () => Math.max(0, scroll.scrollHeight - scroll.viewport.height)
-
-  expect(scroll.scrollTop).toBe(maximum())
-  const initial = setup.captureCharFrame().split("\n")
-  expect(initial.find((line) => line.includes("Jump to latest"))).toBeUndefined()
-  expect(initial[initial.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
-
-  setup.mockInput.pressKey("F6")
-  const clipped = (await setup.waitForFrame((frame) => frame.includes("Jump to latest"))).split("\n")
-  expect(scroll.scrollTop).toBe(maximum() - 1)
-  expect(clipped.find((line) => line.includes("Jump to latest"))).toBeDefined()
-  expect(clipped[clipped.findIndex((line) => line.includes("Final visible message")) + 1]).not.toContain("┃")
-
-  setup.mockInput.pressKey("F7")
-  const restored = (await setup.waitForFrame((frame) => !frame.includes("Jump to latest"))).split("\n")
-  expect(scroll.scrollTop).toBe(maximum())
-  expect(restored.find((line) => line.includes("Jump to latest"))).toBeUndefined()
-  expect(restored[restored.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
 })
 
 test("completed user shell output replaces a partial live read when the final read fails", async () => {
@@ -1369,7 +1310,7 @@ test.each(["manual", "select"] as const)(
             }),
             update: async () => ({}),
           },
-          packages: { resolve: async () => undefined },
+          packages: { prepare: async () => ({ directory: "" }) },
           args: { sessionID: session.id },
           terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
           log: () => {},
@@ -1428,6 +1369,168 @@ test.each(["manual", "select"] as const)(
   },
 )
 
+test.each([100, 44])(
+  "execution failure keeps the empty session composer and draft usable at width %s",
+  async (width) => {
+    await using state = await tmpdir()
+    const session = {
+      id: "ses_failure",
+      projectID: "proj_test",
+      location: { directory },
+      title: "Failure fixture",
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1, updated: 1 },
+    }
+    await using setup = await createAppFixture({
+      width,
+      state: state.path,
+      args: { sessionID: session.id },
+      config: { animations: false, tabs: { enabled: false } },
+      fetch: (url) => {
+        if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+        if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+        if (url.pathname === `/api/session/${session.id}/message`) return json({ data: [], cursor: {} })
+        if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+          return json({ data: [] })
+        return undefined
+      },
+    })
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    setup.mockInput.pressKey("u", { ctrl: true })
+    await setup.mockInput.typeText("Keep this draft")
+    await setup.waitForFrame((frame) => frame.includes("Keep this draft"))
+    setup.events.emit({
+      id: "evt_execution_failed",
+      created: 2,
+      type: "session.execution.failed",
+      durable: { aggregateID: session.id, seq: 1, version: 1 },
+      data: {
+        sessionID: session.id,
+        error: { type: "unknown", message: 'Plugin "broken-skills" failed during skill.transform.' },
+      },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Session failed"))
+    expect(setup.captureCharFrame()).toContain("broken-skills")
+    expect(setup.captureCharFrame()).toContain("skill.transform")
+    expect(setup.captureCharFrame()).toContain("Keep this draft")
+    expect(setup.captureCharFrame()).not.toContain("Select directory")
+    await setup.mockInput.typeText(" intact")
+    await setup.waitForFrame((frame) => frame.includes("Keep this draft intact"))
+  },
+)
+
+test.each([
+  [100, true],
+  [44, true],
+  [100, false],
+  [44, false],
+] as const)("server plugin failures are visible at width %s (already failed: %s)", async (width, initial) => {
+  await using state = await tmpdir()
+  const failure: PluginInfo["state"] = {
+    status: "failed",
+    error: "Plugin disabled after command.transform failed. Check server logs for details.",
+    ref: "err_fixture",
+  }
+  let inventory: PluginInfo[] = [
+    {
+      id: "broken",
+      source: { type: "builtin" },
+      features: { server: true },
+      state: initial ? failure : { status: "active" },
+    },
+    { id: "healthy", source: { type: "builtin" }, features: { server: true }, state: { status: "active" } },
+  ]
+  let requests = 0
+  await using setup = await createAppFixture({
+    width,
+    state: state.path,
+    fetch: (url) => {
+      if (url.pathname !== "/api/plugin") return undefined
+      requests++
+      return json({
+        location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+        data: inventory,
+      })
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  if (!initial) {
+    expect(setup.captureCharFrame()).not.toContain("Plugin failed")
+    inventory = inventory.map((plugin) => (plugin.id === "broken" ? { ...plugin, state: failure } : plugin))
+    setup.events.emit({ id: "evt_failure", created: 1, type: "plugin.updated", data: {} })
+  }
+  await setup.waitForFrame((frame) => frame.includes("Plugin failed:") && frame.includes("broken"))
+  expect(setup.captureCharFrame()).toContain("/plugins")
+  expect(setup.captureCharFrame()).toContain("1 plugin failed")
+
+  const lines = setup.captureCharFrame().split("\n")
+  const row = lines.findIndex((line) => line.includes("Open plugins"))
+  expect(row).toBeGreaterThanOrEqual(0)
+  const line = lines[row]
+  if (!line) throw new Error("Open plugins action is missing")
+  await setup.mockMouse.click(line.indexOf("Open plugins"), row)
+  await setup.waitForFrame((frame) => frame.includes("ctrl+a") && frame.includes("broken"))
+  expect(setup.captureCharFrame()).toContain("broken")
+  expect(setup.captureCharFrame()).not.toContain("healthy")
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Server plugin error") && frame.includes("transform failed"))
+  expect(setup.captureCharFrame()).toContain("Plugin disabled")
+  expect(setup.captureCharFrame()).toContain("transform failed")
+  expect(setup.captureCharFrame()).toContain("err_fixture")
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => frame.includes("ctrl+a"))
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => !frame.includes("ctrl+a"))
+  expect(setup.captureCharFrame()).toContain("1 plugin failed")
+
+  const seen = requests
+  setup.events.emit({ id: "evt_repeat", created: 2, type: "plugin.updated", data: {} })
+  setup.events.emit({ id: "evt_reconnect", type: "server.connected", data: {} })
+  await setup.waitFor(() => requests >= seen + 2)
+  await setup.flush()
+  expect(setup.captureCharFrame()).not.toContain("Plugin failed:")
+
+  inventory = inventory.map((plugin) => ({ ...plugin, state: { status: "active" } }))
+  setup.events.emit({ id: "evt_recovered", created: 3, type: "plugin.updated", data: {} })
+  await setup.waitForFrame((frame) => !frame.includes("1 plugin failed"))
+  inventory = inventory.map((plugin) => (plugin.id === "broken" ? { ...plugin, state: failure } : plugin))
+  setup.events.emit({ id: "evt_failed_again", created: 4, type: "plugin.updated", data: {} })
+  await setup.waitForFrame((frame) => frame.includes("Plugin failed:") && frame.includes("broken"))
+})
+
+test("server plugin failures share one notice and use source names before an ID is known", async () => {
+  await using state = await tmpdir()
+  await using setup = await createAppFixture({
+    state: state.path,
+    fetch: (url) =>
+      url.pathname === "/api/plugin"
+        ? json({
+            location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+            data: [
+              {
+                source: { type: "package", target: "missing-package" },
+                features: {},
+                state: { status: "failed", error: "Package missing" },
+              },
+              {
+                source: { type: "local", path: "/fixture/broken.ts" },
+                features: {},
+                state: { status: "failed", error: "Invalid plugin" },
+              },
+            ],
+          })
+        : undefined,
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("2 plugins failed"))
+  expect(setup.captureCharFrame()).toContain("missing-package")
+  expect(setup.captureCharFrame()).toContain("/fixture/broken.ts")
+  expect(setup.captureCharFrame()).toContain("Open plugins")
+})
+
 async function createAppFixture(
   input: {
     width?: number
@@ -1455,7 +1558,7 @@ async function createAppFixture(
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: { get: async () => input.config ?? { animations: false }, update: async () => ({}) },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
       args: input.args ?? {},
       log: () => {},

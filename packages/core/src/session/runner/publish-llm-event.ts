@@ -4,7 +4,7 @@ import type { Model } from "@opencode-ai/schema/model"
 import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Snapshot } from "@opencode-ai/schema/snapshot"
 import { Effect, Fiber, Iterable } from "effect"
-import { isArrayNonEmpty, isReadonlyArrayNonEmpty } from "effect/Array"
+import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
@@ -12,7 +12,7 @@ import { SessionSchema } from "../schema.js"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Money } from "@opencode-ai/schema/money"
 import { SessionUsage } from "../usage.js"
-import { Tool } from "@opencode-ai/schema/tool"
+import type { Tool } from "../../tool.js"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
@@ -90,10 +90,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   }
   const assistantMessageID = input.assistantMessageID
   let stepStarted = false
-  let stepFailed = false
   let providerFailed = false
   let outputStarted = false
-  let stepStreamed = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
 
@@ -112,8 +110,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   const currentAssistantMessageID = () =>
     stepStarted ? Effect.succeed(assistantMessageID) : Effect.die(new Error("Tool event before assistant step start"))
   const streamed = Effect.fnUntraced(function* () {
-    if (stepStreamed) return
-    stepStreamed = true
     yield* bus.publish(SessionEvent.Step.Streamed, {
       sessionID: input.sessionID,
       assistantMessageID: yield* startAssistant(),
@@ -367,9 +363,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     readonly snapshot?: Snapshot.ID
     readonly files?: readonly RelativePath[]
   }) {
-    if (stepFailed || stepFailure === undefined) return
+    if (stepFailure === undefined) return
     const assistantMessageID = yield* startAssistant()
-    stepFailed = true
     yield* bus.publish(SessionEvent.Step.Failed, {
       sessionID: input.sessionID,
       assistantMessageID,
@@ -557,20 +552,15 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
 
   /** Publishes one canonical terminal event for a locally executed tool call. */
-  const toolExecution = Effect.fnUntraced(function* (id: string, name: string, result: Tool.Result) {
+  const toolExecution = Effect.fnUntraced(function* (id: string, name: string, result: Tool.NormalizedResult) {
     const tool = tools.get(id)
     if (!tool?.called) return yield* Effect.die(new Error(`Tool execution before call: ${id}`))
     if (tool.name !== name)
       return yield* Effect.die(new Error(`Tool execution name changed for ${id}: ${tool.name} -> ${name}`))
     if (tool.settled) return yield* Effect.die(new Error(`Duplicate tool execution: ${id}`))
     tool.settled = true
-    const content =
-      typeof result.content === "string"
-        ? [{ type: "text" as const, text: result.content }]
-        : result.content === undefined
-          ? []
-          : [...result.content]
-    if (!isArrayNonEmpty(content)) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
+    const content = result.content
+    if (!isReadonlyArrayNonEmpty(content)) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
     yield* bus.publish(SessionEvent.Tool.Success, {
       sessionID: input.sessionID,
       assistantMessageID,

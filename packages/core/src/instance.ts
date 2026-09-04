@@ -35,9 +35,9 @@ import { WebSearch } from "./websearch.js"
 import { ReferenceInstructions } from "./reference/instructions.js"
 import { SessionRunnerLLM } from "./session/runner/llm.js"
 import { SessionRunnerModel } from "./session/runner/model.js"
-import { SessionModelTransport } from "./session/model-transport.js"
 import { SessionCompaction } from "./session/compaction.js"
 import { SessionTitle } from "./session/title.js"
+import { SessionContext } from "./session/context.js"
 import { Skill } from "./skill.js"
 import { SkillInstructions } from "./skill/instructions.js"
 import { Snapshot } from "./snapshot.js"
@@ -45,9 +45,6 @@ import { InstructionDiscovery } from "./instruction-discovery.js"
 import { InstructionBuiltIns } from "./instructions/builtins.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 import { SessionInstructions } from "./session/instructions.js"
-import { SessionGenerateNode } from "./session/generate-node.js"
-import { SessionPromptNode } from "./session/prompt-node.js"
-import { SessionRevertNode } from "./session/revert-node.js"
 import { McpTool } from "./tool/mcp.js"
 import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
@@ -55,7 +52,7 @@ import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
 
 export * as Instance from "./instance.js"
-export { Service, byLocationNode, type Interface } from "./instance/service.js"
+export { Service, node, type Interface } from "./instance/service.js"
 
 const nodes = [
   Location.node,
@@ -96,16 +93,13 @@ const nodes = [
   InstructionEntry.node,
   Form.node,
   Generate.node,
-  SessionGenerateNode.node,
-  SessionPromptNode.node,
-  SessionRevertNode.node,
   ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,
   SessionRunnerModel.node,
-  SessionModelTransport.node,
   SessionCompaction.node,
   SessionTitle.node,
+  SessionContext.node,
   Snapshot.node,
   SessionRunnerLLM.node,
   Vcs.node,
@@ -116,7 +110,7 @@ const nodes = [
 export const graph = LayerNode.group(nodes)
 
 export type Services = LayerNode.Output<typeof graph>
-export type Error = LayerNode.Error<typeof graph>
+export type Error = Layer.Error<ReturnType<typeof layer>>
 
 export interface Options {
   // Plugins this instance is born with; empty and absent are equivalent.
@@ -147,7 +141,7 @@ const vanillaReplacements: LayerNode.Replacements = [
 ]
 
 // One instance is one compiled, fresh copy of the graph standing on a directory.
-export function layer(ref: Location.Ref, options: Options = {}) {
+export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Services> {
   const startedAt = performance.now()
   // Ordered: vanilla defaults, then caller replacements (which win over the
   // defaults), then instance bindings (which win over everything).
@@ -159,6 +153,8 @@ export function layer(ref: Location.Ref, options: Options = {}) {
   ]
 
   return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global }).pipe(
+    // Instance boot failures are defects; provided operations retain their typed errors.
+    Layer.orDie,
     Layer.tap(() =>
       Effect.logInfo("location services booted", {
         directory: ref.directory,

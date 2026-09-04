@@ -11,12 +11,6 @@ beforeAll(async () => {
     useLocation: () => ({}),
     useSearchParams: () => [{}, () => undefined],
   }))
-  mock.module("@opencode-ai/ui/context", () => ({
-    createSimpleContext: () => ({
-      use: () => undefined,
-      provider: () => undefined,
-    }),
-  }))
   const mod = await import("./comments")
   createCommentSessionForTest = mod.createCommentSessionForTest
 })

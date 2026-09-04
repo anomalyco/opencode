@@ -9,6 +9,7 @@ import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
+import { SessionHistory } from "../history.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
@@ -23,7 +24,7 @@ import { StepFailedError } from "../error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
-import { PluginSupervisor } from "../../plugin/supervisor.js"
+import { Plugin } from "../../plugin.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -38,7 +39,7 @@ const layer = Layer.effect(
     const modelTransport = yield* SessionModelTransport.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
-    const plugins = yield* PluginSupervisor.Service
+    const plugins = yield* Plugin.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
@@ -106,7 +107,22 @@ const layer = Layer.effect(
                   Effect.gen(function* () {
                     return yield* compaction.compactManual({
                       session,
-                      resolveModel: context.resolveModel,
+                      resolveContext: (session) =>
+                        Effect.gen(function* () {
+                          const selected = yield* context.select(session.id)
+                          const model = yield* context.resolveModel(selected.session)
+                          // Preview updates without admitting them after the already-delivered compaction marker.
+                          const history = yield* SessionHistory.preview(db, session.id, selected.instructions)
+                          return {
+                            session: selected.session,
+                            agent: selected.agent,
+                            tools: selected.tools,
+                            model,
+                            initial: history.initial,
+                            messages: history.messages,
+                            instructionUpdate: history.instructionUpdate,
+                          }
+                        }),
                       prepare: context.prepare,
                       messages: yield* store.context(sessionID),
                       inputID: pending.id,
@@ -182,12 +198,10 @@ const layer = Layer.effect(
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
         initial = undefined
         const compactionInput = {
-          session: loaded.session,
-          messages: loaded.messages,
-          resolved: loaded.model,
+          context: loaded,
           prepare: context.prepare,
         }
-        if (compaction.required({ ...compactionInput, context: loaded })) {
+        if (compaction.required({ messages: loaded.messages, resolved: loaded.model, context: loaded })) {
           const compacted = yield* compaction.compact(compactionInput)
           if (compacted.status !== "completed") return yield* new StepFailedError({ error: compacted.error })
           assistantMessageID = SessionMessage.ID.create()
@@ -303,7 +317,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
-    PluginSupervisor.node,
+    Plugin.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

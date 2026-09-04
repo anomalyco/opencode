@@ -152,6 +152,7 @@ export function makeACPFixture(options: FixtureOptions = {}) {
 
       const directory = request.query["location[directory]"] ?? "/workspace"
       const location = { directory, project: { id: "global", directory } }
+      if (request.path === "/api/plugin/await-activation") return new Response(null, { status: 204 })
       if (request.path === "/api/event") {
         let controller: ReadableStreamDefaultController<Uint8Array> | undefined
         return new Response(

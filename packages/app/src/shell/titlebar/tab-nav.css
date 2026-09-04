@@ -15,11 +15,11 @@
   background: linear-gradient(var(--tab-overlay), var(--tab-overlay)), var(--tab-base);
 }
 
-[data-titlebar-tab][data-orientation="vertical"]:has([data-slot="project-avatar-slot"]) {
+[data-titlebar-tab][data-orientation="vertical"]:has([data-slot="tab-project"]) {
   height: 45px;
 }
 
-[data-titlebar-tab][data-orientation="vertical"]:has([data-slot="project-avatar-slot"]) [data-slot="tab-link"] {
+[data-titlebar-tab][data-orientation="vertical"]:has([data-slot="tab-project"]) [data-slot="tab-link"] {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
   grid-template-rows: repeat(2, var(--line-height-compact));
@@ -84,6 +84,10 @@
 
 [data-titlebar-tab-list][data-orientation="vertical"] {
   gap: 2px;
+}
+
+[data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-list][data-orientation="vertical"] {
+  gap: 4px;
 }
 
 [data-titlebar-tab-slot] {

@@ -355,7 +355,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
     if (shell()) {
-      return new StyledText([fg(input.theme().muted)('Run a command... "git status"')])
+      return new StyledText([fg(input.theme().muted)('Run a command… "git status"')])
     }
 
     if (!input.state().first) {

@@ -12,7 +12,6 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { SessionHeader } from "@/session/header/session-header"
 import { MessageTimeline, SessionSummaryPanel } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
 import { projectForSession } from "@/shell/layout/helpers"
@@ -166,7 +165,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                         baseBranch={
                           session.shared.data.location.vcs.info({ directory: project().worktree })?.branch.current
                         }
-                        diffs={project().vcs === "git" ? review.details.diffs() : []}
+                        diffs={project().vcs ? review.details.diffs() : []}
                         sessionID={session.identity.params.id ?? ""}
                         moveEligible={composer.workspaceMoveEligible()}
                         moveDismissed={store.mobileMoveDismissed}
@@ -273,12 +272,12 @@ export function SessionScreen(props: { session: SessionModel }) {
 
   return (
     <>
-      <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
           <div
             classList={{
-              "@container relative z-10 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
+              "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]":
+                true,
               "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
                 !screen.size.active() && sidePresence.animate(),
               "transition-none": screen.size.active() || !sidePresence.animate(),

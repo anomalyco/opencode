@@ -29,6 +29,7 @@ export type ComposerSelectControl = {
 }
 
 export type ComposerEditorView = {
+  draftOnly?: boolean
   placeholder?: Accessor<string>
   add?: {
     onAttach: () => void
@@ -332,6 +333,7 @@ export function createComposerEditor(input: {
       draft.removeAttachment(id)
     },
     canSubmit() {
+      if (input.view.draftOnly) return false
       const persisted = draft.state
       if (state.mode === "shell") {
         return persisted.prompt.some((part) => "content" in part && !!part.content.trim())
@@ -347,6 +349,7 @@ export function createComposerEditor(input: {
     restoreFocus,
     onInput(value: string, prompt?: ComposerPersistedState["prompt"], cursor?: number) {
       if (prompt) draft.setPrompt(prompt, cursor)
+      if (input.view.draftOnly) return
       dispatch({ type: "input.changed", value, persist: !prompt })
     },
     onCursor(cursor: number) {
@@ -362,6 +365,7 @@ export function createComposerEditor(input: {
       dispatch({ type: "mode.shell" })
     },
     submit(options?: { alternate?: boolean }) {
+      if (input.view.draftOnly) return
       input.view.submit.onSubmit(options)
       dispatch({ type: "popover.close" })
     },

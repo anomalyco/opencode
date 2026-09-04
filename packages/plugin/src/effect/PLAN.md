@@ -168,7 +168,7 @@ Hook context objects may contain:
 - Purpose-built methods for allowed mutations
 - Capability methods where the operation requires more than field assignment
 
-They must not expose core drafts or unrestricted internal objects.
+They must not expose core editors or unrestricted internal objects.
 
 ## Domain Transforms Versus Runtime Hooks
 

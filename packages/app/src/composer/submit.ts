@@ -248,7 +248,8 @@ function restoreSubmission(
         preview: item.preview,
       })),
   )
-  if (value.mode === "normal") {
+  // A recovered follow-up changes the payload, so it must use a new admission ID.
+  if (value.mode === "normal" && restored.prompt === submission.prompt) {
     restored.target.retry.set({
       id: value.id,
       agent: value.selection.agent,

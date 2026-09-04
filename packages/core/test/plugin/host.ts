@@ -193,21 +193,21 @@ export function agentHost(agent: Agent.Interface): Plugin.Context["agent"] {
     list: () => Effect.die("unused agent.list"),
     reload: agent.reload,
     transform: (callback) =>
-      agent.transform((draft) =>
+      agent.transform((editor) =>
         callback({
-          list: () => draft.list().map(agentInfo),
+          list: () => editor.list().map(agentInfo),
           get: (id) => {
-            const value = draft.get(Agent.ID.make(id))
+            const value = editor.get(Agent.ID.make(id))
             return value && agentInfo(value)
           },
-          default: (id) => draft.default(id === undefined ? undefined : Agent.ID.make(id)),
+          default: (id) => editor.default(id === undefined ? undefined : Agent.ID.make(id)),
           update: (id, update) =>
-            draft.update(Agent.ID.make(id), (value) => {
+            editor.update(Agent.ID.make(id), (value) => {
               const current = agentInfo(value)
               update(current)
               Object.assign(value, current, { id: Agent.ID.make(current.id) })
             }),
-          remove: (id) => draft.remove(Agent.ID.make(id)),
+          remove: (id) => editor.remove(Agent.ID.make(id)),
         }),
       ),
   }
@@ -238,16 +238,16 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
     },
     reload: catalog.reload,
     transform: (callback) =>
-      catalog.transform((draft) =>
+      catalog.transform((editor) =>
         callback({
           provider: {
             list: () =>
-              draft.provider.list().map((value) => ({
+              editor.provider.list().map((value) => ({
                 provider: providerInfo(value.provider),
                 models: new Map(Array.from(value.models, ([id, model]) => [id, modelInfo(model)])),
               })),
             get: (id) => {
-              const value = draft.provider.get(Provider.ID.make(id))
+              const value = editor.provider.get(Provider.ID.make(id))
               return (
                 value && {
                   provider: providerInfo(value.provider),
@@ -256,20 +256,20 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
               )
             },
             update: (id, update) =>
-              draft.provider.update(Provider.ID.make(id), (value) => {
+              editor.provider.update(Provider.ID.make(id), (value) => {
                 const current = providerInfo(value)
                 update(current)
                 Object.assign(value, current, { id: Provider.ID.make(current.id) })
               }),
-            remove: (id) => draft.provider.remove(Provider.ID.make(id)),
+            remove: (id) => editor.provider.remove(Provider.ID.make(id)),
           },
           model: {
             get: (providerID, modelID) => {
-              const value = draft.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))
+              const value = editor.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))
               return value && modelInfo(value)
             },
             update: (providerID, modelID, update) =>
-              draft.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), (value) => {
+              editor.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), (value) => {
                 const current = modelInfo(value)
                 update(current)
                 Object.assign(value, current, {
@@ -282,14 +282,14 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
                   })),
                 })
               }),
-            remove: (providerID, modelID) => draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+            remove: (providerID, modelID) => editor.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
             default: {
               get: () => {
-                const value = draft.model.default.get()
+                const value = editor.model.default.get()
                 return value && { providerID: value.providerID, modelID: value.modelID }
               },
               set: (providerID, modelID) =>
-                draft.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
+                editor.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
             },
           },
         }),
@@ -324,22 +324,22 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
         ),
     },
     transform: (callback) =>
-      integration.transform((draft) =>
+      integration.transform((editor) =>
         callback({
-          list: () => draft.list().map((value) => ({ id: value.id, name: value.name })),
+          list: () => editor.list().map((value) => ({ id: value.id, name: value.name })),
           get: (id) => {
-            const value = draft.get(Integration.ID.make(id))
+            const value = editor.get(Integration.ID.make(id))
             return value && { id: value.id, name: value.name }
           },
-          update: (id, update) => draft.update(Integration.ID.make(id), update),
-          remove: (id) => draft.remove(Integration.ID.make(id)),
+          update: (id, update) => editor.update(Integration.ID.make(id), update),
+          remove: (id) => editor.remove(Integration.ID.make(id)),
           method: {
-            list: (id) => draft.method.list(Integration.ID.make(id)),
+            list: (id) => editor.method.list(Integration.ID.make(id)),
             update: (input) => {
               if ("authorize" in input) {
                 const methodID = Integration.MethodID.make(input.method.id)
                 const refresh = input.refresh
-                draft.method.update({
+                editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: { ...input.method, id: methodID },
                   authorize: (answer) =>
@@ -390,14 +390,14 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 return
               }
               if (input.method.type === "env") {
-                draft.method.update({
+                editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: input.method,
                 })
                 return
               }
               if (input.method.type === "command") {
-                draft.method.update({
+                editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: {
                     ...input.method,
@@ -406,12 +406,12 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 })
                 return
               }
-              draft.method.update({
+              editor.method.update({
                 integrationID: Integration.ID.make(input.integrationID),
                 method: input.method,
               })
             },
-            remove: (id, item) => draft.method.remove(Integration.ID.make(id), internalMethod(item)),
+            remove: (id, item) => editor.method.remove(Integration.ID.make(id), internalMethod(item)),
           },
         }),
       ),
@@ -435,18 +435,18 @@ export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["w
         .pipe(Effect.map((data) => ({ location, data }))),
     reload: websearch.reload,
     transform: (callback) =>
-      websearch.transform((draft) => {
+      websearch.transform((editor) => {
         callback({
           add: (definition) =>
-            draft.add({
+            editor.add({
               id: WebSearch.ID.make(definition.id),
               name: definition.name,
               execute: definition.execute,
             }),
           default: {
-            get: draft.default.get,
+            get: editor.default.get,
             set: (selection) =>
-              draft.default.set(
+              editor.default.set(
                 selection === false || selection === "random" ? selection : WebSearch.ID.make(selection),
               ),
           },

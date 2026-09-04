@@ -53,15 +53,19 @@ export interface Prepared {
    * One request-scoped execution operation. Unknown and hook-removed calls
    * fail individually through the same seam.
    */
-  readonly executeTool: (input: Parameters<Tool.Snapshot["execute"]>[0]) => Effect.Effect<Tool.Result, ExecuteError>
+  readonly executeTool: (
+    input: Parameters<Tool.Snapshot["execute"]>[0],
+  ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
 }
 
 interface PrepareInput {
   readonly scope: {
     readonly session: SessionSchema.Info
     readonly agentID: Agent.ID
+    /** Agent whose context an auxiliary request reuses, without changing its request-hook identity. */
+    readonly contextAgentID?: Agent.ID
     readonly model: SessionRunnerModel.Resolved
-    /** Omitted for requests that carry no tools (title, compaction). */
+    /** Omitted for requests that carry no tool definitions, such as titles. */
     readonly tools?: Tool.Snapshot
   }
   readonly transcript: {
@@ -70,9 +74,8 @@ interface PrepareInput {
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /**
-   * Session context hooks shape the agent conversation. Requests that are not
-   * part of the conversation (title, compaction) opt out: their transcripts
-   * pass through unchanged.
+   * Session context hooks shape the agent conversation. Standalone requests
+   * such as titles opt out; compaction uses the selected Session context.
    */
   readonly contextHooks?: false
   /** Stateful Session WebSocket channels require an explicit durable-runner opt-in. */
@@ -300,7 +303,7 @@ export const layer = Layer.effect(
       const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
       const context: PluginHooks.Domains["session"]["context"] = {
         sessionID: session.id,
-        agent: input.scope.agentID,
+        agent: input.scope.contextAgentID ?? input.scope.agentID,
         model: resolved.ref,
         system: input.transcript.system,
         messages: input.transcript.messages,

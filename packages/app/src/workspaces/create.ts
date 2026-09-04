@@ -1,8 +1,10 @@
 import type { LocationGetOutput, OpenCodeClient } from "@opencode-ai/client/promise"
+import type { Data } from "@opencode-ai/client/solid"
 import { getDirectory } from "@opencode-ai/util/path"
 
 export async function createWorktree(input: {
   api: Pick<OpenCodeClient, "location" | "worktree">
+  data: Pick<Data, "location">
   directory: string
   project?: LocationGetOutput["project"]
   branch?: string
@@ -15,6 +17,7 @@ export async function createWorktree(input: {
     branch: input.branch,
     directory: getDirectory(project.canonical),
   })
-  await input.api.location.get({ location: { directory: created.directory } })
+  // Populate the client cache before the destination session mounts.
+  await input.data.location.syncInfo({ directory: created.directory })
   return created.directory
 }

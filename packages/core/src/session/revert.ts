@@ -1,10 +1,10 @@
 export * as SessionRevert from "./revert.js"
 
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
-import { PluginSupervisor } from "../plugin/supervisor-service.js"
+import { Instance } from "../instance/service.js"
 import { RelativePath } from "../schema.js"
 import { Snapshot } from "../snapshot.js"
 import { SessionEvent } from "./event.js"
@@ -21,37 +21,18 @@ interface BoundaryInput {
   readonly messageID: SessionMessage.ID
 }
 
-export interface Interface {
-  readonly stage: (input: {
-    readonly session: SessionSchema.Info
-    readonly messageID: SessionMessage.ID
-    readonly files?: boolean
-  }) => Effect.Effect<SessionSchema.Revert, MessageNotFoundError | Snapshot.Error>
-  readonly clear: (session: SessionSchema.Info) => Effect.Effect<void, Snapshot.Error>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRevert") {}
-
-export const make = Effect.fn("SessionRevert.make")(function* () {
+export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
+  session: SessionSchema.Info
+  messageID: SessionMessage.ID
+  files?: boolean
+}) {
+  const instances = yield* Instance.Service
   const database = yield* Database.Service
   const bus = yield* Bus.Service
-  const plugins = yield* PluginSupervisor.Service
-  const snapshot = yield* Snapshot.Service
-  const loadPending = (sessionID: SessionSchema.ID) =>
-    database.db
-      .select({ pending: SessionTable.revert_pending })
-      .from(SessionTable)
-      .where(eq(SessionTable.id, sessionID))
-      .get()
-      .pipe(
-        Effect.orDie,
-        Effect.map((row) => row?.pending),
-      )
-
-  const stage: Interface["stage"] = Effect.fn("SessionRevert.stage")(function* (input) {
-    yield* plugins.awaitActivation
-    const next = yield* plan(database.db, { sessionID: input.session.id, messageID: input.messageID })
-    const pending = yield* loadPending(input.session.id)
+  const next = yield* plan(database.db, { sessionID: input.session.id, messageID: input.messageID })
+  const pending = yield* loadPending(database.db, input.session.id)
+  return yield* Effect.gen(function* () {
+    const snapshot = yield* Snapshot.Service
     const recorded = pending?.snapshot ?? input.session.revert?.snapshot
     const original = recorded ?? (yield* snapshot.capture())
     const previous = new Set(
@@ -87,12 +68,17 @@ export const make = Effect.fn("SessionRevert.make")(function* () {
       revert,
     })
     return revert
-  })
+  }).pipe(instances.provide(input.session))
+})
 
-  const clear: Interface["clear"] = Effect.fn("SessionRevert.clear")(function* (session) {
-    yield* plugins.awaitActivation
-    const pending = yield* loadPending(session.id)
-    if (!session.revert && !pending) return
+export const clear = Effect.fn("SessionRevert.clear")(function* (session: SessionSchema.Info) {
+  const instances = yield* Instance.Service
+  const database = yield* Database.Service
+  const bus = yield* Bus.Service
+  const pending = yield* loadPending(database.db, session.id)
+  if (!session.revert && !pending) return
+  yield* Effect.gen(function* () {
+    const snapshot = yield* Snapshot.Service
     const original = pending?.snapshot ?? session.revert?.snapshot
     if (original)
       yield* snapshot.restore({
@@ -105,12 +91,8 @@ export const make = Effect.fn("SessionRevert.make")(function* () {
     yield* bus.publish(SessionEvent.RevertEvent.Cleared, {
       sessionID: session.id,
     })
-  })
-
-  return { stage, clear }
+  }).pipe(instances.provide(session))
 })
-
-export const layer = Layer.effect(Service, make())
 
 export const commit = Effect.fn("SessionRevert.commit")(function* (
   bus: Bus.Interface,
@@ -129,6 +111,18 @@ export const commit = Effect.fn("SessionRevert.commit")(function* (
   // deleting history, and retire protection before new work can change those files.
   yield* bus.publish(SessionEvent.RevertEvent.Cleared, { sessionID: session.id })
 })
+
+function loadPending(db: Database.Interface["db"], sessionID: SessionSchema.ID) {
+  return db
+    .select({ pending: SessionTable.revert_pending })
+    .from(SessionTable)
+    .where(eq(SessionTable.id, sessionID))
+    .get()
+    .pipe(
+      Effect.orDie,
+      Effect.map((row) => row?.pending),
+    )
+}
 
 const plan = Effect.fn("SessionRevert.plan")(function* (db: Database.Interface["db"], input: BoundaryInput) {
   const boundary = yield* db

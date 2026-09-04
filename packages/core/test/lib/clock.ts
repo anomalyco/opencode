@@ -12,11 +12,10 @@ const tick = Effect.gen(function* () {
 })
 
 /**
- * Drives every pending TestClock timer to completion: stream debounces and
- * State's 500ms reload debounce register their sleeps from separate fiber hops
- * that a single adjust can miss, so the loop alternates real-macrotask settles
- * with adjusts until the condition holds. Extra adjusts are harmless when
- * nothing is pending.
+ * Drives every pending TestClock timer to completion: stream debounces register
+ * their sleeps from separate fiber hops that a single adjust can miss, so the
+ * loop alternates real-macrotask settles with adjusts until the condition
+ * holds. Extra adjusts are harmless when nothing is pending.
  */
 export const advance = Effect.fnUntraced(function* (condition: () => boolean) {
   for (let attempt = 0; attempt < 100; attempt++) {

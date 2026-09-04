@@ -14,7 +14,7 @@ import { Bus } from "../src/bus.js"
 import { Database } from "../src/database/database.js"
 import { EventTable } from "../src/event/sql.js"
 import { Location } from "../src/location.js"
-import { PluginSupervisor } from "../src/plugin/supervisor-service.js"
+import { Instance } from "../src/instance/service.js"
 import { AbsolutePath, RelativePath } from "../src/schema.js"
 import { SessionEvent } from "../src/session/event.js"
 import { SessionMessage } from "../src/session/message.js"
@@ -97,14 +97,26 @@ const fixture = Effect.fnUntraced(function* () {
       const store = yield* SessionStore.Service
       const snapshot = yield* Snapshot.Service
       const location = yield* Location.Service
-      const makeRevert = (overrides: Partial<Snapshot.Interface> = {}) =>
-        SessionRevert.make().pipe(
-          Effect.provideService(Bus.Service, bus),
-          Effect.provideService(Database.Service, database),
-          Effect.provideService(Snapshot.Service, { ...snapshot, ...overrides }),
-          Effect.provideService(PluginSupervisor.Service, { awaitActivation: Effect.void }),
+      const makeRevert = (overrides: Partial<Snapshot.Interface> = {}) => {
+        const provide = Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(Bus.Service, bus),
+            Layer.succeed(Database.Service, database),
+            Layer.succeed(Instance.Service, {
+              // Revert only requests Snapshot; the fixture supplies that real, scope-owned instance capability.
+              provide: () =>
+                Effect.provide(
+                  Layer.succeed(Snapshot.Service, { ...snapshot, ...overrides }) as Layer.Layer<Instance.Services>,
+                ),
+            }),
+          ),
         )
-      const revert = yield* makeRevert()
+        return {
+          stage: (input: Parameters<typeof SessionRevert.stage>[0]) => SessionRevert.stage(input).pipe(provide),
+          clear: (session: SessionSchema.Info) => SessionRevert.clear(session).pipe(provide),
+        }
+      }
+      const revert = makeRevert()
       const get = Effect.fnUntraced(function* () {
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die("Missing recovery fixture session")
@@ -296,7 +308,7 @@ describe("SessionRevert recovery", () => {
   permissionTest("accumulates new protected paths across failures at different boundaries", () =>
     Effect.gen(function* () {
       const state = yield* fixture()
-      const revert = yield* state.makeRevert({
+      const revert = state.makeRevert({
         diff: () => Effect.fail(new Snapshot.Error({ operation: "diff", message: "Diff unavailable" })),
       })
       yield* revert.stage({ session: yield* state.get(), messageID: state.later }).pipe(Effect.flip)
@@ -360,7 +372,7 @@ describe("SessionRevert recovery", () => {
   it.live("fails before changing files when capture cannot supply an original", () =>
     Effect.gen(function* () {
       const state = yield* fixture()
-      const revert = yield* state.makeRevert({ capture: () => Effect.undefined })
+      const revert = state.makeRevert({ capture: () => Effect.undefined })
       expect(
         yield* revert.stage({ session: yield* state.get(), messageID: state.earlier }).pipe(Effect.flip),
       ).toMatchObject({ _tag: "Snapshot.Error", operation: "capture" })
@@ -389,7 +401,7 @@ describe("SessionRevert recovery", () => {
   it.live("retains the original when diff fails after files have been restored", () =>
     Effect.gen(function* () {
       const state = yield* fixture()
-      const revert = yield* state.makeRevert({
+      const revert = state.makeRevert({
         diff: () => Effect.fail(new Snapshot.Error({ operation: "diff", message: "Diff unavailable" })),
       })
       expect(

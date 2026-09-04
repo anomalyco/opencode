@@ -87,6 +87,11 @@ stdenv.mkDerivation (finalAttrs: {
 
     cd packages/desktop
 
+    export OPENCODE_CLI_DIST="$TMPDIR/desktop-cli"
+    cli_package=$(bun -e 'import { getCurrentCli } from "./scripts/utils.ts"; console.log(getCurrentCli().package.replace("@opencode-ai/", ""))')
+    mkdir -p "$OPENCODE_CLI_DIST/$cli_package/bin"
+    cp ${lib.getExe opencode} "$OPENCODE_CLI_DIST/$cli_package/bin/opencode2"
+
     bun run build
     npx electron-builder --dir \
       --config electron-builder.config.ts \

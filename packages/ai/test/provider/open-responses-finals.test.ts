@@ -82,32 +82,6 @@ describe("Open Responses completed item text", () => {
       expect(response.events.filter(LLMEvent.is.textStart)).toEqual([])
     }),
   )
-
-  it.effect("assembles a done-only message once across replayed item events", () =>
-    Effect.gen(function* () {
-      const item = {
-        type: "message",
-        id: "msg_1",
-        content: [{ type: "output_text", text: "Recovered" }],
-      }
-      const response = yield* generate(
-        { type: "response.output_text.delta", item_id: "msg_1", delta: "Ignored after resume" },
-        { type: "response.output_item.done", item },
-        { type: "response.output_item.added", item },
-        { type: "response.output_item.done", item },
-        completed,
-      )
-      expect(response.text).toBe("Recovered")
-      expect(response.message.content).toEqual([
-        {
-          type: "text",
-          text: "Recovered",
-          providerMetadata: { "openai-compatible": { itemId: "msg_1" } },
-        },
-      ])
-      expect(response.events.filter(LLMEvent.is.textEnd)).toHaveLength(1)
-    }),
-  )
 })
 
 describe("Open Responses completed item reasoning", () => {

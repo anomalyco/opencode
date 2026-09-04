@@ -12,47 +12,31 @@ import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { sessionHref } from "@/shell/routes/session"
 import { createTabMemory } from "./memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed"
-import { createDraftComposerState, type PromptModel } from "@/composer/state"
-import { migrateTabs } from "./migration"
+import {
+  createDraftComposerState,
+  createMemoryComposerState,
+  type ComposerState,
+  type PromptModel,
+} from "@/composer/state"
+import { appendPrompt, promptLength } from "@/composer/prompt-parts"
+import { TabStorage } from "./schema"
 import { useCurrentRoute } from "@/shell/state/layout"
 
-export type SessionTab = {
-  type: "session"
-  server: ServerConnection.Key
-  sessionId: string
-  routeSessionId?: string
-  routeParentId?: string
-}
-
-export type DraftTab = {
-  type: "draft"
-  draftID: string
-  server: ServerConnection.Key
-  directory: string
-  worktree?: string
-  branch?: string
-}
-
-export type Tab = SessionTab | DraftTab
+export type SessionTab = typeof TabStorage.Session.Type
+export type DraftTab = typeof TabStorage.Draft.Type
+export type Tab = typeof TabStorage.Tab.Type
 
 export type PendingSession = {
   draft: DraftTab
   message: SessionMessageUser
   selection: ComposerSelection
+  composer: ComposerState
 }
 
-export type TabInfo = {
-  title?: string
-  directory?: string
-}
+export type TabInfo = typeof TabStorage.Info.Type
 
 export type TabPane = "terminal" | "review"
 export type TabPaneSize = "terminalHeight" | "sessionWidth"
-type TabPaneState = Partial<Record<TabPane, boolean> & Record<TabPaneSize, number>>
-
-type RecentTab = {
-  key?: string
-}
 
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
@@ -85,23 +69,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   init: () => {
     const servers = useServers()
     const platform = usePlatform()
-    const [store, setStore, _, ready] = persisted(
-      {
-        ...Persist.window("tabs"),
-        migrate: migrateTabs,
-      },
-      createStore<Tab[]>([]),
-    )
-    const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), createStore<RecentTab>({}))
-    const [info, setInfo, , infoReady] = persisted(
-      Persist.window("tabs.info"),
-      createStore<Record<string, TabInfo>>({}),
-    )
-    const [panes, setPanes, , panesReady] = persisted(
-      Persist.window("tabs.panes"),
-      createStore<Record<string, TabPaneState>>({}),
-    )
-    const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), createStore<ClosedTab[]>([]))
+    const [store, setStore, _, ready] = persisted(Persist.window("tabs"), TabStorage.Tabs, [])
+    const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), TabStorage.Recent, {
+      key: undefined,
+    })
+    const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos, {})
+    const [panes, setPanes, , panesReady] = persisted(Persist.window("tabs.panes"), TabStorage.Panes, {})
+    const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
     const [pending, setPending] = createStore<Record<string, PendingSession | undefined>>({})
 
     const params = useParams()
@@ -318,8 +292,9 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const draft = { ...actions.draft(draftID) }
         const next = { type: "session" as const, ...session }
         const key = tabKey(next)
+        const composer = createMemoryComposerState()
         const ready = startTransition(() => {
-          setPending(key, { draft, ...preview })
+          setPending(key, { draft, ...preview, composer })
           const index = store.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
           if (index === -1) return
           const active = location.pathname === "/new-session" && location.query.draftId === draftID
@@ -334,9 +309,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         return {
           ready,
-          async complete() {
+          async complete(target: ReturnType<ComposerState["capture"]>) {
             await ready
             if (!pending[key]) return
+            await memory.get<ComposerState>(key, "prompt")?.ready.promise
+            if (promptLength(composer.current())) target.set(composer.current(), composer.cursor())
             await startTransition(() => setPending(key, undefined))
             memory.remove(tabKey(draft))
             removeDraftPersisted(draftID)
@@ -344,6 +321,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           async rollback(worktree?: string) {
             await ready
             if (!pending[key]) return
+            const original = memory.get<ComposerState>(tabKey(draft), "prompt")
+            if (original && promptLength(composer.current())) {
+              // Nothing was submitted: recover both inputs in the original draft.
+              const restored = appendPrompt(original.current(), composer.current())
+              original.set(restored, promptLength(restored))
+            }
             await startTransition(() => {
               const index = store.findIndex((tab) => tabKey(tab) === key)
               if (index !== -1) {

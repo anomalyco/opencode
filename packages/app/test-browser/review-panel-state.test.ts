@@ -66,3 +66,41 @@ test("enables sidebar motion only after custom width hydration", async () => {
     })
   })
 })
+
+test("recovers malformed preferences independently and keeps the filter transient", async () => {
+  const root = createPanel()
+  root.state.setFilter("transient")
+  read?.(JSON.stringify({ sidebarOpened: false, sidebarWidth: "wide", expandMode: "invalid", filter: "stored" }))
+  await root.ready
+  expect(root.state.sidebarOpened()).toBeFalse()
+  expect(root.state.sidebarWidth()).toBe(240)
+  expect(root.state.expandMode()).toBe("collapse")
+  expect(root.state.filter()).toBe("transient")
+  root.dispose()
+})
+
+test.each([0, 199, 481, null])("rejects invalid persisted sidebar width %p", async (sidebarWidth) => {
+  const root = createPanel()
+  read?.(JSON.stringify({ sidebarWidth, expandMode: "expand" }))
+  await root.ready
+  expect(root.state.sidebarWidth()).toBe(240)
+  expect(root.state.sidebarOpened()).toBeTrue()
+  expect(root.state.expandMode()).toBe("expand")
+  root.state.resizeSidebar(1000)
+  expect(root.state.sidebarWidth()).toBe(480)
+  root.state.resizeSidebar(0)
+  expect(root.state.sidebarWidth()).toBe(200)
+  root.dispose()
+})
+
+function createPanel() {
+  return createRoot((dispose) => {
+    const state = createReviewPanelState(platform)
+    const ready = new Promise<void>((resolve) => {
+      createEffect(() => {
+        if (state.sidebarTransition()) resolve()
+      })
+    })
+    return { dispose, state, ready }
+  })
+}

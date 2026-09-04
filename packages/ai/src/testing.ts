@@ -4,6 +4,7 @@ import { LLMClient } from "./route/client.js"
 import {
   LLMEvent,
   LLMResponse,
+  CompactionResponse,
   type FinishReasonDetails,
   type AIError,
   type LLMRequest,
@@ -12,7 +13,7 @@ import {
 } from "./schema/index.js"
 import { Context, Deferred, Effect, Latch, Layer, Queue, Scope, Stream } from "effect"
 
-export type Response = readonly LLMEvent[] | Stream.Stream<LLMEvent, AIError>
+export type Response = readonly LLMEvent[] | Stream.Stream<LLMEvent, AIError> | CompactionResponse
 
 export type Gate = Readonly<{ started: Effect.Effect<void>; release: Effect.Effect<void> }>
 
@@ -99,8 +100,6 @@ export const failAfter = (error: AIError, ...events: readonly LLMEvent[]) =>
 
 export const hangAfter = (...events: readonly LLMEvent[]) => Stream.concat(Stream.fromIterable(events), Stream.never)
 
-const toStream = (response: Response) => (Stream.isStream(response) ? response : Stream.fromIterable(response))
-
 const make = (options: LayerOptions) =>
   Effect.sync(() => {
     const requests: LLMRequest[] = []
@@ -113,26 +112,41 @@ const make = (options: LayerOptions) =>
         requests.length >= count ? Effect.void : Deferred.await(started).pipe(Effect.andThen(wait(count))),
       )
 
-    const stream: ClientInterface["stream"] = (request) =>
-      Stream.suspend(() => {
+    const take = (request: LLMRequest) =>
+      Effect.suspend(() => {
         const count = requests.push(options.transformRequest?.(request) ?? request)
         const waiting = started
         started = Deferred.makeUnsafe()
         const gate = activeGate
         try {
           const response = responses.shift() ?? (typeof fallback === "function" ? fallback(request) : fallback)
-          if (!response) return Stream.die(new Error(`TestLLM has no response for request ${count}`))
-          const streamed = toStream(response)
-          if (!gate) return streamed
-          return Stream.unwrap(
-            Queue.offer(gate.started, undefined).pipe(Effect.andThen(gate.release.await), Effect.as(streamed)),
-          )
+          if (!response) return Effect.die(new Error(`TestLLM has no response for request ${count}`))
+          if (!gate) return Effect.succeed(response)
+          return Queue.offer(gate.started, undefined).pipe(Effect.andThen(gate.release.await), Effect.as(response))
         } finally {
           // Waiters can resume synchronously; assign the reply and gate before notifying them.
           Deferred.doneUnsafe(waiting, Effect.void)
         }
       })
+    const stream: ClientInterface["stream"] = (request) =>
+      Stream.unwrap(
+        take(request).pipe(
+          Effect.map((response) => {
+            if (response instanceof CompactionResponse)
+              return Stream.die("TestLLM generation requires an event response")
+            return Stream.isStream(response) ? response : Stream.fromIterable(response)
+          }),
+        ),
+      )
     const test = Test.of({
+      compact: (request) =>
+        take(request).pipe(
+          Effect.flatMap((response) =>
+            response instanceof CompactionResponse
+              ? Effect.succeed(response)
+              : Effect.die("TestLLM compaction requires a CompactionResponse"),
+          ),
+        ),
       stream,
       generate: (request) =>
         stream(request).pipe(

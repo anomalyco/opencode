@@ -166,7 +166,7 @@ describe("Snapshot", () => {
 
           yield* Effect.gen(function* () {
             const snapshot = yield* Snapshot.Service
-            const registration = yield* snapshot.transform((draft) => draft.configure(false))
+            const registration = yield* snapshot.transform((editor) => editor.configure(false))
             expect(yield* snapshot.capture()).toBeUndefined()
 
             yield* registration.dispose

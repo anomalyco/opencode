@@ -486,6 +486,82 @@
         "summary": "List plugins"
       }
     },
+    "/api/plugin/await-activation": {
+      "post": {
+        "tags": ["plugin"],
+        "operationId": "v2.plugin.awaitActivation",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Wait for configured plugin activation at a Location to settle, including missing-package installs. Completion does not imply every plugin succeeded or background resource discovery finished. Cancelling this wait does not cancel activation.",
+        "summary": "Wait for plugin activation"
+      }
+    },
     "/api/plugin/check": {
       "post": {
         "tags": ["plugin"],
@@ -701,19 +777,22 @@
             }
           }
         },
-        "description": "Update one package plugin and notify active locations to reload it.",
-        "summary": "Update plugin",
+        "description": "Update package plugins concurrently and notify active locations to reload them. Responds once every update has finished; fails when any update fails.",
+        "summary": "Update plugins",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "target": {
-                    "type": "string"
+                  "targets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
-                "required": ["target"],
+                "required": ["targets"],
                 "additionalProperties": false
               }
             }
@@ -8811,7 +8890,8 @@
                 {
                   "type": "null"
                 }
-              ]
+              ],
+              "description": "An absolute path or a path relative to the requested location. Defaults to the location directory."
             },
             "required": false
           }
@@ -8862,7 +8942,7 @@
             }
           }
         },
-        "description": "List direct children of one directory relative to the requested location.",
+        "description": "List direct children using an absolute path or a path relative to the requested location, including parents and siblings outside its directory. Entry paths remain relative to the requested location; listing does not switch locations.",
         "summary": "List directory"
       }
     },
@@ -13698,8 +13778,12 @@
               }
             ]
           },
-          "subtask": {
+          "subagent": {
             "type": "boolean"
+          },
+          "subtask": {
+            "type": "boolean",
+            "description": "Deprecated alias for subagent."
           }
         },
         "required": ["template"],
@@ -13818,16 +13902,9 @@
           "default_agent": {
             "type": "string"
           },
-          "autoupdate": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "string",
-                "enum": ["notify"]
-              }
-            ]
+          "update": {
+            "type": "string",
+            "enum": ["disable", "notify"]
           },
           "share": {
             "type": "string",
@@ -16844,6 +16921,10 @@
               "outdated": {
                 "type": "boolean",
                 "enum": [true]
+              },
+              "updating": {
+                "type": "boolean",
+                "enum": [true]
               }
             },
             "required": ["type", "target"],
@@ -16897,6 +16978,9 @@
                 "enum": ["failed"]
               },
               "error": {
+                "type": "string"
+              },
+              "ref": {
                 "type": "string"
               }
             },

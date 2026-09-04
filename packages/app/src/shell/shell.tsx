@@ -10,7 +10,6 @@ import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
 
 const DebugBar = lazy(() => import("@/shell/debug/debug-bar").then((module) => ({ default: module.DebugBar })))
-const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
 
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
@@ -65,7 +64,7 @@ export default function Layout(props: ParentProps) {
             <aside
               ref={(element) => setState("tabsMount", element)}
               data-slot="vertical-tabs-sidebar"
-              class="relative flex min-h-0 shrink-0 flex-col bg-v2-background-bg-deep px-2.5 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
+              class="relative flex h-full min-h-0 shrink-0 flex-col bg-v2-background-bg-deep px-2.5 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
               style={{
                 width: `${state.tabsWidth}px`,
                 "padding-bottom": "max(8px, env(safe-area-inset-bottom, 0px))",
@@ -86,24 +85,14 @@ export default function Layout(props: ParentProps) {
             class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
             style={{
               "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
-              "padding-bottom": bottomTitlebar() || settings.store.open ? "0px" : "env(safe-area-inset-bottom, 0px)",
+              "padding-bottom": bottomTitlebar() || settings.active() ? "0px" : "env(safe-area-inset-bottom, 0px)",
               "--settings-bottom-inset": bottomTitlebar() ? "40px" : "env(safe-area-inset-bottom, 0px)",
               "--settings-top-inset": mobile() && !bottomTitlebar() ? "0px" : "var(--shell-top-inset, 8px)",
             }}
           >
-            <div
-              class="flex size-full min-h-0 min-w-0 flex-col"
-              hidden={settings.store.open}
-              inert={settings.store.open}
-              aria-hidden={settings.store.open}
-            >
+            <div class="flex size-full min-h-0 min-w-0 flex-col">
               <Suspense>{props.children}</Suspense>
             </div>
-            <Show when={settings.store.open}>
-              <Suspense>
-                <SettingsScreen defaultValue={settings.store.tab} />
-              </Suspense>
-            </Show>
           </main>
         </div>
         <Show when={import.meta.env.DEV && state.debugTools}>

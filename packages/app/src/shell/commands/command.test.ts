@@ -1,11 +1,22 @@
 import { describe, expect, test } from "bun:test"
+import { Schema } from "effect"
 import {
   activeCommandRegistrations,
   addCommandRegistration,
   commandPaletteOptions,
+  CommandCatalog,
   resolveKeybindOption,
   type CommandOption,
 } from "./command"
+
+test("command catalog persistence validates metadata and omits executable fields", () => {
+  const decode = Schema.decodeUnknownSync(CommandCatalog)
+  const catalog = decode({ open: { title: "Open", keybind: "mod+o", hidden: false, onSelect: "invalid" } })
+  expect(catalog).toEqual({ open: { title: "Open", keybind: "mod+o", hidden: false } })
+  expect(decode({})).toEqual({})
+  expect(() => decode({ open: { title: 1 } })).toThrow()
+  expect(decode(Schema.encodeSync(CommandCatalog)(catalog))).toEqual(catalog)
+})
 
 const paletteOptions: CommandOption[] = [
   { id: "settings.open", title: "Open settings" },

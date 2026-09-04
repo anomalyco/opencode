@@ -19,7 +19,10 @@ import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Npm } from "@opencode-ai/util/npm"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { Session } from "@opencode-ai/core/session"
+import { PersistentPty } from "@opencode-ai/core/persistent-pty"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Permission } from "@opencode-ai/core/permission"
 import { Reference } from "@opencode-ai/core/reference"
 import { Rpc } from "@opencode-ai/core/rpc"
@@ -36,10 +39,10 @@ import { emptyMcpLayer } from "../fixture/mcp"
 const npmLayer = Layer.succeed(
   Npm.Service,
   Npm.Service.of({
-    add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
-    resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    add: (name) => Effect.succeed({ directory: "", name }),
+    resolve: (name) => Effect.succeed({ directory: "", name }),
     check: () => Effect.succeed(false),
-    update: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    update: (name) => Effect.succeed({ directory: "", name }),
     which: () => Effect.undefined,
   }),
 )
@@ -58,7 +61,7 @@ const permissionLayer = Layer.succeed(
   }),
 )
 
-export const PluginTestLayer = LayerNode.compile(
+export const PluginTestLayer = AppNodeBuilder.build(
   LayerNode.group([
     AppProcess.node,
     FileSystem.node,
@@ -78,7 +81,9 @@ export const PluginTestLayer = LayerNode.compile(
     Integration.node,
     KV.node,
     Mcp.node,
-    PluginRuntime.node,
+    Session.node,
+    PersistentPty.node,
+    LocationServiceMap.node,
     Permission.node,
     PluginHooks.node,
     Reference.node,
@@ -90,14 +95,12 @@ export const PluginTestLayer = LayerNode.compile(
     Watcher.node,
     WebSearch.node,
   ]),
-  {
-    replacements: [
-      Location.node.replace(tempLocationLayer),
-      Npm.node.replace(npmLayer),
-      Config.node.replace(Config.testLayer()),
-      Mcp.node.replace(emptyMcpLayer),
-      Generate.node.replace(generateLayer),
-      Permission.node.replace(permissionLayer),
-    ],
-  },
-) as unknown as Layer.Layer<unknown, never>
+  [
+    Location.node.replace(tempLocationLayer),
+    Npm.node.replace(npmLayer),
+    Config.node.replace(Config.testLayer()),
+    Mcp.node.replace(emptyMcpLayer),
+    Generate.node.replace(generateLayer),
+    Permission.node.replace(permissionLayer),
+  ],
+)

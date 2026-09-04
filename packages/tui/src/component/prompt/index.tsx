@@ -68,6 +68,7 @@ import { useDirectoryRecents } from "../../prompt/directory-recents"
 import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { truncateFilePath } from "../../ui/file-path"
+import { PromptMetadataRow } from "./metadata"
 
 export type PromptProps = {
   sessionID?: string
@@ -102,10 +103,6 @@ const revealedPromptMetadata = new WeakSet<object>()
 function randomIndex(count: number) {
   if (count <= 0) return 0
   return Math.floor(Math.random() * count)
-}
-
-function fadeColor(color: RGBA, alpha: number) {
-  return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
 }
 
 export function PromptInterruptStatus(props: {
@@ -1838,52 +1835,19 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
-              <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
-                <Show when={agentLabel()} fallback={<box height={1} />}>
-                  {(label) => (
-                    <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>{label()}</text>
-                      <Show
-                        when={store.mode === "normal" && local.permission.mode === "auto" && dimensions().width >= 44}
-                      >
-                        <text fg={fadeColor(theme.text.subdued, agentMetaAlpha())}>auto</text>
-                      </Show>
-                      <Show when={store.mode === "normal" && dimensions().width >= 28}>
-                        <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
-                          <text fg={fadeColor(theme.text.subdued, modelMetaAlpha())}>·</text>
-                          <text
-                            flexShrink={1}
-                            minWidth={0}
-                            wrapMode="none"
-                            truncate
-                            fg={fadeColor(muted() ? theme.text.subdued : theme.text.default, modelMetaAlpha())}
-                          >
-                            {promptDisplay().modelLabel}
-                          </text>
-                          <Show when={dimensions().width >= 50}>
-                            <text flexShrink={0} fg={fadeColor(theme.text.subdued, modelMetaAlpha())}>
-                              {promptDisplay().providerLabel}
-                            </text>
-                          </Show>
-                          <Show when={promptDisplay().variant && dimensions().width >= 70}>
-                            <text fg={fadeColor(theme.text.subdued, variantMetaAlpha())}>·</text>
-                            <text>
-                              <span
-                                style={{
-                                  fg: fadeColor(theme.text.feedback.warning.default, variantMetaAlpha()),
-                                  bold: true,
-                                }}
-                              >
-                                {promptDisplay().variant}
-                              </span>
-                            </text>
-                          </Show>
-                        </box>
-                      </Show>
-                    </>
-                  )}
-                </Show>
-              </box>
+              <PromptMetadataRow
+                mode={store.mode}
+                agent={agentLabel()}
+                auto={local.permission.mode === "auto"}
+                model={promptDisplay().modelLabel}
+                provider={promptDisplay().providerLabel}
+                variant={promptDisplay().variant}
+                muted={!!muted()}
+                highlight={highlight()}
+                agentAlpha={agentMetaAlpha()}
+                modelAlpha={modelMetaAlpha()}
+                variantAlpha={variantMetaAlpha()}
+              />
               <Show when={hasRightContent()}>
                 <box flexDirection="row" gap={1} alignItems="center">
                   {props.right}

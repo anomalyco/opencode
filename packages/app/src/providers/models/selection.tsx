@@ -3,10 +3,12 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, startTransition } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Schema, SchemaGetter } from "effect"
 import { useModels } from "@/providers/models/models"
 import { useSettings } from "@/settings/model"
 import { useProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
 import { hasCustomAgent, resolveAgent } from "./agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./variant"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -15,38 +17,48 @@ import { normalizeAgentList } from "@/runtime/server/global-sync/utils"
 import { useServerSDK } from "@/runtime/server/client"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
-export type ModelKey = { providerID: string; modelID: string; variant?: string }
+const ModelKeySchema = Schema.Struct({
+  providerID: Schema.String,
+  modelID: Schema.String,
+  variant: Schema.optional(Schema.String),
+})
+export type ModelKey = typeof ModelKeySchema.Type
 
-type State = {
-  agent?: string
-  model?: ModelKey
-  variant?: string | null
-}
+const StateSchema = Schema.Struct({
+  agent: Persistence.optional(Schema.String),
+  model: Persistence.optional(ModelKeySchema),
+  variant: Persistence.optional(Schema.NullOr(Schema.String)),
+})
+type State = typeof StateSchema.Type
 
-type Saved = {
-  session: Record<string, State | undefined>
-}
+const SessionsSchema = Schema.Record(
+  Schema.String,
+  Schema.mutableKey(Persistence.fallback(Schema.UndefinedOr(StateSchema), () => undefined)),
+)
+
+const Current = Persistence.struct({ session: SessionsSchema })
+
+export const ModelSelectionSchema = Persistence.migrate(
+  Current,
+  Schema.Struct({
+    session: Persistence.optional(Schema.Record(Schema.String, Schema.Unknown)),
+    pick: Persistence.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  }).pipe(
+    Schema.decode({
+      decode: SchemaGetter.transform((value) => ({
+        session:
+          value.session ??
+          Object.fromEntries(Object.entries(value.pick ?? {}).filter(([key]) => key !== WORKSPACE_KEY)),
+      })),
+      encode: SchemaGetter.transform((value) => value),
+    }),
+  ),
+)
 
 const WORKSPACE_KEY = "__workspace__"
 const handoff = new Map<string, State>()
 
 const handoffKey = (scope: ServerScope, dir: string, id: string) => ScopedKey.from(scope, dir, id)
-
-const migrate = (value: unknown) => {
-  if (!value || typeof value !== "object") return { session: {} }
-
-  const item = value as {
-    session?: Record<string, State | undefined>
-    pick?: Record<string, State | undefined>
-  }
-
-  if (item.session && typeof item.session === "object") return { session: item.session }
-  if (!item.pick || typeof item.pick !== "object") return { session: {} }
-
-  return {
-    session: Object.fromEntries(Object.entries(item.pick).filter(([key]) => key !== WORKSPACE_KEY)),
-  }
-}
 
 const clone = (value: State | undefined) => {
   if (!value) return
@@ -77,13 +89,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
     const [saved, setSaved, , savedReady] = persisted(
-      {
-        ...Persist.serverWorkspace(serverSDK.scope, sdk().directory, "model-selection"),
-        migrate,
-      },
-      createStore<Saved>({
-        session: {},
-      }),
+      Persist.serverWorkspace(serverSDK.scope, sdk().directory, "model-selection"),
+      ModelSelectionSchema,
+      { session: {} },
     )
 
     const [store, setStore] = createStore<{

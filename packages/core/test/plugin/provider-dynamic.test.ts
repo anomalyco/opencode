@@ -4,7 +4,6 @@ import { Cause, Effect, Layer } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { fileURLToPath } from "url"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Model } from "@opencode-ai/core/model"
@@ -16,16 +15,15 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
 const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.url).href
-const fixtureProviderPath = fileURLToPath(fixtureProvider)
 const it = testEffect(PluginTestLayer)
 const itWithAISDK = testEffect(Layer.mergeAll(PluginTestLayer, AppNodeBuilder.build(AISDK.node)))
 
-function npmEntrypoint(entrypoint?: string) {
+function npmPackage(directory = "") {
   return Npm.Service.of({
-    add: () => Effect.succeed({ directory: "", entrypoint }),
-    resolve: () => Effect.succeed({ directory: "", entrypoint }),
+    add: (name) => Effect.succeed({ directory, name }),
+    resolve: (name) => Effect.succeed({ directory, name }),
     check: () => Effect.succeed(false),
-    update: () => Effect.succeed({ directory: "", entrypoint }),
+    update: (name) => Effect.succeed({ directory, name }),
     which: () => Effect.undefined,
   })
 }
@@ -36,13 +34,16 @@ const addPlugin = Effect.fn(function* (npm?: Npm.Interface) {
   yield* DynamicProviderPlugin.effect(host).pipe(Effect.provideService(Npm.Service, npm ?? (yield* Npm.Service)))
 })
 
-function tempEntrypoint(source: string) {
+function tempPackage(source: string) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
       const directory = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-provider-dynamic-"))
-      const entrypoint = path.join(directory, "provider.mjs")
-      await Bun.write(entrypoint, source)
-      return { directory, entrypoint }
+      await Bun.write(path.join(directory, "provider.mjs"), source)
+      await Bun.write(
+        path.join(directory, "package.json"),
+        JSON.stringify({ name: "fixture-provider", exports: "./provider.mjs" }),
+      )
+      return { directory }
     }),
     (tmp) => Effect.promise(() => fs.rm(tmp.directory, { recursive: true, force: true })),
   )
@@ -86,27 +87,11 @@ describe("DynamicProviderPlugin", () => {
     }),
   )
 
-  it.effect("injects the provider ID as the SDK factory name", () =>
+  it.live("loads npm packages through their resolved import entrypoint", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service
-      yield* addPlugin()
-      const result = yield* aisdk.runSDK({
-        model: Model.Info.make({
-          ...Model.Info.default(Provider.ID.make("custom-provider"), Model.ID.make("test-model")),
-          modelID: Model.ID.make("test-model"),
-          package: Provider.aisdk(fixtureProvider),
-        }),
-        package: fixtureProvider,
-        options: { name: "custom-provider", marker: "dynamic" },
-      })
-      expect(result.sdk.options).toEqual({ marker: "dynamic", name: "custom-provider" })
-    }),
-  )
-
-  it.effect("loads npm packages through their resolved import entrypoint", () =>
-    Effect.gen(function* () {
-      const aisdk = yield* AISDK.Service
-      yield* addPlugin(npmEntrypoint(fixtureProviderPath))
+      const tmp = yield* tempPackage(`export { createFixtureProvider } from ${JSON.stringify(fixtureProvider)}\n`)
+      yield* addPlugin(npmPackage(tmp.directory))
       const result = yield* aisdk.runSDK({
         model: Model.Info.make({
           ...Model.Info.default(Provider.ID.make("npm-provider"), Model.ID.make("test-model")),
@@ -123,7 +108,7 @@ describe("DynamicProviderPlugin", () => {
   itWithAISDK.effect("wraps missing npm entrypoint failures as AISDK init errors", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service
-      yield* addPlugin(npmEntrypoint())
+      yield* addPlugin(npmPackage())
       const exit = yield* aisdk
         .language(
           Model.Info.make({
@@ -159,8 +144,8 @@ describe("DynamicProviderPlugin", () => {
   itWithAISDK.live("wraps missing provider factory exports as AISDK init errors", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service
-      const tmp = yield* tempEntrypoint("export const notAProviderFactory = true\n")
-      yield* addPlugin(npmEntrypoint(tmp.entrypoint))
+      const tmp = yield* tempPackage("export const notAProviderFactory = true\n")
+      yield* addPlugin(npmPackage(tmp.directory))
       const exit = yield* aisdk
         .language(
           Model.Info.make({

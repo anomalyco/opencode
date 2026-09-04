@@ -6,7 +6,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Info } from "@opencode-ai/schema/config"
@@ -15,12 +15,14 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Formatter } from "../src/formatter"
 import { Location } from "../src/location"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
+    offlineModels,
   ]),
 )
 type ConfigInput = typeof Info.Encoded
@@ -43,7 +45,7 @@ function withFormatter<A, E, R>(
     ).pipe(
       Effect.andThen(
         Effect.gen(function* () {
-          const plugins = yield* PluginSupervisor.Service
+          const plugins = yield* Plugin.Service
           yield* plugins.awaitActivation
           return yield* body(yield* Formatter.Service, directory)
         }).pipe(
@@ -198,9 +200,9 @@ describe("Formatter", () => {
     withFormatter(false, (formatter, directory) =>
       Effect.gen(function* () {
         const command = { suffix: "A" }
-        yield* formatter.transform((draft) => {
+        yield* formatter.transform((editor) => {
           const suffix = command.suffix
-          draft.set({
+          editor.set({
             name: "reload",
             extensions: [".reload"],
             enabled: Effect.succeed([
@@ -230,7 +232,7 @@ describe("Formatter", () => {
         const resolving = yield* Deferred.make<void>()
         const release = yield* Deferred.make<void>()
         const command = { suffix: "A" }
-        yield* formatter.transform((draft) => {
+        yield* formatter.transform((editor) => {
           const suffix = command.suffix
           const resolved = [
             process.execPath,
@@ -238,7 +240,7 @@ describe("Formatter", () => {
             `const fs = require('fs'); const file = process.argv.at(-1); fs.appendFileSync(file, '${suffix}')`,
             "$FILE",
           ]
-          draft.set({
+          editor.set({
             name: "reload-race",
             extensions: [".race"],
             enabled:

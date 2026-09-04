@@ -6,13 +6,14 @@ import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Context, Effect, Layer } from "effect"
+import { Effect } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Image } from "../image.js"
+import { Instance } from "../instance/service.js"
 import { Mime } from "../mime.js"
+import { Plugin } from "../plugin/service.js"
 import { PluginHooks } from "../plugin/hooks.js"
-import { PluginSupervisor } from "../plugin/supervisor-service.js"
 import { Skill } from "../skill.js"
 import { AttachmentError, SkillNotFoundError } from "./error.js"
 
@@ -25,21 +26,19 @@ export type Input = {
   delivery?: SessionInbox.Delivery
 }
 
-export const make = Effect.fn("SessionPrompt.make")(function* () {
+export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
+  session: Session.Info
+  messageID: SessionMessage.ID
+  input: Input
+}) {
   const fs = yield* FSUtil.Service
-  const plugins = yield* PluginSupervisor.Service
-  const hooks = yield* PluginHooks.Service
-  const image = yield* Image.Service
-  const skillService = yield* Skill.Service
+  const instances = yield* Instance.Service
 
-  const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
-    sessionID: Session.ID
-    messageID: SessionMessage.ID
-    input: Input
-  }) {
-    yield* plugins.awaitActivation
+  return yield* Effect.gen(function* () {
+    yield* Plugin.awaitActivation
+    const hooks = yield* PluginHooks.Service
     const event = yield* hooks.trigger("session", "prompt", {
-      sessionID: request.sessionID,
+      sessionID: request.session.id,
       messageID: request.messageID,
       prompt: structuredClone({
         text: request.input.text,
@@ -57,6 +56,7 @@ export const make = Effect.fn("SessionPrompt.make")(function* () {
     const requested = input.skills
     const selected = yield* Effect.gen(function* () {
       if (!requested?.length) return undefined
+      const skillService = yield* Skill.Service
       const prepared = new Map<Skill.ID, Skill.Name>()
       return yield* Effect.forEach(requested, (attachment) =>
         Effect.gen(function* () {
@@ -87,123 +87,117 @@ export const make = Effect.fn("SessionPrompt.make")(function* () {
       }),
       delivery: SessionInbox.Delivery.make(event.delivery),
     } satisfies SessionInbox.Item
-  })
-
-  const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(function* (
-    input: PromptInput.FileAttachment,
-  ) {
-    const resolved = input.uri.startsWith("data:")
-      ? {
-          bytes: yield* decodeDataURL(input.uri),
-          source: { type: "inline" as const },
-          start: undefined,
-          end: undefined,
-          name: undefined,
-          mime: undefined,
-        }
-      : yield* readFileAttachment(input.uri)
-    if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
-      return yield* new AttachmentError({
-        uri: input.uri,
-        message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${input.uri}`,
-      })
-
-    const mime = resolved.mime ?? Mime.detect(resolved.bytes)
-    const content =
-      mime === "text/plain" && resolved.start !== undefined
-        ? Buffer.from(
-            Buffer.from(resolved.bytes)
-              .toString("utf8")
-              .split("\n")
-              .slice(resolved.start - 1, resolved.end)
-              .join("\n"),
-          )
-        : resolved.bytes
-    const normalized = yield* normalizeImageAttachment(input, Buffer.from(content).toString("base64"), mime)
-    return FileAttachment.create({
-      data: normalized.data,
-      mime: normalized.mime,
-      source: resolved.source,
-      name: input.name ?? resolved.name,
-      description: input.description,
-      mention: input.mention,
-    })
-  })
-
-  const normalizeImageAttachment = Effect.fn("SessionPrompt.normalizeImageAttachment")(function* (
-    input: PromptInput.FileAttachment,
-    data: string,
-    mime: string,
-  ) {
-    if (!mime.startsWith("image/")) return { data: Base64.make(data), mime }
-    const label = input.name ?? (input.uri.startsWith("data:") ? "inline attachment" : input.uri)
-    const content = { uri: label, content: data, encoding: "base64" as const, mime }
-    const normalized = yield* image.normalize(label, content).pipe(
-      Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)),
-      Effect.mapError((error) => new AttachmentError({ uri: label, message: error.message })),
-    )
-    return { data: Base64.make(normalized.content), mime: normalized.mime }
-  })
-
-  const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(function* (uri: string) {
-    const url = yield* Effect.try({
-      try: () => new URL(uri),
-      catch: () => new AttachmentError({ uri, message: `Invalid attachment URI: ${uri}` }),
-    })
-    if (url.protocol !== "file:")
-      return yield* new AttachmentError({ uri, message: `Unsupported attachment URI: ${uri}` })
-    const start = positiveInt(url.searchParams.get("start"))
-    const end = positiveInt(url.searchParams.get("end"))
-    const target = yield* Effect.try({
-      try: () => {
-        url.search = ""
-        url.hash = ""
-        return fileURLToPath(url)
-      },
-      catch: () => new AttachmentError({ uri, message: `Invalid file URI: ${uri}` }),
-    })
-    const info = yield* fs
-      .stat(target)
-      .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
-    if (info.type === "Directory") {
-      const entries = yield* fs
-        .readDirectoryEntries(target)
-        .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
-      return {
-        bytes: Buffer.from(
-          entries
-            .filter((entry) => entry.type === "file" || entry.type === "directory")
-            .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1))
-            .map((entry) => entry.name + (entry.type === "directory" ? path.sep : ""))
-            .join("\n"),
-        ),
-        source: { type: "uri" as const, uri },
-        start: undefined,
-        end: undefined,
-        name: path.basename(target),
-        mime: "application/x-directory",
-      }
-    }
-    if (info.type !== "File") return yield* new AttachmentError({ uri, message: `Attachment is not a file: ${uri}` })
-    if (Number(info.size) > MAX_ATTACHMENT_BYTES)
-      return yield* new AttachmentError({
-        uri,
-        message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${uri}`,
-      })
-    const bytes = yield* fs
-      .readFile(target)
-      .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
-    return { bytes, source: { type: "uri" as const, uri }, start, end, name: path.basename(target), mime: undefined }
-  })
-
-  return { prepare }
+  }).pipe(instances.provide(request.session))
 })
 
-export type Interface = Effect.Success<ReturnType<typeof make>>
+const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(function* (
+  input: PromptInput.FileAttachment,
+) {
+  const resolved = input.uri.startsWith("data:")
+    ? {
+        bytes: yield* decodeDataURL(input.uri),
+        source: { type: "inline" as const },
+        start: undefined,
+        end: undefined,
+        name: undefined,
+        mime: undefined,
+      }
+    : yield* readFileAttachment(input.uri)
+  if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
+    return yield* new AttachmentError({
+      uri: input.uri,
+      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${input.uri}`,
+    })
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
+  const mime = resolved.mime ?? Mime.detect(resolved.bytes)
+  const content =
+    mime === "text/plain" && resolved.start !== undefined
+      ? Buffer.from(
+          Buffer.from(resolved.bytes)
+            .toString("utf8")
+            .split("\n")
+            .slice(resolved.start - 1, resolved.end)
+            .join("\n"),
+        )
+      : resolved.bytes
+  const normalized = yield* normalizeImageAttachment(input, Buffer.from(content).toString("base64"), mime)
+  return FileAttachment.create({
+    data: normalized.data,
+    mime: normalized.mime,
+    source: resolved.source,
+    name: input.name ?? resolved.name,
+    description: input.description,
+    mention: input.mention,
+  })
+})
 
-export const layer = Layer.effect(Service, make())
+const normalizeImageAttachment = Effect.fn("SessionPrompt.normalizeImageAttachment")(function* (
+  input: PromptInput.FileAttachment,
+  data: string,
+  mime: string,
+) {
+  if (!mime.startsWith("image/")) return { data: Base64.make(data), mime }
+  const image = yield* Image.Service
+  const label = input.name ?? (input.uri.startsWith("data:") ? "inline attachment" : input.uri)
+  const content = { uri: label, content: data, encoding: "base64" as const, mime }
+  const normalized = yield* image.normalize(label, content).pipe(
+    Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)),
+    Effect.mapError((error) => new AttachmentError({ uri: label, message: error.message })),
+  )
+  return { data: Base64.make(normalized.content), mime: normalized.mime }
+})
+
+const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(function* (uri: string) {
+  const fs = yield* FSUtil.Service
+  const url = yield* Effect.try({
+    try: () => new URL(uri),
+    catch: () => new AttachmentError({ uri, message: `Invalid attachment URI: ${uri}` }),
+  })
+  if (url.protocol !== "file:")
+    return yield* new AttachmentError({ uri, message: `Unsupported attachment URI: ${uri}` })
+  const start = positiveInt(url.searchParams.get("start"))
+  const end = positiveInt(url.searchParams.get("end"))
+  const target = yield* Effect.try({
+    try: () => {
+      url.search = ""
+      url.hash = ""
+      return fileURLToPath(url)
+    },
+    catch: () => new AttachmentError({ uri, message: `Invalid file URI: ${uri}` }),
+  })
+  const info = yield* fs
+    .stat(target)
+    .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
+  if (info.type === "Directory") {
+    const entries = yield* fs
+      .readDirectoryEntries(target)
+      .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
+    return {
+      bytes: Buffer.from(
+        entries
+          .filter((entry) => entry.type === "file" || entry.type === "directory")
+          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1))
+          .map((entry) => entry.name + (entry.type === "directory" ? path.sep : ""))
+          .join("\n"),
+      ),
+      source: { type: "uri" as const, uri },
+      start: undefined,
+      end: undefined,
+      name: path.basename(target),
+      mime: "application/x-directory",
+    }
+  }
+  if (info.type !== "File") return yield* new AttachmentError({ uri, message: `Attachment is not a file: ${uri}` })
+  if (Number(info.size) > MAX_ATTACHMENT_BYTES)
+    return yield* new AttachmentError({
+      uri,
+      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${uri}`,
+    })
+  const bytes = yield* fs
+    .readFile(target)
+    .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
+  return { bytes, source: { type: "uri" as const, uri }, start, end, name: path.basename(target), mime: undefined }
+})
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 

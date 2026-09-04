@@ -12,7 +12,7 @@ export type PermissionEffect = "allow" | "deny" | "ask"
 
 export type PluginSource =
   | { type: "builtin" }
-  | { type: "package"; target: string; version?: string; outdated?: true }
+  | { type: "package"; target: string; version?: string; outdated?: true; updating?: true }
   | { type: "local"; path: string }
   | { type: "sdk" }
 
@@ -133,17 +133,6 @@ export type SessionMessageCompactionRunning = {
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "running"
-  reason: "auto" | "manual"
-  summary: string
-  recent: string
-}
-
-export type SessionMessageCompactionCompleted = {
-  type: "compaction"
-  id: string
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  status: "completed"
   reason: "auto" | "manual"
   summary: string
   recent: string
@@ -521,6 +510,19 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
+export type SessionMessageCompactionCompleted = {
+  type: "compaction"
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  status: "completed"
+  reason: "auto" | "manual"
+  model?: ModelRef
+  providerState?: SessionMessageProviderState
+  summary: string
+  recent: string
+}
+
 export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
@@ -809,16 +811,6 @@ export type SessionCompactionStarted = {
   data: { sessionID: string; reason: "auto" | "manual"; recent: string; inputID?: string }
 }
 
-export type SessionCompactionEnded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.compaction.ended"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; reason: "auto" | "manual"; text: string; recent: string }
-}
-
 export type SessionCompactionFailed = {
   id: string
   created: number
@@ -993,15 +985,6 @@ export type ReferenceUpdated = {
   type: "reference.updated"
   location?: LocationRef
   data: {}
-}
-
-export type PluginAdded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "plugin.added"
-  location?: LocationRef
-  data: { id: string }
 }
 
 export type PluginUpdated = {
@@ -1367,6 +1350,23 @@ export type SessionToolCalled = {
     input: { [x: string]: any }
     executed: boolean
     state?: SessionMessageProviderState1
+  }
+}
+
+export type SessionCompactionEnded = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.compaction.ended"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    reason: "auto" | "manual"
+    model?: ModelRef
+    providerState?: SessionMessageProviderState1
+    text: string
+    recent: string
   }
 }
 
@@ -1902,7 +1902,7 @@ export type ConfigEntry =
         shell?: string
         model?: string | { providerID: string; model: string; variant?: string }
         default_agent?: string
-        autoupdate?: boolean | "notify"
+        update?: "disable" | "notify"
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
@@ -1990,6 +1990,7 @@ export type ConfigEntry =
             description?: string
             agent?: string
             model?: string | { providerID: string; model: string; variant?: string }
+            subagent?: boolean
             subtask?: boolean
           }
         }
@@ -2310,7 +2311,6 @@ export type V2Event =
   | ReferenceUpdated
   | PermissionAsked
   | PermissionReplied
-  | PluginAdded
   | PluginUpdated
   | ProjectUpdated
   | WorktreeUpdated
@@ -2347,10 +2347,6 @@ export type V2Event =
 
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
-export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly message: string }
-export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
-
 export type InvalidRequestError = {
   readonly _tag: "InvalidRequestError"
   readonly message: string
@@ -2359,6 +2355,10 @@ export type InvalidRequestError = {
 }
 export const isInvalidRequestError = (value: unknown): value is InvalidRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidRequestError"
+
+export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly message: string }
+export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
 export type AgentNotFoundError = {
   readonly _tag: "AgentNotFoundError"
@@ -2380,14 +2380,6 @@ export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly
 export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidCursorError"
 
-export type ConflictError = {
-  readonly _tag: "ConflictError"
-  readonly message: string
-  readonly resource?: string | undefined
-}
-export const isConflictError = (value: unknown): value is ConflictError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
-
 export type SessionNotFoundError = {
   readonly _tag: "SessionNotFoundError"
   readonly sessionID: string
@@ -2395,6 +2387,14 @@ export type SessionNotFoundError = {
 }
 export const isSessionNotFoundError = (value: unknown): value is SessionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SessionNotFoundError"
+
+export type ConflictError = {
+  readonly _tag: "ConflictError"
+  readonly message: string
+  readonly resource?: string | undefined
+}
+export const isConflictError = (value: unknown): value is ConflictError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
 
 export type UnknownError = {
   readonly _tag: "UnknownError"
@@ -2485,14 +2485,6 @@ export type FormNotFoundError = { readonly _tag: "FormNotFoundError"; readonly i
 export const isFormNotFoundError = (value: unknown): value is FormNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormNotFoundError"
 
-export type FormAlreadySettledError = {
-  readonly _tag: "FormAlreadySettledError"
-  readonly id: string
-  readonly message: string
-}
-export const isFormAlreadySettledError = (value: unknown): value is FormAlreadySettledError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormAlreadySettledError"
-
 export type FormInvalidAnswerError = {
   readonly _tag: "FormInvalidAnswerError"
   readonly id: string
@@ -2500,6 +2492,14 @@ export type FormInvalidAnswerError = {
 }
 export const isFormInvalidAnswerError = (value: unknown): value is FormInvalidAnswerError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormInvalidAnswerError"
+
+export type FormAlreadySettledError = {
+  readonly _tag: "FormAlreadySettledError"
+  readonly id: string
+  readonly message: string
+}
+export const isFormAlreadySettledError = (value: unknown): value is FormAlreadySettledError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormAlreadySettledError"
 
 export type PermissionNotFoundError = {
   readonly _tag: "PermissionNotFoundError"
@@ -2596,6 +2596,14 @@ export type PluginListOutput = {
   data: Array<PluginInfo>
 }
 
+export type PluginAwaitActivationInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type PluginAwaitActivationOutput = void
+
 export type PluginCheckInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -2612,7 +2620,7 @@ export type PluginUpdateInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
-  readonly target: { readonly target: string }["target"]
+  readonly targets: { readonly targets: ReadonlyArray<string> }["targets"]
 }
 
 export type PluginUpdateOutput = void
@@ -3076,6 +3084,8 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
+              readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
             }
@@ -3353,6 +3363,8 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
+              readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
             }
@@ -3630,6 +3642,8 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
+              readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
             }

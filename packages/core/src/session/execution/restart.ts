@@ -176,13 +176,7 @@ export const layer = (options?: Options) =>
                 (message) =>
                   message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
               )
-              if (assistant?.type !== "assistant") return "Subagent completed without a text response."
-              return (
-                assistant.content
-                  .filter((part) => part.type === "text")
-                  .map((part) => part.text)
-                  .join("") || "Subagent completed without a text response."
-              )
+              return SubagentCompletion.text(assistant)
             }),
           ),
         })

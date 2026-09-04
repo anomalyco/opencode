@@ -12,7 +12,8 @@ await Effect.runPromise(
     process.argv.slice(2),
   ).pipe(
     Effect.provideService(Updater.Service, {
-      check: () => Effect.die("Manual upgrades must not run the automatic update check"),
+      monitor: () => Effect.die("Manual upgrades must not monitor automatic updates"),
+      apply: () => Effect.die("Manual upgrades must not apply TUI updates"),
       method: () =>
         Effect.sync(() => {
           record("method")

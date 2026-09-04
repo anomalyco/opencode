@@ -4,7 +4,7 @@ import { NodeServices } from "@effect/platform-node"
 import { Service, type DiscoverOptions } from "@opencode-ai/client/effect/service"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
-import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import { Effect, Option, Redacted, Schedule, Schema } from "effect"
@@ -13,7 +13,6 @@ import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { ServiceRegistration } from "./services/service-registration"
-import { Updater } from "./services/updater"
 import { WebUi } from "./services/web-ui"
 
 export type Mode = "default" | "service" | "stdio"
@@ -28,7 +27,6 @@ export type Options = {
 // The process effect lives until server shutdown; tracing it would parent every request to one process-lifetime trace.
 export const run = Effect.fnUntraced(function* (options: Options) {
   return yield* processEffect(options).pipe(
-    Effect.provide(Updater.layer),
     Effect.provide(
       LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {
         replacements: [
@@ -84,7 +82,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const server = yield* start(
         {
           app: {
-            name: process.env.OPENCODE_CLIENT ?? "cli",
+            name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
             version: OPENCODE_VERSION,
             channel: OPENCODE_CHANNEL,
           },
@@ -165,8 +163,6 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)
-      const updater = yield* Updater.Service
-      yield* updater.check().pipe(Effect.schedule(Schedule.spaced("10 minutes")), Effect.forkScoped)
       return yield* options.mode === "service"
         ? server.shutdown
         : options.mode === "stdio"
