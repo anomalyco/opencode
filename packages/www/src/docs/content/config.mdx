@@ -297,13 +297,13 @@ Set the maximum number of lines and bytes retained from a tool result.
 
 ### Web search
 
-Use `"auto"` to randomly choose a search provider and keep using it until it
+Use `"random"` to randomly choose a search provider and keep using it until it
 returns HTTP 429. OpenCode then retries the query with another available provider.
 
 ```jsonc
 {
   "websearch": {
-    "provider": "auto",
+    "provider": "random",
   },
 }
 ```
@@ -312,7 +312,6 @@ returns HTTP 429. OpenCode then retries the query with another available provide
 - When every provider is cooling down, the search fails without waiting.
 - Selection and cooldowns are kept in memory per Location, not across server restarts.
 - Set `provider` to a provider ID to disable automatic switching, or set `websearch` to `false` to disable search.
-- `"random"` is a deprecated alias for `"auto"`; existing configurations continue to work.
 
 ### MCP
 

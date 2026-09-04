@@ -1991,7 +1991,7 @@ export type ConfigEntry =
             | { repository: string; branch?: string; description?: string; hidden?: boolean }
             | { path: string; description?: string; hidden?: boolean }
         }
-        websearch?: false | { provider: "auto" | "random" | (string & {}) }
+        websearch?: false | { provider: "random" | (string & {}) }
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {

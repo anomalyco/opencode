@@ -5,11 +5,10 @@ import { WebSearch } from "../websearch.js"
 
 export class Info extends Schema.Class<Info>("ConfigWebSearch.Info")({
   provider: Schema.Union([
-    Schema.Literal("auto").annotate({
+    Schema.Literal("random").annotate({
       description:
         "Reuse a randomly selected provider until it is rate limited, then switch to another available provider.",
     }),
-    Schema.Literal("random").annotate({ description: 'Deprecated alias for "auto".', deprecated: true }),
     WebSearch.ID,
   ]),
 }) {}

@@ -122,9 +122,9 @@ export const Plugin = {
                             : undefined
                         if (selection?.status === "cancelled")
                           return yield* Effect.fail(new Error("Web search cancelled"))
-                        const providerID = selection?.answer.provider ?? "auto"
-                        if (providerID === "auto") {
-                          yield* websearch.select("auto")
+                        const providerID = selection?.answer.provider ?? "random"
+                        if (providerID === "random") {
+                          yield* websearch.select("random")
                           return
                         }
                         const provider = providers.find((provider) => provider.id === providerID)

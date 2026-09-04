@@ -27,19 +27,8 @@ export const Response = WebSearch.Response
 export type Response = WebSearch.Response
 
 export const ProviderKey = "websearch:provider"
-export const Selection = Schema.Union([
-  ID,
-  Schema.Literal("auto"),
-  Schema.Literal("random").annotate({ description: 'Deprecated alias for "auto".', deprecated: true }),
-  Schema.Literal(false),
-])
+export const Selection = Schema.Union([ID, Schema.Literal("random"), Schema.Literal(false)])
 export type Selection = typeof Selection.Type
-
-export function normalizeSelection(selection: string | false): Exclude<Selection, "random"> {
-  if (selection === false || selection === "auto") return selection
-  if (selection === "random") return "auto"
-  return ID.make(selection)
-}
 
 export interface ProviderImplementation extends Provider {
   readonly execute: (input: ProviderInput) => Effect.Effect<readonly Result[], unknown>
@@ -77,7 +66,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/We
 
 type Data = {
   readonly providers: Map<ID, ProviderImplementation>
-  selection?: Exclude<Selection, "random">
+  selection?: Selection
 }
 
 export type Editor = {
@@ -102,7 +91,7 @@ const layer = Layer.effect(
         add: (provider) => editor.providers.set(provider.id, provider),
         default: {
           get: () => editor.selection,
-          set: (selection) => (editor.selection = normalizeSelection(selection)),
+          set: (selection) => (editor.selection = selection),
         },
       }),
       notify: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
@@ -117,17 +106,17 @@ const layer = Layer.effect(
       const data = state.get()
       if (
         data.selection === false ||
-        data.selection === "auto" ||
+        data.selection === "random" ||
         (data.selection && data.providers.has(data.selection))
       )
         return data.selection
       const stored = yield* kv.get(ProviderKey)
       const decoded = Schema.decodeUnknownOption(Selection)(stored)
       if (stored !== undefined && Option.isNone(decoded)) yield* kv.remove(ProviderKey)
-      return Option.getOrUndefined(Option.map(decoded, normalizeSelection))
+      return Option.getOrUndefined(decoded)
     })
 
-    const autoProvider = (now: number, attempted?: Set<ID>) => {
+    const randomProvider = (now: number, attempted?: Set<ID>) => {
       const providers = state.get().providers
       cooldowns.forEach((cooldown, id) => {
         if (cooldown.until <= now || !providers.has(id)) cooldowns.delete(id)
@@ -142,13 +131,11 @@ const layer = Layer.effect(
       return provider
     }
 
-    const defaultProvider = Effect.fn("WebSearch.default")(function* (
-      choice: Exclude<Selection, "random"> | undefined,
-    ) {
+    const defaultProvider = Effect.fn("WebSearch.default")(function* (choice: Selection | undefined) {
       if (choice === false) return yield* new DisabledError()
-      if (choice === "auto") {
+      if (choice === "random") {
         // A configured but cooling-down provider must not trigger the consent form again.
-        return autoProvider(yield* Clock.currentTimeMillis) ?? state.get().providers.values().next().value
+        return randomProvider(yield* Clock.currentTimeMillis) ?? state.get().providers.values().next().value
       }
       return choice ? state.get().providers.get(choice) : undefined
     })
@@ -167,7 +154,7 @@ const layer = Layer.effect(
         return provider && { id: provider.id, name: provider.name }
       }),
       select: Effect.fn("WebSearch.select")(function* (selection) {
-        yield* kv.set(ProviderKey, normalizeSelection(selection))
+        yield* kv.set(ProviderKey, selection)
       }),
       query: Effect.fn("WebSearch.query")(function* (input, options) {
         const choice = input.providerID ? undefined : yield* selection()
@@ -178,7 +165,7 @@ const layer = Layer.effect(
         const attempted = new Set<ID>()
         while (true) {
           if (options?.onProvider) yield* options.onProvider({ id: provider.id, name: provider.name })
-          let cooldown = choice === "auto" ? cooldowns.get(provider.id) : undefined
+          let cooldown = choice === "random" ? cooldowns.get(provider.id) : undefined
           if (!cooldown || cooldown.until <= (yield* Clock.currentTimeMillis)) {
             attempted.add(provider.id)
             const result = yield* provider
@@ -187,13 +174,13 @@ const layer = Layer.effect(
             if (result._tag === "Success") return new Response({ providerID: provider.id, results: result.success })
             const cause = result.failure
             const error = new RequestError({ providerID: provider.id, cause })
-            if (choice !== "auto" || !HttpClientError.isHttpClientError(cause) || cause.response?.status !== 429)
+            if (choice !== "random" || !HttpClientError.isHttpClientError(cause) || cause.response?.status !== 429)
               return yield* error
             const now = yield* Clock.currentTimeMillis
             cooldown = { until: now + cooldownMillis(cause.response.headers["retry-after"], now), error }
             cooldowns.set(provider.id, cooldown)
           }
-          provider = autoProvider(yield* Clock.currentTimeMillis, attempted)
+          provider = randomProvider(yield* Clock.currentTimeMillis, attempted)
           if (!provider) return yield* cooldown.error
         }
       }),

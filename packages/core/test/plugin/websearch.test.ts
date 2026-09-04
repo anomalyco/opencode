@@ -40,7 +40,7 @@ describe("built-in web search providers", () => {
           yield* plugin.effect(
             host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
           )
-          yield* websearch.select("auto")
+          yield* websearch.select("random")
           expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
           expect(signals).toHaveLength(1)
           expect(signals[0]?.aborted).toBe(true)

@@ -216,7 +216,7 @@ describe("WebSearchTool registration", () => {
       expect(first.status).toBe("completed")
       expect(["exa", "parallel"]).toContain(first.metadata?.provider)
       expect(first.metadata?.provider).toBe((yield* fixture.websearch.default())?.id)
-      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("auto")
+      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
       expect(fixture.websearch.queries).toHaveLength(2)
       expect(fixture.formRequests).toEqual([
         {
@@ -270,7 +270,7 @@ describe("WebSearchTool registration", () => {
         call: { type: "tool-call", id: "call-missing", name: "websearch", input: { query: "effect" } },
       })
       expect(result.status).toBe("completed")
-      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("auto")
+      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
       expect(result.metadata?.provider).toBe((yield* fixture.websearch.default())?.id)
       expect(fixture.formRequests).toHaveLength(1)
     }),
@@ -341,7 +341,7 @@ describe("WebSearchTool registration", () => {
 
       expect(results.every((item) => item.status === "completed")).toBe(true)
       expect(fixture.formRequests).toHaveLength(1)
-      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("auto")
+      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
     }),
   )
 
@@ -367,7 +367,7 @@ describe("WebSearchTool registration", () => {
   it.effect("keeps provider progress, output, and metadata accurate across automatic failover", () =>
     Effect.gen(function* () {
       const fixture = yield* setup
-      yield* fixture.websearch.select("auto")
+      yield* fixture.websearch.select("random")
       const first = yield* fixture.websearch.default()
       if (!first) return yield* Effect.die("Expected an automatic provider")
       yield* fixture.websearch.transform((editor) =>
@@ -401,7 +401,7 @@ describe("WebSearchTool registration", () => {
   it.effect("does not reopen consent when all automatic providers are cooling down", () =>
     Effect.gen(function* () {
       const fixture = yield* setup
-      yield* fixture.websearch.select("auto")
+      yield* fixture.websearch.select("random")
       fixture.error = TestWebSearch.httpError()
       const tools = yield* fixture.registry.snapshot()
       yield* Effect.forEach(["first", "cooling"], (query) =>

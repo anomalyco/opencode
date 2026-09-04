@@ -14470,13 +14470,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["auto"],
-                "description": "Reuse a randomly selected provider until it is rate limited, then switch to another available provider."
-              },
-              {
-                "type": "string",
                 "enum": ["random"],
-                "description": "Deprecated alias for \"auto\"."
+                "description": "Reuse a randomly selected provider until it is rate limited, then switch to another available provider."
               },
               {
                 "type": "string"
