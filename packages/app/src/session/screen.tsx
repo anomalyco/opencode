@@ -275,16 +275,19 @@ export function SessionScreen(props: { session: SessionModel }) {
     <>
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
-          {/* Both headers reserve a slot for this control, outside their width animations. */}
+          {/* Keep the control outside panel animations; the terminal's 52px header includes a 1px divider. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
-            <div class="absolute end-3 top-2.5 z-30" data-slot="session-review-toggle">
+            <div
+              class="absolute end-3 top-0 z-30 flex items-center"
+              classList={{ "h-[51px]": sideTerminalVisible(), "h-12": !sideTerminalVisible() }}
+              data-slot="session-review-toggle"
+            >
               <SessionReviewToggle />
             </div>
           </Show>
           <div
             classList={{
-              "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]":
-                true,
+              "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
               "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
                 !screen.size.active() && sidePresence.animate(),
               "transition-none": screen.size.active() || !sidePresence.animate(),
@@ -415,6 +418,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                             present={store.sideTerminalPresent}
                             animate={sidePresence.animate() || sideMotion().animateTerminal}
                             contentHeight={screen.side.terminal.contentHeight()}
+                            reserveReviewToggle={!screen.side.region.open()}
                           />
                         </div>
                       </div>

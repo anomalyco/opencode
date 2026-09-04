@@ -428,7 +428,8 @@ export function SessionSidePanel(props: {
                         </Tabs.List>
                         <div
                           data-slot="session-side-panel-actions"
-                          class="session-review-v2-open-in-app-slot h-12 self-start shrink-0 flex items-center gap-2 pe-3"
+                          class="session-review-v2-open-in-app-slot self-start shrink-0 flex items-center gap-2 pe-3"
+                          classList={{ "h-[51px]": props.stacked, "h-12": !props.stacked }}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
