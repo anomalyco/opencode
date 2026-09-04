@@ -526,7 +526,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("tolerates keepalive frames before response.created", () =>
+  it.effect("tolerates keepalive and provider notifications before response.created", () =>
     Effect.gen(function* () {
       const webSocket = WebSocketTransport.makeDirect({
         open: () =>
@@ -534,6 +534,7 @@ describe("OpenAI Responses route", () => {
             sendText: () => Effect.void,
             messages: Stream.fromArray([
               ProviderShared.encodeJson({ type: "keepalive", sequence_number: 0 }),
+              ProviderShared.encodeJson({ type: "codex.rate_limits" }),
               ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_alive" } }),
               ProviderShared.encodeJson({
                 type: "response.completed",
