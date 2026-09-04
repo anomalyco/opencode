@@ -13,7 +13,7 @@ export const MODEL_AUTHOR_RULES = [
   { match: "nemotron", author: "nvidia" },
   { match: "qwen", author: "qwen" },
 ] as const
-export const EXCLUDED_MODELS = new Set(["alpha-gpt-next"])
+export const EXCLUDED_MODELS = new Set(["alpha-gpt-next", "omen-alpha"])
 export const FREE_MODELS = new Set(["gpt-5-nano", "grok-code", "big-pickle"])
 export const MODEL_NAME_ALIASES: Record<string, string> = {
   "deepseek-v4-flash-0731": "deepseek-v4-flash",

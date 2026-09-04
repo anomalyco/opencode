@@ -36,6 +36,8 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("nemotron-3-super-free")).toBe("nvidia")
     expect(modelAuthor("qwen3.7-max")).toBe("qwen")
     expect(modelAuthor("alpha-gpt-next")).toBeUndefined()
+    expect(modelAuthor("omen-alpha")).toBeUndefined()
+    expect(modelAuthor("OMEN-ALPHA-free:global")).toBeUndefined()
   })
 
   test("uses provider.model to resolve opencode route providers", () => {
@@ -70,6 +72,7 @@ describe("inference stat normalization", () => {
 
   test("model aggregates prefer provider.model and use normalized model", () => {
     expect(toModelAggregate(aggregate("alpha-gpt-next", "openai"))).toEqual([])
+    expect(toModelAggregate(aggregate("omen-alpha", "unknown"))).toEqual([])
 
     expect(toModelAggregate(aggregate("deepseek-v4-flash-free", "not-public-provider"))).toMatchObject([
       {
@@ -124,6 +127,7 @@ describe("inference stat normalization", () => {
     })
 
     expect(queries).toHaveLength(8)
+    queries.forEach((query) => expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next', 'omen-alpha')"))
     expect(queries[0]).toContain("'week' AS grain")
     expect(queries[0]).toContain("'2026-W33' AS period_key")
     expect(queries[2]).toContain("'2026-08-10' AS period_key")
@@ -186,6 +190,7 @@ describe("inference stat normalization", () => {
     expect(queries).toHaveLength(1)
     expect(queries[0]?.cohortDates).toEqual(["2026-08-10", "2026-08-17"])
     expect(queries[0]?.query).toContain("AND product = 'go'")
+    expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next', 'omen-alpha')")
     expect(queries[0]?.query).toContain("COUNT(*) AS model_requests")
     expect(queries[0]?.query).toContain("SUM(model_requests) AS total_requests")
     expect(queries[0]?.query).toContain("MAX(model_requests) AS max_model_requests")
