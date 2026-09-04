@@ -5,7 +5,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.4.0",
+  "packageManager": "bun@1.4.1",
   "scripts": {
     "dev": "bun run --cwd packages/cli --conditions=browser src/index.ts",
     "dev:live": "sh -c 'OPENCODE_TUI_CHANNEL=dev OPENCODE_PASSWORD=\"$(opencode2 service get password)\" exec bun run dev \"$@\" --server \"$(opencode2 service status)\"' --",
@@ -43,7 +43,7 @@
       "@effect/platform-node-shared": "4.0.0-rc.112",
       "@effect/sql-sqlite-bun": "4.0.0-rc.112",
       "@npmcli/arborist": "9.4.0",
-      "@types/bun": "1.3.13",
+      "@types/bun": "1.4.0",
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@hono/standard-validator": "0.2.0",
@@ -159,6 +159,7 @@
     "@effect/platform-node-shared": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "bun-types": "1.4.1",
     "effect": "catalog:",
     "solid-js": "catalog:"
   },
