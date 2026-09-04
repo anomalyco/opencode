@@ -80,6 +80,20 @@ export function decodeFilePath(input: string) {
   }
 }
 
+export function parseFileURL(input: string) {
+  if (typeof URL.canParse === "function" && !URL.canParse(input)) return undefined
+  let url: URL
+  try {
+    url = new URL(input)
+  } catch {
+    return undefined
+  }
+  if (url.protocol !== "file:") return undefined
+  const pathname = decodeFilePath(url.pathname)
+  const path = !url.hostname || url.hostname === "localhost" ? pathname : `//${url.hostname}${pathname}`
+  return { path, url: url.href }
+}
+
 export function encodeFilePath(filepath: string): string {
   // Normalize Windows paths: convert backslashes to forward slashes
   let normalized = filepath.replace(/\\/g, "/")
