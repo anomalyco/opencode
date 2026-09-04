@@ -647,7 +647,8 @@
 
 .settings-tab-search {
   position: relative;
-  width: 100%;
+  width: calc(100% - 2px);
+  margin-inline: 1px;
 }
 
 .settings-tab-search [data-component="text-input-v2"] {
