@@ -1205,6 +1205,30 @@ it.effect("merges plugin arrays from global and local configs", () =>
   ),
 )
 
+it.effect("does not share mutable nested config between workspaces", () =>
+  withGlobalConfig(
+    {
+      config: {
+        mcp: {
+          global: { type: "remote", url: "https://global.example.com/mcp" },
+        },
+      },
+    },
+    () =>
+      Effect.gen(function* () {
+        const first = yield* tmpdirScoped()
+        const second = yield* tmpdirScoped()
+        const firstConfig = yield* Config.use.get().pipe(provideInstanceEffect(first))
+
+        firstConfig.mcp!["workspace-only"] = { type: "remote", url: "https://workspace.example.com/mcp" }
+
+        const secondConfig = yield* Config.use.get().pipe(provideInstanceEffect(second))
+        expect(firstConfig.mcp).toHaveProperty("workspace-only")
+        expect(secondConfig.mcp).not.toHaveProperty("workspace-only")
+      }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+  ),
+)
+
 it.effect("global config remains global when project config is disabled", () =>
   withConfigTree(
     {
