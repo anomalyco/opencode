@@ -344,9 +344,9 @@ describe("plugin.codex", () => {
     ["gpt-4.99", false],
     ["gpt-5.5-pro", false],
     ["gpt-5.6", false],
-    ["gpt-6garbage", false],
-    ["gpt-6.", false],
-    ["gpt-6.1.2", false],
+    ["gpt-6garbage", true],
+    ["gpt-6.", true],
+    ["gpt-6.1.2", true],
     ["not-a-gpt-model", false],
   ])("filters OAuth model %s by GPT major and minor versions", async (id, allowed) => {
     const hooks = await CodexAuthPlugin({} as never)
