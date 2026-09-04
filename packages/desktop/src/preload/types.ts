@@ -22,6 +22,12 @@ export type ServerReadyData = {
   password: string | null
 }
 
+export type RemotePairingInfo = {
+  url: string
+  urls: string[]
+  expiresIn: number
+}
+
 export type WslServersAPI = WslServersPlatform
 export type UpdaterAPI = {
   subscribe: (cb: (state: UpdaterState) => void) => Promise<() => void>
@@ -46,6 +52,8 @@ export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: () => Promise<ServerReadyData>
+  createRemotePairing: (sessionID: string, directory: string) => Promise<RemotePairingInfo>
+  revokeRemotePairing: (sessionID: string, directory: string) => Promise<void>
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks: () => Promise<string[]>

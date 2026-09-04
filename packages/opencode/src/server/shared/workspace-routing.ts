@@ -9,6 +9,7 @@ const RULES: Array<Rule> = [
 ]
 
 export function isLocalWorkspaceRoute(method: string, path: string) {
+  if (/^\/session\/[^/]+\/remote$/.test(path)) return true
   for (const rule of RULES) {
     if (rule.method && rule.method !== method) continue
     const match = rule.exact ? path === rule.path : path === rule.path || path.startsWith(rule.path + "/")
@@ -22,6 +23,7 @@ export function getWorkspaceRouteSessionID(url: URL) {
 
   const id =
     url.pathname.match(/^\/session\/([^/]+)(?:\/|$)/)?.[1] ??
+    url.pathname.match(/^\/remote\/session\/([^/]+)(?:\/|$)/)?.[1] ??
     url.pathname.match(/^\/experimental\/session\/([^/]+)\/background$/)?.[1]
   if (!id) return null
 

@@ -33,6 +33,7 @@ import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { reviewTooltipKeybind } from "../command-tooltip-keybind"
 import { useTitlebarRightMount } from "../titlebar"
+import { SessionRemoteControl } from "./session-remote-control"
 
 const OPEN_APPS = [
   "vscode",
@@ -440,6 +441,7 @@ export function SessionHeader() {
                     </div>
                   </Show>
                   <div class="flex items-center gap-1">
+                    <SessionRemoteControl />
                     <Show when={status()}>
                       <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                         <StatusPopover />
@@ -531,6 +533,7 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
 
   return (
     <div class="flex items-center gap-2">
+      <SessionRemoteControl />
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
