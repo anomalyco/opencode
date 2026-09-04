@@ -75,3 +75,14 @@ test("uses config for legacy servers", () => {
     modelID: "claude",
   })
 })
+
+test("preserves slashes in model IDs for legacy servers", () => {
+  expect(resolveDefaultModel(undefined, "openrouter/openrouter/free")).toEqual({
+    providerID: "openrouter",
+    modelID: "openrouter/free",
+  })
+  expect(resolveDefaultModel(undefined, "openrouter/anthropic/claude-sonnet-4.6")).toEqual({
+    providerID: "openrouter",
+    modelID: "anthropic/claude-sonnet-4.6",
+  })
+})
