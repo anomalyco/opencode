@@ -50,6 +50,7 @@ import { countryFromRequest, isModelCountryRestricted } from "~/lib/request-coun
 import { isPeakPricing } from "./pricing"
 import { prepareRequestBody } from "./requestBody"
 import { requiresGoTrainingConsent } from "./trainingConsent"
+import { proxyInference } from "~/lib/inference-proxy"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type PreparedBody = Awaited<ReturnType<typeof prepareRequestBody>>
@@ -100,6 +101,26 @@ export async function handler(
     const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
     const rawZenApiKey = opts.parseApiKey(input.request.headers)
     const zenApiKey = rawZenApiKey === "public" ? undefined : rawZenApiKey
+    const zenData = ZenData.list(opts.modelList)
+    if (opts.modelList === "full" && model) {
+      // Read routing metadata without running legacy model, auth, or balance checks.
+      const configured = zenData.models[model]
+      const entry = Array.isArray(configured)
+        ? configured.find((entry) => entry.formatFilter === opts.format)
+        : configured
+      const response = await proxyInference(input.request, {
+        provider: entry?.byokProvider,
+        model: entry?.providers.find((provider) => provider.id === entry.byokProvider)?.model,
+        body: (providerModel) => requestBody?.stream(providerModel ?? model, false) ?? body,
+      }).catch(() => {
+        void (requestBody ? requestBody.cancel() : body.cancel()).catch(() => {})
+        return Response.json(
+          { error: { type: "api_error", message: "Inference routing is unavailable. Please retry later." } },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
+        )
+      })
+      if (response) return response
+    }
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
@@ -112,7 +133,6 @@ export async function handler(
       user_agent: userAgent,
       "model.tier": opts.modelList === "full" ? "zen" : "go",
     })
-    const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
     const country = countryFromRequest(input.request)
     if (isModelCountryRestricted(modelInfo.id, country)) throw new RegionError(t("zen.api.error.countryNotAllowed"))
