@@ -54,9 +54,9 @@ export function NewSessionView(props: {
         data-component="new-session"
         class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div class="absolute inset-x-0 top-[25.375%] flex justify-center">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <Wordmark class="h-auto w-full text-v2-background-bg-inverse" />
+            <Wordmark class="mx-auto h-auto w-full max-w-[720px] text-v2-background-bg-inverse" />
             <div class="mt-8 flex flex-col gap-8">
               <Composer model={props.composer} />
               <Show when={props.project.empty()}>

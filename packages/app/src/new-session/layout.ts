@@ -1,2 +1,2 @@
-/** Inline new-session content width — keep in sync with session composer `placement === "inline"`. */
-export const NEW_SESSION_CONTENT_WIDTH = "w-full max-w-[720px] px-0"
+/** Keep the prompt width and side padding in sync with SessionComposerRegion. */
+export const NEW_SESSION_CONTENT_WIDTH = "w-full px-3 md:max-w-[1000px] md:mx-auto"
