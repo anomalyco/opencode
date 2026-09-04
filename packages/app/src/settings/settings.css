@@ -1029,8 +1029,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding-block: 20px;
-  padding-inline: 16px;
+  padding: 16px;
   border-radius: 8px;
   background-color: var(--v2-background-bg-layer-01);
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
