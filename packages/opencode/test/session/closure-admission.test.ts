@@ -3,10 +3,17 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Deferred, Effect, Exit, Fiber, Layer, Queue, Ref } from "effect"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Queue, Ref, Scope } from "effect"
 import { BackgroundJob } from "@/background/job"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
+import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
+import { WorkspaceRef } from "@/effect/instance-ref"
 import { SessionAdmission } from "@/session/closure/admission"
 import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionMutation } from "@/session/closure/mutation"
+import { SessionReplayPermit } from "@/session/closure/replay-permit"
 import { SessionToolPartPermit } from "@/session/toolpart-permit"
 import { SessionClosureModel as Model } from "@/session/closure/model"
 import { SessionClosurePorts as Ports } from "@/session/closure/ports"
@@ -175,7 +182,9 @@ const ambientFor = (session: SessionID): SessionAdmission.Interface => ({
   retry: "initial",
 })
 
-describe("SessionRunState closure admission", () => {
+class FifoSentinel extends Context.Service<FifoSentinel, string>()("@opencode/test/FifoSentinel") {}
+
+describe("SessionRunState closure admission (CP-023 Gate 3)", () => {
   it.live("admits an unfenced session, binds the lease to the Runner, and retires it after", () =>
     Effect.gen(function* () {
       const runs = yield* Queue.unbounded<HeldRun>()
@@ -225,6 +234,52 @@ describe("SessionRunState closure admission", () => {
     }),
   )
 
+  it.live("retires natural map authority before sequential replacement discovery and cancellation (CP-033)", () =>
+    Effect.gen(function* () {
+      const record: Recorder = { bound: [], retired: [] }
+      const session = SessionID.make("ses_cp033_sequential_reentry")
+
+      yield* withRunState(fakeClosure(record, admits), () =>
+        Effect.gen(function* () {
+          const state = yield* SessionRunState.Service
+
+          // The exact onIdle-before-result ordering is proved at Runner's baseline oracle because
+          // SessionRunState intentionally exposes no production hook into its map-retirement callback.
+          // This production-layer continuation proves the resulting authority remains observable.
+          expect(yield* state.ensureRunning(session, Effect.succeed(reply), Effect.succeed(reply))).toBe(reply)
+          expect((yield* state.listActive()).some((entry) => entry.session === session)).toBe(false)
+
+          const replacementStarted = yield* Deferred.make<void>()
+          const replacementRelease = yield* Deferred.make<void>()
+          yield* Effect.addFinalizer(() => Deferred.succeed(replacementRelease, undefined).pipe(Effect.asVoid))
+          const replacement = yield* state
+            .ensureRunning(
+              session,
+              Effect.succeed(reply),
+              Deferred.succeed(replacementStarted, undefined).pipe(
+                Effect.asVoid,
+                Effect.andThen(Deferred.await(replacementRelease)),
+                Effect.as(reply),
+              ),
+            )
+            .pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.await(replacementStarted)
+
+          expect(yield* state.listActive()).toContainEqual({
+            session,
+            running: true,
+            shell: false,
+          })
+          expect(Exit.isFailure(yield* state.assertNotBusy(session).pipe(Effect.exit))).toBe(true)
+          expect(yield* state.interruptRunner(session)).toBe(true)
+          expect(yield* Fiber.join(replacement)).toBe(reply)
+          expect((yield* state.listActive()).some((entry) => entry.session === session)).toBe(false)
+          expect(record.retired).toHaveLength(2)
+        }),
+      )
+    }),
+  )
+
   it.live("refuses ensureRunning and startShell for a fenced session and never starts the work", () =>
     Effect.gen(function* () {
       const runs = yield* Queue.unbounded<HeldRun>()
@@ -238,13 +293,21 @@ describe("SessionRunState closure admission", () => {
           const state = yield* SessionRunState.Service
           const ran = yield* Ref.make(false)
           const work = Ref.set(ran, true).pipe(Effect.as(reply))
+          const control = SessionID.make("ses_gate3_control")
 
           // Positive precondition A: this exact session, through this exact seam, admits and runs
           // before the fence exists. Without it a later refusal could come from a guard that
           // refuses unconditionally, or from a harness that never wired the seam at all.
-          expect(yield* state.ensureRunning(root, Effect.succeed(reply), work)).toBe(reply)
+          expect(yield* state.ensureRunning(control, Effect.succeed(reply), work)).toBe(reply)
           expect(yield* Ref.get(ran)).toBe(true)
           yield* Ref.set(ran, false)
+
+          // Publish an exact F entry while the session is still open, but keep its wrapper release
+          // closed. This is the accepted-but-not-selected side of T-13's fence-while-queued race.
+          const release = yield* Deferred.make<void>()
+          const publication = yield* state.publish(root, Effect.succeed(reply), work, release)
+          expect(publication.type).toBe("published")
+          expect((yield* state.listActive()).map((item) => item.session)).toContain(root)
 
           const pending = yield* closure.request({ root, runState: capability }).pipe(Effect.forkScoped)
           const held = yield* Queue.take(runs)
@@ -259,6 +322,16 @@ describe("SessionRunState closure admission", () => {
           const fences = (yield* closure.view).fences
           expect(fences.map((item) => item.session)).toEqual([node])
           const fenceState = fences[0]!.state
+
+          // Selection now opens behind the standing fence. The fresh execution admission refuses
+          // before the work body, while the already-accepted F barrier receives that exact error.
+          yield* Deferred.succeed(release, undefined)
+          const selected = yield* state.awaitPublished(publication).pipe(Effect.flip)
+          expect(selected._tag).toBe("SessionClosureAdmissionRefused")
+          if (selected._tag !== "SessionClosureAdmissionRefused")
+            return yield* Effect.die("expected a selected admission refusal")
+          expect(selected.session).toBe(root)
+          expect(selected.reason).toBe(fenceState)
 
           const refused = yield* state.ensureRunning(root, Effect.succeed(reply), work).pipe(Effect.flip)
           // Narrow explicitly rather than lean on `expect`, which does not narrow. The seam's error
@@ -283,8 +356,79 @@ describe("SessionRunState closure admission", () => {
           // affected continuation lease; refusing before reserving would erase it.
           const post = leaseOf(yield* closure.view, node)
           const suppressed = post.filter((item) => item.state === "suppressed")
-          expect(suppressed).toHaveLength(2)
+          expect(suppressed).toHaveLength(3)
           expect(suppressed.every((item) => item.origin === "internal")).toBe(true)
+
+          yield* Deferred.succeed(held.release, undefined)
+          yield* Fiber.join(pending).pipe(Effect.flip)
+        }),
+      )
+    }),
+  )
+
+  it.live("discovers and physically cancels a genuinely queued F behind a fenced predecessor (CP-033 T-13)", () =>
+    Effect.gen(function* () {
+      const runs = yield* Queue.unbounded<HeldRun>()
+      const ports: Ports.RuntimePorts = { driver: heldDriver(runs), participants: [], hooks: {} }
+      const root = SessionID.make("ses_cp033_queued_fence")
+      const node = Model.id("session", root)
+
+      yield* withRunState(realClosure(ports), () =>
+        Effect.gen(function* () {
+          const closure = yield* SessionClosure.Service
+          const state = yield* SessionRunState.Service
+          const predecessorStarted = yield* Deferred.make<void>()
+          const predecessorRelease = yield* Deferred.make<void>()
+          const providerCalls = yield* Ref.make(0)
+          yield* Effect.addFinalizer(() => Deferred.succeed(predecessorRelease, undefined).pipe(Effect.asVoid))
+
+          const predecessor = yield* state
+            .ensureRunning(
+              root,
+              Effect.succeed(reply),
+              Deferred.succeed(predecessorStarted, undefined).pipe(
+                Effect.asVoid,
+                Effect.andThen(Deferred.await(predecessorRelease)),
+                Effect.as(reply),
+              ),
+            )
+            .pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.await(predecessorStarted)
+
+          const release = yield* Deferred.make<void>()
+          yield* Deferred.succeed(release, undefined)
+          const publication = yield* state.publish(
+            root,
+            Effect.succeed(reply),
+            Ref.update(providerCalls, (count) => count + 1).pipe(Effect.as(reply)),
+            release,
+          )
+          expect(publication.type).toBe("published")
+          if (publication.type !== "published") return yield* Effect.die("expected queued F publication")
+          expect(yield* Deferred.isDone(publication.done)).toBe(false)
+          expect(yield* state.listActive()).toContainEqual({ session: root, running: true, shell: false })
+
+          const pending = yield* closure.request({ root, runState: capability }).pipe(Effect.forkScoped)
+          const held = yield* Queue.take(runs)
+          yield* Effect.addFinalizer(() => Deferred.succeed(held.release, undefined).pipe(Effect.asVoid))
+          const claimed = yield* held.input.control.claim({
+            operation: held.input.command.operation,
+            proofs: [{ value: "proven_connected", root: node, active: node, path: [node], edges: [] }],
+            signals: [Effect.succeed("success" as const)],
+          })
+          expect(claimed.decision).toEqual({ type: "applied" })
+          expect((yield* closure.view).fences.map((item) => item.session)).toEqual([node])
+
+          // Discovery sees the live predecessor/F queue, and the exact physical seam cancels that
+          // generation before the queued body can acquire execution admission or reach its provider.
+          const discovered = yield* state.listActive()
+          expect(discovered).toContainEqual({ session: root, running: true, shell: false })
+          expect(yield* state.interruptRunner(root)).toBe(true)
+          expect(yield* state.awaitPublished(publication)).toBe(reply)
+          expect(yield* Fiber.join(predecessor)).toBe(reply)
+          expect(yield* Ref.get(providerCalls)).toBe(0)
+          expect((yield* state.listActive()).some((entry) => entry.session === root)).toBe(false)
+          expect(yield* state.interruptRunner(root)).toBe(false)
 
           yield* Deferred.succeed(held.release, undefined)
           yield* Fiber.join(pending).pipe(Effect.flip)
@@ -434,7 +578,93 @@ describe("SessionAdmission context reuse", () => {
   )
 })
 
-// The signalable pre-bind owner.
+describe("SessionRunState exact FIFO context (CP-033 T-06)", () => {
+  it.live("retains queuer services and refs while replacing stale authority and Scope", () =>
+    Effect.gen(function* () {
+      const session = SessionID.make("ses_cp033_context")
+      const workspace = WorkspaceV2.ID.make("wrk_cp033_context")
+      const acquired = yield* Ref.make(0)
+      const record: Recorder = { bound: [], retired: [] }
+      const acquire: SessionClosure.Interface["acquire"] = () =>
+        Ref.modify(acquired, (current) => [current + 1, current + 1] as const).pipe(
+          Effect.map((sequence) => ({
+            type: "admitted" as const,
+            lease: Model.id("lease", `lease_cp033_${sequence}`),
+            epoch: 0n,
+            instance: Model.id("instance", "instance_cp033"),
+          })),
+        )
+
+      yield* withRunState(fakeClosure(record, acquire), (directory) =>
+        Effect.gen(function* () {
+          const state = yield* SessionRunState.Service
+          const closure = yield* SessionClosure.Service
+          const callerScope = yield* Scope.Scope
+          const release = yield* Deferred.make<void>()
+          const entered = yield* Deferred.make<void>()
+          const scopeClosed = yield* Deferred.make<void>()
+          const work = Effect.gen(function* () {
+            yield* Deferred.succeed(entered, undefined)
+            const admission = yield* Effect.serviceOption(SessionAdmission.Service)
+            const mutation = yield* Effect.serviceOption(SessionMutation.Active)
+            const replay = yield* Effect.serviceOption(SessionReplayPermit.Service)
+            const sentinel = yield* Effect.serviceOption(FifoSentinel)
+            const generation = yield* Effect.serviceOption(Scope.Scope)
+            const instance = yield* InstanceState.context
+            const observedWorkspace = yield* WorkspaceRef
+            const observedAls = yield* EffectBridge.fromPromise(() => WorkspaceContext.workspaceID)
+
+            expect(Option.isSome(admission)).toBe(true)
+            if (Option.isSome(admission)) {
+              expect(admission.value.leases).toEqual([Model.id("lease", "lease_cp033_1")])
+              expect(admission.value.leases).not.toEqual(ambientFor(session).leases)
+            }
+            expect(Option.isNone(mutation)).toBe(true)
+            expect(Option.isNone(replay)).toBe(true)
+            expect(Option.isSome(sentinel) ? sentinel.value : undefined).toBe("retained")
+            expect(Option.isSome(generation)).toBe(true)
+            if (Option.isSome(generation)) {
+              expect(generation.value).not.toBe(callerScope)
+              yield* Scope.addFinalizer(generation.value, Deferred.succeed(scopeClosed, undefined))
+            }
+            expect(instance.directory).toBe(directory)
+            expect(observedWorkspace).toBe(workspace)
+            expect(observedAls).toBe(workspace)
+
+            // The selected work's fresh execution lease is ambient for nested same-Session work.
+            yield* SessionAdmission.admitted(
+              closure,
+              { session, origin: "internal", source: "cp033.nested" },
+              () => Effect.void,
+            )
+            return reply
+          })
+
+          const publication = yield* state
+            .publish(session, Effect.succeed(reply), work, release)
+            .pipe(
+              Effect.provideService(SessionAdmission.Service, ambientFor(session)),
+              Effect.provideService(SessionMutation.Active, { sessions: new Set([session]) }),
+              Effect.provideService(SessionReplayPermit.Service, { aggregates: new Set([session]) }),
+              Effect.provideService(FifoSentinel, "retained"),
+              Effect.provideService(WorkspaceRef, workspace),
+            )
+          expect(publication.type).toBe("published")
+          expect(yield* Deferred.isDone(entered)).toBe(false)
+
+          yield* Deferred.succeed(release, undefined)
+          expect(yield* state.awaitPublished(publication)).toBe(reply)
+          yield* Deferred.await(scopeClosed)
+          expect(yield* Ref.get(acquired)).toBe(1)
+          expect(record.bound).toEqual([{ type: "scope", id: Model.id("scope", `runner:${session}`) }])
+          expect(record.retired).toEqual([Model.id("lease", "lease_cp033_1")])
+        }),
+      )
+    }),
+  )
+})
+
+// CP-023 Gate 3 Slice H1 — the signalable pre-bind owner (I-32).
 //
 // A pre-bind "owner" that is only an opaque NAME (`scope_<uuid>`) cannot be reached by a fence
 // landing during plugin/template/command/prompt/shell setup, so "immediately binds it to an

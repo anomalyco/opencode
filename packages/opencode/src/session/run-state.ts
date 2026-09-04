@@ -3,17 +3,19 @@ import { InstanceState } from "@/effect/instance-state"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Runner } from "@/effect/runner"
 import { BackgroundJob } from "@/background/job"
-import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
 import { SessionClosure } from "./closure/coordinator"
 import { SessionAdmission } from "./closure/admission"
 import { SessionClosureModel as Model } from "./closure/model"
-import type { SessionMutation } from "./closure/mutation"
+import { SessionMutation } from "./closure/mutation"
+import { SessionReplayPermit } from "./closure/replay-permit"
+import * as RunService from "@/effect/run-service"
 // Type-only: the evidence shape is the closure ports contract's to define, and importing it keeps
 // one definition rather than a structural copy that can silently drift. No runtime edge is created.
 import type { SessionClosurePorts as Ports } from "./closure/ports"
+import { Context, Deferred, Effect, Exit, Latch, Layer, Scope, SynchronizedRef } from "effect"
 
 /**
  * What the shared Runner store's work can refuse with.
@@ -22,6 +24,66 @@ import type { SessionClosurePorts as Ports } from "./closure/ports"
  * mutation was refused because a branch is closing.
  */
 export type RunnerError = SessionClosure.AdmissionRefused | SessionMutation.MutationRefused
+
+export type Published = Runner.Publication<SessionV1.WithParts, RunnerError>
+
+type LifecycleState = {
+  readonly closing: boolean
+  readonly generations: ReadonlyMap<object, Effect.Effect<void>>
+}
+
+/** @internal Exact Instance-owned generation registry shared by every Session Runner. */
+export interface GenerationLifecycle extends Runner.Lifecycle {
+  readonly dispose: Effect.Effect<void>
+  readonly inspect: Effect.Effect<{ readonly closing: boolean; readonly active: number }>
+}
+
+/** @internal Exported so deterministic lifecycle tests exercise the production registry itself. */
+export const makeGenerationLifecycle = (): GenerationLifecycle => {
+  const ref = SynchronizedRef.makeUnsafe<LifecycleState>({ closing: false, generations: new Map() })
+
+  const register: Runner.Lifecycle["register"] = (token, dispose) =>
+    SynchronizedRef.modify(ref, (current) => {
+      if (current.closing) {
+        const refused: Effect.Effect<void, Runner.Cancelled> = Effect.fail(new Runner.Cancelled())
+        return [refused, current] as const
+      }
+      const generations = new Map(current.generations)
+      generations.set(token, dispose)
+      return [Effect.void, { closing: false, generations }] as const
+    }).pipe(Effect.flatten)
+
+  const unregister: Runner.Lifecycle["unregister"] = (token) =>
+    SynchronizedRef.update(ref, (current) => {
+      const generations = new Map(current.generations)
+      generations.delete(token)
+      return { closing: current.closing, generations }
+    })
+
+  const dispose = Effect.uninterruptible(
+    SynchronizedRef.modify(
+      ref,
+      (current) =>
+        [Array.from(current.generations.values()), { closing: true, generations: current.generations }] as const,
+    ).pipe(
+      Effect.flatMap((disposers) =>
+        Effect.forEach(disposers, (close) => close.pipe(Effect.exit), { concurrency: "unbounded" }).pipe(
+          Effect.flatMap((exits) => {
+            const failed = exits.find(Exit.isFailure)
+            return failed ? Effect.failCause(failed.cause) : Effect.void
+          }),
+        ),
+      ),
+      Effect.ensuring(SynchronizedRef.set(ref, { closing: true, generations: new Map() })),
+    ),
+  )
+
+  const inspect = SynchronizedRef.get(ref).pipe(
+    Effect.map((current) => ({ closing: current.closing, active: current.generations.size })),
+  )
+
+  return { register, unregister, dispose, inspect }
+}
 
 export interface Interface {
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
@@ -36,6 +98,14 @@ export interface Interface {
   readonly interruptRunner: (sessionID: SessionID) => Effect.Effect<boolean>
   /** Sessions holding a live Runner, reported per axis. Reads the Runner store, not a status projection. */
   readonly listActive: () => Effect.Effect<readonly Ports.RunnerActivity[]>
+  /** Reply-required FIFO admission. Publication and result waiting are deliberately separate. */
+  readonly publish: (
+    sessionID: SessionID,
+    onInterrupt: Effect.Effect<SessionV1.WithParts>,
+    work: Effect.Effect<SessionV1.WithParts, SessionClosure.AdmissionRefused>,
+    release: Deferred.Deferred<void>,
+  ) => Effect.Effect<Published, RunnerError>
+  readonly awaitPublished: (published: Published) => Effect.Effect<SessionV1.WithParts, RunnerError>
   readonly ensureRunning: (
     sessionID: SessionID,
     onInterrupt: Effect.Effect<SessionV1.WithParts>,
@@ -66,20 +136,21 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make(
       Effect.fn("SessionRunState.state")(function* () {
         const scope = yield* Scope.Scope
+        const lifecycle = makeGenerationLifecycle()
         // One store serves both seams, so its error parameter is the union of what either seam's
         // work can raise. Shell setup reaches revert cleanup, which is where the mutation refusal
         // comes from.
         const runners = new Map<SessionID, Runner.Runner<SessionV1.WithParts, RunnerError>>()
-        yield* Effect.addFinalizer(
-          Effect.fnUntraced(function* () {
-            yield* Effect.forEach(runners.values(), (runner) => runner.cancel, {
-              concurrency: "unbounded",
-              discard: true,
-            })
-            runners.clear()
-          }),
+        yield* Effect.addFinalizer(() =>
+          lifecycle.dispose.pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                runners.clear()
+              }),
+            ),
+          ),
         )
-        return { runners, scope }
+        return { runners, scope, lifecycle }
       }),
     )
 
@@ -97,6 +168,7 @@ const layer = Layer.effect(
         }),
         onBusy: status.set(sessionID, { type: "busy" }),
         onInterrupt,
+        lifecycle: data.lifecycle,
       })
       data.runners.set(sessionID, next)
       return next
@@ -184,6 +256,49 @@ const layer = Layer.effect(
       )
     })
 
+    const publish = Effect.fn("SessionRunState.publish")(function* (
+      sessionID: SessionID,
+      onInterrupt: Effect.Effect<SessionV1.WithParts>,
+      work: Effect.Effect<SessionV1.WithParts, SessionClosure.AdmissionRefused>,
+      release: Deferred.Deferred<void>,
+    ) {
+      // `attach` is evaluated on the queuer's fiber before the entry can wait. It materializes the
+      // effective Instance/Workspace references, including WorkspaceContext's JavaScript-local
+      // fallback, into the Context captured immediately afterward.
+      const queuer = yield* RunService.attach(Effect.context<never>())
+      const current = yield* runner(sessionID, onInterrupt)
+      return yield* current.publish(
+        (generation) =>
+          SessionAdmission.admitted(
+            closure,
+            {
+              session: sessionID,
+              origin: "internal",
+              source: "SessionRunState.publish",
+              reuseAmbient: false,
+            },
+            (context) =>
+              Effect.gen(function* () {
+                yield* bindTo(context, "runner", sessionID)
+                return yield* work
+              }),
+          ).pipe(
+            Effect.updateContext(() =>
+              queuer.pipe(
+                Context.omit(SessionAdmission.Service, SessionMutation.Active, SessionReplayPermit.Service),
+                Context.add(Scope.Scope, generation),
+              ),
+            ),
+          ),
+        release,
+      )
+    })
+
+    const awaitPublished = Effect.fn("SessionRunState.awaitPublished")(function* (published: Published) {
+      if (published.type === "completed") return published.value
+      return yield* published.await
+    })
+
     const startShell = Effect.fn("SessionRunState.startShell")(function* (
       sessionID: SessionID,
       onInterrupt: Effect.Effect<SessionV1.WithParts>,
@@ -204,7 +319,16 @@ const layer = Layer.effect(
       )
     })
 
-    return Service.of({ assertNotBusy, cancel, interruptRunner, listActive, ensureRunning, startShell })
+    return Service.of({
+      assertNotBusy,
+      cancel,
+      interruptRunner,
+      listActive,
+      publish,
+      awaitPublished,
+      ensureRunning,
+      startShell,
+    })
   }),
 )
 
