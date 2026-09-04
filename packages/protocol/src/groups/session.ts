@@ -31,6 +31,10 @@ import { Location } from "@opencode-ai/schema/location"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { EventLog } from "@opencode-ai/schema/event-log"
 
+export const SessionLogItem = Schema.Union([SessionEvent.Durable, EventLog.Synced]).annotate({
+  identifier: "SessionLogItem",
+})
+
 const ParentIDFilter = Schema.Union([
   Session.ID,
   Schema.Null.pipe(
@@ -650,7 +654,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           follow: BooleanFromString.pipe(Schema.optional),
         },
         success: HttpApiSchema.StreamSse({
-          data: Schema.Union([SessionEvent.Durable, EventLog.Synced]).annotate({ identifier: "SessionLogItem" }),
+          data: SessionLogItem,
         }),
         error: SessionNotFoundError,
       }).annotateMerge(
