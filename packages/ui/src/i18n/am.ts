@@ -141,8 +141,6 @@ export const dict: Record<string, string> = {
   "ui.tool.websearch": "ድር ፍለጋ",
   "ui.tool.websearch.provider": "{{provider}}ድር ፍለጋ",
   "ui.tool.shell": "ሼል",
-  "ui.sessionTurn.reasoning.title": "Reasoning",
-  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "የሚደረጉ ነገሮች",
   "ui.tool.todos.read": "ወደ-ድርጊት አንብብ",

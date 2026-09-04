@@ -965,8 +965,6 @@ export const dict = {
     "Skiptu á milli fulltrúa í innsláttarreitnum. Þegar þeir eru faldir er Build-fulltrúinn sjálfgefinn.",
   "settings.general.row.reasoningSummaries.title": "Sýndu samantektir um rökstuðning",
   "settings.general.row.reasoningSummaries.description": "Birta rökstuðningssamantektir líkana á tímalínunni",
-  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
-  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Stækkaðu hluta skeljaverkfæra",
   "settings.general.row.shellToolPartsExpanded.description": "Sýna hluta skelverkfæra stækkað sjálfgefið á tímalínunni",
   "settings.general.row.editToolPartsExpanded.title": "Stækkaðu breytingaverkfærahluta",

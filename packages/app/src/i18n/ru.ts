@@ -955,8 +955,6 @@ export const dict = {
     "Показывать переключатель агентов в редакторе запросов. Если он скрыт, по умолчанию используется агент Build.",
   "settings.general.row.reasoningSummaries.title": "Показывать сводки рассуждений",
   "settings.general.row.reasoningSummaries.description": "Отображать сводки рассуждений модели в ленте",
-  "settings.general.row.collapsibleReasoning.title": "Сворачиваемые размышления",
-  "settings.general.row.collapsibleReasoning.description": "Показывать размышления в виде сворачиваемых карточек в ленте",
 
   "settings.general.row.shellToolPartsExpanded.title": "Разворачивать элементы инструмента shell",
   "settings.general.row.shellToolPartsExpanded.description":

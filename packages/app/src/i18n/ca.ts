@@ -974,8 +974,6 @@ export const dict = {
     "Canvia entre agents del compositor. Quan s'amaga, el valor predeterminat és Build agent.",
   "settings.general.row.reasoningSummaries.title": "Mostra resums de raonament",
   "settings.general.row.reasoningSummaries.description": "Mostra els resums de raonament del model a la línia de temps",
-  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
-  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Amplieu les peces de l'eina de closca",
   "settings.general.row.shellToolPartsExpanded.description":
     "Mostra les parts de l'eina d'intèrpret d'ordres ampliades per defecte a la línia de temps",

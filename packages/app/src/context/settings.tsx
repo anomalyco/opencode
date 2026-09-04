@@ -30,7 +30,6 @@ export interface Settings {
     showStatus: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
-    collapsibleReasoning: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
@@ -192,7 +191,6 @@ const defaultSettings: Settings = {
     showStatus: false,
     showTerminal: false,
     showReasoningSummaries: false,
-    collapsibleReasoning: true,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showCustomAgents: false,
@@ -404,13 +402,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setShowReasoningSummaries(value: boolean) {
           setStore("general", "showReasoningSummaries", value)
-        },
-        collapsibleReasoning: withFallback(
-          () => store.general?.collapsibleReasoning,
-          defaultSettings.general.collapsibleReasoning,
-        ),
-        setCollapsibleReasoning(value: boolean) {
-          setStore("general", "collapsibleReasoning", value)
         },
         shellToolPartsExpanded: withFallback(
           () => store.general?.shellToolPartsExpanded,

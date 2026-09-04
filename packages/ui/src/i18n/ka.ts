@@ -142,8 +142,6 @@ export const dict: Record<string, string> = {
   "ui.tool.websearch": "ვებ ძიება",
   "ui.tool.websearch.provider": "{{provider}} ვებ ძიება",
   "ui.tool.shell": "Shell",
-  "ui.sessionTurn.reasoning.title": "Reasoning",
-  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "დასასრულებელი",
   "ui.tool.todos.read": "წაიკითხეთ სამუშაოები",

@@ -158,8 +158,6 @@ export const dict = {
   "ui.tool.websearch": "Pretraga weba",
   "ui.tool.websearch.provider": "{{provider}} Pretraga weba",
   "ui.tool.shell": "Shell",
-  "ui.sessionTurn.reasoning.title": "Reasoning",
-  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Lista zadataka",
   "ui.tool.todos.read": "Čitanje liste zadataka",

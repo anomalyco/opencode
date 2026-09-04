@@ -144,8 +144,6 @@ export const dict: Record<string, string> = {
   "ui.tool.websearch": "Web Search",
   "ui.tool.websearch.provider": "{{provider}} Web Search",
   "ui.tool.shell": "Shell",
-  "ui.sessionTurn.reasoning.title": "Reasoning",
-  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "ལྷནམ",
   "ui.tool.todos": "འབད་དགོཔ་ཚུ།",
   "ui.tool.todos.read": "ལཱ་འབད་དགོཔ་ལྷག།",

@@ -969,8 +969,6 @@ export const dict = {
     "Přepínání mezi agenty ve skladateli. Když je skrytý, výchozí nastavení je Sestavit agenta.",
   "settings.general.row.reasoningSummaries.title": "Ukažte shrnutí odůvodnění",
   "settings.general.row.reasoningSummaries.description": "Zobrazte souhrny zdůvodnění modelu na časové ose",
-  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
-  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Rozbalte části nástroje shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Ve výchozím nastavení zobrazit na časové ose rozbalené části nástroje shell",
