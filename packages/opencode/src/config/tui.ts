@@ -36,6 +36,7 @@ export type Resolved = TuiConfig.Resolved
 
 export type HostMetadata = {
   plugin_origins?: ConfigPlugin.Origin[]
+  disabled_plugins?: string[]
 }
 
 export interface Interface {
