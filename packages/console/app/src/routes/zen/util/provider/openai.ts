@@ -51,7 +51,12 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
     const cacheReadTokens = usage.input_tokens_details?.cached_tokens ?? undefined
     const cacheWriteTokens = usage.input_tokens_details?.cache_write_tokens ?? undefined
     return {
-      inputTokens: inputTokens - (cacheReadTokens ?? 0),
+      // `input_tokens` is the whole prompt: cached_tokens and cache_write_tokens are
+      // both subsets of it, not addends on top of it (OpenAI's own sample: 2600 =
+      // 2000 read + 400 written + 200 neither). Subtract both so the four buckets
+      // downstream are disjoint -- handler.ts sums them for the long-context
+      // threshold and prices each one separately.
+      inputTokens: inputTokens - (cacheReadTokens ?? 0) - (cacheWriteTokens ?? 0),
       outputTokens,
       reasoningTokens,
       cacheReadTokens,
