@@ -9,6 +9,7 @@ import type { Provider } from "../../src/provider/provider"
 import { SystemPrompt } from "../../src/session/system"
 import { MCP } from "../../src/mcp"
 import { testEffect } from "../lib/effect"
+import { InstanceRef } from "../../src/effect/instance-ref"
 
 const skills: Skill.Info[] = [
   {
@@ -163,6 +164,24 @@ describe("session.system", () => {
           "</mcp_instructions>",
         ].join("\n"),
       )
+    }),
+  )
+
+  it.effect("environment still renders when the session directory no longer exists", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const missing = `K:/missing-opencode-session-${Date.now()}`
+      const output = yield* prompt
+        .environment({ providerID: "openai", api: { id: "gpt-5" } } as Provider.Model)
+        .pipe(
+          Effect.provideService(InstanceRef, {
+            directory: missing,
+            worktree: missing,
+            project: { vcs: "git" },
+          } as never),
+        )
+
+      expect(output.join("\n")).toContain(`Working directory: ${missing}`)
     }),
   )
 })
