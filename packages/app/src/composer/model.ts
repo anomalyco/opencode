@@ -21,7 +21,7 @@ import type { ImageAttachmentPart } from "./state"
 import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { composerPlaceholder } from "./placeholder"
-import { createComposerSubmit } from "./submit"
+import { createComposerSubmit, withSlashSkill } from "./submit"
 
 export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
@@ -236,22 +236,42 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         type: "builtin" as const,
       })),
   ])
-  const commands = createMemo<ComposerSuggestion[]>(() =>
-    slashCommands().map((item) => ({
+  const slashSkills = createMemo(() =>
+    skills().filter((skill) => skill.slash === true && !slashCommands().some((item) => item.trigger === skill.id)),
+  )
+  const commands = createMemo<ComposerSuggestion[]>(() => [
+    ...slashCommands().map((item) => ({
       id: item.id,
-      kind: "command",
+      kind: "command" as const,
       label: `/${item.trigger}`,
       trigger: item.trigger,
       title: item.title,
       description: item.description,
       keybind: command.keybindParts(item.id),
     })),
-  )
+    ...slashSkills().map((skill) => ({
+      id: `skill:${skill.id}`,
+      kind: "skill" as const,
+      label: `/${skill.id}`,
+      trigger: skill.id,
+      title: skill.name,
+      description: skill.description,
+      mention: {
+        type: "skill" as const,
+        id: Skill.ID.make(skill.id),
+        name: Skill.Name.make(skill.name),
+        content: `/${skill.id}`,
+        start: 0,
+        end: 0,
+      },
+    })),
+  ])
   const variants = createMemo(() => ["default", ...adapter.controls().model.selection.variant.list()])
   const submission = createComposerSubmit({
     adapter,
     mode,
     commands: () => data.location.command.list({ directory: sdk().directory }),
+    skills: slashSkills,
     editor: () => editor,
     queueScroll: () => requestAnimationFrame(() => editor?.scrollIntoView({ block: "nearest" })),
     addToHistory: (value, mode) => controller.addHistory(value, mode),
@@ -377,6 +397,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
           // the composer value as a new prompt. Enter keeps it queued in
           // place; the alternate action sends it as a steer.
           if (queue?.editing()) {
+            prompt.set(withSlashSkill(prompt.current(), slashSkills()))
             queue.confirmEdit(submitOptions?.alternate ? "steer" : "queue")
             return
           }

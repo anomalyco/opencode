@@ -145,7 +145,7 @@ export function createComposerEditor(input: {
       return
     }
     if (command.type === "mention.add") {
-      if (command.item.mention) draft.addMention(command.item.mention)
+      if (command.item.mention) draft.addMention(command.item.mention, command.range)
       return
     }
     if (command.type === "popover.filter") {
