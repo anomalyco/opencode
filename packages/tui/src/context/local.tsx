@@ -6,7 +6,6 @@ import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
-import { useClient } from "./client"
 import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
 import {
@@ -23,14 +22,7 @@ import { useRoute } from "./route"
 import { useData } from "./data"
 import { usePermission } from "./permission"
 import { useLocation } from "./location"
-
-export function parseModel(model: string) {
-  const [providerID, ...rest] = model.split("/")
-  return {
-    providerID: providerID,
-    modelID: rest.join("/"),
-  }
-}
+import { parse } from "../util/model"
 
 export function recentModels(model: ModelPreferenceModel, recent: ModelPreferenceModel[]) {
   const seen = new Set<string>()
@@ -49,7 +41,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const data = useData()
-    const client = useClient()
     const toast = useToast()
     const theme = useTheme()
     const { mode } = useThemes()
@@ -215,13 +206,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const configured = entry?.type === "document" ? entry.info.model : undefined
         if (!configured) return
         return typeof configured === "string"
-          ? { ...parseModel(configured), variant: undefined }
+          ? { ...parse(configured), variant: undefined }
           : { providerID: configured.providerID, modelID: configured.model, variant: configured.variant }
       })
 
       const fallbackModel = createMemo(() => {
         if (args.model) {
-          const { providerID, modelID } = parseModel(args.model)
+          const { providerID, modelID } = parse(args.model)
           if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
@@ -347,14 +338,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (route.data.type === "session") {
           const sessionID = route.data.sessionID
           const current = sessionSelection(sessionID)
-          const preferred = normalizeModelVariant(
+          setSessionDraft(
+            sessionID,
             current?.providerID === model.providerID && current.modelID === model.modelID
-              ? current.variant
-              : preferredSelection(model).variant,
+              ? current
+              : preferredSelection(model),
           )
-          const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
-          const variant = preferred && info?.variants?.some((item) => item.id === preferred) ? preferred : undefined
-          setSessionDraft(sessionID, { ...model, variant })
           return true
         }
         const current = agent.current()
@@ -410,9 +399,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             id: string
             variant?: string
           },
-          agentID = agent.current()?.id,
+          agentID: string,
         ) {
-          if (!agentID) return () => {}
           const committed = {
             agentID,
             selection: selectionKey({ providerID: value.providerID, modelID: value.id, variant: value.variant }),
@@ -524,9 +512,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return currentSelection()?.variant
           },
           current() {
-            const v = this.selected()
-            if (v && this.list().includes(v)) return v
-            return undefined
+            return this.selected()
           },
           list() {
             const m = currentSelection()

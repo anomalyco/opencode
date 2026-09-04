@@ -1251,6 +1251,23 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
+    const prepareAgent = async () => {
+      if (!session) {
+        await data.session.sync(target)
+        session = data.session.get(target)
+      }
+      if (session?.agent !== agent.id) {
+        await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
+      }
+    }
+    const commitModel = () => {
+      const model = { providerID: selection.providerID, id: selection.modelID, variant }
+      const cancelCommit = local.model.trackSessionCommit(target, model, agent.id)
+      return client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
+        cancelCommit()
+        throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
+      })
+    }
     history.append(entry)
     const dispatch = (send: () => Promise<unknown>) => {
       const setup = newSession
@@ -1263,21 +1280,10 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
       const send = async () => {
-        if (!session) {
-          await data.session.sync(target)
-          session = data.session.get(target)
-        }
-        if (session?.agent !== agent.id) {
-          await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
-        }
+        await prepareAgent()
         // Commands inherit the composer selection; command-specific overrides
         // remain server-owned and run after this preparation.
-        const model = { providerID: selection.providerID, id: selection.modelID, variant }
-        const cancelCommit = local.model.trackSessionCommit(target, model, agent.id)
-        await client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
-          cancelCommit()
-          throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
-        })
+        await commitModel()
         return client.api.session.command({
           sessionID: target,
           command: slashHead.name,
@@ -1300,19 +1306,12 @@ export function Prompt(props: PromptProps) {
     } else {
       move.startSubmit()
       try {
-        if (!session) {
-          await data.session.sync(target)
-          session = data.session.get(target)
-        }
-        if (session?.agent !== agent.id) {
-          await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
-        }
+        await prepareAgent()
       } catch (error) {
         toast.show({ title: "Failed to prepare session", message: errorMessage(error), variant: "error" })
         restoreEntry()
         return true
       }
-      const model = { providerID: selection.providerID, id: selection.modelID, variant }
       if (session?.revert) {
         const error = await client.api.session.revert.commit({ sessionID: target }).then(
           () => undefined,
@@ -1361,16 +1360,10 @@ export function Prompt(props: PromptProps) {
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
           gate: newSession?.gate,
-          prepare: () => {
-            // Commit the captured selection after earlier admissions, including
-            // compaction setup. Cached state may still precede their SSE echoes;
-            // the server makes an unchanged selection a no-op.
-            const cancelCommit = local.model.trackSessionCommit(target, model, agent.id)
-            return client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
-              cancelCommit()
-              throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
-            })
-          },
+          // Commit the captured selection after earlier admissions, including
+          // compaction setup. Cached state may still precede their SSE echoes;
+          // the server makes an unchanged selection a no-op.
+          prepare: commitModel,
         })
         .catch((error) => {
           if (newSession) return newSession.recover(error)
