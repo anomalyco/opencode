@@ -7,6 +7,7 @@ import { createBrowserFiles } from "./browser/files"
 import { createDiagnostics } from "./browser/diagnostics"
 import { createProfiling } from "./browser/profiling"
 import { createCornerImages } from "./browser/corners"
+import type { BrowserNetwork } from "./browser/network"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 let nextRef = 0
@@ -30,6 +31,7 @@ export function createBrowserPage(
   options: {
     id: Browser.TabID
     partition: string
+    network: BrowserNetwork | null
     publish: (error?: string) => void
     fail: () => void
     popup: (options: Electron.BrowserWindowConstructorOptions) => WebContents
@@ -51,6 +53,7 @@ export function createBrowserPage(
     },
   })
   const contents = view.webContents
+  const detachNetwork = options.network?.attach(contents)
   contents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown" || input.alt || !(process.platform === "darwin" ? input.meta : input.control)) return
     const step =
@@ -334,6 +337,7 @@ export function createBrowserPage(
     async dispose() {
       if (closed) return
       closed = true
+      detachNetwork?.()
       contents.session.off("will-download", download)
       await profiling.dispose()
       cdp.dispose()
