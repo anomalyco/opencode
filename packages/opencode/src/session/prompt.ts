@@ -19,6 +19,8 @@ import { Plugin } from "../plugin"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { ReflectionState } from "@opencode-ai/core/session/runner/reflection-state"
+import { containsHedge } from "@opencode-ai/core/session/runner/hedge"
 import { ToolRegistry } from "@/tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
@@ -1067,14 +1069,12 @@ const layer = Layer.effect(
 
     const maybeReflect = Effect.fnUntraced(function* (sessionID: SessionID) {
       const signals = yield* SynchronizedRef.get(stuckSignals)
-      if (signals.size === 0) return
-
       const modelOverride = parseReflectionModel(flags.experimentalReflectionModel)
       yield* sessionExecution
         .reflect(sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
         .pipe(
           Effect.catchCause((cause) =>
-            Effect.logError("V2 reflection failed", {
+            Effect.logError("reflection failed", {
               cause,
               "session.id": sessionID,
               signals: [...signals],
@@ -1090,6 +1090,7 @@ const layer = Layer.effect(
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
+      ReflectionState.clearDirection(input.sessionID)
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
 
@@ -1153,6 +1154,24 @@ const layer = Layer.effect(
             !hasToolCalls &&
             lastAssistant.parentID === lastUser.id
           ) {
+            const state = ReflectionState.get(sessionID)
+            if (!state.directionConfirmed) {
+              const modelOverride = parseReflectionModel(flags.experimentalReflectionModel)
+              const thenResult = yield* sessionExecution
+                .thenLoop(sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
+                .pipe(
+                  Effect.map(Option.some),
+                  Effect.catchCause((cause) =>
+                    Effect.logError("thenLoop reflection failed", { cause, "session.id": sessionID }).pipe(
+                      Effect.as(Option.none()),
+                    ),
+                  ),
+                )
+              if (Option.isSome(thenResult) && thenResult.value.steered) {
+                yield* Effect.logInfo("thenLoop produced steer, continuing loop", { "session.id": sessionID })
+                continue
+              }
+            }
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
             )
@@ -1169,6 +1188,34 @@ const layer = Layer.effect(
           }
 
           step++
+          const toolParts = lastAssistantMsg?.parts.filter((p): p is SessionV1.ToolPart => p.type === "tool") ?? []
+          const hasSettlementFailure = toolParts.some(
+            (p) =>
+              p.state.status === "error" ||
+              (p.state.status === "completed" &&
+                typeof p.state.output === "string" &&
+                /\b(error|fail|failed|failure|exception|fatal|unhandled)\b/i.test(p.state.output)),
+          )
+          const assistantText =
+            lastAssistantMsg?.parts
+              .filter(
+                (p): p is SessionV1.TextPart | SessionV1.ReasoningPart =>
+                  p.type === "text" || p.type === "reasoning",
+              )
+              .map((p) => p.text)
+              .join(" ") ?? ""
+          const hasHedge = containsHedge(assistantText)
+
+          if (hasSettlementFailure || hasHedge) {
+            const modelOverride = parseReflectionModel(flags.experimentalReflectionModel)
+            yield* sessionExecution
+              .whyLoop(sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logError("whyLoop execution failed", { cause, "session.id": sessionID }),
+                ),
+              )
+          }
           if (step === 1)
             yield* title({
               session,
@@ -1300,11 +1347,15 @@ const layer = Layer.effect(
               sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+            const reflectionText = ReflectionState.getReflectionText(sessionID)
+            const steerGuidance = ReflectionState.consumeSteerGuidanceText(sessionID)
             const system = [
               ...env,
               ...instructions,
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
+              ...(reflectionText ? [reflectionText] : []),
+              ...(steerGuidance ? [steerGuidance] : []),
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)

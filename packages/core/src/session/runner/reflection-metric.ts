@@ -3,7 +3,7 @@ export * as ReflectionMetric from "./reflection-metric"
 import { and, asc, eq, isNull } from "drizzle-orm"
 import { Effect } from "effect"
 import { Database } from "../../database/database"
-import { SessionInputTable } from "../sql"
+import { MessageTable, PartTable, SessionInputTable } from "../sql"
 import { SessionSchema } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -73,8 +73,33 @@ export const initialPrompt = Effect.fn("ReflectionMetric.initialPrompt")(functio
     .limit(1)
     .get()
     .pipe(Effect.orDie)
-  if (!row) return ""
-  return row.prompt.text
+  if (row) return row.prompt.text
+
+  const firstUser = yield* db
+    .select()
+    .from(MessageTable)
+    .where(eq(MessageTable.session_id, sessionID))
+    .orderBy(asc(MessageTable.time_created), asc(MessageTable.id))
+    .limit(5)
+    .all()
+    .pipe(Effect.orDie)
+  for (const m of firstUser) {
+    if (m.data.role === "user") {
+      const parts = yield* db
+        .select()
+        .from(PartTable)
+        .where(eq(PartTable.message_id, m.id))
+        .orderBy(asc(PartTable.id))
+        .all()
+        .pipe(Effect.orDie)
+      const text = parts
+        .filter((p) => p.data.type === "text")
+        .map((p) => (p.data as { text?: string }).text ?? "")
+        .join("\n")
+      if (text.trim().length > 0) return text
+    }
+  }
+  return ""
 })
 
 export type Cofinality = "omega" | "transfinite"

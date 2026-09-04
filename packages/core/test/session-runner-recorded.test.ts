@@ -117,6 +117,24 @@ const execution = Layer.effect(
             extensionsDetected: 0,
           },
         }),
+      whyLoop: () =>
+        Effect.succeed({
+          steered: false,
+          iterates: 0,
+          converged: true,
+          certificate: { epsilon: 0 },
+          text: "",
+          extensionsDetected: 0,
+        }),
+      thenLoop: () =>
+        Effect.succeed({
+          steered: false,
+          iterates: 0,
+          converged: true,
+          certificate: { epsilon: 0 },
+          text: "",
+          extensionsDetected: 0,
+        }),
       escalate: () => Effect.succeed({ escalated: true, message: "mock escalation" }),
     })
   }),

@@ -20,6 +20,16 @@ export interface Interface {
     sessionID: SessionSchema.ID,
     input?: { readonly model?: { readonly providerID: string; readonly modelID: string } },
   ) => Effect.Effect<SessionRunner.ReflectionOutcome, SessionRunner.RunError>
+  /** Fire Why loop reflection against the session's last assistant message. */
+  readonly whyLoop: (
+    sessionID: SessionSchema.ID,
+    input?: { readonly model?: { readonly providerID: string; readonly modelID: string } },
+  ) => Effect.Effect<SessionRunner.ReflectionResult, SessionRunner.RunError>
+  /** Fire Then loop forward-projection against the session's last assistant message. */
+  readonly thenLoop: (
+    sessionID: SessionSchema.ID,
+    input?: { readonly model?: { readonly providerID: string; readonly modelID: string } },
+  ) => Effect.Effect<SessionRunner.ReflectionResult, SessionRunner.RunError>
   /** Escalate current task to a more capable (cloud) model. Re-routes through automation queue. */
   readonly escalate: (
     input: { readonly sessionID: SessionSchema.ID; readonly reason: string },
@@ -46,7 +56,45 @@ export const noopLayer = Layer.succeed(
     resume: () => Effect.void,
     wake: () => Effect.void,
     interrupt: () => Effect.void,
-    reflect: () => Effect.die("Reflection not available in noop layer"),
+    reflect: () =>
+      Effect.succeed({
+        why: { steered: false, iterates: 0, converged: true, certificate: { epsilon: 0 }, text: "", extensionsDetected: 0 },
+        // eslint-disable-next-line unicorn/no-thenable
+        then: { steered: false, iterates: 0, converged: true, certificate: { epsilon: 0 }, text: "", extensionsDetected: 0 },
+        diagnostic: {
+          muR: "",
+          tauR: "",
+          state: "",
+          initialPrompt: "",
+          rhoMuR: 0,
+          rhoTauR: 0,
+          rhoState: 0,
+          forwardMisalignment: 0,
+          backwardMisalignment: 0,
+          totalMisalignment: 0,
+          objectiveGap: 0,
+          cofinality: "omega" as const,
+          extensionsDetected: 0,
+        },
+      }),
+    whyLoop: () =>
+      Effect.succeed({
+        steered: false,
+        iterates: 0,
+        converged: true,
+        certificate: { epsilon: 0 },
+        text: "",
+        extensionsDetected: 0,
+      }),
+    thenLoop: () =>
+      Effect.succeed({
+        steered: false,
+        iterates: 0,
+        converged: true,
+        certificate: { epsilon: 0 },
+        text: "",
+        extensionsDetected: 0,
+      }),
     escalate: () => Effect.die("Escalation not available in noop layer"),
   }),
 )

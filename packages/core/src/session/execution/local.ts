@@ -101,6 +101,42 @@ const layer = Layer.effect(
         )
       }),
 
+      whyLoop: Effect.fnUntraced(function* (
+        sessionID: SessionSchema.ID,
+        input?: { readonly model?: { readonly providerID: string; readonly modelID: string } },
+      ) {
+        const session = yield* store.get(sessionID)
+        if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
+        return yield* SessionRunner.Service.use((runner) =>
+          runner.whyLoop(sessionID, input?.model),
+        ).pipe(
+          Effect.provide(locations.get(session.location)),
+          Effect.tapCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.void
+              : Effect.logError("Failed whyLoop on Session", cause).pipe(Effect.annotateLogs({ sessionID })),
+          ),
+        )
+      }),
+
+      thenLoop: Effect.fnUntraced(function* (
+        sessionID: SessionSchema.ID,
+        input?: { readonly model?: { readonly providerID: string; readonly modelID: string } },
+      ) {
+        const session = yield* store.get(sessionID)
+        if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
+        return yield* SessionRunner.Service.use((runner) =>
+          runner.thenLoop(sessionID, input?.model),
+        ).pipe(
+          Effect.provide(locations.get(session.location)),
+          Effect.tapCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.void
+              : Effect.logError("Failed thenLoop on Session", cause).pipe(Effect.annotateLogs({ sessionID })),
+          ),
+        )
+      }),
+
       escalate: Effect.fnUntraced(function* (input: {
         readonly sessionID: SessionSchema.ID
         readonly reason: string

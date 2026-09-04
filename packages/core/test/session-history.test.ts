@@ -12,7 +12,9 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionHistory } from "@opencode-ai/core/session/history"
+import { MessageID, PartID } from "@opencode-ai/core/v1/session"
 import { testEffect } from "./lib/effect"
 
 const projects = Layer.succeed(
@@ -160,6 +162,124 @@ describe("SessionV2.history", () => {
       const error = yield* session.history({ sessionID: SessionV2.ID.make("ses_missing"), limit: 10 }).pipe(Effect.flip)
 
       expect(error._tag).toBe("Session.NotFoundError")
+    }),
+  )
+
+  it.effect("loads V1 history for runner when session_message table has no rows", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const sessionID = SessionV2.ID.make("ses_v1_legacy_test")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: ProjectV2.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: ProjectV2.ID.global,
+          slug: "v1-legacy-test",
+          directory: "/project",
+          title: "V1 Legacy Test",
+          version: "1",
+        })
+        .run()
+
+      const userMsgId = MessageID.make("msg_user_1")
+      yield* db
+        .insert(MessageTable)
+        .values({
+          id: userMsgId,
+          session_id: sessionID,
+          time_created: 1000,
+          time_updated: 1000,
+          data: {
+            role: "user",
+            time: { created: 1000 },
+          } as any,
+        })
+        .run()
+
+      yield* db
+        .insert(PartTable)
+        .values({
+          id: PartID.make("prt_user_txt"),
+          message_id: userMsgId,
+          session_id: sessionID,
+          time_created: 1000,
+          time_updated: 1000,
+          data: {
+            type: "text",
+            text: "Fix the queue bug",
+          } as any,
+        })
+        .run()
+
+      const asstMsgId = MessageID.make("msg_asst_1")
+      yield* db
+        .insert(MessageTable)
+        .values({
+          id: asstMsgId,
+          session_id: sessionID,
+          time_created: 2000,
+          time_updated: 2000,
+          data: {
+            role: "assistant",
+            agent: "build",
+            modelID: "claude-sonnet",
+            providerID: "anthropic",
+            time: { created: 2000, completed: 2500 },
+          } as any,
+        })
+        .run()
+
+      yield* db
+        .insert(PartTable)
+        .values([
+          {
+            id: PartID.make("prt_asst_txt"),
+            message_id: asstMsgId,
+            session_id: sessionID,
+            time_created: 2000,
+            time_updated: 2000,
+            data: {
+              type: "text",
+              text: "Running tests now.",
+            } as any,
+          },
+          {
+            id: PartID.make("prt_asst_tool"),
+            message_id: asstMsgId,
+            session_id: sessionID,
+            time_created: 2100,
+            time_updated: 2100,
+            data: {
+              type: "tool",
+              tool: "bash",
+              callID: "call_test_1",
+              state: {
+                status: "completed",
+                input: { command: "bun test" },
+                output: "FAIL: 6 tests failed",
+              },
+            } as any,
+          },
+        ])
+        .run()
+
+      const entries = yield* SessionHistory.entriesForRunner(db, sessionID, 0)
+      expect(entries).toHaveLength(2)
+      expect(entries[0].message.type).toBe("user")
+      if (entries[0].message.type === "user") {
+        expect(entries[0].message.text).toBe("Fix the queue bug")
+      }
+      expect(entries[1].message.type).toBe("assistant")
+      if (entries[1].message.type === "assistant") {
+        expect(entries[1].message.content).toHaveLength(2)
+        expect(entries[1].message.content[0].type).toBe("text")
+        expect(entries[1].message.content[1].type).toBe("tool")
+      }
     }),
   )
 })
