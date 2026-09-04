@@ -56,8 +56,6 @@ export const Plugin = define({
 
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
-        // Titles are a side effect of activity already observed on the primary request.
-        if (event.kind === "title") return
         const active = sessions.get(event.sessionID)
         const settings = yield* loadSettings()
         if (!settings) {

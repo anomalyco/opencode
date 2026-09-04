@@ -1090,7 +1090,8 @@ effect: (ctx) =>
 ### Sessions
 
 Modify assembled system instructions, messages, tools, or request options immediately before model dispatch. The hook
-runs for every request a session issues; `event.kind` is `"primary"`, `"compaction"`, `"title"`, or `"generate"`.
+runs for every request that carries the session conversation; `event.kind` is `"primary"`, `"compaction"`, or
+`"generate"`. Title requests do not run context hooks.
 Typed `options` keys are generation settings; any other key is passed to the protocol as a provider option.
 
 ```ts
@@ -1099,7 +1100,7 @@ effect: (ctx) =>
     const session = ctx.session
     yield* session.hook("context", (event) =>
       Effect.sync(() => {
-        if (event.kind === "title") return
+        if (event.kind === "compaction") return
         event.system.push({ text: "Keep the review focused on correctness." })
         delete event.tools.write
         event.options.maxTokens = 8_000

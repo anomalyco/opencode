@@ -11,7 +11,7 @@ import {
   SystemPart,
 } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
-import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
+import type { SessionRequestKind, SessionRequestOptions } from "@opencode-ai/plugin/effect/session"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { Content } from "@opencode-ai/schema/tool"
@@ -312,17 +312,18 @@ export const layer = Layer.effect(
       )
       // Hooks mutate this record in place: edit descriptions and schemas, rename, or remove.
       const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
-      const context: PluginHooks.Domains["session"]["context"] = {
+      const draft = {
         sessionID: session.id,
         agent: input.scope.agentID,
         model: resolved.ref,
-        kind: input.kind,
         system: input.transcript.system,
         messages: input.transcript.messages,
         tools: definitions,
-        options: {},
+        options: {} as SessionRequestOptions,
       }
-      yield* hooks.trigger("session", "context", context)
+      // Titles are not part of the agent conversation and skip context hooks.
+      const context =
+        input.kind === "title" ? draft : yield* hooks.trigger("session", "context", { ...draft, kind: input.kind })
       // Typed generation keys and provider-semantic keys share one bag in the hook;
       // the request keeps them apart.
       const generation = Object.fromEntries(

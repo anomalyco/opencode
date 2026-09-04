@@ -1101,13 +1101,13 @@ await ctx.session.hook("context", (event) => {
 ```
 
 Context changes affect only the outgoing model call, not persisted history or configuration. The hook runs for every
-request a session issues; `event.kind` says which flow issued it: `"primary"` for the agent loop, `"compaction"` for
-checkpoint summaries, `"title"` for title generation, and `"generate"` for transient `ctx.session.generate` calls.
-`event.agent` is always the session's selected agent, except for titles, which use the hidden `title` agent.
+request that carries the session conversation; `event.kind` says which flow issued it: `"primary"` for the agent loop,
+`"compaction"` for checkpoint summaries, and `"generate"` for transient `ctx.session.generate` calls. Title requests do
+not run context hooks. `event.agent` is always the session's selected agent.
 
 ```ts
 await ctx.session.hook("context", (event) => {
-  if (event.kind === "title") return
+  if (event.kind === "compaction") return
   event.messages.push({ role: "user", content: [{ type: "text", text: "Reminder: prefer small diffs." }] })
 })
 ```
@@ -1255,7 +1255,7 @@ interface SessionContextHook {
   readonly sessionID: string
   readonly agent: string
   readonly model: { providerID: string; id: string; variant?: string }
-  readonly kind: SessionRequestKind
+  readonly kind: Exclude<SessionRequestKind, "title">
   system: SystemPart[]
   messages: Message[]
   tools: Record<string, { description: string; input: JsonSchema }>
