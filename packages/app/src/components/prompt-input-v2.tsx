@@ -20,9 +20,10 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePermission } from "@/context/permission"
-import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
+import { type ImageAttachmentPart, type TextAttachmentPart, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
+import { ServerConnection } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
@@ -116,6 +117,9 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const attachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
+  const textAttachments = createMemo(() =>
+    prompt.current().filter((part): part is TextAttachmentPart => part.type === "text-attachment"),
+  )
   const commentCount = createMemo(() => {
     if (mode() === "shell") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
@@ -125,7 +129,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       .current()
       .map((part) => ("content" in part ? part.content : ""))
       .join("")
-    return text.trim().length === 0 && attachments().length === 0 && commentCount() === 0
+    return text.trim().length === 0 && attachments().length === 0 && textAttachments().length === 0 && commentCount() === 0
   })
   const stopping = createMemo(() => working() && blank())
   const placeholder = createMemo(() =>
@@ -199,6 +203,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     prompt,
     info,
     imageAttachments: attachments,
+    textAttachments,
     commentCount,
     autoAccept: accepting,
     mode,
@@ -219,6 +224,13 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
     model: props.controls.model.selection,
+    materializeTextAttachment: async (attachment) => {
+      if (!ServerConnection.local(sdk().server) || !platform.materializeDraftBlob) {
+        throw new Error(language.t("prompt.toast.pasteUnsupported.description"))
+      }
+      return platform.materializeDraftBlob(attachment.blob.id)
+    },
+    cleanupMaterializedTextAttachment: (id) => platform.cleanupMaterializedDraftBlob?.(id) ?? Promise.resolve(),
   })
 
   const referenceDescription = (reference: ReferenceInfo) =>
@@ -346,8 +358,10 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     onContextRemove(item) {
       if (item?.commentID) comments.remove(item.path, item.commentID)
     },
-    openAttachment: (attachment) =>
-      dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />),
+    openAttachment: (attachment) => {
+      if (attachment.type !== "image") return
+      dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />)
+    },
     openContext(key) {
       const item = controller.contextItem(key)
       if (item) openComment(item, props, sync, layout, files, comments)

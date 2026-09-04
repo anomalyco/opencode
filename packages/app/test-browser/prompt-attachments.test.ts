@@ -171,6 +171,48 @@ test("rejects desktop duplicates and keeps changed files in the V2 prompt store"
   })
 })
 
+test("stores a large text paste as a compact V2 text attachment", async () => {
+  await createRoot(async (dispose) => {
+    const [state, setState] = createStore({ prompt: [] as PromptInputV2Prompt })
+    const stored: File[] = []
+    const attachments = createPromptInputV2Attachments({
+      capture: () => ({
+        current: () => state.prompt,
+        cursor: () => 0,
+        set: (prompt) => setState("prompt", prompt),
+      }),
+      editor: () => document.createElement("div"),
+      focusEditor: () => undefined,
+      addPart: () => false,
+      setDraggingType: () => undefined,
+      directory: () => "/",
+      isDialogActive: () => false,
+      warn: () => undefined,
+      duplicate: () => undefined,
+      onError: () => undefined,
+      store: async (file) => {
+        stored.push(file)
+        return { id: "blob-1", url: "blob:blob-1" }
+      },
+    })
+    const text = Array.from({ length: 1400 }, () => "1".repeat(120)).join("\n")
+
+    expect(await attachments.addTextAttachment(text)).toBe(true)
+    expect(stored).toHaveLength(1)
+    expect(await stored[0]!.text()).toBe(text)
+    expect(state.prompt).toEqual([
+      expect.objectContaining({
+        type: "text-attachment",
+        mime: "text/plain",
+        size: text.length,
+        lineCount: 1400,
+        blob: { id: "blob-1", url: "blob:blob-1" },
+      }),
+    ])
+    dispose()
+  })
+})
+
 test("rejects the large-paste regression fixture before editor insertion", () => {
   createRoot((dispose) => {
     const [state, setState] = createStore<PromptInputV2PersistedState>({

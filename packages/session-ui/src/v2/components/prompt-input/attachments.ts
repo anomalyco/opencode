@@ -1,7 +1,7 @@
 import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { isLargePaste, normalizePaste } from "./paste"
-import type { PromptInputV2Attachment, PromptInputV2Prompt } from "./types"
+import type { PromptInputV2Attachment, PromptInputV2Prompt, PromptInputV2TextAttachment } from "./types"
 
 const accepted = [
   "image/png",
@@ -80,6 +80,7 @@ export type PromptInputV2AttachmentConfig = {
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
   store?: (file: File) => Promise<{ id: string; url: string }>
+  onTextAttachment?: (attachment: PromptInputV2TextAttachment) => void
 }
 
 export function createPromptInputV2Attachments(
@@ -176,6 +177,23 @@ export function createPromptInputV2Attachments(
     if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
     put()
   }
+  const addTextAttachment = async (text: string) => {
+    const target = capture()
+    if (!target || !input.store) return false
+    const blob = new Blob([text], { type: "text/plain" })
+    const attachment: PromptInputV2TextAttachment = {
+      type: "text-attachment",
+      id: globalThis.crypto?.randomUUID?.() ?? Math.random().toString(16).slice(2),
+      filename: `pasted-text-${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(16).slice(2)).slice(0, 8)}.txt`,
+      mime: "text/plain",
+      size: blob.size,
+      lineCount: text.split("\n").length,
+      blob: await input.store(new File([blob], "pasted-text.txt", { type: "text/plain" })),
+    }
+    target.prompt.set([...target.prompt.current(), attachment], target.cursor)
+    input.onTextAttachment?.(attachment)
+    return true
+  }
   const handleDrop = async (event: DragEvent) => {
     if (input.isDialogActive()) return
     event.preventDefault()
@@ -206,6 +224,7 @@ export function createPromptInputV2Attachments(
 
   return {
     addAttachments,
+    addTextAttachment,
     handlePaste,
     handleDrop,
     pick(fallback: () => void) {

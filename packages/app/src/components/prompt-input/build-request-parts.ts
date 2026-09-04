@@ -2,7 +2,7 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
-import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
+import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt, TextAttachmentPart } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
 
@@ -23,6 +23,7 @@ type BuildRequestPartsInput = {
   prompt: Prompt
   context: ContextFile[]
   images: (Omit<ImageAttachmentPart, "blob"> & { dataUrl: string })[]
+  textAttachments?: { attachment: TextAttachmentPart; path: string }[]
   text: string
   messageID: string
   sessionID: string
@@ -204,7 +205,15 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
     } satisfies PromptRequestPart
   })
 
-  requestParts.push(...files, ...context, ...agents, ...images)
+  const textAttachments = (input.textAttachments ?? []).map(({ attachment, path }) => ({
+    id: Identifier.ascending("part"),
+    type: "file",
+    mime: attachment.mime,
+    url: `file://${encodeFilePath(path)}`,
+    filename: attachment.filename,
+  })) satisfies PromptRequestPart[]
+
+  requestParts.push(...files, ...context, ...agents, ...images, ...textAttachments)
 
   return {
     requestParts,
