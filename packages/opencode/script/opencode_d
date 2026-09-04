@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # opencode_d — run opencode from source, behaving like the production-built
 # `opencode` binary. See CONTRIBUTING.md → "Running dev with the caller's
 # working directory" for details.
@@ -8,18 +8,40 @@
 #   opencode_d --help
 #   opencode_d run "hello"
 #   opencode_d                  # start TUI in the current directory
-set -euo pipefail
+set -eu
 
-ORIGINAL_PWD="$PWD"
+# Snapshot the caller's environment so we can restore it after the `cd` into
+# the repo. We never mutate the caller's PWD/OLDPWD beyond this script — bun
+# inherits the restored values via exec.
+caller_pwd="$PWD"
+caller_oldpwd="${OLDPWD-}"
 
 # Resolve the opencode repo root from this script's location so the wrapper
 # works regardless of where it's invoked from (including via a symlink).
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+# POSIX-compliant symlink resolution: no `readlink -f` (GNU coreutils only;
+# stock macOS readlink lacks -f on versions < 13).
+script=$0
+while [ -L "$script" ]; do
+  dir=$(cd -- "$(dirname -- "$script")" && pwd)
+  script=$(readlink -- "$script")
+  case $script in
+    /*) ;;
+    *) script=$dir/$script ;;
+  esac
+done
+script_dir=$(cd -- "$(dirname -- "$script")" && pwd)
+repo_root=$(cd -- "$script_dir/../../.." && pwd)
 
-cd "$REPO_ROOT/packages/opencode"
+cd -- "$repo_root/packages/opencode"
 
-# opencode reads process.env.PWD for the project root; `cd` above overwrote it.
-export PWD="$ORIGINAL_PWD"
+# opencode reads process.env.PWD for the project root; the `cd` above
+# overwrote it. Restore PWD and OLDPWD to the caller's view so the launched
+# process sees the same working-directory state as a production invocation.
+PWD=$caller_pwd
+export PWD
+if [ -n "$caller_oldpwd" ]; then
+  OLDPWD=$caller_oldpwd
+  export OLDPWD
+fi
 
-exec bun run --conditions=browser bin/dev.ts "$ORIGINAL_PWD" "$@"
+exec bun run --conditions=browser bin/dev.ts "$caller_pwd" "$@"
