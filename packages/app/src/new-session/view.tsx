@@ -61,7 +61,10 @@ export function NewSessionView(props: {
         />
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <Wordmark class="mx-auto h-auto w-full max-w-[720px] text-v2-background-bg-inverse" />
+            <Wordmark
+              fade={false}
+              class="mx-auto h-auto w-full max-w-[720px] text-v2-background-bg-inverse opacity-60 [[data-color-scheme=dark]_&]:opacity-50"
+            />
             <div class="mt-8 flex flex-col gap-8">
               <Composer model={props.composer} />
               <Show when={props.project.empty()}>
