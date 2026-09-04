@@ -389,6 +389,41 @@ export const ShellTool = Tool.define(
       }
       const shellKind = ShellID.toKind(Shell.name(shell))
 
+      // Redirection targets (`>`, `>>`, `2>`, `<`, `&>`, `>&`) are filesystem
+      // paths even when the command name itself is not in the FILES
+      // allowlist. Without this scan `echo x > /tmp/out` writes outside the
+      // workspace without triggering external_directory — the same operation
+      // `cp x /tmp/out` denies. Scan every file_redirect destination
+      // regardless of the command name. The grammar nests these under
+      // redirected_statement (a sibling of the command node), so walk the
+      // whole tree once.
+      //
+      // Scope note: this covers *direct* redirection targets only. Writes via
+      // command arguments (`printf x | tee /etc/x`, `dd of=/path`,
+      // `sponge`, `install`, `script -c`) ride the command-name FILES
+      // allowlist path above, not this scan — those commands are not in
+      // FILES and so are not gated here. Variable targets (`> "$P"` /
+      // `> $P`) are caught by the dynamic() guard in argPath and bail
+      // fail-closed (no prompt for a wrong path), so the shell still executes
+      // the redirect — this scan treats that as "mostly closed" rather than
+      // fully gated. Follow-up would resolve shell vars before resolving.
+      for (const redirect of root.descendantsOfType("file_redirect")) {
+        // A file_redirect is `[descriptor] op destination`. The destination
+        // is the LAST named child — reading it positionally skips the
+        // optional file_descriptor ("2>..." has descriptor=2, ">..." has
+        // none) and picks up the word that names the file. This holds for
+        // `>`, `>>`, `2>`, `&>`, `>&`, `<>` in tree-sitter-bash; the
+        // PowerShell grammar names these nodes differently, so this scan is
+        // a no-op on posix shells only.
+        const named = redirect.namedChildren
+        const target = named[named.length - 1]
+        if (!target) continue
+        const resolved = yield* argPath(target.text, cwd, ps, shell)
+        if (!resolved || containsPath(resolved, instance)) continue
+        const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
+        scan.dirs.add(dir)
+      }
+
       for (const node of commands(root)) {
         const command = parts(node)
         const tokens = command.map((item) => item.text)
