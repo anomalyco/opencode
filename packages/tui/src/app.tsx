@@ -226,11 +226,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         restart: managed.restart,
       }
     : undefined
-  const exit = {
-    epilogue: undefined as string | undefined,
-    reason: undefined as unknown,
-    restart: undefined as { sessionID?: string } | undefined,
-  }
+  const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const options = {
@@ -401,9 +397,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                         <AttentionProvider>
                                                                           <UpdateNotificationProvider
                                                                             updater={input.updater}
-                                                                            onRestart={(sessionID) => {
-                                                                              exit.restart = { sessionID }
-                                                                            }}
                                                                           >
                                                                             <PluginProvider
                                                                               packages={input.packages}
@@ -460,7 +453,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }
       })
       yield* shutdown.await
-      return { epilogue: exit.epilogue, reason: exit.reason, restart: exit.restart }
+      return { epilogue: exit.epilogue, reason: exit.reason }
     }),
   )
   yield* Effect.sync(() => {
@@ -468,7 +461,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")
   })
-  return result.restart
 })
 
 function App(props: { pair?: DialogPairCredentials }) {

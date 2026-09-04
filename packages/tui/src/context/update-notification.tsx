@@ -5,7 +5,6 @@ import { useStorage } from "./storage"
 import { useEvent } from "./event"
 import { errorMessage } from "../util/error"
 import { useExit } from "./exit"
-import { useRoute } from "./route"
 import { useDialog } from "../ui/dialog"
 import { DialogUpdate } from "../component/dialog-update"
 
@@ -27,10 +26,9 @@ export type UpdateSource = {
 
 export const { use: useUpdateNotification, provider: UpdateNotificationProvider } = createSimpleContext({
   name: "UpdateNotification",
-  init: (props: { updater?: UpdateSource; onRestart?: (sessionID?: string) => void }) => {
+  init: (props: { updater?: UpdateSource }) => {
     const event = useEvent()
     const exit = useExit()
-    const route = useRoute()
     const dialog = useDialog()
     const log = useLog({ component: "update-notification" })
     const [state, setState] = createSignal<UpdateState>()
@@ -85,7 +83,6 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
     const restart = () => {
       const current = state()
       if (current?.type !== "installed") return
-      props.onRestart?.(route.data.type === "session" ? route.data.sessionID : undefined)
       exit()
     }
 
