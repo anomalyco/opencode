@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { agent, model, renderLocal } from "../fixture/local"
+import { agent, model, renderLocal, session } from "../fixture/local"
 import { directory, json } from "../fixture/tui-client"
 
 test("cycles all recent models in a stable order in both directions", async () => {
@@ -123,4 +123,110 @@ test("ignores unsupported agent variants", async () => {
     agents: [agent("build", { providerID: "provider", id: "first", variant: "missing" })],
   })
   expect(setup.local.model.selection()?.variant).toBeUndefined()
+})
+
+test("switching agents restores their model and variant within the session", async () => {
+  await using setup = await renderLocal({
+    models: [model("first", ["low", "high"]), model("second", ["low", "high"]), model("third", ["low", "high"])],
+    agents: [
+      agent("build", { providerID: "provider", id: "first", variant: "high" }),
+      agent("plan", { providerID: "provider", id: "second", variant: "low" }),
+    ],
+    sessions: [session("ses_first", { providerID: "provider", id: "first", variant: "low" })],
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: "low" })
+  setup.local.agent.move(1)
+  expect(setup.local.agent.current()?.id).toBe("plan")
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "low" })
+  setup.local.model.set({ providerID: "provider", modelID: "third" })
+  setup.local.model.variant.set("high")
+  setup.local.agent.move(-1)
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: "low" })
+  setup.local.agent.set("plan")
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "third", variant: "high" })
+})
+
+test("agent and model drafts are isolated across sessions and survive navigation", async () => {
+  await using setup = await renderLocal({
+    models: [model("first", ["low", "high"]), model("second", ["low", "high"])],
+    agents: [agent("build"), agent("plan", { providerID: "provider", id: "second" })],
+    sessions: [
+      session("ses_first", { providerID: "provider", id: "first", variant: "low" }),
+      session("ses_second", { providerID: "provider", id: "second", variant: "high" }, "plan"),
+    ],
+  })
+  await Promise.all([setup.data.session.sync("ses_first"), setup.data.session.sync("ses_second")])
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  setup.local.agent.set("plan")
+  setup.local.model.variant.set("low")
+  setup.route.navigate({ type: "session", sessionID: "ses_second" })
+  expect(setup.local.agent.current()?.id).toBe("plan")
+  expect(setup.local.model.variant.current()).toBe("high")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.agent.current()?.id).toBe("plan")
+  expect(setup.local.model.variant.current()).toBe("low")
+  setup.local.agent.set("build")
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: "low" })
+})
+
+test("selection commits clear only the captured agent's draft and retain other agents", async () => {
+  await using setup = await renderLocal({
+    models: [model("first"), model("second"), model("third")],
+    agents: [agent("build"), agent("plan", { providerID: "provider", id: "second" })],
+    sessions: [session("ses_first", { providerID: "provider", id: "first" })],
+    fetch: (url) => {
+      if (url.pathname.includes("/message/"))
+        return json({
+          data: {
+            id: url.pathname.split("/").at(-1),
+            type: "model-switched",
+            model: { providerID: "provider", id: url.pathname.endsWith("msg_model") ? "second" : "third" },
+            time: { created: 2 },
+          },
+        })
+    },
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  setup.local.agent.set("plan")
+  setup.local.model.set({ providerID: "provider", modelID: "second" })
+  setup.local.agent.set("build")
+  setup.local.model.trackSessionCommit("ses_first", { providerID: "provider", id: "second" }, "plan")
+  setup.events.emit({
+    id: "evt_agent",
+    type: "session.agent.selected",
+    created: 1,
+    durable: { aggregateID: "ses_first", seq: 1, version: 1 },
+    data: { sessionID: "ses_first", agent: "plan", previous: "build" },
+  })
+  setup.events.emit({
+    id: "evt_model",
+    type: "session.model.selected",
+    created: 2,
+    durable: { aggregateID: "ses_first", seq: 2, version: 1 },
+    data: { sessionID: "ses_first", model: { providerID: "provider", id: "second" } },
+  })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.data.session.get("ses_first")?.model?.id === "second"
+  })
+  expect(setup.local.agent.current()?.id).toBe("build")
+  expect(setup.local.model.current()?.modelID).toBe("first")
+  setup.local.agent.set("plan")
+  expect(setup.local.model.current()?.modelID).toBe("second")
+  setup.events.emit({
+    id: "evt_external_model",
+    type: "session.model.selected",
+    created: 3,
+    durable: { aggregateID: "ses_first", seq: 3, version: 1 },
+    data: { sessionID: "ses_first", model: { providerID: "provider", id: "third" } },
+  })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.local.model.current()?.modelID === "third"
+  })
+  setup.local.agent.set("build")
+  expect(setup.local.model.current()?.modelID).toBe("first")
 })

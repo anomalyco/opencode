@@ -83,7 +83,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       )
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
+        draftBySession: {} as Record<string, string | undefined>,
       })
+      onCleanup(event.on("session.deleted", (evt) => setAgentStore("draftBySession", evt.data.sessionID, undefined)))
+      onCleanup(
+        event.on("session.agent.selected", (evt) => {
+          if (agentStore.draftBySession[evt.data.sessionID] === evt.data.agent)
+            setAgentStore("draftBySession", evt.data.sessionID, undefined)
+        }),
+      )
       const colors = createMemo(() => {
         const step = mode() === "light" ? 800 : 200
         return dedupeWith(
@@ -96,7 +104,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((agent) => agent.id === agentStore.current) ?? agents().at(0)
+          const selected =
+            route.data.type === "session"
+              ? (agentStore.draftBySession[route.data.sessionID] ??
+                args.agent ??
+                data.session.get(route.data.sessionID)?.agent ??
+                agentStore.current)
+              : agentStore.current
+          return agents().find((agent) => agent.id === selected) ?? agents().at(0)
         },
         set(id: string) {
           if (!agents().some((agent) => agent.id === id))
@@ -105,7 +120,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               message: `Agent not found: ${id}`,
               duration: 3000,
             })
-          setAgentStore("current", id)
+          batch(() => {
+            const changed = this.current()?.id !== id
+            if (changed) model.remember()
+            setAgentStore("current", id)
+            if (route.data.type === "session") setAgentStore("draftBySession", route.data.sessionID, id)
+            // Retain both selections while agent and model commits arrive separately.
+            const selected = changed && route.data.type === "session" ? model.current() : undefined
+            if (selected) model.set(selected)
+          })
         },
         move(direction: 1 | -1) {
           batch(() => {
@@ -115,7 +138,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (next < 0) next = agents().length - 1
             if (next >= agents().length) next = 0
             const value = agents()[next]
-            setAgentStore("current", value.id)
+            this.set(value.id)
           })
         },
         color(id: string) {
@@ -141,14 +164,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
       const [selectionState, setSelectionState] = createStore<{
         newSessionModelByLocationAgent: Record<string, ModelPreferenceModel | undefined>
-        draftBySession: Record<string, ModelSelection | undefined>
+        selectionBySessionAgent: Record<string, Record<string, ModelSelection | undefined> | undefined>
       }>({
         newSessionModelByLocationAgent: {},
-        draftBySession: {},
+        selectionBySessionAgent: {},
       })
 
       const repository = createModelPreferenceRepository(path.join(paths.state, "model.json"))
-      const pendingSelectionCommits = new Map<string, string>()
+      const pendingSelectionCommits = new Map<string, { agentID: string; selection: string }>()
       const selectionKey = (value: ModelSelection) =>
         `${modelPreferenceKey(value)}:${normalizeModelVariant(value.variant) ?? "default"}`
       const saveState = {
@@ -271,15 +294,36 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       function sessionSelection(sessionID: string) {
-        return selectionState.draftBySession[sessionID] ?? durableSelection(sessionID)
+        const current = agent.current()
+        if (!current) return
+        const selected = selectionState.selectionBySessionAgent[sessionID]?.[current.id]
+        if (selected) return selected
+        const session = data.session.get(sessionID)
+        if (!session?.agent || session.agent === current.id) return durableSelection(sessionID)
+        const model = newSessionModel()
+        return model && preferredSelection(model)
+      }
+
+      function setSessionSelection(sessionID: string, agentID: string, selection: ModelSelection | undefined) {
+        setSelectionState("selectionBySessionAgent", sessionID, {
+          ...selectionState.selectionBySessionAgent[sessionID],
+          [agentID]: selection,
+        })
       }
 
       function setSessionDraft(sessionID: string, selection: ModelSelection) {
+        const current = agent.current()
+        if (!current) return
         const durable = durableSelection(sessionID)
-        setSelectionState(
-          "draftBySession",
+        const session = data.session.get(sessionID)
+        setSessionSelection(
           sessionID,
-          durable && selectionKey(durable) === selectionKey(selection) ? undefined : selection,
+          current.id,
+          (!session?.agent || session.agent === current.id) &&
+            durable &&
+            selectionKey(durable) === selectionKey(selection)
+            ? undefined
+            : selection,
         )
       }
 
@@ -312,24 +356,30 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             modelID: evt.data.model.id,
             variant: evt.data.model.variant,
           })
-          if (committed !== expected) return
+          if (committed !== expected.selection) return
           pendingSelectionCommits.delete(evt.data.sessionID)
-          const draft = selectionState.draftBySession[evt.data.sessionID]
+          const draft = selectionState.selectionBySessionAgent[evt.data.sessionID]?.[expected.agentID]
           if (draft && selectionKey(draft) === committed)
-            setSelectionState("draftBySession", evt.data.sessionID, undefined)
+            setSessionSelection(evt.data.sessionID, expected.agentID, undefined)
         }),
       )
 
       onCleanup(
         event.on("session.deleted", (evt) => {
           pendingSelectionCommits.delete(evt.data.sessionID)
-          setSelectionState("draftBySession", evt.data.sessionID, undefined)
+          setSelectionState("selectionBySessionAgent", evt.data.sessionID, undefined)
         }),
       )
 
       return {
         current: currentModel,
         selection: currentSelection,
+        remember() {
+          const current = agent.current()
+          const selection = currentSelection()
+          if (route.data.type !== "session" || !current || !selection) return
+          setSessionSelection(route.data.sessionID, current.id, { ...selection })
+        },
         available(model = currentModel()) {
           return model ? isModelValid(model) : false
         },
@@ -340,8 +390,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             id: string
             variant?: string
           },
+          agentID = agent.current()?.id,
         ) {
-          const committed = selectionKey({ providerID: value.providerID, modelID: value.id, variant: value.variant })
+          if (!agentID) return () => {}
+          const committed = {
+            agentID,
+            selection: selectionKey({ providerID: value.providerID, modelID: value.id, variant: value.variant }),
+          }
           pendingSelectionCommits.set(sessionID, committed)
           return () => {
             if (pendingSelectionCommits.get(sessionID) === committed) pendingSelectionCommits.delete(sessionID)

@@ -48,7 +48,6 @@ import { useConnected } from "../use-connected"
 import { useToast } from "../../ui/toast"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
-import { useArgs } from "../../context/args"
 import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
 import { resolvePastedAttachments } from "./local-attachment"
@@ -190,7 +189,6 @@ export function Prompt(props: PromptProps) {
   const leader = Keymap.useLeaderActive()
   const muted = () => leader() || props.muted
   const local = useLocal()
-  const args = useArgs()
   const paths = useTuiPaths()
   const terminalEnvironment = useTuiTerminalEnvironment()
   const clipboard = useClipboard()
@@ -411,18 +409,6 @@ export function Prompt(props: PromptProps) {
       { defer: true },
     ),
   )
-
-  // Initialize agent/model/variant from the durable V2 Session state.
-  let syncedSessionID: string | undefined
-  createEffect(() => {
-    const sessionID = props.sessionID
-    if (!sessionID || sessionID === syncedSessionID || !local.model.ready) return
-    const session = data.session.get(sessionID)
-    if (!session) return
-    const agent = session.agent && local.agent.list().find((agent) => agent.id === session.agent)
-    if (agent && !args.agent) local.agent.set(agent.id)
-    syncedSessionID = sessionID
-  })
 
   const promptCommands = createMemo(() =>
     [
@@ -1287,7 +1273,7 @@ export function Prompt(props: PromptProps) {
         // Commands inherit the composer selection; command-specific overrides
         // remain server-owned and run after this preparation.
         const model = { providerID: selection.providerID, id: selection.modelID, variant }
-        const cancelCommit = local.model.trackSessionCommit(target, model)
+        const cancelCommit = local.model.trackSessionCommit(target, model, agent.id)
         await client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
           cancelCommit()
           throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
@@ -1379,7 +1365,7 @@ export function Prompt(props: PromptProps) {
             // Commit the captured selection after earlier admissions, including
             // compaction setup. Cached state may still precede their SSE echoes;
             // the server makes an unchanged selection a no-op.
-            const cancelCommit = local.model.trackSessionCommit(target, model)
+            const cancelCommit = local.model.trackSessionCommit(target, model, agent.id)
             return client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
               cancelCommit()
               throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })

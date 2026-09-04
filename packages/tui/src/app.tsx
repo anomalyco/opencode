@@ -737,6 +737,7 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
           const model = local.model.current()
+          const agent = local.agent.current()
           const current =
             route.data.type === "session"
               ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
@@ -750,6 +751,7 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
               location.error?.location,
             ),
           })
+          if (agent) local.agent.set(agent.id)
           if (model) local.model.set(model)
           dialog.clear()
         },
