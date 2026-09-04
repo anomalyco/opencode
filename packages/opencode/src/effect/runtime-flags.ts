@@ -28,6 +28,7 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
     broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
     direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"),
   }).pipe(Config.map((flags) => flags.broad || flags.direct)),
+  disableAgentsSkills: bool("OPENCODE_DISABLE_AGENTS"),
   enableExa: Config.all({
     experimental,
     enabled: bool("OPENCODE_ENABLE_EXA"),

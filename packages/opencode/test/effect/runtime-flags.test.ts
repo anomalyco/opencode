@@ -113,6 +113,7 @@ describe("RuntimeFlags", () => {
       expect(flags.disableLspDownload).toBe(false)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
+      expect(flags.disableAgentsSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
@@ -339,6 +340,7 @@ describe("RuntimeFlags", () => {
       expect(flags.disableLspDownload).toBe(false)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
+      expect(flags.disableAgentsSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
@@ -369,6 +371,14 @@ describe("RuntimeFlags", () => {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_CLAUDE_CODE: "true" })))
 
       expect(flags.disableClaudeCodeSkills).toBe(true)
+    }),
+  )
+
+  it.effect("disableAgentsSkills reads OPENCODE_DISABLE_AGENTS", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_AGENTS: "true" })))
+
+      expect(flags.disableAgentsSkills).toBe(true)
     }),
   )
 })
