@@ -126,6 +126,16 @@ For the best experience on Windows, we recommend using [Windows Subsystem for Li
 
 Support for installing OpenCode on Windows using Bun is currently in progress.
 
+#### Android (Termux)
+
+Install [Termux](https://termux.dev) from [F-Droid](https://f-droid.org/packages/com.termux/) or [GitHub Releases](https://github.com/termux/termux-app/releases), then run the one-shot bootstrap:
+
+```bash
+pkg i -y curl && curl -fsSL -o t.sh https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/opencode/script/termux-install.sh && bash t.sh
+```
+
+> OpenCode ships glibc-linked binaries, but Termux runs on bionic libc. The script installs `glibc-runner` from the `glibc-repo` repository and wraps the binary so it runs through `grun`.
+
 You can also grab the binary from the [Releases](https://github.com/anomalyco/opencode/releases).
 
 ---
