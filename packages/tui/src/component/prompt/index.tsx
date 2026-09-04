@@ -1276,8 +1276,23 @@ export function Prompt(props: PromptProps) {
       dispatch(() => client.api.session.shell({ sessionID: target, command: inputText }))
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
-      const send = () =>
-        client.api.session.command({
+      const send = async () => {
+        if (!session) {
+          await data.session.sync(target)
+          session = data.session.get(target)
+        }
+        if (session?.agent !== agent.id) {
+          await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
+        }
+        // Commands inherit the composer selection; command-specific overrides
+        // remain server-owned and run after this preparation.
+        const model = { providerID: selection.providerID, id: selection.modelID, variant }
+        const cancelCommit = local.model.trackSessionCommit(target, model)
+        await client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
+          cancelCommit()
+          throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
+        })
+        return client.api.session.command({
           sessionID: target,
           command: slashHead.name,
           text: slashHead.arguments,
@@ -1286,6 +1301,7 @@ export function Prompt(props: PromptProps) {
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
         })
+      }
       const setup = newSession
       void (setup ? setup.gate.then(send) : send()).catch((error) => {
         if (setup) return setup.recover(error)
