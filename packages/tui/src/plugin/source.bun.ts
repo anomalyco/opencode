@@ -18,12 +18,10 @@ const shared = new Set([
   "solid-js/store",
 ])
 
-export async function prepareSource(
-  entrypoint: string,
-  version: number,
-  track: (file: string, directory?: boolean) => void,
-) {
+export async function prepareSource(entrypoint: string, track: (file: string, directory?: boolean) => void) {
   const solid = createSolidTransformPlugin()
+  // Snapshot deferred local imports too. Evicting require.cache alone lets an
+  // old callback import new code after a failed replacement, breaking fallback.
   const result = await Bun.build({
     entrypoints: [fileURLToPath(entrypoint)],
     target: "bun",
@@ -88,10 +86,8 @@ export async function prepareSource(
     ],
   })
   if (!result.success) throw new Error(result.logs.map(String).join("\n"))
-  const url = URL.createObjectURL(
-    new Blob([await result.outputs[0].text(), `\n// generation ${version}\n`], { type: "text/javascript" }),
-  )
-  return { version: url, dispose: () => URL.revokeObjectURL(url) }
+  const version = URL.createObjectURL(result.outputs[0])
+  return { version, dispose: () => URL.revokeObjectURL(version) }
 }
 
 async function transformSource(contents: string, file: string, loader: "js" | "ts") {

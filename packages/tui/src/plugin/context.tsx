@@ -295,7 +295,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       const memo = local ? undefined : npmFailures.get(target)
       const resolved = memo
         ? { status: "failed" as const, error: memo }
-        : await resolvePlugin(target, local, options, previous, props.packages, source.install, sources.version).catch(
+        : await resolvePlugin(target, local, options, previous, props.packages, source.install, sources.read).catch(
             (error) => ({
               status: "failed" as const,
               error: errorMessage(error),
@@ -597,7 +597,7 @@ async function resolvePlugin(
   previous: Registration | undefined,
   packages: PackageSource,
   install: boolean,
-  sourceVersion: (entrypoint: string) => Promise<string>,
+  readSource: ReturnType<typeof createPluginSources>["read"],
 ) {
   // Package entrypoints never change within a session, so a loaded previous
   // version needs no re-resolution (which could otherwise hit npm).
@@ -608,17 +608,18 @@ async function resolvePlugin(
   if (!entrypoint) return { status: "unsupported" as const }
   // Content remains stable across the several mtimes one save may expose to
   // filesystem watchers, while the generation keeps reverted modules fresh.
-  let version = local ? await sourceVersion(entrypoint) : entrypoint
+  let source = local ? await readSource(entrypoint) : { version: entrypoint, module: await Host.load(entrypoint) }
   while (true) {
+    const version = source.version
     if (previous && previous.version === version && sameOptions(previous.options, options))
       return { status: "unchanged" as const, plugin: previous.plugin, version }
-    const mod = await Host.load(version)
+    const mod = source.module
     if (local) {
-      const observed = await sourceVersion(entrypoint)
+      const observed = await readSource(entrypoint)
       // In-place saves can change the file between hashing and import. Retry
       // so setup always runs under the generation of the imported bytes.
-      if (version !== observed) {
-        version = observed
+      if (version !== observed.version) {
+        source = observed
         continue
       }
     }

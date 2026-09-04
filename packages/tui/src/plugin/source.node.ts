@@ -3,11 +3,10 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { freshSpecifier, localSource } from "./discovery"
 
-export async function prepareSource(
-  entrypoint: string,
-  version: number,
-  track: (file: string, directory?: boolean) => void,
-) {
+let generation = Date.now()
+
+export async function prepareSource(entrypoint: string, track: (file: string, directory?: boolean) => void) {
+  const version = ++generation
   const hook = registerHooks({
     resolve(specifier, context, nextResolve) {
       if (!context.parentURL?.endsWith(`?mtime=${version}`)) return nextResolve(specifier, context)

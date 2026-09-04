@@ -11,113 +11,106 @@ import { Plugin } from "@opencode-ai/plugin/tui"
 import { tmpdir } from "./fixture/fixture"
 
 test("a fresh local plugin generation observes edited helper exports", async () => {
-  await using dir = await tmpdir()
-  const sources = createPluginSources(async () => {})
-  using _cleanup = { [Symbol.dispose]: sources.dispose }
-  const entry = path.join(dir.path, "tui.ts")
-  const helper = path.join(dir.path, "helper.ts")
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  const helper = new URL("helper.ts", sources.url)
   await Bun.write(entry, 'export { value as default } from "./helper.ts"')
   await Bun.write(helper, 'export const value = "before"')
-  expect(await Host.load(await sources.version(pathToFileURL(entry).href))).toMatchObject({ default: "before" })
+  const before = await sources.read(entry.href)
+  expect(before.module).toMatchObject({ default: "before" })
   await Bun.write(helper, 'export const value = "after"')
-  expect(await Host.load(await sources.version(pathToFileURL(entry).href))).toMatchObject({ default: "after" })
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: "after" })
+  expect(before.module).toMatchObject({ default: "before" })
 })
 
 test("tracks transitive imports through the Solid runtime transform", async () => {
-  await using dir = await tmpdir()
   const watched: string[] = []
-  const sources = createPluginSources(async (file) => {
+  await using sources = await fixture(async (file) => {
     watched.push(file)
   })
-  using _cleanup = { [Symbol.dispose]: sources.dispose }
-  const entry = path.join(dir.path, "tui.tsx")
-  const panel = path.join(dir.path, "panel.tsx")
-  const helper = path.join(dir.path, "nested/label.ts")
+  const entry = new URL("tui.tsx", sources.url)
+  const helper = new URL("nested/label.ts", sources.url)
   await Bun.write(entry, 'export { value as default } from "./panel"')
   await Bun.write(
-    panel,
+    new URL("panel.tsx", sources.url),
     'import { label } from "./nested/label"; export const Panel = () => <text>{label}</text>; export const value = label',
   )
   await Bun.write(helper, 'export const label = "before"')
-  const before = await sources.version(pathToFileURL(entry).href)
-  expect(await Host.load(before)).toMatchObject({ default: "before" })
-  await sources.version(pathToFileURL(entry).href)
-  expect(watched).toContain(helper)
+  const before = await sources.read(entry.href)
+  expect(before.module).toMatchObject({ default: "before" })
+  expect(watched).toContain(fileURLToPath(helper))
   await Bun.write(helper, 'export const label = "after"')
-  const after = await sources.version(pathToFileURL(entry).href)
-  expect(after).not.toBe(before)
-  expect(await Host.load(after)).toMatchObject({ default: "after" })
+  const after = await sources.read(entry.href)
+  expect(after.version).not.toBe(before.version)
+  expect(after.module).toMatchObject({ default: "after" })
 })
 
 test("unchanged bytes are a no-op, reverted bytes get a fresh module", async () => {
-  await using dir = await tmpdir()
-  const sources = createPluginSources(async () => {})
-  using _cleanup = { [Symbol.dispose]: sources.dispose }
-  const entry = pathToFileURL(path.join(dir.path, "tui.ts")).href
-  await Bun.write(new URL(entry), "export default { value: 1 }")
-  const first = await sources.version(entry)
-  const original = await Host.load(first)
-  await Bun.write(new URL(entry), "export default { value: 1 }")
-  expect(await sources.version(entry)).toBe(first)
-  await Bun.write(new URL(entry), "export default { value: 2 }")
-  expect(await Host.load(await sources.version(entry))).toMatchObject({ default: { value: 2 } })
-  await Bun.write(new URL(entry), "export default { value: 1 }")
-  const reverted = await sources.version(entry)
-  expect(reverted).not.toBe(first)
-  expect(await Host.load(reverted)).not.toBe(original)
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(entry, "export default { value: 1 }")
+  const first = await sources.read(entry.href)
+  await Bun.write(entry, "export default { value: 1 }")
+  expect(await sources.read(entry.href)).toBe(first)
+  await Bun.write(entry, "export default { value: 2 }")
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: { value: 2 } })
+  await Bun.write(entry, "export default { value: 1 }")
+  const reverted = await sources.read(entry.href)
+  expect(reverted.version).not.toBe(first.version)
+  expect(reverted.module).not.toBe(first.module)
+  expect(reverted.module).toMatchObject({ default: { value: 1 } })
 })
 
-test("renamed exports, failed builds, and new dependencies recover without cached helpers", async () => {
-  await using dir = await tmpdir()
-  const sources = createPluginSources(async () => {})
-  using _cleanup = { [Symbol.dispose]: sources.dispose }
-  const entry = pathToFileURL(path.join(dir.path, "tui.ts")).href
-  await Bun.write(new URL(entry), 'export { value as default } from "./helper"')
-  await Bun.write(path.join(dir.path, "helper.ts"), "export const value = 1")
-  const before = await sources.version(entry)
-  expect(await Host.load(before)).toMatchObject({ default: 1 })
-  await Bun.write(path.join(dir.path, "helper.ts"), "export const renamed = 2")
-  await expect(sources.version(entry)).rejects.toThrow("value")
-  expect(await Host.load(before)).toMatchObject({ default: 1 })
-  await Bun.write(new URL(entry), 'export { renamed as default } from "./helper"')
-  expect(await Host.load(await sources.version(entry))).toMatchObject({ default: 2 })
-  await Bun.write(path.join(dir.path, "helper.ts"), 'export { value as renamed } from "./new/leaf"')
-  await expect(sources.version(entry)).rejects.toThrow("leaf")
-  await Bun.write(path.join(dir.path, "new/leaf.ts"), "export const value = 3")
-  expect(await Host.load(await sources.version(entry))).toMatchObject({ default: 3 })
+test("renamed exports, failed loads, and new dependencies recover without cached helpers", async () => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  const helper = new URL("helper.ts", sources.url)
+  await Bun.write(entry, 'import { value } from "./helper"; export default value')
+  await Bun.write(helper, "export const value = 1")
+  const before = await sources.read(entry.href)
+  expect(before.module).toMatchObject({ default: 1 })
+  await Bun.write(helper, "export const renamed = 2")
+  await expect(sources.read(entry.href)).rejects.toThrow()
+  expect(before.module).toMatchObject({ default: 1 })
+  await Bun.write(entry, 'import { renamed } from "./helper"; export default renamed')
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: 2 })
+  await Bun.write(helper, 'export { value as renamed } from "./new/leaf"')
+  await expect(sources.read(entry.href)).rejects.toThrow("leaf")
+  await Bun.write(new URL("new/leaf.ts", sources.url), "export const value = 3")
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: 3 })
 })
 
 test("shared runtime and ordinary package identities survive plugin generations", async () => {
-  await using dir = await tmpdir()
-  const sources = createPluginSources(async () => {})
-  using _cleanup = { [Symbol.dispose]: sources.dispose }
-  const entry = pathToFileURL(path.join(dir.path, "tui.ts")).href
-  await Bun.write(path.join(dir.path, "node_modules/example/package.json"), '{"type":"module","main":"index.js"}')
-  await Bun.write(path.join(dir.path, "node_modules/example/index.js"), 'export default { value: "package" }')
-  const pkg = await Host.load(pathToFileURL(path.join(dir.path, "node_modules/example/index.js")).href)
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(new URL("node_modules/example/package.json", sources.url), '{"type":"module","main":"index.js"}')
+  const library = new URL("node_modules/example/index.js", sources.url)
+  await Bun.write(library, 'export default { value: "package" }')
+  const pkg = await Host.load(library.href)
   if (typeof pkg !== "object" || pkg === null || !("default" in pkg)) throw new Error("Missing package fixture export")
   for (const label of ["before", "after"]) {
     await Bun.write(
-      new URL(entry),
+      entry,
       `import { createSignal } from "solid-js"
       import { Plugin } from "@opencode-ai/plugin/tui"
       import value from "example"
-      export default { createSignal, Plugin, value, label: ${JSON.stringify(label)} }`,
+      export { createSignal, Plugin, value }; export const label = ${JSON.stringify(label)}`,
     )
-    expect(await Host.load(await sources.version(entry))).toMatchObject({
-      default: { createSignal, Plugin, value: pkg.default, label },
-    })
+    const loaded = (await sources.read(entry.href)).module
+    if (typeof loaded !== "object" || loaded === null) throw new Error("Missing plugin fixture exports")
+    expect("createSignal" in loaded && loaded.createSignal).toBe(createSignal)
+    expect("Plugin" in loaded && loaded.Plugin).toBe(Plugin)
+    expect("value" in loaded && loaded.value).toBe(pkg.default)
+    expect(loaded).toMatchObject({ label })
   }
 })
 
 test("helper import.meta stays anchored to its source, including assets and resolution", async () => {
-  await using dir = await tmpdir()
-  const sources = createPluginSources(async () => {})
-  using _cleanup = { [Symbol.dispose]: sources.dispose }
-  const entry = pathToFileURL(path.join(dir.path, "tui.ts")).href
-  const helper = path.join(dir.path, "nested/helper.ts")
-  await Bun.write(new URL(entry), 'export { default } from "./nested/helper"')
-  await Bun.write(path.join(dir.path, "nested/asset.txt"), "asset")
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  const helper = new URL("nested/helper.ts", sources.url)
+  await Bun.write(entry, 'export { default } from "./nested/helper"')
+  await Bun.write(new URL("nested/asset.txt", sources.url), "asset")
   await Bun.write(
     helper,
     `export default {
@@ -126,66 +119,58 @@ test("helper import.meta stays anchored to its source, including assets and reso
     asset: await Bun.file(new URL("./asset.txt", import.meta.url)).text(),
   }`,
   )
-  expect(await Host.load(await sources.version(entry))).toMatchObject({
+  expect((await sources.read(entry.href)).module).toMatchObject({
     default: {
-      url: pathToFileURL(helper).href,
-      dir: path.dirname(helper),
+      url: helper.href,
+      dir: path.dirname(fileURLToPath(helper)),
       asset: "asset",
-      resolved: pathToFileURL(path.join(dir.path, "nested/asset.txt")).href,
+      resolved: new URL("nested/asset.txt", sources.url).href,
     },
   })
 })
 
 test("literal dynamic imports and JSON join the source graph", async () => {
-  await using dir = await tmpdir()
   const watched: string[] = []
-  const sources = createPluginSources(async (file) => {
+  await using sources = await fixture(async (file) => {
     watched.push(file)
   })
-  using _cleanup = { [Symbol.dispose]: sources.dispose }
-  const entry = pathToFileURL(path.join(dir.path, "tui.ts")).href
-  const json = path.join(dir.path, "data.json")
-  await Bun.write(new URL(entry), 'export default (await import("./helper")).default')
-  await Bun.write(path.join(dir.path, "helper.ts"), 'import data from "./data.json"; export default data.value')
+  const entry = new URL("tui.ts", sources.url)
+  const json = new URL("data.json", sources.url)
+  await Bun.write(entry, 'export default (await import("./helper")).default')
+  await Bun.write(new URL("helper.ts", sources.url), 'import data from "./data.json"; export default data.value')
   await Bun.write(json, '{"value":1}')
-  expect(await Host.load(await sources.version(entry))).toMatchObject({ default: 1 })
-  expect(watched).toContain(json)
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: 1 })
+  expect(watched).toContain(fileURLToPath(json))
   await Bun.write(json, '{"value":2}')
-  expect(await Host.load(await sources.version(entry))).toMatchObject({ default: 2 })
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: 2 })
 })
 
 test("real watchers observe atomic saves to nested, outside-root, and symlinked helpers", async () => {
-  await using dir = await tmpdir()
   let changes = 0
   const watcher = createSourceWatcher(() => {
     changes++
   })
-  const sources = createPluginSources(watcher.wait)
-  using _cleanup = {
-    [Symbol.dispose]() {
-      sources.dispose()
-      watcher.dispose()
-    },
-  }
-  const entry = pathToFileURL(path.join(dir.path, "plugin/tui.ts")).href
-  const helper = path.join(dir.path, "shared/nested/helper.ts")
+  using _watcher = { [Symbol.dispose]: watcher.dispose }
+  await using sources = await fixture(watcher.wait)
+  const entry = new URL("plugin/tui.ts", sources.url)
+  const helper = new URL("shared/nested/helper.ts", sources.url)
   await Bun.write(helper, "export const value = 1")
-  await Bun.write(new URL(entry), 'export { value as default } from "./link"')
-  await symlink(helper, path.join(dir.path, "plugin/link.ts"))
-  expect(await Host.load(await sources.version(entry))).toMatchObject({ default: 1 })
+  await Bun.write(entry, 'export { value as default } from "./link"')
+  await symlink(fileURLToPath(helper), fileURLToPath(new URL("plugin/link.ts", sources.url)))
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: 1 })
   const count = changes
-  await Bun.write(helper + ".new", "export const value = 2")
-  await rename(helper + ".new", helper)
+  await Bun.write(new URL(helper.href + ".new"), "export const value = 2")
+  await rename(new URL(helper.href + ".new"), helper)
   const deadline = Date.now() + 3000
   while (Date.now() < deadline) {
     if (changes > count) break
     await Bun.sleep(10)
   }
   expect(changes).toBeGreaterThan(count)
-  expect(await Host.load(await sources.version(entry))).toMatchObject({ default: 2 })
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: 2 })
 })
 
-test("Node reloads the local ESM graph without changing source URLs", async () => {
+test("Node reloads the local ESM graph without relocating source files", async () => {
   await using dir = await tmpdir()
   const script = path.join(dir.path, "probe.ts")
   await Bun.write(
@@ -198,13 +183,16 @@ test("Node reloads the local ESM graph without changing source URLs", async () =
     const helper = new URL("./helper.mjs", import.meta.url)
     const sources = createPluginSources(async () => {})
     try {
-      await writeFile(entry, 'export { value as default } from "./helper.mjs"')
-      await writeFile(helper, 'export const value = 1')
-      const initial = await sources.version(entry.href)
-      assert.equal((await import(initial)).default, 1)
-      assert.equal(await sources.version(entry.href), initial)
-      await writeFile(helper, 'export const value = 2')
-      assert.equal((await import(await sources.version(entry.href))).default, 2)
+      await writeFile(entry, 'export { value as default, source } from "./helper.mjs"')
+      await writeFile(helper, 'export const value = 1; export const source = import.meta.url')
+      const initial = await sources.read(entry.href)
+      assert.equal(initial.module.default, 1)
+      assert.equal(new URL(initial.module.source).pathname, helper.pathname)
+      assert.equal(await sources.read(entry.href), initial)
+      await writeFile(helper, 'export const value = 2; export const source = import.meta.url')
+      const updated = (await sources.read(entry.href)).module
+      assert.equal(updated.default, 2)
+      assert.equal(new URL(updated.source).pathname, helper.pathname)
       console.log("node graph reload passed")
     } finally { sources.dispose() }
   `,
@@ -217,7 +205,10 @@ test("Node reloads the local ESM graph without changing source URLs", async () =
     naming: "probe.mjs",
   })
   expect(build.success).toBe(true)
-  const child = Bun.spawn(["node", path.join(dir.path, "probe.mjs")], { stdout: "pipe", stderr: "pipe" })
+  const child = Bun.spawn(["node", "--no-warnings", path.join(dir.path, "probe.mjs")], {
+    stdout: "pipe",
+    stderr: "pipe",
+  })
   const [stdout, stderr, exit] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
@@ -227,25 +218,119 @@ test("Node reloads the local ESM graph without changing source URLs", async () =
 })
 
 test("computed imports retain the importing helper's resolution base", async () => {
-  await using dir = await tmpdir()
-  const sources = createPluginSources(async () => {})
-  using _cleanup = { [Symbol.dispose]: sources.dispose }
-  const entry = pathToFileURL(path.join(dir.path, "tui.ts")).href
-  await Bun.write(new URL(entry), 'import { read } from "./nested/reader"; export default await read("./leaf.mjs")')
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(entry, 'import { read } from "./nested/reader"; export default await read("./leaf.mjs")')
   await Bun.write(
-    path.join(dir.path, "nested/reader.ts"),
+    new URL("nested/reader.ts", sources.url),
     "export const read = async (name: string) => (await import(name)).default",
   )
-  await Bun.write(path.join(dir.path, "nested/leaf.mjs"), 'export default "computed"')
-  expect(await Host.load(await sources.version(entry))).toMatchObject({ default: "computed" })
+  await Bun.write(new URL("nested/leaf.mjs", sources.url), 'export default "computed"')
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: "computed" })
 })
 
 test("empty source modules remain valid dependencies", async () => {
-  await using dir = await tmpdir()
-  const sources = createPluginSources(async () => {})
-  using _cleanup = { [Symbol.dispose]: sources.dispose }
-  const entry = pathToFileURL(path.join(dir.path, "tui.ts")).href
-  await Bun.write(new URL(entry), 'import "./empty"; export default "ready"')
-  await Bun.write(path.join(dir.path, "empty.ts"), "")
-  expect(await Host.load(await sources.version(entry))).toMatchObject({ default: "ready" })
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(entry, 'import "./empty"; export default "ready"')
+  await Bun.write(new URL("empty.ts", sources.url), "")
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: "ready" })
 })
+
+test("folded imports are watched and dead imports need not be installed", async () => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  const helper = new URL("helper.ts", sources.url)
+  await Bun.write(entry, 'if (false) require("not-installed"); export default (await import("./" + "helper")).default')
+  await Bun.write(helper, 'export default "before"')
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: "before" })
+  await Bun.write(helper, 'export default "after"')
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: "after" })
+})
+
+test("cycles retain one canonical entrypoint per generation and old bindings stay pinned", async () => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(
+    entry,
+    'import { read } from "./helper"; export const value = {}; export default () => read() === value',
+  )
+  await Bun.write(new URL("helper.ts", sources.url), 'import { value } from "./tui"; export const read = () => value')
+  const before = (await sources.read(entry.href)).module
+  if (typeof before !== "object" || before === null || !("default" in before) || typeof before.default !== "function")
+    throw new Error("Missing cycle fixture")
+  expect(before.default()).toBe(true)
+  await Bun.write(
+    entry,
+    'import { read } from "./helper"; export const value = { changed: true }; export default () => read() === value',
+  )
+  const after = (await sources.read(entry.href)).module
+  if (typeof after !== "object" || after === null || !("default" in after) || typeof after.default !== "function")
+    throw new Error("Missing cycle fixture")
+  expect(after.default()).toBe(true)
+  expect(before.default()).toBe(true)
+})
+
+test("an old callback retains its deferred helper after a failed replacement", async () => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  const helper = new URL("helper.ts", sources.url)
+  await Bun.write(entry, 'export default async () => (await import("./helper")).default')
+  await Bun.write(helper, 'export default "old helper"')
+  const before = (await sources.read(entry.href)).module
+  if (typeof before !== "object" || before === null || !("default" in before) || typeof before.default !== "function")
+    throw new Error("Missing deferred fixture")
+  await Bun.write(helper, 'export default "new helper"')
+  await Bun.write(entry, 'throw new Error("replacement failed"); export default null')
+  await expect(sources.read(entry.href)).rejects.toThrow("replacement failed")
+  expect(await before.default()).toBe("old helper")
+})
+
+test("each helper resolves packages from its own directory", async () => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(
+    entry,
+    'import { Plugin } from "@opencode-ai/plugin/tui"; import value from "./nested/helper"; export default { Plugin, value }',
+  )
+  await Bun.write(new URL("nested/helper.ts", sources.url), 'import value from "example"; export default value')
+  for (const directory of ["", "nested/"]) {
+    await Bun.write(
+      new URL(directory + "node_modules/example/package.json", sources.url),
+      '{"type":"module","main":"index.js"}',
+    )
+    await Bun.write(
+      new URL(directory + "node_modules/example/index.js", sources.url),
+      `export default ${JSON.stringify(directory || "root")}`,
+    )
+  }
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: { value: "nested/" } })
+})
+
+test("unchanged evaluation failures do not repeat import-time effects", async () => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  const code = `import { appendFileSync } from "node:fs"
+    appendFileSync(new URL("./attempts.log", import.meta.url), "attempt\\n")
+    throw new Error("broken evaluation")`
+  await Bun.write(entry, code)
+  await expect(sources.read(entry.href)).rejects.toThrow("broken evaluation")
+  await expect(sources.read(entry.href)).rejects.toThrow("broken evaluation")
+  expect(await Bun.file(new URL("attempts.log", sources.url)).text()).toBe("attempt\n")
+  await Bun.write(entry, code + "\n// another generation")
+  await expect(sources.read(entry.href)).rejects.toThrow("broken evaluation")
+  expect(await Bun.file(new URL("attempts.log", sources.url)).text()).toBe("attempt\nattempt\n")
+})
+
+async function fixture(watch: (file: string) => Promise<void> = async () => {}) {
+  const dir = await tmpdir()
+  const sources = createPluginSources(watch)
+  return {
+    ...sources,
+    url: pathToFileURL(dir.path + path.sep),
+    async [Symbol.asyncDispose]() {
+      sources.dispose()
+      await dir[Symbol.asyncDispose]()
+    },
+  }
+}
