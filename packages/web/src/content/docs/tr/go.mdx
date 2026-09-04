@@ -75,6 +75,7 @@ Mevcut model listesi şunları içerir:
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 Test edip yenilerini ekledikçe model listesi değişebilir.
 
@@ -94,11 +95,13 @@ Hesabınızın işaretlenmemesi için kullandığınız aracın
 
 ## Kullanım limitleri
 
-OpenCode Go aşağıdaki limitleri içerir:
+OpenCode Go aşağıdaki temel limitleri içerir:
 
 - **5 saatlik limit** — 12$ kullanım
 - **Haftalık limit** — 30$ kullanım
 - **Aylık limit** — 60$ kullanım
+
+Etkin kullanım limiti modele göre değişir; aşağıdaki tabloya bakın.
 
 Limitler dolar değeri üzerinden belirlenmiştir. Bu, gerçek istek sayınızın kullandığınız modele bağlı olduğu anlamına gelir. MiMo-V2.5 gibi daha ucuz modeller daha fazla isteğe izin verirken, GLM-5.2 gibi yüksek maliyetli modeller daha azına izin verir.
 
@@ -132,8 +135,9 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 | DeepSeek V4 Flash Vision Exp | 3,800              | 9,450          | 18,900      |
 | Hy4 preview                  | 1,350              | 3,380          | 6,770       |
 | Hy3                          | 4,300              | 10,750         | 21,500      |
+| Omen Alpha                   | 11,600             | 29,000         | 57,900      |
 
-Tahminler, gözlemlenen istek modellerine dayanır:
+Tahminler istek başına aşağıdaki token sayılarını kullanır; gerçek kullanım değişir.
 
 - Grok 4.6 — İstek başına 390 girdi, 32.500 önbelleğe alınmış, 120 çıktı token'ı
 - GLM-5.3-Flash — İstek başına 1.000 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
@@ -158,6 +162,7 @@ Tahminler, gözlemlenen istek modellerine dayanır:
 - Hy3 — İstek başına 830 girdi, 71.500 önbelleğe alınmış, 295 çıktı token'ı
 - MiMo-V2.5 — İstek başına 830 girdi, 71.500 önbelleğe alınmış, 295 çıktı token'ı
 - MiMo-V2.5-Pro — İstek başına 790 girdi, 86.000 önbelleğe alınmış, 305 çıktı token'ı
+- Omen Alpha — İstek başına 300 girdi, 40.000 önbelleğe alınmış, 100 çıktı token'ı
 
 Tahminler ayrıca 1M token başına aşağıdaki fiyatlara ve her modelle birlikte sunulan aylık kullanıma dayanır:
 
@@ -197,6 +202,7 @@ Tahminler ayrıca 1M token başına aşağıdaki fiyatlara ve her modelle birlik
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15      |
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30      |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60      |
+| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | $100     |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak saatleri pazartesiden cumaya 01:00-04:00 ve 06:00-10:00 UTC'dir; hafta sonları dahil diğer tüm saatler Off-Peak'tir. [Daha fazla bilgi](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -220,7 +226,7 @@ Eğer Zen bakiyenizde kredileriniz varsa, konsoldan **Bakiye kullan (Use balance
 
 ### Bazı modellerin kullanımı neden daha düşük?
 
-Go ile aylık 10$ ödersiniz ve size bunun 6 katı değerinde kullanım sunmayı hedefleriz.
+Go ile aylık 10$ ödersiniz ve çoğu model için size bunun 6 katı değerinde kullanım sunmayı hedefleriz.
 
 Çoğu modelde bunu toplu indirimler ve ayrılmış GPU kapasitesi sayesinde mümkün kılıyoruz. Ardından bu tasarrufları 6 katlık çarpanla size aktarıyoruz.
 
@@ -263,6 +269,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K3 için yapılandırmanızda `opencode-go/kimi-k3` kullanmalısınız.
 
@@ -308,6 +315,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | Kullanılmaz   | 0 gün        |
 | Hy4 preview                  | Kullanılmaz   | 0 gün        |
 | Hy3                          | Kullanılmaz   | 0 gün        |
+| Omen Alpha                   | Kullanılmaz   | 0 gün        |
 
 - **Grok 4.6:** ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır. [Daha fazla bilgi](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır. [Daha fazla bilgi](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
