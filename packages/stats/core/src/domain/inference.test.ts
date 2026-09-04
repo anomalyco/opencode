@@ -36,8 +36,8 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("nemotron-3-super-free")).toBe("nvidia")
     expect(modelAuthor("qwen3.7-max")).toBe("qwen")
     expect(modelAuthor("alpha-gpt-next")).toBeUndefined()
-    expect(modelAuthor("omen-alpha")).toBeUndefined()
-    expect(modelAuthor("OMEN-ALPHA-free:global")).toBeUndefined()
+    expect(modelAuthor("omen-alpha")).toBe("unknown")
+    expect(modelAuthor("OMEN-ALPHA-free:global")).toBe("unknown")
   })
 
   test("uses provider.model to resolve opencode route providers", () => {
@@ -49,6 +49,22 @@ describe("inference stat normalization", () => {
     expect(statProvider("big-pickle", "gpt-5", "opencode")).toBe("openai")
     expect(statProvider("big-pickle", "", "opencode")).toBe("unknown")
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
+  })
+
+  test("keeps stealth model usage without exposing the route provider", () => {
+    expect(statProvider("omen-alpha", "gpt-test-model", "test-provider")).toBe("unknown")
+    expect(statProvider("OMEN-ALPHA-free:global", "gpt-test-model", "test-provider")).toBe("unknown")
+    expect(statProvider("omen-alpha", "", "test-provider")).toBe("unknown")
+
+    const row = { ...aggregate("omen-alpha", "test-provider"), provider_model: "gpt-test-model" }
+    expect(toModelAggregate(row)).toMatchObject([{ model: "omen-alpha", provider: "unknown", requests: 1 }])
+    expect(toProviderAggregate(row)).toMatchObject([{ provider: "unknown", requests: 1 }])
+    expect(toGeoAggregate({ ...row, country: "US" })).toMatchObject([
+      { model: "omen-alpha", provider: "unknown", country: "US", requests: 1 },
+    ])
+    expect(toRetentionAggregate({ ...row, cohort_date: "2026-08-10", eligible_users: "12" })).toMatchObject([
+      { model: "omen-alpha", provider: "unknown", eligibleUsers: 12 },
+    ])
   })
 
   test("merges renamed models under their current name", () => {
@@ -72,7 +88,6 @@ describe("inference stat normalization", () => {
 
   test("model aggregates prefer provider.model and use normalized model", () => {
     expect(toModelAggregate(aggregate("alpha-gpt-next", "openai"))).toEqual([])
-    expect(toModelAggregate(aggregate("omen-alpha", "unknown"))).toEqual([])
 
     expect(toModelAggregate(aggregate("deepseek-v4-flash-free", "not-public-provider"))).toMatchObject([
       {
@@ -127,7 +142,10 @@ describe("inference stat normalization", () => {
     })
 
     expect(queries).toHaveLength(8)
-    queries.forEach((query) => expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next', 'omen-alpha')"))
+    queries.forEach((query) => {
+      expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
+      expect(query).toContain("CASE\n      WHEN lower(model) IN ('omen-alpha') THEN 'unknown'\n")
+    })
     expect(queries[0]).toContain("'week' AS grain")
     expect(queries[0]).toContain("'2026-W33' AS period_key")
     expect(queries[2]).toContain("'2026-08-10' AS period_key")
@@ -190,7 +208,8 @@ describe("inference stat normalization", () => {
     expect(queries).toHaveLength(1)
     expect(queries[0]?.cohortDates).toEqual(["2026-08-10", "2026-08-17"])
     expect(queries[0]?.query).toContain("AND product = 'go'")
-    expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next', 'omen-alpha')")
+    expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
+    expect(queries[0]?.query).toContain("CASE\n      WHEN lower(model) IN ('omen-alpha') THEN 'unknown'\n")
     expect(queries[0]?.query).toContain("COUNT(*) AS model_requests")
     expect(queries[0]?.query).toContain("SUM(model_requests) AS total_requests")
     expect(queries[0]?.query).toContain("MAX(model_requests) AS max_model_requests")
