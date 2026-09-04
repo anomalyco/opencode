@@ -39,6 +39,86 @@ In the TUI, open the command palette and select **Enable auto-approve permission
 
 ---
 
+## Auto-approve mode
+
+:::caution[Beta]
+Auto-approve is opt-in and disabled by default. It delegates approval decisions to a model, so review the behavior below before enabling it.
+:::
+
+Auto-approve is a TUI mode that asks a fast model to review each consequential action before it runs. Safe, clearly authorized actions run without interrupting you; anything unsafe, ambiguous, or unauthorized falls back to the normal approval prompt.
+
+This is different from [auto mode](#auto-mode) above. `--auto` approves everything that is not denied, with no review. Auto-approve reviews each action individually and stops you on the risky ones.
+
+Enable it with the beta flag:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "auto_approve": true
+  }
+}
+```
+
+Without this flag the mode is hidden from the agent cycle and no permission is ever sent to a model.
+
+Once enabled, press `<tab>` in the TUI to cycle to **Auto-approve**. The prompt border turns green while the mode is active.
+
+### What gets reviewed
+
+While the mode is active, these actions are reviewed even if your config would allow them: `bash`, `edit`, `task`, `webfetch`, `websearch`, `external_directory`, and `skill`.
+
+Read-only actions — `read`, `glob`, `grep`, `list`, and `lsp` — are never sent to the model, so browsing the codebase stays fast.
+
+### What it never does
+
+- **`deny` rules are always enforced.** A denied action stays denied and is never sent for review.
+- **Your `"always"` grants are respected.** Approving something with *always* keeps working; it is not re-reviewed.
+- **Actions inside subagents are never auto-approved.** A subagent's prompt is written by a model, not by you, so it cannot be treated as your authorization.
+- **It fails closed.** A timeout, an unavailable model, or any error results in the normal approval prompt, never an approval.
+- **It never notifies you about an approval.** An auto-approved action does not fire a "Permission needs input" desktop notification, since nothing is waiting on you.
+
+### Choosing the model
+
+By default the mode uses the active provider's small model. To pick a specific one:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": { "auto_approve": true },
+  "auto_approve": {
+    "model": "anthropic/claude-haiku-4-5"
+  }
+}
+```
+
+Use a fast, non-reasoning model. Reviews that take longer than 15 seconds fall back to the normal prompt.
+
+### Inspecting decisions
+
+Every action the model approves leaves an `Auto-approved: <permission> <pattern>` row in the
+transcript, directly under the tool call it authorized. The row stays with that tool call for as long as the
+transcript keeps it, so you can review afterwards exactly what ran without a prompt. Actions that fall back to the
+normal prompt show that prompt instead.
+
+To also see what the model was shown and how it answered, enable details:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": { "auto_approve": true },
+  "auto_approve": { "show_details": true }
+}
+```
+
+Each reviewed action then additionally displays a `Classifier: AUTO_APPROVE` / `Classifier: ASK` row that expands to show the exact input sent to the model and its raw response. This is off by default because the input includes your request text.
+
+:::note
+Authorization must be specific. "Run `ls` in /tmp" authorizes that action, while a standing grant like "you can run any command you want" does not — broad delegation is deliberately not treated as approval, because that is exactly what a prompt injection would try to plant.
+:::
+
+---
+
 ## Configuration
 
 You can set permissions globally (with `*`), and override specific tools.

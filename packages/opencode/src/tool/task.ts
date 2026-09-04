@@ -123,7 +123,11 @@ export const TaskTool = Tool.define(
           always: ["*"],
           metadata: {
             description: params.description,
+            prompt: params.prompt,
             subagent_type: params.subagent_type,
+            ...(params.background !== undefined ? { background: params.background } : {}),
+            ...(params.task_id !== undefined ? { task_id: params.task_id } : {}),
+            ...(params.command !== undefined ? { command: params.command } : {}),
           },
         })
       }

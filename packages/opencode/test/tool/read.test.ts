@@ -215,6 +215,19 @@ describe("tool.read external_directory permission", () => {
       const read = items.find((item) => item.permission === "read")
       expect(read).toBeDefined()
       expect(read!.patterns).toEqual([path.join("src", "secret.ts")])
+      expect(read!.metadata).toEqual({ offset: 1, limit: 2000 })
+    }),
+  )
+
+  it.live("reports the effective bounds when offset and limit are explicitly zero", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "src", "secret.ts"), "shh")
+
+      const { items, next } = asks()
+      yield* exec(dir, { filePath: path.join(dir, "src", "secret.ts"), offset: 0, limit: 0 }, next)
+      const read = items.find((item) => item.permission === "read")
+      expect(read!.metadata).toEqual({ offset: 1, limit: 2000 })
     }),
   )
 

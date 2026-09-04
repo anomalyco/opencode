@@ -19,6 +19,7 @@ import type {
   VcsInfo,
   SnapshotFileDiff,
   ConsoleState,
+  PermissionClassificationDetails,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "./project"
@@ -28,7 +29,7 @@ import { useTuiStartup } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, createEffect, createMemo, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
@@ -36,6 +37,39 @@ import { usePermission } from "./permission"
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
   switchableOrgCount: 0,
+}
+
+type AutoApprovalAttempt = {
+  request: PermissionRequest
+  directory: string
+  revision: number
+  resolved: boolean
+  recovered: boolean
+  // Set the moment the `once` reply is dispatched, cleared when it settles.
+  replying: boolean
+  classify: AbortController
+  reply: AbortController
+  timeout?: ReturnType<typeof setTimeout>
+  replyTimeout?: ReturnType<typeof setTimeout>
+}
+
+function fallbackDelay() {
+  return Number(process.env["OPENCODE_TUI_AUTO_APPROVE_FALLBACK_MS"]) || 18_000
+}
+
+// A reply already on the wire is given its own, longer grace period: the classify deadline
+// must not yank it back (aborting cannot un-send it), but it cannot wait forever either, or a
+// reply whose response never arrives would hide the permission for good.
+function replyDelay() {
+  return Number(process.env["OPENCODE_TUI_AUTO_APPROVE_REPLY_MS"]) || 20_000
+}
+
+export type AutoApprovalTrace = Partial<PermissionClassificationDetails> & {
+  request: PermissionRequest
+  /** The classifier's verdict. */
+  approved: boolean
+  /** The TUI replied "once" on the user's behalf, so this action ran without ever being shown. */
+  applied?: boolean
 }
 
 function search<T>(items: T[], target: string, key: (item: T) => string) {
@@ -82,6 +116,9 @@ export const {
       permission: {
         [sessionID: string]: PermissionRequest[]
       }
+      auto_approve: {
+        [requestID: string]: AutoApprovalTrace
+      }
       question: {
         [sessionID: string]: QuestionRequest[]
       }
@@ -126,6 +163,7 @@ export const {
       status: "loading",
       agent: [],
       permission: {},
+      auto_approve: {},
       question: {},
       command: [],
       provider: [],
@@ -150,6 +188,17 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const autoApprovals = new Map<string, AutoApprovalAttempt>()
+    const permissionVisible = new Set<(request: PermissionRequest) => void>()
+    function announce(request: PermissionRequest) {
+      // Handlers are plugin-supplied; one that throws must not abort the rest of this
+      // event handler, which is in the middle of applying server state.
+      for (const handler of permissionVisible) {
+        try {
+          handler(request)
+        } catch {}
+      }
+    }
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -173,12 +222,91 @@ export const {
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    function upsertPermission(request: PermissionRequest) {
+      const requests = store.permission[request.sessionID]
+      if (!requests) {
+        setStore("permission", request.sessionID, [request])
+        announce(request)
+        return
+      }
+      const match = search(requests, request.id, (item) => item.id)
+      if (match.found) {
+        setStore("permission", request.sessionID, match.index, reconcile(request))
+        return
+      }
+      announce(request)
+      setStore(
+        "permission",
+        request.sessionID,
+        produce((draft) => {
+          draft.splice(match.index, 0, request)
+        }),
+      )
+    }
+
+    function releaseAttempt(attempt: AutoApprovalAttempt) {
+      if (autoApprovals.get(attempt.request.id) === attempt) autoApprovals.delete(attempt.request.id)
+    }
+
+    function resolveAttempt(attempt: AutoApprovalAttempt) {
+      attempt.resolved = true
+      clearTimeout(attempt.timeout)
+      clearTimeout(attempt.replyTimeout)
+      releaseAttempt(attempt)
+    }
+
+    function fallbackPermission(attempt: AutoApprovalAttempt) {
+      // Aborting a reply already on the wire cannot un-send it, so a dialog here would
+      // prompt for an action the server may have run.
+      if (attempt.resolved || attempt.recovered || attempt.replying) return
+      attempt.recovered = true
+      clearTimeout(attempt.timeout)
+      clearTimeout(attempt.replyTimeout)
+      attempt.classify.abort()
+      releaseAttempt(attempt)
+      upsertPermission(attempt.request)
+    }
+
+    function invalidatePermission(attempt: AutoApprovalAttempt) {
+      attempt.recovered = true
+      clearTimeout(attempt.timeout)
+      clearTimeout(attempt.replyTimeout)
+      attempt.classify.abort()
+      attempt.reply.abort()
+    }
+
+    createEffect(() => {
+      const mode = permission.mode
+      permission.revision
+      if (mode === "review") return
+      for (const attempt of autoApprovals.values()) fallbackPermission(attempt)
+    })
+
     event.subscribe((event, { directory, workspace }) => {
       switch (event.type) {
-        case "server.instance.disposed":
+        case "server.instance.disposed": {
+          const disposed = event.properties.directory
+          for (const attempt of [...autoApprovals.values()]) {
+            // Only the disposed instance forgot its pending requests. Attempts against a
+            // live instance still need an answer, so hand those back to the normal dialog.
+            if (attempt.directory === disposed) invalidatePermission(attempt)
+            else fallbackPermission(attempt)
+          }
+          autoApprovals.clear()
+          // reconcile, not a bare object: setStore merges plain objects, so `{}` would keep every trace.
+          setStore("auto_approve", reconcile({}))
           void bootstrap()
           break
+        }
         case "permission.replied": {
+          const attempt = autoApprovals.get(event.properties.requestID)
+          if (attempt) {
+            attempt.resolved = true
+            clearTimeout(attempt.timeout)
+            attempt.classify.abort()
+            attempt.reply.abort()
+            autoApprovals.delete(event.properties.requestID)
+          }
           const requests = store.permission[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -204,23 +332,99 @@ export const {
             })
             break
           }
-          const requests = store.permission[request.sessionID]
-          if (!requests) {
-            setStore("permission", request.sessionID, [request])
+          if (permission.mode === "review") {
+            const requests = store.permission[request.sessionID]
+            if (requests && search(requests, request.id, (item) => item.id).found) {
+              upsertPermission(request)
+              break
+            }
+            if (autoApprovals.has(request.id)) break
+            const attempt: AutoApprovalAttempt = {
+              request,
+              directory,
+              revision: permission.revision,
+              resolved: false,
+              recovered: false,
+              replying: false,
+              classify: new AbortController(),
+              reply: new AbortController(),
+            }
+            attempt.timeout = setTimeout(() => fallbackPermission(attempt), fallbackDelay())
+            autoApprovals.set(request.id, attempt)
+            void sdk.client.permission
+              .classify({ requestID: request.id, directory, workspace }, { signal: attempt.classify.signal })
+              .then((result) => {
+                const decision = result.data?.approved === true
+                // The audit trail is not opt-in: show_details controls only the classifier
+                // input/output, never whether the decision itself is recorded.
+                if (decision || result.data?.details) {
+                  setStore("auto_approve", request.id, {
+                    request,
+                    approved: decision,
+                    ...(result.data?.details ?? {}),
+                  })
+                }
+                if (
+                  attempt.resolved ||
+                  attempt.recovered ||
+                  permission.mode !== "review" ||
+                  permission.revision !== attempt.revision
+                ) {
+                  fallbackPermission(attempt)
+                  return
+                }
+                if (result.data?.approved !== true) {
+                  fallbackPermission(attempt)
+                  return
+                }
+                attempt.replying = true
+                // The `replying` guard must not outlive the request itself: a reply whose
+                // response never arrives would otherwise hold the permission hidden forever,
+                // which strands the agent worse than a redundant dialog does.
+                // Recover from the timer itself rather than relying on the abort: a transport
+                // that never settles never observes the signal.
+                attempt.replyTimeout = setTimeout(() => {
+                  attempt.replying = false
+                  attempt.reply.abort()
+                  fallbackPermission(attempt)
+                }, replyDelay())
+                return sdk.client.permission
+                  .reply(
+                    {
+                      requestID: request.id,
+                      reply: "once",
+                      directory,
+                      workspace,
+                    },
+                    { signal: attempt.reply.signal },
+                  )
+                  .then((reply) => {
+                    attempt.replying = false
+                    clearTimeout(attempt.replyTimeout)
+                    // Release the id either way: relying on the `permission.replied` event alone
+                    // leaks the entry, and the guard above would then swallow a repeated ask.
+                    if (reply.data === true) {
+                      if (store.auto_approve[request.id]) setStore("auto_approve", request.id, "applied", true)
+                      resolveAttempt(attempt)
+                      return
+                    }
+                    // Someone else resolved the request while our reply was in flight. It was
+                    // never shown, but it was not ours to approve, so do not claim it.
+                    if (attempt.resolved) {
+                      resolveAttempt(attempt)
+                      return
+                    }
+                    fallbackPermission(attempt)
+                  })
+              })
+              .catch(() => {
+                attempt.replying = false
+                clearTimeout(attempt.replyTimeout)
+                fallbackPermission(attempt)
+              })
             break
           }
-          const match = search(requests, request.id, (r) => r.id)
-          if (match.found) {
-            setStore("permission", request.sessionID, match.index, reconcile(request))
-            break
-          }
-          setStore(
-            "permission",
-            request.sessionID,
-            produce((draft) => {
-              draft.splice(match.index, 0, request)
-            }),
-          )
+          upsertPermission(request)
           break
         }
 
@@ -271,6 +475,14 @@ export const {
           break
 
         case "session.deleted": {
+          setStore(
+            "auto_approve",
+            produce((draft) => {
+              for (const [id, trace] of Object.entries(draft)) {
+                if (trace.request.sessionID === event.properties.info.id) delete draft[id]
+              }
+            }),
+          )
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore(
@@ -354,6 +566,16 @@ export const {
                   delete draft[oldest.id]
                 }),
               )
+              // Traces hang off a tool part; keeping them past the part they annotate would
+              // grow without bound in a long session.
+              setStore(
+                "auto_approve",
+                produce((draft) => {
+                  for (const [id, trace] of Object.entries(draft)) {
+                    if (trace.request.tool?.messageID === oldest.id) delete draft[id]
+                  }
+                }),
+              )
             })
           }
           break
@@ -371,6 +593,14 @@ export const {
               }),
             )
           }
+          setStore(
+            "auto_approve",
+            produce((draft) => {
+              for (const [id, trace] of Object.entries(draft)) {
+                if (trace.request.tool?.messageID === event.properties.messageID) delete draft[id]
+              }
+            }),
+          )
           break
         }
         case "message.part.updated": {
@@ -555,6 +785,15 @@ export const {
       void bootstrap()
     })
 
+    const autoApproveIndex = createMemo(() => {
+      const index = new Map<string, AutoApprovalTrace>()
+      for (const trace of Object.values(store.auto_approve)) {
+        if (!trace.request.tool) continue
+        index.set(`${trace.request.tool.messageID} ${trace.request.tool.callID}`, trace)
+      }
+      return index
+    })
+
     const result = {
       data: store,
       set: setStore,
@@ -664,6 +903,22 @@ export const {
           })
           syncingSessions.set(sessionID, task)
           return task
+        },
+      },
+      autoApprove: {
+        get(messageID: string, callID: string) {
+          return autoApproveIndex().get(`${messageID} ${callID}`)
+        },
+      },
+      permission: {
+        /**
+         * Fires once per request at the moment it actually reaches the user. Distinct from the
+         * `permission.asked` event: auto-approve mode withholds a request while a model reviews
+         * it, and never shows the ones it approves.
+         */
+        onVisible(handler: (request: PermissionRequest) => void) {
+          permissionVisible.add(handler)
+          return () => permissionVisible.delete(handler)
         },
       },
       bootstrap,
