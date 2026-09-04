@@ -446,10 +446,13 @@ export function Autocomplete(props: {
 
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]
+    const builtins = new Set(results.map((item) => item.display))
 
     for (const serverCommand of sync.data.command) {
-      if (serverCommand.source === "skill") continue
-      const label = serverCommand.source === "mcp" ? ":mcp" : ""
+      const label = serverCommand.source === "mcp" ? ":mcp" : serverCommand.source === "skill" ? ":skill" : ""
+      // Selecting an entry inserts "/<name>", not the label, so a skill sharing a
+      // name with a builtin would render a second row that runs the builtin instead.
+      if (serverCommand.source === "skill" && builtins.has("/" + serverCommand.name)) continue
       results.push({
         display: "/" + serverCommand.name + label,
         description: serverCommand.description,
