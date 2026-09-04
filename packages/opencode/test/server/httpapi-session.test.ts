@@ -4,7 +4,7 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Cause, Config, Effect, Exit, Layer } from "effect"
+import { Cause, Config, Effect, Exit, Fiber, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -425,6 +425,70 @@ describe("session HttpApi", () => {
         root: sessionDirectory,
       })
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
+  )
+
+  it.live(
+    "abort stops a model-invoked shell command",
+    () =>
+      Effect.gen(function* () {
+        const llm = yield* TestLLMServer
+        const config = testProviderConfig(llm.url)
+        const directory = yield* tmpdirScoped({ git: true, config })
+        const session = yield* createSession({
+          title: "abort shell",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        }).pipe(provideInstanceEffect(directory))
+
+        yield* llm.tool("bash", {
+          command: "printf shell-ready; sleep 30",
+          timeout: 30_000,
+          workdir: directory,
+        })
+
+        const headers = { "content-type": "application/json", "x-opencode-directory": directory }
+        const running = yield* request(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "run the command" }],
+          }),
+        }).pipe(Effect.forkChild)
+
+        yield* pollWithTimeout(
+          Session.use.messages({ sessionID: session.id }).pipe(
+            provideInstanceEffect(directory),
+            Effect.map((messages) => {
+              const part = messages.flatMap((message) => message.parts).findLast((item) => item.type === "tool")
+              if (part?.type !== "tool" || part.state.status !== "running") return
+              if (part.state.metadata?.output.includes("shell-ready")) return true as const
+            }),
+          ),
+          "shell tool never started",
+        )
+
+        expect(
+          yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: session.id }), {
+            method: "POST",
+            headers,
+          }).pipe(Effect.timeout("5 seconds")),
+        ).toBe(true)
+
+        const exit = yield* Fiber.await(running)
+        expect(Exit.isSuccess(exit)).toBe(true)
+        if (Exit.isFailure(exit)) return
+        expect(exit.value.status).toBe(200)
+
+        const messages = yield* Session.use
+          .messages({ sessionID: session.id })
+          .pipe(provideInstanceEffect(directory), Effect.orDie)
+        const part = messages.flatMap((message) => message.parts).findLast((item) => item.type === "tool")
+        expect(part?.type === "tool" && part.state.status === "completed" ? part.state.output : "").toContain(
+          "User aborted the command",
+        )
+      }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
+    15_000,
   )
 
   it.instance(
