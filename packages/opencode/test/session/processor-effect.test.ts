@@ -209,6 +209,34 @@ const providerErrorLLM = Layer.succeed(
 const providerErrorEnv = LayerNode.compile(root, [...replacements, [LLM.node, providerErrorLLM]])
 const itProviderError = testEffect(providerErrorEnv)
 
+// Regression: providers (Qwen via OpenRouter) can re-emit argument deltas for a
+// tool call that already produced its result. Those late events carry no tool
+// name, so the adapter falls back to "unknown".
+const lateToolInputLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: "call-1", name: "lookup" }),
+        LLMEvent.toolInputEnd({ id: "call-1", name: "lookup" }),
+        LLMEvent.toolCall({ id: "call-1", name: "lookup", input: {}, providerExecuted: true }),
+        LLMEvent.toolResult({
+          id: "call-1",
+          name: "lookup",
+          result: { type: "json", value: { output: "ok", title: "lookup", metadata: {} } },
+          providerExecuted: true,
+        }),
+        LLMEvent.toolInputDelta({ id: "call-1", name: "unknown", text: "{}" }),
+        LLMEvent.toolInputEnd({ id: "call-1", name: "unknown" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ),
+  }),
+)
+const lateToolInputEnv = LayerNode.compile(root, [...replacements, [LLM.node, lateToolInputLLM]])
+const itLateToolInput = testEffect(lateToolInputEnv)
+
 const fragmentFailureLLM = Layer.succeed(
   LLM.Service,
   LLM.Service.of({
@@ -1165,6 +1193,46 @@ itFragmentFailure.live("session.processor effect tests retain partial legacy par
         expect(seen).toContain(MessageV2.Event.PartUpdated.type)
         expect(seen).toContain(Session.Event.Error.type)
         expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
+      }),
+    { config: cfg },
+  ),
+)
+
+itLateToolInput.live("session.processor effect tests ignore tool input events after a call settles", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "late tool input")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "late tool input" }],
+          tools: {},
+        })
+
+        const calls = (yield* MessageV2.parts(msg.id)).filter(
+          (part): part is SessionV1.ToolPart => part.type === "tool",
+        )
+        expect(calls.map((part) => ({ tool: part.tool, status: part.state.status }))).toEqual([
+          { tool: "lookup", status: "completed" },
+        ])
       }),
     { config: cfg },
   ),

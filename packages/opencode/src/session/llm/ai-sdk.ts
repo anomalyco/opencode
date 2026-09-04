@@ -236,8 +236,10 @@ export function toLLMEvents(
 
     case "tool-result":
       return Effect.sync(() => {
+        // Names are kept for the life of the stream rather than dropped here:
+        // providers may re-emit argument deltas for a call that already
+        // produced its result, and those chunks carry no name of their own.
         const name = state.toolNames[event.toolCallId] ?? "unknown"
-        delete state.toolNames[event.toolCallId]
         return [
           LLMEvent.toolResult({
             id: event.toolCallId,
@@ -252,7 +254,6 @@ export function toLLMEvents(
     case "tool-error":
       return Effect.sync(() => {
         const name = state.toolNames[event.toolCallId] ?? ("toolName" in event ? event.toolName : "unknown")
-        delete state.toolNames[event.toolCallId]
         return [
           LLMEvent.toolError({
             id: event.toolCallId,
