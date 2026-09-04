@@ -234,6 +234,52 @@ describe("Project.fromDirectory", () => {
       ).toBe(remoteID)
     }),
   )
+
+  it.live("migrates project IDs when workspace has no project_id column", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      const projects = yield* Project.Service
+      const rootResult = yield* projects.fromDirectory(tmp)
+      const sessionID = crypto.randomUUID() as SessionID
+
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: rootResult.project.id,
+          slug: sessionID,
+          directory: tmp,
+          title: "test",
+          version: "0.0.0-test",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db.run(`DROP TABLE \`workspace\``).pipe(Effect.orDie)
+      yield* db
+        .run(
+          `CREATE TABLE \`workspace\` (
+            \`id\` text PRIMARY KEY,
+            \`provider\` text NOT NULL,
+            \`binding\` text NOT NULL,
+            \`created_at\` integer NOT NULL,
+            \`last_used_at\` integer NOT NULL
+          )`,
+        )
+        .pipe(Effect.orDie)
+      yield* Effect.promise(() => $`git remote add origin git@github.com:acme/app.git`.cwd(tmp).quiet())
+
+      const result = yield* projects.fromDirectory(tmp)
+
+      expect(result.project.id).toBe(remoteProjectID("github.com/acme/app"))
+      expect(
+        (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
+          ?.project_id,
+      ).toBe(result.project.id)
+    }),
+  )
 })
 
 describe("Project.fromDirectory git failure paths", () => {
