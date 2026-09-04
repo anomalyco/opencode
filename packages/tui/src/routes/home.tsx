@@ -144,8 +144,8 @@ function UpdateNotification() {
                 onMouseUp={() => update.open?.("notification")}
               >
                 <UpdateMessage
-                  title="Update available"
-                  description={`Version ${state.version} is available. Click for more details`}
+                  title={state.type === "installed" ? "Update installed" : "Update available"}
+                  description={`Version ${state.version} is ${state.type === "installed" ? "installed" : "available"}. Click for more details`}
                   backdrop={
                     hovered() === "primary" ? theme.background.action.primary.hovered : theme.background.default
                   }
