@@ -84,7 +84,7 @@ function TaskRow(props: {
           class="truncate text-strong"
           style={{ "font-size": "13px", "font-weight": "400", "line-height": "130%", "letter-spacing": "-0.04px" }}
         >
-          {item.headline}
+          {item.headline || language.t("session.tasks.subagent")}
           <Show when={item.nested}>
             <span class="text-text-weak"> (+{item.nested})</span>
           </Show>
@@ -112,44 +112,44 @@ function TaskRow(props: {
           </Show>
         </div>
         <Show when={item.stats}>
-          <div class="border-border-weaker-base mt-3 flex flex-wrap gap-4 border-t pt-3 text-11-regular text-text-weak">
+          <div class="text-12-regular text-text-weak mt-3 flex flex-wrap gap-4 border-t border-border-weaker-base pt-3">
             <Show when={item.stats!.model}>
               <div class="flex items-center gap-1">
-                <span class="text-text-weaker">Model:</span>
+                <span class="text-text-weaker">{language.t("session.tasks.stats.model")}:</span>
                 <span class="font-mono text-text-base">{item.stats!.model}</span>
               </div>
             </Show>
             <Show when={item.stats!.agent}>
               <div class="flex items-center gap-1">
-                <span class="text-text-weaker">Agent:</span>
+                <span class="text-text-weaker">{language.t("session.tasks.stats.agent")}:</span>
                 <span class="font-mono text-text-base">{item.stats!.agent}</span>
               </div>
             </Show>
             <div class="flex items-center gap-1">
-              <span class="text-text-weaker">Tools:</span>
-              <span class="font-mono text-text-base">{item.stats!.toolCalls}</span>
+              <span class="text-text-weaker">{language.t("session.tasks.stats.tools")}:</span>
+              <span class="font-mono text-text-base">{item.stats!.toolCalls.toLocaleString(language.intl())}</span>
             </div>
             <Show when={item.stats!.fails > 0}>
               <div class="flex items-center gap-1" style={{ color: "var(--v2-state-fg-danger)" }}>
-                <span class="text-text-weaker">Fails:</span>
-                <span class="font-mono text-text-base">{item.stats!.fails}</span>
+                <span class="text-text-weaker">{language.t("session.tasks.stats.fails")}:</span>
+                <span class="font-mono text-text-base">{item.stats!.fails.toLocaleString(language.intl())}</span>
               </div>
             </Show>
             <Show when={item.stats!.fails === 0 && item.stats!.toolCalls > 0}>
               <div class="flex items-center gap-1" style={{ color: "var(--v2-state-fg-success)" }}>
-                <span class="text-text-weaker">Fails:</span>
+                <span class="text-text-weaker">{language.t("session.tasks.stats.fails")}:</span>
                 <span class="font-mono text-text-base">0</span>
               </div>
             </Show>
             <div class="flex items-center gap-1">
-              <span class="text-text-weaker">Tokens:</span>
+              <span class="text-text-weaker">{language.t("session.tasks.stats.tokens")}:</span>
               <span class="font-mono text-text-base">
-                ↓{item.stats!.tokensIn.toLocaleString()} ↑{item.stats!.tokensOut.toLocaleString()}
+                ↓{item.stats!.tokensIn.toLocaleString(language.intl())} ↑{item.stats!.tokensOut.toLocaleString(language.intl())}
               </span>
             </div>
             <Show when={item.stats!.cost > 0}>
               <div class="flex items-center gap-1">
-                <span class="text-text-weaker">Cost:</span>
+                <span class="text-text-weaker">{language.t("session.tasks.stats.cost")}:</span>
                 <span class="font-mono text-text-base">${item.stats!.cost.toFixed(4)}</span>
               </div>
             </Show>
