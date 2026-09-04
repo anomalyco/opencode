@@ -1,6 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
@@ -15,6 +16,7 @@ import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
@@ -59,6 +61,7 @@ const layer = Layer.effect(
         if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
       yield* plugins.awaitActivation
+      yield* settleStaleCompactions(sessionID)
       yield* settleStaleToolCalls(sessionID)
 
       const advanceToStep = Effect.fn("SessionRunner.advanceToStep")(() =>
@@ -273,6 +276,36 @@ const layer = Layer.effect(
           }),
         })
         if (completed !== undefined) return completed
+      }
+    })
+
+    const settleStaleCompactions = Effect.fn("SessionRunner.settleStaleCompactions")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      // A process death skips compaction finalizers. Include orphans behind a
+      // completed checkpoint, and settle newest first to match event projection.
+      const rows = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(
+          and(
+            eq(SessionMessageTable.session_id, sessionID),
+            eq(SessionMessageTable.type, "compaction"),
+            sql`json_extract(${SessionMessageTable.data}, '$.status') = 'running'`,
+          ),
+        )
+        .orderBy(desc(SessionMessageTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      for (const row of rows) {
+        const message = yield* SessionHistory.decodeMessageRow(row)
+        if (message.type !== "compaction") continue
+        yield* bus.publish(SessionEvent.Compaction.Failed, {
+          sessionID,
+          reason: message.reason,
+          inputID: message.id,
+          error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+        })
       }
     })
 

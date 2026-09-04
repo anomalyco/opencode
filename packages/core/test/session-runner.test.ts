@@ -3472,6 +3472,83 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[1])).toEqual(["Start working", "Recover with this"])
   })
 
+  scenario("settles abandoned compactions before continuing after a process crash", function* (s) {
+    yield* s.runPrompt("History before the crash")
+    const first = SessionMessage.ID.create()
+    const completed = SessionMessage.ID.create()
+    const last = SessionMessage.ID.create()
+    yield* s.bus.publish(SessionEvent.Compaction.Started, {
+      sessionID,
+      reason: "manual",
+      inputID: first,
+      recent: "",
+    })
+    yield* s.bus.publish(SessionEvent.Compaction.Started, {
+      sessionID,
+      reason: "manual",
+      inputID: completed,
+      recent: "",
+    })
+    yield* s.bus.publish(SessionEvent.Compaction.Ended, {
+      sessionID,
+      reason: "manual",
+      text: "## Objective\n- Earlier completed checkpoint",
+      recent: "",
+    })
+    yield* s.bus.publish(SessionEvent.Compaction.Started, {
+      sessionID,
+      reason: "auto",
+      inputID: last,
+      recent: "",
+    })
+
+    // These starts have no terminal events, as after SIGKILL. The older orphan
+    // is outside model-visible history; recovery must settle it as well.
+    expect(
+      (yield* s.messages).filter((message) => message.type === "compaction" && message.status === "running"),
+    ).toHaveLength(2)
+    yield* s.llm.push(TestLLM.text("Recovered response", "recovered"))
+    const run = yield* s.resumePaused
+    expect((yield* s.messages).filter((message) => message.type === "compaction").toReversed()).toMatchObject([
+      { id: first, status: "failed", reason: "manual", error: { type: "compaction.interrupted" } },
+      { id: completed, status: "completed", summary: "## Objective\n- Earlier completed checkpoint" },
+      { id: last, status: "failed", reason: "auto", error: { type: "compaction.interrupted" } },
+    ])
+    yield* run.finish
+
+    yield* s.llm.push(TestLLM.text("## Objective\n- New checkpoint", "new-summary"))
+    const next = yield* s.session.compact({ sessionID })
+    yield* s.session.wait(sessionID)
+    expect((yield* s.messages).find((message) => message.id === next.id)).toMatchObject({
+      status: "completed",
+      summary: "## Objective\n- New checkpoint",
+    })
+    expect(
+      (yield* s.messages).filter((message) => message.type === "compaction" && message.status === "running"),
+    ).toHaveLength(0)
+  })
+
+  scenario("settles an abandoned compaction before delivering another manual compaction", function* (s) {
+    yield* s.runPrompt("History before the crash")
+    const previous = SessionMessage.ID.create()
+    yield* s.bus.publish(SessionEvent.Compaction.Started, {
+      sessionID,
+      reason: "manual",
+      inputID: previous,
+      recent: "",
+    })
+    yield* s.llm.push(TestLLM.text("## Objective\n- New checkpoint", "new-summary"))
+    const gate = yield* s.llm.gate
+    const next = yield* s.session.compact({ sessionID })
+    yield* gate.started
+    expect((yield* s.messages).filter((message) => message.type === "compaction").toReversed()).toMatchObject([
+      { id: previous, status: "failed", error: { type: "compaction.interrupted" } },
+      { id: next.id, status: "running" },
+    ])
+    yield* gate.release
+    yield* s.session.wait(sessionID)
+  })
+
   scenario("durably fails local tools left running by a prior process before continuing", function* (s) {
     yield* s.admit("Recover interrupted tool")
     yield* SessionInbox.promote(s.db, s.bus, sessionID, "steer")
