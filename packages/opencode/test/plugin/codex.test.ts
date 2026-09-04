@@ -331,12 +331,24 @@ describe("plugin.codex", () => {
     ["gpt-6", true],
     ["gpt-6.0-astra", true],
     ["gpt-7", true],
+    ["gpt-10", true],
+    ["gpt-5.5-astra", true],
+    ["gpt-5.9", true],
+    ["gpt-5.10", true],
+    ["gpt-5.10-astra", true],
+    ["gpt-5.40", true],
     ["gpt-5", false],
+    ["gpt-5.4-astra", false],
+    ["gpt-5.04-astra", false],
     ["gpt-4.1", false],
+    ["gpt-4.99", false],
     ["gpt-5.5-pro", false],
     ["gpt-5.6", false],
+    ["gpt-6garbage", false],
+    ["gpt-6.", false],
+    ["gpt-6.1.2", false],
     ["not-a-gpt-model", false],
-  ])("filters OAuth model %s with integer or decimal versions", async (id, allowed) => {
+  ])("filters OAuth model %s by GPT major and minor versions", async (id, allowed) => {
     const hooks = await CodexAuthPlugin({} as never)
     const provider = {
       models: {
