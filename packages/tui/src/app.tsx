@@ -100,6 +100,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
+import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
@@ -397,21 +398,23 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                           <UpdateNotificationProvider
                                                                             updater={input.updater}
                                                                           >
-                                                                            <PluginProvider
-                                                                              packages={input.packages}
-                                                                              directories={pluginDirectories}
-                                                                            >
-                                                                              <App
-                                                                                pair={
-                                                                                  input.server.endpoint.auth
-                                                                                    ? input.server.endpoint.auth
-                                                                                    : {
-                                                                                        username: "opencode",
-                                                                                        password: "",
-                                                                                      }
-                                                                                }
-                                                                              />
-                                                                            </PluginProvider>
+                                                                            <PanelProvider>
+                                                                              <PluginProvider
+                                                                                packages={input.packages}
+                                                                                directories={pluginDirectories}
+                                                                              >
+                                                                                <App
+                                                                                  pair={
+                                                                                    input.server.endpoint.auth
+                                                                                      ? input.server.endpoint.auth
+                                                                                      : {
+                                                                                          username: "opencode",
+                                                                                          password: "",
+                                                                                        }
+                                                                                  }
+                                                                                />
+                                                                              </PluginProvider>
+                                                                            </PanelProvider>
                                                                           </UpdateNotificationProvider>
                                                                         </AttentionProvider>
                                                                       </EditorContextProvider>
@@ -474,6 +477,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const dialog = useDialog()
   const local = useLocal()
   const sessionTabs = useSessionTabs()
+  const panels = usePanel()
   const keymap = Keymap.use()
   const event = useEvent()
   const client = useClient()
@@ -574,8 +578,21 @@ function App(props: { pair?: DialogPairCredentials }) {
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
   const tabsVertical = () =>
     config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, tabsResize.preferredSize())
-  const tabsVisible = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
+  const tabsAvailable = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
+  const fullscreenPanel = () =>
+    route.data.type === "session" &&
+    panels.current()?.sessionID === route.data.sessionID &&
+    panels.presentation() === "fullscreen"
+  const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
+
+  // Measure the prospective split layout, even while full-screen hides the tabs.
+  createEffect(() => panels.setWidth(dimensions().width - (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)))
+  createEffect(() => {
+    const current = panels.current()
+    if (!current || (route.data.type === "session" && route.data.sessionID === current.sessionID)) return
+    panels.close()
+  })
 
   createEffect(() => {
     renderer.useMouse = config.data.mouse

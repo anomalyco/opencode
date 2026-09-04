@@ -113,7 +113,6 @@ import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
-import { useSessionTerminals } from "../../context/session-terminals"
 
 addDefaultParsers(parsers.parsers)
 
@@ -161,6 +160,7 @@ export function Session(props: {
   sidebarVisible: boolean
   onToggleSidebar: () => void
   visibleTerminalID?: string
+  onTerminalPicker?: (show: (() => void) | undefined) => void
   width?: number
 }) {
   const setEpilogue = useEpilogue()
@@ -234,6 +234,8 @@ export function Session(props: {
     open: false,
     tab: undefined as string | undefined,
   })
+  props.onTerminalPicker?.(() => setComposer({ open: true, tab: "terminals" }))
+  onCleanup(() => props.onTerminalPicker?.(undefined))
   createEffect(() => {
     if (props.promptMuted && composer.open) setComposer("open", false)
   })
@@ -260,7 +262,6 @@ export function Session(props: {
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
-  const terminalError = () => toast.show({ variant: "error", message: "Unable to load terminal" })
   const client = useClient()
   const autoApproved = new Set<string>()
   createEffect(() => {
@@ -295,7 +296,6 @@ export function Session(props: {
   const [firstJump, setFirstJump] = createSignal<() => void>()
   const [synced, setSynced] = createSignal(false)
   const sessionTabs = useSessionTabs()
-  const terminals = useSessionTerminals()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
@@ -985,73 +985,6 @@ export function Session(props: {
       },
     },
     {
-      title: props.sidebarVisible ? "Hide sidebar" : "Show sidebar",
-      id: "session.sidebar.toggle",
-      group: "Session",
-      run: () => {
-        props.onToggleSidebar()
-        dialog.clear()
-      },
-    },
-    ...(config.session.terminal
-      ? [
-          {
-            title: props.visibleTerminalID ? "Hide terminal pane" : "Show terminal pane",
-            id: "terminal.toggle",
-            group: "Session",
-            run: () => {
-              const sessionID = route.sessionID
-              if (props.visibleTerminalID) {
-                promptRef.current?.focus()
-                void terminals.selectTerminal(sessionID, null).catch(toast.error)
-              } else {
-                void terminals
-                  .refresh(sessionID)
-                  .then(async () => {
-                    const terminal = terminals.get(sessionID).terminals.at(-1)
-                    if (terminal) return terminals.selectTerminal(sessionID, terminal.id)
-                    await terminals.newTerminal(sessionID)
-                  })
-                  .catch(terminalError)
-              }
-              dialog.clear()
-            },
-          },
-          {
-            title: "Select terminal",
-            id: "terminal.select",
-            group: "Session",
-            run: () => {
-              promptRef.current?.focus()
-              setComposer({ open: true, tab: "terminals" })
-              void terminals.refresh(route.sessionID).catch(terminalError)
-              dialog.clear()
-            },
-          },
-          {
-            title: "Close terminal pane",
-            id: "terminal.close",
-            group: "Session",
-            enabled: props.visibleTerminalID !== undefined,
-            run: () => {
-              promptRef.current?.focus()
-              void terminals.selectTerminal(route.sessionID, null).catch(toast.error)
-              dialog.clear()
-            },
-          },
-          {
-            title: "New terminal",
-            id: "session.terminal",
-            group: "Session",
-            slash: { name: "terminal" },
-            run: async () => {
-              dialog.clear()
-              await terminals.newTerminal(route.sessionID).catch(terminalError)
-            },
-          },
-        ]
-      : []),
-    {
       title: (() => {
         const next = nextThinkingMode(thinkingMode())
         if (next === "hide") return "Collapse thinking"
@@ -1515,7 +1448,6 @@ export function Session(props: {
                   <Prompt
                     visible={true}
                     ref={bind}
-                    disabled={false}
                     muted={props.promptMuted}
                     onSubmit={() => {
                       toBottom()

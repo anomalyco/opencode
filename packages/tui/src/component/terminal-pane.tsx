@@ -1,4 +1,4 @@
-import { CliRenderEvents, EmbeddedTerminalRenderable, type RGBA } from "@opentui/core"
+import { EmbeddedTerminalRenderable, type RGBA } from "@opentui/core"
 import type { ResolvedThemeTokens } from "@opencode-ai/theme/tui"
 import { extend, useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js"
@@ -28,7 +28,6 @@ export function TerminalPane(props: {
   onAutoFocus?: () => void
   onFocusRequest?: (focus: (() => void) | undefined) => void
   onDisconnect?: () => void
-  onFocusChange?: (focused: boolean) => void
 }) {
   const client = useClient()
   const keymap = Keymap.use()
@@ -148,9 +147,6 @@ export function TerminalPane(props: {
     },
     { priority: 100 },
   )
-  // Blur emits this event before updating the terminal's own focused flag.
-  const onFocused = () => props.onFocusChange?.(renderer.currentFocusedRenderable === terminal)
-  renderer.on(CliRenderEvents.FOCUSED_RENDERABLE, onFocused)
   createEffect(() => {
     if (!props.autoFocus || !terminal) return
     terminal.focus()
@@ -172,8 +168,6 @@ export function TerminalPane(props: {
     waitingSize?.resolve()
     socket?.close()
     offKeys()
-    renderer.off(CliRenderEvents.FOCUSED_RENDERABLE, onFocused)
-    props.onFocusChange?.(false)
     props.onFocusRequest?.(undefined)
   })
 

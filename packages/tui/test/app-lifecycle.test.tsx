@@ -1228,7 +1228,7 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
 })
 
 test.each(["manual", "select"] as const)(
-  "selection copy and dismissal respect %s mode in the prompt and terminal pane",
+  "selection copy and pane management respect %s mode in the prompt and terminal pane",
   async (copy) => {
     const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
     setup.renderer.start()
@@ -1358,6 +1358,19 @@ test.each(["manual", "select"] as const)(
       expect(input).toEqual(["\x03"])
       expect(setup.renderer.hasSelection).toBeFalse()
       expect(setup.renderer.isDestroyed).toBeFalse()
+
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressArrow("up")
+      await setup.waitFor(() => terminal.isDestroyed)
+      expect(setup.renderer.currentFocusedEditor?.plainText).toBe("")
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressKey("t")
+      await setup.waitForFrame((frame) => frame.includes("alpha beta gamma"))
+      expect(setup.renderer.currentFocusedRenderable).toBeInstanceOf(EmbeddedTerminalRenderable)
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressArrow("down")
+      await setup.waitForFrame((frame) => frame.includes("Subagents") && frame.includes("Terminals"))
+      expect(setup.renderer.currentFocusedRenderable).not.toBeInstanceOf(EmbeddedTerminalRenderable)
 
       setup.renderer.destroy()
       await task
