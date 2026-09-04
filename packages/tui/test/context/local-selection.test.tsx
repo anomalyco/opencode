@@ -230,3 +230,63 @@ test("selection commits clear only the captured agent's draft and retain other a
   setup.local.agent.set("build")
   expect(setup.local.model.current()?.modelID).toBe("first")
 })
+
+test.each([undefined, { providerID: "provider", id: "missing", variant: "high" }])(
+  "falls back from a missing or unavailable session model (%j)",
+  async (selected) => {
+    await using setup = await renderLocal({
+      models: [model("first", ["low", "high"]), model("second")],
+      agents: [agent("build", { providerID: "provider", id: "first", variant: "low" })],
+      sessions: [session("ses_first", selected)],
+    })
+    await setup.data.session.sync("ses_first")
+    setup.route.navigate({ type: "session", sessionID: "ses_first" })
+    expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: "low" })
+    expect(setup.local.model.available()).toBe(true)
+    expect(setup.data.session.get("ses_first")?.model).toEqual(selected)
+  },
+)
+
+test("unavailable agent and global defaults fall back to an available recent model", async () => {
+  await using setup = await renderLocal({
+    models: [model("first"), model("second")],
+    agents: [agent("build", { providerID: "provider", id: "missing" })],
+    sessions: [session("ses_first", { providerID: "provider", id: "removed" })],
+    preferences: { recent: [{ providerID: "provider", modelID: "second" }] },
+    fetch: (url) => {
+      if (url.pathname === "/api/config") return json([{ type: "document", info: { model: "provider/missing" } }])
+    },
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.model.current()?.modelID).toBe("second")
+})
+
+test("a draft model that becomes unavailable falls back without blocking the session", async () => {
+  let available = [model("first"), model("second")]
+  await using setup = await renderLocal({
+    sessions: [session("ses_first", { providerID: "provider", id: "first" })],
+    fetch: (url) => {
+      if (url.pathname === "/api/model") return json({ location: { directory }, data: available })
+    },
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  setup.local.model.set({ providerID: "provider", modelID: "second" })
+  expect(setup.local.model.current()?.modelID).toBe("second")
+  available = [model("first")]
+  setup.data.location.model.invalidate()
+  await setup.data.location.model.sync()
+  expect(setup.local.model.current()?.modelID).toBe("first")
+  expect(setup.local.model.available()).toBe(true)
+})
+
+test("drops unavailable session variants rather than sending a hidden invalid variant", async () => {
+  await using setup = await renderLocal({
+    models: [model("first", ["low"])],
+    sessions: [session("ses_first", { providerID: "provider", id: "first", variant: "removed" })],
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: undefined })
+})
