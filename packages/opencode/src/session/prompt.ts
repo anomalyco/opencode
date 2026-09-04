@@ -264,7 +264,20 @@ const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       const promptOps = yield* ops()
       const { task: taskTool } = yield* registry.named()
-      const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
+      const taskAgent = yield* agents.get(task.agent)
+      if (!taskAgent) {
+        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+        const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+        const error = new NamedError.Unknown({ message: `Agent not found: "${task.agent}".${hint}` })
+        yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+        throw error
+      }
+
+      const taskModel = task.model
+        ? yield* getModel(task.model.providerID, task.model.modelID, sessionID)
+        : taskAgent.model
+          ? yield* getModel(taskAgent.model.providerID, taskAgent.model.modelID, sessionID)
+          : model
       const assistantMessage: SessionV1.Assistant = yield* sessions.updateMessage({
         id: MessageID.ascending(),
         role: "assistant",
@@ -272,7 +285,7 @@ const layer = Layer.effect(
         sessionID,
         mode: task.agent,
         agent: task.agent,
-        variant: lastUser.model.variant,
+        variant: taskAgent.variant ?? lastUser.model.variant,
         path: { cwd: ctx.directory, root: ctx.worktree },
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -309,15 +322,6 @@ const layer = Layer.effect(
         { tool: TaskTool.id, sessionID, callID: part.id },
         { args: taskArgs },
       )
-
-      const taskAgent = yield* agents.get(task.agent)
-      if (!taskAgent) {
-        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
-        const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-        const error = new NamedError.Unknown({ message: `Agent not found: "${task.agent}".${hint}` })
-        yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
-        throw error
-      }
 
       let error: Error | undefined
       const taskAbort = new AbortController()
