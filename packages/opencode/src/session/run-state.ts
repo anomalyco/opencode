@@ -7,8 +7,10 @@ import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
+import { InstanceActivity } from "@opencode-ai/core/instance-activity"
 
 export interface Interface {
+  readonly isActive: () => Effect.Effect<boolean>
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly ensureRunning: (
@@ -74,6 +76,11 @@ const layer = Layer.effect(
       if (existing?.busy) yield* busyError(sessionID)
     })
 
+    const isActive = Effect.fn("SessionRunState.isActive")(function* () {
+      const data = yield* InstanceState.get(state)
+      return Array.from(data.runners.values()).some((item) => item.busy)
+    })
+
     const cancel = Effect.fn("SessionRunState.cancel")(function* (sessionID: SessionID) {
       yield* cancelBackgroundJobs(background, sessionID)
       const data = yield* InstanceState.get(state)
@@ -90,7 +97,12 @@ const layer = Layer.effect(
       onInterrupt: Effect.Effect<SessionV1.WithParts>,
       work: Effect.Effect<SessionV1.WithParts>,
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt)).ensureRunning(work)
+      const activity = InstanceActivity.identify(yield* InstanceState.directory)
+      const tracked = Effect.sync(() => InstanceActivity.touch(activity)).pipe(
+        Effect.andThen(work),
+        Effect.ensuring(Effect.sync(() => InstanceActivity.touch(activity))),
+      )
+      return yield* (yield* runner(sessionID, onInterrupt)).ensureRunning(tracked)
     })
 
     const startShell = Effect.fn("SessionRunState.startShell")(function* (
@@ -99,12 +111,17 @@ const layer = Layer.effect(
       work: Effect.Effect<SessionV1.WithParts>,
       ready?: Latch.Latch,
     ) {
+      const activity = InstanceActivity.identify(yield* InstanceState.directory)
+      const tracked = Effect.sync(() => InstanceActivity.touch(activity)).pipe(
+        Effect.andThen(work),
+        Effect.ensuring(Effect.sync(() => InstanceActivity.touch(activity))),
+      )
       return yield* (yield* runner(sessionID, onInterrupt))
-        .startShell(work, ready)
+        .startShell(tracked, ready)
         .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
     })
 
-    return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
+    return Service.of({ isActive, assertNotBusy, cancel, ensureRunning, startShell })
   }),
 )
 

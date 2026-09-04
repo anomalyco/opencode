@@ -10,6 +10,7 @@ import { Location } from "./location"
 import { PtyID } from "./pty/schema"
 import { Shell } from "./shell"
 import { lazy } from "./util/lazy"
+import { PtyActivity } from "./pty/activity"
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
 // Exited sessions stay observable (status, exit code, retained output) until removed explicitly.
@@ -34,6 +35,7 @@ type Active = {
   cursor: number
   subscribers: Map<object, Subscriber>
   listeners: Disp[]
+  counted: boolean
 }
 
 export const Info = Pty.Info
@@ -94,6 +96,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const location = yield* Location.Service
+    const activity = PtyActivity.identify(location.directory)
     const config = yield* Config.Service
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
@@ -117,6 +120,10 @@ const layer = Layer.effect(
       for (const listener of session.listeners) listener.dispose()
       session.listeners.length = 0
       if (session.info.status === "running") {
+        if (session.counted) {
+          session.counted = false
+          PtyActivity.stopped(activity)
+        }
         try {
           session.process.kill()
         } catch {}
@@ -198,8 +205,10 @@ const layer = Layer.effect(
         cursor: 0,
         subscribers: new Map(),
         listeners: [],
+        counted: true,
       }
       sessions.set(id, session)
+      PtyActivity.started(activity)
       session.listeners.push(
         proc.onData((chunk) => {
           session.cursor += chunk.length
@@ -222,6 +231,10 @@ const layer = Layer.effect(
         }),
         proc.onExit(({ exitCode }) => {
           if (session.info.status === "exited") return
+          if (session.counted) {
+            session.counted = false
+            PtyActivity.stopped(activity)
+          }
           session.info.status = "exited"
           session.info.exitCode = exitCode
           notifyEnd(session, { exitCode })

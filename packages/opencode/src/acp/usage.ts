@@ -1,7 +1,5 @@
 import type { AgentSideConnection, Usage } from "@agentclientprotocol/sdk"
 import type { AssistantMessage as OpenCodeAssistantMessage, Message } from "@opencode-ai/sdk/v2"
-import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { makeGlobalNode, Node } from "@opencode-ai/core/effect/app-node"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -130,10 +128,7 @@ export const contextLimitLoaderLayer = Layer.effect(
 
     return ContextLimitLoader.of({
       providers: Effect.fn("ACPUsageContextLimitLoader.providers")(function* (directory) {
-        const ctx = yield* store.load({ directory })
-        return yield* Effect.gen(function* () {
-          return yield* provider.list()
-        }).pipe(Effect.provideService(InstanceRef, ctx))
+        return yield* store.provide({ directory }, provider.list())
       }),
     })
   }),

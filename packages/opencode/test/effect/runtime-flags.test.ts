@@ -312,6 +312,49 @@ describe("RuntimeFlags", () => {
     )
   }
 
+  for (const input of [
+    { name: "absent", config: {}, expected: undefined, warns: false },
+    {
+      name: "minimum",
+      config: { OPENCODE_EXPERIMENTAL_INSTANCE_IDLE_TIMEOUT_MS: "3600000" },
+      expected: 3_600_000,
+      warns: false,
+    },
+    {
+      name: "above minimum",
+      config: { OPENCODE_EXPERIMENTAL_INSTANCE_IDLE_TIMEOUT_MS: "7200000" },
+      expected: 7_200_000,
+      warns: false,
+    },
+    {
+      name: "below minimum",
+      config: { OPENCODE_EXPERIMENTAL_INSTANCE_IDLE_TIMEOUT_MS: "3599999" },
+      expected: undefined,
+      warns: true,
+    },
+    {
+      name: "invalid string",
+      config: { OPENCODE_EXPERIMENTAL_INSTANCE_IDLE_TIMEOUT_MS: "nope" },
+      expected: undefined,
+      warns: true,
+    },
+    {
+      name: "non-integer",
+      config: { OPENCODE_EXPERIMENTAL_INSTANCE_IDLE_TIMEOUT_MS: "3600000.5" },
+      expected: undefined,
+      warns: true,
+    },
+  ]) {
+    it.effect(`parses instanceIdleTimeoutMs from config: ${input.name}`, () =>
+      Effect.gen(function* () {
+        const flags = yield* readFlags.pipe(Effect.provide(fromConfig(input.config)))
+
+        expect(flags.instanceIdleTimeoutMs).toBe(input.expected)
+        expect(flags.instanceIdleTimeoutWarning !== undefined).toBe(input.warns)
+      }),
+    )
+  }
+
   it.effect("layer ignores the active ConfigProvider for omitted test overrides", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(
@@ -344,6 +387,7 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalOxfmt).toBe(false)
       expect(flags.outputTokenMax).toBeUndefined()
       expect(flags.bashDefaultTimeoutMs).toBeUndefined()
+      expect(flags.instanceIdleTimeoutMs).toBeUndefined()
       expect(flags.client).toBe("cli")
     }),
   )

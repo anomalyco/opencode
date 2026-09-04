@@ -1,7 +1,5 @@
 import { Agent } from "@/agent/agent"
 import { Command } from "@/command"
-import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -114,28 +112,30 @@ export const loaderLayer = Layer.effect(
 
     return Loader.of({
       load: Effect.fn("ACPDirectoryLoader.load")(function* (directory) {
-        const ctx = yield* store.load({ directory })
-        return yield* Effect.gen(function* () {
-          const providers = yield* provider.list()
-          const [agents, defaultAgent, commands, defaultModel] = yield* Effect.all(
-            [agent.list(), agent.defaultInfo(), command.list(), provider.defaultModel().pipe(Effect.option)],
-            { concurrency: "unbounded" },
-          )
-          return build({
-            directory,
-            providers,
-            modes: agents
-              .filter((item) => item.mode !== "subagent" && item.hidden !== true)
-              .map((item) => ({
-                id: item.name,
-                name: item.name,
-                ...(item.description ? { description: item.description } : {}),
-              })),
-            defaultModeID: defaultAgent.name,
-            commands: commands.toSorted((a, b) => a.name.localeCompare(b.name)),
-            ...(defaultModel._tag === "Some" ? { defaultModel: defaultModel.value } : {}),
-          })
-        }).pipe(Effect.provideService(InstanceRef, ctx))
+        return yield* store.provide(
+          { directory },
+          Effect.gen(function* () {
+            const providers = yield* provider.list()
+            const [agents, defaultAgent, commands, defaultModel] = yield* Effect.all(
+              [agent.list(), agent.defaultInfo(), command.list(), provider.defaultModel().pipe(Effect.option)],
+              { concurrency: "unbounded" },
+            )
+            return build({
+              directory,
+              providers,
+              modes: agents
+                .filter((item) => item.mode !== "subagent" && item.hidden !== true)
+                .map((item) => ({
+                  id: item.name,
+                  name: item.name,
+                  ...(item.description ? { description: item.description } : {}),
+                })),
+              defaultModeID: defaultAgent.name,
+              commands: commands.toSorted((a, b) => a.name.localeCompare(b.name)),
+              ...(defaultModel._tag === "Some" ? { defaultModel: defaultModel.value } : {}),
+            })
+          }),
+        )
       }),
     })
   }),
