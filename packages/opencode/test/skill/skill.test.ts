@@ -9,7 +9,13 @@ import { Config } from "../../src/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
-import { provideInstance, provideTmpdirInstance, testInstanceStoreLayer, tmpdir } from "../fixture/fixture"
+import {
+  provideInstance,
+  provideTmpdirInstance,
+  testInstanceStoreLayer,
+  tmpdir,
+  tmpdirScoped,
+} from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
@@ -64,6 +70,28 @@ const withHome = <A, E, R>(home: string, self: Effect.Effect<A, E, R>) =>
   )
 
 describe("skill", () => {
+  it.live("bare keeps only built-in skills", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const skillDir = path.join(dir, ".opencode", "skill", "bare-test")
+      yield* Effect.promise(() => fs.mkdir(skillDir, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(skillDir, "SKILL.md"),
+          "---\nname: bare-test\ndescription: Must not load in bare mode.\n---\n\n# Bare test",
+        ),
+      )
+
+      yield* Skill.Service.use((skill) =>
+        Effect.gen(function* () {
+          const list = yield* skill.all()
+          expect(list.some((item) => item.name === "bare-test")).toBe(false)
+          expect(list.some((item) => item.location === "<built-in>")).toBe(true)
+        }),
+      ).pipe(provideInstance(dir, "bare"))
+    }),
+  )
+
   it.effect("formats verbose locations as XML-safe filesystem paths", () =>
     Effect.sync(() => {
       const output = Skill.fmt(

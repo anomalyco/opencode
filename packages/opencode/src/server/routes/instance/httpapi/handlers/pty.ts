@@ -44,8 +44,8 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
     const cors = yield* CorsConfig
     const plugin = yield* Plugin.Service
     const locations = yield* LocationServiceMap.Service
-    const unregister = registerDisposer((directory) =>
-      Effect.runPromise(locations.invalidate(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+    const unregister = registerDisposer((ctx) =>
+      Effect.runPromise(locations.invalidate(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))),
     )
     yield* Effect.addFinalizer(() => Effect.sync(unregister))
 
@@ -165,8 +165,8 @@ export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-conne
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
     const locations = yield* LocationServiceMap.Service
-    const unregister = registerDisposer((directory) =>
-      Effect.runPromise(locations.invalidate(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+    const unregister = registerDisposer((ctx) =>
+      Effect.runPromise(locations.invalidate(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))),
     )
     yield* Effect.addFinalizer(() => Effect.sync(unregister))
 

@@ -31,6 +31,7 @@ import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } fro
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { InstanceOptions } from "@/project/instance-options"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
@@ -178,9 +179,8 @@ const layer = Layer.effect(
           if (init._tag === "Some") hooks.push(init.value)
         }
 
-        const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
-        if (flags.pure && cfg.plugin_origins?.length) {
-        }
+        const external = InstanceOptions.resolve(ctx.profile).discovery.externalPlugins
+        const plugins = flags.pure || !external ? [] : (cfg.plugin_origins ?? [])
         if (plugins.length) yield* config.waitForDependencies()
 
         const loaded = yield* Effect.promise(() =>

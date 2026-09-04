@@ -15,6 +15,7 @@ import { ConfigMarkdown } from "@/config/markdown"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { Discovery } from "./discovery"
+import { InstanceOptions } from "@/project/instance-options"
 import { isRecord } from "@/util/record"
 import { escapeHtml } from "@/util/html"
 
@@ -258,6 +259,9 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const discovered = yield* InstanceState.make(
       Effect.fn("Skill.discovery")(function* (ctx) {
+        if (!InstanceOptions.resolve(ctx.profile).discovery.externalSkills) {
+          return { matches: [], dirs: [] }
+        }
         return yield* discoverSkills(
           config,
           discovery,
