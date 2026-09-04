@@ -637,7 +637,11 @@ export function createBrowserPage(
 
   async function inspect(action: Browser.Action): Promise<Browser.Target> {
     // Most CDP queries cannot run while a JavaScript dialog blocks the renderer.
-    if (action.type === "dialog") return { resources: [dialog ? dialogURL : contents.getURL()], key: `${generation}:${dialogRevision}:${Boolean(dialog)}` }
+    if (action.type === "dialog")
+      return {
+        resources: [dialog ? dialogURL : contents.getURL()],
+        key: `${generation}:${dialogRevision}:${Boolean(dialog)}`,
+      }
     const fileIDs =
       action.type === "heap.compare" ? [action.before, action.after] : "fileID" in action ? [action.fileID] : []
     if (fileIDs.length)

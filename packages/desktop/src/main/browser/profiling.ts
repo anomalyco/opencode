@@ -59,7 +59,9 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
     const resources = cpu.resources
     clearTimeout(cpu.timer)
     cpu.result = cdp.send("Profiler.stop").then(async ({ profile }) => ({
-      id: await files.save("profile.cpuprofile", "application/json", Buffer.from(JSON.stringify(profile)), [...resources]),
+      id: await files.save("profile.cpuprofile", "application/json", Buffer.from(JSON.stringify(profile)), [
+        ...resources,
+      ]),
       durationMs: (profile.endTime - profile.startTime) / 1000,
     }))
     return cpu.result
