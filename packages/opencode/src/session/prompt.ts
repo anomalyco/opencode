@@ -1238,6 +1238,7 @@ const layer = Layer.effect(
               Effect.provideService(MCP.Service, mcp),
               Effect.provideService(Truncate.Service, truncate),
               Effect.provideService(RuntimeFlags.Service, flags),
+              Effect.provideService(EventV2Bridge.Service, events),
             )
 
             if (lastUser.format?.type === "json_schema") {
@@ -1343,7 +1344,31 @@ const layer = Layer.effect(
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+      return yield* state.ensureRunning(
+        input.sessionID,
+        lastAssistant(input.sessionID),
+        runLoop(input.sessionID).pipe(
+          Effect.catchCause((cause) => {
+            const alreadySurfaced = cause.reasons
+              .filter(Cause.isDieReason)
+              .some(
+                (reason) =>
+                  reason.defect instanceof NamedError || Provider.ModelNotFoundError.isInstance(reason.defect),
+              )
+            if (alreadySurfaced) return Effect.failCause(cause)
+            if (!cause.reasons.some(Cause.isDieReason)) return Effect.failCause(cause)
+            return Effect.gen(function* () {
+              const error = new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject()
+              yield* Effect.logError("session run failed with defect", {
+                "session.id": input.sessionID,
+                cause,
+              })
+              yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error })
+              return yield* Effect.failCause(cause)
+            })
+          }),
+        ),
+      )
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
