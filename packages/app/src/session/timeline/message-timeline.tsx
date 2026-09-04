@@ -58,7 +58,6 @@ export function BackgroundMoveHint(props: { keybind?: string[]; onMove?: () => v
       type="button"
       variant="ghost-faint"
       size="small"
-      icon="outline-arrow-to-corner-top-right"
       class="max-w-full"
       aria-label={language.t("session.background.moveInline", { keybind: keybind() })}
       onClick={() => props.onMove?.()}

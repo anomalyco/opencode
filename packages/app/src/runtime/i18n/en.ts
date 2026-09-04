@@ -676,7 +676,7 @@ export const dict = {
   "session.error.incompatible.description":
     "{{server}} is running OpenCode {{version}}, which isn't compatible with this app. Upgrade the server to OpenCode V2 to continue.",
   "session.background.moveTasks": "Move {{tasks}} to background",
-  "session.background.moveRunning": "Move running work to background",
+  "session.background.moveRunning": "Move to background",
   "session.background.inBackground": "Running {{tasks}} in background",
   "session.background.moveInline": "Press {{keybind}} to move running work to the background",
   "session.background.running": "Running work in background",
