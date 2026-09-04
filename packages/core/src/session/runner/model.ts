@@ -57,6 +57,7 @@ export const resolved = (
     readonly variant?: Model.VariantID
     readonly cost: Model.Info["cost"]
     readonly limit: Model.Info["limit"]
+    readonly compaction?: Provider.Compaction
   },
 ): Resolved => ({
   model,
@@ -68,6 +69,7 @@ export const resolved = (
   capabilities: options.capabilities,
   cost: options.cost,
   limit: options.limit,
+  compaction: options.compaction,
 })
 
 const layer = Layer.effect(

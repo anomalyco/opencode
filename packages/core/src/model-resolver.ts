@@ -1,7 +1,7 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { LanguageModel } from "@opencode-ai/ai"
+import { AIError, LanguageModel, LLM, LLMClient, UnsupportedOperationError } from "@opencode-ai/ai"
 import { Auth } from "@opencode-ai/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
@@ -53,6 +53,7 @@ export class UnresolvedProviderVariablesError extends Schema.TaggedError<Unresol
 }
 
 export type Error =
+  | AIError
   | VariantUnavailableError
   | UnsupportedPackageError
   | UnresolvedProviderVariablesError
@@ -69,6 +70,8 @@ export interface Resolved {
   readonly cost: Info["cost"]
   /** Catalog token limits used by Core for context management. */
   readonly limit: Info["limit"]
+  /** Model policy overrides the provider policy; omitted means local compaction. */
+  readonly compaction?: Info["compaction"]
 }
 
 export interface Interface {
@@ -115,9 +118,25 @@ export const fromCatalogModel = (
   model: Info,
   credential?: Credential.Value,
   dependencies?: Dependencies,
-): Effect.Effect<LanguageModel, UnsupportedPackageError | UnresolvedProviderVariablesError> =>
+): Effect.Effect<LanguageModel, AIError | UnsupportedPackageError | UnresolvedProviderVariablesError> =>
   resolveCatalogModel(model, credential, dependencies).pipe(
     Effect.flatMap((resolved) => validateProviderVariables(model, resolved)),
+    Effect.flatMap((resolved) => {
+      if (model.compaction?.mode !== "provider") return Effect.succeed(resolved)
+      const request = LLM.request({ model: resolved, messages: [] })
+      if (LLMClient.canCompact(request, { mechanism: "trigger" }) || LLMClient.canCompact(request))
+        return Effect.succeed(resolved)
+      return Effect.fail(
+        new AIError({
+          reason: new UnsupportedOperationError({
+            operation: "compact",
+            provider: resolved.provider,
+            route: resolved.route.id,
+            message: `Provider compaction is not supported by ${model.providerID}/${model.id} (${resolved.route.id})`,
+          }),
+        }),
+      )
+    }),
   )
 
 const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(function* (
@@ -296,6 +315,7 @@ export const layer = Layer.effect(
         capabilities: selected.capabilities,
         cost: selected.cost,
         limit: selected.limit,
+        compaction: selected.compaction,
       }
     })
     return Service.of({

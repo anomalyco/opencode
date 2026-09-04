@@ -75,7 +75,44 @@ Add `compaction` to any [OpenCode configuration file](/config):
 preserves more recent detail but leaves less room for future work. Larger
 `buffer` triggers preflight compaction earlier.
 
-## Checkpoint contents
+## Provider compaction (manual)
+
+By default, compaction generates a local text summary. To use the selected
+provider's native compaction operation for manual requests, set a provider policy.
+An individual model's policy overrides it:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "compaction": { "mode": "provider" },
+      "models": {
+        "gpt-4.1": { "compaction": { "mode": "local" } },
+      },
+    },
+  },
+}
+```
+
+- Automatic and overflow compaction still use local summaries. This policy only
+  changes manual compaction; it does not enable in-band provider context management.
+- OpenAI Responses uses a streamed compaction trigger when the route supports it.
+  Endpoint-only routes use their standalone compaction endpoint. Deployment/model
+  support can vary; provider errors are returned without a retry or local fallback.
+- Unsupported routes are rejected during model resolution. Configure custom
+  endpoints through provider/model `settings.baseURL`, not a `model.request` hook;
+  native compaction rejects endpoint rewrites by that hook.
+- Trigger checkpoints retain up to approximately 64,000 tokens of whole, real user
+  messages and attachments, including users retained across earlier native
+  compactions. Synthetic guidance is not retained as user input. Endpoint results
+  are stored as the provider returned them. Neither path fabricates a text summary.
+- Successful native checkpoints advance the instruction epoch and are replayed
+  only with a matching provider, model, protocol, and endpoint. Switching to an
+  incompatible route reuses an earlier compatible checkpoint or retained transcript.
+  Disabling automatic compaction does not remove an installed checkpoint.
+
+## Local checkpoint contents
 
 V2 uses the session's selected agent, model, and variant to generate the summary.
 The request reuses the normal instructions, tool definitions, and structured
