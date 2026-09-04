@@ -1,6 +1,6 @@
 export * as OpenCodeTools from "./opencode.js"
 
-import { ToolFailure } from "@opencode-ai/ai"
+import { SystemPart, ToolFailure } from "@opencode-ai/ai"
 import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { AbsolutePath } from "@opencode-ai/schema/schema"
 import { Session } from "@opencode-ai/schema/session"
@@ -18,6 +18,15 @@ const MoveOutput = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePat
 export const Plugin = {
   id: "opencode.tools",
   effect: Effect.fn("OpenCodeTools.Plugin")(function* (ctx: Context) {
+    yield* ctx.session.hook("context", (event) =>
+      Effect.sync(() => {
+        event.system.push(
+          SystemPart.make(
+            "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
+          ),
+        )
+      }),
+    )
     yield* ctx.tool
       .transform((draft) => {
         draft.namespace({ name: "opencode", description: "OpenCode session and runtime tools." })
