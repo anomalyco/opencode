@@ -297,7 +297,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
               if (ALLOWED_MODELS.has(model.api.id)) return true
               if (DISALLOWED_MODELS.has(model.api.id)) return false
               if (model.api.id === "gpt-5.6") return false
-              const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
+              const match = model.api.id.match(/^gpt-(\d+(?:\.\d+)?)/)
               return match ? parseFloat(match[1]) > 5.4 : false
             })
             .map(([modelID, model]) => [

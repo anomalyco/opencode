@@ -326,6 +326,29 @@ describe("plugin.codex", () => {
     )
   })
 
+  test.each([
+    ["gpt-6-astra", true],
+    ["gpt-6", true],
+    ["gpt-6.0-astra", true],
+    ["gpt-7", true],
+    ["gpt-5", false],
+    ["gpt-4.1", false],
+    ["gpt-5.5-pro", false],
+    ["gpt-5.6", false],
+    ["not-a-gpt-model", false],
+  ])("filters OAuth model %s with integer or decimal versions", async (id, allowed) => {
+    const hooks = await CodexAuthPlugin({} as never)
+    const provider = {
+      models: {
+        [id]: { id, api: { id }, limit: {}, cost: {}, options: {} },
+      },
+    }
+
+    const models = await hooks.provider!.models!(provider as never, { auth: { type: "oauth" } } as never)
+
+    expect(Object.keys(models)).toEqual(allowed ? [id] : [])
+  })
+
   test("deduplicates concurrent Codex token refreshes", async () => {
     const refreshedAccess = createTestJwt({
       "https://api.openai.com/auth": { chatgpt_compute_residency: "eu" },
