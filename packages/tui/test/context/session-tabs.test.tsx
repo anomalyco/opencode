@@ -332,6 +332,33 @@ test.each([undefined, true, false])("replaces previews with legacy experiment se
   }
 })
 
+test.each([
+  ["home", "preview"],
+  ["home", "permanent"],
+  ["add", "preview"],
+  ["add", "permanent"],
+])("opening a new session via %s keeps the preview when %s is selected", async (action, selected) => {
+  const setup = await renderSessionTabs("preview", { persisted: ["permanent"] })
+
+  try {
+    await wait(() => setup.tabs.tabs().length === 2 && setup.tabs.isPreview("preview"))
+    setup.tabs.select(selected)
+    if (action === "add") setup.tabs.add()
+    if (action === "home") setup.route.navigate({ type: "home" })
+
+    expect(setup.tabs.newTab()).toBe(true)
+    expect(setup.tabs.isPreview("preview")).toBe(false)
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["permanent", "preview"])
+
+    setup.route.navigate({ type: "session", sessionID: "next-preview" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "next-preview"))
+    expect(setup.tabs.isPreview("next-preview")).toBe(true)
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["permanent", "preview", "next-preview"])
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("server-wide prompt admissions do not promote a local session preview", async () => {
   const setup = await renderSessionTabs("preview")
 
