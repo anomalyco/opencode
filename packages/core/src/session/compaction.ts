@@ -144,14 +144,14 @@ export interface Interface extends State.Transformable<Editor> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
+const hasInputUsage = (message: SessionMessage.Info) =>
+  message.type === "assistant" &&
+  !message.error &&
+  message.tokens !== undefined &&
+  message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
+
 export const estimateTokens = (input: RequiredInput) => {
-  const index = input.messages.findLastIndex(
-    (message) =>
-      message.type === "assistant" &&
-      !message.error &&
-      message.tokens !== undefined &&
-      message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
-  )
+  const index = input.messages.findLastIndex(hasInputUsage)
   const last = input.messages[index]
   // Keep the anchor's local tool results: they are not covered by its provider usage.
   const added = SessionModelRequest.unsupportedParts(
@@ -693,18 +693,7 @@ export const layer = Layer.effect(
       )
       // Native usage describes the compaction operation, not the replacement's size. Wait for
       // a primary response to anchor the new window, including after restart or new admission.
-      if (
-        native >= 0 &&
-        !input.messages
-          .slice(native + 1)
-          .some(
-            (message) =>
-              message.type === "assistant" &&
-              !message.error &&
-              message.tokens &&
-              message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
-          )
-      )
+      if (native >= 0 && !input.messages.some((message, index) => index > native && hasInputUsage(message)))
         return false
       const limit = input.resolved.limit
       const context = limit.context
