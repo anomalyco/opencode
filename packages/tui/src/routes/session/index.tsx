@@ -69,6 +69,7 @@ import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { projectedPromptInput } from "../../prompt/codec"
 import { deduplicateVisibleImages } from "../../prompt/attachment"
+import { renderUserMessageMentions } from "../../prompt/user-message-mention"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
@@ -2365,10 +2366,28 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const ctx = use()
   const data = useData()
   const local = useLocal()
-  const files = createMemo(() => deduplicateVisibleImages(props.message.files ?? []))
+  const files = createMemo(() => props.message.files ?? [])
   const skills = createMemo(() => props.message.skills ?? [])
+  const agents = createMemo(() => props.message.agents ?? [])
+  const mentions = createMemo(() =>
+    renderUserMessageMentions(props.message.text, [
+      ...files().map((file, index) => ({ key: `file:${index}`, type: "file" as const, mention: file.mention })),
+      ...agents().map((agent, index) => ({ key: `agent:${index}`, type: "agent" as const, mention: agent.mention })),
+      ...skills().map((skill, index) => ({ key: `skill:${index}`, type: "skill" as const, mention: skill.mention })),
+    ]),
+  )
+  const visibleFiles = createMemo(() => deduplicateVisibleImages(files().map((file, index) => ({ ...file, index }))))
+  const fileBadges = createMemo(() =>
+    visibleFiles().filter((file) => !file.mime.startsWith("image/") && !mentions().inline.has(`file:${file.index}`)),
+  )
+  const agentBadges = createMemo(() => agents().filter((_, index) => !mentions().inline.has(`agent:${index}`)))
+  const skillBadges = createMemo(() => skills().filter((_, index) => !mentions().inline.has(`skill:${index}`)))
+  const bodyVisible = createMemo(
+    () =>
+      !!props.message.text.trim() || fileBadges().length > 0 || agentBadges().length > 0 || skillBadges().length > 0,
+  )
   const images = createMemo(() =>
-    files().flatMap((file) =>
+    visibleFiles().flatMap((file) =>
       file.mime.startsWith("image/") ? [{ uri: `data:${file.mime};base64,${file.data}` }] : [],
     ),
   )
@@ -2387,7 +2406,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   }
 
   return (
-    <Show when={props.message.text.trim() || files().length || skills().length}>
+    <Show when={props.message.text.trim() || files().length || agents().length || skills().length}>
       <box
         border={["left"]}
         borderColor={delivery() ? theme.border.default : color()}
@@ -2395,96 +2414,112 @@ function UserMessage(props: { message: SessionMessageUser }) {
         backgroundColor={theme.background.default}
       >
         <SessionImages images={images()} paddingLeft={2} />
-        <box
-          onMouseOver={() => {
-            setHover(true)
-          }}
-          onMouseOut={() => {
-            setHover(false)
-          }}
-          onMouseUp={() => {
-            if (renderer.getSelection()?.getSelectedText()) return
-            if (delivery() === "steer") {
+        <Show when={bodyVisible()}>
+          <box
+            onMouseOver={() => {
+              setHover(true)
+            }}
+            onMouseOut={() => {
+              setHover(false)
+            }}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              if (delivery() === "steer") {
+                dialog.replace(() => (
+                  <DialogSelect
+                    title="Pending steer"
+                    options={[
+                      { title: "Move to queue", value: "queue" as const },
+                      { title: "Delete", value: "cancel" as const },
+                    ]}
+                    onSelect={(option) => {
+                      void updatePendingSteer(option.value)
+                    }}
+                  />
+                ))
+                return
+              }
               dialog.replace(() => (
-                <DialogSelect
-                  title="Pending steer"
-                  options={[
-                    { title: "Move to queue", value: "queue" as const },
-                    { title: "Delete", value: "cancel" as const },
-                  ]}
-                  onSelect={(option) => {
-                    void updatePendingSteer(option.value)
-                  }}
+                <DialogMessage
+                  messageID={props.message.id}
+                  sessionID={ctx.sessionID}
+                  setPrompt={(value) => promptRef.current?.set(value)}
                 />
               ))
-              return
-            }
-            dialog.replace(() => (
-              <DialogMessage
-                messageID={props.message.id}
-                sessionID={ctx.sessionID}
-                setPrompt={(value) => promptRef.current?.set(value)}
-              />
-            ))
-          }}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
-          flexShrink={0}
-        >
-          <text fg={theme.text.default}>{props.message.text}</text>
-          <Show when={skills().length}>
-            <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
-              <For each={skills()}>
-                {(skill) => (
-                  <text fg={theme.text.default}>
-                    <span
-                      style={{
-                        bg: theme.hue.accent[mode() === "light" ? 700 : 200],
-                        fg: theme.background.default,
-                        bold: true,
-                      }}
-                    >
-                      {" skill "}
-                    </span>
-                    <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}>
-                      {` ${skill.name} `}
-                    </span>
-                  </text>
+            }}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={2}
+            backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
+            flexShrink={0}
+          >
+            <text fg={theme.text.default}>
+              <For each={mentions().segments}>
+                {(segment) => (
+                  <span
+                    style={
+                      segment.type
+                        ? {
+                            fg:
+                              segment.type === "file"
+                                ? theme.text.feedback.warning.default
+                                : (segment.type === "agent"
+                                    ? theme.categorical[0]
+                                    : (theme.categorical[1] ?? theme.categorical[0]))[mode() === "light" ? 700 : 200],
+                            bold: true,
+                          }
+                        : undefined
+                    }
+                  >
+                    {segment.text}
+                  </span>
                 )}
               </For>
-            </box>
-          </Show>
-          <Show when={files().length}>
-            <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
-              <For each={files()}>
-                {(file) => {
-                  const label = file.mime === "application/x-directory" ? "dir" : "file"
-                  return (
-                    <text fg={theme.text.default}>
-                      <span
-                        style={{
-                          bg: theme.hue.accent[mode() === "light" ? 700 : 200],
-                          fg: theme.background.default,
-                          bold: true,
-                        }}
-                      >
-                        {` ${label} `}
-                      </span>
-                      <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}>
-                        {" "}
-                        {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
-                      </span>
-                    </text>
-                  )
-                }}
-              </For>
-            </box>
-          </Show>
-        </box>
+            </text>
+            <Show when={skillBadges().length}>
+              <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
+                <For each={skillBadges()}>{(skill) => <UserMentionBadge type="skill" name={skill.name} />}</For>
+              </box>
+            </Show>
+            <Show when={agentBadges().length}>
+              <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
+                <For each={agentBadges()}>{(agent) => <UserMentionBadge type="agent" name={agent.name} />}</For>
+              </box>
+            </Show>
+            <Show when={fileBadges().length}>
+              <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
+                <For each={fileBadges()}>
+                  {(file) => (
+                    <UserMentionBadge
+                      type={file.mime === "application/x-directory" ? "dir" : "file"}
+                      name={file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}
+                    />
+                  )}
+                </For>
+              </box>
+            </Show>
+          </box>
+        </Show>
       </box>
     </Show>
+  )
+}
+
+function UserMentionBadge(props: { type: "agent" | "dir" | "file" | "skill"; name: string }) {
+  const theme = useTheme("elevated")
+  const mode = useThemes().mode
+  const color = () =>
+    props.type === "agent"
+      ? theme.categorical[0][mode() === "light" ? 700 : 200]
+      : props.type === "skill"
+        ? (theme.categorical[1] ?? theme.categorical[0])[mode() === "light" ? 700 : 200]
+        : theme.hue.accent[mode() === "light" ? 700 : 200]
+
+  return (
+    <text fg={theme.text.default}>
+      <span style={{ bg: color(), fg: theme.background.default, bold: true }}>{` ${props.type} `}</span>
+      <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}>{` ${props.name} `}</span>
+    </text>
   )
 }
 
