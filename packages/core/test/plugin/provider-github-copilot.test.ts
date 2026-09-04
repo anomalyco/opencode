@@ -131,7 +131,7 @@ describe("GithubCopilotPlugin", () => {
       yield* Effect.promise(() =>
         send("https://api.githubcopilot.com/chat/completions", {
           method: "POST",
-          headers: { "x-api-key": "old" },
+          headers: { "x-api-key": "old", "X-Interaction-Id": "ses_test" },
           body: JSON.stringify({
             messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png" } }] }],
           }),
@@ -143,6 +143,7 @@ describe("GithubCopilotPlugin", () => {
       expect(requests[0]?.get("copilot-vision-request")).toBe("true")
       expect(requests[0]?.get("x-github-api-version")).toBe("2026-08-01")
       expect(requests[0]?.get("user-agent")).toBe("opencode/beta/1.2.3/test")
+      expect(requests[0]?.get("x-interaction-id")).toBe("ses_test")
     }),
   )
 
@@ -156,7 +157,7 @@ describe("GithubCopilotPlugin", () => {
         model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("claude-sonnet-4.5") }),
         request: new Request("https://api.githubcopilot.com/v1/messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": "token" },
+          headers: { "Content-Type": "application/json", "x-api-key": "token", "X-Interaction-Id": "ses_test" },
           body: JSON.stringify({ messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }),
         }),
       })
@@ -165,6 +166,7 @@ describe("GithubCopilotPlugin", () => {
       expect(event.request.headers.get("x-initiator")).toBe("user")
       expect(event.request.headers.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14")
       expect(event.request.headers.get("x-github-api-version")).toBe("2026-08-01")
+      expect(event.request.headers.get("x-interaction-id")).toBe("ses_test")
     }),
   )
 
@@ -172,7 +174,7 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).parent, "build")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent", "X-Interaction-Id": event.sessionID })
     }),
   )
 
@@ -180,7 +182,11 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).child, "build")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-subagent", "x-initiator": "agent" })
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-subagent",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
     }),
   )
 
@@ -188,7 +194,11 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).parent, "title")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-background", "x-initiator": "agent" })
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-background",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
     }),
   )
 
@@ -196,7 +206,26 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).child, "compaction")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-compaction", "x-initiator": "agent" })
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-compaction",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
+    }),
+  )
+
+  it.effect("keeps interaction IDs stable within a session and distinct across sessions", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const session = yield* sessions()
+      const events = yield* Effect.forEach([session.parent, session.parent, session.child], (id) =>
+        modelRequest(id, "build"),
+      )
+      expect(events.map((event) => event.headers["X-Interaction-Id"])).toEqual([
+        session.parent,
+        session.parent,
+        session.child,
+      ])
     }),
   )
 
