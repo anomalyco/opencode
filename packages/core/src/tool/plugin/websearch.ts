@@ -11,6 +11,10 @@ import { WebSearch } from "../../websearch.js"
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
 const providerSelectionLock = Semaphore.makeUnsafe(1)
+const httpErrors = new Map([
+  [429, "Web search rate limited (HTTP 429)"],
+  [401, "Web search authentication failed (HTTP 401)"],
+])
 
 export const description = `Search the web using the user's selected search integration. Use this for current information beyond knowledge cutoff.
 
@@ -119,13 +123,14 @@ export const Plugin = {
                         if (selection?.status === "cancelled")
                           return yield* Effect.fail(new Error("Web search cancelled"))
                         const providerID = selection?.answer.provider ?? "auto"
-                        if (
-                          typeof providerID !== "string" ||
-                          (providerID !== "auto" && !providers.some((provider) => provider.id === providerID))
-                        )
-                          return yield* new WebSearch.ProviderRequiredError()
-                        yield* websearch.select(providerID === "auto" ? "auto" : WebSearch.ID.make(providerID))
-                        if (providerID !== "auto") return WebSearch.ID.make(providerID)
+                        if (providerID === "auto") {
+                          yield* websearch.select("auto")
+                          return
+                        }
+                        const provider = providers.find((provider) => provider.id === providerID)
+                        if (!provider) return yield* new WebSearch.ProviderRequiredError()
+                        yield* websearch.select(provider.id)
+                        return provider.id
                       }),
                     )
                     .pipe(
@@ -158,28 +163,14 @@ export const Plugin = {
                 const fallback = `Unable to search the web for ${input.query}`
                 if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
                 const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
-                switch (status) {
-                  case 429:
-                    return new ToolFailure({
-                      message: "Web search rate limited (HTTP 429)",
-                      error,
-                      metadata: { provider: error.providerID },
-                    })
-                  case 401:
-                    return new ToolFailure({
-                      message: "Web search authentication failed (HTTP 401)",
-                      error,
-                      metadata: { provider: error.providerID },
-                    })
-                  case undefined:
-                    return new ToolFailure({ message: fallback, error, metadata: { provider: error.providerID } })
-                  default:
-                    return new ToolFailure({
-                      message: `Web search request failed (HTTP ${status})`,
-                      error,
-                      metadata: { provider: error.providerID },
-                    })
-                }
+                return new ToolFailure({
+                  message:
+                    status === undefined
+                      ? fallback
+                      : (httpErrors.get(status) ?? `Web search request failed (HTTP ${status})`),
+                  error,
+                  metadata: { provider: error.providerID },
+                })
               }),
             ),
         }),

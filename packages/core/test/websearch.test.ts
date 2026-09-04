@@ -364,6 +364,27 @@ describe("WebSearch", () => {
     }),
   )
 
+  it.effect("uses updated registrations for the sticky provider", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("auto")
+      expect((yield* websearch.query({ query: "original" })).results).toHaveLength(1)
+      const updated = yield* websearch.transform((editor) =>
+        editor.add({
+          id: exa.providerID,
+          name: "Updated Exa",
+          execute: () => Effect.succeed([]),
+        }),
+      )
+      expect(yield* websearch.default()).toEqual({ id: exa.providerID, name: "Updated Exa" })
+      expect((yield* websearch.query({ query: "updated" })).results).toEqual([])
+      yield* updated.dispose
+      expect((yield* websearch.query({ query: "restored" })).results).toHaveLength(1)
+      expect(exa.calls).toEqual([{ query: "original" }, { query: "restored" }])
+    }),
+  )
+
   it.effect("fails when web search is explicitly disabled", () =>
     Effect.gen(function* () {
       yield* register("exa")

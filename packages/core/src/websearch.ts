@@ -115,15 +115,16 @@ const layer = Layer.effect(
 
     const selection = Effect.fn("WebSearch.selection")(function* () {
       const data = state.get()
-      const configured =
-        data.selection === false || data.selection === "auto" || (data.selection && data.providers.has(data.selection))
-          ? data.selection
-          : undefined
-      const stored = configured === undefined ? yield* kv.get(ProviderKey) : undefined
+      if (
+        data.selection === false ||
+        data.selection === "auto" ||
+        (data.selection && data.providers.has(data.selection))
+      )
+        return data.selection
+      const stored = yield* kv.get(ProviderKey)
       const decoded = Schema.decodeUnknownOption(Selection)(stored)
       if (stored !== undefined && Option.isNone(decoded)) yield* kv.remove(ProviderKey)
-      const selection = configured ?? Option.getOrUndefined(decoded)
-      return selection === undefined ? undefined : normalizeSelection(selection)
+      return Option.getOrUndefined(Option.map(decoded, normalizeSelection))
     })
 
     const autoProvider = (now: number, attempted?: Set<ID>) => {
@@ -131,11 +132,12 @@ const layer = Layer.effect(
       cooldowns.forEach((cooldown, id) => {
         if (cooldown.until <= now || !providers.has(id)) cooldowns.delete(id)
       })
+      const current = active === undefined ? undefined : providers.get(active)
+      if (current && !cooldowns.has(current.id) && !attempted?.has(current.id)) return current
       const available = Array.from(providers.values()).filter(
         (provider) => !cooldowns.has(provider.id) && !attempted?.has(provider.id),
       )
-      const provider =
-        available.find((provider) => provider.id === active) ?? available[Math.floor(Math.random() * available.length)]
+      const provider = available[Math.floor(Math.random() * available.length)]
       active = provider?.id
       return provider
     }
@@ -169,45 +171,31 @@ const layer = Layer.effect(
       }),
       query: Effect.fn("WebSearch.query")(function* (input, options) {
         const choice = input.providerID ? undefined : yield* selection()
-        const provider = input.providerID
+        let provider = input.providerID
           ? yield* requireProvider(state.get().providers, input.providerID)
           : yield* defaultProvider(choice)
         if (!provider) return yield* new ProviderRequiredError()
         const attempted = new Set<ID>()
-        const attempt = (provider: ProviderImplementation): Effect.Effect<Response, RequestError> =>
-          Effect.gen(function* () {
-            if (options?.onProvider) yield* options.onProvider({ id: provider.id, name: provider.name })
-            if (choice === "auto") {
-              const cooldown = cooldowns.get(provider.id)
-              const now = yield* Clock.currentTimeMillis
-              if (cooldown && cooldown.until > now) {
-                const next = autoProvider(now, attempted)
-                if (!next) return yield* cooldown.error
-                return yield* attempt(next)
-              }
-            }
+        while (true) {
+          if (options?.onProvider) yield* options.onProvider({ id: provider.id, name: provider.name })
+          let cooldown = choice === "auto" ? cooldowns.get(provider.id) : undefined
+          if (!cooldown || cooldown.until <= (yield* Clock.currentTimeMillis)) {
             attempted.add(provider.id)
-            return yield* provider.execute({ query: input.query }).pipe(
-              Effect.flatMap(decodeResults),
-              Effect.map((results) => new Response({ providerID: provider.id, results })),
-              Effect.catch((cause) =>
-                Effect.gen(function* () {
-                  const error = new RequestError({ providerID: provider.id, cause })
-                  if (choice !== "auto" || !HttpClientError.isHttpClientError(cause) || cause.response?.status !== 429)
-                    return yield* error
-                  const now = yield* Clock.currentTimeMillis
-                  cooldowns.set(provider.id, {
-                    until: now + cooldownMillis(cause.response.headers["retry-after"], now),
-                    error,
-                  })
-                  const next = autoProvider(now, attempted)
-                  if (!next) return yield* error
-                  return yield* attempt(next)
-                }),
-              ),
-            )
-          })
-        return yield* attempt(provider)
+            const result = yield* provider
+              .execute({ query: input.query })
+              .pipe(Effect.flatMap(decodeResults), Effect.result)
+            if (result._tag === "Success") return new Response({ providerID: provider.id, results: result.success })
+            const cause = result.failure
+            const error = new RequestError({ providerID: provider.id, cause })
+            if (choice !== "auto" || !HttpClientError.isHttpClientError(cause) || cause.response?.status !== 429)
+              return yield* error
+            const now = yield* Clock.currentTimeMillis
+            cooldown = { until: now + cooldownMillis(cause.response.headers["retry-after"], now), error }
+            cooldowns.set(provider.id, cooldown)
+          }
+          provider = autoProvider(yield* Clock.currentTimeMillis, attempted)
+          if (!provider) return yield* cooldown.error
+        }
       }),
     })
   }),
