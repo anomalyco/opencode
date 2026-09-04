@@ -445,6 +445,8 @@ export const dict = {
   "mcp.status.connected": "已连接",
   "mcp.status.failed": "失败",
   "mcp.status.needs_auth": "需要授权",
+  "mcp.status.needs_client_registration": "需要客户端注册",
+  "mcp.status.pending": "连接中…",
   "mcp.auth.clickToAuthenticate": "点击进行授权",
   "mcp.status.disabled": "已禁用",
 
@@ -885,6 +887,8 @@ export const dict = {
 
   "settings.tab.mcp": "MCP",
   "settings.mcp.add": "添加服务器",
+  "settings.mcp.type.local": "本地",
+  "settings.mcp.type.remote": "远程",
   "settings.mcp.empty": "尚未配置 MCP 服务器。",
   "settings.mcp.deleted": "已删除 {{name}}。",
   "settings.mcp.errors.refresh": "无法加载 MCP 服务器。",
@@ -911,7 +915,7 @@ export const dict = {
   "settings.mcp.form.oauth": "OAuth",
   "settings.mcp.form.oauth.clientId": "客户端 ID",
   "settings.mcp.form.oauth.clientSecret": "客户端密钥",
-  "settings.mcp.form.oauth.clientSecret.keep": "已配置 — 留空以保留",
+  "settings.mcp.form.oauth.clientSecret.keep": "留空则省略 — 可能需要重新认证",
   "settings.mcp.form.oauth.scope": "作用域",
   "settings.mcp.form.oauth.callbackPort": "回调端口",
   "settings.mcp.form.oauth.disableAutodetect": "禁用 OAuth 自动检测",
@@ -1101,10 +1105,6 @@ export const dict = {
 
   "settings.commands.title": "命令",
   "settings.commands.description": "可在此处配置命令设置。",
-
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "可在此处配置 MCP 设置。",
-
   "settings.permissions.title": "权限",
   "settings.permissions.description": "控制服务器默认可以使用哪些工具。",
   "settings.permissions.section.tools": "工具",
