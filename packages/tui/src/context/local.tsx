@@ -194,6 +194,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
+        const entry = data.location.config
+          .list(location.ref)
+          ?.findLast((entry) => entry.type === "document" && entry.info.model !== undefined)
+        const configured = entry?.type === "document" ? entry.info.model : undefined
+        if (configured) {
+          const model =
+            typeof configured === "string"
+              ? parseModel(configured)
+              : { providerID: configured.providerID, modelID: configured.model }
+          if (isModelValid(model)) return model
+        }
+
         for (const item of preferences.recent) {
           if (isModelValid(item)) {
             return item
