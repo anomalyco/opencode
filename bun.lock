@@ -872,6 +872,7 @@
       "name": "@opencode-ai/tui",
       "version": "1.18.4",
       "dependencies": {
+        "@babel/core": "7.29.7",
         "@opencode-ai/client": "workspace:*",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/latex": "workspace:*",
@@ -899,6 +900,7 @@
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
+        "@types/babel__core": "7.20.5",
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
       },

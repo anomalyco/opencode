@@ -14,10 +14,9 @@ import {
   type ParentProps,
 } from "solid-js"
 import path from "path"
-import { readFile, stat } from "fs/promises"
+import { stat } from "fs/promises"
 import { fileURLToPath } from "url"
 import type { Page } from "@opencode-ai/plugin/tui/context"
-import { Hash } from "@opencode-ai/util/hash"
 import { Host } from "@opencode-ai/plugin/host"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
@@ -31,7 +30,8 @@ import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
 import { createSourceWatcher } from "./watch"
-import { discoverPluginTargets, freshSpecifier, localSource } from "./discovery"
+import { discoverPluginTargets, localSource } from "./discovery"
+import { createPluginSources } from "./source"
 import { isMissingPath } from "../util/config-directories"
 import { createMarkdownRenderer } from "./markdown"
 
@@ -83,7 +83,6 @@ type Registration = {
 type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "options"> & { enabled: boolean }
 
 const PluginContext = createContext<Value>()
-let sourceVersion = Date.now()
 
 export function PluginProvider(props: ParentProps<{ packages: PackageSource; directories: string[] }>) {
   const host = usePluginHost()
@@ -109,15 +108,6 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   // One save can emit several watch events. Remember setup failures so those
   // events do not repeatedly tear down and restore the last good generation.
   const setupFailures = new Map<string, { version: string; options: Registration["options"]; error: string }>()
-  const sourceVersions = new Map<string, { digest: string; generation: number }>()
-  const sourceGeneration = async (entrypoint: string) => {
-    const digest = Hash.sha256(await readFile(new URL(entrypoint)))
-    const previous = sourceVersions.get(entrypoint)
-    if (previous?.digest === digest) return previous.generation
-    const generation = ++sourceVersion
-    sourceVersions.set(entrypoint, { digest, generation })
-    return generation
-  }
   const markdown = createMarkdownRenderer(() =>
     Object.values(store.registrations).flatMap((registration) => (registration.active ? [registration.markdown] : [])),
   )
@@ -241,6 +231,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
     clearTimeout(pending)
     watcher.dispose()
   }
+  const sources = createPluginSources(watcher.wait)
   onCleanup(stopWatching)
 
   // Rebuild the plugin generation as resolve → compare → swap, mirroring the
@@ -304,7 +295,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       const memo = local ? undefined : npmFailures.get(target)
       const resolved = memo
         ? { status: "failed" as const, error: memo }
-        : await resolvePlugin(target, local, options, previous, props.packages, source.install, sourceGeneration).catch(
+        : await resolvePlugin(target, local, options, previous, props.packages, source.install, sources.version).catch(
             (error) => ({
               status: "failed" as const,
               error: errorMessage(error),
@@ -533,6 +524,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
           ),
         )
         .then(() => setStore("registrations", reconcileStore({})))
+        .finally(sources.dispose)
       return disposing
     }
     const unregister = lifecycle.add(dispose)
@@ -605,7 +597,7 @@ async function resolvePlugin(
   previous: Registration | undefined,
   packages: PackageSource,
   install: boolean,
-  sourceGeneration: (entrypoint: string) => Promise<number>,
+  sourceVersion: (entrypoint: string) => Promise<string>,
 ) {
   // Package entrypoints never change within a session, so a loaded previous
   // version needs no re-resolution (which could otherwise hit npm).
@@ -616,18 +608,17 @@ async function resolvePlugin(
   if (!entrypoint) return { status: "unsupported" as const }
   // Content remains stable across the several mtimes one save may expose to
   // filesystem watchers, while the generation keeps reverted modules fresh.
-  let generation = local ? await sourceGeneration(entrypoint) : undefined
+  let version = local ? await sourceVersion(entrypoint) : entrypoint
   while (true) {
-    const version = generation === undefined ? entrypoint : freshSpecifier(entrypoint, generation)
     if (previous && previous.version === version && sameOptions(previous.options, options))
       return { status: "unchanged" as const, plugin: previous.plugin, version }
     const mod = await Host.load(version)
-    if (generation !== undefined) {
-      const observed = await sourceGeneration(entrypoint)
+    if (local) {
+      const observed = await sourceVersion(entrypoint)
       // In-place saves can change the file between hashing and import. Retry
       // so setup always runs under the generation of the imported bytes.
-      if (generation !== observed) {
-        generation = observed
+      if (version !== observed) {
+        version = observed
         continue
       }
     }
