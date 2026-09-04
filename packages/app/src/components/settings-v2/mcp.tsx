@@ -63,7 +63,10 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
     const sdk = serverSdk()
     return {
       list: async () => {
-        if (protocol() === "v1") {
+        // Protocol is undefined while detection is in flight; the SDK `/mcp`
+        // route is the safe default (the promise client's `/api/mcp` only
+        // exists on genuine 1.17-era servers and hangs/404s elsewhere).
+        if (protocol() !== "v2") {
           // Matches server-sync.tsx loadMcpQuery v1 path: legacy.mcp.status()
           const status = await sdk.client.mcp.status(directory())
           return Object.entries(status).map(([name, value]) => ({ name, status: { status: value.status } }))
@@ -330,42 +333,50 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   )
 
   return (
-    <div class="settings-v2-tab-body settings-v2-plugins">
-      <div class="mb-4">
-        <ButtonV2 size="normal" variant="neutral" onClick={onAdd}>
-          {language.t("settings.mcp.add")}
-        </ButtonV2>
-      </div>
-      <Show
-        when={!servers.loading && (servers() ?? []).length > 0}
-        fallback={
-          <div class="settings-v2-plugins-note">
-            <Show when={!servers.loading} fallback={<>{language.t("common.loading")}{language.t("common.loading.ellipsis")}</>}>
-              <Show when={!loadError()} fallback={<>{language.t("settings.mcp.errors.refresh")} {loadError()}</>}>
-                {language.t("settings.mcp.empty")}
-              </Show>
-            </Show>
+    <>
+      <div class="settings-v2-tab-header settings-v2-plugins-header">
+        <div class="settings-v2-tab-header-row">
+          <h2 class="settings-v2-tab-title">{language.t("settings.tab.mcp")}</h2>
+          <div class="flex items-center gap-2">
+            <ButtonV2 size="normal" variant="neutral" onClick={onAdd}>
+              {language.t("settings.mcp.add")}
+            </ButtonV2>
           </div>
-        }
-      >
-        <SettingsListV2>
-          <For each={sorted()}>
-            {(server) => (
-              <SettingsRowV2
-                title={server.name}
-                description={
-                  <Tag variant={statusTagVariant(server.status.status)}>
-                    {language.t(statusKey(server.status.status))}
-                  </Tag>
-                }
-              >
-                {actionRow(server)}
-              </SettingsRowV2>
-            )}
-          </For>
-        </SettingsListV2>
-      </Show>
-    </div>
+        </div>
+      </div>
+
+      <div class="settings-v2-tab-body settings-v2-plugins">
+        <Show
+          when={!servers.loading && (servers() ?? []).length > 0}
+          fallback={
+            <div class="settings-v2-plugins-note">
+              <Show when={!servers.loading} fallback={<>{language.t("common.loading")}{language.t("common.loading.ellipsis")}</>}>
+                <Show when={!loadError()} fallback={<>{language.t("settings.mcp.errors.refresh")} {loadError()}</>}>
+                  {language.t("settings.mcp.empty")}
+                </Show>
+              </Show>
+            </div>
+          }
+        >
+          <SettingsListV2>
+            <For each={sorted()}>
+              {(server) => (
+                <SettingsRowV2
+                  title={server.name}
+                  description={
+                    <Tag variant={statusTagVariant(server.status.status)}>
+                      {language.t(statusKey(server.status.status))}
+                    </Tag>
+                  }
+                >
+                  {actionRow(server)}
+                </SettingsRowV2>
+              )}
+            </For>
+          </SettingsListV2>
+        </Show>
+      </div>
+    </>
   )
 }
 const McpFormFields: Component<{
