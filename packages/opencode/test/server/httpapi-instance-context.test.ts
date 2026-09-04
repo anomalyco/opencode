@@ -189,6 +189,28 @@ describe("HttpApi instance context middleware", () => {
     }),
   )
 
+  it.live("preserves literal percent-encoded sequences in directory paths", () =>
+    Effect.gen(function* () {
+      const parent = yield* tmpdirScoped()
+      const directory = path.join(parent, "User%2e%20Name")
+      yield* Effect.promise(() => mkdir(directory, { recursive: true }))
+      yield* Project.use.fromDirectory(directory)
+      yield* serveProbe()
+
+      const encoded = encodeURIComponent(directory)
+      const query = yield* HttpClient.get(`/probe?directory=${encoded}`)
+      expect(query.status).toBe(200)
+      expect(yield* query.json).toMatchObject({ directory })
+
+      const header = yield* HttpClientRequest.get("/probe").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", encoded),
+        HttpClient.execute,
+      )
+      expect(header.status).toBe(200)
+      expect(yield* header.json).toMatchObject({ directory })
+    }),
+  )
+
   it.live("provides selected workspace id on control-plane routes", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
