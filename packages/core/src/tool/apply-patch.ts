@@ -137,7 +137,14 @@ const layer = Layer.effectDiscard(
                     }
                     if ((yield* fs.stat(target.canonical)).type !== "File") yield* fail(hunk.path)
                     const source = yield* fs.readFile(target.canonical)
-                    const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(source)
+                    let original: string
+                    try {
+                      original = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true }).decode(source)
+                    } catch {
+                      return yield* new ToolFailure({
+                        message: `Unable to apply patch at ${hunk.path}: file is not valid UTF-8`,
+                      })
+                    }
                     const before = original.replace(/^\uFEFF/, "")
                     if (hunk.type === "delete") {
                       prepared.push({ ...hunk, target, before, after: "" })
@@ -152,7 +159,7 @@ const layer = Layer.effectDiscard(
                       before,
                       after: update.content,
                     })
-                  }).pipe(Effect.mapError(() => fail(hunk.path)))
+                  }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail(hunk.path))))
                 }
 
                 const patchFiles = prepared.map(patchFile)
