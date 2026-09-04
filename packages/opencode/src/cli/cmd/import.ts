@@ -1,6 +1,6 @@
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Session } from "@/session/session"
+import { Session, sessionPath } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { CliError, effectCmd } from "../effect-cmd"
 import { Database } from "@opencode-ai/core/database/database"
@@ -8,7 +8,6 @@ import { SessionTable, MessageTable, PartTable } from "@opencode-ai/core/session
 import { InstanceRef } from "@/effect/instance-ref"
 import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
-import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Schema } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
@@ -180,7 +179,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     ...exportData.info,
     projectID: ctx.project.id,
     directory: ctx.directory,
-    path: path.relative(path.resolve(ctx.worktree), ctx.directory).replaceAll("\\", "/"),
+    path: sessionPath(ctx.worktree, ctx.directory),
   }) as Session.Info
   const row = Session.toRow(info)
   yield* db
