@@ -17,8 +17,11 @@ export default Plugin.define({
           return { directory: input.directory }
         },
         async remove(input, { signal }) {
+          const source = await ctx.storage.get(`tree:${input.directory}`)
+          if (typeof source !== "string") throw new Worktree.OperationError({ message: "Worktree source not found" })
+          // Windows cannot remove the working directory of the Git process itself.
           await git(
-            input.directory,
+            source,
             ["worktree", "remove", ...(input.force ? ["--force"] : []), input.directory],
             signal,
             !input.force,
