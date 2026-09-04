@@ -851,16 +851,6 @@ export type SessionUsageRecorded = {
   data: { sessionID: string; source: "title" | "compaction"; cost: MoneyUSD; tokens: TokenUsageInfo }
 }
 
-export type SessionRevertPrepared = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.revert.prepared"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; snapshot?: string; paths: Array<string> }
-}
-
 export type ModelsDevRefreshed = {
   id: string
   created: number
@@ -2242,7 +2232,6 @@ export type SessionEventDurable =
   | SessionRevertCommitted
   | SessionMessageContentUpdated
   | SessionUsageRecorded
-  | SessionRevertPrepared
 
 export type IntegrationInfo = {
   id: string

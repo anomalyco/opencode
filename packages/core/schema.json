@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "82a127a2-4a18-4bf8-91fe-498d94f7f71f",
-  "prevIds": ["be60f352-8da1-40e1-8d70-dc41121cfbc5"],
+  "id": "be60f352-8da1-40e1-8d70-dc41121cfbc5",
+  "prevIds": ["3fb67508-0196-4bae-b2bd-c08ece7583fd"],
   "ddl": [
     {
       "name": "account_state",
@@ -1297,16 +1297,6 @@
       "default": null,
       "generated": null,
       "name": "revert",
-      "entityType": "columns",
-      "table": "session_v2"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "revert_pending",
       "entityType": "columns",
       "table": "session_v2"
     },

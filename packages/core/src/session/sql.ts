@@ -14,8 +14,6 @@ import type { Instruction } from "@opencode-ai/schema/instruction"
 import type { Session } from "@opencode-ai/schema/session"
 import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode-ai/schema/session-inbox"
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
-import type { RelativePath } from "@opencode-ai/schema/schema"
-import type { Snapshot } from "@opencode-ai/schema/snapshot"
 import type { Schema } from "effect"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -51,10 +49,6 @@ export const SessionTable = sqliteTable(
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
     revert: text({ mode: "json" }).$type<Session.Revert | RevertV1>(),
-    revert_pending: text({ mode: "json" }).$type<{
-      readonly snapshot: Snapshot.ID
-      readonly paths: readonly RelativePath[]
-    }>(),
     permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{

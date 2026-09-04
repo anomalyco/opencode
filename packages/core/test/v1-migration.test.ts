@@ -55,7 +55,6 @@ const session = (
   tokens_cache_read: 99,
   tokens_cache_write: 99,
   revert: null,
-  revert_pending: null,
   permission: null,
   agent: null,
   model: null,

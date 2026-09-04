@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { and, asc, eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Event } from "@opencode-ai/schema/event"
@@ -702,117 +702,6 @@ describe("Session-owned handles", () => {
       expect((yield* handle.get()).revert).toBeUndefined()
       expect(yield* fixture.store.context(sessionID)).toEqual([])
       expect(fixture.locations).toHaveLength(acquisitions)
-    }),
-  )
-
-  for (const operation of ["commit", "prompt", "compact"] as const) {
-    it.live(`${operation} accepts failed revert preparation without changing files or deleting history`, () =>
-      Effect.gen(function* () {
-        const fixture = yield* setup({
-          snapshot: () =>
-            Layer.mock(Snapshot.Service, {
-              restore: () => Effect.die("Committed preparation must not restore files"),
-            }),
-        })
-        const handle = fixture.sessions.forSession(sessionID)
-        const boundary = yield* handle.synthetic({ text: "Retain this history", resume: false })
-        yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
-        yield* fixture.bus.publish(SessionEvent.RevertEvent.Prepared, {
-          sessionID,
-          snapshot: Snapshot.ID.make("original"),
-          paths: [RelativePath.make("file.txt")],
-        })
-        const acquisitions = fixture.locations.length
-        if (operation === "commit") yield* handle.revert.commit()
-        if (operation === "prompt") yield* handle.prompt({ text: "Continue from these files", resume: false })
-        if (operation === "compact") yield* handle.compact({})
-        expect(fixture.locations).toHaveLength(acquisitions + (operation === "prompt" ? 1 : 0))
-        expect(yield* fixture.store.hasPendingRevert(sessionID)).toBe(false)
-        expect((yield* handle.get()).revert).toBeUndefined()
-        expect(yield* fixture.store.context(sessionID)).toMatchObject([{ id: boundary.id }])
-        const events = yield* fixture.db
-          .select({ type: EventTable.type })
-          .from(EventTable)
-          .where(eq(EventTable.aggregate_id, sessionID))
-          .orderBy(asc(EventTable.seq))
-          .all()
-          .pipe(Effect.orDie)
-        expect(events.at(-1)?.type).toBe(
-          operation === "commit" ? "session.revert.cleared.1" : "session.inbox.enqueued.1",
-        )
-        yield* handle.revert.clear()
-      }),
-    )
-  }
-
-  it.live("does not wake pending recovery when retrying an already admitted prompt", () =>
-    Effect.gen(function* () {
-      const fixture = yield* setup()
-      const handle = fixture.sessions.forSession(sessionID)
-      const input = { id: SessionMessage.ID.create(), text: "Existing input" }
-      yield* handle.prompt({ ...input, resume: false })
-      yield* fixture.bus.publish(SessionEvent.RevertEvent.Prepared, {
-        sessionID,
-        snapshot: Snapshot.ID.make("original"),
-        paths: [RelativePath.make("file.txt")],
-      })
-      yield* handle.prompt(input)
-      expect(yield* fixture.store.hasPendingRevert(sessionID)).toBe(true)
-      expect(fixture.wakes).toEqual([])
-    }),
-  )
-
-  it.live("does not wake pending recovery when retrying an already admitted compaction", () =>
-    Effect.gen(function* () {
-      const fixture = yield* setup()
-      const handle = fixture.sessions.forSession(sessionID)
-      const input = { id: SessionMessage.ID.create() }
-      yield* handle.compact(input)
-      const wakes = fixture.wakes.length
-      yield* fixture.bus.publish(SessionEvent.RevertEvent.Prepared, {
-        sessionID,
-        snapshot: Snapshot.ID.make("original"),
-        paths: [RelativePath.make("file.txt")],
-      })
-      yield* handle.compact(input)
-      expect(yield* fixture.store.hasPendingRevert(sessionID)).toBe(true)
-      expect(fixture.wakes).toHaveLength(wakes)
-    }),
-  )
-
-  it.live("retains failed revert preparation without waking for synthetic notices", () =>
-    Effect.gen(function* () {
-      const fixture = yield* setup()
-      const handle = fixture.sessions.forSession(sessionID)
-      yield* fixture.bus.publish(SessionEvent.RevertEvent.Prepared, {
-        sessionID,
-        snapshot: Snapshot.ID.make("original"),
-        paths: [RelativePath.make("file.txt")],
-      })
-      yield* handle.synthetic({ text: "Background notice" })
-      expect(yield* fixture.store.hasPendingRevert(sessionID)).toBe(true)
-      expect(fixture.wakes).toEqual([])
-    }),
-  )
-
-  it.live("retains failed revert preparation when new prompt preparation is interrupted", () =>
-    Effect.gen(function* () {
-      const fixture = yield* setup()
-      const handle = fixture.sessions.forSession(sessionID)
-      yield* fixture.bus.publish(SessionEvent.RevertEvent.Prepared, {
-        sessionID,
-        snapshot: Snapshot.ID.make("original"),
-        paths: [RelativePath.make("file.txt")],
-      })
-      const entered = yield* Deferred.make<void>()
-      yield* fixture.hooks.register("session", "prompt", () =>
-        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
-      )
-      const prompt = yield* handle.prompt({ text: "Not admitted" }).pipe(Effect.forkScoped)
-      yield* Deferred.await(entered)
-      yield* Fiber.interrupt(prompt)
-      expect(yield* fixture.store.hasPendingRevert(sessionID)).toBe(true)
-      expect(yield* handle.inbox()).toEqual([])
     }),
   )
 

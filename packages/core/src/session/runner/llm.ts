@@ -58,8 +58,6 @@ const layer = Layer.effect(
         const control = pending.type === "compaction" || pending.type === "move"
         if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
-      // Retried admissions and explicit resumes must not overwrite a protected undo baseline.
-      if (yield* store.hasPendingRevert(sessionID)) return DrainResult.Complete()
       yield* plugins.awaitActivation
       yield* settleStaleToolCalls(sessionID)
 

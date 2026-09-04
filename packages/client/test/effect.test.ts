@@ -282,49 +282,6 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
 })
 
-test("session.log decodes revert preparation and subsequent path deltas", async () => {
-  const data = [
-    { sessionID: "ses_test", snapshot: "original", paths: ["first.txt"] },
-    { sessionID: "ses_test", paths: ["second.txt"] },
-  ]
-  const httpClient = HttpClient.make((request) =>
-    Effect.succeed(
-      HttpClientResponse.fromWeb(
-        request,
-        new Response(
-          data
-            .map(
-              (data, seq) =>
-                `data: ${JSON.stringify({
-                  id: `evt_prepared_${seq}`,
-                  created: 1,
-                  type: "session.revert.prepared",
-                  durable: { aggregateID: "ses_test", seq, version: 1 },
-                  data,
-                })}\n\n`,
-            )
-            .join(""),
-          { headers: { "content-type": "text/event-stream" } },
-        ),
-      ),
-    ),
-  )
-  const result = await Effect.gen(function* () {
-    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
-    return yield* client.session.log({ sessionID: Session.ID.make("ses_test") }).pipe(Stream.runCollect)
-  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
-
-  expect(
-    result.map((event) => {
-      if (event.type !== "session.revert.prepared") throw new Error("Expected revert preparation")
-      return { snapshot: event.data.snapshot?.toString(), paths: event.data.paths.map(String) }
-    }),
-  ).toEqual([
-    { snapshot: "original", paths: ["first.txt"] },
-    { snapshot: undefined, paths: ["second.txt"] },
-  ])
-})
-
 test("session.log retains the typed SessionNotFoundError", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(

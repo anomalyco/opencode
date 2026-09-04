@@ -24,7 +24,6 @@ import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
 import { ProjectTable } from "../project/sql.js"
-import { Snapshot } from "@opencode-ai/schema/snapshot"
 
 type DatabaseService = Database.Interface["db"]
 type MessageEvent = Exclude<
@@ -34,7 +33,6 @@ type MessageEvent = Exclude<
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
-const decodePaths = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(RelativePath)))
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -633,13 +631,7 @@ const layer = Layer.effectDiscard(
         })
         yield* db
           .update(SessionTable)
-          .set({
-            time_updated: event.created,
-            // New user work accepts failed preparation; synthetic notices do not.
-            ...(event.data.item.type === "user" || event.data.item.type === "compaction"
-              ? { revert_pending: null }
-              : {}),
-          })
+          .set({ time_updated: event.created })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
@@ -704,42 +696,6 @@ const layer = Layer.effectDiscard(
       }),
     )
     yield* bus.project(SessionEvent.Compaction.Failed, (event) => run(db, event))
-    yield* bus.project(SessionEvent.RevertEvent.Prepared, (event) =>
-      Effect.gen(function* () {
-        const row = yield* db
-          .select({
-            pending: SessionTable.revert_pending,
-            // Keep patch payloads inside SQLite; a pending record already contains all needed metadata.
-            snapshot: sql<
-              string | null
-            >`case when ${SessionTable.revert_pending} is null then json_extract(${SessionTable.revert}, '$.snapshot') end`,
-            paths: sql<string | null>`case when ${SessionTable.revert_pending} is null then (
-              select json_group_array(coalesce(json_extract(value, '$.file'), json_extract(value, '$.path')))
-              from json_each(${SessionTable.revert}, '$.files')
-            ) end`,
-          })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, event.data.sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        const snapshot = row?.pending?.snapshot ?? row?.snapshot ?? event.data.snapshot
-        if (!snapshot) return yield* Effect.die(new Error("Revert preparation requires an original snapshot"))
-        return yield* db
-          .update(SessionTable)
-          .set({
-            revert_pending: {
-              snapshot: Snapshot.ID.make(snapshot),
-              paths: Array.from(
-                new Set([...(row?.pending?.paths ?? decodePaths(row?.paths ?? "[]")), ...event.data.paths]),
-              ),
-            },
-            time_updated: sql`${SessionTable.time_updated}`,
-          })
-          .where(eq(SessionTable.id, event.data.sessionID))
-          .run()
-          .pipe(Effect.orDie, Effect.asVoid)
-      }),
-    )
     yield* bus.project(SessionEvent.RevertEvent.Staged, (event) =>
       Effect.gen(function* () {
         const revert = event.data.revert
@@ -747,7 +703,6 @@ const layer = Layer.effectDiscard(
           .update(SessionTable)
           .set({
             revert: { ...revert, files: revert.files ? [...revert.files] : undefined },
-            revert_pending: null,
             time_updated: event.created,
           })
           .where(eq(SessionTable.id, event.data.sessionID))
@@ -758,7 +713,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.RevertEvent.Cleared, (event) =>
       db
         .update(SessionTable)
-        .set({ revert: null, revert_pending: null, time_updated: event.created })
+        .set({ revert: null, time_updated: event.created })
         .where(eq(SessionTable.id, event.data.sessionID))
         .run()
         .pipe(Effect.orDie, Effect.asVoid),
@@ -793,7 +748,7 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         yield* db
           .update(SessionTable)
-          .set({ revert: null, revert_pending: null, time_updated: event.created })
+          .set({ revert: null, time_updated: event.created })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
