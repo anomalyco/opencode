@@ -1,11 +1,15 @@
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Cause, Clock, Duration, Effect, Schedule } from "effect"
+import { Cause, Clock, Duration, Effect, Schedule, Schema } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
 import { isRecord } from "@/util/record"
 
 export type Err = ReturnType<NamedError["toObject"]>
+
+export class EmptyResponseError extends Schema.TaggedErrorClass<EmptyResponseError>()("SessionEmptyResponseError", {
+  message: Schema.String,
+}) {}
 
 export const GO_UPSELL_MESSAGE = "Free usage exceeded, subscribe to Go"
 export const GO_UPSELL_URL = "https://opencode.ai/go"
@@ -188,7 +192,8 @@ export function policy(opts: {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
-      const retry = retryable(error, opts.provider)
+      const retry =
+        meta.input instanceof EmptyResponseError ? { message: meta.input.message } : retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
       if (meta.attempt > RETRY_MAX_RETRIES) return Cause.done(meta.attempt)
       return Effect.gen(function* () {

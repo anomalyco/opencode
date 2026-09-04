@@ -650,14 +650,30 @@ const layer = Layer.effect(
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
+            let generated = false
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
+              Stream.tap((event) => {
+                if (
+                  (event.type === "text-delta" && event.text.length > 0) ||
+                  (event.type === "reasoning-delta" && event.text.length > 0) ||
+                  event.type === "tool-input-start" ||
+                  event.type === "tool-call"
+                ) {
+                  generated = true
+                }
+                return handleEvent(event)
+              }),
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
+            if (ctx.assistantMessage.finish === "unknown" && !generated) {
+              yield* new SessionRetry.EmptyResponseError({
+                message: "The model returned an empty response with an unknown finish reason",
+              })
+            }
           }).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
