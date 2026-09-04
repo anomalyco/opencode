@@ -751,6 +751,7 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
     const defaultModelStarted = performance.now()
     const defaultModel = defaultModelFromConfig(configResponse?.data?.model, providers)
     ACPProfile.duration("acp.directory.defaultModel.resolve", defaultModelStarted, { configured: !!defaultModel })
+    const defaultAgent = agents.find((agent) => agent.mode !== "subagent" && agent.hidden !== true)
     const modes = agents
       .filter((agent) => agent.mode !== "subagent" && agent.hidden !== true)
       .map((agent) => ({
@@ -775,9 +776,15 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
       directory,
       providers,
       modes,
-      defaultModeID: agents.find((agent) => agent.mode === "primary" && agent.hidden !== true)?.name ?? "build",
+      defaultModeID: defaultAgent?.name ?? "build",
       commands: commands.toSorted((a, b) => a.name.localeCompare(b.name)),
       ...(defaultModel ? { defaultModel } : {}),
+      ...(defaultModel &&
+      defaultAgent?.model?.providerID === defaultModel.providerID &&
+      defaultAgent.model.modelID === defaultModel.modelID &&
+      defaultAgent.variant
+        ? { defaultVariant: defaultAgent.variant }
+        : {}),
     })
   })
 }
@@ -895,6 +902,13 @@ function sendUsageUpdate(
 function selectVariant(snapshot: Directory.Snapshot, model: Directory.DefaultModel) {
   const variants = Directory.variants(snapshot, model)
   if (!variants) return
+  if (
+    snapshot.defaultModel?.providerID === model.providerID &&
+    snapshot.defaultModel.modelID === model.modelID &&
+    snapshot.defaultVariant &&
+    variants[snapshot.defaultVariant]
+  )
+    return snapshot.defaultVariant
   if (variants.default) return "default"
   return Object.keys(variants)[0]
 }

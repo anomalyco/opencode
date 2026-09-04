@@ -196,6 +196,12 @@ describe("ACP service sessions", () => {
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
       sessionUpdate?: (update: SessionNotification) => Promise<void>
+      configuredModel?: string
+      defaultAgent?: {
+        model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
+        mode?: "primary" | "all"
+        variant: string
+      }
     },
   ) => {
     const updates: SessionNotification[] = []
@@ -219,13 +225,13 @@ describe("ACP service sessions", () => {
       },
       config: {
         providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
-        get: () => Promise.resolve({ data: {} }),
+        get: () => Promise.resolve({ data: options?.configuredModel ? { model: options.configuredModel } : {} }),
       },
       app: {
         agents: () =>
           Promise.resolve({
             data: [
-              { name: "build", mode: "primary", permission: [], options: {} },
+              { name: "build", mode: "primary", permission: [], options: {}, ...options?.defaultAgent },
               { name: "plan", mode: "primary", description: "Plan first", permission: [], options: {} },
               { name: "hidden", mode: "primary", hidden: true, permission: [], options: {} },
             ],
@@ -355,6 +361,21 @@ describe("ACP service sessions", () => {
     expect(JSON.stringify(updates[0])).toContain("available_commands_update")
     expect(JSON.stringify(updates[0])).toContain("review-skill")
     expect(mcpAdds).toEqual(["tools"])
+  })
+
+  it("uses the default agent variant for a matching configured model", async () => {
+    const { service } = makeService([], {
+      configuredModel: `${providerID}/${secondModelID}`,
+      defaultAgent: {
+        model: { providerID, modelID: secondModelID },
+        mode: "all",
+        variant: "medium",
+      },
+    })
+    const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(select(result, "model")?.currentValue).toBe(`${providerID}/${secondModelID}`)
+    expect(select(result, "effort")?.currentValue).toBe("medium")
   })
 
   it("loads a session and restores model variant and mode from messages", async () => {
