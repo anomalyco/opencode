@@ -133,7 +133,7 @@ describe("Runner", () => {
       expect(runner.busy).toBe(true)
       expect(runner.state._tag).toBe("Running")
 
-      yield* runner.cancel
+      expect(yield* runner.cancel).toBe(true)
       expect(runner.busy).toBe(false)
 
       const exit = yield* Fiber.await(fiber)
@@ -146,8 +146,22 @@ describe("Runner", () => {
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
-      yield* runner.cancel
+      expect(yield* runner.cancel).toBe(false)
       expect(runner.busy).toBe(false)
+    }),
+  )
+
+  it.live(
+    "admit reserves a run before returning control",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s)
+      const admitted = yield* runner.admit(Effect.never.pipe(Effect.as("never")))
+
+      expect(runner.busy).toBe(true)
+      expect(yield* runner.cancel).toBe(true)
+      const exit = yield* admitted.pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
     }),
   )
 

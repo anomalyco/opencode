@@ -3,9 +3,11 @@ import { Cause, Deferred, Effect, Exit, Fiber, Latch, Schema, Scope, Synchronize
 export interface Runner<A, E = never> {
   readonly state: State<A, E>
   readonly busy: boolean
+  readonly admit: (work: Effect.Effect<A, E>) => Effect.Effect<Effect.Effect<A, E>>
   readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
+  readonly admitShell: (work: Effect.Effect<A, E>, ready?: Latch.Latch) => Effect.Effect<Effect.Effect<A, E | Busy>>
   readonly startShell: (work: Effect.Effect<A, E>, ready?: Latch.Latch) => Effect.Effect<A, E | Busy>
-  readonly cancel: Effect.Effect<void>
+  readonly cancel: Effect.Effect<boolean>
 }
 
 export class Cancelled extends Schema.TaggedErrorClass<Cancelled>()("RunnerCancelled", {}) {}
@@ -112,7 +114,7 @@ export const make = <A, E = never>(
       yield* Fiber.interrupt(shell.fiber)
     })
 
-  const ensureRunning = (work: Effect.Effect<A, E>) =>
+  const admit = (work: Effect.Effect<A, E>) =>
     SynchronizedRef.modifyEffect(
       ref,
       Effect.fnUntraced(function* (st) {
@@ -135,9 +137,11 @@ export const make = <A, E = never>(
           }
         }
       }),
-    ).pipe(Effect.flatten)
+    )
 
-  const startShell = (work: Effect.Effect<A, E>, ready?: Latch.Latch): Effect.Effect<A, E | Busy> =>
+  const ensureRunning = (work: Effect.Effect<A, E>) => admit(work).pipe(Effect.flatten)
+
+  const admitShell = (work: Effect.Effect<A, E>, ready?: Latch.Latch) =>
     SynchronizedRef.modifyEffect(
       ref,
       Effect.fnUntraced(function* (st) {
@@ -166,19 +170,22 @@ export const make = <A, E = never>(
           { _tag: "Shell", shell },
         ] as const
       }),
-    ).pipe(Effect.flatten)
+    )
+
+  const startShell = (work: Effect.Effect<A, E>, ready?: Latch.Latch): Effect.Effect<A, E | Busy> =>
+    admitShell(work, ready).pipe(Effect.flatten)
 
   const cancel = SynchronizedRef.modify(ref, (st) => {
     switch (st._tag) {
       case "Idle":
-        return [Effect.void, st] as const
+        return [Effect.succeed(false), st] as const
       case "Running":
         return [
           Effect.gen(function* () {
             yield* Fiber.interrupt(st.run.fiber)
             yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
             yield* idleIfCurrent()
-          }),
+          }).pipe(Effect.as(true)),
           { _tag: "Idle" } as const,
         ] as const
       case "Shell":
@@ -186,7 +193,7 @@ export const make = <A, E = never>(
           Effect.gen(function* () {
             yield* stopShell(st.shell)
             yield* idleIfCurrent()
-          }),
+          }).pipe(Effect.as(true)),
           { _tag: "Idle" } as const,
         ] as const
       case "ShellThenRun":
@@ -195,7 +202,7 @@ export const make = <A, E = never>(
             yield* stopShell(st.shell)
             yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
             yield* idleIfCurrent()
-          }),
+          }).pipe(Effect.as(true)),
           { _tag: "Idle" } as const,
         ] as const
     }
@@ -208,7 +215,9 @@ export const make = <A, E = never>(
     get busy() {
       return state()._tag !== "Idle"
     },
+    admit,
     ensureRunning,
+    admitShell,
     startShell,
     cancel,
   }
