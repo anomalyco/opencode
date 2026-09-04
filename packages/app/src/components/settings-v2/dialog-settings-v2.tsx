@@ -9,6 +9,7 @@ import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import { SettingsPluginsV2 } from "./plugins"
+import { SettingsMcpV2 } from "./mcp"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -72,6 +73,10 @@ export const DialogSettings: Component<{
                         {language.t("settings.tab.plugins")}
                       </TabsV2.Trigger>
                     </Show>
+                    <TabsV2.Trigger value="mcp">
+                      <Icon name="server" />
+                      {language.t("settings.tab.mcp")}
+                    </TabsV2.Trigger>
                   </div>
                 </div>
 
@@ -120,6 +125,9 @@ export const DialogSettings: Component<{
             <SettingsPluginsV2 />
           </TabsV2.Content>
         </Show>
+        <TabsV2.Content value="mcp" class="settings-v2-panel">
+          <SettingsMcpV2 directory={directory()} />
+        </TabsV2.Content>
       </TabsV2>
     </Dialog>
   )
