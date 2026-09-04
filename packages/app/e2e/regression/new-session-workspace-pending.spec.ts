@@ -26,6 +26,72 @@ for (const viewport of [
   { name: "desktop", width: 1280, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    test(`keeps the normal composer while creating a worktree on ${viewport.name} in ${colorScheme}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize(viewport)
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" })
+      const mock = await openDraft(page)
+      const composer = page.locator('[data-component="composer"]')
+      const editor = page.getByRole("textbox", { name: "Prompt", exact: true })
+      const submit = page.locator('[data-action="composer-submit"]')
+      const placeholder = composer.getByText("Add follow-up, / for commands, @ for context…", { exact: true })
+      await expect(composer.getByText("Ask anything, / for commands, @ for context…", { exact: true })).toBeVisible()
+      const background = await composer.evaluate((element) => getComputedStyle(element).backgroundColor)
+      const pending = await submitPending(page, mock)
+      await expect(editor).toBeEmpty()
+      await expect(editor).toBeFocused()
+      await expect(editor).toHaveCSS("opacity", "1")
+      await testInfo.attach("pending-empty", {
+        body: await page.screenshot({ path: testInfo.outputPath("pending-empty.png") }),
+        contentType: "image/png",
+      })
+      await expect.soft(composer).toHaveCSS("background-color", background)
+      await expect.soft(placeholder).toBeVisible()
+
+      const followUp = Array.from(
+        { length: 18 },
+        (_, index) => `Step ${index + 1}: explain the setup and its expected output.`,
+      ).join("\n")
+      await draftFollowUp(page, followUp)
+      await editor.press("ControlOrMeta+End")
+      await expect(submit).toBeDisabled()
+      await editor.press("Enter")
+      await editor.press("ControlOrMeta+Enter")
+      await expect(editor).toHaveText(followUp)
+      await expect(editor).toBeFocused()
+      expect(mock.calls).toEqual(["worktree"])
+      await testInfo.attach("pending-long-draft", {
+        body: await page.screenshot({ path: testInfo.outputPath("pending-long-draft.png") }),
+        contentType: "image/png",
+      })
+
+      mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+      await expect(pending.shimmer).toHaveCount(0)
+      await expect(submit).toBeEnabled()
+      await expect(editor).toHaveText(followUp)
+      await expect(editor).toBeFocused()
+      await expect(composer).toHaveCSS("background-color", background)
+      await expect
+        .poll(() => mock.prompts)
+        .toEqual([{ sessionID: pending.sessionID, body: expect.objectContaining({ id: pending.messageID, text }) }])
+      await editor.fill("")
+      await expect(placeholder).toBeVisible()
+      await expect(submit).toHaveAccessibleName("Stop")
+      await editor.press("ControlOrMeta+V")
+      await expect(editor).toHaveText(followUp)
+      await expect(submit).toBeEnabled()
+      await submit.click()
+      await expect
+        .poll(() => mock.prompts)
+        .toEqual([
+          { sessionID: pending.sessionID, body: expect.objectContaining({ id: pending.messageID, text }) },
+          { sessionID: pending.sessionID, body: expect.objectContaining({ text: followUp }) },
+        ])
+    })
+  }
+
   test(`keeps Session in the tab until the generated title arrives on ${viewport.name}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport)
     const mock = await openDraft(page, { untitled: true })
@@ -438,15 +504,15 @@ test("executes a selected slash command after creating its worktree", async ({ p
   })
 })
 
-async function draftFollowUp(page: Page) {
+async function draftFollowUp(page: Page, text = followUp) {
   const editor = page.locator('[data-component="composer-editor"]')
   await editor.pressSequentially("!")
   await expect(editor).toHaveText("!")
   await expect(editor).toHaveAttribute("dir", "auto")
   await editor.fill("")
-  await page.evaluate((text) => navigator.clipboard.writeText(text), followUp)
+  await page.evaluate((text) => navigator.clipboard.writeText(text), text)
   await editor.press("ControlOrMeta+V")
-  await expect(editor).toHaveText(followUp)
+  await expect(editor).toHaveText(text)
 }
 
 async function openDraft(

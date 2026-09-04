@@ -20,7 +20,7 @@ export function PreparingComposer(props: { pending: PendingSession }) {
     },
     view: {
       draftOnly: true,
-      placeholder: () => language.t("session.new.worktree.draftPlaceholder"),
+      placeholder: () => language.t("ui.promptInput.placeholder.followUp", { slash: "/", at: "@" }),
       submit: { stopping: () => false, onSubmit() {}, onStop() {} },
     },
   })

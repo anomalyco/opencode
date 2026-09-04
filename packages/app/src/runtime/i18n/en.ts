@@ -749,7 +749,6 @@ export const dict = {
   "session.new.worktree.mainWithBranch": "Main branch ({{branch}})",
   "session.new.worktree.create": "Create new worktree",
   "session.new.worktree.creating": "Creating worktree",
-  "session.new.worktree.draftPlaceholder": "Draft a follow-up while the worktree is being prepared…",
   "session.new.workspace.runIn": "Run session in",
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
