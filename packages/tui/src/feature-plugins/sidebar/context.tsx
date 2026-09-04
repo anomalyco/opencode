@@ -16,6 +16,13 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
   const state = createMemo(() =>
     contextUsage(msg(), props.context.data.location.model.list(session()?.location), session()?.revert?.messageID),
   )
+  const cacheRate = createMemo(() => {
+    const current = session()
+    if (!current) return undefined
+    const totalInput = current.tokens.input + current.tokens.cache.read
+    if (totalInput === 0) return undefined
+    return Math.round((current.tokens.cache.read / totalInput) * 100)
+  })
 
   return (
     <Show when={state() || cost() > 0}>
@@ -32,6 +39,9 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
               </Show>
             </>
           )}
+        </Show>
+        <Show when={cacheRate() !== undefined}>
+          <text fg={theme.text.subdued}>{cacheRate()}% cache ratio</text>
         </Show>
         <Show when={cost() > 0}>
           <text fg={theme.text.subdued}>{money.format(cost())} spent</text>
