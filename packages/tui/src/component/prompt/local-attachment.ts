@@ -46,14 +46,14 @@ export async function resolvePastedAttachments(text: string, platform: string) {
   }
 
   return attachments.map((item) => {
-    const filename = path.basename(item.filepath)
+    const filename = path.resolve(item.filepath)
     if (item.attachment.type === "text") {
-      return { type: "text" as const, content: item.attachment.content, filename }
+      return { type: "text" as const, content: `Attached file: ${filename}\n\n${item.attachment.content}`, filename }
     }
     return {
       type: "file" as const,
       uri: `data:${item.attachment.mime};base64,${Buffer.from(item.attachment.content).toString("base64")}`,
-      filename: item.filepath,
+      filename,
     }
   })
 }

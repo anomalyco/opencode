@@ -102,6 +102,21 @@ describe("prompt local attachments", () => {
     }
   })
 
+  test.each(["avif", "gif", "jpeg", "jpg", "pdf", "png", "webp"])(
+    "retains an absolute path for dropped %s files",
+    async (extension) => {
+      await using tmp = await tmpdir()
+      const file = path.join(tmp.path, `one image.${extension}`)
+      await Bun.write(file, new Uint8Array([1, 2, 3]))
+
+      for (const input of [file, path.relative(process.cwd(), file)]) {
+        expect(await resolvePastedAttachments(`"${input}"`, process.platform)).toMatchObject([
+          { type: "file", filename: file },
+        ])
+      }
+    },
+  )
+
   test("resolves quoted paths and URI lists as ordered attachments", async () => {
     await using tmp = await tmpdir()
     const image = path.join(tmp.path, "one image.png")
@@ -137,14 +152,14 @@ describe("prompt local attachments", () => {
     }
   })
 
-  test("resolves SVG files as text with the original content", async () => {
+  test("includes the SVG path before its original text content", async () => {
     await using tmp = await tmpdir()
     const file = path.join(tmp.path, "image.svg")
     const content = "<svg />\r\n"
     await Bun.write(file, content)
 
     expect(await resolvePastedAttachments(file, process.platform)).toEqual([
-      { type: "text", content, filename: "image.svg" },
+      { type: "text", content: `Attached file: ${file}\n\n${content}`, filename: file },
     ])
   })
 
@@ -160,7 +175,7 @@ describe("prompt local attachments", () => {
 
     expect(await resolvePastedAttachments(`${image} ${svg}`, process.platform)).toMatchObject([
       { type: "file", filename: image },
-      { type: "text", content, filename: "image.svg" },
+      { type: "text", content: `Attached file: ${svg}\n\n${content}`, filename: svg },
     ])
     await Bun.write(svg, content + " ")
     expect(await resolvePastedAttachments(`${image} ${svg}`, process.platform)).toBeUndefined()
