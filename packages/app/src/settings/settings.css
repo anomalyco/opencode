@@ -1029,23 +1029,90 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 20px;
-  border-radius: 6px;
-  background-color: var(--v2-background-bg-base);
+  padding: 16px;
+  border-radius: 8px;
+  background-color: var(--v2-background-bg-layer-01);
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+}
+
+.settings-workspaces-inventory[data-empty="true"] [data-component="settings-list"] {
+  padding: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.settings-workspaces-row-motion {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  opacity: 1;
+  transition:
+    grid-template-rows 150ms ease-out,
+    opacity 120ms ease-out;
+}
+
+.settings-workspaces-row-motion[data-removing="true"] {
+  grid-template-rows: minmax(0, 0fr);
+  opacity: 0;
 }
 
 .settings-workspaces-row {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
+  transition:
+    padding-bottom 150ms ease-out,
+    margin-bottom 150ms ease-out,
+    border-color 120ms ease-out;
 }
 
-.settings-workspaces-row:not(:last-child) {
+.settings-workspaces-row-motion:not(:last-child) > .settings-workspaces-row {
   padding-bottom: 20px;
   margin-bottom: 20px;
   border-bottom: 0.5px solid var(--v2-border-border-base);
+}
+
+.settings-workspaces-row-motion:has(+ .settings-workspaces-row-motion[data-removing="true"]:last-child)
+  > .settings-workspaces-row {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-color: transparent;
+}
+
+.settings-workspaces-empty-motion {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 0fr);
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    grid-template-rows 150ms ease-out,
+    opacity 120ms ease-out;
+}
+
+.settings-workspaces-empty-motion[data-visible="true"] {
+  grid-template-rows: minmax(0, 1fr);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.settings-workspaces-empty-motion > .settings-workspaces-empty {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-workspaces-row-motion {
+    transition: none;
+  }
+
+  .settings-workspaces-row,
+  .settings-workspaces-empty-motion {
+    transition: none;
+  }
 }
 
 .settings-workspaces-row-header {
@@ -1088,7 +1155,7 @@
   color: var(--v2-text-text-base);
   font-family: inherit;
   font-size: 13px;
-  font-weight: 530;
+  font-weight: 440;
   line-height: var(--line-height-compact);
   letter-spacing: -0.04px;
   text-overflow: ellipsis;
@@ -1098,11 +1165,20 @@
   cursor: default;
 }
 
+.settings-workspaces-path-name {
+  color: var(--v2-text-text-base);
+  font-weight: 530;
+}
+
 .settings-workspaces-meta {
   font-size: 13px;
   font-weight: 440;
   line-height: var(--line-height-compact);
   color: var(--v2-text-text-faint);
+}
+
+.settings-workspaces-meta-project {
+  color: var(--v2-text-text-muted);
 }
 
 .settings-workspaces-active,
@@ -1114,11 +1190,16 @@
   color: var(--v2-text-text-faint);
 }
 
+.settings-workspaces-active {
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
 .settings-workspaces-sessions {
   display: flex;
   flex-direction: column;
   border: 0.5px solid var(--v2-border-border-base);
-  border-radius: 4px;
+  border-radius: 6px;
   background-color: var(--v2-background-bg-base);
   overflow: hidden;
 }
@@ -1129,7 +1210,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
+  padding-block: 10px;
+  padding-inline: 12px 16px;
   font-size: 13px;
   font-weight: 440;
   line-height: 16px;
@@ -1149,20 +1231,26 @@
 
 .settings-workspaces-session-time {
   flex-shrink: 0;
-  font-size: 11px;
-  line-height: 1;
-  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  color: var(--v2-text-text-faint);
 }
 
 .settings-workspaces-empty {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-block: 48px;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   font-size: 13px;
   font-weight: 440;
   line-height: var(--line-height-compact);
   color: var(--v2-text-text-muted);
+}
+
+.settings-workspaces-empty-title {
+  color: var(--v2-text-text-base);
+  font-weight: 530;
 }
 
 @media (max-width: 639px) {

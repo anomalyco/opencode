@@ -1,5 +1,5 @@
 import { debounce } from "@solid-primitives/scheduled"
-import { createEffect, createMemo, createResource } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
@@ -11,8 +11,8 @@ import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
 import {
   isWorkspaceDirectory,
   isWorkspaceSelection,
+  sameDirectory,
   workspaceDefaultSelection,
-  workspaceDirectories,
   workspaceSelectionDestination,
 } from "@/workspaces/paths"
 
@@ -56,6 +56,45 @@ export function createNewSessionWorkspaceController(input: {
     const current = projectID ? data.project.get(projectID) : undefined
     return current ? normalizeProjectInfo(current) : undefined
   })
+  const [worktrees, worktreeActions] = createResource(
+    () => currentProject()?.id,
+    async (projectID) => ({
+      projectID,
+      items: await serverSDK.api.worktree
+        .list({ projectID })
+        .catch(() => (currentProject()?.id === projectID ? currentProject()?.worktrees : undefined) ?? []),
+    }),
+  )
+  onCleanup(
+    serverSDK.event.listen((event) => {
+      if (event.type === "worktree.updated") void worktreeActions.refetch()
+    }),
+  )
+  const worktreeItems = createMemo(() => {
+    const project = currentProject()
+    if (!project) return []
+    const loaded = worktrees.latest
+    return loaded?.projectID === project.id ? loaded.items : project.worktrees
+  })
+  const worktreeDirectories = createMemo(() => {
+    const project = currentProject()
+    if (!project) return []
+    const directories = [
+      ...worktreeItems().map((item) => item.directory),
+      ...project.worktrees.map((item) => item.directory),
+      ...(project.sandboxes ?? []),
+    ]
+    return directories
+      .filter((directory) => !sameDirectory(project.worktree, directory))
+      .filter((directory, index, items) => items.findIndex((item) => sameDirectory(item, directory)) === index)
+  })
+  const managedWorktrees = createMemo(() => {
+    const project = currentProject()
+    if (!project) return 0
+    return worktreeItems().filter(
+      (item) => item.strategy !== undefined && !sameDirectory(project.worktree, item.directory),
+    ).length
+  })
   const visible = createMemo(() =>
     resolveNewSessionGit({
       projectVcs: currentProject()?.vcs,
@@ -66,7 +105,9 @@ export function createNewSessionWorkspaceController(input: {
     const project = currentProject()
     const worktree = input.selectedWorktree()
     if (!project || !worktree) return
-    return isWorkspaceSelection(project, worktree) ? worktree : undefined
+    return isWorkspaceSelection(project, worktree) || worktreeDirectories().some((item) => sameDirectory(item, worktree))
+      ? worktree
+      : undefined
   })
   const fallback = createMemo(() => {
     const project = currentProject()
@@ -97,7 +138,7 @@ export function createNewSessionWorkspaceController(input: {
       () => undefined,
     )
     const project = currentProject()
-    const directories = project ? [project.worktree, ...workspaceDirectories(project)] : [sdk().directory]
+    const directories = project ? [project.worktree, ...worktreeDirectories()] : [sdk().directory]
     directories.forEach((directory) => void data.location.vcs.sync({ directory }).catch(() => undefined))
   })
   const branch = createMemo(() =>
@@ -122,7 +163,11 @@ export function createNewSessionWorkspaceController(input: {
       workspace: createMemo(() => {
         const project = currentProject()
         const current = value()
-        return current === "create" || (!!project && isWorkspaceDirectory(project, current))
+        return (
+          current === "create" ||
+          (!!project &&
+            (isWorkspaceDirectory(project, current) || worktreeDirectories().some((item) => sameDirectory(item, current))))
+        )
       }),
       reset: () => {
         input.setSelectedWorktree(undefined)
@@ -142,10 +187,8 @@ export function createNewSessionWorkspaceController(input: {
     },
     project: {
       root: projectRoot,
-      workspaces: () => {
-        const project = currentProject()
-        return project ? workspaceDirectories(project) : []
-      },
+      workspaces: worktreeDirectories,
+      managed: managedWorktrees,
       git: visible,
       branches: () => {
         const current = data.location.vcs.info({ directory: sdk().directory })?.branch.current
