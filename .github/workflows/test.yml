@@ -96,7 +96,9 @@ jobs:
 
       - name: Install ffmpeg
         if: runner.os == 'Linux'
+        timeout-minutes: 10
         run: |
+          echo 'Acquire::http::Timeout "15"; Acquire::https::Timeout "15"; APT::Update::Error-Mode "any";' | sudo tee /etc/apt/apt.conf.d/99-opencode-ci
           sudo apt-get update
           sudo apt-get install --yes ffmpeg
 
@@ -229,8 +231,11 @@ jobs:
 
       - name: Install Playwright system dependencies
         if: env.E2E_ENABLED == 'true' && runner.os == 'Linux'
+        timeout-minutes: 10
         working-directory: packages/app
-        run: bunx playwright install-deps chromium
+        run: |
+          echo 'Acquire::http::Timeout "15"; Acquire::https::Timeout "15"; APT::Update::Error-Mode "any";' | sudo tee /etc/apt/apt.conf.d/99-opencode-ci
+          bunx playwright install-deps chromium
 
       - name: Install Playwright browsers
         if: env.E2E_ENABLED == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
