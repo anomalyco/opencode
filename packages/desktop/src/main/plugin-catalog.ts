@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
 import { join } from "node:path"
 
 const ECOSYSTEM_URL = "https://opencode.ai/docs/ecosystem/"
@@ -166,15 +167,31 @@ export function createCatalogFetcher(deps: {
       return { ...cached, stale: true }
     }
 
-    let result: CatalogResult
-    try {
-      result = await fetchFresh()
-      memory = { result, at: now() }
-    } catch {
-      throw new Error("Failed to fetch plugin catalog and no cache available")
+    // Single-flight the cold path: concurrent callers share one network fetch.
+    // With no cache available, a failure must reject (callers have nothing to
+    // fall back to) — hence the rethrow after the shared refresh settles.
+    if (refresh) {
+      await refresh
+      return memory!.result
     }
-    await writeDiskCache(result)
-    return result
+    const settled = fetchFresh().then(
+      async (result) => {
+        memory = { result, at: now() }
+        await writeDiskCache(result)
+      },
+      async (error) => {
+        throw error
+      },
+    )
+    refresh = settled
+    try {
+      await settled
+      return memory!.result
+    } catch (error) {
+      throw new Error("Failed to fetch plugin catalog and no cache available", { cause: error })
+    } finally {
+      refresh = undefined
+    }
   }
 
   function startBackgroundRefresh() {
@@ -300,7 +317,11 @@ export function createCatalogFetcher(deps: {
   async function writeDiskCache(result: CatalogResult) {
     try {
       await mkdir(deps.cacheDir, { recursive: true })
-      await writeFile(join(deps.cacheDir, CACHE_FILE), JSON.stringify(result))
+      // Atomic tmp+rename so a concurrent reader never parses a partial file.
+      const target = join(deps.cacheDir, CACHE_FILE)
+      const tmp = join(deps.cacheDir, `.${Date.now()}-${randomUUID()}.catalog-tmp`)
+      await writeFile(tmp, JSON.stringify(result))
+      await rename(tmp, target)
     } catch {
       /* cache write failures are non-fatal */
     }

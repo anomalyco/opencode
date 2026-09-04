@@ -141,7 +141,7 @@ export const SettingsPluginsV2: Component<{}> = () => {
   }
 
   const openInstall = (name: string, entry?: PluginEntry) => {
-    dialog.push(() => (
+    void dialog.push(() => (
       <DialogInstallPlugin
         name={name}
         entry={entry}
@@ -168,12 +168,15 @@ export const SettingsPluginsV2: Component<{}> = () => {
   }
 
   const confirmUninstall = (name: string, scope: Scope) => {
-    dialog.push(() => (
+    void dialog.push(() => (
       <Dialog>
         <DialogHeader>
           <DialogTitleGroup
             title={language.t("settings.plugins.installed.uninstall")}
-            description={language.t("settings.plugins.installed.uninstallBody", { name, scope })}
+            description={language.t("settings.plugins.installed.uninstallBody", {
+              name,
+              scope: language.t(`settings.plugins.installed.provenance.${scope}`),
+            })}
           />
         </DialogHeader>
         <DialogFooter>
