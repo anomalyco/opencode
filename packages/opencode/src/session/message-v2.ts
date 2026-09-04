@@ -145,6 +145,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   // Only apply this workaround if the model actually supports that media input -
   // otherwise unsupportedParts() will turn it into a user-visible error.
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
+    if (!supportsMediaInput(attachment)) return false
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
@@ -156,6 +157,12 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       return id.includes("gemini-3") && !id.includes("gemini-2")
     }
     return false
+  }
+  const supportsMediaInput = (attachment: { mime: string }) => {
+    if (!model.capabilities.attachment) return false
+    if (attachment.mime === "application/pdf") return model.capabilities.input.pdf
+    if (attachment.mime.startsWith("image/")) return model.capabilities.input.image
+    return true
   }
 
   const toModelOutput = (options: { toolCallId: string; input: unknown; output: unknown }) => {
