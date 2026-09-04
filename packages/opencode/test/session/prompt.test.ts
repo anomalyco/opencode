@@ -1196,6 +1196,89 @@ it.instance("cancel records MessageAbortedError on interrupted process", () =>
   }),
 )
 
+it.instance(
+  "cancel restarts the loop for queued input stranded behind the aborted turn",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const status = yield* SessionStatus.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* seed(chat.id)
+
+      yield* llm.hang
+      yield* user(chat.id, "in-flight question")
+
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* waitForBusy(chat.id)
+
+      // TUI "queued" input is a user message persisted while the turn runs.
+      yield* user(chat.id, "queued question")
+
+      yield* prompt.cancel(chat.id)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      const abortedID = Exit.isSuccess(exit) && exit.value.info.role === "assistant" ? exit.value.info.id : undefined
+      expect(abortedID).toBeDefined()
+
+      // A fresh loop must answer the queued message: a finished assistant
+      // reply newer than the aborted one appears (the single hanging
+      // response is consumed by the aborted turn, so the restarted turn
+      // lands on the server's default reply).
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const msgs = yield* sessions.messages({ sessionID: chat.id })
+          const answered = msgs.find(
+            (msg) =>
+              msg.info.role === "assistant" &&
+              msg.info.id > abortedID! &&
+              msg.info.finish !== undefined,
+          )
+          return answered === undefined ? undefined : (true as const)
+        }),
+        "queued input was never answered after cancel",
+        "3 seconds",
+      )
+      expect((yield* status.get(chat.id)).type).toBe("idle")
+    }),
+  10_000,
+)
+
+it.instance(
+  "cancel without queued input does not restart the loop",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const status = yield* SessionStatus.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* seed(chat.id)
+
+      yield* llm.hang
+      const inflight = yield* user(chat.id, "in-flight question")
+
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* waitForBusy(chat.id)
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+
+      // Only the interrupted (in-flight) question existed — nothing was
+      // queued behind it, so no new turn may start and nothing gets answered.
+      yield* Effect.sleep("500 millis")
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const answered = msgs.filter(
+        (msg) => msg.info.role === "assistant" && msg.info.id > inflight.id && msg.info.finish !== undefined,
+      )
+      expect(answered).toHaveLength(0)
+      expect((yield* status.get(chat.id)).type).toBe("idle")
+    }),
+  10_000,
+)
+
 raceNoLLMServer.instance(
   "finalizes assistant when cancelled before processor creation completes",
   () =>
