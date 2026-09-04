@@ -77,6 +77,7 @@ Die aktuelle Liste der Modelle umfasst:
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 Die Liste der Modelle kann sich ändern, während wir neue testen und hinzufügen.
 
@@ -96,11 +97,13 @@ Damit dein Konto nicht markiert wird, stelle sicher, dass das von dir verwendete
 
 ## Nutzungslimits
 
-OpenCode Go beinhaltet die folgenden Limits:
+OpenCode Go beinhaltet die folgenden Basislimits:
 
 - **5-Stunden-Limit** — 12 $ Nutzung
 - **Wöchentliches Limit** — 30 $ Nutzung
 - **Monatliches Limit** — 60 $ Nutzung
+
+Das effektive Kontingent variiert je nach Modell; siehe die Tabelle unten.
 
 Limits sind in Dollarwerten definiert. Das bedeutet, dass die tatsächliche Anzahl deiner Anfragen von dem von dir genutzten Modell abhängt. Günstigere Modelle wie MiMo-V2.5 erlauben mehr Anfragen, während teurere Modelle wie GLM-5.2 weniger erlauben.
 
@@ -134,8 +137,9 @@ Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf ty
 | DeepSeek V4 Flash Vision Exp | 3,800                  | 9,450              | 18,900             |
 | Hy4 preview                  | 1,350                  | 3,380              | 6,770              |
 | Hy3                          | 4,300                  | 10,750             | 21,500             |
+| Omen Alpha                   | 11,600                 | 29,000             | 57,900             |
 
-Die Schätzungen basieren auf beobachteten Anfragemustern:
+Die Schätzungen verwenden die folgenden Token-Anzahlen pro Anfrage; die tatsächliche Nutzung variiert.
 
 - Grok 4.6 — 390 Input-, 32.500 Cached-, 120 Output-Tokens pro Anfrage
 - GLM-5.3-Flash — 1.000 Input-, 55.000 Cached-, 200 Output-Tokens pro Anfrage
@@ -160,6 +164,7 @@ Die Schätzungen basieren auf beobachteten Anfragemustern:
 - Hy3 — 830 Input-, 71.500 Cached-, 295 Output-Tokens pro Anfrage
 - MiMo-V2.5 — 830 Input-, 71.500 Cached-, 295 Output-Tokens pro Anfrage
 - MiMo-V2.5-Pro — 790 Input-, 86.000 Cached-, 305 Output-Tokens pro Anfrage
+- Omen Alpha — 300 Input-, 40.000 Cached-, 100 Output-Tokens pro Anfrage
 
 Die Schätzungen basieren außerdem auf den folgenden Preisen pro 1M Tokens und der monatlichen Nutzung, die bei jedem Modell enthalten ist:
 
@@ -199,6 +204,7 @@ Die Schätzungen basieren außerdem auf den folgenden Preisen pro 1M Tokens und 
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15     |
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30     |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60     |
+| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | $100    |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Die Peak-Zeiten sind montags bis freitags von 01:00-04:00 und 06:00-10:00 UTC; alle anderen Zeiten, einschließlich der Wochenenden, sind Off-Peak. [Mehr erfahren](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -222,7 +228,7 @@ Wenn du auch Guthaben auf deinem Zen-Konto hast, kannst du in der Console die Op
 
 ### Warum einige Modelle weniger Nutzung bieten
 
-Mit Go zahlst du $10/Monat, und unser Ziel ist, dir dafür das Sechsfache dieses Betrags als Nutzungsguthaben zu bieten.
+Mit Go zahlst du $10/Monat, und bei den meisten Modellen ist unser Ziel, dir dafür das Sechsfache dieses Betrags als Nutzungsguthaben zu bieten.
 
 Bei den meisten Modellen ermöglichen wir dies durch Mengenrabatte und reservierte GPU-Kapazität. Diese Ersparnisse geben wir dann über den 6x-Multiplikator an dich weiter.
 
@@ -265,6 +271,7 @@ Du kannst auf die Go-Modelle auch über die folgenden API-Endpunkte zugreifen.
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 Die [Modell-ID](/docs/config/#models) in deiner OpenCode Config verwendet das Format `opencode-go/<model-id>`. Für Kimi K3 würdest du beispielsweise `opencode-go/kimi-k3` in deiner Config verwenden.
 
@@ -310,6 +317,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | Nicht verwendet | 0 Tage            |
 | Hy4 preview                  | Nicht verwendet | 0 Tage            |
 | Hy3                          | Nicht verwendet | 0 Tage            |
+| Omen Alpha                   | Nicht verwendet | 0 Tage            |
 
 - **Grok 4.6:** ZDR deaktiviert wichtige API-Funktionen, die von gespeicherten Daten abhängen, einschließlich der zustandsbehafteten Responses API, Files and Collections und der Batch API. [Mehr erfahren](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Für die Nutzung aller API-Funktionen werden Protokolle zur Missbrauchsüberwachung erstellt und bis zu 30 Tage lang aufbewahrt. [Mehr erfahren](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
