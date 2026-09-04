@@ -1218,7 +1218,9 @@ export function createData(config: CreateDataInput) {
         break
       case "config.updated":
         result.location.config.invalidate(location)
-        refresh(() => Promise.all([result.location.config.sync(location), result.location.websearch.refresh(location)]))
+        if (result.location.config.list(location) !== undefined || sync.has(`location.config:${locationKey(location)}`))
+          refresh(() => result.location.config.sync(location))
+        refresh(() => result.location.websearch.refresh(location))
         break
       case "websearch.updated":
         refresh(() => result.location.websearch.refresh(location))
@@ -1778,7 +1780,6 @@ export function createData(config: CreateDataInput) {
           result.location.vcs.sync(location),
           result.location.agent.sync(location),
           result.location.command.sync(location),
-          result.location.config.sync(location),
           result.location.integration.sync(location),
           result.location.mcp.server.sync(location),
           result.location.mcp.resource.sync(location),
