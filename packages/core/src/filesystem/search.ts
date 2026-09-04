@@ -179,7 +179,7 @@ export const fffLayer = Layer.effect(
               }),
               line: match.lineNumber,
               offset: match.byteOffset,
-              text: match.lineContent.length > 2_000 ? match.lineContent.slice(0, 2_000) + "..." : match.lineContent,
+              text: match.lineContent.length > 2_000 ? match.lineContent.slice(0, 2_000) + "…" : match.lineContent,
               submatches: match.matchRanges.map(([start, end]) => ({
                 text: bytes.subarray(start, end).toString("utf8"),
                 start,

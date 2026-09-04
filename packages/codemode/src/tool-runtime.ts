@@ -453,7 +453,7 @@ const searchDescription = describeDefinition(`${reservedNamespace}.search`, make
 const catalogLine = (tool: ToolDescription) => {
   // Keep the tool description concise; the full schema documentation remains in the signature.
   const line = tool.description.split("\n", 1)[0]!.trim()
-  const description = line.length > 120 ? line.slice(0, 119) + "..." : line
+  const description = line.length > 120 ? line.slice(0, 119) + "…" : line
   return description === "" ? `  - ${tool.signature}` : `  - ${tool.signature} // ${description}`
 }
 

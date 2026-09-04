@@ -266,7 +266,7 @@ const layer = Layer.effect(
                 offset: match.absolute_offset,
                 text:
                   match.lines.text.length > 2_000
-                    ? match.lines.text.slice(0, 2_000).replace(/[\uD800-\uDBFF]$/, "") + "..."
+                    ? match.lines.text.slice(0, 2_000).replace(/[\uD800-\uDBFF]$/, "") + "…"
                     : match.lines.text,
                 submatches: match.submatches.map((submatch) => ({
                   text: submatch.match.text,
