@@ -165,7 +165,17 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)
       yield* Updater.Service.pipe(
-        Effect.flatMap((updater) => Updater.pollUpdates({ check: updater.check() })),
+        Effect.flatMap((updater) =>
+          Updater.pollUpdates({
+            check: updater.check().pipe(
+              Effect.flatMap((result) => {
+                if (!result) return Effect.void
+                if (result.type === "available") return server.updateAvailable(result.version)
+                return server.updated(result.version)
+              }),
+            ),
+          }),
+        ),
         Effect.provide(Updater.layer),
         Effect.forkScoped,
       )

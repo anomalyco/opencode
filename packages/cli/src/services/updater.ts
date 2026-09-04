@@ -9,9 +9,10 @@ import { action, parseReleaseVersion, type Policy } from "./updater-action"
 
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
 export type Method = (typeof methods)[number]
+export type CheckResult = { readonly type: "available" | "installed"; readonly version: string }
 
 export interface Interface {
-  readonly check: () => Effect.Effect<string | undefined>
+  readonly check: () => Effect.Effect<CheckResult | undefined>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
@@ -233,9 +234,9 @@ const make = Effect.gen(function* () {
     function* () {
       const result = yield* inspect()
       if (!result) return undefined
-      if (result.policy === "notify") return result.version
+      if (result.policy === "notify") return { type: "available", version: result.version }
       if (!(yield* install(result.version))) return yield* Effect.fail(new Error("Installation method not found"))
-      return undefined
+      return { type: "installed", version: result.version }
     },
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )

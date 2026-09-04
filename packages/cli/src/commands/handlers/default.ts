@@ -87,7 +87,7 @@ export default Runtime.handler(Commands, (input) =>
         subscribe: (notify, signal) =>
           runPromise(
             Fiber.join(update).pipe(
-              Effect.flatMap((version) => (version === undefined ? Effect.void : Effect.sync(() => notify(version)))),
+              Effect.flatMap((result) => (result === undefined ? Effect.void : Effect.sync(() => notify(result)))),
             ),
             { signal },
           ),

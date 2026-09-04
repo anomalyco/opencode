@@ -1533,7 +1533,7 @@ test("server plugin failures share one notice and use source names before an ID 
 
 test("shows an available update on Home and opens the update dialog on click", async () => {
   await using state = await tmpdir()
-  const monitored = Promise.withResolvers<(version: string) => void>()
+  const monitored = Promise.withResolvers<(notice: { type: "available" | "installed"; version: string }) => void>()
   await using setup = await createAppFixture({
     state: state.path,
     updater: {
@@ -1549,7 +1549,7 @@ test("shows an available update on Home and opens the update dialog on click", a
   })
   await setup.ready
   const notify = await monitored.promise
-  notify("2.0.0")
+  notify({ type: "available", version: "2.0.0" })
   await setup.waitForFrame((frame) => frame.includes("OpenCode 2.0.0 is available"))
 
   const lines = setup.captureCharFrame().split("\n")
@@ -1560,6 +1560,9 @@ test("shows an available update on Home and opens the update dialog on click", a
   await setup.mockMouse.click(line.indexOf("OpenCode 2.0.0 is available"), row)
   await setup.waitForFrame((frame) => frame.includes("Update available") && frame.includes("manually restart"))
   expect(setup.captureCharFrame()).not.toContain("OpenCode 2.0.0 is available")
+  setup.mockInput.pressEscape()
+  setup.events.emit({ id: "evt_updated", created: 1, type: "installation.updated", data: { version: "2.0.0" } })
+  await setup.waitForFrame((frame) => frame.includes("OpenCode 2.0.0 was installed · restart to apply"))
 })
 
 async function createAppFixture(

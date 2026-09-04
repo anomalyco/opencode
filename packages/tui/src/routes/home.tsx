@@ -94,15 +94,17 @@ export function Home() {
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
           <Prompt ref={bind} placeholders={placeholder} disabled={forms().length > 0} />
         </box>
-        <Show when={update.available()} keyed>
-          {(version) => (
+        <Show when={update.notice()} keyed>
+          {(notice) => (
             <text
               fg={theme.text.feedback.info.default}
               attributes={TextAttributes.BOLD}
               marginTop={1}
-              onMouseUp={update.open}
+              onMouseUp={notice.type === "available" ? update.open : undefined}
             >
-              OpenCode {version} is available · click to update
+              {notice.type === "available"
+                ? `OpenCode ${notice.version} is available · click to update`
+                : `OpenCode ${notice.version} was installed · restart to apply`}
             </text>
           )}
         </Show>
