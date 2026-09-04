@@ -39,12 +39,7 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       )
         return
       setState((current) => {
-        if (
-          notice.source === "server" &&
-          current?.source === "client" &&
-          (current.type === "available" || current.type === "installing")
-        )
-          return current
+        if (notice.source === "server" && current?.source === "client") return current
         return notice
       })
     }
