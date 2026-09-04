@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { Show, createMemo } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -12,33 +12,10 @@ import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerModel } from "./model"
 
-export type ComposerDropState = { active: boolean; label: string }
-
-export function Composer(props: {
-  class?: string
-  model: ComposerModel
-  borderUnderlay?: boolean
-  onDropStateChange?: (state: ComposerDropState) => void
-}) {
+export function Composer(props: { class?: string; model: ComposerModel; borderUnderlay?: boolean }) {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
-  const dropInput = () => props.model.model.selection.current()?.capabilities.input
-  const dropLabel = createMemo(() => {
-    const input = dropInput()
-    if (!input?.image && !input?.pdf) return language.t("ui.promptInput.dropFiles")
-    if (!input.pdf) return language.t("ui.promptInput.dropFiles.image")
-    if (!input.image) return language.t("ui.promptInput.dropFiles.pdf")
-    return language.t("ui.promptInput.dropFiles.imagePdf")
-  })
-
-  createEffect(() =>
-    props.onDropStateChange?.({
-      active: props.model.state.drag === "active",
-      label: dropLabel(),
-    }),
-  )
-  onCleanup(() => props.onDropStateChange?.({ active: false, label: dropLabel() }))
 
   return (
     <div class="flex flex-col gap-3">

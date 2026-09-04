@@ -42,9 +42,14 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   const interaction = createComposerEditorState(prompt.mode.current())
   createEffect(
-    on(adapter.ready, (ready) => {
-      if (ready) interaction[1]("mode", prompt.mode.current())
-    }),
+    on(
+      () => (adapter.ready() ? prompt.mode.current() : undefined),
+      (mode) => {
+        if (!mode) return
+        // Project external draft changes without another mode write clearing restored retry metadata.
+        interaction[1](mode === "shell" ? { mode, popover: { type: "closed" } } : { mode })
+      },
+    ),
   )
   const mode = () => interaction[0].mode
   const history = createComposerHistory()
