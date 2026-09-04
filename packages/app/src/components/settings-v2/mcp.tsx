@@ -6,12 +6,13 @@ import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { For, Show, createMemo, createResource, createSignal, type Component } from "solid-js"
+import type { McpLocalConfig, McpRemoteConfig } from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import { useServerSDK } from "@/context/server-sdk"
+import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { showToast } from "@/utils/toast"
-import { buildAddInput, emptyForm, formFromConfig, storedToPayloadConfig, type McpFormState } from "./mcp-payload"
+import { buildAddInput, emptyForm, formFromConfig, storedToPayloadConfig, type McpFormState, type McpServerConfig } from "./mcp-payload"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import "./settings-v2.css"
@@ -42,11 +43,68 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const dialog = useDialog()
   const serverSdk = useServerSDK()
   const serverSync = useServerSync()
+  const protocol = useServerProtocol()
 
   const [busy, setBusy] = createSignal<string | undefined>()
   const [loadError, setLoadError] = createSignal<string | undefined>()
 
   const location = () => (props.directory ? { location: { directory: props.directory } } : {})
+  const directory = () => (props.directory ? { directory: props.directory } : undefined)
+
+  // The v1 and v2 servers expose different MCP surfaces:
+  // - v1: REST `/api/mcp*` (list/add/remove/connect/disconnect)
+  // - v2: `GET /mcp` status map + `PUT /mcp` add + connect/disconnect; there is
+  //   NO delete route — removal is a config update that unsets the key.
+  const mcpApi = () => {
+    const sdk = serverSdk()
+    return {
+      list: async () => {
+        if (protocol() === "v2") {
+          const status = await sdk.client.mcp.status(directory())
+          return Object.entries(status).map(([name, value]) => ({ name, status: { status: value.status } }))
+        }
+        const result = await sdk.api.mcp.list(
+          props.directory ? { location: { directory: props.directory } } : undefined,
+        )
+        return result.data ?? []
+      },
+      add: async (server: string, config: McpServerConfig) => {
+        if (protocol() === "v2") {
+          // The v2 schema wants mutable arrays; the payload builder types them readonly.
+          const mutable = (config.type === "local"
+            ? { ...config, command: [...config.command] }
+            : { ...config }) as McpLocalConfig | McpRemoteConfig
+          await sdk.client.mcp.add({ name: server, config: mutable, ...directory() })
+          return
+        }
+        await sdk.api.mcp.add({ server, config, ...location() })
+      },
+      remove: async (server: string) => {
+        if (protocol() === "v2") {
+          const config = serverSync().data.config
+          const next = { ...config, mcp: { ...config?.mcp } }
+          delete next.mcp[server]
+          await sdk.client.global.config.update({ config: next })
+          return
+        }
+        await sdk.api.mcp.remove({ server, ...location() })
+      },
+      connect: async (server: string) => {
+        if (protocol() === "v2") {
+          await sdk.client.mcp.connect({ name: server, ...directory() })
+          return
+        }
+        await sdk.api.mcp.connect({ server, ...location() })
+      },
+      disconnect: async (server: string) => {
+        if (protocol() === "v2") {
+          await sdk.client.mcp.disconnect({ name: server, ...directory() })
+          return
+        }
+        await sdk.api.mcp.disconnect({ server, ...location() })
+      },
+    }
+  }
 
   const [servers, serversActions] = createResource(
     // A resource source of `undefined` would skip the fetcher entirely, so use a
@@ -54,11 +112,9 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
     () => true,
     async () => {
       try {
-        const result = await serverSdk().api.mcp.list(
-          props.directory ? { location: { directory: props.directory } } : undefined,
-        )
+        const result = await mcpApi().list()
         setLoadError(undefined)
-        return result.data ?? []
+        return result
       } catch (error) {
         setLoadError(error instanceof Error ? error.message : String(error))
         return []
@@ -74,13 +130,14 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const addServer = async (form: McpFormState, previous?: { name: string; wasConnected: boolean }) => {
     const built = buildAddInput(form, { keepSecret: previous !== undefined })
     if (!built.ok) throw new Error(built.error)
+    const api = mcpApi()
     if (previous) {
       if (previous.wasConnected) {
-        await serverSdk().api.mcp.disconnect({ server: previous.name, ...location() }).catch(() => undefined)
+        await api.disconnect(previous.name).catch(() => undefined)
       }
-      await serverSdk().api.mcp.remove({ server: previous.name, ...location() })
+      await api.remove(previous.name)
     }
-    await serverSdk().api.mcp.add({ server: built.input.server, config: built.input.config, ...location() })
+    await api.add(built.input.server, built.input.config)
   }
 
   const openForm = (initial: McpFormState, previous?: { name: string; wasConnected: boolean }) => {
@@ -135,7 +192,7 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const connect = async (name: string) => {
     setBusy(name)
     try {
-      await serverSdk().api.mcp.connect({ server: name, ...location() })
+      await mcpApi().connect(name)
       await serversActions.refetch()
     } catch (error) {
       onError(error)
@@ -147,7 +204,7 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const disconnect = async (name: string) => {
     setBusy(name)
     try {
-      await serverSdk().api.mcp.disconnect({ server: name, ...location() })
+      await mcpApi().disconnect(name)
       await serversActions.refetch()
     } catch (error) {
       onError(error)
@@ -161,7 +218,7 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
     try {
       await serverSdk().client.mcp.auth.authenticate({
         name,
-        directory: props.directory,
+        ...(props.directory ? { directory: props.directory } : {}),
       })
       await serversActions.refetch()
     } catch (error) {
@@ -174,7 +231,7 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const remove = async (name: string) => {
     setBusy(name)
     try {
-      await serverSdk().api.mcp.remove({ server: name, ...location() })
+      await mcpApi().remove(name)
       showToast({ variant: "success", description: language.t("settings.mcp.deleted", { name }) })
       await serversActions.refetch()
     } catch (error) {
