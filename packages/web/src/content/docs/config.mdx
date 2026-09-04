@@ -502,6 +502,37 @@ Set your UI theme in `tui.json`.
 
 ---
 
+### Display
+
+You can choose the currency OpenCode uses to display usage costs with the `display.currency` option. It accepts an ISO 4217 code such as `"CNY"`, `"EUR"`, or `"JPY"`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "display": {
+    "currency": "CNY"
+  }
+}
+```
+
+Costs are tracked in the currency configured for the model's provider (USD by default). When `display.currency` is set, displayed amounts are converted from that source currency. When it is not set, costs are shown in the source currency. If no exchange rate is available for a currency pair, the original amount and currency are shown unchanged — values are never relabeled without conversion.
+
+OpenCode ships a table of approximate display exchange rates. These are meant for display only and are not billing-authoritative. You can override them or add missing currencies with the `display.exchangeRates` option, expressed as units per 1 USD:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "display": {
+    "currency": "CNY",
+    "exchangeRates": {
+      "CNY": 7.15
+    }
+  }
+}
+```
+
+---
+
 ### Agents
 
 You can configure specialized agents for specific tasks through the `agent` option.
