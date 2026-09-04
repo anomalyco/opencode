@@ -18,11 +18,12 @@ describe("Config.Entry", () => {
     expect(() => Schema.decodeUnknownSync(Config.Info)({ providers: { custom: { canonical: 1 } } })).toThrow()
   })
 
-  test("accepts disabled, fixed, and random web search selection", () => {
+  test("accepts disabled, fixed, auto, and legacy random web search selection", () => {
     const decode = Schema.decodeUnknownSync(Config.Info)
 
     expect(decode({ websearch: false }).websearch).toBe(false)
     expect(decode({ websearch: { provider: "exa" } }).websearch).toEqual({ provider: WebSearch.ID.make("exa") })
+    expect(decode({ websearch: { provider: "auto" } }).websearch).toEqual({ provider: "auto" })
     expect(decode({ websearch: { provider: "random" } }).websearch).toEqual({ provider: "random" })
   })
 

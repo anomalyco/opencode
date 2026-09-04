@@ -445,10 +445,7 @@ export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["w
             }),
           default: {
             get: editor.default.get,
-            set: (selection) =>
-              editor.default.set(
-                selection === false || selection === "random" ? selection : WebSearch.ID.make(selection),
-              ),
+            set: (selection) => editor.default.set(WebSearch.normalizeSelection(selection)),
           },
         })
       }),

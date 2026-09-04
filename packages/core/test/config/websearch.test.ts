@@ -14,29 +14,31 @@ import { PluginTestLayer } from "../plugin/fixture"
 const it = testEffect(PluginTestLayer)
 
 describe("ConfigWebSearchPlugin.Plugin", () => {
-  it.live("reloads changed default selection", () =>
-    Effect.gen(function* () {
-      const websearch = yield* WebSearch.Service
-      const bus = yield* Bus.Service
-      const config = yield* Config.Test
-      const plugins = yield* Plugin.Service
-      yield* websearch.transform((editor) =>
-        editor.add({ id: WebSearch.ID.make("test"), name: "Test", execute: () => Effect.succeed([]) }),
-      )
-      yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins))
+  ;(["auto", "random"] as const).forEach((provider) => {
+    it.live(`reloads changed default selection to ${provider}`, () =>
+      Effect.gen(function* () {
+        const websearch = yield* WebSearch.Service
+        const bus = yield* Bus.Service
+        const config = yield* Config.Test
+        const plugins = yield* Plugin.Service
+        yield* websearch.transform((editor) =>
+          editor.add({ id: WebSearch.ID.make("test"), name: "Test", execute: () => Effect.succeed([]) }),
+        )
+        yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins))
 
-      expect((yield* websearch.default().pipe(Effect.flip))._tag).toBe("WebSearch.Disabled")
+        expect((yield* websearch.default().pipe(Effect.flip))._tag).toBe("WebSearch.Disabled")
 
-      yield* config.setEntries([configured(new ConfigWebSearch.Info({ provider: "random" }))])
-      yield* bus.publish(Event.Updated, {})
-      yield* waitUntil(
-        websearch.default().pipe(
-          Effect.map((provider) => provider?.id === WebSearch.ID.make("test")),
-          Effect.orElseSucceed(() => false),
-        ),
-      )
-    }).pipe(Effect.provide(Config.testLayer([configured(false)]))),
-  )
+        yield* config.setEntries([configured(new ConfigWebSearch.Info({ provider }))])
+        yield* bus.publish(Event.Updated, {})
+        yield* waitUntil(
+          websearch.default().pipe(
+            Effect.map((provider) => provider?.id === WebSearch.ID.make("test")),
+            Effect.orElseSucceed(() => false),
+          ),
+        )
+      }).pipe(Effect.provide(Config.testLayer([configured(false)]))),
+    )
+  })
 })
 
 function configured(websearch: ConfigWebSearch.Selection): Document {

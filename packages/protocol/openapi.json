@@ -14470,7 +14470,13 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["random"]
+                "enum": ["auto"],
+                "description": "Reuse a randomly selected provider until it is rate limited, then switch to another available provider."
+              },
+              {
+                "type": "string",
+                "enum": ["random"],
+                "description": "Deprecated alias for \"auto\"."
               },
               {
                 "type": "string"
@@ -18221,6 +18227,12 @@
             "type": "string",
             "enum": ["auto", "manual"]
           },
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "providerState": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_5"
+          },
           "summary": {
             "type": "string"
           },
@@ -18446,6 +18458,9 @@
         "type": "object"
       },
       "Session.Message.ProviderState_4": {
+        "type": "object"
+      },
+      "Session.Message.ProviderState_5": {
         "type": "object"
       },
       "Session.Message.Shell": {
