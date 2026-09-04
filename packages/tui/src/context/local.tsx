@@ -67,7 +67,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return !!models()?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
     }
 
-    function getFirstValidModel(...modelFns: (() => ModelPreferenceModel | undefined)[]) {
+    function getFirstValidModel<T extends ModelPreferenceModel>(...modelFns: (() => T | undefined)[]) {
       for (const modelFn of modelFns) {
         const model = modelFn()
         if (model && isModelValid(model)) return model
@@ -140,7 +140,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {},
       })
       const [selectionState, setSelectionState] = createStore<{
-        newSessionModelByLocationAgent: Record<string, ModelPreferenceModel | undefined>
+        newSessionModelByLocationAgent: Record<string, ModelSelection | undefined>
         draftBySession: Record<string, ModelSelection | undefined>
       }>({
         newSessionModelByLocationAgent: {},
@@ -210,9 +210,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const newSessionModel = createMemo(() => {
         const a = agent.current()
-        return getFirstValidModel(
+        return getFirstValidModel<ModelSelection>(
           () => a && selectionState.newSessionModelByLocationAgent[locationAgentKey(a.id)],
-          () => a?.model && { providerID: a.model.providerID, modelID: a.model.id },
+          () =>
+            a?.model && {
+              providerID: a.model.providerID,
+              modelID: a.model.id,
+              variant: a.model.variant,
+            },
           fallbackModel,
         )
       })
@@ -221,7 +226,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (route.data.type === "session") return sessionSelection(route.data.sessionID)
         const model = newSessionModel()
         if (!model) return
-        return { ...model, variant: normalizeModelVariant(preferences.variant[modelPreferenceKey(model)]) }
+        return {
+          ...model,
+          variant: normalizeModelVariant(model.variant ?? preferences.variant[modelPreferenceKey(model)]),
+        }
       })
 
       const currentModel = createMemo(() => {
@@ -259,22 +267,25 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       function selectModel(model: ModelPreferenceModel) {
+        const current = currentSelection()
+        const preferred = normalizeModelVariant(
+          current?.providerID === model.providerID && current.modelID === model.modelID
+            ? current.variant
+            : preferences.variant[modelPreferenceKey(model)],
+        )
+        const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
+        const variant = preferred && info?.variants?.some((item) => item.id === preferred) ? preferred : undefined
         if (route.data.type === "session") {
           const sessionID = route.data.sessionID
-          const current = sessionSelection(sessionID)
-          const preferred = normalizeModelVariant(
-            current?.providerID === model.providerID && current.modelID === model.modelID
-              ? current.variant
-              : preferences.variant[modelPreferenceKey(model)],
-          )
-          const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
-          const variant = preferred && info?.variants?.some((item) => item.id === preferred) ? preferred : undefined
           setSessionDraft(sessionID, { ...model, variant })
           return true
         }
-        const current = agent.current()
-        if (!current) return false
-        setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), model)
+        const a = agent.current()
+        if (!a) return false
+        setSelectionState("newSessionModelByLocationAgent", locationAgentKey(a.id), {
+          ...model,
+          variant: variant ?? "default",
+        })
         return true
       }
 
@@ -437,6 +448,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (!m) return
             if (route.data.type === "session") {
               setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
+            }
+            if (route.data.type !== "session") {
+              const current = agent.current()
+              if (current)
+                setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), {
+                  ...m,
+                  // Keep an explicit default distinct from an absent preference.
+                  variant: value ?? "default",
+                })
             }
             setPreferences("variant", modelPreferenceKey(m), normalizeModelVariant(value))
             savePreferences()
