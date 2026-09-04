@@ -85,18 +85,33 @@ Trenutna lista modela uključuje:
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 Lista modela se može mijenjati dok testiramo i dodajemo nove.
 
 ---
 
+## Gdje ga mogu koristiti?
+
+OpenCode Go je osmišljen za korištenje s [OpenCode-om](https://opencode.ai) i drugim popularnim agentima za programiranje koji generišu slične vrste zahtjeva.
+
+Saobraćaj se nadzire radi otkrivanja zloupotrebe koja narušava iskustvo drugih korisnika.
+
+Kako vaš račun ne bi bio označen, pobrinite se da alat koji koristite
+
+1\. ne generiše saobraćaj koji predstavlja zloupotrebu  
+2\. se ispravno identifikuje (bez generičkih User-Agent identifikatora)  
+3\. uključuje zaglavlje `x-opencode-session` kako bismo mogli optimizovati keširanje promptova
+
 ## Ograničenja upotrebe
 
-OpenCode Go uključuje sljedeća ograničenja:
+OpenCode Go uključuje sljedeća osnovna ograničenja:
 
 - **Ograničenje od 5 sati** — $12 potrošnje
 - **Sedmično ograničenje** — $30 potrošnje
 - **Mjesečno ograničenje** — $60 potrošnje
+
+Efektivna potrošnja razlikuje se po modelu; pogledajte tabelu ispod.
 
 Ograničenja su definisana u dolarskoj vrijednosti. To znači da vaš stvarni broj zahtjeva zavisi od modela koji koristite. Jeftiniji modeli poput MiMo-V2.5 omogućavaju više zahtjeva, dok skuplji modeli poput GLM-5.2 omogućavaju manje.
 
@@ -130,8 +145,9 @@ Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih obrazaca kori
 | DeepSeek V4 Flash Vision Exp | 3,800              | 9,450             | 18,900            |
 | Hy4 preview                  | 1,350              | 3,380             | 6,770             |
 | Hy3                          | 4,300              | 10,750            | 21,500            |
+| Omen Alpha                   | 11,600             | 29,000            | 57,900            |
 
-Procjene se zasnivaju na zapaženim obrascima zahtjeva:
+Procjene koriste sljedeći broj tokena po zahtjevu; stvarna potrošnja varira.
 
 - Grok 4.6 — 390 ulaznih, 32,500 keširanih, 120 izlaznih tokena po zahtjevu
 - GLM-5.3-Flash — 1,000 ulaznih (input), 55,000 keširanih, 200 izlaznih (output) tokena po zahtjevu
@@ -156,6 +172,7 @@ Procjene se zasnivaju na zapaženim obrascima zahtjeva:
 - Hy3 — 830 ulaznih, 71,500 keširanih, 295 izlaznih tokena po zahtjevu
 - MiMo-V2.5 — 830 ulaznih, 71,500 keširanih, 295 izlaznih tokena po zahtjevu
 - MiMo-V2.5-Pro — 790 ulaznih, 86,000 keširanih, 305 izlaznih tokena po zahtjevu
+- Omen Alpha — 300 ulaznih, 40.000 keširanih, 100 izlaznih tokena po zahtjevu
 
 Procjene se također zasnivaju na sljedećim cijenama po 1M tokena i mjesečnoj potrošnji uključenoj uz svaki model:
 
@@ -195,6 +212,7 @@ Procjene se također zasnivaju na sljedećim cijenama po 1M tokena i mjesečnoj 
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15       |
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30       |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60       |
+| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | $100      |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak sati su 01:00-04:00 i 06:00-10:00 UTC od ponedjeljka do petka; svi ostali sati, uključujući vikende, su Off-Peak. [Saznajte više](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -220,7 +238,7 @@ nakon što dostignete ograničenja upotrebe umjesto blokiranja zahtjeva.
 
 ### Zašto neki modeli imaju manju uključenu potrošnju
 
-Uz Go plaćate $10 mjesečno, a cilj nam je omogućiti vam potrošnju šest puta veću od tog iznosa.
+Uz Go plaćate $10 mjesečno, a za većinu modela cilj nam je omogućiti vam potrošnju šest puta veću od tog iznosa.
 
 Za većinu modela to postižemo količinskim popustima i rezervisanim GPU kapacitetom. Tu uštedu zatim prenosimo na vas primjenom faktora šest.
 
@@ -263,6 +281,7 @@ Također možete pristupiti Go modelima putem sljedećih API endpointa.
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [Model id](/docs/config/#models) u vašoj OpenCode konfiguraciji
 koristi format `opencode-go/<model-id>`. Na primjer, za Kimi K3, koristili biste
@@ -310,6 +329,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | Ne koristi se     | 0 dana               |
 | Hy4 preview                  | Ne koristi se     | 0 dana               |
 | Hy3                          | Ne koristi se     | 0 dana               |
+| Omen Alpha                   | Ne koristi se     | 0 dana               |
 
 - **Grok 4.6:** ZDR onemogućava važne API funkcije koje zavise od pohranjenih podataka, uključujući Responses API s očuvanjem stanja, Files and Collections i Batch API. [Saznajte više](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Zapisi o nadzoru zloupotrebe generišu se za svako korištenje API funkcija i čuvaju do 30 dana. [Saznajte više](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
