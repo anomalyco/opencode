@@ -740,13 +740,19 @@ export function RunFooterView(props: RunFooterViewProps) {
                             theme={theme}
                             commands={props.commands}
                             onClose={closePanel}
-                            onSelect={(name) => {
+                            onSelect={(names) => {
+                              const name = names[0]
+                              if (!name) return
+                              const argumentsText = names
+                                .slice(1)
+                                .map((item) => `/${item}`)
+                                .join(" ")
                               composer.replacePrompt({
-                                text: `/${name} `,
+                                text: `${names.map((item) => `/${item}`).join(" ")} `,
                                 parts: [],
                                 command: {
                                   name,
-                                  arguments: "",
+                                  arguments: argumentsText ? `${argumentsText} ` : "",
                                 },
                               })
                               closePanel()

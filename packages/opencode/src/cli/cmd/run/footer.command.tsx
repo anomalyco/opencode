@@ -776,31 +776,45 @@ export function RunSkillSelectBody(props: {
   theme: Accessor<RunFooterTheme>
   commands: Accessor<RunCommand[] | undefined>
   onClose: () => void
-  onSelect: (name: string) => void
+  onSelect: (names: string[]) => void
 }) {
   let field: InputRenderable | undefined
   const [query, setQuery] = createSignal("")
+  const [selected, setSelected] = createSignal<string[]>([])
   const entries = createMemo<SkillEntry[]>(() =>
     (props.commands() ?? [])
       .filter((item) => item.source === "skill")
       .map((item) => ({
         category: "",
-        display: item.name,
+        display: `${selected().includes(item.name) ? "[x]" : "[ ]"} ${item.name}`,
         description: item.description?.replace(/\s+/g, " ").trim() || undefined,
+        footer: selected().includes(item.name) ? "selected" : undefined,
         keywords: `skill ${item.name} ${item.description ?? ""}`,
         name: item.name,
       }))
-      .sort((a, b) => a.display.localeCompare(b.display)),
+      .sort((a, b) => a.name.localeCompare(b.name)),
   )
   const items = createMemo<SkillEntry[]>(() => match(query(), entries()))
   const menu = createFooterMenuState({ count: () => items().length, limit: PANEL_LIST_ROWS })
-  const select = () => {
+  const selectedCount = createMemo(() => selected().length)
+  const toggle = () => {
     const item = items()[menu.selected()]
     if (!item) {
       return
     }
 
-    props.onSelect(item.name)
+    setSelected((current) =>
+      current.includes(item.name) ? current.filter((name) => name !== item.name) : [...current, item.name],
+    )
+  }
+  const select = () => {
+    if (selectedCount() > 0) {
+      props.onSelect(selected())
+      return
+    }
+
+    const item = items()[menu.selected()]
+    if (item) props.onSelect([item.name])
   }
 
   createEffect(() => {
@@ -813,12 +827,18 @@ export function RunSkillSelectBody(props: {
       return
     }
 
+    if (event.name.toLowerCase() === "space") {
+      event.preventDefault()
+      toggle()
+      return
+    }
+
     handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
   })
 
   return (
     <PanelShell
-      title="Skills"
+      title={selectedCount() > 0 ? `Skills - ${selectedCount()} selected` : "Skills"}
       query={query()}
       count={items().length}
       total={entries().length}
