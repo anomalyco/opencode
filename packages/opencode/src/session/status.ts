@@ -38,12 +38,15 @@ const layer = Layer.effect(
 
     const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
       const data = yield* InstanceState.get(state)
-      yield* events.publish(Event.Status, { sessionID, status })
+      const previous = data.get(sessionID)
       if (status.type === "idle") {
+        if (!previous) return
+        yield* events.publish(Event.Status, { sessionID, status })
         yield* events.publish(Event.Idle, { sessionID })
         data.delete(sessionID)
         return
       }
+      yield* events.publish(Event.Status, { sessionID, status })
       data.set(sessionID, status)
     })
 
