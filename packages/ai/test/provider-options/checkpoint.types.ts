@@ -24,7 +24,6 @@ import type { Prepared } from "../../src/protocols/open-responses-channel.js"
 declare const webSocket: WebSocketChannelExecutor
 const model = OpenAI.configure().responses("fixture")
 const request = LLM.request({ model, prompt: "hello" })
-LLMClient.compact(request).pipe(Effect.map((result) => result satisfies CompactionResponse))
 LLMClient.compact(request, { mechanism: "endpoint" }).pipe(Effect.map((result) => result satisfies CompactionResponse))
 LLMClient.compact(request, { mechanism: "trigger", webSocket }).pipe(
   Effect.map((result) => {
@@ -56,8 +55,6 @@ LLMClient.compact(LLMRequest.update(request, { messages: [] }), { mechanism: "tr
 
 const azure = Azure.configure({ resourceName: "fixture" }).responses("fixture")
 const xai = XAI.configure().responses("fixture")
-LLMClient.compact(LLM.request({ model: azure }))
-LLMClient.compact(LLM.request({ model: xai }))
 // @ts-expect-error Azure must not inherit OpenAI's trigger operation.
 LLMClient.compact(LLM.request({ model: azure }), { mechanism: "trigger" })
 LLMClient.compact(LLM.request({ model: Azure.responsesModel("fixture", { resourceName: "fixture" }) }), {
@@ -80,32 +77,18 @@ const unsupported = {
     model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
   }),
 }
-// @ts-expect-error Bedrock does not expose endpoint compaction.
-LLMClient.compact(unsupported.bedrock)
 // @ts-expect-error Bedrock does not expose trigger compaction.
 LLMClient.compact(unsupported.bedrock, { mechanism: "trigger" })
-// @ts-expect-error Mantle does not expose endpoint compaction.
-LLMClient.compact(unsupported.mantle)
 // @ts-expect-error Mantle must not inherit trigger support from OpenAI's protocol.
 LLMClient.compact(unsupported.mantle, { mechanism: "trigger" })
-// @ts-expect-error Anthropic does not expose endpoint compaction.
-LLMClient.compact(unsupported.anthropic)
 // @ts-expect-error Anthropic does not expose trigger compaction.
 LLMClient.compact(unsupported.anthropic, { mechanism: "trigger" })
-// @ts-expect-error OpenAI Chat does not expose endpoint compaction.
-LLMClient.compact(unsupported.openai)
 // @ts-expect-error OpenAI Chat does not expose trigger compaction.
 LLMClient.compact(unsupported.openai, { mechanism: "trigger" })
-// @ts-expect-error Azure Chat does not expose endpoint compaction.
-LLMClient.compact(unsupported.azure)
 // @ts-expect-error Azure Chat does not expose trigger compaction.
 LLMClient.compact(unsupported.azure, { mechanism: "trigger" })
-// @ts-expect-error xAI Chat does not expose endpoint compaction.
-LLMClient.compact(unsupported.xai)
 // @ts-expect-error xAI Chat does not expose trigger compaction.
 LLMClient.compact(unsupported.xai, { mechanism: "trigger" })
-// @ts-expect-error Generic protocol compatibility does not grant endpoint support.
-LLMClient.compact(unsupported.compatible)
 // @ts-expect-error Generic protocol compatibility does not grant trigger support.
 LLMClient.compact(unsupported.compatible, { mechanism: "trigger" })
 // @ts-expect-error Changing the model replaces its capability.

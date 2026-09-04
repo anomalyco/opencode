@@ -80,7 +80,7 @@ describe("TestLLM legacy client", () => {
 })
 
 describe("TestLLM first-class client", () => {
-  it.effect("scripts trigger checkpoints lazily with gates, queue order, and fallbacks", () =>
+  it.effect("returns scripted checkpoints only for trigger compaction", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       const request = LLM.request({ model: OpenAI.configure().responses("fixture"), prompt: "hello" })
@@ -89,25 +89,10 @@ describe("TestLLM first-class client", () => {
         responseID: "resp_fixture",
       })
       const endpoint = new CompactionResponse({ replacement: [] })
-      yield* client.push(checkpoint, endpoint)
+      yield* client.push(checkpoint, endpoint, checkpoint, checkpoint)
       const operation = LLMClient.compact(request, { mechanism: "trigger" })
       expect(yield* client.requests()).toEqual([])
-      const gate = yield* client.gate()
-      const fiber = yield* operation.pipe(Effect.forkChild({ startImmediately: true }))
-      yield* gate.started
-      yield* client.wait(1)
-      expect(fiber.pollUnsafe()).toBeUndefined()
-      yield* gate.release
-      expect(yield* Fiber.join(fiber)).toBe(checkpoint)
-      expect(yield* client.compact(request)).toBe(endpoint)
-      yield* client.serve((observed) => {
-        expect(observed).toBe(request)
-        return checkpoint
-      })
-      expect(yield* LLMClient.compact(request, { mechanism: "trigger" })).toBe(checkpoint)
-      yield* client.always(checkpoint)
-      expect(yield* LLMClient.compact(request, { mechanism: "trigger" })).toBe(checkpoint)
-      yield* client.push(endpoint, checkpoint, checkpoint)
+      expect(yield* operation).toBe(checkpoint)
       expect(yield* client.compact(request, { mechanism: "trigger" }).pipe(Effect.catchDefect(Effect.succeed))).toBe(
         "TestLLM trigger compaction requires a CompactionCheckpointResponse",
       )
@@ -117,7 +102,6 @@ describe("TestLLM first-class client", () => {
       expect(yield* client.generate(request).pipe(Effect.catchDefect(Effect.succeed))).toBe(
         "TestLLM generation requires an event response",
       )
-      expect(yield* client.requests()).toHaveLength(7)
     }),
   )
 

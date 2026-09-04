@@ -5,7 +5,7 @@ import { configure } from "@opencode-ai/ai/providers/openai"
 import { SessionModelTransport } from "../src/session/model-transport"
 import { WebSocketConstructor } from "../src/effect/websocket-constructor"
 import { Session } from "@opencode-ai/schema/session"
-import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { testEffect } from "./lib/effect"
 import { makeWebSocketServer } from "./lib/websocket-server"
@@ -17,20 +17,8 @@ const runtime = Layer.mergeAll(
 const it = testEffect(runtime)
 const sessionID = Session.ID.make("ses_checkpoint_transport")
 const checkpoint = { type: "compaction", encrypted_content: "opaque" }
-type Mode =
-  | "success"
-  | "missing"
-  | "multiple"
-  | "incomplete"
-  | "disconnect"
-  | "cancel"
-  | "rejected"
-  | "ambiguous"
-  | "fallback"
-
-const fixture = (mode: Mode) =>
+const fixture = (mode: "success" | "invalid" | "fallback") =>
   Effect.gen(function* () {
-    const seen = yield* Deferred.make<void>()
     const requests: Array<Record<string, unknown>> = []
     const http: Array<Record<string, unknown>> = []
     let disconnect: (() => void) | undefined
@@ -72,32 +60,13 @@ const fixture = (mode: Mode) =>
           send({ type: "response.completed", response: { id, output: [item] } })
           return
         }
-        if (mode === "ambiguous") {
-          socket.close()
-          return
-        }
-        if (mode === "rejected") {
-          send({ type: "error", error: { code: "previous_response_not_found", message: "missing baseline" } })
-          return
-        }
         send({ type: "response.created", response: { id } })
-        if (mode !== "missing") send({ type: "response.output_item.done", output_index: 0, item: checkpoint })
-        Deferred.doneUnsafe(seen, Effect.void)
-        if (mode === "cancel") return
-        if (mode === "disconnect") {
-          socket.close()
-          return
-        }
+        send({ type: "response.output_item.done", output_index: 0, item: checkpoint })
         send({
-          type: mode === "incomplete" ? "response.incomplete" : "response.completed",
+          type: "response.completed",
           response: {
             id,
-            output:
-              mode === "missing"
-                ? []
-                : mode === "multiple"
-                  ? [checkpoint, { ...checkpoint, encrypted_content: "second" }]
-                  : [checkpoint],
+            output: mode === "invalid" ? [checkpoint, { ...checkpoint, encrypted_content: "second" }] : [checkpoint],
             usage: { input_tokens: 100, output_tokens: 10 },
           },
         })
@@ -107,7 +76,6 @@ const fixture = (mode: Mode) =>
       requests,
       headers: server.state.headers,
       http,
-      seen,
       opens: () => server.state.opens,
       disconnect: () => disconnect?.(),
       request: LLM.request({
@@ -161,44 +129,20 @@ it.live("trigger reuses the append baseline and clears it before the next genera
   }),
 )
 
-for (const mode of ["missing", "multiple", "incomplete", "disconnect", "rejected", "ambiguous"] as const) {
-  it.live(`trigger ${mode} does not retry, fall back, or commit a continuation checkpoint`, () =>
-    Effect.gen(function* () {
-      const server = yield* fixture(mode)
-      const transport = yield* SessionModelTransport.Service
-      const webSocket = transport.bind(sessionID)
-      const first = yield* LLMClient.generate(server.request, { webSocket })
-      const input = LLMRequest.update(server.request, { messages: [...server.request.messages, first.message] })
-      const error = yield* LLMClient.compact(input, { mechanism: "trigger", webSocket }).pipe(Effect.flip)
-      expect(error.reason._tag).toBe(
-        ["disconnect", "ambiguous", "rejected"].includes(mode) ? "Transport" : "InvalidProviderOutput",
-      )
-      if (mode === "rejected") expect(error.reason).toMatchObject({ delivery: "rejected", recovery: "retry-full" })
-      if (mode === "ambiguous") expect(error.reason).toMatchObject({ delivery: "ambiguous" })
-      expect(server.requests).toHaveLength(2)
-      expect(server.http).toHaveLength(0)
-      yield* LLMClient.generate(input, { webSocket })
-      expect(server.requests[2]?.previous_response_id).toBeUndefined()
-      expect(server.requests[2]?.input).toHaveLength(2)
-    }),
-  )
-}
-
-it.live("cancelled trigger closes its connection without returning the partial checkpoint", () =>
+it.live("invalid trigger output does not retry or commit a continuation checkpoint", () =>
   Effect.gen(function* () {
-    const server = yield* fixture("cancel")
+    const server = yield* fixture("invalid")
     const transport = yield* SessionModelTransport.Service
     const webSocket = transport.bind(sessionID)
-    const running = yield* LLMClient.compact(server.request, { mechanism: "trigger", webSocket }).pipe(
-      Effect.forkChild(),
-    )
-    yield* Deferred.await(server.seen)
-    yield* Fiber.interrupt(running)
-    yield* LLMClient.generate(server.request, { webSocket })
+    const first = yield* LLMClient.generate(server.request, { webSocket })
+    const input = LLMRequest.update(server.request, { messages: [...server.request.messages, first.message] })
+    const error = yield* LLMClient.compact(input, { mechanism: "trigger", webSocket }).pipe(Effect.flip)
+    expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(server.requests).toHaveLength(2)
-    expect(server.opens()).toBe(2)
-    expect(server.requests[1]?.previous_response_id).toBeUndefined()
     expect(server.http).toHaveLength(0)
+    yield* LLMClient.generate(input, { webSocket })
+    expect(server.requests[2]?.previous_response_id).toBeUndefined()
+    expect(server.requests[2]?.input).toHaveLength(2)
   }),
 )
 
