@@ -466,6 +466,10 @@ export const dict = {
 
   "dialog.project.edit.title": "Edit project",
   "dialog.project.edit.name": "Name",
+  "dialog.project.edit.folder": "Folder",
+  "dialog.project.delete.title": "Delete project",
+  "dialog.project.delete.confirm": "Confirm delete",
+  "dialog.project.delete.hint": "Deleting removes this project and ALL of its session history. This cannot be undone.",
   "dialog.project.edit.icon": "Icon",
   "dialog.project.edit.icon.alt": "Project icon",
   "dialog.project.edit.icon.hint": "Click or drag an image",

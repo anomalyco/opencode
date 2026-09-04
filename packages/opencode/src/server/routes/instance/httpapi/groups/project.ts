@@ -11,6 +11,7 @@ import { described } from "./metadata"
 const root = "/project"
 const UpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
+  worktree: Schema.optional(Schema.String),
   icon: Schema.optional(Project.Info.fields.icon),
   commands: Schema.optional(Project.Info.fields.commands),
 })
@@ -60,6 +61,19 @@ export const ProjectApi = HttpApi.make("project")
             identifier: "project.update",
             summary: "Update project",
             description: "Update project properties such as name, icon, and commands.",
+          }),
+        ),
+        HttpApiEndpoint.del("remove", `${root}/:projectID`, {
+          params: { projectID: ProjectV2.ID },
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({ mode: Schema.optional(Schema.Literals(["cascade", "detach"])) }),
+          success: described(Schema.Void, "Deletion result"),
+          error: [HttpApiError.BadRequest, ProjectNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.remove",
+            summary: "Delete a project",
+            description: "Remove a registered project. mode=cascade also deletes every session and its history.",
           }),
         ),
         HttpApiEndpoint.get("directories", `${root}/:projectID/directories`, {
