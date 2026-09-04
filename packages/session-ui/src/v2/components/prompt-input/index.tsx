@@ -74,7 +74,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
   })
 
   return (
-    <div class={`relative size-full flex flex-col gap-0 ${props.class ?? ""}`}>
+    <div class={`@container relative size-full flex flex-col gap-0 ${props.class ?? ""}`}>
       <input
         ref={props.controller.setFileInput}
         type="file"
@@ -195,7 +195,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
           </Show>
         </div>
 
-        <div class="flex h-11 items-center px-2">
+        <div class="flex h-11 items-center gap-1 px-2">
           <div
             class="flex min-w-0 flex-1 items-center gap-1"
             aria-hidden={state.mode === "shell"}
@@ -218,11 +218,13 @@ export function PromptInputV2(props: PromptInputV2Props) {
             />
             <Show when={view.agent} keyed>
               {(control) => (
-                <PromptInputV2ConfiguredSelect
-                  title={i18n.t("ui.promptInput.chooseAgent")}
-                  keybind={["Mod", "."]}
-                  control={control}
-                />
+                <div class="hidden @2xl:contents">
+                  <PromptInputV2ConfiguredSelect
+                    title={i18n.t("ui.promptInput.chooseAgent")}
+                    keybind={["Mod", "."]}
+                    control={control}
+                  />
+                </div>
               )}
             </Show>
             <Show
@@ -245,13 +247,32 @@ export function PromptInputV2(props: PromptInputV2Props) {
             <Show when={(props.variantControlVisible ?? true) && view.variant} keyed>
               {(control) => (
                 <Show when={control.options().length > 1}>
-                  <PromptInputV2ConfiguredSelect
-                    title={i18n.t("ui.promptInput.chooseVariant")}
-                    keybind={["Shift", "Mod", "D"]}
-                    control={control}
-                  />
+                  <div class="hidden @2xl:contents">
+                    <PromptInputV2ConfiguredSelect
+                      title={i18n.t("ui.promptInput.chooseVariant")}
+                      keybind={["Shift", "Mod", "D"]}
+                      control={control}
+                    />
+                  </div>
                 </Show>
               )}
+            </Show>
+            <Show
+              when={
+                view.agent ||
+                ((props.variantControlVisible ?? true) && view.variant && view.variant.options().length > 1)
+              }
+            >
+              <PromptInputV2SettingsMenu
+                agent={view.agent}
+                variant={
+                  (props.variantControlVisible ?? true) && view.variant && view.variant.options().length > 1
+                    ? view.variant
+                    : undefined
+                }
+                agentLabel={i18n.t("ui.promptInput.chooseAgent")}
+                variantLabel={i18n.t("ui.promptInput.chooseVariant")}
+              />
             </Show>
           </div>
           <PromptInputV2SubmitButton
@@ -560,6 +581,7 @@ export function PromptInputV2Select(props: {
 }) {
   return (
     <TooltipV2
+      class="min-w-0 max-w-[220px]"
       placement="top"
       value={
         <>
@@ -573,7 +595,7 @@ export function PromptInputV2Select(props: {
           as={ButtonV2}
           variant="ghost-muted"
           size="normal"
-          class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          class={`w-full justify-start ![font-weight:440] ${props.class ?? ""}`}
           aria-label={props.title}
         >
           {props.currentIcon}
@@ -599,6 +621,70 @@ export function PromptInputV2Select(props: {
         </MenuV2.Portal>
       </MenuV2>
     </TooltipV2>
+  )
+}
+
+function PromptInputV2SettingsMenu(props: {
+  agent?: PromptInputV2SelectControl
+  variant?: PromptInputV2SelectControl
+  agentLabel: string
+  variantLabel: string
+}) {
+  const label = () => (props.agent ? props.agentLabel : props.variantLabel)
+  return (
+    <div class="shrink-0 @2xl:hidden">
+      <TooltipV2 placement="top" value={label()}>
+        <MenuV2 gutter={6} modal={false} placement="top-start">
+          <MenuV2.Trigger
+            as={IconButtonV2}
+            type="button"
+            icon={<IconV2 name="outline-dots" />}
+            variant="ghost-muted"
+            size="large"
+            aria-label={label()}
+          />
+          <MenuV2.Portal>
+            <MenuV2.Content>
+              <Show when={props.variant} keyed>
+                {(control) => (
+                  <MenuV2.Group>
+                    <MenuV2.GroupLabel>{props.variantLabel}</MenuV2.GroupLabel>
+                    <MenuV2.RadioGroup value={control.current()} onChange={control.onSelect}>
+                      <For each={control.options()}>
+                        {(option) => (
+                          <MenuV2.RadioItem value={option.id} class="capitalize" closeOnSelect>
+                            {option.label}
+                          </MenuV2.RadioItem>
+                        )}
+                      </For>
+                    </MenuV2.RadioGroup>
+                  </MenuV2.Group>
+                )}
+              </Show>
+              <Show when={props.agent && props.variant}>
+                <MenuV2.Separator />
+              </Show>
+              <Show when={props.agent} keyed>
+                {(control) => (
+                  <MenuV2.Group>
+                    <MenuV2.GroupLabel>{props.agentLabel}</MenuV2.GroupLabel>
+                    <MenuV2.RadioGroup value={control.current()} onChange={control.onSelect}>
+                      <For each={control.options()}>
+                        {(option) => (
+                          <MenuV2.RadioItem value={option.id} class="capitalize" closeOnSelect>
+                            {option.label}
+                          </MenuV2.RadioItem>
+                        )}
+                      </For>
+                    </MenuV2.RadioGroup>
+                  </MenuV2.Group>
+                )}
+              </Show>
+            </MenuV2.Content>
+          </MenuV2.Portal>
+        </MenuV2>
+      </TooltipV2>
+    </div>
   )
 }
 
@@ -680,6 +766,7 @@ export function PromptInputV2SubmitButton(props: {
 }) {
   return (
     <TooltipV2
+      class="shrink-0"
       placement="top"
       inactive={!props.stopping && props.disabled}
       value={props.stopping ? props.stopLabel : props.sendLabel}

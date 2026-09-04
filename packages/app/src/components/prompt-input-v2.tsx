@@ -500,6 +500,7 @@ function PromptInputV2ModelControl(props: {
   return (
     <Show when={!props.loading}>
       <TooltipV2
+        class="min-w-0 max-w-[220px]"
         placement="top"
         gutter={4}
         value={
@@ -517,7 +518,7 @@ function PromptInputV2ModelControl(props: {
               data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
-              class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+              class="w-full justify-start ![font-weight:440] group"
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
               onClick={props.onUnpaidClick}
@@ -534,7 +535,7 @@ function PromptInputV2ModelControl(props: {
                 variant="ghost-muted"
                 size="normal"
                 style={{ height: "28px" }}
-                class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+                class="w-full justify-start ![font-weight:440] group"
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="prompt-model"
                 data-control-type="popover"
