@@ -727,6 +727,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
 })
 
 test("session startup prompt is submitted exactly once", async () => {
+  await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const events = createEventStream()
   const cwd = process.cwd()
@@ -780,7 +781,7 @@ test("session startup prompt is submitted exactly once", async () => {
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy", prompt: "RESUME_READY" },
         log: () => {},
-      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
 
     await Promise.race([
@@ -799,6 +800,76 @@ test("session startup prompt is submitted exactly once", async () => {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
   }
+})
+
+test.each(["session", "continue"])("session startup prompt waits for a delayed fork (%s)", async (target) => {
+  await using state = await tmpdir()
+  const fork = Promise.withResolvers<Response>()
+  const forkRequested = Promise.withResolvers<void>()
+  const promptSubmitted = Promise.withResolvers<unknown>()
+  const location = { directory, project: { id: "project", directory, canonical: directory } }
+  const source = {
+    id: "ses_source",
+    title: "Source session",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const forked = { ...source, id: "ses_forked", title: "Forked session" }
+  const prompts: unknown[] = []
+  await using setup = await createAppFixture({
+    state: state.path,
+    config: { animations: false, tabs: { enabled: false } },
+    args: {
+      sessionID: target === "session" ? source.id : undefined,
+      continue: target === "continue",
+      fork: true,
+      prompt: "FORK_READY",
+    },
+    fetch: async (url, request) => {
+      if (url.pathname === "/api/location") return json(location)
+      if (url.pathname === "/api/agent")
+        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      if (url.pathname === "/api/model")
+        return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
+      if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
+      if (url.pathname === "/api/session") return json({ data: [source], cursor: {} })
+      if (url.pathname === `/api/session/${source.id}/fork`) {
+        forkRequested.resolve()
+        return fork.promise
+      }
+      if (url.pathname === `/api/session/${forked.id}`) return json({ data: forked })
+      if (new RegExp(`^/api/session/${forked.id}/(message|inbox|permission)$`).test(url.pathname))
+        return json({ data: [], cursor: {} })
+      if (url.pathname === `/api/session/${forked.id}/prompt`) {
+        const body = await request.json()
+        prompts.push(body)
+        promptSubmitted.resolve(body)
+        return json({ data: {} })
+      }
+      return undefined
+    },
+  })
+
+  await forkRequested.promise
+  await setup.ready
+  await setup.waitForVisualIdle()
+  expect(setup.captureCharFrame()).not.toContain("FORK_READY")
+  expect(prompts).toHaveLength(0)
+
+  fork.resolve(json({ data: forked }))
+  const body = await Promise.race([
+    promptSubmitted.promise,
+    Bun.sleep(2000).then(() => {
+      throw new Error("fork startup prompt was not submitted")
+    }),
+  ])
+  expect(body).toMatchObject({ text: "FORK_READY" })
+  expect(prompts).toHaveLength(1)
 })
 
 test.each([false, true])("uses the resolved launch directory for new prompts (fallback: %s)", async (fallback) => {
@@ -877,11 +948,13 @@ test.each([false, true])("uses the resolved launch directory for new prompts (fa
 })
 
 test("error investigations repeatedly seed editable home drafts without creating sessions", async () => {
+  await using state = await tmpdir()
   const cwd = process.cwd()
   const location = { directory: cwd, project: { id: "project", directory: cwd } }
   let created = 0
   await using setup = await createAppFixture({
-    config: { animations: false, keybinds: { "mcp.list": "f6" } },
+    state: state.path,
+    config: { animations: false, tabs: { enabled: false }, keybinds: { "mcp.list": "f6" } },
     fetch: (url, request) => {
       if (url.pathname === "/api/location") return json(location)
       if (url.pathname === "/api/mcp")

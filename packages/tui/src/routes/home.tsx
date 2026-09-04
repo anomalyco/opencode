@@ -1,8 +1,7 @@
 import { Prompt, type PromptRef } from "../component/prompt"
 import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
 import { Logo } from "../component/logo"
-import { useArgs } from "../context/args"
-import { useRouteData } from "../context/route"
+import { useRoute, useRouteData } from "../context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { useEditorContext } from "../context/editor"
@@ -12,7 +11,6 @@ import { FormPrompt } from "./session/form"
 import { Slot } from "../plugin/render"
 import { useTerminalDimensions } from "@opentui/solid"
 
-let once = false
 const placeholder = {
   normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
   shell: ["ls -la", "git status", "pwd"],
@@ -20,9 +18,9 @@ const placeholder = {
 
 export function Home() {
   const route = useRouteData("home")
+  const router = useRoute()
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
-  const args = useArgs()
   const local = useLocal()
   const editor = useEditorContext()
   const data = useData()
@@ -48,9 +46,6 @@ export function Home() {
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
     promptRef.set(r)
-    if (once || !r || route.prompt || !args.prompt) return
-    r.set({ text: args.prompt, files: [], agents: [], pasted: [] })
-    once = true
   }
 
   createEffect(() => {
@@ -66,10 +61,15 @@ export function Home() {
     if (sent) return
     if (!r) return
     if (!local.model.ready) return
-    if (!args.prompt) return
-    if (r.current.text !== args.prompt) return
+    if (!route.autoSubmit) return
+    if (!route.prompt) return
+    if (r.current.text !== route.prompt.text) return
     sent = true
-    r.submit()
+    void r.submit().then((submitted) => {
+      if (submitted && router.data.type === "home")
+        router.navigate({ type: "home", location: router.data.location })
+      sent = submitted
+    })
   })
 
   return (

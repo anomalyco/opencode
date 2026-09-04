@@ -103,7 +103,6 @@ import {
 import { switchLabel } from "../../util/model"
 import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
 import { stringWidth } from "../../util/string-width"
-import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useSessionTabs } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
@@ -174,7 +173,6 @@ export function Session(props: {
   const { navigate } = useRoute()
   const data = useData()
   const local = useLocal()
-  const args = useArgs()
   const paths = useTuiPaths()
   const configState = useConfig()
   const config = configState.data
@@ -560,9 +558,13 @@ export function Session(props: {
     const current = prompt()
     if (sent || !current || !synced() || !local.model.ready || !local.model.catalogReady) return
     if (!local.agent.current() || !local.model.current()) return
-    if (!args.prompt || route.prompt?.text !== args.prompt || current.current.text !== args.prompt) return
+    if (!route.autoSubmit) return
+    if (!route.prompt || current.current.text !== route.prompt.text) return
     sent = true
-    current.submit()
+    void current.submit().then((submitted) => {
+      if (submitted && route.prompt) navigate({ type: "session", sessionID: route.sessionID })
+      sent = submitted
+    })
   })
   const dialog = useDialog()
   const renderer = useRenderer()

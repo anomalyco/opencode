@@ -16,6 +16,9 @@ export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
+    const requestedSession = Option.getOrUndefined(input.session)
+    if (input.fork && !input.continue && !requestedSession)
+      yield* Effect.fail(new Error("--fork requires --continue or --session"))
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
@@ -73,7 +76,8 @@ export default Runtime.handler(Commands, (input) =>
       },
       args: {
         continue: input.continue,
-        sessionID: Option.getOrUndefined(input.session),
+        sessionID: requestedSession,
+        fork: input.fork,
         prompt: Option.getOrUndefined(input.prompt),
         auto: input.auto || input.yolo || input.dangerouslySkipPermissions,
       },

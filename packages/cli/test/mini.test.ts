@@ -121,6 +121,13 @@ describe("mini command", () => {
     expect(result.stdout).toMatch(/^  run[ \t]+Run OpenCode with a message\r?$/m)
   })
 
+  test("requires a session target when forking from the full TUI", async () => {
+    const result = await cli(["--fork"])
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toContain("--fork requires --continue or --session")
+  })
+
   test("exposes run without legacy interactive, attach, or command modes", async () => {
     const result = await cli(["run", "--help"])
 

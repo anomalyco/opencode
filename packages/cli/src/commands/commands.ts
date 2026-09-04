@@ -54,6 +54,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       Flag.withDescription("Session ID to continue"),
       Flag.optional,
     ),
+    fork: Flag.boolean("fork").pipe(
+      Flag.withDescription("Fork the session before continuing"),
+      Flag.withDefault(false),
+    ),
     prompt: Flag.string("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
   },
   commands: [
