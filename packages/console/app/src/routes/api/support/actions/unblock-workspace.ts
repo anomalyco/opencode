@@ -4,7 +4,10 @@ import { safeEqual } from "@opencode-ai/console-core/util/crypto.js"
 import { Resource } from "@opencode-ai/console-resource"
 import z from "zod"
 
-const Body = z.object({ workspaceID: z.string().startsWith("wrk_") })
+const Body = z.union([
+  z.object({ workspaceID: z.string().startsWith("wrk_") }),
+  z.object({ email: z.email().transform((email) => email.trim().toLowerCase()) }),
+])
 
 export async function POST(event: APIEvent) {
   if (!safeEqual(event.request.headers.get("authorization") ?? "", `Bearer ${Resource.SUPPORT_API_KEY.value}`)) {
@@ -15,7 +18,7 @@ export async function POST(event: APIEvent) {
   if (!body.success) {
     return Response.json({ error: "Invalid request", issues: body.error.issues }, { status: 400 })
   }
-  return Workspace.unblock(body.data.workspaceID)
-    .then(() => Response.json({ success: true, message: "Workspace unblocked" }))
+  return Workspace.unblock(body.data)
+    .then((workspaceIDs) => Response.json({ success: true, message: "Workspace unblocked", workspaceIDs }))
     .catch((error) => Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 }))
 }

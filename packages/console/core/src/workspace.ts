@@ -7,8 +7,9 @@ import { UserTable } from "./schema/user.sql"
 import { BillingTable } from "./schema/billing.sql"
 import { WorkspaceTable } from "./schema/workspace.sql"
 import { AccountTable } from "./schema/account.sql"
+import { AuthTable } from "./schema/auth.sql"
 import { Key } from "./key"
-import { and, eq, isNull, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 
 export namespace Workspace {
   export const Region = z.enum(["us", "eu", "sg", "cn"])
@@ -104,15 +105,43 @@ export namespace Workspace {
     )
   })
 
-  export const unblock = fn(z.string().startsWith("wrk_"), async (workspaceID) => {
-    await Database.transaction(async (tx) => {
-      const workspace = await tx
-        .select({ id: WorkspaceTable.id })
-        .from(WorkspaceTable)
-        .where(eq(WorkspaceTable.id, workspaceID))
-        .then((rows) => rows[0])
-      if (!workspace) throw new Error("Workspace not found")
-      await tx.update(WorkspaceTable).set({ is_blocked: false }).where(eq(WorkspaceTable.id, workspaceID))
-    })
-  })
+  export const unblock = fn(
+    z.union([
+      z.object({ workspaceID: z.string().startsWith("wrk_") }),
+      z.object({ email: z.email() }),
+    ]),
+    async (input) => {
+      return Database.transaction(async (tx) => {
+        const workspaces = "workspaceID" in input
+          ? await tx
+              .select({ id: WorkspaceTable.id })
+              .from(WorkspaceTable)
+              .where(and(eq(WorkspaceTable.id, input.workspaceID), isNull(WorkspaceTable.timeDeleted)))
+          : await tx
+              .selectDistinct({ id: WorkspaceTable.id })
+              .from(WorkspaceTable)
+              .innerJoin(
+                UserTable,
+                and(eq(UserTable.workspaceID, WorkspaceTable.id), isNull(UserTable.timeDeleted)),
+              )
+              .innerJoin(
+                AuthTable,
+                and(
+                  eq(AuthTable.accountID, UserTable.accountID),
+                  eq(AuthTable.provider, "email"),
+                  eq(AuthTable.subject, input.email.toLowerCase()),
+                  isNull(AuthTable.timeDeleted),
+                ),
+              )
+              .where(isNull(WorkspaceTable.timeDeleted))
+        if (workspaces.length === 0) throw new Error("Workspace not found")
+        if (!("workspaceID" in input) && workspaces.length > 1) {
+          throw new Error("Email is associated with multiple workspaces; use workspaceID")
+        }
+        const workspaceIDs = workspaces.map((workspace) => workspace.id)
+        await tx.update(WorkspaceTable).set({ is_blocked: false }).where(inArray(WorkspaceTable.id, workspaceIDs))
+        return workspaceIDs
+      })
+    },
+  )
 }
