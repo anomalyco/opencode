@@ -7,9 +7,11 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { KV } from "@opencode-ai/core/kv"
 import { WebSearch } from "@opencode-ai/core/websearch"
+import type { Session } from "@opencode-ai/schema/session"
 
 export interface Interface extends WebSearch.Interface {
   readonly queries: readonly WebSearch.Input[]
+  readonly sessionIDs: readonly (Session.ID | undefined)[]
   /** Waits for query arrivals, not provider execution or query completion. */
   readonly wait: (count: number) => Effect.Effect<void>
 }
@@ -36,6 +38,7 @@ export const layer = Layer.effectContext(
     const context = yield* Layer.build(AppNodeBuilder.build(LayerNode.group([WebSearch.node, Bus.node, KV.node])))
     const websearch = Context.get(context, WebSearch.Service)
     const queries: WebSearch.Input[] = []
+    const sessionIDs: (Session.ID | undefined)[] = []
     let started = yield* Deferred.make<void>()
     const wait = (count: number): Effect.Effect<void> =>
       Effect.suspend(() =>
@@ -44,9 +47,11 @@ export const layer = Layer.effectContext(
     const test = Service.of({
       ...websearch,
       queries,
+      sessionIDs,
       wait,
       query: Effect.fnUntraced(function* (input, options) {
         queries.push({ ...input })
+        sessionIDs.push(options?.sessionID)
         const previous = started
         started = yield* Deferred.make<void>()
         yield* Deferred.succeed(previous, undefined)

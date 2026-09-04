@@ -135,6 +135,7 @@ describe("WebSearchTool registration", () => {
         },
       ])
       expect(fixture.events).toEqual(["permission", "query"])
+      expect(fixture.websearch.sessionIDs).toEqual([sessionID])
     }),
   )
 
@@ -215,7 +216,7 @@ describe("WebSearchTool registration", () => {
       })
       expect(first.status).toBe("completed")
       expect(["exa", "parallel"]).toContain(first.metadata?.provider)
-      expect(first.metadata?.provider).toBe((yield* fixture.websearch.default())?.id)
+      expect(fixture.websearch.sessionIDs).toEqual([sessionID, sessionID])
       expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
       expect(fixture.websearch.queries).toHaveLength(2)
       expect(fixture.formRequests).toEqual([
@@ -271,7 +272,9 @@ describe("WebSearchTool registration", () => {
       })
       expect(result.status).toBe("completed")
       expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
-      expect(result.metadata?.provider).toBe((yield* fixture.websearch.default())?.id)
+      expect(result.metadata?.provider).toBe(
+        (yield* fixture.websearch.query({ query: "next" }, { sessionID })).providerID,
+      )
       expect(fixture.formRequests).toHaveLength(1)
     }),
   )
@@ -368,11 +371,11 @@ describe("WebSearchTool registration", () => {
     Effect.gen(function* () {
       const fixture = yield* setup
       yield* fixture.websearch.select("random")
-      const first = yield* fixture.websearch.default()
-      if (!first) return yield* Effect.die("Expected an automatic provider")
+      const first = (yield* fixture.websearch.query({ query: "seed" }, { sessionID })).providerID
       yield* fixture.websearch.transform((editor) =>
         editor.add({
-          ...first,
+          id: first,
+          name: first,
           execute: () => Effect.fail(TestWebSearch.httpError()),
         }),
       )
@@ -387,14 +390,14 @@ describe("WebSearchTool registration", () => {
             progress.push(metadata)
           }),
       })
-      const replacement = WebSearch.ID.make(first.id === "exa" ? "parallel" : "exa")
-      expect(progress).toEqual([{ provider: first.id }, { provider: replacement }])
+      const replacement = WebSearch.ID.make(first === "exa" ? "parallel" : "exa")
+      expect(progress).toEqual([{ provider: first }, { provider: replacement }])
       expect(result).toMatchObject({
         output: { provider: replacement, results: fixture.results },
         metadata: { provider: replacement },
       })
       expect(fixture.formRequests).toEqual([])
-      expect((yield* fixture.websearch.default())?.id).toBe(replacement)
+      expect((yield* fixture.websearch.query({ query: "next" }, { sessionID })).providerID).toBe(replacement)
     }),
   )
 

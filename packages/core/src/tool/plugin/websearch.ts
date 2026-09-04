@@ -57,7 +57,10 @@ export const Plugin = {
               const search = (providerID?: WebSearch.ID) =>
                 websearch.query(
                   { ...input, providerID },
-                  { onProvider: (provider) => context.progress({ provider: provider.id }) },
+                  {
+                    sessionID: context.sessionID,
+                    onProvider: (provider) => context.progress({ provider: provider.id }),
+                  },
                 )
               const result = yield* search().pipe(
                 Effect.catchTag("WebSearch.ProviderRequired", () => {

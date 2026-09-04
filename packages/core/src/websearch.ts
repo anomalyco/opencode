@@ -1,7 +1,9 @@
 export * as WebSearch from "./websearch.js"
 
 import { WebSearch } from "@opencode-ai/schema/websearch"
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
+import type { Session } from "@opencode-ai/schema/session"
+import { SessionEvent } from "@opencode-ai/schema/session-event"
+import { Clock, Context, Effect, Layer, Option, Schema, Stream } from "effect"
 import { HttpClientError } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "./bus.js"
@@ -58,7 +60,10 @@ export interface Interface extends State.Transformable<Editor> {
   readonly select: (selection: Selection) => Effect.Effect<void>
   readonly query: (
     input: Input,
-    options?: { readonly onProvider?: (provider: Provider) => Effect.Effect<void> },
+    options?: {
+      readonly sessionID?: Session.ID
+      readonly onProvider?: (provider: Provider) => Effect.Effect<void>
+    },
   ) => Effect.Effect<Response, Error>
 }
 
@@ -84,7 +89,16 @@ const layer = Layer.effect(
     const kv = yield* KV.Service
     const decodeResults = Schema.decodeUnknownEffect(Schema.Array(Result))
     const cooldowns = new Map<ID, { until: number; error: RequestError }>()
-    let active: ID | undefined
+    const preferred = new Map<Session.ID | undefined, { provider?: ID }>()
+    yield* Effect.addFinalizer(() => Effect.sync(() => preferred.clear()))
+    yield* bus.subscribe([SessionEvent.Deleted, SessionEvent.Moved]).pipe(
+      Stream.runForEach((event) =>
+        Effect.sync(() => {
+          preferred.delete(event.data.sessionID)
+        }),
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
     const state = State.create<Data, Editor>({
       initial: () => ({ providers: new Map() }),
       editor: (editor) => ({
@@ -116,26 +130,30 @@ const layer = Layer.effect(
       return Option.getOrUndefined(decoded)
     })
 
-    const randomProvider = (now: number, attempted?: Set<ID>) => {
+    const randomProvider = (now: number, affinity: { provider?: ID }, attempted?: Set<ID>) => {
       const providers = state.get().providers
       cooldowns.forEach((cooldown, id) => {
         if (cooldown.until <= now || !providers.has(id)) cooldowns.delete(id)
       })
-      const current = active === undefined ? undefined : providers.get(active)
+      const current = affinity.provider === undefined ? undefined : providers.get(affinity.provider)
       if (current && !cooldowns.has(current.id) && !attempted?.has(current.id)) return current
       const available = Array.from(providers.values()).filter(
         (provider) => !cooldowns.has(provider.id) && !attempted?.has(provider.id),
       )
       const provider = available[Math.floor(Math.random() * available.length)]
-      active = provider?.id
+      if (provider) affinity.provider = provider.id
       return provider
     }
 
     const defaultProvider = Effect.fn("WebSearch.default")(function* (choice: Selection | undefined) {
       if (choice === false) return yield* new DisabledError()
       if (choice === "random") {
-        // A configured but cooling-down provider must not trigger the consent form again.
-        return randomProvider(yield* Clock.currentTimeMillis) ?? state.get().providers.values().next().value
+        // Inspection must not select a provider or reopen consent when every provider is cooling down.
+        const active = preferred.get(undefined)?.provider
+        return (
+          (active === undefined ? undefined : state.get().providers.get(active)) ??
+          state.get().providers.values().next().value
+        )
       }
       return choice ? state.get().providers.get(choice) : undefined
     })
@@ -162,6 +180,12 @@ const layer = Layer.effect(
           ? yield* requireProvider(state.get().providers, input.providerID)
           : yield* defaultProvider(choice)
         if (!provider) return yield* new ProviderRequiredError()
+        // Keep the cell for this query so deletion/movement cannot reinsert an in-flight session's entry.
+        const affinity = preferred.get(options?.sessionID) ?? { provider: undefined }
+        if (choice === "random") {
+          preferred.set(options?.sessionID, affinity)
+          provider = randomProvider(yield* Clock.currentTimeMillis, affinity) ?? provider
+        }
         const attempted = new Set<ID>()
         while (true) {
           if (options?.onProvider) yield* options.onProvider({ id: provider.id, name: provider.name })
@@ -180,7 +204,7 @@ const layer = Layer.effect(
             cooldown = { until: now + cooldownMillis(cause.response.headers["retry-after"], now), error }
             cooldowns.set(provider.id, cooldown)
           }
-          provider = randomProvider(yield* Clock.currentTimeMillis, attempted)
+          provider = randomProvider(yield* Clock.currentTimeMillis, affinity, attempted)
           if (!provider) return yield* cooldown.error
         }
       }),
