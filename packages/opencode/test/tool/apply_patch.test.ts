@@ -318,6 +318,21 @@ describe("tool.apply_patch freeform", () => {
     }),
   )
 
+  it.instance("treats move-to-same-path as an update", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const target = path.join(test.directory, "same.txt")
+      yield* writeText(target, "old content\n")
+
+      const patchText =
+        "*** Begin Patch\n*** Update File: same.txt\n*** Move to: same.txt\n@@\n-old content\n+new content\n*** End Patch"
+
+      yield* execute({ patchText }, ctx)
+      expect(yield* readText(target)).toBe("new content\n")
+    }),
+  )
+
   it.instance("adds file overwriting existing file", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

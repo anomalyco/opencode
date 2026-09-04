@@ -234,6 +234,13 @@ export const ApplyPatchTool = Tool.define(
 
           case "move":
             if (change.movePath) {
+              // Move to the same path degenerates to an update — otherwise write+remove would delete the file just written.
+              if (change.movePath === change.filePath) {
+                yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
+                updates.push({ file: change.filePath, event: "change" })
+                break
+              }
+
               // Create parent directories (recursive: true is safe on existing/root dirs)
 
               yield* afs.writeWithDirs(change.movePath!, Bom.join(change.newContent, change.bom))
