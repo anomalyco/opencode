@@ -56,11 +56,15 @@ export function SessionBrowserPane(props: {
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
     const visible = props.visible && store.visible && !dialog.active && !covered(rect)
-    const color = getComputedStyle(surface).backgroundColor
+    // The cutout exposes the app backdrop outside the rounded Review card,
+    // not the browser surface inside it.
+    const color = getComputedStyle(
+      surface.closest(".bg-v2-background-bg-deep") ?? document.documentElement,
+    ).backgroundColor
     const next = `${tab.id}:${visible}:${left}:${top}:${right}:${bottom}:${color}:${window.devicePixelRatio}`
     if (next !== layout) {
       layout = next
-      // Let the browser resolve the semantic surface color, including custom
+      // Let the browser resolve the semantic backdrop color, including custom
       // themes using color formats that Electron's color parser cannot read.
       if (paint) {
         paint.clearRect(0, 0, 1, 1)
