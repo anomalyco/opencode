@@ -28,6 +28,7 @@ export interface CompareInput {
 
 export interface DiffInput extends CompareInput {
   readonly context?: number
+  /** Project-relative files or directories. Each directory selector produces a combined diff. */
   readonly paths?: readonly RelativePath[]
 }
 

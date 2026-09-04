@@ -120,3 +120,39 @@ export const chunksByFile = (patch: Patch, fallback: (index: number) => string |
     acc.set(file, (acc.get(file) ?? "") + chunk)
     return acc
   }, new Map<string, string>())
+
+/** Assemble streamed Git output one file at a time, preserving every character. */
+export function collectGitPatch() {
+  const files = new Map<string, string>()
+  const fragments: string[] = []
+  const marker = "\ndiff --git "
+  let tail = ""
+  const flush = () => {
+    if (fragments.length === 0) return
+    const text = fragments.join("")
+    fragments.length = 0
+    const file = fileFromPatchChunk(text)
+    if (file) files.set(file, (files.get(file) ?? "") + text)
+  }
+  return {
+    write(chunk: string) {
+      const text = tail + chunk
+      let start = 0
+      for (let index = text.indexOf(marker); index !== -1; index = text.indexOf(marker, start)) {
+        fragments.push(text.slice(start, index + 1))
+        flush()
+        start = index + 1
+      }
+      // Keep only enough lookbehind to recognize a header split between reads.
+      const end = Math.max(start, text.length - marker.length + 1)
+      if (end > start) fragments.push(text.slice(start, end))
+      tail = text.slice(end)
+    },
+    end() {
+      if (tail) fragments.push(tail)
+      tail = ""
+      flush()
+      return files
+    },
+  }
+}

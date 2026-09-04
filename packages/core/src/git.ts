@@ -1,7 +1,7 @@
 export * as Git from "./git.js"
 
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath, RelativePath } from "./schema.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -150,6 +150,7 @@ export interface Interface {
       from: TreeID
       to: TreeID
       context?: number
+      /** Exact files or directory prefixes; directory selectors return combined diffs. */
       paths?: readonly RelativePath[]
     }) => Effect.Effect<readonly File.Diff[], OperationError>
     readonly restore: (input: {
@@ -296,14 +297,6 @@ const layer = Layer.effect(
     const reset = Effect.fn("Git.sync.resetHard")(function* (repository: Repository, revision: string) {
       yield* operation("reset", repository.worktree, ["reset", "--hard", revision])
     })
-
-    const repositoryArgs = (repository: Repository, args: string[]) => [
-      "--git-dir",
-      repository.gitDirectory,
-      "--work-tree",
-      repository.worktree,
-      ...args,
-    ]
 
     const repositoryOperation = Effect.fnUntraced(function* (
       operationName: OperationError["operation"],
@@ -521,39 +514,54 @@ const layer = Layer.effect(
       paths?: readonly RelativePath[]
     }) {
       const diffs = new Map<RelativePath, File.Diff>()
+      const directories = new Map<RelativePath, RelativePath[]>()
+      const binaries = new Map<string, string>()
       // Stable headers keep user diff settings from mixing neighboring files' patch chunks.
+      const diffArgs = (options: string[], paths: readonly RelativePath[]) => [
+        "--literal-pathspecs",
+        "diff",
+        "--no-ext-diff",
+        "--no-color",
+        "--no-renames",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        "--submodule=short",
+        ...options,
+        input.from,
+        input.to,
+        "--",
+        ...paths,
+      ]
       const read = (options: string[], paths: readonly RelativePath[]) =>
-        repositoryOperation("diff", input.repository, [
-          "--literal-pathspecs",
-          "diff",
-          "--no-ext-diff",
-          "--no-color",
-          "--no-renames",
-          "--src-prefix=a/",
-          "--dst-prefix=b/",
-          "--submodule=short",
-          ...options,
-          input.from,
-          input.to,
-          "--",
-          ...paths,
-        ])
+        repositoryOperation("diff", input.repository, diffArgs(options, paths))
       for (const paths of input.paths === undefined
         ? [[]]
         : pathBatches(input.paths.map((file) => repositoryPath(input.repository, file)))) {
-        const result = yield* Effect.all(
-          {
-            names: read(["--name-status", "-z"], paths),
-            stats: read(["--numstat", "-z"], paths),
-            patch: read([`--unified=${input.context ?? 3}`], paths),
-          },
-          { concurrency: 3 },
-        )
-        const names = result.names.text.split("\0")
+        const names = (yield* read(["--name-status", "-z"], paths)).text.split("\0")
         const statuses = new Map(
           names.flatMap((status, index) => (index % 2 === 0 && status ? [[names[index + 1], status] as const] : [])),
         )
-        const patches = VcsPatch.chunksByFile({ text: result.patch.text, truncated: false }, () => undefined)
+        if (statuses.size === 0) continue
+        const parents = new Set<string>()
+        for (const file of statuses.keys()) {
+          for (let index = file.lastIndexOf("/"); index !== -1; index = file.lastIndexOf("/", index - 1)) {
+            parents.add(file.slice(0, index))
+          }
+        }
+        for (const selected of paths) {
+          if (selected !== "." && !parents.has(selected)) continue
+          const files = Array.from(statuses.keys())
+            .filter((file) => selected === "." || file === selected || file.startsWith(selected + "/"))
+            .map((file) => RelativePath.make(file))
+          if (files.length > 0) directories.set(selected, files)
+        }
+        const result = yield* Effect.all(
+          {
+            stats: read(["--numstat", "-z"], paths),
+            patches: readPatches(proc, input.repository, diffArgs([`--unified=${input.context ?? 3}`], paths)),
+          },
+          { concurrency: 2 },
+        )
         for (const entry of result.stats.text.split("\0").filter(Boolean)) {
           const first = entry.indexOf("\t")
           const second = entry.indexOf("\t", first + 1)
@@ -562,22 +570,43 @@ const layer = Layer.effect(
           const deletions = entry.slice(first + 1, second)
           const binary = additions === "-" || deletions === "-"
           const status = statuses.get(file)
+          const patch = result.patches.get(file)
+          if (!binary && patch === undefined && (Number(additions) > 0 || Number(deletions) > 0))
+            return yield* new OperationError({
+              operation: "diff",
+              directory: input.repository.worktree,
+              message: `Could not parse Git patch for ${file}`,
+            })
+          if (binary) binaries.set(file, patch ?? "")
           diffs.set(file, {
             file,
             status: status === "A" ? "added" : status === "D" ? "deleted" : "modified",
             additions: binary ? 0 : Number(additions),
             deletions: binary ? 0 : Number(deletions),
-            patch: binary ? "" : (patches.get(file) ?? ""),
+            patch: binary ? "" : (patch ?? ""),
           })
         }
       }
       return input.paths === undefined
         ? Array.from(diffs.values())
         : input.paths.map((file) => {
-            const diff = diffs.get(repositoryPath(input.repository, file))
-            return diff
-              ? { ...diff, file }
-              : { file, status: "modified" as const, additions: 0, deletions: 0, patch: "" }
+            const normalized = repositoryPath(input.repository, file)
+            const diff = diffs.get(normalized)
+            if (diff && !directories.has(normalized)) return { ...diff, file }
+            const children = (directories.get(normalized) ?? []).flatMap((path) => {
+              const child = diffs.get(path)
+              return child ? [child] : []
+            })
+            return {
+              file,
+              status:
+                children.length > 0 && children.every((child) => child.status === children[0].status)
+                  ? children[0].status
+                  : ("modified" as const),
+              additions: children.reduce((total, child) => total + child.additions, 0),
+              deletions: children.reduce((total, child) => total + child.deletions, 0),
+              patch: children.map((child) => binaries.get(child.file) ?? child.patch).join(""),
+            }
           })
     })
 
@@ -740,6 +769,48 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, AppProcess.node] })
+
+function readPatches(proc: AppProcess.Interface, repository: Repository, args: string[]) {
+  return Effect.gen(function* () {
+    const collector = VcsPatch.collectGitPatch()
+    const handle = yield* proc.spawn(
+      ChildProcess.make("git", repositoryArgs(repository, args), {
+        cwd: repository.worktree,
+        extendEnv: true,
+        stdin: "ignore",
+      }),
+    )
+    const result = yield* Effect.all(
+      {
+        stdout: handle.stdout.pipe(
+          Stream.decodeText,
+          Stream.runForEach((chunk) => Effect.sync(() => collector.write(chunk))),
+        ),
+        stderr: AppProcess.collectStream(handle.stderr, undefined),
+        code: handle.exitCode,
+      },
+      { concurrency: "unbounded" },
+    )
+    if (result.code !== 0)
+      return yield* new OperationError({
+        operation: "diff",
+        directory: repository.worktree,
+        message: result.stderr.buffer.toString("utf8").trim() || "Git diff failed",
+      })
+    return collector.end()
+  }).pipe(
+    Effect.scoped,
+    Effect.mapError((cause) =>
+      cause instanceof OperationError
+        ? cause
+        : new OperationError({ operation: "diff", directory: repository.worktree, message: cause.message, cause }),
+    ),
+  )
+}
+
+function repositoryArgs(repository: Repository, args: string[]) {
+  return ["--git-dir", repository.gitDirectory, "--work-tree", repository.worktree, ...args]
+}
 
 function repositoryPath(repository: Repository, file: RelativePath) {
   return RelativePath.make(

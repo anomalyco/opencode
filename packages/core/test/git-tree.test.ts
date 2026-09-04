@@ -148,6 +148,47 @@ describe("Git tree batches", () => {
   )
 
   it.live(
+    "streams multi-buffer UTF-8 patches without changing CRLF content",
+    () =>
+      Effect.gen(function* () {
+        const f = yield* fixture({ "large.txt": "before\r\n" })
+        yield* write(f.directory, { "large.txt": "after 🦊 diff --git is file content\r\n".repeat(10_000) })
+        const after = yield* f.capture()
+        const diffs = yield* f.git.tree.diff({ repository: f.repository, from: f.before, to: after })
+        const expected = yield* Effect.promise(() =>
+          $`git --git-dir ${f.repository.gitDirectory} --work-tree ${f.directory} diff --no-renames ${f.before} ${after} -- large.txt`
+            .cwd(f.directory)
+            .text(),
+        )
+        expect(diffs).toHaveLength(1)
+        expect(diffs[0].patch).toBe(expected)
+      }),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "fails instead of returning partial diffs when Git cannot read a changed blob",
+    () =>
+      Effect.gen(function* () {
+        const f = yield* fixture({ "changed.txt": "before\n" })
+        yield* write(f.directory, { "changed.txt": "after\n" })
+        const after = yield* f.capture()
+        const blob = (yield* Effect.promise(() =>
+          $`git --git-dir ${f.repository.gitDirectory} rev-parse ${`${after}:changed.txt`}`.cwd(f.directory).text(),
+        )).trim()
+        yield* Effect.promise(async () => {
+          const file = path.join(f.repository.gitDirectory, "objects", blob.slice(0, 2), blob.slice(2))
+          await fs.unlink(file)
+          await fs.writeFile(file, "broken object")
+        })
+        const error = yield* f.git.tree.diff({ repository: f.repository, from: f.before, to: after }).pipe(Effect.flip)
+        expect(error).toBeInstanceOf(Git.OperationError)
+        expect(error.operation).toBe("diff")
+      }),
+    { timeout: 30_000 },
+  )
+
+  it.live(
     "keeps Git display configuration from mixing neighboring patches",
     () =>
       Effect.gen(function* () {
@@ -231,6 +272,84 @@ describe("Git tree batches", () => {
         expect(yield* Effect.promise(() => Bun.file(path.join(f.directory, "app/s/page.tsx")).text())).toBe(
           "keep this edit\n",
         )
+      }),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "returns complete directory diffs and totals without including neighboring paths",
+    () =>
+      Effect.gen(function* () {
+        const f = yield* fixture({
+          "nested/a.txt": "before\n",
+          "nested/deeper/b.txt": "before\n",
+          "nested/image.bin": new Uint8Array([0, 1]),
+          "nested-other/outside.txt": "before\n",
+        })
+        yield* write(f.directory, {
+          "nested/a.txt": "after\n",
+          "nested/deeper/b.txt": "after\nextra\n",
+          "nested/image.bin": new Uint8Array([0, 2]),
+          "nested-other/outside.txt": "outside\n",
+        })
+        const after = yield* f.capture()
+        for (const selected of ["nested/", "./nested", "."]) {
+          const diffs = yield* f.git.tree.diff({
+            repository: f.repository,
+            from: f.before,
+            to: after,
+            paths: [RelativePath.make(selected)],
+          })
+          const expected = yield* Effect.promise(() =>
+            $`git --git-dir ${f.repository.gitDirectory} --work-tree ${f.directory} diff --no-renames ${f.before} ${after} -- ${selected}`
+              .cwd(f.directory)
+              .text(),
+          )
+          expect(diffs).toHaveLength(1)
+          expect(diffs[0]).toEqual({
+            file: selected,
+            status: "modified",
+            additions: selected === "." ? 4 : 3,
+            deletions: selected === "." ? 3 : 2,
+            patch: expected,
+          })
+        }
+        const empty = yield* f.git.tree.diff({
+          repository: f.repository,
+          from: f.before,
+          to: after,
+          paths: [RelativePath.make("absent/")],
+        })
+        expect(empty).toEqual([{ file: "absent/", status: "modified", additions: 0, deletions: 0, patch: "" }])
+      }),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "includes exact and descendant changes in file-directory replacements",
+    () =>
+      Effect.gen(function* () {
+        const f = yield* fixture({ module: "old file\n" })
+        yield* Effect.promise(() => fs.unlink(path.join(f.directory, "module")))
+        yield* write(f.directory, { "module/index.ts": "new child\n" })
+        const after = yield* f.capture()
+        for (const [from, to] of [
+          [f.before, after],
+          [after, f.before],
+        ]) {
+          const diffs = yield* f.git.tree.diff({
+            repository: f.repository,
+            from,
+            to,
+            paths: [RelativePath.make("module")],
+          })
+          const expected = yield* Effect.promise(() =>
+            $`git --git-dir ${f.repository.gitDirectory} --work-tree ${f.directory} diff --no-renames ${from} ${to} -- module`
+              .cwd(f.directory)
+              .text(),
+          )
+          expect(diffs).toEqual([{ file: "module", status: "modified", additions: 1, deletions: 1, patch: expected }])
+        }
       }),
     { timeout: 30_000 },
   )
