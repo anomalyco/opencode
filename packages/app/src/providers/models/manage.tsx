@@ -16,6 +16,7 @@ import { DialogConnectProvider } from "@/providers/connect/dialog"
 import { decode64 } from "@/runtime/persistence/base64"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
+import { compareModels } from "./order"
 import "@/settings/settings.css"
 
 type ModelItem = ReturnType<ReturnType<typeof useLocal>["model"]["list"]>[number]
@@ -45,7 +46,7 @@ export const DialogManageModels: Component = () => {
     items: () => local.model.list(),
     key: (x) => `${x.provider.id}:${x.id}`,
     filterKeys: ["provider.name", "name", "id"],
-    sortBy: (a, b) => a.name.localeCompare(b.name),
+    sortBy: compareModels,
     groupBy: (x) => x.provider.id,
     sortGroupsBy: (a, b) => {
       const aRank = popularProviders.indexOf(a.category)

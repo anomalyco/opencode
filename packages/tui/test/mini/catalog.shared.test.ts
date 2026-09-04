@@ -58,6 +58,7 @@ describe("run catalog shared", () => {
         models: {
           "gpt-5": {
             name: "Little Frank",
+            time: { released: 1 },
             cost: {
               input: 0,
             },

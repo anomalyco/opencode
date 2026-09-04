@@ -58,6 +58,9 @@ export type RunCommand = {
 
 type RunProviderModel = {
   name?: string
+  time?: {
+    released: number
+  }
   cost?: {
     input: number
   }

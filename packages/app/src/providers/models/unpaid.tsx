@@ -11,6 +11,7 @@ import { useIntegrations } from "@/providers/catalog/integrations"
 import { decode64 } from "@/runtime/persistence/base64"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ModelTooltip } from "./tooltip"
+import { compareModels, isFreeModel } from "./order"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
 const featuredProviders = ["opencode", "opencode-go", "openai", "anthropic", "google", "github-copilot"]
@@ -29,9 +30,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
     const c = model.current()
     return c ? `${c.provider.id}:${c.id}` : undefined
   })
-  const isFree = (item: ReturnType<ModelState["list"]>[number]) =>
-    item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)
-  const freeModels = createMemo(() => model.list().filter(isFree))
+  const freeModels = createMemo(() => model.list().filter(isFreeModel).sort(compareModels))
 
   const openProviders = (provider?: string) => {
     void import("@/providers/connect/dialog").then((x) => {
@@ -94,7 +93,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
                     <ModelTooltip
                       model={{ ...item, name: displayModelName(item.name) }}
                       latest={item.latest}
-                      free={isFree(item)}
+                      free={isFreeModel(item)}
                       v2
                     />
                   }

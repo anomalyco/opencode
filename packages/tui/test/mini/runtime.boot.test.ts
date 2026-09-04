@@ -89,6 +89,7 @@ describe("run runtime boot", () => {
           models: {
             "gpt-5": {
               name: "gpt-5",
+              time: { released: 1 },
               cost: {
                 input: 0,
               },

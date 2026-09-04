@@ -3,6 +3,7 @@ import { TextAttributes, type InputRenderable, type KeyEvent } from "@opentui/co
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
+import { compareModelOrder } from "@opencode-ai/util/model-order"
 import { Keymap } from "../context/keymap"
 import { Config } from "../config"
 import { OneCellSpinner } from "../component/one-cell-spinner"
@@ -51,6 +52,8 @@ type ModelEntry = PanelEntry & {
   providerID: string
   modelID: string
   providerName: string
+  free: boolean
+  released: number
   current: boolean
 }
 
@@ -149,6 +152,7 @@ function createSearchablePanelController<T extends PanelEntry>(input: {
   onClose: () => void
   onSelect: (item: T) => void
   isCurrent?: (item: T) => boolean
+  compare?: (a: T, b: T, query: string) => number
   closeOnFirstUp?: boolean
   onKey?: (event: KeyEvent, item: T | undefined) => boolean
   onRows?: (rows: number) => void
@@ -162,7 +166,12 @@ function createSearchablePanelController<T extends PanelEntry>(input: {
   })
   let field: InputRenderable | undefined
   const [query, setQuery] = createSignal("")
-  const items = createMemo<T[]>(() => match(query(), input.entries()))
+  const items = createMemo<T[]>(() => {
+    const text = query().trim()
+    const matched = match(text, input.entries())
+    const compare = input.compare
+    return compare ? matched.toSorted((a, b) => compare(a, b, text)) : matched
+  })
   const menu = createFooterMenuState({ count: () => items().length, limit: () => layout().limit })
   const selected = () => items()[menu.selected()]
 
@@ -1154,46 +1163,29 @@ export function RunModelSelectBody(props: {
   mono?: boolean
 }) {
   const entries = createMemo<ModelEntry[]>(() =>
-    (props.providers() ?? [])
-      .flatMap((provider) =>
-        Object.entries(provider.models)
-          .filter(([, model]) => model.status !== "deprecated")
-          .map(([modelID, model]) => {
-            const title = model.name ?? modelID
-            const current = props.current()?.providerID === provider.id && props.current()?.modelID === modelID
-            const footer = current
-              ? "current"
-              : model.cost?.input === 0 && provider.id === "opencode"
-                ? "Free"
-                : title !== modelID
-                  ? modelID
-                  : undefined
-            return {
-              providerID: provider.id,
-              modelID,
-              providerName: provider.name,
-              category: provider.name,
-              display: title,
-              footer,
-              footerTone: current ? ("selection" as const) : undefined,
-              keywords: `${provider.id} ${provider.name} ${modelID} ${title} ${footer ?? ""}`,
-              current,
-            }
-          }),
-      )
-      .sort((a, b) => {
-        const provider = Number(a.providerID !== "opencode") - Number(b.providerID !== "opencode")
-        if (provider !== 0) {
-          return provider
-        }
-
-        const name = a.providerName.localeCompare(b.providerName)
-        if (name !== 0) {
-          return name
-        }
-
-        return a.display.localeCompare(b.display)
-      }),
+    (props.providers() ?? []).flatMap((provider) =>
+      Object.entries(provider.models)
+        .filter(([, model]) => model.status !== "deprecated")
+        .map(([modelID, model]) => {
+          const title = model.name ?? modelID
+          const current = props.current()?.providerID === provider.id && props.current()?.modelID === modelID
+          const free = model.cost?.input === 0 && provider.id === "opencode"
+          const footer = current ? "current" : free ? "Free" : title !== modelID ? modelID : undefined
+          return {
+            providerID: provider.id,
+            modelID,
+            providerName: provider.name,
+            free,
+            released: model.time?.released ?? 0,
+            category: provider.name,
+            display: title,
+            footer,
+            footerTone: current ? ("selection" as const) : undefined,
+            keywords: `${provider.id} ${provider.name} ${modelID} ${title} ${footer ?? ""}`,
+            current,
+          }
+        }),
+    ),
   )
   const controller = createSearchablePanelController({
     entries,
@@ -1201,6 +1193,20 @@ export function RunModelSelectBody(props: {
     onClose: props.onClose,
     onSelect: (item) => props.onSelect({ providerID: item.providerID, modelID: item.modelID }),
     isCurrent: (item) => item.current,
+    compare: (a, b, query) => {
+      if (!query) {
+        const provider = Number(a.providerID !== "opencode") - Number(b.providerID !== "opencode")
+        if (provider !== 0) return provider
+
+        const name = a.providerName.localeCompare(b.providerName)
+        if (name !== 0) return name
+      }
+
+      return compareModelOrder(
+        { free: a.free, released: a.released, name: a.display },
+        { free: b.free, released: b.released, name: b.display },
+      )
+    },
   })
 
   return (

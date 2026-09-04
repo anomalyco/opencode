@@ -75,6 +75,7 @@ export function runProviders(providers: CurrentProvider[], models: CurrentModel[
     const cost = defaultCost(model)
     provider.models[model.id] = {
       name: model.name,
+      time: { released: model.time.released },
       cost: cost === undefined ? undefined : { input: cost },
       limit: { context: model.limit.context },
       status: model.status,

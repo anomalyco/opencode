@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { prioritizeFavorites, sortModelOptions } from "../../../../src/component/dialog-model"
+import { go } from "fuzzysort"
 
 describe("prioritizeFavorites", () => {
   test("uses the favorite order captured when the dialog opened", () => {
@@ -23,6 +24,32 @@ describe("prioritizeFavorites", () => {
 })
 
 describe("sortModelOptions", () => {
+  test.each(["", "haik"])("orders matches free-first then newest for query %j", (query) => {
+    const options = [
+      { providerID: "demo", title: "Claude Haiku 3", releaseDate: 1 },
+      { providerID: "demo", title: "Claude Haiku 4.5", releaseDate: 2 },
+      { providerID: "demo", title: "Claude Haiku Free", releaseDate: 0, footer: "Free" },
+    ]
+    const matches = query ? go(query, options, { key: "title" }).map((item) => item.obj) : options
+    expect(sortModelOptions(matches, !query).map((item) => item.title)).toEqual([
+      "Claude Haiku Free",
+      "Claude Haiku 4.5",
+      "Claude Haiku 3",
+    ])
+  })
+
+  test("flat search sorts across providers rather than by provider priority", () => {
+    expect(
+      sortModelOptions(
+        [
+          { providerID: "opencode", providerName: "OpenCode", title: "Claude Haiku 3", releaseDate: 1 },
+          { providerID: "anthropic", providerName: "Anthropic", title: "Claude Haiku 4.5", releaseDate: 2 },
+        ],
+        false,
+      ).map((item) => item.title),
+    ).toEqual(["Claude Haiku 4.5", "Claude Haiku 3"])
+  })
+
   test("orders opencode models before other providers", () => {
     const sorted = sortModelOptions([
       { providerID: "openai", providerName: "OpenAI", releaseDate: 3, title: "GPT 5" },

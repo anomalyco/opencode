@@ -4,7 +4,8 @@ import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { DialogIntegration } from "./dialog-integration"
 import { DialogVariant } from "./dialog-variant"
-import * as fuzzysort from "fuzzysort"
+import { go } from "fuzzysort"
+import { compareModelOrder } from "@opencode-ai/util/model-order"
 import { useConnected } from "./use-connected"
 import { useData } from "../context/data"
 import { modelPreferenceKey } from "../model-preference"
@@ -99,11 +100,15 @@ export function DialogModel(props: { providerID?: string }) {
             return false
           return true
         }),
+      connected(),
     )
 
     if (needle) {
       return prioritizeFavorites(
-        fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
+        sortModelOptions(
+          go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
+          false,
+        ),
         favoritePriority,
       )
     }
@@ -179,19 +184,20 @@ export function prioritizeFavorites<T extends { value: { providerID: string; mod
 }
 
 export function sortModelOptions<
-  T extends { providerID?: string; providerName?: string; releaseDate: string | number; title: string },
->(options: T[]) {
+  T extends { providerID?: string; providerName?: string; releaseDate: number; title: string; footer?: string },
+>(options: T[], grouped = true) {
   return options.toSorted((a, b) => {
-    const provider = Number(a.providerID !== "opencode") - Number(b.providerID !== "opencode")
-    if (provider !== 0) return provider
+    if (grouped) {
+      const provider = Number(a.providerID !== "opencode") - Number(b.providerID !== "opencode")
+      if (provider !== 0) return provider
 
-    const name = (a.providerName ?? "").localeCompare(b.providerName ?? "")
-    if (name !== 0) return name
-
-    const release = Number(b.releaseDate) - Number(a.releaseDate)
-    if (release !== 0) return release
-
-    return a.title.localeCompare(b.title)
+      const name = (a.providerName ?? "").localeCompare(b.providerName ?? "")
+      if (name !== 0) return name
+    }
+    return compareModelOrder(
+      { free: a.footer === "Free", released: a.releaseDate, name: a.title },
+      { free: b.footer === "Free", released: b.releaseDate, name: b.title },
+    )
   })
 }
 

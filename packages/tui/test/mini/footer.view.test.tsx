@@ -82,11 +82,13 @@ function model(input: {
   id: string
   name: string
   status?: "active" | "deprecated"
+  released?: number
   cost?: number
   variants?: Record<string, Record<string, never>>
 }) {
   return {
     name: input.name,
+    time: input.released === undefined ? undefined : { released: input.released },
     cost: {
       input: input.cost ?? 1,
     },
@@ -1033,6 +1035,7 @@ test("direct skill panel renders searchable skill list", async () => {
     command({ name: "review", description: "Review code" }),
     command({ name: "internal", description: "Skill command", source: "skill" }),
     command({ name: "formatter", description: "Apply formatter fixes", source: "skill" }),
+    command({ name: "auto-formatter", description: "Format code", source: "skill" }),
   ])
   const selected: string[] = []
 
@@ -1066,11 +1069,13 @@ test("direct skill panel renders searchable skill list", async () => {
     expect(frame).toContain("formatter")
     expect(frame).toContain("Apply formatter fixes")
     expect(frame).not.toContain("review")
+    app.mockInput.pressEnter()
+    expect(selected).toEqual(["auto-formatter"])
     await app.mockInput.typeText("format")
     await app.renderOnce()
     expect(app.captureCharFrame()).not.toContain("internal")
     app.mockInput.pressEnter()
-    expect(selected).toEqual(["formatter"])
+    expect(selected).toEqual(["auto-formatter", "formatter"])
   } finally {
     app.renderer.destroy()
   }
@@ -2462,6 +2467,112 @@ test("direct permission rejection submits through keymap return binding", async 
     app.renderer.destroy()
   }
 })
+
+test.each(["", "model"])(
+  "direct model panel orders free, release, and name with provider grouping only for blank query '%s'",
+  async (query) => {
+    const providers: RunProvider[] = [
+      {
+        id: "other",
+        name: "Another provider",
+        models: {
+          model: model({ id: "model", name: "Model", cost: 0, released: 1 }),
+          "model-e": model({ id: "model-e", name: "Model E", released: 1000 }),
+        },
+      },
+      {
+        id: "opencode",
+        name: "OpenCode",
+        models: {
+          "model-d": model({ id: "model-d", name: "Model D" }),
+          "model-c": model({ id: "model-c", name: "Model C", released: 500 }),
+          "b-model": model({ id: "b-model", name: "B Model", cost: 0, released: 200 }),
+          "a-model": model({ id: "a-model", name: "A Model", cost: 0, released: 200 }),
+          "z-model": model({ id: "z-model", name: "Z Model", cost: 0, released: 300 }),
+          old: model({ id: "old", name: "Old Model", cost: 0, released: 2000, status: "deprecated" }),
+        },
+      },
+    ]
+    const selected: NonNullable<RunInput["model"]>[] = []
+    const current = { providerID: "opencode", modelID: "a-model" }
+    const app = await testRender(
+      () => (
+        <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+          <RunModelSelectBody
+            theme={() => RUN_THEME_FALLBACK.footer}
+            providers={() => providers}
+            current={() => current}
+            onClose={() => {}}
+            onSelect={(value) => selected.push(value)}
+          />
+        </box>
+      ),
+      { width: 100, height: RUN_COMMAND_PANEL_ROWS + 1 },
+    )
+
+    try {
+      await app.renderOnce()
+      if (query) await app.mockInput.typeText(query)
+      await app.renderOnce()
+      const names = query
+        ? ["Z Model", "A Model", "B Model", "Model E", "Model C", "Model", "Model D"]
+        : ["Z Model", "A Model", "B Model", "Model C", "Model D", "Model E", "Model"]
+      const rows = app
+        .captureCharFrame()
+        .split("\n")
+        .map((row) => row.trim().split(/\s{2,}/)[0])
+      expect(rows.filter((row) => names.includes(row))).toEqual(names)
+      expect(app.captureCharFrame()).not.toContain("Old Model")
+      expect(rows.filter((row) => ["OpenCode", "Another provider"].includes(row))).toEqual(
+        query ? [] : ["OpenCode", "Another provider"],
+      )
+      if (!query) {
+        expect(app.captureCharFrame()).toContain("current")
+        expect(app.captureCharFrame().match(/\bFree\b/g)).toHaveLength(2)
+      }
+
+      app.mockInput.pressEnter()
+      expect(selected.at(-1)).toEqual(query ? { providerID: "opencode", modelID: "z-model" } : current)
+      app.mockInput.pressKey("HOME")
+      for (const [providerID, modelID] of [
+        ["opencode", "z-model"],
+        ["opencode", "a-model"],
+        ["opencode", "b-model"],
+        ...(query
+          ? [
+              ["other", "model-e"],
+              ["opencode", "model-c"],
+              ["other", "model"],
+              ["opencode", "model-d"],
+            ]
+          : [
+              ["opencode", "model-c"],
+              ["opencode", "model-d"],
+              ["other", "model-e"],
+              ["other", "model"],
+            ]),
+      ]) {
+        app.mockInput.pressEnter()
+        expect(selected.at(-1)).toEqual({ providerID, modelID })
+        app.mockInput.pressKey("ARROW_DOWN")
+        await app.renderOnce()
+      }
+      app.mockInput.pressKey("ARROW_UP")
+      app.mockInput.pressEnter()
+      expect(selected.at(-1)).toEqual({ providerID: "other", modelID: query ? "model" : "model-e" })
+
+      if (query) {
+        app.mockInput.pressKey("u", { ctrl: true })
+        await app.renderOnce()
+        app.mockInput.pressKey("HOME")
+        app.mockInput.pressEnter()
+        expect(selected.at(-1)).toEqual({ providerID: "opencode", modelID: "z-model" })
+      }
+    } finally {
+      app.renderer.destroy()
+    }
+  },
+)
 
 test("direct model panel keeps native V2 light search and options readable on a transparent background", async () => {
   const theme = await nativeLightTheme()

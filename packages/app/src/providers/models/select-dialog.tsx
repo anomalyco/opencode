@@ -21,11 +21,9 @@ import { handleDocumentSearchKeydown } from "@/shell/commands/search-keydown"
 import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./search"
+import { compareModels, isFreeModel } from "./order"
 import { SettingsList } from "@/settings/list"
 import "@/settings/settings.css"
-
-const isFree = (provider: string, cost: { input: number } | undefined) =>
-  provider === "opencode" && (!cost || cost.input === 0)
 
 type ModelState = ReturnType<typeof useLocal>["model"]
 type ModelItem = ReturnType<ModelState["list"]>[number]
@@ -64,11 +62,13 @@ const ModelList: Component<{
   const models = createMemo(() => controller.models(store.search))
   const groups = createMemo(() => controller.groups(models()))
   const expanded = (provider: string) => store.search.length > 0 || !store.collapsed[provider]
-  const visibleModels = () => models().filter((item) => expanded(item.provider.id))
+  const visibleModels = () => groups().flatMap((group) => (expanded(group.category) ? group.items : []))
   let scrollRef: HTMLDivElement | undefined
 
   const setSearch = (value: string) => {
-    const first = controller.models(value).find((item) => value.length > 0 || !store.collapsed[item.provider.id])
+    const first = controller
+      .groups(controller.models(value))
+      .find((group) => value.length > 0 || !store.collapsed[group.category])?.items[0]
     setStore({ search: value, active: first ? modelKey(first) : "" })
   }
   const moveActive = (delta: number) => {
@@ -187,17 +187,12 @@ const ModelList: Component<{
                                     gutter={12}
                                     openDelay={0}
                                     value={
-                                      <ModelTooltip
-                                        model={item}
-                                        latest={item.latest}
-                                        free={isFree(item.provider.id, item.cost)}
-                                        v2
-                                      />
+                                      <ModelTooltip model={item} latest={item.latest} free={isFreeModel(item)} v2 />
                                     }
                                   >
                                     <span class="min-w-0 truncate">{item.name}</span>
                                   </Tooltip>
-                                  <Show when={isFree(item.provider.id, item.cost)}>
+                                  <Show when={isFreeModel(item)}>
                                     <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
                                   </Show>
                                   <Show when={item.latest}>
@@ -277,7 +272,7 @@ function createModelSelectorController(input: {
       const filtered = query
         ? allModels().filter((item) => matchesModelSearch(query, [item.name, item.id, item.provider.name]))
         : allModels()
-      return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
+      return [...filtered].sort(compareModels)
     },
     groups: (models: ModelItem[]) => {
       const byProvider = new Map<string, ModelItem[]>()
@@ -314,7 +309,7 @@ function ModelSelectorPopoverView(props: {
 
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
-  const keys = () => [...models().map(modelKey), manageKey]
+  const keys = () => [...groups().flatMap((group) => group.items.map(modelKey)), manageKey]
   const initialActive = () => {
     const selected = props.current
     const options = keys()
@@ -364,7 +359,7 @@ function ModelSelectorPopoverView(props: {
     queueMicrotask(() => activeItem()?.scrollIntoView({ block: "nearest" }))
   }
   const setSearch = (value: string) => {
-    const first = props.models(value)[0]
+    const first = props.groups(props.models(value))[0]?.items[0]
     setStore({ search: value, active: first ? modelKey(first) : manageKey })
   }
 
@@ -467,14 +462,7 @@ function ModelSelectorPopoverView(props: {
                               placement="right-start"
                               gutter={6}
                               openDelay={0}
-                              value={
-                                <ModelTooltip
-                                  model={item}
-                                  latest={item.latest}
-                                  free={isFree(item.provider.id, item.cost)}
-                                  v2
-                                />
-                              }
+                              value={<ModelTooltip model={item} latest={item.latest} free={isFreeModel(item)} v2 />}
                             >
                               <Menu.RadioItem
                                 value={modelKey(item)}
@@ -489,7 +477,7 @@ function ModelSelectorPopoverView(props: {
                                 onSelect={() => selectModel(item)}
                               >
                                 <span class="min-w-0 truncate leading-5">{item.name}</span>
-                                <Show when={isFree(item.provider.id, item.cost)}>
+                                <Show when={isFreeModel(item)}>
                                   <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
                                 </Show>
                                 <Show when={item.latest}>
