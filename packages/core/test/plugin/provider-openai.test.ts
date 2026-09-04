@@ -48,6 +48,7 @@ const request = Effect.fn(function* (providerID: Provider.ID, baseURL: string) {
     sessionID: Session.ID.make("ses_test"),
     agent: Agent.ID.make("build"),
     model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
+    kind: "session",
     baseURL,
     headers: {},
   })

@@ -1139,7 +1139,8 @@ Generation options depend on the selected protocol and model:
 
 #### Model request
 
-Modify model request settings and optionally scope the hook to one provider.
+Modify model request settings and optionally scope the hook to one provider. The event carries the same `kind`
+as the HTTP hooks below.
 
 ```ts
 await ctx.session.hook(

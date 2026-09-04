@@ -60,7 +60,7 @@ export interface Prepared {
 }
 
 interface PrepareInput {
-  /** Which Session flow issues this request; HTTP hooks receive it alongside the Session identity. */
+  /** Which Session flow issues this request; request hooks receive it alongside the Session identity. */
   readonly kind: SessionRequestKind
   readonly scope: {
     readonly session: SessionSchema.Info
@@ -200,6 +200,7 @@ interface HookScope {
   readonly sessionID: SessionSchema.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
 }
 
 const sessionHeaders = (session: Pick<SessionSchema.Info, "id" | "parentID" | "projectID">, app: App.Info) => ({
@@ -241,10 +242,7 @@ const applyModelHooks = (hooks: PluginHooks.Interface, scope: HookScope, request
 // Exposes each outbound HTTP exchange to session.http.request/response hooks
 // through web-standard Request/Response values.
 const httpMiddleware =
-  (
-    hooks: PluginHooks.Interface,
-    scope: HookScope & { readonly kind: SessionRequestKind },
-  ): NonNullable<StreamOptions["http"]> =>
+  (hooks: PluginHooks.Interface, scope: HookScope): NonNullable<StreamOptions["http"]> =>
   (request, handler) =>
     Effect.gen(function* () {
       const before = yield* hooks.trigger("session", "http.request", {
@@ -331,7 +329,7 @@ export const layer = Layer.effect(
       )
       const request = yield* applyModelHooks(
         hooks,
-        { sessionID: session.id, agent: input.scope.agentID, model: resolved.ref },
+        { sessionID: session.id, agent: input.scope.agentID, model: resolved.ref, kind: input.kind },
         LLM.request({
           model,
           http: {
