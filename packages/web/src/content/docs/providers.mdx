@@ -2418,6 +2418,41 @@ Some useful routing options:
 
 ---
 
+### vLLM
+
+OpenCode discovers models from a [vLLM](https://docs.vllm.ai) server automatically. By default it looks at `http://127.0.0.1:8000/v1`. Point it at another server with `VLLM_BASE_URL`:
+
+```bash
+VLLM_BASE_URL=http://my-gpu-box:8000/v1 opencode
+```
+
+Discovered models show up as `vllm/<served-model-name>` in `/models`, and the `max_model_len` reported by vLLM becomes the context limit. Tool calling is assumed to be available, so start vLLM with `--enable-auto-tool-choice` and a `--tool-call-parser` for your model.
+
+For an authenticated server or per-model overrides, configure the provider. Anything you declare here is merged on top of what discovery finds:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vllm": {
+      "options": {
+        "baseURL": "http://my-gpu-box:8000/v1",
+        "apiKey": "{env:VLLM_API_KEY}"
+      },
+      "models": {
+        "Qwen/Qwen3-Coder-30B-A3B-Instruct": {
+          "limit": { "context": 131072, "output": 32768 }
+        }
+      }
+    }
+  }
+}
+```
+
+Omit `apiKey` when the server runs without `--api-key`. Discovered models send reasoning back as `reasoning_content` on follow-up turns, which models served with `--reasoning-parser` expect; set `"interleaved": false` on a model to turn that off. Only model cards with `owned_by: "vllm"` are discovered, and discovery is skipped when `vllm` is in `disabled_providers`.
+
+---
+
 ### xAI
 
 Two ways to authenticate: a SuperGrok subscription via device-code OAuth or a pay-as-you-go API key from the xAI console.

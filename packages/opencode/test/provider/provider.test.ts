@@ -287,6 +287,31 @@ it.instance(
   },
 )
 
+it.instance("discovers vLLM models from VLLM_BASE_URL", () =>
+  Effect.gen(function* () {
+    using server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        Response.json({
+          object: "list",
+          data: [
+            { id: "Qwen/Qwen3-Coder-30B-A3B-Instruct", object: "model", owned_by: "vllm", max_model_len: 262_144 },
+          ],
+        }),
+    })
+    yield* setProcessEnv("VLLM_BASE_URL", `${server.url}v1`)
+    const providers = yield* list
+    const provider = providers[ProviderV2.ID.make("vllm")]
+    expect(provider).toBeDefined()
+    expect(provider.name).toBe("vLLM")
+    expect(provider.options.baseURL).toBe(`${server.url}v1`)
+    const model = provider.models["Qwen/Qwen3-Coder-30B-A3B-Instruct"]
+    expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
+    expect(model.limit.context).toBe(262_144)
+    expect(model.capabilities.toolcall).toBe(true)
+  }),
+)
+
 it.instance(
   "env variable takes precedence, config merges options",
   Effect.gen(function* () {
