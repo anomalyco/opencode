@@ -60,7 +60,6 @@
 
 .settings-screen .settings-tab-body {
   padding-inline: 0;
-  padding-bottom: var(--settings-bottom-inset, 0px);
 }
 
 .settings-nav {
@@ -98,6 +97,7 @@
 
 .settings-about-content {
   display: flex;
+  flex-shrink: 0;
   width: 100%;
   max-width: 560px;
   min-height: 462px;
@@ -105,7 +105,7 @@
   align-items: center;
   justify-content: flex-start;
   gap: 24px;
-  padding-block: 80px 32px;
+  padding-block: 80px calc(80px + var(--settings-bottom-inset, 0px));
   color: var(--v2-text-text-muted);
   font-size: 13px;
   font-weight: 440;
@@ -273,7 +273,7 @@
   flex-direction: column;
   gap: 36px;
   width: 100%;
-  padding: 0 40px 40px;
+  padding: 0 40px calc(80px + var(--settings-bottom-inset, 0px));
 }
 
 [data-slot="settings-row-description"] a.settings-link {
@@ -1170,7 +1170,7 @@
   }
 
   .settings-tab-body.settings-workspaces {
-    padding: 0 20px 24px;
+    padding-inline: 20px;
   }
 
   .settings-workspaces-toolbar,
