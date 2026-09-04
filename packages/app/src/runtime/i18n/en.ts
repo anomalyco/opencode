@@ -994,7 +994,7 @@ export const dict = {
   "settings.timeline.description.compact": "Group all activity with details collapsed.",
   "settings.timeline.description.quiet": "Group edits and subagents. Hide other activity.",
   "settings.timeline.description.text-only": "Hide all activity.",
-  "settings.timeline.description.custom": "Use your selected placement and details for each activity category.",
+  "settings.timeline.description.custom": "Uses advanced settings.",
   "settings.timeline.custom": "Custom",
   "settings.timeline.advanced": "Advanced",
   "settings.timeline.advanced.description": "Set placement and details for each activity category.",
