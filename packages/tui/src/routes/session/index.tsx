@@ -2926,6 +2926,7 @@ function InlineTool(props: {
   pending: string
   failure?: string
   spinner?: boolean
+  running?: boolean
   status?: JSX.Element
   children: JSX.Element
   part: SessionMessageAssistantTool
@@ -2937,7 +2938,9 @@ function InlineTool(props: {
   const [errorExpanded, setErrorExpanded] = createSignal(false)
   const permission = useToolPermission(() => props.part)
 
-  const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error.message : undefined))
+  const error = createMemo(() =>
+    !props.running && props.part.state.status === "error" ? props.part.state.error.message : undefined,
+  )
 
   const denied = createMemo(
     () =>
@@ -3482,6 +3485,7 @@ function Subagent(props: ToolProps) {
     <InlineTool
       icon={continuation() ? "↳" : isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
       spinner={!continuation() && isRunning()}
+      running={isRunning()}
       complete={description()}
       pending="Delegating…"
       part={props.part}
