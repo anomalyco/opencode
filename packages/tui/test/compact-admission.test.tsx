@@ -233,3 +233,115 @@ test.each(["first", "second"])(
     }
   },
 )
+
+test.each([
+  { name: "command", text: "/deploy now", endpoint: "command", change: true },
+  { name: "skill", text: "/tiger", endpoint: "skill", change: true },
+  { name: "shell", text: "echo hi", endpoint: "shell", change: true },
+  { name: "unchanged command", text: "/deploy now", endpoint: "command", change: false },
+])("prepares the prompt selection before $name submission", async ({ name, text, endpoint, change }) => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const invoked = Promise.withResolvers<void>()
+  const events = createEventStream()
+  const sessionID = `ses_${endpoint}_${change ? "changed" : "unchanged"}`
+  const location = { directory, project: { id: "project", directory, canonical: directory } }
+  const mutations: string[] = []
+  const calls = createFetch(async (url, request) => {
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "project",
+          title: `${name} selection fixture`,
+          agent: "review",
+          model: { providerID: "demo", id: "current" },
+          location: { directory },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+        },
+      })
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    if (url.pathname === `/api/session/${sessionID}/inbox` || url.pathname === `/api/session/${sessionID}/permission`)
+      return json({ data: [] })
+    if (url.pathname === "/api/agent")
+      return json({
+        location,
+        data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }],
+      })
+    if (url.pathname === "/api/provider") return json({ location, data: [{ id: "demo", name: "Demo" }] })
+    if (url.pathname === "/api/model")
+      return json({
+        location,
+        data: ["current", "selected"].map((id) => ({
+          id,
+          providerID: "demo",
+          name: `${id} model`,
+          variants: [],
+          cost: [],
+          time: { released: 0 },
+        })),
+      })
+    if (url.pathname === "/api/command")
+      return json({ location, data: [{ name: "deploy", description: "Deploy", template: "" }] })
+    if (url.pathname === "/api/skill")
+      return json({
+        location,
+        data: [{ id: "tiger", name: "Tiger", description: "Tiger", slash: true, location: directory, content: "" }],
+      })
+    if (request.method === "POST" && url.pathname === `/api/session/${sessionID}/agent`) {
+      mutations.push(`agent:${(await request.json()).agent}`)
+      return new Response(null, { status: 204 })
+    }
+    if (request.method === "POST" && url.pathname === `/api/session/${sessionID}/model`) {
+      mutations.push(`model:${(await request.json()).model.id}`)
+      return new Response(null, { status: 204 })
+    }
+    if (request.method === "POST" && url.pathname === `/api/session/${sessionID}/${endpoint}`) {
+      mutations.push(endpoint)
+      invoked.resolve()
+      return new Response(null, { status: 204 })
+    }
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  const { run } = await import("../src/app")
+  const task = Effect.runPromise(
+    run({
+      app: { name: "test", version: "test", channel: "test" },
+      server: { endpoint: { url: server.url.toString() } },
+      config: { get: async () => ({ animations: false }), update: async () => ({}) },
+      packages: { resolve: async () => undefined },
+      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+      args: { sessionID },
+      log: () => {},
+    }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+  )
+  try {
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("current model"))
+    if (change) {
+      await setup.mockInput.typeText("/models")
+      setup.mockInput.pressEnter()
+      await setup.waitForFrame(
+        (frame) => frame.includes("Select model") && setup.renderer.currentFocusedRenderable instanceof InputRenderable,
+      )
+      await setup.mockInput.typeText("selected")
+      setup.mockInput.pressEnter()
+      await setup.waitForFrame((frame) => frame.includes("selected model") && !frame.includes("Select model"))
+    }
+    if (name === "shell") setup.mockInput.typeText("!")
+    await setup.mockInput.typeText(text)
+    if (name === "skill") setup.mockInput.pressEscape()
+    setup.mockInput.pressEnter()
+    await invoked.promise
+    expect(mutations).toEqual(["agent:build", ...(change ? ["model:selected"] : []), endpoint])
+  } finally {
+    setup.renderer.destroy()
+    await task
+    await server.stop()
+  }
+})

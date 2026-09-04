@@ -1266,6 +1266,25 @@ export function Prompt(props: PromptProps) {
 
     const target = sessionID
     history.append(entry)
+    const prepareActionSelection = async () => {
+      if (!session) {
+        await data.session.sync(target)
+        session = data.session.get(target)
+      }
+      if (session?.agent !== agent.id) await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
+      if (
+        session?.model?.providerID === selection.providerID &&
+        session.model.id === selection.modelID &&
+        (session.model.variant ?? "default") === (variant ?? "default")
+      )
+        return
+      const model = { providerID: selection.providerID, id: selection.modelID, variant }
+      const cancelCommit = local.model.trackSessionCommit(target, model)
+      await client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
+        cancelCommit()
+        throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
+      })
+    }
     const dispatch = (send: () => Promise<unknown>) => {
       const setup = newSession
       if (setup) void setup.gate.then(send).catch(setup.recover)
@@ -1273,11 +1292,15 @@ export function Prompt(props: PromptProps) {
     }
     if (currentMode === "shell") {
       move.startSubmit()
-      dispatch(() => client.api.session.shell({ sessionID: target, command: inputText }))
+      dispatch(async () => {
+        await prepareActionSelection()
+        return client.api.session.shell({ sessionID: target, command: inputText })
+      })
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
-      const send = () =>
-        client.api.session.command({
+      const send = async () => {
+        await prepareActionSelection()
+        return client.api.session.command({
           sessionID: target,
           command: slashHead.name,
           text: slashHead.arguments,
@@ -1286,6 +1309,7 @@ export function Prompt(props: PromptProps) {
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
         })
+      }
       const setup = newSession
       void (setup ? setup.gate.then(send) : send()).catch((error) => {
         if (setup) return setup.recover(error)
@@ -1294,7 +1318,10 @@ export function Prompt(props: PromptProps) {
       })
     } else if (isSkill) {
       move.startSubmit()
-      dispatch(() => client.api.session.skill({ sessionID: target, skill: slashHead.name }))
+      dispatch(async () => {
+        await prepareActionSelection()
+        return client.api.session.skill({ sessionID: target, skill: slashHead.name })
+      })
     } else {
       move.startSubmit()
       try {
