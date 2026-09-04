@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { MessageDecodeError } from "./error.js"
@@ -6,31 +6,51 @@ import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
+import { SessionProviderContext } from "./provider-context.js"
 import { SessionMessageTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 
 const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 
-export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  return yield* db
-    .select({ seq: SessionMessageTable.seq })
-    .from(SessionMessageTable)
-    .where(
-      and(
-        eq(SessionMessageTable.session_id, sessionID),
-        eq(SessionMessageTable.type, "compaction"),
-        sql`json_extract(${SessionMessageTable.data}, '$.status') = 'completed'`,
-      ),
-    )
-    .orderBy(desc(SessionMessageTable.seq))
-    .limit(1)
-    .get()
-    .pipe(Effect.orDie)
+export const latestCompaction = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  target?: SessionProviderContext.Provenance,
+) {
+  let before: number | undefined
+  while (true) {
+    const row = yield* db
+      .select()
+      .from(SessionMessageTable)
+      .where(
+        and(
+          eq(SessionMessageTable.session_id, sessionID),
+          eq(SessionMessageTable.type, "compaction"),
+          sql`json_extract(${SessionMessageTable.data}, '$.status') = 'completed'`,
+          before === undefined ? undefined : lt(SessionMessageTable.seq, before),
+        ),
+      )
+      .orderBy(desc(SessionMessageTable.seq))
+      .limit(1)
+      .get()
+      .pipe(Effect.orDie)
+    if (!row) return undefined
+    before = row.seq
+    const message = yield* decodeMessageRow(row)
+    if (message.type !== "compaction" || message.status !== "completed") continue
+    if (!message.providerContext || SessionProviderContext.compatible(message.providerContext, target))
+      return { seq: row.seq }
+  }
 })
 
 export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
   decode({ ...row.data, id: row.id, type: row.type }).pipe(
+    Effect.tap((message) =>
+      message.type === "compaction" && message.status === "completed" && message.providerContext
+        ? SessionProviderContext.validate(message.providerContext)
+        : Effect.void,
+    ),
     Effect.mapError(
       () =>
         new MessageDecodeError({
@@ -40,8 +60,12 @@ export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =
     ),
   )
 
-const messageEntries = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  const compaction = yield* latestCompaction(db, sessionID)
+const messageEntries = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  target?: SessionProviderContext.Provenance,
+) {
+  const compaction = yield* latestCompaction(db, sessionID, target)
   const rows = yield* db
     .select()
     .from(SessionMessageTable)
@@ -54,24 +78,38 @@ const messageEntries = Effect.fnUntraced(function* (db: DatabaseService, session
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  return yield* Effect.forEach(rows, (row) =>
+  const entries = yield* Effect.forEach(rows, (row) =>
     decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
+  )
+  // Skipped native checkpoints are not textual summaries. Their original transcript remains available.
+  return entries.filter(
+    ({ message }) =>
+      message.type !== "compaction" ||
+      message.status !== "completed" ||
+      !message.providerContext ||
+      SessionProviderContext.compatible(message.providerContext, target),
   )
 })
 
-export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  return (yield* messageEntries(db, sessionID)).map((entry) => entry.message)
+/** Without a resolved target, native checkpoints are conservatively skipped. */
+export const load = Effect.fn("SessionHistory.load")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  target?: SessionProviderContext.Provenance,
+) {
+  return (yield* messageEntries(db, sessionID, target)).map((entry) => entry.message)
 })
 
 export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   instructions: Instructions.List,
+  target?: SessionProviderContext.Provenance,
 ) {
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
-        const messages = yield* messageEntries(db, sessionID)
+        const messages = yield* messageEntries(db, sessionID, target)
         return {
           initial: yield* InstructionState.initial(db, sessionID, instructions),
           entries: messages,
@@ -85,12 +123,13 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   instructions: Instructions.List,
+  target?: SessionProviderContext.Provenance,
 ) {
   const observed = yield* Instructions.read(instructions)
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
-        const messages = yield* messageEntries(db, sessionID)
+        const messages = yield* messageEntries(db, sessionID, target)
         // An active assistant may contain an unresolved tool call, so only preview the settled prefix.
         const unsettled = messages.findIndex(
           (entry) => entry.message.type === "assistant" && entry.message.time.completed === undefined,

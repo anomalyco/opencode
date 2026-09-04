@@ -15,6 +15,7 @@ import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
 import { SessionModelTransport } from "./model-transport.js"
+import { SessionProviderContext } from "./provider-context.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
@@ -74,6 +75,8 @@ interface PrepareInput {
   readonly transcript: {
     readonly system: Array<SystemPart>
     readonly messages: Array<Message>
+    /** Selected durable window, checked again after model request hooks resolve the route. */
+    readonly providerContext?: SessionProviderContext.Info
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /**
@@ -93,8 +96,13 @@ export const baseTranscript = (input: {
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
+  const checkpoint = input.messages.findLast(
+    (message): message is SessionMessage.CompactionCompleted =>
+      message.type === "compaction" && message.status === "completed" && message.providerContext !== undefined,
+  )
   return {
     providerMetadataKey,
+    providerContext: checkpoint?.providerContext,
     system: [
       input.agent.system
         ? input.agent.system
@@ -103,7 +111,12 @@ export const baseTranscript = (input: {
     ]
       .filter((part) => part.length > 0)
       .map(SystemPart.make),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    messages: toLLMMessages(
+      input.messages,
+      input.model.ref,
+      providerMetadataKey,
+      SessionProviderContext.provenance(input.model),
+    ),
   }
 }
 
@@ -345,6 +358,18 @@ export const layer = Layer.effect(
           providerOptions: Object.keys(context.providerOptions).length === 0 ? undefined : context.providerOptions,
         }),
       )
+      // A newly installed routing hook must not send an existing opaque window to another deployment.
+      // Checkpoint producers stamp the final prepared route, not the pre-hook catalog selection.
+      if (
+        input.transcript.providerContext &&
+        !SessionProviderContext.compatible(
+          input.transcript.providerContext,
+          SessionProviderContext.provenance({ model: request.model, ref: resolved.ref }),
+        )
+      )
+        return yield* Effect.die(
+          new Error("Provider context is incompatible with the route selected by model request hooks"),
+        )
       const hasHttpHooks =
         (yield* hooks.has("session", "http.request", resolved.ref.providerID)) ||
         (yield* hooks.has("session", "http.response", resolved.ref.providerID))

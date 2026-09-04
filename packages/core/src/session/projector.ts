@@ -14,6 +14,7 @@ import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { InstructionState } from "./instruction-state.js"
+import { SessionProviderContext } from "./provider-context.js"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { Slug } from "../util/slug.js"
@@ -691,8 +692,13 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Compaction.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
+        if (event.data.providerContext)
+          yield* SessionProviderContext.validate(event.data.providerContext).pipe(Effect.orDie)
         yield* run(db, event)
-        yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
+        // Native windows include chronological updates, but may be skipped after a model switch.
+        // Keep the prior baseline so re-expansion can replay those same updates in order.
+        if (!event.data.providerContext)
+          yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
       }),
     )
     yield* bus.project(SessionEvent.Compaction.Failed, (event) => run(db, event))

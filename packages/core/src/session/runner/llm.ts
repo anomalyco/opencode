@@ -11,6 +11,7 @@ import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
 import { SessionHistory } from "../history.js"
+import { SessionProviderContext } from "../provider-context.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
@@ -113,7 +114,12 @@ const layer = Layer.effect(
                           const selected = yield* context.select(session.id)
                           const model = yield* context.resolveModel(selected.session)
                           // Preview updates without admitting them after the already-delivered compaction marker.
-                          const history = yield* SessionHistory.preview(db, session.id, selected.instructions)
+                          const history = yield* SessionHistory.preview(
+                            db,
+                            session.id,
+                            selected.instructions,
+                            SessionProviderContext.provenance(model),
+                          )
                           return {
                             session: selected.session,
                             agent: selected.agent,
@@ -221,6 +227,7 @@ const layer = Layer.effect(
           scope: { session: loaded.session, agentID: loaded.agent.id, model: loaded.model, tools: loaded.tools },
           transcript: {
             system: transcript.system,
+            providerContext: transcript.providerContext,
             messages: stepLimitReached
               ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
               : transcript.messages,
