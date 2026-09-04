@@ -344,6 +344,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         const result = await legacy(value.location).vcs.diff({
           mode: value.mode === "working" ? "git" : value.mode,
           context: value.context,
+          workspace: value.location?.workspace,
         })
         return located(
           (result.data ?? []).map((file) => ({
