@@ -185,6 +185,8 @@ function createServerPermissionState(input: {
 }) {
   const MAX_RESPONDED = 1000
   const RESPONDED_TTL_MS = 60 * 60 * 1000
+  const AUTO_RESPONSE_RETRY_LIMIT = 2
+  const AUTO_RESPONSE_RETRY_DELAY_MS = 1000
   const responded = new Map<string, number>()
   const meta = { disposed: false }
 
@@ -223,19 +225,26 @@ function createServerPermissionState(input: {
       .then((result) => result.data.map(normalizePermissionRequest))
   }
 
-  function respondOnce(permission: PermissionRequest, directory?: string) {
+  function respondOnce(permission: PermissionRequest, directory?: string, attempt = 0) {
+    if (meta.disposed || !input.autoApprove()) return
     const now = Date.now()
     const hit = responded.has(permission.id)
     responded.delete(permission.id)
     responded.set(permission.id, now)
     pruneResponded(now)
     if (hit) return
-    respond({
-      sessionID: permission.sessionID,
-      permissionID: permission.id,
-      response: "once",
-      directory,
-    })
+    input.sdk.api.permission
+      .reply({
+        sessionID: permission.sessionID,
+        requestID: permission.id,
+        reply: "once",
+        location: directory ? { directory } : undefined,
+      })
+      .catch(() => {
+        responded.delete(permission.id)
+        if (meta.disposed || !input.autoApprove() || attempt >= AUTO_RESPONSE_RETRY_LIMIT) return
+        setTimeout(() => respondOnce(permission, directory, attempt + 1), AUTO_RESPONSE_RETRY_DELAY_MS * (attempt + 1))
+      })
   }
 
   function sessions(directory?: string) {
@@ -259,26 +268,6 @@ function createServerPermissionState(input: {
     void permission
     void directory
     return input.autoApprove()
-  }
-
-  function isPending(permission: PermissionRequest) {
-    const pending = input.sync.session.data.permission[permission.sessionID]
-    return pending === undefined || pending.some((item) => item.id === permission.id)
-  }
-
-  async function shouldAutoRespondResolved(permission: PermissionRequest, directory?: string) {
-    return shouldAutoRespond(permission, directory)
-  }
-
-  async function respondPending(
-    permission: PermissionRequest,
-    directory?: string,
-    current: () => boolean = () => true,
-  ) {
-    if (!current() || !isPending(permission)) return
-    if (!(await shouldAutoRespondResolved(permission, directory))) return
-    if (meta.disposed || !current() || !isPending(permission)) return
-    respondOnce(permission, directory)
   }
 
   const SWEEP_RETRY_LIMIT = 2
@@ -309,9 +298,7 @@ function createServerPermissionState(input: {
           ].map((directory) =>
             list(directory).then(
               (permissions) => {
-                permissions.forEach((permission) => {
-                  void respondPending(permission, directory, input.autoApprove)
-                })
+                permissions.forEach((permission) => respondOnce(permission, directory))
                 return true
               },
               () => false,
@@ -334,7 +321,7 @@ function createServerPermissionState(input: {
       return
     }
     if (event?.type !== "permission.asked") return
-    void respondPending(event.properties, e.name, input.autoApprove)
+    respondOnce(event.properties, e.name)
   }
 
   const unsubscribe = input.sdk.event.listen((event) => {
