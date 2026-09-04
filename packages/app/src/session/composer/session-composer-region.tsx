@@ -2,11 +2,12 @@ import { Show, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
+import { SessionWebSearchDock } from "@/session/requests/session-websearch-dock"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 
 type SessionComposerRegionState = Pick<
   SessionComposerRegionController["state"],
-  "questionRequest" | "permissionRequest" | "permissionResponding" | "decide" | "blocked"
+  "questionRequest" | "websearch" | "permissionRequest" | "permissionResponding" | "decide" | "blocked"
 >
 
 export type SessionComposerRegionViewController = Pick<
@@ -32,6 +33,9 @@ export function SessionComposerRegion(props: {
           "md:max-w-[1000px] md:mx-auto": controller.centered(),
         }}
       >
+        <Show when={controller.state.websearch.request()}>
+          <SessionWebSearchDock model={controller.state.websearch} onSubmit={controller.onResponseSubmit} />
+        </Show>
         <Show when={controller.state.questionRequest()} keyed>
           {(request) => (
             <div>
