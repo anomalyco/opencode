@@ -10,7 +10,6 @@ import { DialogUpdate } from "../component/dialog-update"
 
 type ClientNotice = { readonly type: "available" | "installed"; readonly version: string }
 type Notice = ClientNotice & ({ readonly source: "client" } | { readonly source: "server"; readonly remote: boolean })
-export type UpdateOrigin = "manual" | "notification"
 export type UpdateState =
   | ClientNotice
   | { readonly type: "installing"; readonly version: string }
@@ -87,8 +86,10 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       exit()
     }
 
-    const open = (origin: UpdateOrigin) => {
+    const open = (origin: "manual" | "notification") => {
       if (!props.updater) return
+      // Manual checks hide the current notice without marking the version as seen.
+      if (origin === "manual") setNotification(undefined)
       if (origin === "notification") {
         const current = notification()
         if (!current || (current.source === "server" && current.remote)) return
@@ -100,7 +101,6 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       }
       dialog.replace(() => (
         <DialogUpdate
-          origin={origin}
           check={origin === "manual" ? check : undefined}
           state={state}
           install={install}
