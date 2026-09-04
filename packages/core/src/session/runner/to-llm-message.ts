@@ -3,6 +3,7 @@ import type { Model } from "@opencode-ai/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
+import { SessionProviderContext } from "../provider-context.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
@@ -221,7 +222,12 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Info,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  target?: SessionProviderContext.Provenance,
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -274,6 +280,10 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       return assistant(message, model, providerMetadataKey)
     case "compaction":
       if (message.status !== "completed") return []
+      if (message.providerContext)
+        return SessionProviderContext.compatible(message.providerContext, target)
+          ? [...SessionProviderContext.decode(message.providerContext)]
+          : []
       return [
         Message.make({
           id: message.id,
@@ -300,4 +310,5 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+  target?: SessionProviderContext.Provenance,
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey, target))

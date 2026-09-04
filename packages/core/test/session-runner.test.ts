@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   AIError,
+  CompactionPart,
   HttpContext,
   LLMEvent,
   LLMRequest,
@@ -40,6 +41,7 @@ import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
+import { SessionProviderContext } from "@opencode-ai/core/session/provider-context"
 import { Money } from "@opencode-ai/schema/money"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -1434,6 +1436,76 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Entry summary\n</summary>")
     expect(yield* s.inbox).toEqual([])
   })
+
+  scenario(
+    "restores installed native context with auto disabled and preserves it across fork and revert",
+    function* (s) {
+      const compaction = yield* SessionCompaction.Service
+      yield* compaction.transform((editor) => editor.configure({ auto: false }))
+      yield* s.runPrompt("Original request")
+      const target = SessionProviderContext.provenance({
+        model: s.currentModel,
+        ref: Model.Ref.make({
+          id: Model.ID.make(s.currentModel.id),
+          providerID: Provider.ID.make(s.currentModel.provider),
+        }),
+      })
+      if (!target) throw new Error("Expected concrete fixture endpoint")
+      const replacement = [
+        Message.assistant(CompactionPart.make({ provider: s.currentModel.provider, encrypted: "checkpoint" })),
+      ]
+      const providerContext = SessionProviderContext.encode(target, replacement)
+      yield* s.bus.publish(SessionEvent.Compaction.Ended, {
+        sessionID,
+        reason: "manual",
+        text: "",
+        recent: "",
+        providerContext,
+      })
+      const checkpoint = (yield* s.messages).find((message) => message.type === "compaction")
+      if (!checkpoint) throw new Error("Expected checkpoint")
+
+      s.systemBaseline = "Newest instructions"
+      const after = yield* s.runPrompt("After checkpoint")
+      const continued = s.requests.at(-1)
+      if (!continued) throw new Error("Expected continuation request")
+      expect(continued.messages[0]).toEqual(replacement[0])
+      expect(systemTexts(continued)).toContain("Newest instructions")
+
+      const forked = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: after.id } })
+      yield* s.session.prompt({ sessionID: forked.id, text: "Fork prompt", resume: false })
+      yield* s.session.resume(forked.id)
+      expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[0])
+      expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Newest instructions")
+      expect(
+        (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
+      ).toMatchObject({ providerContext })
+
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: checkpoint.id })
+      yield* s.runPrompt("After revert")
+      expect(
+        s.requests
+          .at(-1)
+          ?.messages.flatMap((message) => message.content)
+          .some((part) => part.type === "compaction"),
+      ).toBe(false)
+      expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
+      expect(
+        (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
+      ).toMatchObject({ providerContext })
+
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "model.request", (event) =>
+        Effect.sync(() => {
+          event.baseURL = "https://another-deployment.example/v1"
+        }),
+      )
+      const before = s.requests.length
+      yield* s.session.prompt({ sessionID: forked.id, text: "Changed route", resume: false })
+      expect(yield* s.session.resume(forked.id).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+      expect(s.requests).toHaveLength(before)
+    },
+  )
 
   scenario("seeds a fork with the parent's newest instruction values", function* (s) {
     yield* s.runPrompt("First")
