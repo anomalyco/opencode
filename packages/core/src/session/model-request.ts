@@ -1,6 +1,15 @@
 export * as SessionModelRequest from "./model-request.js"
 
-import { HttpOptions, LanguageModel, LLM, LLMRequest, Message, SystemPart } from "@opencode-ai/ai"
+import {
+  GenerationOptions,
+  type GenerationOptionsFields,
+  HttpOptions,
+  LanguageModel,
+  LLM,
+  LLMRequest,
+  Message,
+  SystemPart,
+} from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
 import type { Agent } from "@opencode-ai/schema/agent"
@@ -26,6 +35,8 @@ const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 
+const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
+
 const responsesWebSocketFlag = (providerID: string) =>
   `OPENCODE_EXPERIMENTAL_${providerID.replace(/[^a-zA-Z0-9]+/g, "_").toUpperCase()}_RESPONSES_WEBSOCKET`
 
@@ -49,7 +60,10 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
 export interface Prepared {
   readonly request: LLMRequest
   readonly options: StreamOptions
-  readonly retry: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
+  /** Runs retry hooks with this request's kind; the returned event carries the hooked decision. */
+  readonly retry: (
+    event: Omit<PluginHooks.Domains["session"]["retry"], "kind">,
+  ) => Effect.Effect<PluginHooks.Domains["session"]["retry"]>
   /**
    * One request-scoped execution operation. Unknown and hook-removed calls
    * fail individually through the same seam.
@@ -65,8 +79,6 @@ interface PrepareInput {
   readonly scope: {
     readonly session: SessionSchema.Info
     readonly agentID: Agent.ID
-    /** Agent whose context an auxiliary request reuses, without changing its request-hook identity. */
-    readonly contextAgentID?: Agent.ID
     readonly model: SessionRunnerModel.Resolved
     /** Omitted for requests that carry no tool definitions, such as titles. */
     readonly tools?: Tool.Snapshot
@@ -76,11 +88,6 @@ interface PrepareInput {
     readonly messages: Array<Message>
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
-  /**
-   * Session context hooks shape the agent conversation. Standalone requests
-   * such as titles opt out; compaction uses the selected Session context.
-   */
-  readonly contextHooks?: false
   /** Stateful Session WebSocket channels require an explicit durable-runner opt-in. */
   readonly webSocket?: "session"
 }
@@ -307,15 +314,23 @@ export const layer = Layer.effect(
       const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
       const context: PluginHooks.Domains["session"]["context"] = {
         sessionID: session.id,
-        agent: input.scope.contextAgentID ?? input.scope.agentID,
+        agent: input.scope.agentID,
         model: resolved.ref,
+        kind: input.kind,
         system: input.transcript.system,
         messages: input.transcript.messages,
         tools: definitions,
-        generation: {},
-        providerOptions: {},
+        options: {},
       }
-      if (input.contextHooks !== false) yield* hooks.trigger("session", "context", context)
+      yield* hooks.trigger("session", "context", context)
+      // Typed generation keys and provider-semantic keys share one bag in the hook;
+      // the request keeps them apart.
+      const generation = Object.fromEntries(
+        Object.entries(context.options).filter(([key]) => GENERATION_KEYS.has(key)),
+      ) as GenerationOptionsFields
+      const providerOptions = Object.fromEntries(
+        Object.entries(context.options).filter(([key]) => !GENERATION_KEYS.has(key)),
+      )
       // Match each surviving entry back to its tool, by recognizing a moved definition or
       // by key. Identity wins so a definition moved onto another tool's name still executes
       // the tool it describes. Entries matching neither were invented by a hook and dropped.
@@ -341,8 +356,8 @@ export const layer = Layer.effect(
           messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
           tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
           toolChoice: input.toolChoice,
-          generation: Object.keys(context.generation).length === 0 ? undefined : context.generation,
-          providerOptions: Object.keys(context.providerOptions).length === 0 ? undefined : context.providerOptions,
+          generation: Object.keys(generation).length === 0 ? undefined : generation,
+          providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
         }),
       )
       const hasHttpHooks =
@@ -373,7 +388,7 @@ export const layer = Layer.effect(
         tools
           .execute({ ...input, definitions: hooked })
           .pipe(Effect.catchCauseFilter(declineDefect, (decline) => Effect.fail(decline)))
-      const retry: Prepared["retry"] = (event) => hooks.trigger("session", "retry", event).pipe(Effect.asVoid)
+      const retry: Prepared["retry"] = (event) => hooks.trigger("session", "retry", { ...event, kind: input.kind })
       return {
         request,
         options,

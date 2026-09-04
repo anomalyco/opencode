@@ -29,11 +29,11 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
   sessionID: Session.ID.make("ses_system_prompt"),
   agent: Agent.ID.make("build"),
   model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make(id) }),
+  kind: "primary",
   system: [SystemPart.make(system)],
   messages: [],
   tools: {},
-  generation: {},
-  providerOptions: {},
+  options: {},
 })
 
 describe("SystemPromptPlugin", () => {

@@ -1,5 +1,5 @@
 import { beforeEach, expect } from "bun:test"
-import { AIError, LLMClient, LLMEvent, LanguageModel, TransportError, type LLMRequest } from "@opencode-ai/ai"
+import { AIError, LLMClient, LLMEvent, LanguageModel, Message, TransportError, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -229,6 +229,34 @@ it.effect("generates a title from the sole user message and renames the session"
     expect(renamed?.title).toBe("Generated Title")
     expect(renamed?.tokens).toEqual({ input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } })
     expect(renamed?.cost).toBeCloseTo(0.0000233)
+  }),
+)
+
+it.effect("runs context hooks with the title kind and splits options into the request", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_context_hook")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Redact this message")
+
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        expect(event.kind).toBe("title")
+        expect(event.agent).toBe(Agent.ID.make("title"))
+        event.messages = [Message.user("[redacted]")]
+        event.options.maxTokens = 32
+        event.options.reasoningEffort = "low"
+      }),
+    )
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(requests).toHaveLength(1)
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain("Redact this message")
+    expect(requests[0]?.generation).toEqual(expect.objectContaining({ maxTokens: 32 }))
+    expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "low" })
   }),
 )
 

@@ -18,23 +18,30 @@ export interface SessionPrompt {
   delivery: SessionInbox.Delivery
 }
 
-export interface SessionContext {
-  readonly sessionID: Session.ID
-  readonly agent: Agent.ID
-  readonly model: Model.Ref
-  system: Array<SystemPart>
-  messages: Array<Message>
-  tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
-  /** Request overrides; unset fields retain route and model defaults. */
-  generation: Types.DeepMutable<GenerationOptionsFields>
-  providerOptions: Record<string, unknown>
-}
-
 /**
  * Why a Session request is being made. Auxiliary requests share the Session's
  * hook identity but need to be told apart from the agent loop.
  */
 export type SessionRequestKind = "primary" | "compaction" | "title" | "generate"
+
+/**
+ * Request overrides. Typed keys are the protocol-neutral generation settings;
+ * any other key is passed to the selected protocol as a provider option under its
+ * semantic name, such as `reasoningEffort` for OpenAI Responses. Unset fields
+ * retain route and model defaults.
+ */
+export type SessionRequestOptions = Types.DeepMutable<GenerationOptionsFields> & Record<string, unknown>
+
+export interface SessionContext {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  system: Array<SystemPart>
+  messages: Array<Message>
+  tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
+  options: SessionRequestOptions
+}
 
 export interface SessionModelRequest {
   readonly sessionID: Session.ID
@@ -68,6 +75,7 @@ export interface SessionRetry {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
   readonly error: SessionError.Error
   readonly attempt: number
   decision: SessionRetryDecision

@@ -2124,19 +2124,19 @@ describe("SessionRunnerLLM", () => {
           sessionID,
           model: { id: ID.make(s.currentModel.id), providerID: Provider.ID.make(s.currentModel.provider), variant },
         })
-        const requestAgents: Agent.ID[] = []
+        const hookRequests: Array<{ agent: Agent.ID; kind: string }> = []
         yield* hooks.register("session", "context", (event) =>
           Effect.sync(() => {
             expect(event.agent).toBe(agentID)
             expect(event.model.variant).toBe(variant)
             event.system.push(SystemPart.make("Hook-provided instructions"))
             event.tools.echo.description = "Hook-provided tool description"
-            event.generation.maxTokens = 4_000
+            event.options.maxTokens = 4_000
           }),
         )
         yield* hooks.register("session", "model.request", (event) =>
           Effect.sync(() => {
-            requestAgents.push(event.agent)
+            hookRequests.push({ agent: event.agent, kind: event.kind })
           }),
         )
         yield* s.llm.push(
@@ -2182,7 +2182,7 @@ describe("SessionRunnerLLM", () => {
           expect(compact[field]).toEqual(normal[field])
         expect(compact.toolChoice).toBeUndefined()
         expect(compact.system.map((part) => part.text)).toContain("Review the project carefully.")
-        expect(requestAgents[2]).toBe(Agent.ID.make("compaction"))
+        expect(hookRequests[2]).toEqual({ agent: agentID, kind: "compaction" })
         expect(s.executions).toEqual(["x".repeat(4_000)])
         expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
           model: { id: s.currentModel.id, providerID: s.currentModel.provider, variant },
@@ -2297,7 +2297,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(5)
     for (const request of s.requests) expect(request).toEqual(s.requests[0])
     expect(retries.map((event) => event.attempt)).toEqual([2, 3, 4, 5])
-    expect(retries.every((event) => event.sessionID === sessionID && event.agent === "compaction")).toBe(true)
+    expect(retries.every((event) => event.sessionID === sessionID && event.kind === "compaction")).toBe(true)
     expect(retries[3].decision).toEqual({ retry: true, delay: 60_000 })
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       status: "completed",

@@ -121,11 +121,11 @@ const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => (
   sessionID,
   agent,
   model: { id: Model.ID.make("test-model"), providerID: Provider.ID.make("test") },
+  kind: "primary",
   system: [],
   messages,
   tools: {},
-  generation: {},
-  providerOptions: {},
+  options: {},
 })
 
 type ToolErrorEvent = Extract<ToolHooks["execute.after"], { readonly status: "error" }>

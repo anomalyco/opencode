@@ -1089,7 +1089,9 @@ effect: (ctx) =>
 
 ### Sessions
 
-Modify assembled system instructions, messages, or tools immediately before model dispatch.
+Modify assembled system instructions, messages, tools, or request options immediately before model dispatch. The hook
+runs for every request a session issues; `event.kind` is `"primary"`, `"compaction"`, `"title"`, or `"generate"`.
+Typed `options` keys are generation settings; any other key is passed to the protocol as a provider option.
 
 ```ts
 effect: (ctx) =>
@@ -1097,8 +1099,10 @@ effect: (ctx) =>
     const session = ctx.session
     yield* session.hook("context", (event) =>
       Effect.sync(() => {
+        if (event.kind === "title") return
         event.system.push({ text: "Keep the review focused on correctness." })
         delete event.tools.write
+        event.options.maxTokens = 8_000
       }),
     )
   }),
@@ -1186,10 +1190,13 @@ interface SessionHooks {
 
 type RetryDecision = { retry: false } | { retry: true; delay: number }
 
+type SessionRequestKind = "primary" | "compaction" | "title" | "generate"
+
 interface SessionRetry {
   readonly sessionID: string
   readonly agent: string
   readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: SessionRequestKind
   readonly error: { type: string; message: string; status?: number }
   readonly attempt: number
   decision: RetryDecision

@@ -6,8 +6,8 @@ import { Model } from "@opencode-ai/schema/model"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Clock, Duration, Effect, Pull, Schedule } from "effect"
 import { Bus } from "../../bus.js"
-import type { PluginHooks } from "../../plugin/hooks.js"
 import { SessionEvent } from "../event.js"
+import type { SessionModelRequest } from "../model-request.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 
@@ -16,7 +16,7 @@ interface Input {
   readonly error: SessionError.Error
   readonly agent: Agent.ID
   readonly model: Model.Ref
-  readonly hook: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
+  readonly hook: SessionModelRequest.Prepared["retry"]
   readonly retry: boolean
 }
 
@@ -90,15 +90,14 @@ export const policy = (sessionID: SessionSchema.ID) =>
         const [, duration] = next
         attempt++
         const delay = Math.ceil(Duration.toMillis(duration))
-        const event: PluginHooks.Domains["session"]["retry"] = {
+        const event = yield* input.hook({
           sessionID,
           agent: input.agent,
           model: input.model,
           error: input.error,
           attempt,
           decision: input.retry ? { retry: true, delay } : { retry: false },
-        }
-        yield* input.hook(event)
+        })
         if (!event.decision.retry) return event.decision
         const normalized =
           Number.isFinite(event.decision.delay) && event.decision.delay >= 0 ? Math.ceil(event.decision.delay) : delay

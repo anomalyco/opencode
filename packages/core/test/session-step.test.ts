@@ -105,7 +105,7 @@ for (const fixture of [
           agent: Agent.defaultID,
           model,
           prepared: {
-            retry: () => Effect.void,
+            retry: (event) => Effect.succeed({ ...event, kind: "primary" as const }),
             request: LLM.request({ model: model.model, prompt: "Run one tool", toolChoice: fixture.toolChoice }),
             options: {},
             executeTool: () =>
