@@ -70,6 +70,8 @@ import { ReadTool } from "../tool/plugin/read.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
+import { McpTool } from "../tool/mcp.js"
+import { McpToolPlugin } from "../tool/plugin/mcp.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
 import { WebFetchTool } from "../tool/plugin/webfetch.js"
@@ -116,6 +118,7 @@ const services = [
   LocationMutation.Service,
   ModelsDev.Service,
   Mcp.Service,
+  McpTool.Service,
   Npm.Service,
   Permission.Service,
   Form.Service,
@@ -164,6 +167,7 @@ export const requirements = LayerNode.group([
   LocationMutation.node,
   ModelsDev.node,
   Mcp.node,
+  McpTool.node,
   Npm.node,
   Permission.node,
   Form.node,
@@ -189,6 +193,7 @@ export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
   ConfigMcpPlugin.Plugin,
+  McpToolPlugin.Plugin,
   McpCodeModeExclusionPlugin.Plugin,
   WellKnownPlugin.Plugin,
   VcsGitPlugin.Plugin,
