@@ -71,6 +71,7 @@ Modellerimize aşağıdaki API uç noktaları aracılığıyla da erişebilirsin
 | GPT 5                           | gpt-5                           | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | GPT 5 Codex                     | gpt-5-codex                     | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | GPT 5 Nano                      | gpt-5-nano                      | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Claude Fable 5.1                | claude-fable-5-1                | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Fable 5                  | claude-fable-5                  | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 5                   | claude-opus-5                   | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.8                 | claude-opus-4-8                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
@@ -81,6 +82,7 @@ Modellerimize aşağıdaki API uç noktaları aracılığıyla da erişebilirsin
 | Claude Sonnet 4.6               | claude-sonnet-4-6               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.5               | claude-sonnet-4-5               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5                | claude-haiku-4-5                | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Gemini 3.8 Flash                | gemini-3.8-flash                | `https://opencode.ai/zen/v1/models/gemini-3.8-flash`      | `@ai-sdk/google`            |
 | Gemini 3.7 Flash                | gemini-3.7-flash                | `https://opencode.ai/zen/v1/models/gemini-3.7-flash`      | `@ai-sdk/google`            |
 | Gemini 3.6 Flash                | gemini-3.6-flash                | `https://opencode.ai/zen/v1/models/gemini-3.6-flash`      | `@ai-sdk/google`            |
 | Gemini 3.5 Flash                | gemini-3.5-flash                | `https://opencode.ai/zen/v1/models/gemini-3.5-flash`      | `@ai-sdk/google`            |
@@ -109,10 +111,10 @@ Modellerimize aşağıdaki API uç noktaları aracılığıyla da erişebilirsin
 | Kimi K3                         | kimi-k3                         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Hy3 Free                        | hy3-free                        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Ling 3.0 Flash Fin Free         | ling-3.0-flash-fin-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Lightning Free     | nemotron-3.5-lightning-free     | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Muse Spark 1.3 Contributor Free | muse-spark-1.3-contributor-free | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor Free | muse-spark-1.2-contributor-free | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 
 OpenCode yapılandırmanızdaki [model id](/docs/config/#models) `opencode/<model-id>` biçimini kullanır. Örneğin, GPT 5.5 için yapılandırmanızda `opencode/gpt-5.5` kullanırsınız.
@@ -137,10 +139,10 @@ Kullandıkça öde modelini destekliyoruz. Aşağıda **1M token başına** fiya
 | --------------------------------- | ------ | ------- | ----------- | ------------ |
 | Big Pickle                        | Free   | Free    | Free        | -            |
 | MiMo-V2.5 Free                    | Free   | Free    | Free        | -            |
-| Hy3 Free                          | Free   | Free    | Free        | -            |
 | Ling 3.0 Flash Fin Free           | Free   | Free    | Free        | -            |
 | Nemotron 3 Ultra Free             | Free   | Free    | Free        | -            |
 | Nemotron 3.5 Lightning Free       | Free   | Free    | Free        | -            |
+| Muse Spark 1.3 Contributor Free   | Free   | Free    | Free        | -            |
 | Muse Spark 1.2 Contributor Free   | Free   | Free    | Free        | -            |
 | MiniMax M3                        | $0.30  | $1.20   | $0.06       | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | -            |
@@ -160,6 +162,7 @@ Kullandıkça öde modelini destekliyoruz. Aşağıda **1M token başına** fiya
 | DeepSeek V4 Pro (Peak)            | $1.32  | $3.96   | $0.044      | -            |
 | DeepSeek V4 Flash (Off-Peak)      | $0.22  | $0.66   | $0.007      | -            |
 | DeepSeek V4 Flash (Peak)          | $0.44  | $1.32   | $0.014      | -            |
+| Claude Fable 5.1                  | $10.00 | $50.00  | $0.25       | $12.50       |
 | Claude Fable 5                    | $10.00 | $50.00  | $1.00       | $12.50       |
 | Claude Opus 5                     | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -171,6 +174,7 @@ Kullandıkça öde modelini destekliyoruz. Aşağıda **1M token başına** fiya
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00  | $0.30       | $3.75        |
 | Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50  | $0.60       | $7.50        |
 | Claude Haiku 4.5                  | $1.00  | $5.00   | $0.10       | $1.25        |
+| Gemini 3.8 Flash                  | $1.50  | $7.50   | $0.15       | -            |
 | Gemini 3.7 Flash                  | $1.50  | $7.50   | $0.15       | -            |
 | Gemini 3.6 Flash                  | $1.50  | $7.50   | $0.15       | -            |
 | Gemini 3.5 Flash                  | $1.50  | $9.00   | $0.15       | -            |
@@ -223,11 +227,11 @@ Kredi kartı ücretleri maliyet üzerinden yansıtılır (%4.4 + işlem başına
 Ücretsiz modeller:
 
 - MiMo-V2.5 Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
-- Hy3 Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 - Ling 3.0 Flash Fin Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 - Nemotron 3 Ultra Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 - Nemotron 3.5 Lightning Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 - Big Pickle, sınırlı bir süre için OpenCode'da ücretsiz olan gizli bir modeldir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
+- Muse Spark 1.3 Contributor Free, sınırlı bir süre için OpenCode'da kullanılabilir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 - Muse Spark 1.2 Contributor Free, sınırlı bir süre için OpenCode'da kullanılabilir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 
 Sorularınız varsa <a href={email}>bizimle iletişime geçin</a>.
@@ -281,12 +285,12 @@ Tüm modellerimiz US'de barındırılıyor. Sağlayıcılarımız zero-retention
 
 - Big Pickle: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
 - MiMo-V2.5 Free: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
-- Hy3 Free: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
 - Ling 3.0 Flash Fin Free: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
 - Nemotron 3 Ultra Free (ücretsiz NVIDIA uç noktaları): Yalnızca deneme amaçlıdır — kişisel veya gizli veri göndermeyin. Kullanımınız güvenlik amacıyla ve NVIDIA ürünlerini ve hizmetlerini geliştirmek için kaydedilir. Geliştirme amacıyla kaydedilen oturum verileri kimliğinizle veya herhangi bir kalıcı tanımlayıcıyla ilişkilendirilmez. Veri işleme uygulamalarımız hakkında daha fazla bilgi için [Gizlilik Politikamıza](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) bakın. Bu uç noktayla etkileşime geçerek, bu tür bilgileri toplamamıza, kaydetmemize ve kullanmamıza ve [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) koşullarına onay vermiş olursunuz.
 - Nemotron 3.5 Lightning Free (ücretsiz NVIDIA uç noktaları): Yalnızca deneme amaçlıdır — kişisel veya gizli veri göndermeyin. Kullanımınız güvenlik amacıyla ve NVIDIA ürünlerini ve hizmetlerini geliştirmek için kaydedilir. Geliştirme amacıyla kaydedilen oturum verileri kimliğinizle veya herhangi bir kalıcı tanımlayıcıyla ilişkilendirilmez. Veri işleme uygulamalarımız hakkında daha fazla bilgi için [Gizlilik Politikamıza](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) bakın. Bu uç noktayla etkileşime geçerek, bu tür bilgileri toplamamıza, kaydetmemize ve kullanmamıza ve [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) koşullarına onay vermiş olursunuz.
 - OpenAI APIs: İstekler [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) uyarınca 30 gün boyunca saklanır.
 - Anthropic APIs: İstekler [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) uyarınca 30 gün boyunca saklanır.
+- Muse Spark 1.3 Contributor Free: Gelecekteki Meta modellerini eğitmek için istemlerinizi ve tamamlamalarınızı kullanma izni karşılığında büyük ölçüde indirimli token fiyatlandırması. [Daha fazla bilgi](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - Muse Spark 1.2 Contributor Free: Gelecekteki Meta modellerini eğitmek için istemlerinizi ve tamamlamalarınızı kullanma izni karşılığında büyük ölçüde indirimli token fiyatlandırması. [Daha fazla bilgi](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 
 ---

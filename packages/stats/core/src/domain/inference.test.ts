@@ -50,6 +50,10 @@ describe("inference stat normalization", () => {
   })
 
   test("merges renamed models under their current name", () => {
+    expect(statModel("deepseek-v4-flash-0731", "")).toBe("deepseek-v4-flash")
+    expect(statModel("deepseek-v4-flash-0731-free", "")).toBe("deepseek-v4-flash")
+    expect(statModel("deepseek-v4-flash-dsv4-flash-final-rnaovd", "")).toBe("deepseek-v4-flash")
+    expect(statModel("deepseek-v4-flash-vision-exp", "")).toBe("deepseek-v4-flash-vision-exp")
     expect(statModel("x-preview-f", "")).toBe("glm-5.3-flash")
     expect(statModel("ox-alpha", "")).toBe("glm-5.3-flash")
     expect(statModel("ox-alpha-free", "")).toBe("glm-5.3-flash")
@@ -130,6 +134,9 @@ describe("inference stat normalization", () => {
     expect(queries[0]).toContain("COALESCE(NULLIF(lower(model_tier), ''), '') AS raw_tier")
     expect(queries[0]).toContain("WHEN lower(COALESCE(raw_tier, '')) = 'free'")
     expect(queries[0]).toContain("regexp_replace(NULLIF(route_model, ''), '^.*/', '')")
+    expect(queries[0]).toContain("= 'deepseek-v4-flash-0731' THEN 'deepseek-v4-flash'")
+    expect(queries[0]).toContain("= 'deepseek-v4-flash-dsv4-flash-final-rnaovd' THEN 'deepseek-v4-flash'")
+    expect(queries[0]).not.toContain("= 'deepseek-v4-flash-vision-exp' THEN 'deepseek-v4-flash'")
     expect(queries[0]).toContain("= 'ox-alpha' THEN 'glm-5.3-flash'")
     expect(queries[0]).toContain("= 'x-preview-f' THEN 'glm-5.3-flash'")
     expect(queries[0]).toContain("OR lower(raw_model) IN ('gpt-5-nano', 'grok-code', 'big-pickle')")

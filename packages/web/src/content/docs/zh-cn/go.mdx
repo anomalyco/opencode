@@ -63,6 +63,7 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([仅限部分地区](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([仅限部分地区](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
@@ -78,6 +79,18 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 随着我们进行测试和添加新模型，该列表可能会发生变化。
 
 ---
+
+## 可以在哪里使用？
+
+OpenCode Go 适用于 [OpenCode](https://opencode.ai) 以及其他会产生类似请求的主流编程 Agent。
+
+我们会监控流量，以识别影响其他用户体验的滥用行为。
+
+为避免你的账户被标记为异常，请确保你使用的工具：
+
+1\. 不产生滥用流量  
+2\. 明确标识自身（不要使用过于笼统的 user agent 标识）  
+3\. 包含 `x-opencode-session` 请求头，以便我们优化提示词缓存
 
 ## 使用限制
 
@@ -107,10 +120,11 @@ OpenCode Go 包含以下限制：
 | MiMo-V2.5-Pro                | 3,250           | 8,150      | 16,300     |
 | MiniMax M3                   | 3,200           | 8,000      | 16,000     |
 | MiniMax M2.7                 | 3,400           | 8,500      | 17,000     |
+| Muse Spark 1.3 Contributor   | 45,300          | 113,300    | 226,600    |
 | Muse Spark 1.2 Contributor   | 45,300          | 113,300    | 226,600    |
 | Qwen3.8 Max                  | 160             | 400        | 810        |
 | Qwen3.8 Flash                | 5,400           | 13,500     | 27,000     |
-| Qwen3.7 Max                  | 340             | 840        | 1,690      |
+| Qwen3.7 Max                  | 170             | 420        | 840        |
 | Qwen3.7 Plus                 | 4,300           | 10,800     | 21,600     |
 | Qwen3.6 Plus                 | 3,300           | 8,200      | 16,300     |
 | DeepSeek V4 Pro              | 1,050           | 2,600      | 5,200      |
@@ -135,6 +149,7 @@ OpenCode Go 包含以下限制：
 - MiMo-V2.5-Pro — 每次请求 790 个输入 token，86,000 个缓存 token，305 个输出 token
 - MiniMax M3 — 每次请求 510 个输入 token，56,000 个缓存 token，190 个输出 token
 - MiniMax M2.7 — 每次请求 300 个输入 token，55,000 个缓存 token，125 个输出 token
+- Muse Spark 1.3 Contributor — 每次请求 620 个输入 token，71,400 个缓存 token，300 个输出 token
 - Muse Spark 1.2 Contributor — 每次请求 620 个输入 token，71,400 个缓存 token，300 个输出 token
 - Qwen3.8 Max — 每次请求 420 个输入 token，66,000 个缓存 token，200 个输出 token
 - Qwen3.8 Flash — 每次请求 600 个输入 token，58,000 个缓存 token，200 个输出 token
@@ -165,10 +180,11 @@ OpenCode Go 包含以下限制：
 | MiniMax M3                              | $0.30  | $1.20  | $0.06     | -        | $60      |
 | MiniMax M2.7                            | $0.30  | $1.20  | $0.06     | $0.375   | $60      |
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06     | $0.375   | $60      |
+| Muse Spark 1.3 Contributor              | $0.10  | $0.20  | $0.002    | -        | $60      |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002    | -        | $60      |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25     | $2.50    | $15      |
 | Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016    | $0.20    | $30      |
-| Qwen3.7 Max                             | $2.50  | $7.50  | $0.50     | $3.125   | $60      |
+| Qwen3.7 Max                             | $2.50  | $7.50  | $0.50     | $3.125   | $30      |
 | Qwen3.7 Plus (≤ 256K tokens)            | $0.40  | $1.60  | $0.04     | $0.50    | $60      |
 | Qwen3.7 Plus (> 256K tokens)            | $1.20  | $4.80  | $0.12     | $1.50    | $60      |
 | Qwen3.6 Plus (≤ 256K tokens)            | $0.50  | $3.00  | $0.05     | $0.625   | $60      |
@@ -238,6 +254,7 @@ OpenCode Go 包含以下限制：
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -284,6 +301,7 @@ https://opencode.ai/zen/go/v1/models
 | Qwen3.6 Plus                 | 不使用   | 0 天     |
 | MiniMax M3                   | 不使用   | 0 天     |
 | MiniMax M2.7                 | 不使用   | 0 天     |
+| Muse Spark 1.3 Contributor   | 是       | 非 ZDR   |
 | Muse Spark 1.2 Contributor   | 是       | 非 ZDR   |
 | DeepSeek V4 Pro              | 不使用   | 0 天     |
 | DeepSeek V4 Flash            | 不使用   | 0 天     |
@@ -293,6 +311,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.6:** ZDR 会禁用依赖所存储数据的重要 API 功能，包括有状态的 Responses API、Files and Collections 和 Batch API。[了解更多](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
 - **GPT 5.6 Luna:** 所有 API 功能的使用都会生成滥用监控日志，并最多保留 30 天。[了解更多](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
+- **Muse Spark 1.3 Contributor:** 以允许使用你的提示词和补全结果训练未来的 Meta 模型为交换，token 价格可获得大幅折扣。仅在 Meta 的[地理使用政策](https://ai.developer.meta.com/legal/geographic-use-policy)允许的地区提供。[了解更多](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **Muse Spark 1.2 Contributor:** 以允许使用你的提示词和补全结果训练未来的 Meta 模型为交换，token 价格可获得大幅折扣。仅在 Meta 的[地理使用政策](https://ai.developer.meta.com/legal/geographic-use-policy)允许的地区提供。[了解更多](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **DeepSeek V4 Flash:** ZDR 协议每月续签。当前协议有效期至 2026 年 8 月 31 日。
 

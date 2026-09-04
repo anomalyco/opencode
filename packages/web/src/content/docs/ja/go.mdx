@@ -63,6 +63,7 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([一部の地域に限定](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([一部の地域に限定](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
@@ -78,6 +79,18 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 新しいモデルをテストして追加するにつれて、モデルのリストは変更される場合があります。
 
 ---
+
+## どこで使用できますか？
+
+OpenCode Goは、[OpenCode](https://opencode.ai)や、同様の種類のリクエストを生成するその他の一般的なコーディングエージェントで使用することを想定しています。
+
+他のユーザーの利用体験を損なう不正なトラフィックがないか監視されています。
+
+アカウントにフラグが付けられないよう、使用するツールが以下の条件を満たしていることを確認してください。
+
+1\. 不正なトラフィックを生成しない  
+2\. 自身を適切に識別する（汎用的すぎるユーザーエージェントを使用しない）  
+3\. プロンプトキャッシュを最適化できるよう、`x-opencode-session`ヘッダーを含める
 
 ## 利用制限
 
@@ -107,10 +120,11 @@ OpenCode Goには以下の制限が含まれています：
 | MiMo-V2.5-Pro                | 3,250                     | 8,150            | 16,300           |
 | MiniMax M3                   | 3,200                     | 8,000            | 16,000           |
 | MiniMax M2.7                 | 3,400                     | 8,500            | 17,000           |
+| Muse Spark 1.3 Contributor   | 45,300                    | 113,300          | 226,600          |
 | Muse Spark 1.2 Contributor   | 45,300                    | 113,300          | 226,600          |
 | Qwen3.8 Max                  | 160                       | 400              | 810              |
 | Qwen3.8 Flash                | 5,400                     | 13,500           | 27,000           |
-| Qwen3.7 Max                  | 340                       | 840              | 1,690            |
+| Qwen3.7 Max                  | 170                       | 420              | 840              |
 | Qwen3.7 Plus                 | 4,300                     | 10,800           | 21,600           |
 | Qwen3.6 Plus                 | 3,300                     | 8,200            | 16,300           |
 | DeepSeek V4 Pro              | 1,050                     | 2,600            | 5,200            |
@@ -133,6 +147,7 @@ OpenCode Goには以下の制限が含まれています：
 - DeepSeek V4 Flash Vision Exp — リクエストあたり 入力 410トークン、キャッシュ 71,300トークン、出力 310トークン
 - MiniMax M3 — リクエストあたり 入力 510トークン、キャッシュ 56,000トークン、出力 190トークン
 - MiniMax M2.7 — リクエストあたり 入力 300トークン、キャッシュ 55,000トークン、出力 125トークン
+- Muse Spark 1.3 Contributor — リクエストあたり 入力 620トークン、キャッシュ 71,400トークン、出力 300トークン
 - Muse Spark 1.2 Contributor — リクエストあたり 入力 620トークン、キャッシュ 71,400トークン、出力 300トークン
 - Qwen3.8 Max — リクエストあたり 入力 420トークン、キャッシュ 66,000トークン、出力 200トークン
 - Qwen3.8 Flash — リクエストあたり 入力 600トークン、キャッシュ 58,000トークン、出力 200トークン
@@ -165,10 +180,11 @@ OpenCode Goには以下の制限が含まれています：
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60   |
 | MiniMax M2.7                            | $0.30  | $1.20  | $0.06       | $0.375       | $60   |
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | $60   |
+| Muse Spark 1.3 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60   |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60   |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | $15   |
 | Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | $30   |
-| Qwen3.7 Max                             | $2.50  | $7.50  | $0.50       | $3.125       | $60   |
+| Qwen3.7 Max                             | $2.50  | $7.50  | $0.50       | $3.125       | $30   |
 | Qwen3.7 Plus (≤ 256K tokens)            | $0.40  | $1.60  | $0.04       | $0.50        | $60   |
 | Qwen3.7 Plus (> 256K tokens)            | $1.20  | $4.80  | $0.12       | $1.50        | $60   |
 | Qwen3.6 Plus (≤ 256K tokens)            | $0.50  | $3.00  | $0.05       | $0.625       | $60   |
@@ -238,6 +254,7 @@ Goでは月額$10を支払い、その6倍の利用枠を提供することを�
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -284,6 +301,7 @@ https://opencode.ai/zen/go/v1/models
 | Qwen3.6 Plus                 | 使用なし             | 0日         |
 | MiniMax M3                   | 使用なし             | 0日         |
 | MiniMax M2.7                 | 使用なし             | 0日         |
+| Muse Spark 1.3 Contributor   | はい                 | ZDRではない |
 | Muse Spark 1.2 Contributor   | はい                 | ZDRではない |
 | DeepSeek V4 Pro              | 使用なし             | 0日         |
 | DeepSeek V4 Flash            | 使用なし             | 0日         |
@@ -293,6 +311,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.6:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
 - **GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
+- **Muse Spark 1.3 Contributor:** 将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。利用できるのは、Metaの[地域別利用ポリシー](https://ai.developer.meta.com/legal/geographic-use-policy)で許可されている地域に限られます。[詳しく見る](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **Muse Spark 1.2 Contributor:** 将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。利用できるのは、Metaの[地域別利用ポリシー](https://ai.developer.meta.com/legal/geographic-use-policy)で許可されている地域に限られます。[詳しく見る](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **DeepSeek V4 Flash:** ZDR契約は毎月更新されます。現在の契約は2026年8月31日まで有効です。
 
