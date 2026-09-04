@@ -109,6 +109,28 @@ story("only highlights the eye when hovering the icon, not its activity label", 
   }
 })
 
+story("opens advanced on returning to custom settings but not presets", async ({ mount }) => {
+  const component = await mount("settings-timeline-detail--interactive")
+  const advanced = component.getByRole("button", { name: "Advanced", exact: true })
+  await expect(advanced).toHaveAttribute("aria-expanded", "false")
+  await advanced.click()
+  await component.locator('[data-category="shell"][data-field="placement"] [data-slot="switch-control"]').click()
+  await expect(component.getByRole("slider")).toHaveAttribute("aria-valuetext", "Custom")
+  await advanced.click()
+  await expect(advanced).toHaveAttribute("aria-expanded", "false")
+  await component.getByRole("button", { name: "Leave settings" }).click()
+  await expect(advanced).toHaveCount(0)
+  await component.getByRole("button", { name: "Return to settings" }).click()
+  await expect(advanced).toHaveAttribute("aria-expanded", "true")
+  await expect(component.getByRole("switch", { name: "Shell grouped", exact: true })).not.toBeChecked()
+
+  await component.getByRole("slider").press("End")
+  await expect(component.getByRole("slider")).toHaveAttribute("aria-valuetext", "Everything")
+  await component.getByRole("button", { name: "Leave settings" }).click()
+  await component.getByRole("button", { name: "Return to settings" }).click()
+  await expect(advanced).toHaveAttribute("aria-expanded", "false")
+})
+
 story("keeps visibility and switches in sync with the preset slider", async ({ mount }) => {
   const component = await mount("settings-timeline-detail--interactive")
   await component.getByRole("button", { name: "Advanced", exact: true }).click()

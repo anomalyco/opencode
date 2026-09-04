@@ -70,7 +70,7 @@ export function TimelineDetailControl(props: { value: TimelineDetail; onChange: 
         <span data-slot="timeline-detail-summary">{language.t("settings.timeline.summary", { preset: label() })}</span>{" "}
         {language.t(`settings.timeline.description.${preset()?.id ?? "custom"}`)}
       </p>
-      <Collapsible variant="ghost" data-slot="timeline-detail-advanced">
+      <Collapsible variant="ghost" data-slot="timeline-detail-advanced" defaultOpen={!preset()}>
         <Collapsible.Trigger>
           <span>{language.t("settings.timeline.advanced")}</span>
           <Collapsible.Arrow />
