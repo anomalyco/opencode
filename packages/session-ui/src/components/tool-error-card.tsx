@@ -7,6 +7,74 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 
+function getToolContextLabel(tool: string, input: Record<string, unknown>, t: (key: string) => string): { label: string; value: string } | undefined {
+  switch (tool) {
+    case "bash":
+    case "shell": {
+      const command = typeof input.command === "string" ? input.command : undefined
+      if (command) return { label: t("ui.toolErrorCard.context.command"), value: command }
+      break
+    }
+    case "read": {
+      const filePath = typeof input.filePath === "string" ? input.filePath : undefined
+      if (filePath) return { label: t("ui.toolErrorCard.context.file"), value: filePath }
+      break
+    }
+    case "edit": {
+      const filePath = typeof input.filePath === "string" ? input.filePath : undefined
+      if (filePath) return { label: t("ui.toolErrorCard.context.file"), value: filePath }
+      break
+    }
+    case "write": {
+      const filePath = typeof input.filePath === "string" ? input.filePath : undefined
+      if (filePath) return { label: t("ui.toolErrorCard.context.file"), value: filePath }
+      break
+    }
+    case "webfetch": {
+      const url = typeof input.url === "string" ? input.url : undefined
+      if (url) return { label: t("ui.toolErrorCard.context.url"), value: url }
+      break
+    }
+    case "websearch": {
+      const query = typeof input.query === "string" ? input.query : undefined
+      if (query) return { label: t("ui.toolErrorCard.context.query"), value: query }
+      break
+    }
+    case "glob": {
+      const pattern = typeof input.pattern === "string" ? input.pattern : undefined
+      const path = typeof input.path === "string" ? input.path : undefined
+      if (pattern) return { label: t("ui.toolErrorCard.context.pattern"), value: path ? `${pattern} (${path})` : pattern }
+      break
+    }
+    case "grep": {
+      const pattern = typeof input.pattern === "string" ? input.pattern : undefined
+      const path = typeof input.path === "string" ? input.path : undefined
+      if (pattern) return { label: t("ui.toolErrorCard.context.pattern"), value: path ? `${pattern} (${path})` : pattern }
+      break
+    }
+    case "list": {
+      const path = typeof input.path === "string" ? input.path : undefined
+      if (path) return { label: t("ui.toolErrorCard.context.directory"), value: path }
+      break
+    }
+    case "task": {
+      const description = typeof input.description === "string" ? input.description : undefined
+      if (description) return { label: t("ui.toolErrorCard.context.task"), value: description }
+      break
+    }
+    case "patch":
+    case "apply_patch": {
+      const files = Array.isArray(input.files) ? input.files : undefined
+      if (files?.length) {
+        const fileNames = files.map((f: any) => typeof f === "string" ? f : f?.path).filter(Boolean)
+        if (fileNames.length) return { label: t("ui.toolErrorCard.context.files"), value: fileNames.join(", ") }
+      }
+      break
+    }
+  }
+  return undefined
+}
+
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
   error: string
@@ -17,6 +85,7 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
   subtitle?: string
   href?: string
   onSubtitleClick?: (event: MouseEvent) => void
+  input?: Record<string, unknown>
 }
 
 export function ToolErrorCard(props: ToolErrorCardProps) {
@@ -37,6 +106,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     "subtitle",
     "href",
     "onSubtitleClick",
+    "input",
   ])
   const setOpen = (value: boolean) => {
     if (props.open === undefined) setState("open", value)
@@ -84,6 +154,12 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     const parts = tail().split(": ")
     if (parts.length <= 1) return cleaned()
     return parts.slice(1).join(": ").trim() || cleaned()
+  })
+
+  const context = createMemo(() => {
+    const input = split.input as Record<string, unknown> | undefined
+    if (!input) return undefined
+    return getToolContextLabel(split.tool, input, i18n.t)
   })
 
   const copy = async () => {
@@ -152,6 +228,14 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                   />
                 </Tooltip>
               </div>
+            </Show>
+            <Show when={context()}>
+              {(ctx) => (
+                <div data-slot="tool-error-card-context">
+                  <span data-slot="tool-error-card-context-label">{ctx().label}</span>
+                  <span data-slot="tool-error-card-context-value">{ctx().value}</span>
+                </div>
+              )}
             </Show>
             <Show when={body()}>{(value) => <CardDescription>{value()}</CardDescription>}</Show>
           </div>
