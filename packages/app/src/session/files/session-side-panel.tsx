@@ -219,7 +219,7 @@ export function SessionSidePanel(props: {
     return active !== "review" && active !== "context" && active !== "empty"
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
-  const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
+  const closeTabKeybind = createMemo(() => command.keybindParts("file.close"))
   createEffect(() => {
     if (!file.ready()) return
 
@@ -417,7 +417,7 @@ export function SessionSidePanel(props: {
                               class="flex items-center"
                             >
                               <IconButton
-                                icon={<Icon name="plus-small" />}
+                                icon={<Icon name="plus" />}
                                 variant="ghost-muted"
                                 size="large"
                                 onClick={() => openFileBrowser()}

@@ -3,7 +3,30 @@ import { ShellScan } from "../../src/shell/scan.js"
 
 const pwsh = process.env.SHELL_SCAN_PWSH ?? Bun.which("pwsh")
 
+// These ordinary forms must stay accepted, not disappear behind the oracle's opaque-result filter.
+const supported = [
+  "Invoke-ProbeA; Invoke-ProbeB",
+  "$result = Invoke-ProbeA; Invoke-ProbeB",
+  "if (Invoke-ProbeA) { Invoke-ProbeB } else { Invoke-ProbeC }",
+  "foreach ($item in (Invoke-ProbeA)) { Invoke-ProbeB }",
+  "function Get-Probe { param($x); Invoke-ProbeB }; Invoke-ProbeA",
+  "$x = @{ first = Invoke-ProbeA; second = @(Invoke-ProbeB; Invoke-ProbeC) }",
+  'Invoke-ProbeA "$(Invoke-ProbeB "$(Invoke-ProbeC)")"',
+  "Invoke-ProbeA | ForEach-Object { Invoke-ProbeB }",
+  "Invoke-ProbeA @'\nliteral ; }\n'@; Invoke-ProbeB",
+  'Invoke-ProbeA @"\n$(Invoke-ProbeB)\n"@; Invoke-ProbeC',
+  "Invoke-ProbeA `\n  argument; Invoke-ProbeB",
+  "Invoke-ProbeA 2>&1; Invoke-ProbeB",
+  "& 'Invoke-ProbeA' argument; Invoke-ProbeB",
+  "Invoke-ProbeA --% literal; ignored\nInvoke-ProbeB",
+]
+
+test.each(supported)("accepts supported PowerShell syntax without an opaque escape hatch: %s", (source) => {
+  expect(ShellScan.scanPowerShell(source).kind).toBe("scanned")
+})
+
 const fixtures = [
+  ...supported,
   ...[
     "$result = Invoke-ProbeA; Invoke-ProbeB",
     "$result = (Invoke-ProbeA); Invoke-ProbeB",
@@ -343,6 +366,10 @@ test.skipIf(!pwsh)(
     let executed = 0
     for (const result of results) {
       const scan = ShellScan.scanPowerShell(result.source)
+      if (supported.includes(result.source)) {
+        expect(result.errors, result.source).toEqual([])
+        expect(scan.kind, result.source).toBe("scanned")
+      }
       if (scan.kind === "opaque" || result.errors.length > 0) continue
       scanned++
       executed += result.executed.length

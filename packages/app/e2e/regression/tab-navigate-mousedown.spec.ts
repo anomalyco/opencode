@@ -1,7 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { currentSession } from "../utils/mock-server"
-import pkg from "../../package.json" with { type: "json" }
 
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const sessionA = session("ses_tab_a", "Tab A session")
@@ -185,7 +184,9 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabA).toContainText(sessionA.title)
   await expect(tabB).toContainText(sessionB.title)
   await expect(tabB.locator('[data-slot="tab-project"]')).toHaveText("tab-project")
-  await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toHaveText("Home")
+  await expect(
+    sidebar.getByRole("button", { name: "Home", exact: true }).getByText("Home", { exact: true }),
+  ).toBeVisible()
   await expect(sidebar.getByRole("button", { name: "New session" })).toBeVisible()
   await expect(sidebar.locator('[data-slot="vertical-tabs-footer"]')).toBeVisible()
   const status = sidebar.getByRole("button", { name: "Status", exact: true })
@@ -317,7 +318,77 @@ for (const direction of ["ltr", "rtl"]) {
   })
 }
 
-test("appearance experimental settings control vertical tab details", async ({ page }) => {
+for (const profile of [
+  { locale: "en", direction: "ltr" },
+  { locale: "en", direction: "rtl" },
+  { locale: "ar", direction: "rtl" },
+]) {
+  test(`vertical shortcut hints align at the row end: ${profile.locale} ${profile.direction}`, async ({ page }) => {
+    await mockServer(page)
+    await page.addInitScript(
+      ({ server, sessionID, locale }) => {
+        localStorage.setItem("opencode.global.dat:language", JSON.stringify({ locale }))
+        localStorage.setItem(
+          "settings.v3",
+          JSON.stringify({
+            appearance: { tabLayout: "vertical" },
+            keybinds: { "home.toggle": "ctrl+alt+h", "tab.new": "ctrl+shift+n" },
+          }),
+        )
+        localStorage.setItem(
+          "opencode.window.browser.dat:tabs",
+          JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
+        )
+      },
+      { server, sessionID: sessionA.id, locale: profile.locale },
+    )
+    await page.goto(`/server/${base64Encode(server)}/session/${sessionA.id}`)
+
+    const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+    await expect(sidebar).toHaveCSS("width", "260px")
+    await page
+      .locator("html")
+      .evaluate((element, direction) => element.setAttribute("dir", direction), profile.direction)
+    await expect(sidebar).toHaveCSS("direction", profile.direction)
+
+    for (const row of [
+      { action: "home", shortcut: "Ctrl+Alt+H" },
+      { action: "new-session", shortcut: "Ctrl+Shift+N" },
+    ]) {
+      const button = sidebar.locator(`[data-action="vertical-tabs-${row.action}"]`)
+      const hint = button.locator('span[aria-hidden="true"]')
+      await expect(hint).toHaveText(row.shortcut)
+      await expect(hint.getByText(row.shortcut, { exact: true })).toHaveCSS("direction", "ltr")
+      await expect(hint).toHaveCSS("opacity", "0")
+      await button.hover()
+      await expect(hint).toHaveCSS("opacity", "1")
+      await expect
+        .poll(() =>
+          hint.evaluate((element) => {
+            const button = element.closest("button")!
+            const row = button.getBoundingClientRect()
+            const hint = element.getBoundingClientRect()
+            return getComputedStyle(button).direction === "rtl" ? hint.left - row.left : row.right - hint.right
+          }),
+        )
+        .toBeCloseTo(8, 1)
+      await page.getByRole("main").hover()
+      await expect(hint).toHaveCSS("opacity", "0")
+    }
+
+    const home = sidebar.locator('[data-action="vertical-tabs-home"]')
+    const newSession = sidebar.locator('[data-action="vertical-tabs-new-session"]')
+    await home.focus()
+    await page.keyboard.press("Tab")
+    await expect(newSession).toBeFocused()
+    await expect(newSession.locator('span[aria-hidden="true"]')).toHaveCSS("opacity", "1")
+    await page.keyboard.press("Shift+Tab")
+    await expect(home).toBeFocused()
+    await expect(home.locator('span[aria-hidden="true"]')).toHaveCSS("opacity", "1")
+  })
+}
+
+test("dedicated experimental settings control vertical tab details", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA }) => {
@@ -335,11 +406,14 @@ test("appearance experimental settings control vertical tab details", async ({ p
 
   const settings = page.getByTestId("settings-screen")
   await expect(settings).toBeVisible()
-  const version = settings.getByRole("tablist").getByText(`v${pkg.version}`, { exact: true })
-  await expect(settings.getByRole("tablist").getByText("OpenCode Desktop", { exact: true })).toBeInViewport()
-  await expect(version).toBeInViewport()
+  await expect(settings.getByRole("tablist").getByText("OpenCode Desktop", { exact: true })).toHaveCount(0)
+  await expect(settings.getByRole("tablist").getByText(/^v\d+\./)).toHaveCount(0)
   await settings.getByRole("tab", { name: "Appearance" }).click()
-  await expect(settings.getByRole("heading", { name: "Experimental" })).toBeVisible()
+  await expect(settings.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible()
+  await expect(settings.locator('[data-action="settings-tab-layout"]')).toHaveCount(0)
+  await expect(settings.getByRole("switch", { name: "Show project names", exact: true })).toHaveCount(0)
+  await settings.getByRole("tab", { name: "Experimental", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Experimental", level: 2, exact: true })).toBeVisible()
 
   const layout = settings.locator('[data-action="settings-tab-layout"]')
   await expect(layout).toContainText("Horizontal")
@@ -360,19 +434,27 @@ test("appearance experimental settings control vertical tab details", async ({ p
   await page.setViewportSize({ width: 920, height: 720 })
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toHaveCSS("width", "260px")
   await expect(settings.getByRole("tablist")).toBeHidden()
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeVisible()
+  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeVisible()
 
   await page.setViewportSize({ width: 800, height: 720 })
   await expect(settings.getByRole("tablist")).toBeHidden()
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeVisible()
+  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeVisible()
 
   await page.setViewportSize({ width: 390, height: 720 })
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeVisible()
+  await settings.getByRole("button", { name: "Experimental", exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "Appearance", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible()
+  await expect(layout).toHaveCount(0)
+  await settings.getByRole("button", { name: "Appearance", exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "Experimental", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Experimental", level: 2, exact: true })).toBeVisible()
+  await expect(layout).toContainText("Vertical")
+  await expect(projectNameSwitch).toBeChecked()
   await settings.evaluate((element) => element.setAttribute("dir", "rtl"))
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeInViewport()
+  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeInViewport()
 
   await page.setViewportSize({ width: 390, height: 360 })
-  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeInViewport()
+  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeInViewport()
 
   // Reload the UI-selected preference without seeding settings storage.
   await page.reload()
@@ -396,7 +478,7 @@ test("appearance experimental settings control vertical tab details", async ({ p
   ).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
   await page.keyboard.press("Control+,")
-  await settings.getByRole("tab", { name: "Appearance" }).click()
+  await settings.getByRole("tab", { name: "Experimental", exact: true }).click()
   await expect(layout).toContainText("Vertical")
 })
 

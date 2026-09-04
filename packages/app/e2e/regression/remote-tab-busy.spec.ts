@@ -1,12 +1,15 @@
-import { expect, test, type Page, type Route } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { currentSession } from "../utils/mock-server"
+import { createMockServerHandler } from "../utils/mock-server"
+import { installSseTransport } from "../utils/sse-transport"
 
 const serverA = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const serverB = "http://127.0.0.1:4097"
 const sessionA = session("ses_server_a", "C:/server-a", "Server A session")
 const sessionB = session("ses_server_b", "/home/server-b", "Server B session")
 const childB = { ...session("ses_server_b_child", sessionB.directory, "Server B subagent"), parentID: sessionB.id }
+
+test.use({ serviceWorkers: "block" })
 
 test("tab busy indicator reflects activity in the tab session family", async ({ page }, info) => {
   await mockServers(page)
@@ -27,7 +30,7 @@ test("tab busy indicator reflects activity in the tab session family", async ({ 
   const hrefA = `/server/${base64Encode(serverA)}/session/${sessionA.id}`
   const hrefB = `/server/${base64Encode(serverB)}/session/${sessionB.id}`
   await page.goto(hrefB)
-  await expect(page.getByText(sessionB.title).first()).toBeVisible()
+  await expect(page.getByRole("heading", { name: sessionB.title, exact: true })).toBeVisible()
 
   // The parent is idle, but its tab remains active while the background child runs.
   const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefB}"])`)
@@ -52,65 +55,61 @@ function session(id: string, directory: string, title: string) {
 }
 
 async function mockServers(page: Page) {
+  // Both servers stay connected while the client hydrates their active-session snapshots.
+  await installSseTransport(page, { server: serverA })
+  await installSseTransport(page, { server: serverB })
+  const servers = new Map(
+    [sessionA, sessionB].map(
+      (current) =>
+        [
+          current === sessionA ? serverA : serverB,
+          createMockServerHandler({
+            directory: current.directory,
+            project: {
+              id: current.projectID,
+              worktree: current.directory,
+              vcs: "git",
+              time: { created: 1, updated: 1 },
+              sandboxes: [],
+            },
+            sessions: current === sessionB ? [current, childB] : [current],
+            sessionStatus: current === sessionB ? { [childB.id]: { type: "running" } } : {},
+            provider: { all: [], connected: [], default: {} },
+            pageMessages: () => ({ items: [] }),
+          }),
+        ] as const,
+    ),
+  )
+  page.on("close", () => servers.forEach((server) => void server.dispose()))
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
-    if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
+    const server = servers.get(url.origin)
+    if (!server) return route.fallback()
     const current = url.origin === serverA ? sessionA : sessionB
     const directory = url.searchParams.get("directory")
-    if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/api/event") return sse(route)
-    if (url.pathname === "/api/health") return json(route, { pid: 1 })
-    if (url.pathname === "/api/session/active")
-      return json(route, { data: url.origin === serverB ? { [childB.id]: { type: "running" } } : {} })
-    if (url.pathname === "/api/session")
-      return json(route, {
-        data: url.origin === serverB ? [currentSession(current), currentSession(childB)] : [currentSession(current)],
-        cursor: {},
+    if (directory && directory !== current.directory)
+      return route.fulfill({
+        status: 500,
+        json: { name: "InvalidDirectory" },
+        headers: { "access-control-allow-origin": "*" },
       })
-    if (url.pathname === `/api/session/${current.id}`) return json(route, { data: currentSession(current) })
-    if (url.pathname === `/api/session/${current.id}/message`) return json(route, { data: [], cursor: {} })
-    if (["/api/agent", "/api/provider", "/api/model", "/api/command", "/api/reference"].includes(url.pathname))
-      return json(route, { location: { directory: current.directory }, data: [] })
-    if (url.pathname === "/api/model/default")
-      return json(route, { location: { directory: current.directory }, data: null })
-    if (url.pathname === "/api/permission/request" || url.pathname === "/api/question/request")
-      return json(route, { location: { directory: current.directory }, data: [] })
-    if (url.pathname === "/api/mcp") return json(route, { location: { directory: current.directory }, data: [] })
-    if (url.pathname === "/api/mcp/resource")
-      return json(route, { location: { directory: current.directory }, data: { resources: [], templates: [] } })
-    if (url.pathname === "/api/project" || url.pathname === "/api/project/current") {
-      const project = {
-        id: current.projectID,
-        canonical: current.directory,
-        vcs: "git",
-        time: { created: 1, updated: 1 },
-        sandboxes: [],
-      }
-      return json(route, url.pathname === "/api/project" ? [project] : { id: project.id, directory: current.directory })
-    }
-    if (url.pathname === "/api/location") return json(route, { directory: current.directory })
-    if (url.pathname === "/api/vcs")
-      return json(route, {
-        location: { directory: current.directory },
-        data: { branch: "main", defaultBranch: "main" },
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({
+        status: 204,
+        headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*" },
       })
-    return json(route, {})
-  })
-}
-
-function json(route: Route, body: unknown, status = 200) {
-  return route.fulfill({
-    status,
-    contentType: "application/json",
-    headers: { "access-control-allow-origin": "*" },
-    body: JSON.stringify(body),
-  })
-}
-
-function sse(route: Route) {
-  return route.fulfill({
-    status: 200,
-    contentType: "text/event-stream",
-    body: 'data: {"id":"evt_connected","type":"server.connected","data":{}}\n\n',
+    const body = route.request().postDataBuffer()
+    const response = await server.handler(
+      new Request(url, {
+        method: route.request().method(),
+        headers: route.request().headers(),
+        body: body ? Uint8Array.from(body) : undefined,
+      }),
+    )
+    return route.fulfill({
+      status: response.status,
+      headers: { ...Object.fromEntries(response.headers), "access-control-allow-origin": "*" },
+      body: Buffer.from(await response.arrayBuffer()),
+    })
   })
 }
