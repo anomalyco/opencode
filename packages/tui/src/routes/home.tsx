@@ -268,7 +268,7 @@ function UpdateNotification() {
 function UpdateMessage(props: { title: string; description: string; backdrop: RGBA; animate?: boolean }) {
   const theme = useTheme()
   const lines = props.description.split("\n")
-  const width = Math.max(stringWidth(props.title), ...lines.map(stringWidth))
+  const width = Math.max(stringWidth(props.title), ...lines.map((line) => stringWidth(line)))
   const padding = " ".repeat(Math.floor((width - stringWidth(props.title)) / 2))
   const description = lines.map((line) => " ".repeat(Math.floor((width - stringWidth(line)) / 2)) + line).join("\n")
   return (

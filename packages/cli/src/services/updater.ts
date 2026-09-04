@@ -234,9 +234,9 @@ const make = Effect.gen(function* () {
     function* () {
       const result = yield* inspect()
       if (!result) return undefined
-      if (result.policy === "notify") return { type: "available", version: result.version }
+      if (result.policy === "notify") return { type: "available" as const, version: result.version }
       if (!(yield* install(result.version))) return yield* Effect.fail(new Error("Installation method not found"))
-      return { type: "installed", version: result.version }
+      return { type: "installed" as const, version: result.version }
     },
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )
