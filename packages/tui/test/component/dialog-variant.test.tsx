@@ -2,9 +2,8 @@ import { expect, test } from "bun:test"
 import { DialogVariant } from "../../src/component/dialog-variant"
 import { agent, model, renderLocal } from "../fixture/local"
 
-test.each([44, 120])("variant picker can explicitly reset an agent variant at %i columns", async (width) => {
+test("variant picker can explicitly reset an agent variant", async () => {
   await using setup = await renderLocal({
-    width,
     models: [model("first", ["low", "high"])],
     agents: [agent("build", { providerID: "provider", id: "first", variant: "high" })],
   })

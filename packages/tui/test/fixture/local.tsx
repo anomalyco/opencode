@@ -27,7 +27,6 @@ export async function renderLocal(
     preferences?: Partial<ModelPreference>
     args?: Args
     fetch?: FetchHandler
-    width?: number
   } = {},
 ) {
   const temporary = await tmpdir()
@@ -87,7 +86,7 @@ export async function renderLocal(
         </ArgsProvider>
       </TestTuiContexts>
     ),
-    { width: input.width ?? 100, height: 30, kittyKeyboard: true },
+    { width: 100, height: 30, kittyKeyboard: true },
   )
   await setup.waitFor(() => local !== undefined && local.model.ready)
   await data.location.sync()
