@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { rename, symlink } from "node:fs/promises"
-import { pathToFileURL } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { Host } from "@opencode-ai/plugin/host"
 import "../src/plugin/runtime-plugin-support.bun"
 import { createPluginSources } from "../src/plugin/source"
@@ -191,7 +191,7 @@ test("Node reloads the local ESM graph without changing source URLs", async () =
   await Bun.write(
     script,
     `
-    import { createPluginSources } from ${JSON.stringify(new URL("../src/plugin/source.ts", import.meta.url).pathname)}
+    import { createPluginSources } from ${JSON.stringify(fileURLToPath(new URL("../src/plugin/source.ts", import.meta.url)))}
     import { writeFile } from "node:fs/promises"
     import assert from "node:assert/strict"
     const entry = new URL("./entry.mjs", import.meta.url)
