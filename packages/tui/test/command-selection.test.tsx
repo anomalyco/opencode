@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test"
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
-import { createTestRenderer } from "@opentui/core/testing"
-import { Effect, FileSystem } from "effect"
-import { Global } from "@opencode-ai/util/global"
-import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
+import { directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
+import { createAppFixture } from "./fixture/app"
 
 test.each(["steer", "queue"])("custom commands commit the captured selection before %s delivery", async (delivery) => {
   await using state = await tmpdir()
@@ -154,10 +152,6 @@ async function createCommandFixture(input: {
   create?: Promise<void>
   mutate?: (type: string) => Response | Promise<Response> | undefined
 }) {
-  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
-  setup.renderer.start()
-  const ready = Promise.withResolvers<void>()
-  const events = createEventStream()
   const mutations: { type: string; body: unknown }[] = []
   const location = { directory, project: { id: "project", directory, canonical: directory } }
   const session = {
@@ -171,69 +165,59 @@ async function createCommandFixture(input: {
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
   }
-  const calls = createFetch(async (url, request) => {
-    if (url.pathname === "/api/location") return json(location)
-    if (url.pathname === "/api/agent")
-      return json({
-        location,
-        data: ["build", "plan"].map((id) => ({ id, mode: "primary", hidden: false, permissions: [] })),
-      })
-    if (url.pathname === "/api/provider") return json({ location, data: [{ id: "demo", name: "Demo" }] })
-    if (url.pathname === "/api/model")
-      return json({
-        location,
-        data: ["first", "second"].map((id) => ({
-          id,
-          providerID: "demo",
-          name: `${id} model`,
-          variants: [{ id: "low" }, { id: "high" }],
-          cost: [],
-          time: { released: 0 },
-        })),
-      })
-    if (url.pathname === "/api/command")
-      return json({ location, data: [{ name: "review", description: "Review the input" }] })
-    if (url.pathname === "/api/session" && request.method === "POST") {
-      const body: { id: string; agent: string; model: typeof session.model } = await request.json()
-      Object.assign(session, body)
-      mutations.push({ type: "create", body })
-      await input.create
-      return json({ data: session })
-    }
-    if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
-    if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname)) return json({ data: [], cursor: {} })
-    const type = url.pathname.match(/^\/api\/session\/[^/]+\/(agent|model|command|environment)$/)?.[1]
-    if (type) {
-      mutations.push({ type, body: await request.json() })
-      return input.mutate?.(type) ?? new Response(null, { status: 204 })
-    }
-    return undefined
-  }, events)
-  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
-  const { run } = await import("../src/app")
-  const task = Effect.runPromise(
-    run({
-      app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() } },
-      config: {
-        get: async () => ({
-          animations: false,
-          keybinds: { "agent.cycle": "f6", "variant.cycle": "f7", "model.list": "f8", "prompt.queue": "f9" },
-        }),
-        update: async () => ({}),
-      },
-      packages: { prepare: async () => ({ directory: "" }) },
-      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
-      args: input.newSession ? {} : { sessionID: session.id },
-      environment: input.newSession ? { COMMAND_SELECTION_FIXTURE: "true" } : undefined,
-      log: () => {},
-    }).pipe(Effect.provide(Global.layerWith({ state: input.state })), Effect.provide(FileSystem.layerNoop({}))),
-  )
+  const setup = await createAppFixture({
+    state: input.state,
+    config: {
+      animations: false,
+      keybinds: { "agent.cycle": "f6", "variant.cycle": "f7", "model.list": "f8", "prompt.queue": "f9" },
+    },
+    args: input.newSession ? {} : { sessionID: session.id },
+    environment: input.newSession ? { COMMAND_SELECTION_FIXTURE: "true" } : undefined,
+    fetch: async (url, request) => {
+      if (url.pathname === "/api/location") return json(location)
+      if (url.pathname === "/api/agent")
+        return json({
+          location,
+          data: ["build", "plan"].map((id) => ({ id, mode: "primary", hidden: false, permissions: [] })),
+        })
+      if (url.pathname === "/api/provider") return json({ location, data: [{ id: "demo", name: "Demo" }] })
+      if (url.pathname === "/api/model")
+        return json({
+          location,
+          data: ["first", "second"].map((id) => ({
+            id,
+            providerID: "demo",
+            name: `${id} model`,
+            variants: [{ id: "low" }, { id: "high" }],
+            cost: [],
+            time: { released: 0 },
+          })),
+        })
+      if (url.pathname === "/api/command")
+        return json({ location, data: [{ name: "review", description: "Review the input" }] })
+      if (url.pathname === "/api/session" && request.method === "POST") {
+        const body: { id: string; agent: string; model: typeof session.model } = await request.json()
+        Object.assign(session, body)
+        mutations.push({ type: "create", body })
+        await input.create
+        return json({ data: session })
+      }
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
+      const type = url.pathname.match(/^\/api\/session\/[^/]+\/(agent|model|command|environment)$/)?.[1]
+      if (type) {
+        mutations.push({ type, body: await request.json() })
+        return input.mutate?.(type) ?? new Response(null, { status: 204 })
+      }
+      return undefined
+    },
+  })
   return {
     ...setup,
     mutations,
     async select() {
-      await ready.promise
+      await setup.ready
       await setup.waitForFrame((frame) => frame.includes("Build · first model"))
       setup.mockInput.pressKey("F6")
       await setup.waitForFrame((frame) => frame.includes("Plan ·"))
@@ -253,11 +237,6 @@ async function createCommandFixture(input: {
           frame.includes("Plan · second model Demo · low") &&
           setup.renderer.currentFocusedRenderable instanceof TextareaRenderable,
       )
-    },
-    async [Symbol.asyncDispose]() {
-      setup.renderer.destroy()
-      await task
-      await server.stop()
     },
   }
 }
