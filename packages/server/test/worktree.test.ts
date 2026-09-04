@@ -226,26 +226,3 @@ it.live(
     }),
   30_000,
 )
-
-it.live("rejects workspace-qualified worktree operations without touching the host", () =>
-  Effect.gen(function* () {
-    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-worktree-local-")))
-    const server = yield* startServer(tmp.path)
-    const url = new URL("/api/worktree", server.base)
-    url.searchParams.set("location[directory]", tmp.path)
-    url.searchParams.set("location[workspace]", "wrk_remote")
-    for (const method of ["GET", "POST"] as const) {
-      const response = yield* Effect.promise(() =>
-        fetch(url, {
-          method,
-          headers: { ...server.headers, "content-type": "application/json" },
-          ...(method === "POST" ? { body: JSON.stringify({ name: "not-local" }) } : {}),
-        }),
-      )
-      expect(response.status).toBe(400)
-      expect(yield* Effect.promise(() => response.json())).toMatchObject({
-        data: { message: "Worktree operations only support local locations" },
-      })
-    }
-  }),
-)

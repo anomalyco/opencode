@@ -24,6 +24,7 @@ import { ConfigWorktreePlugin } from "@opencode-ai/core/config/plugin/worktree"
 import { ConfigNormalize } from "@opencode-ai/core/config/normalize"
 import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { Workspace } from "@opencode-ai/schema/workspace"
 import { host } from "./plugin/host"
 import { initRepo } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
@@ -54,6 +55,7 @@ function worktreeLayer(
   database: Database.Interface,
   bus: Bus.Interface,
   data: string,
+  workspaceID?: Workspace.ID,
 ) {
   return AppNodeBuilder.build(LayerNode.group([Worktree.node, Git.node, FSUtil.node, Location.node, Global.node]), [
     Database.node.replace(Layer.succeed(Database.Service, database)),
@@ -64,6 +66,7 @@ function worktreeLayer(
         Location.Service,
         Location.Service.of({
           directory,
+          workspaceID,
           project: { id: projectID, directory, canonical: directory },
         }),
       ),
@@ -799,6 +802,36 @@ describe("Worktree", () => {
       expect(error).toBeInstanceOf(Worktree.InvalidDirectoryError)
       expect(yield* stored(resolved.id)).toContainEqual({ directory: linked, strategy: "git" })
       expect(yield* Effect.promise(() => fs.stat(linked).then((item) => item.isDirectory()))).toBe(true)
+    }),
+  )
+
+  it.live("rejects workspace-qualified locations before running worktree operations", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const fs = yield* FSUtil.Service
+      const context = yield* Layer.build(
+        worktreeLayer(
+          input.sourceDirectory,
+          input.projectID,
+          database,
+          bus,
+          input.root.path,
+          Workspace.ID.make("wrk_remote"),
+        ),
+      )
+      const worktrees = Context.get(context, Worktree.Service)
+      const directory = abs(path.join(input.root.path, "not-created"))
+      const errors = yield* Effect.all([
+        worktrees.list().pipe(Effect.flip),
+        worktrees.create({ directory, name: "task" }).pipe(Effect.flip),
+        worktrees.remove({ directory: input.sourceDirectory, force: true }).pipe(Effect.flip),
+        worktrees.refresh().pipe(Effect.flip),
+      ])
+      for (const error of errors) expect(error).toBeInstanceOf(Worktree.UnsupportedLocationError)
+      expect(yield* fs.existsSafe(directory)).toBe(false)
+      expect(yield* fs.isDir(input.sourceDirectory)).toBe(true)
     }),
   )
 

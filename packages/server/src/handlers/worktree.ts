@@ -1,45 +1,31 @@
 import { Git } from "@opencode-ai/core/git"
 import { Worktree } from "@opencode-ai/core/worktree"
-import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { WorktreeError } from "@opencode-ai/protocol/groups/worktree"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { requestRef } from "../location"
 
 export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (handlers) =>
-  Effect.gen(function* () {
-    const locations = yield* LocationServiceMap.Service
-
-    const run = <A>(ref: Location.Ref, action: (service: Worktree.Interface) => Effect.Effect<A, Worktree.Error>) => {
-      if (ref.workspaceID) return Effect.fail(new Worktree.UnsupportedLocationError({ directory: ref.directory }))
-      return Effect.gen(function* () {
-        const plugins = yield* Plugin.Service
-        const worktrees = yield* Worktree.Service
-        yield* plugins.awaitActivation
-        return yield* action(worktrees)
-      }).pipe(Effect.provide(locations.get(ref)))
-    }
-
-    return handlers
-      .handle("worktree.list", (ctx) => badRequest(run(requestRef(ctx.request), (worktrees) => worktrees.list())))
-      .handle("worktree.create", (ctx) =>
-        badRequest(run(requestRef(ctx.request), (worktrees) => worktrees.create(ctx.payload))),
-      )
-      .handle("worktree.remove", (ctx) =>
-        badRequest(run(requestRef(ctx.request), (worktrees) => worktrees.remove(ctx.payload))).pipe(
-          Effect.as(HttpApiSchema.NoContent.make()),
-        ),
-      )
-      .handle("worktree.refresh", (ctx) =>
-        badRequest(run(requestRef(ctx.request), (worktrees) => worktrees.refresh())).pipe(
-          Effect.as(HttpApiSchema.NoContent.make()),
-        ),
-      )
-  }),
+  handlers
+    .handle("worktree.list", () => run((worktrees) => worktrees.list()))
+    .handle("worktree.create", (ctx) => run((worktrees) => worktrees.create(ctx.payload)))
+    .handle("worktree.remove", (ctx) =>
+      run((worktrees) => worktrees.remove(ctx.payload)).pipe(Effect.as(HttpApiSchema.NoContent.make())),
+    )
+    .handle("worktree.refresh", () =>
+      run((worktrees) => worktrees.refresh()).pipe(Effect.as(HttpApiSchema.NoContent.make())),
+    ),
 )
+
+function run<A>(action: (service: Worktree.Interface) => Effect.Effect<A, Worktree.Error>) {
+  return Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const worktrees = yield* Worktree.Service
+    yield* plugins.awaitActivation
+    return yield* action(worktrees)
+  }).pipe(badRequest)
+}
 
 function badRequest<A, R>(effect: Effect.Effect<A, Worktree.Error, R>) {
   return effect.pipe(
