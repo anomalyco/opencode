@@ -3,8 +3,10 @@ import type { BrowserWindow } from "electron"
 import { Browser } from "@opencode-ai/plugin-browser/rpc"
 import { Schema } from "effect"
 import { createBrowserPage } from "../../src/main/browser-chromium"
+import { createCornerImages } from "../../src/main/browser/corners"
 
 export async function verifyTargets(win: BrowserWindow, url: string) {
+  const children = win.contentView.children.length
   const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
   const page = createBrowserPage(win, {
     id: tabID,
@@ -26,6 +28,37 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
   }
   try {
     await page.ready
+    for (const color of [
+      [255, 255, 255, 255],
+      [20, 24, 30, 255],
+      [40, 100, 160, 255],
+    ] as const) {
+      const images = createCornerImages(color, 10, 1)
+      const left = images[0].toBitmap()
+      const right = images[1].toBitmap()
+      assert.deepEqual([...left.subarray(9 * 10 * 4, 9 * 10 * 4 + 4)], [color[2], color[1], color[0], 255])
+      assert.equal(left[9 * 4 + 3], 0)
+      assert.equal(right[3], 0)
+      assert.equal(right[(10 * 10 - 1) * 4 + 3], 255)
+    }
+    for (const bounds of [
+      { x: 30, y: 40, width: 500, height: 300 },
+      { x: 50, y: 60, width: 600, height: 400 },
+    ]) {
+      page.layout(bounds, [255, 255, 255, 255], 10)
+      page.setVisible(true)
+      await page.contents.executeJavaScript(
+        "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))))",
+      )
+      assert.deepEqual(page.view.getBounds(), bounds)
+      assert.deepEqual(await page.contents.executeJavaScript("({width:innerWidth,height:innerHeight})"), {
+        width: bounds.width,
+        height: bounds.height,
+      })
+      assert.equal(win.contentView.children.length, children + 3)
+      page.setVisible(false)
+      assert(win.contentView.children.slice(children).every((view) => !view.getVisible()))
+    }
     await execute({ type: "navigate", tabID, url })
     const frameURL = new URL("/frame", url.replace("127.0.0.1", "localhost")).href
     await execute({
@@ -85,6 +118,7 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
     assert(retained.resources.includes(url + "/"))
   } finally {
     await page.dispose()
+    assert.equal(win.contentView.children.length, children)
   }
 
   async function waitForFile() {

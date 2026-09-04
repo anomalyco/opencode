@@ -11,7 +11,14 @@ const endpoint = Schema.Struct({
 })
 const target = Schema.Struct({ sessionID: text(256).check(Schema.isStartsWith("ses")), endpoint })
 const bounds = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite })
-const layout = Schema.Struct({ tabID: Browser.TabID, visible: Schema.Boolean, bounds: Schema.optionalKey(bounds) })
+const channel = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))
+const layout = Schema.Struct({
+  tabID: Browser.TabID,
+  visible: Schema.Boolean,
+  bounds: Schema.optionalKey(bounds),
+  background: Schema.optionalKey(Schema.Tuple([channel, channel, channel, channel])),
+  radius: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
+})
 export const BrowserPaneRequestSchema = Schema.Union([
   Schema.Struct({ type: Schema.Literal("register"), bindingID, target }),
   Schema.Struct({ type: Schema.Literal("layout"), bindingID, layout: Schema.optionalKey(layout) }),
