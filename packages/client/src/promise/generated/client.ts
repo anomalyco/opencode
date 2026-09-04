@@ -1968,11 +1968,12 @@ export function make(options: ClientOptions) {
         ),
     },
     worktree: {
-      list: (input: WorktreeListInput, requestOptions?: RequestOptions) =>
+      list: (input?: WorktreeListInput, requestOptions?: RequestOptions) =>
         request<WorktreeListOutput>(
           {
             method: "GET",
-            path: `/api/worktree/${encodeURIComponent(input.projectID)}`,
+            path: `/api/worktree`,
+            query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,

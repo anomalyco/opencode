@@ -1,12 +1,10 @@
 import { Git } from "@opencode-ai/core/git"
 import { Worktree } from "@opencode-ai/core/worktree"
-import { Database } from "@opencode-ai/core/database/database"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { WorktreeError } from "@opencode-ai/protocol/groups/worktree"
 import { Effect } from "effect"
-import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { requestRef } from "../location"
@@ -14,7 +12,6 @@ import { requestRef } from "../location"
 export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (handlers) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
-    const database = yield* Database.Service
 
     const run = <A>(ref: Location.Ref, action: (service: Worktree.Interface) => Effect.Effect<A, Worktree.Error>) => {
       if (ref.workspaceID) return Effect.fail(new Worktree.UnsupportedLocationError({ directory: ref.directory }))
@@ -27,32 +24,19 @@ export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (han
     }
 
     return handlers
-      .handle("worktree.list", (ctx) =>
-        Worktree.list(ctx.params.projectID).pipe(Effect.provideService(Database.Service, database)),
-      )
+      .handle("worktree.list", (ctx) => badRequest(run(requestRef(ctx.request), (worktrees) => worktrees.list())))
       .handle("worktree.create", (ctx) =>
-        badRequest(
-          Effect.gen(function* () {
-            const request = yield* HttpServerRequest.HttpServerRequest
-            return yield* run(requestRef(request), (worktrees) => worktrees.create(ctx.payload))
-          }),
-        ),
+        badRequest(run(requestRef(ctx.request), (worktrees) => worktrees.create(ctx.payload))),
       )
       .handle("worktree.remove", (ctx) =>
-        badRequest(
-          Effect.gen(function* () {
-            const request = yield* HttpServerRequest.HttpServerRequest
-            return yield* run(requestRef(request), (worktrees) => worktrees.remove(ctx.payload))
-          }),
-        ).pipe(Effect.as(HttpApiSchema.NoContent.make())),
+        badRequest(run(requestRef(ctx.request), (worktrees) => worktrees.remove(ctx.payload))).pipe(
+          Effect.as(HttpApiSchema.NoContent.make()),
+        ),
       )
-      .handle("worktree.refresh", () =>
-        badRequest(
-          Effect.gen(function* () {
-            const request = yield* HttpServerRequest.HttpServerRequest
-            return yield* run(requestRef(request), (worktrees) => worktrees.refresh())
-          }),
-        ).pipe(Effect.as(HttpApiSchema.NoContent.make())),
+      .handle("worktree.refresh", (ctx) =>
+        badRequest(run(requestRef(ctx.request), (worktrees) => worktrees.refresh())).pipe(
+          Effect.as(HttpApiSchema.NoContent.make()),
+        ),
       )
   }),
 )

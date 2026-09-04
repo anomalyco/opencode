@@ -27,7 +27,6 @@ test("worktree mutation inputs do not require a project or explicit creation def
   expect(Schema.encodeSync(Worktree.CreateInput)(Schema.decodeUnknownSync(Worktree.CreateInput)({}))).toEqual({})
   expect(Worktree.CreateInput.fields).not.toHaveProperty("projectID")
   expect(Worktree.RemoveInput.fields).not.toHaveProperty("projectID")
-  expect(Worktree.ListInput.fields).toHaveProperty("projectID")
 })
 
 test("inventory contains only the directory and its owning strategy", () => {

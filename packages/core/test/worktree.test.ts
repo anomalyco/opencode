@@ -704,7 +704,7 @@ describe("Worktree", () => {
       const registration = yield* worktrees.transform((editor) => editor.configure({ directory: parent }))
       const created = yield* worktrees.create({ name: "configured" })
       expect(created.directory).toBe(abs(path.join(parent, "configured")))
-      expect(yield* worktrees.list(input.projectID)).toContainEqual({
+      expect(yield* worktrees.list()).toContainEqual({
         directory: created.directory,
         strategy: "git",
       })
@@ -799,6 +799,51 @@ describe("Worktree", () => {
       expect(error).toBeInstanceOf(Worktree.InvalidDirectoryError)
       expect(yield* stored(resolved.id)).toContainEqual({ directory: linked, strategy: "git" })
       expect(yield* Effect.promise(() => fs.stat(linked).then((item) => item.isDirectory()))).toBe(true)
+    }),
+  )
+
+  it.live("list invokes the location's strategies before returning inventory", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktrees = yield* Worktree.Service
+      const git = yield* WorktreeGit.make
+      const directory = abs(path.join(input.root.path, "discovered"))
+      yield* Effect.promise(() => fs.mkdir(directory))
+      const sources: AbsolutePath[] = []
+      yield* worktrees.transform((editor) =>
+        editor.add({
+          ...git,
+          id: Worktree.StrategyID.make("discovered-copy"),
+          list: (sourceDirectory) =>
+            Effect.sync(() => {
+              sources.push(sourceDirectory)
+              return [{ directory, type: "worktree" as const }]
+            }),
+        }),
+      )
+      expect(yield* worktrees.list()).toContainEqual({ directory, strategy: "discovered-copy" })
+      expect(sources).toEqual([input.sourceDirectory])
+      expect(yield* stored(input.projectID)).toContainEqual({ directory, strategy: "discovered-copy" })
+      yield* Effect.promise(() => fs.rmdir(directory))
+      expect(yield* worktrees.list()).not.toContainEqual({ directory, strategy: "discovered-copy" })
+      expect(sources).toEqual([input.sourceDirectory, input.sourceDirectory])
+    }),
+  )
+
+  it.live("list surfaces strategy discovery failures", () =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktree.Service
+      const git = yield* WorktreeGit.make
+      yield* worktrees.transform((editor) =>
+        editor.add({
+          ...git,
+          id: Worktree.StrategyID.make("broken-discovery"),
+          list: () => Effect.fail(new Error("Cannot enumerate worktrees")),
+        }),
+      )
+      const error = yield* worktrees.list().pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Worktree.OperationError)
+      if (error instanceof Worktree.OperationError) expect(error.message).toContain("Cannot enumerate worktrees")
     }),
   )
 

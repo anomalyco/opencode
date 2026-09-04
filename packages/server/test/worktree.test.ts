@@ -10,7 +10,7 @@ import { OpenCode } from "@opencode-ai/client"
 import { initRepo } from "../../core/test/fixture/git"
 
 it.live(
-  "lists worktrees by project and creates and removes them through a location",
+  "lists, creates, and removes worktrees through the same location",
   () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-worktree-endpoint-")))
@@ -22,19 +22,11 @@ it.live(
       yield* Effect.promise(() => $`git config user.name Test`.cwd(project).quiet())
       yield* Effect.promise(() => $`git commit --allow-empty -m root`.cwd(project).quiet())
       const server = yield* startServer(path.join(tmp.path, "config"))
-      const location = new URL("/api/location", server.base)
-      location.searchParams.set("location[directory]", project)
-      const resolved = yield* Effect.promise(() =>
-        fetch(location, { headers: server.headers }).then((response) => response.json()),
-      )
-      if (!isRecord(resolved) || !isRecord(resolved.project) || typeof resolved.project.id !== "string")
-        throw new Error("Expected resolved project")
-      const inventory = new URL(`/api/worktree/${resolved.project.id}`, server.base)
       const url = new URL("/api/worktree", server.base)
       url.searchParams.set("location[directory]", project)
 
       const initial = yield* Effect.promise(() =>
-        fetch(inventory, { headers: server.headers }).then((response) => response.json()),
+        fetch(url, { headers: server.headers }).then((response) => response.json()),
       )
       expect(initial).toEqual([{ directory: project }])
 
@@ -48,7 +40,7 @@ it.live(
       expect(created).toEqual({ directory: path.join(destination, "api") })
 
       const listed = yield* Effect.promise(() =>
-        fetch(inventory, { headers: server.headers }).then((response) => response.json()),
+        fetch(url, { headers: server.headers }).then((response) => response.json()),
       )
       expect(listed).toContainEqual({
         directory: path.join(destination, "api"),
@@ -90,13 +82,12 @@ it.live(
         const created = await api.worktree.create()
         expect(path.dirname(created.directory)).toBe(destination)
         await api.worktree.refresh()
-        const location = await api.location.get()
-        expect(await api.worktree.list({ projectID: location.project.id })).toContainEqual({
+        expect(await api.worktree.list()).toContainEqual({
           directory: created.directory,
           strategy: "git",
         })
         await api.worktree.remove({ directory: created.directory, force: false })
-        expect(await api.worktree.list({ projectID: location.project.id })).toEqual([{ directory: project }])
+        expect(await api.worktree.list()).toEqual([{ directory: project }])
       })
     }),
   30_000,
@@ -136,14 +127,13 @@ it.live(
         const a = await api.location.get({ location: { directory: nested } })
         const b = await api.location.get({ location: { directory: second } })
         expect(a.project.id).toBe(b.project.id)
-        const projectID = a.project.id
         const custom = await api.worktree.create({ location: { directory: nested }, name: "custom" })
         const builtin = await api.worktree.create({ location: { directory: second }, name: "builtin" })
         expect(custom.directory).toBe(path.join(destination, "custom"))
         expect(builtin.directory).toBe(path.join(destination, "builtin"))
-        await api.worktree.refresh({ location: { directory: second } })
-        await api.worktree.refresh({ location: { directory: nested } })
-        const rows = await api.worktree.list({ projectID })
+        const otherRows = await api.worktree.list({ location: { directory: second } })
+        expect(otherRows).toContainEqual({ directory: custom.directory, strategy: "test-copy" })
+        const rows = await api.worktree.list({ location: { directory: nested } })
         expect(rows).toContainEqual({
           directory: custom.directory,
           strategy: "test-copy",
@@ -183,7 +173,7 @@ it.live(
           directory: builtin.directory,
           force: false,
         })
-        expect((await api.worktree.list({ projectID })).filter((row) => row.strategy)).toEqual([])
+        expect((await api.worktree.list({ location: { directory: nested } })).filter((row) => row.strategy)).toEqual([])
       })
     }),
   30_000,
@@ -224,11 +214,11 @@ it.live(
       const server = yield* startServer(path.join(tmp.path, "config"))
       const api = OpenCode.make({ baseUrl: server.base, headers: server.headers })
       yield* Effect.promise(async () => {
-        const location = await api.location.get({ location: { directory: source } })
+        await api.location.get({ location: { directory: source } })
         const url = new URL("/api/plugin/await-activation", server.base)
         url.searchParams.set("location[directory]", source)
         expect((await fetch(url, { method: "POST", headers: server.headers })).status).toBe(204)
-        expect(await api.worktree.list({ projectID: location.project.id })).toContainEqual({
+        expect(await api.worktree.list({ location: { directory: target } })).toContainEqual({
           directory: path.join(destination, "delegated"),
           strategy: "target-copy",
         })
@@ -244,20 +234,18 @@ it.live("rejects workspace-qualified worktree operations without touching the ho
     const url = new URL("/api/worktree", server.base)
     url.searchParams.set("location[directory]", tmp.path)
     url.searchParams.set("location[workspace]", "wrk_remote")
-    const response = yield* Effect.promise(() =>
-      fetch(url, {
-        method: "POST",
-        headers: { ...server.headers, "content-type": "application/json" },
-        body: JSON.stringify({ name: "not-local" }),
-      }),
-    )
-    expect(response.status).toBe(400)
-    expect(yield* Effect.promise(() => response.json())).toMatchObject({
-      data: { message: "Worktree operations only support local locations" },
-    })
+    for (const method of ["GET", "POST"] as const) {
+      const response = yield* Effect.promise(() =>
+        fetch(url, {
+          method,
+          headers: { ...server.headers, "content-type": "application/json" },
+          ...(method === "POST" ? { body: JSON.stringify({ name: "not-local" }) } : {}),
+        }),
+      )
+      expect(response.status).toBe(400)
+      expect(yield* Effect.promise(() => response.json())).toMatchObject({
+        data: { message: "Worktree operations only support local locations" },
+      })
+    }
   }),
 )
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}

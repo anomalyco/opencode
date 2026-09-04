@@ -6080,7 +6080,11 @@ export type ReferenceListOutput = {
   data: Array<ReferenceInfo>
 }
 
-export type WorktreeListInput = { readonly projectID: { readonly projectID: string }["projectID"] }
+export type WorktreeListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
 
 export type WorktreeListOutput = WorktreeList
 

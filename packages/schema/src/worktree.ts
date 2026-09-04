@@ -2,7 +2,6 @@ export * as Worktree from "./worktree.js"
 
 import { Schema } from "effect"
 import { durable, ephemeral, inventory } from "./event.js"
-import { ProjectID } from "./project-id.js"
 import { AbsolutePath, optional } from "./schema.js"
 import { Project } from "./project.js"
 
@@ -48,11 +47,6 @@ export class OperationError extends Schema.TaggedError<OperationError>()("Worktr
   message: Schema.String,
   forceRequired: optional(Schema.Boolean),
 }) {}
-
-export const ListInput = Schema.Struct({
-  projectID: ProjectID,
-}).annotate({ identifier: "Worktree.ListInput" })
-export interface ListInput extends Schema.Schema.Type<typeof ListInput> {}
 
 export const List = Schema.Array(Directory).annotate({ identifier: "Worktree.List" })
 export type List = typeof List.Type

@@ -483,7 +483,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
         }),
     },
     worktree: {
-      list: (input) => worktrees.list(input.projectID),
+      list: (input) => atWorktree(locationRef(input), (service) => service.list()),
       create: (input) => atWorktree(locationRef(input), (service) => service.create(input)),
       refresh: (input) => atWorktree(locationRef(input), (service) => service.refresh()).pipe(Effect.asVoid),
       remove: (input) => atWorktree(locationRef(input), (service) => service.remove(input)),

@@ -44,9 +44,6 @@ export type RefreshResult = typeof RefreshResult.Type
 export const Info = Worktree.Info
 export type Info = typeof Info.Type
 
-export const ListInput = Worktree.ListInput
-export type ListInput = typeof ListInput.Type
-
 export const List = Worktree.List
 export type List = typeof List.Type
 
@@ -117,29 +114,13 @@ export interface Editor {
 }
 
 export interface Interface extends State.Transformable<Editor> {
-  readonly list: (projectID: ProjectSchema.ID) => Effect.Effect<List>
+  readonly list: () => Effect.Effect<List, Error>
   readonly create: (input?: CreateInput) => Effect.Effect<Info, Error>
   readonly remove: (input: RemoveInput) => Effect.Effect<void, Error>
   readonly refresh: () => Effect.Effect<RefreshResult, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Worktree") {}
-
-// Inventory is project-wide and remains readable without booting any location or plugins.
-export const list = Effect.fn("Worktree.list")(function* (projectID: ProjectSchema.ID) {
-  const database = yield* Database.Service
-  const rows = yield* database.db
-    .select({ directory: WorktreeTable.directory, strategy: WorktreeTable.strategy })
-    .from(WorktreeTable)
-    .where(eq(WorktreeTable.project_id, projectID))
-    .orderBy(desc(WorktreeTable.time_created), asc(WorktreeTable.directory))
-    .all()
-    .pipe(Effect.orDie)
-  return rows.map((row) => ({
-    directory: row.directory,
-    strategy: row.strategy ?? undefined,
-  }))
-})
 
 const layer = Layer.effect(
   Service,
@@ -182,7 +163,16 @@ const layer = Layer.effect(
     })
 
     const ops = {
-      list: (projectID: ProjectSchema.ID) => list(projectID).pipe(Effect.provideService(Database.Service, database)),
+      list: Effect.fnUntraced(function* () {
+        const rows = yield* db
+          .select({ directory: WorktreeTable.directory, strategy: WorktreeTable.strategy })
+          .from(WorktreeTable)
+          .where(eq(WorktreeTable.project_id, projectID))
+          .orderBy(desc(WorktreeTable.time_created), asc(WorktreeTable.directory))
+          .all()
+          .pipe(Effect.orDie)
+        return rows.map((row) => ({ directory: row.directory, strategy: row.strategy ?? undefined }))
+      }),
       find: Effect.fnUntraced(function* (directory: AbsolutePath) {
         const row = yield* db
           .select({ directory: WorktreeTable.directory, strategy: WorktreeTable.strategy })
@@ -317,7 +307,7 @@ const layer = Layer.effect(
 
     const refresh = Effect.fn("Worktree.refresh")(function* () {
       yield* local
-      const stored = yield* ops.list(projectID)
+      const stored = yield* ops.list()
       const checked = yield* Effect.forEach(
         stored,
         (item) => fs.isDir(item.directory).pipe(Effect.map((exists) => ({ ...item, exists }))),
@@ -362,7 +352,10 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      list: ops.list,
+      list: Effect.fn("Worktree.list")(function* () {
+        yield* refresh()
+        return yield* ops.list()
+      }),
       create,
       remove,
       refresh,

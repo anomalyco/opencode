@@ -1931,9 +1931,11 @@ export interface ReferenceApi<E = never> {
   readonly list: ReferenceListOperation<E>
 }
 
-export type WorktreeListInput = { readonly projectID: Project.ID }
+export type WorktreeListInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
 export type WorktreeListOutput = Worktree.List
-export type WorktreeListOperation<E = never> = (input: WorktreeListInput) => Effect.Effect<WorktreeListOutput, E>
+export type WorktreeListOperation<E = never> = (input?: WorktreeListInput) => Effect.Effect<WorktreeListOutput, E>
 
 export type WorktreeCreateInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined

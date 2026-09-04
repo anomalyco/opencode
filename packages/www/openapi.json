@@ -11997,18 +11997,50 @@
         "summary": "List references"
       }
     },
-    "/api/worktree/{projectID}": {
+    "/api/worktree": {
       "get": {
         "tags": ["worktree"],
         "operationId": "v2.worktree.list",
         "parameters": [
           {
-            "name": "projectID",
-            "in": "path",
+            "name": "location",
+            "in": "query",
             "schema": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            "required": true
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -12024,11 +12056,18 @@
             }
           },
           "400": {
-            "description": "InvalidRequestError",
+            "description": "WorktreeError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorktreeErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -12044,11 +12083,9 @@
             }
           }
         },
-        "description": "List known local worktrees for a project.",
+        "description": "Discover worktrees through the requested location's strategies and return its project's inventory.",
         "summary": "List worktrees"
-      }
-    },
-    "/api/worktree": {
+      },
       "post": {
         "tags": ["worktree"],
         "operationId": "v2.worktree.create",
@@ -19854,7 +19891,7 @@
     },
     {
       "name": "worktree",
-      "description": "Project worktree management routes."
+      "description": "Location-scoped worktree management routes."
     },
     {
       "name": "workspace",

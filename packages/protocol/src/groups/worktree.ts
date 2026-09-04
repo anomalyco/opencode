@@ -1,4 +1,3 @@
-import { Project } from "@opencode-ai/schema/project"
 import { Worktree } from "@opencode-ai/schema/worktree"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -19,16 +18,20 @@ export class WorktreeError extends Schema.Error<WorktreeError>("WorktreeError")(
 
 export const WorktreeGroup = HttpApiGroup.make("server.worktree")
   .add(
-    HttpApiEndpoint.get("worktree.list", `${root}/:projectID`, {
-      params: { projectID: Project.ID },
+    HttpApiEndpoint.get("worktree.list", root, {
+      query: LocationQuery,
       success: Worktree.List,
-    }).annotateMerge(
-      OpenApi.annotations({
-        identifier: "v2.worktree.list",
-        summary: "List worktrees",
-        description: "List known local worktrees for a project.",
-      }),
-    ),
+      error: WorktreeError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.worktree.list",
+          summary: "List worktrees",
+          description:
+            "Discover worktrees through the requested location's strategies and return its project's inventory.",
+        }),
+      ),
   )
   .add(
     HttpApiEndpoint.post("worktree.create", root, {
@@ -78,4 +81,4 @@ export const WorktreeGroup = HttpApiGroup.make("server.worktree")
         }),
       ),
   )
-  .annotateMerge(OpenApi.annotations({ title: "worktree", description: "Project worktree management routes." }))
+  .annotateMerge(OpenApi.annotations({ title: "worktree", description: "Location-scoped worktree management routes." }))

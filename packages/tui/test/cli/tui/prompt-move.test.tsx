@@ -70,7 +70,7 @@ test.each([
 
     const frame = await fixture.create()
 
-    expect(fixture.reads.worktrees).toEqual(["proj_test"])
+    expect(fixture.reads.worktrees).toEqual([selected.directory])
     expect(frame).toContain(clone)
     expect(frame.indexOf(clone)).toBeLessThan(frame.indexOf(main))
     expect(fixture.requests).toEqual([
@@ -171,17 +171,16 @@ async function renderMove(input: {
         },
       })
     }
-    if (url.pathname === "/api/worktree/proj_test" || url.pathname === "/api/worktree/proj_launch") {
+    if (url.pathname === "/api/worktree") {
       if (request.method === "GET") {
-        reads.worktrees.push(url.pathname.slice("/api/worktree/".length))
+        const directory = url.searchParams.get("location[directory]") ?? launch
+        reads.worktrees.push(directory)
         return json(
-          url.pathname === "/api/worktree/proj_launch"
+          directory === launch && input.launchProjectID
             ? [{ directory: launch }]
             : [{ directory: main }, { directory: clone }, { directory: linked, strategy: "git" }],
         )
       }
-    }
-    if (url.pathname === "/api/worktree") {
       if (request.method === "POST") {
         requests.push({
           payload: await request.json(),

@@ -1451,9 +1451,9 @@ const EndpointReferenceList = (raw: RawClient["server.reference"]) => (input?: R
 
 const adaptGroupReference = (raw: RawClient["server.reference"]) => ({ list: EndpointReferenceList(raw) })
 
-const EndpointWorktreeList = (raw: RawClient["server.worktree"]) => (input: WorktreeListInput) =>
+const EndpointWorktreeList = (raw: RawClient["server.worktree"]) => (input?: WorktreeListInput) =>
   preserveEffect<WorktreeListOutput>()(
-    raw["worktree.list"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["worktree.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input?: WorktreeCreateInput) =>

@@ -81,16 +81,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   })
 
   const [directories, { refetch }] = createResource(
-    () => (props.fixture || props.initialRemoving ? undefined : props.projectID),
-    async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
+    () => (props.fixture || props.initialRemoving ? undefined : worktreeLocation()),
+    async (location, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
-        // A failed discovery must not hide the project-wide stored inventory.
-        await client.api.worktree
-          .refresh({
-            location: worktreeLocation(),
-          })
-          .catch(() => undefined)
-        const directories = await client.api.worktree.list({ projectID })
+        const directories = await client.api.worktree.list({ location })
         setLoadError(undefined)
         return directories
       } catch (error) {
