@@ -19,6 +19,7 @@ import {
 } from "@opencode-ai/core/plugin/provider/github-copilot"
 import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
+import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
 import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -44,12 +45,13 @@ const sessions = Effect.fn(function* () {
   return { parent: parent.id, child: child.id }
 })
 
-const modelRequest = Effect.fn(function* (sessionID: Session.ID, agent: string) {
+const modelRequest = Effect.fn(function* (sessionID: Session.ID, kind: SessionRequestKind, agent = "build") {
   const hooks = yield* PluginHooks.Service
   return yield* hooks.trigger("session", "model.request", {
     sessionID,
     agent: Agent.ID.make(agent),
     model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
+    kind,
     headers: {},
   })
 })
@@ -154,6 +156,7 @@ describe("GithubCopilotPlugin", () => {
         sessionID: Session.ID.make("ses_test"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("claude-sonnet-4.5") }),
+        kind: "session",
         request: new Request("https://api.githubcopilot.com/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-api-key": "token" },
@@ -171,7 +174,7 @@ describe("GithubCopilotPlugin", () => {
   it.effect("classifies main-loop steps as agent interactions", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).parent, "build")
+      const event = yield* modelRequest((yield* sessions()).parent, "session")
       expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
     }),
   )
@@ -179,7 +182,7 @@ describe("GithubCopilotPlugin", () => {
   it.effect("classifies child-session steps as subagent interactions", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).child, "build")
+      const event = yield* modelRequest((yield* sessions()).child, "session")
       expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-subagent", "x-initiator": "agent" })
     }),
   )
@@ -192,11 +195,19 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("classifies compaction requests", () =>
+  it.effect("classifies compaction requests by kind rather than agent", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).child, "compaction")
+      const event = yield* modelRequest((yield* sessions()).child, "compaction", "build")
       expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-compaction", "x-initiator": "agent" })
+    }),
+  )
+
+  it.effect("does not classify by agent name", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).parent, "session", "compaction")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
     }),
   )
 
@@ -208,6 +219,7 @@ describe("GithubCopilotPlugin", () => {
         sessionID: (yield* sessions()).parent,
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5.4") }),
+        kind: "session",
         headers: {},
       })
       expect(event.headers).toEqual({})
@@ -233,6 +245,14 @@ describe("GithubCopilotPlugin", () => {
         }),
       )
       expect(requests[0]?.get("x-initiator")).toBe("agent")
+    }),
+  )
+
+  it.effect("classifies session generation requests as agent interactions", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).parent, "generate")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
     }),
   )
 

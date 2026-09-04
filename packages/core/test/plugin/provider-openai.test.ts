@@ -226,6 +226,7 @@ describe("OpenAIPlugin", () => {
       const program = Effect.gen(function* () {
         const requests = yield* SessionModelRequest.Service
         return yield* requests.prepare({
+          kind: "session",
           scope: {
             session: Session.Info.make({
               id: sessionID,

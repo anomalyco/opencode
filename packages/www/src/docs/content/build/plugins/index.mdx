@@ -1156,9 +1156,14 @@ await ctx.session.hook(
 Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
 it.
 
+Both hooks run for every request a session issues. `event.kind` says which flow issued it: `"session"` for the agent
+loop, `"compaction"` for checkpoint summaries, `"title"` for title generation, and `"generate"` for transient
+`ctx.session.generate` calls. Use it instead of the agent ID to tell auxiliary requests apart.
+
 ```ts
 await ctx.session.hook("http.request", (event) => {
   event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
 })
 
 await ctx.session.hook("http.response", (event) => {

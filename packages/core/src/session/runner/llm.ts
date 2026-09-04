@@ -217,6 +217,7 @@ const layer = Layer.effect(
           messages: loaded.messages,
         })
         const prepared = yield* context.prepare({
+          kind: "session",
           scope: { session: loaded.session, agentID: loaded.agent.id, model: loaded.model, tools: loaded.tools },
           transcript: {
             system: transcript.system,

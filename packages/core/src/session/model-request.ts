@@ -2,6 +2,7 @@ export * as SessionModelRequest from "./model-request.js"
 
 import { HttpOptions, LanguageModel, LLM, LLMRequest, Message, SystemPart } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
+import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { Content } from "@opencode-ai/schema/tool"
@@ -59,6 +60,8 @@ export interface Prepared {
 }
 
 interface PrepareInput {
+  /** Which Session flow issues this request; HTTP hooks receive it alongside the Session identity. */
+  readonly kind: SessionRequestKind
   readonly scope: {
     readonly session: SessionSchema.Info
     readonly agentID: Agent.ID
@@ -238,7 +241,10 @@ const applyModelHooks = (hooks: PluginHooks.Interface, scope: HookScope, request
 // Exposes each outbound HTTP exchange to session.http.request/response hooks
 // through web-standard Request/Response values.
 const httpMiddleware =
-  (hooks: PluginHooks.Interface, scope: HookScope): NonNullable<StreamOptions["http"]> =>
+  (
+    hooks: PluginHooks.Interface,
+    scope: HookScope & { readonly kind: SessionRequestKind },
+  ): NonNullable<StreamOptions["http"]> =>
   (request, handler) =>
     Effect.gen(function* () {
       const before = yield* hooks.trigger("session", "http.request", {
@@ -356,6 +362,7 @@ export const layer = Layer.effect(
             sessionID: session.id,
             agent: input.scope.agentID,
             model: resolved.ref,
+            kind: input.kind,
           })
         : undefined
       const options: StreamOptions = {
