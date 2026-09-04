@@ -121,8 +121,101 @@ describe("SessionProjector", () => {
       expect(storedRevert?.files).toEqual([
         { file: "src/old.ts", status: "modified", additions: 1, deletions: 0, patch: "@@" },
       ])
+      const bus = yield* Bus.Service
+      yield* bus.publish(SessionEvent.RevertEvent.Prepared, { sessionID, paths: [RelativePath.make("src/new.ts")] })
+      expect((yield* db.select().from(SessionTable).get())?.revert_pending).toEqual({
+        snapshot: Snapshot.ID.make("tree"),
+        paths: ["src/old.ts", "src/new.ts"].map((file) => RelativePath.make(file)),
+      })
     }),
   )
+
+  it.effect("replays preparation deltas without publishing a staged boundary or changing activity", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const before = yield* store.get(sessionID)
+      const prepared = {
+        id: Event.ID.make("evt_revert_prepared"),
+        aggregateID: sessionID,
+        seq: 0,
+        type: Bus.versionedType(SessionEvent.RevertEvent.Prepared.type, 1),
+        created: 10,
+        data: { sessionID, snapshot: Snapshot.ID.make("original"), paths: [RelativePath.make("first.txt")] },
+      }
+      yield* bus.replay(prepared)
+      yield* bus.replay(prepared)
+      yield* bus.replay({
+        id: Event.ID.make("evt_revert_more_paths"),
+        aggregateID: sessionID,
+        seq: 1,
+        type: prepared.type,
+        created: 20,
+        data: { sessionID, paths: [RelativePath.make("second.txt")] },
+      })
+      expect(yield* store.get(sessionID)).toEqual(before)
+      expect((yield* db.select().from(SessionTable).get())?.revert_pending).toEqual({
+        snapshot: Snapshot.ID.make("original"),
+        paths: ["first.txt", "second.txt"].map((file) => RelativePath.make(file)),
+      })
+      yield* bus.publish(SessionEvent.RevertEvent.Cleared, { sessionID })
+      expect((yield* db.select().from(SessionTable).get())?.revert_pending).toBeNull()
+    }),
+  )
+
+  it.effect("rejects preparation without a new or previously recorded original", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      expect(
+        yield* bus
+          .publish(SessionEvent.RevertEvent.Prepared, { sessionID, paths: [RelativePath.make("first.txt")] })
+          .pipe(Effect.exit),
+      ).toMatchObject({ _tag: "Failure" })
+      expect((yield* db.select().from(SessionTable).get())?.revert_pending).toBeNull()
+      expect(yield* db.select().from(EventTable).all()).toEqual([])
+    }),
+  )
+
+  for (const type of ["user", "compaction"] as const) {
+    it.effect(`replayed ${type} admission accepts failed preparation but synthetic admission does not`, () =>
+      Effect.gen(function* () {
+        yield* seedSession()
+        const bus = yield* Bus.Service
+        const store = yield* SessionStore.Service
+        yield* bus.publish(SessionEvent.RevertEvent.Prepared, {
+          sessionID,
+          snapshot: Snapshot.ID.make("original"),
+          paths: [RelativePath.make("file.txt")],
+        })
+        yield* bus.replay({
+          id: Event.ID.make("evt_notice"),
+          aggregateID: sessionID,
+          seq: 1,
+          type: Bus.versionedType(SessionEvent.InboxEnqueued.type, 1),
+          data: {
+            sessionID,
+            inboxID: SessionMessage.ID.make("msg_notice"),
+            item: { type: "synthetic", payload: { text: "Background notice" }, delivery: "steer" },
+          },
+        })
+        expect(yield* store.hasPendingRevert(sessionID)).toBe(true)
+        yield* bus.replay({
+          id: Event.ID.make("evt_accept"),
+          aggregateID: sessionID,
+          seq: 2,
+          type: Bus.versionedType(SessionEvent.InboxEnqueued.type, 1),
+          data: {
+            sessionID,
+            inboxID: SessionMessage.ID.make("msg_accept"),
+            item: { type, payload: type === "user" ? { text: "Continue" } : {}, delivery: "steer" },
+          },
+        })
+        expect(yield* store.hasPendingRevert(sessionID)).toBe(false)
+      }),
+    )
+  }
 
   it.effect("projects staged, cleared, and committed reverts", () =>
     Effect.gen(function* () {
@@ -171,6 +264,11 @@ describe("SessionProjector", () => {
         })
         .run()
       const bus = yield* Bus.Service
+      yield* bus.publish(SessionEvent.RevertEvent.Prepared, {
+        sessionID,
+        snapshot: Snapshot.ID.make("tree"),
+        paths: [RelativePath.make("first.txt")],
+      })
       yield* bus.publish(SessionEvent.RevertEvent.Staged, {
         sessionID,
         revert: { messageID: boundary, snapshot: Snapshot.ID.make("tree"), files: [] },
@@ -180,11 +278,23 @@ describe("SessionProjector", () => {
         snapshot: "tree",
         files: [],
       })
+      expect((yield* db.select().from(SessionTable).get())?.revert_pending).toBeNull()
+      yield* bus.publish(SessionEvent.RevertEvent.Prepared, { sessionID, paths: [RelativePath.make("second.txt")] })
+      expect((yield* db.select().from(SessionTable).get())?.revert_pending).toEqual({
+        snapshot: Snapshot.ID.make("tree"),
+        paths: [RelativePath.make("second.txt")],
+      })
       yield* bus.publish(SessionEvent.RevertEvent.Cleared, { sessionID })
       expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toBeNull()
+      expect((yield* db.select().from(SessionTable).get())?.revert_pending).toBeNull()
       yield* bus.publish(SessionEvent.RevertEvent.Staged, {
         sessionID,
         revert: { messageID: boundary, files: [] },
+      })
+      yield* bus.publish(SessionEvent.RevertEvent.Prepared, {
+        sessionID,
+        snapshot: Snapshot.ID.make("next-original"),
+        paths: [RelativePath.make("third.txt")],
       })
       yield* bus.publish(SessionEvent.RevertEvent.Committed, {
         sessionID,
@@ -200,6 +310,7 @@ describe("SessionProjector", () => {
         tokens_reasoning: 2,
         tokens_cache_read: 3,
         tokens_cache_write: 1,
+        revert_pending: null,
       })
       // A committed revert resets the fold cache so the next boundary establishes a new epoch.
       expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toBeUndefined()

@@ -29,7 +29,7 @@ import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Form } from "@opencode-ai/core/form"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -3158,6 +3158,23 @@ describe("SessionRunnerLLM", () => {
       Expected.user("Run once"),
       Expected.assistant({ finish: "stop" }, [Expected.text("Once")]),
     ])
+  })
+
+  scenario("leaves queued input untouched while undo recovery is pending", function* (s) {
+    const queued = yield* s.admit("Preserve this queued input")
+    yield* s.llm.push(TestLLM.stop())
+    yield* s.bus.publish(SessionEvent.RevertEvent.Prepared, {
+      sessionID,
+      snapshot: Snapshot.ID.make("original"),
+      paths: [RelativePath.make("file.txt")],
+    })
+    yield* s.resume
+    expect(s.requests).toHaveLength(0)
+    expect(yield* s.inbox).toMatchObject([{ id: queued.id }])
+    yield* s.bus.publish(SessionEvent.RevertEvent.Cleared, { sessionID })
+    yield* s.resume
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.inbox).toEqual([])
   })
 
   scenario("steers an active step with newly recorded prompts", function* (s) {

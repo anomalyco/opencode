@@ -170,7 +170,7 @@ export const make = Effect.fn("Session.make")(function* () {
             }).pipe(instances.provide(session)),
           )
           // Commit a staged revert only after preparation succeeds, before admitting new work.
-          if (session.revert) yield* SessionRevert.commit(bus, session)
+          if (session.revert) yield* SessionRevert.commit(bus, store, session)
           const admitted = yield* admission.admit({
             id: messageID,
             sessionID: session.id,
@@ -181,7 +181,7 @@ export const make = Effect.fn("Session.make")(function* () {
         }).pipe(
           Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
         )
-        if (input.resume !== false) yield* execution.wake(sessionID)
+        if (input.resume !== false && !(yield* store.hasPendingRevert(sessionID))) yield* execution.wake(sessionID)
         return admitted
       }),
     ),
@@ -272,7 +272,7 @@ export const make = Effect.fn("Session.make")(function* () {
     input: { id?: SessionMessage.ID; delivery?: SessionInbox.Delivery },
   ) {
     const session = yield* get(sessionID)
-    if (session.revert) yield* SessionRevert.commit(bus, session)
+    if (session.revert) yield* SessionRevert.commit(bus, store, session)
     const inputID = input.id ?? SessionMessage.ID.create()
     const admitted = yield* admission
       .admitCompaction({
@@ -283,7 +283,7 @@ export const make = Effect.fn("Session.make")(function* () {
       .pipe(
         Effect.catchTag("SessionInbox.LifecycleConflict", () => new CompactionConflictError({ sessionID, inputID })),
       )
-    yield* execution.wake(sessionID)
+    if (!(yield* store.hasPendingRevert(sessionID))) yield* execution.wake(sessionID)
     return admitted
   })
   const wait = Effect.fn("Session.wait")(function* (sessionID: SessionSchema.ID) {
@@ -331,7 +331,8 @@ export const make = Effect.fn("Session.make")(function* () {
                 () => new SyntheticConflictError({ sessionID, inputID }),
               ),
             )
-          if (input.resume !== false && !(yield* get(sessionID)).revert) yield* execution.wake(sessionID)
+          if (input.resume !== false && !(yield* get(sessionID)).revert && !(yield* store.hasPendingRevert(sessionID)))
+            yield* execution.wake(sessionID)
           return admitted
         }),
       ),
@@ -359,7 +360,7 @@ export const make = Effect.fn("Session.make")(function* () {
   const commit = Effect.fn("Session.revert.commit")(function* (sessionID: SessionSchema.ID) {
     const session = yield* get(sessionID)
     if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
-    return yield* SessionRevert.commit(bus, session)
+    return yield* SessionRevert.commit(bus, store, session)
   })
   const revert = { stage, clear, commit }
   const operations = {

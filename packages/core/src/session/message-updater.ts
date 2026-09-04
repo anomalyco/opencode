@@ -443,6 +443,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           if (current?.status === "running") return yield* adapter.updateCompaction(failed)
           yield* adapter.appendMessage(failed)
         }),
+      "session.revert.prepared": () => Effect.void,
       "session.revert.staged": () => Effect.void,
       "session.revert.cleared": () => Effect.void,
       "session.revert.committed": () => Effect.void,

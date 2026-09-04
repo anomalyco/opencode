@@ -22,6 +22,8 @@ import { Plugin } from "../src/plugin.js"
 import { SessionEvent } from "../src/session-event.js"
 import { SessionID } from "../src/session-id.js"
 import { SessionMessage } from "../src/session-message.js"
+import { RelativePath } from "../src/schema.js"
+import { Snapshot } from "../src/snapshot.js"
 import { WorkspaceEvent } from "../src/workspace-event.js"
 
 describe("public event manifest", () => {
@@ -154,6 +156,7 @@ describe("public event manifest", () => {
         "session.compaction.ended.1",
         "session.compaction.failed.1",
         "session.revert.staged.1",
+        "session.revert.prepared.1",
         "session.revert.cleared.1",
         "session.revert.committed.1",
         "worktree.resolved.1",
@@ -162,6 +165,7 @@ describe("public event manifest", () => {
     expect(SessionEvent.DurableDefinitions).toEqual([
       ...SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
       SessionEvent.UsageRecorded,
+      SessionEvent.RevertEvent.Prepared,
     ])
     expect(SessionEvent.UsageRecorded.durability).toBe("durable")
     expect(EventManifest.Durable.get("session.usage.recorded.1")).toBe(SessionEvent.UsageRecorded)
@@ -169,6 +173,11 @@ describe("public event manifest", () => {
     expect(EventManifest.Definitions).not.toContain(SessionEvent.UsageRecorded)
     expect(EventManifest.ServerDefinitions).not.toContain(SessionEvent.UsageRecorded)
     expect(EventManifest.Latest.has("session.usage.recorded")).toBe(false)
+    expect(EventManifest.Durable.get("session.revert.prepared.1")).toBe(SessionEvent.RevertEvent.Prepared)
+    expect(SessionEvent.Definitions).not.toContain(SessionEvent.RevertEvent.Prepared)
+    expect(EventManifest.Definitions).not.toContain(SessionEvent.RevertEvent.Prepared)
+    expect(EventManifest.ServerDefinitions).not.toContain(SessionEvent.RevertEvent.Prepared)
+    expect(EventManifest.Latest.has("session.revert.prepared")).toBe(false)
     expect(SessionEvent.UsageUpdated.durability).toBe("ephemeral")
     expect(SessionEvent.Compaction.Delta.durability).toBe("ephemeral")
     expect(SessionEvent.Tool.Progress.durability).toBe("ephemeral")
@@ -176,6 +185,18 @@ describe("public event manifest", () => {
     expect(EventManifest.Durable.has("session.compaction.delta.1")).toBe(false)
     expect(EventManifest.ServerDefinitions).toContain(SessionEvent.UsageUpdated)
     expect(EventManifest.Definitions.every((definition) => definition.durability !== undefined)).toBe(true)
+  })
+
+  test("encodes revert protection deltas without repeating an existing snapshot", () => {
+    const encode = Schema.encodeSync(SessionEvent.RevertEvent.Prepared.data)
+    const sessionID = SessionID.make("ses_prepared")
+    const paths = [RelativePath.make("src/file.ts")]
+    expect(encode({ sessionID, paths, snapshot: Snapshot.ID.make("original") })).toEqual({
+      sessionID,
+      paths,
+      snapshot: "original",
+    })
+    expect(encode({ sessionID, paths, snapshot: undefined })).toEqual({ sessionID, paths })
   })
 
   test("uses the current Session skill event as durable version 1", () => {
