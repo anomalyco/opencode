@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { generateText } from "ai"
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { Effect } from "effect"
 import { ProviderTransform } from "@/provider/transform"
 import { LLMRequestPrep } from "@/session/llm/request"
@@ -5073,6 +5075,49 @@ describe("ProviderTransform.variants", () => {
         none: { reasoningEffort: "none" },
         high: { reasoningEffort: "high" },
       })
+    })
+
+    test("deepseek-v4 none disables thinking on the wire", async () => {
+      const model = createMockModel({
+        id: "deepseek/deepseek-v4-pro",
+        providerID: "deepseek",
+        api: {
+          id: "deepseek-v4-pro",
+          url: "https://api.deepseek.com",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      let body: Record<string, unknown> | undefined
+      const deepseek = createOpenAICompatible({
+        name: "deepseek",
+        baseURL: model.api.url,
+        apiKey: "test",
+        fetch: Object.assign(
+          async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+            body = JSON.parse(String(init?.body))
+            return new Response(
+              JSON.stringify({
+                id: "chatcmpl-test",
+                object: "chat.completion",
+                created: 0,
+                model: model.api.id,
+                choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+                usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+              }),
+              { headers: { "Content-Type": "application/json" } },
+            )
+          },
+          { preconnect: fetch.preconnect.bind(fetch) },
+        ),
+      })
+
+      await generateText({
+        model: deepseek(model.api.id),
+        prompt: "hi",
+        providerOptions: ProviderTransform.providerOptions(model, ProviderTransform.variants(model).none),
+      })
+
+      expect(body?.thinking).toEqual({ type: "disabled" })
     })
   })
 
