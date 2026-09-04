@@ -335,4 +335,30 @@ describe("opencode run (non-interactive subprocess)", () => {
       }),
     30_000,
   )
+
+  // An exhausted quota answers with a retry-after measured in days, which the
+  // session retry schedule honors. A non-interactive run has nowhere to show a
+  // pending retry, so it must report the limit and stop rather than sleep on it.
+  cliIt.concurrent(
+    "reports and exits non-zero instead of waiting out an exhausted quota",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.error(
+          429,
+          {
+            name: "GoUsageLimitError",
+            message: "Monthly usage limit reached.",
+            metadata: { workspace: "wrk_test", limitName: "Monthly" },
+          },
+          { "retry-after": "345600" },
+        )
+
+        const result = yield* opencode.run("say hi")
+
+        expect(result.exitCode).not.toBe(0)
+        expect(result.stderr).toContain("usage limit reached")
+        expect(result.durationMs).toBeLessThan(30_000)
+      }),
+    60_000,
+  )
 })
