@@ -1,3 +1,4 @@
+import { Question as QuestionSchema } from "@opencode-ai/schema/question"
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { Question } from "../question"
@@ -6,6 +7,18 @@ import DESCRIPTION from "./question.txt"
 export const Parameters = Schema.Struct({
   questions: Schema.mutable(Schema.Array(Question.Prompt)).annotate({ description: "Questions to ask" }),
 })
+
+type Questions = Schema.Schema.Type<typeof Parameters>["questions"]
+
+/**
+ * Cleans model-supplied option previews once, at the boundary, so every surface
+ * downstream receives display-ready text and none of them has to defend itself.
+ */
+export const sanitize = (questions: Questions): Questions =>
+  questions.map((question) => {
+    const options = QuestionSchema.normalizeOptions(question.options, question.multiple)
+    return options === question.options ? question : { ...question, options: [...options] }
+  })
 
 type Metadata = {
   answers: ReadonlyArray<Question.Answer>
@@ -23,7 +36,7 @@ export const QuestionTool = Tool.define<typeof Parameters, Metadata, Question.Se
         Effect.gen(function* () {
           const answers = yield* question.ask({
             sessionID: ctx.sessionID,
-            questions: params.questions,
+            questions: sanitize(params.questions),
             tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
           })
 

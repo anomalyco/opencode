@@ -123,6 +123,107 @@ describe("QuestionTool", () => {
     }),
   )
 
+  it.effect("normalizes option previews before the question reaches any surface", () =>
+    Effect.gen(function* () {
+      captured = undefined
+      reject = false
+      deny = false
+      const registry = yield* ToolRegistry.Service
+      const questions = [
+        {
+          question: "Which layout?",
+          header: "Layout",
+          options: [
+            { label: "Split", description: "Two panes", preview: "```\n[a][b]\n```" },
+            { label: "Stacked", description: "One column" },
+          ],
+        },
+      ]
+
+      yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-question-preview", name: "question", input: { questions } },
+      })
+
+      expect(capturedInput()?.questions).toEqual([
+        {
+          question: "Which layout?",
+          header: "Layout",
+          options: [
+            { label: "Split", description: "Two panes", preview: "[a][b]" },
+            { label: "Stacked", description: "One column" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("truncates an oversized preview instead of failing the call", () =>
+    Effect.gen(function* () {
+      captured = undefined
+      reject = false
+      deny = false
+      const registry = yield* ToolRegistry.Service
+
+      const result = yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-question-huge",
+          name: "question",
+          input: {
+            questions: [
+              {
+                question: "Which shape?",
+                header: "Shape",
+                options: [{ label: "Wide", description: "wide", preview: "x".repeat(9000) }],
+              },
+            ],
+          },
+        },
+      })
+
+      expect(result.result.type).toBe("text")
+      const preview = capturedInput()?.questions[0]?.options[0]?.preview
+      expect(preview).toBeDefined()
+      expect(preview!.length).toBeLessThan(9000)
+      expect(preview!.endsWith("(preview truncated)")).toBe(true)
+    }),
+  )
+
+  it.effect("drops previews for multi-select questions", () =>
+    Effect.gen(function* () {
+      captured = undefined
+      reject = false
+      deny = false
+      const registry = yield* ToolRegistry.Service
+
+      yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-question-multi",
+          name: "question",
+          input: {
+            questions: [
+              {
+                question: "Which features?",
+                header: "Features",
+                multiple: true,
+                options: [{ label: "Auth", description: "auth", preview: "ignored" }],
+              },
+            ],
+          },
+        },
+      })
+
+      expect(capturedInput()?.questions[0]?.options[0]).toEqual({ label: "Auth", description: "auth" })
+    }),
+  )
+
   it.effect("does not invent tool ownership metadata without a durable registry source", () =>
     Effect.gen(function* () {
       captured = undefined

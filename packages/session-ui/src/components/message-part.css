@@ -926,6 +926,68 @@
     gap: 4px;
     flex: 1;
     min-height: 0;
+    container-type: inline-size;
+    container-name: question-content;
+  }
+
+  /* Wraps the option list and, when an option carries one, the preview pane.
+     Stacked by default; the two-pane layout only engages when a preview exists
+     and the dock is wide enough to give both columns room. */
+  [data-slot="question-split"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  [data-slot="question-preview"] {
+    min-width: 0;
+    min-height: 0;
+    /* Bounded so preview content can never push the composer off screen. */
+    max-height: 220px;
+    overflow: auto;
+    padding: 10px;
+    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: 6px;
+    background-color: var(--v2-background-bg-layer-01);
+  }
+
+  [data-slot="question-preview-body"] {
+    font-family: var(--font-family-mono);
+    font-size: 12px;
+    line-height: var(--line-height-large);
+    color: var(--v2-text-text-base);
+    margin: 0;
+    /* Verbatim: never re-wrap the author's columns. Long lines scroll. */
+    white-space: pre;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  [data-slot="question-preview-empty"] {
+    font-family: var(--font-family-sans);
+    font-size: 13px;
+    line-height: var(--line-height-large);
+    color: var(--v2-text-text-muted);
+  }
+
+  @container question-content (min-width: 34rem) {
+    [data-slot="question-split"][data-preview="true"] {
+      flex-direction: row;
+      align-items: stretch;
+      gap: 12px;
+
+      [data-slot="question-options"] {
+        flex: 0 0 40%;
+        max-width: 40%;
+      }
+
+      [data-slot="question-preview"] {
+        flex: 1 1 auto;
+        max-height: 100%;
+      }
+    }
   }
 
   [data-slot="question-text"] {

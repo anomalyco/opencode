@@ -90,6 +90,42 @@ describe("tool.question", () => {
     }),
   )
 
+  it.instance("normalizes option previews and drops them for multi-select", () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const questions = [
+        {
+          question: "Which layout?",
+          header: "Layout",
+          options: [
+            { label: "Split", description: "Two panes", preview: "```\n[a][b]\n```" },
+            { label: "Stacked", description: "One column" },
+          ],
+        },
+        {
+          question: "Which features?",
+          header: "Features",
+          multiple: true,
+          options: [{ label: "Auth", description: "auth", preview: "ignored" }],
+        },
+      ]
+
+      const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+      const item = yield* pending(question)
+
+      expect(item.questions[0]?.options).toEqual([
+        { label: "Split", description: "Two panes", preview: "[a][b]" },
+        { label: "Stacked", description: "One column" },
+      ])
+      expect(item.questions[1]?.options).toEqual([{ label: "Auth", description: "auth" }])
+
+      yield* question.reply({ requestID: item.id, answers: [["Split"], ["Auth"]] })
+      yield* Fiber.join(fiber)
+    }),
+  )
+
   // intentionally removed the zod validation due to tool call errors, hoping prompting is gonna be good enough
   //   test("should throw an Error for header exceeding 30 characters", async () => {
   //     const tool = await QuestionTool.init()
