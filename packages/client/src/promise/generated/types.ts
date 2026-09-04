@@ -192,6 +192,8 @@ export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning
 
 export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 
+export type ProviderCompaction = { mode: "local" | "provider" }
+
 export type ModelCapabilities = {
   tools: boolean
   input: Array<string>
@@ -209,18 +211,6 @@ export type ModelVariant = {
 export type MoneyUSDPerMillionTokens = number
 
 export type GenerateTextResponse = { data: { text: string } }
-
-export type ProviderInfo = {
-  id: string
-  canonical?: string
-  integrationID?: string
-  name: string
-  activation: "auto" | "enabled" | "disabled"
-  package: string
-  settings?: { [x: string]: any }
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-}
 
 export type FormWhen = {
   key: string
@@ -1360,6 +1350,19 @@ export type ModelCompatibility = {
   requireAssistantAfterTool?: boolean
 }
 
+export type ProviderInfo = {
+  id: string
+  canonical?: string
+  integrationID?: string
+  name: string
+  activation: "auto" | "enabled" | "disabled"
+  package: string
+  compaction?: ProviderCompaction
+  settings?: { [x: string]: any }
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+}
+
 export type ModelCost = {
   tier?: { type: "context"; size: number }
   input: MoneyUSDPerMillionTokens
@@ -1830,6 +1833,7 @@ export type ModelInfo = {
   name: string
   compatibility?: ModelCompatibility
   package?: string
+  compaction?: ProviderCompaction
   settings?: { [x: string]: any }
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
@@ -2004,6 +2008,7 @@ export type ConfigEntry =
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {
           [x: string]: {
+            compaction?: ProviderCompaction
             canonical?: string
             name?: string
             env?: Array<string>
@@ -2013,6 +2018,7 @@ export type ConfigEntry =
             body?: { [x: string]: JsonValue }
             models?: {
               [x: string]: {
+                compaction?: ProviderCompaction
                 modelID?: string
                 family?: string
                 name?: string

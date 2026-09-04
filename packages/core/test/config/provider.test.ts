@@ -32,6 +32,44 @@ function required<T>(value: T | undefined): T {
 const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  it.effect("inherits provider compaction policy with model overrides and rejects unsupported routes", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "@opencode-ai/ai/providers/openai/responses",
+                compaction: { mode: "provider" },
+                models: {
+                  native: {},
+                  local: { compaction: { mode: "local" }, package: "@opencode-ai/ai/providers/openai/chat" },
+                  unsupported: { package: "@opencode-ai/ai/providers/openai/chat" },
+                },
+              },
+              default: { package: "@opencode-ai/ai/providers/openai/chat", models: { chat: {} } },
+            },
+          }),
+        }),
+      ])
+      const native = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("native")))
+      const local = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("local")))
+      const unsupported = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("unsupported")))
+      const defaultModel = required(yield* catalog.model.get(Provider.ID.make("default"), Model.ID.make("chat")))
+      expect(native.compaction).toEqual({ mode: "provider" })
+      expect(local.compaction).toEqual({ mode: "local" })
+      expect(defaultModel.compaction).toBeUndefined()
+      yield* ModelResolver.fromCatalogModel(native)
+      yield* ModelResolver.fromCatalogModel(local)
+      yield* ModelResolver.fromCatalogModel(defaultModel)
+      expect(yield* ModelResolver.fromCatalogModel(unsupported).pipe(Effect.flip)).toMatchObject({
+        reason: { _tag: "UnsupportedOperation", operation: "compact" },
+      })
+    }),
+  )
+
   it.effect("adds key auth for custom providers without env credentials", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

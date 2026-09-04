@@ -28,6 +28,11 @@ export type Package = typeof Package.Type
 export const Activation = Schema.Literals(["auto", "enabled", "disabled"])
 export type Activation = typeof Activation.Type
 
+export interface Compaction extends Schema.Schema.Type<typeof Compaction> {}
+export const Compaction = Schema.Struct({
+  mode: Schema.Literals(["local", "provider"]),
+}).annotate({ identifier: "Provider.Compaction" })
+
 export const Overlays = {
   settings: Schema.Record(Schema.String, Schema.Any).pipe(optional),
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
@@ -52,6 +57,7 @@ export const Info = Schema.Struct({
   name: Schema.String,
   activation: Activation,
   package: Package,
+  compaction: Compaction.pipe(optional),
   ...Overlays,
 })
   .annotate({ identifier: "Provider.Info" })

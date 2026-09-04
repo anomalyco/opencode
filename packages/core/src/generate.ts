@@ -37,6 +37,7 @@ export const layer = Layer.effect(
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
       const resolved = yield* resolver.resolve(input.model).pipe(
+        Effect.catchTag("AI.Error", (error) => new ModelSelectionError({ message: error.message })),
         Effect.catchTag(
           [
             "SessionRunnerModel.VariantUnavailableError",

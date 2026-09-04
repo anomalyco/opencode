@@ -14272,6 +14272,9 @@
       "Config.ModelEncoded": {
         "type": "object",
         "properties": {
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          },
           "modelID": {
             "type": "string"
           },
@@ -14377,6 +14380,9 @@
       "Config.ProviderEncoded": {
         "type": "object",
         "properties": {
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          },
           "canonical": {
             "type": "string"
           },
@@ -16309,6 +16315,9 @@
           "package": {
             "type": "string"
           },
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          },
           "settings": {
             "type": "object"
           },
@@ -17242,6 +17251,17 @@
         "required": ["id"],
         "additionalProperties": false
       },
+      "Provider.Compaction": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["local", "provider"]
+          }
+        },
+        "required": ["mode"],
+        "additionalProperties": false
+      },
       "Provider.Info": {
         "type": "object",
         "properties": {
@@ -17263,6 +17283,9 @@
           },
           "package": {
             "type": "string"
+          },
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
           },
           "settings": {
             "type": "object"
