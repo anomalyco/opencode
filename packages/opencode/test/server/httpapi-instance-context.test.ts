@@ -161,6 +161,21 @@ describe("HttpApi instance context middleware", () => {
     }),
   )
 
+  it.live("persists the routed project while loading instance context", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.Service
+      yield* serveProbe()
+
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent(dir)}`)
+
+      expect(response.status).toBe(200)
+      const saved = (yield* project.list()).find((item) => item.worktree === dir)
+      expect(saved).toBeDefined()
+      expect(saved?.id).not.toBe("global")
+    }),
+  )
+
   it.live("falls back to the raw directory when URI decoding fails", () =>
     Effect.gen(function* () {
       yield* serveProbe()

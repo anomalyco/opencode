@@ -185,6 +185,9 @@ export const dict = {
   "command.session.share.description": "इस सेशन को साझा करें और URL को क्लिपबोर्ड पर कॉपी करें",
   "command.session.unshare": "सेशन साझा करना बंद करें",
   "command.session.unshare.description": "इस सेशन को साझा करना बंद करें",
+  "command.session.export": "सेशन निर्यात करें",
+  "command.session.export.description": "सेशन की पूरी ट्रांसक्रिप्ट को JSON के रूप में निर्यात करें",
+
   "palette.search.placeholder": "फ़ाइलें, कमांड और सेशन खोजें",
   "palette.search.placeholder.home": "कमांड और सेशन खोजें",
   "palette.empty": "कोई परिणाम नहीं मिला",
@@ -543,6 +546,8 @@ export const dict = {
   "dialog.releaseNotes.action.next": "अगला",
   "dialog.releaseNotes.action.hideFuture": "भविष्य में इन्हें न दिखाएँ",
   "dialog.releaseNotes.media.alt": "रिलीज़ पूर्वावलोकन",
+  "dialog.usageExceeded.dontShowAgain": "फिर से न दिखाएँ",
+
   "context.breakdown.title": "कॉन्टेक्स्ट ब्रेकडाउन",
   "context.breakdown.note": 'इनपुट टोकन का अनुमानित विभाजन। "अन्य" में टूल की परिभाषाएँ और अतिरिक्त खर्च शामिल हैं।',
   "context.breakdown.system": "सिस्टम",
@@ -552,6 +557,8 @@ export const dict = {
   "context.breakdown.other": "अन्य",
   "context.systemPrompt.title": "सिस्टम प्रॉम्प्ट",
   "context.rawMessages.title": "मूल संदेश",
+  "context.export.session": "सेशन निर्यात करें",
+
   "context.stats.session": "सेशन",
   "context.stats.messages": "संदेश",
   "context.stats.provider": "प्रोवाइडर",
@@ -618,6 +625,11 @@ export const dict = {
   "toast.session.unshare.success.description": "सेशन सफलतापूर्वक अनशेयर किया गया!",
   "toast.session.unshare.failed.title": "सेशन को अनशेयर करने में विफल",
   "toast.session.unshare.failed.description": "सेशन को अनशेयर करते समय एक त्रुटि उत्पन्न हुई",
+  "toast.session.export.success.title": "सेशन निर्यात किया गया",
+  "toast.session.export.success.description": "सेशन को {{filename}} में सहेजा गया",
+  "toast.session.export.failed.title": "सेशन निर्यात करने में विफल",
+  "toast.session.export.failed.description": "सेशन निर्यात करते समय एक त्रुटि हुई",
+
   "toast.session.listFailed.title": "{{project}} के लिए सेशन लोड करने में विफल",
   "toast.project.reloadFailed.title": "{{project}} को पुनः लोड करने में विफल",
   "toast.update.title": "उपलब्ध अद्यतन",
@@ -833,6 +845,7 @@ export const dict = {
   "common.moreOptions": "अधिक विकल्प",
   "common.learnMore": "और अधिक जानें",
   "common.rename": "नाम बदलें",
+  "common.export": "निर्यात करें",
   "common.reset": "रीसेट करें",
   "common.archive": "संग्रहित करें",
   "common.delete": "हटाएँ",

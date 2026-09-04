@@ -34,7 +34,7 @@ import { useTheme } from "@opencode-ai/ui/theme/context"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(t("error.dev.rootNotFound"))
+  throw new Error(t("desktop.error.dev.rootNotFound"))
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {

@@ -35,7 +35,9 @@ export function formatTranscript(
   transcript += `**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n`
   transcript += `---\n\n`
 
-  for (const msg of messages) {
+  for (const msg of messages.toSorted(
+    (a, b) => a.info.time.created - b.info.time.created || a.info.id.localeCompare(b.info.id),
+  )) {
     transcript += formatMessage(msg.info, msg.parts, options, providers)
     transcript += `---\n\n`
   }

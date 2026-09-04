@@ -322,6 +322,7 @@ jobs:
         working-directory: packages/desktop
         env:
           NODE_OPTIONS: --max-old-space-size=4096
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}

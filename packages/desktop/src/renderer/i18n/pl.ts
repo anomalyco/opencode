@@ -25,4 +25,7 @@ export const dict = {
     "Interfejs CLI zainstalowano w {{path}}\n\nUruchom ponownie terminal, aby użyć polecenia „opencode”.",
   "desktop.cli.failed.title": "Instalacja nie powiodła się",
   "desktop.cli.failed.message": "Nie udało się zainstalować CLI: {{error}}",
+
+  "desktop.error.dev.rootNotFound":
+    "Nie znaleziono elementu głównego. Czy zapomniałeś dodać go do swojego index.html? A może atrybut id został błędnie wpisany?",
 }

@@ -628,7 +628,7 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
         aria-label={props.state.ariaLabel}
       >
         <span class="shrink-0 ml-[8px] mr-px text-[11px] text-v2-text-text-accent [font-weight:530] opacity-0 translate-x-2 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 motion-reduce:translate-x-0">
-          Update
+          {props.state.label}
         </span>
         <span class="flex size-5 shrink-0 items-center justify-center">
           <Show

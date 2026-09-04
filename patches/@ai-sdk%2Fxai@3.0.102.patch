@@ -1,8 +1,33 @@
 diff --git a/dist/index.d.mts b/dist/index.d.mts
-index 266c5ffdd9ee74ff95908ce90858ee4369d4e4ae..990ef4195bc67b6d25f249e1c81cf51710390f9a 100644
+index 266c5ffdd9ee74ff95908ce90858ee4369d4e4ae..6ac6e2873b7681ac632c903694aa38c7b09773fa 100644
 --- a/dist/index.d.mts
 +++ b/dist/index.d.mts
-@@ -78,6 +78,7 @@ declare const xaiLanguageModelResponsesOptions: z.ZodObject<{
+@@ -5,12 +5,7 @@ import { FetchFunction } from '@ai-sdk/provider-utils';
+ 
+ type XaiChatModelId = 'grok-4.3' | 'grok-4.20-0309-reasoning' | 'grok-4.20-0309-non-reasoning' | 'grok-4.20-multi-agent-0309' | 'grok-build-0.1' | (string & {});
+ declare const xaiLanguageModelChatOptions: z.ZodObject<{
+-    reasoningEffort: z.ZodOptional<z.ZodEnum<{
+-        none: "none";
+-        low: "low";
+-        medium: "medium";
+-        high: "high";
+-    }>>;
++    reasoningEffort: z.ZodOptional<z.ZodString>;
+     logprobs: z.ZodOptional<z.ZodBoolean>;
+     topLogprobs: z.ZodOptional<z.ZodNumber>;
+     parallel_function_calling: z.ZodOptional<z.ZodBoolean>;
+@@ -68,16 +63,12 @@ type XaiResponsesModelId = 'grok-4.3' | 'grok-4.20-0309-reasoning' | 'grok-4.20-
+  * @see https://docs.x.ai/docs/api-reference#create-new-response
+  */
+ declare const xaiLanguageModelResponsesOptions: z.ZodObject<{
+-    reasoningEffort: z.ZodOptional<z.ZodEnum<{
+-        none: "none";
+-        low: "low";
+-        medium: "medium";
+-        high: "high";
+-    }>>;
++    reasoningEffort: z.ZodOptional<z.ZodString>;
+     logprobs: z.ZodOptional<z.ZodBoolean>;
      topLogprobs: z.ZodOptional<z.ZodNumber>;
      store: z.ZodOptional<z.ZodBoolean>;
      previousResponseId: z.ZodOptional<z.ZodString>;
@@ -11,10 +36,35 @@ index 266c5ffdd9ee74ff95908ce90858ee4369d4e4ae..990ef4195bc67b6d25f249e1c81cf517
          "file_search_call.results": "file_search_call.results";
      }>>>>;
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 266c5ffdd9ee74ff95908ce90858ee4369d4e4ae..990ef4195bc67b6d25f249e1c81cf51710390f9a 100644
+index 266c5ffdd9ee74ff95908ce90858ee4369d4e4ae..6ac6e2873b7681ac632c903694aa38c7b09773fa 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
-@@ -78,6 +78,7 @@ declare const xaiLanguageModelResponsesOptions: z.ZodObject<{
+@@ -5,12 +5,7 @@ import { FetchFunction } from '@ai-sdk/provider-utils';
+ 
+ type XaiChatModelId = 'grok-4.3' | 'grok-4.20-0309-reasoning' | 'grok-4.20-0309-non-reasoning' | 'grok-4.20-multi-agent-0309' | 'grok-build-0.1' | (string & {});
+ declare const xaiLanguageModelChatOptions: z.ZodObject<{
+-    reasoningEffort: z.ZodOptional<z.ZodEnum<{
+-        none: "none";
+-        low: "low";
+-        medium: "medium";
+-        high: "high";
+-    }>>;
++    reasoningEffort: z.ZodOptional<z.ZodString>;
+     logprobs: z.ZodOptional<z.ZodBoolean>;
+     topLogprobs: z.ZodOptional<z.ZodNumber>;
+     parallel_function_calling: z.ZodOptional<z.ZodBoolean>;
+@@ -68,16 +63,12 @@ type XaiResponsesModelId = 'grok-4.3' | 'grok-4.20-0309-reasoning' | 'grok-4.20-
+  * @see https://docs.x.ai/docs/api-reference#create-new-response
+  */
+ declare const xaiLanguageModelResponsesOptions: z.ZodObject<{
+-    reasoningEffort: z.ZodOptional<z.ZodEnum<{
+-        none: "none";
+-        low: "low";
+-        medium: "medium";
+-        high: "high";
+-    }>>;
++    reasoningEffort: z.ZodOptional<z.ZodString>;
+     logprobs: z.ZodOptional<z.ZodBoolean>;
      topLogprobs: z.ZodOptional<z.ZodNumber>;
      store: z.ZodOptional<z.ZodBoolean>;
      previousResponseId: z.ZodOptional<z.ZodString>;
@@ -23,9 +73,18 @@ index 266c5ffdd9ee74ff95908ce90858ee4369d4e4ae..990ef4195bc67b6d25f249e1c81cf517
          "file_search_call.results": "file_search_call.results";
      }>>>>;
 diff --git a/dist/index.js b/dist/index.js
-index 717b74538f5c8f0d6ab1475ebb2a84a47ccd3950..dd7dbeb3bc307e0d355f4bb4939d06cc8eae7528 100644
+index 717b74538f5c8f0d6ab1475ebb2a84a47ccd3950..0fd8f0d1cae951cd24401034a9c1dba762d9fd84 100644
 --- a/dist/index.js
 +++ b/dist/index.js
+@@ -246,7 +246,7 @@ var searchSourceSchema = import_v4.z.discriminatedUnion("type", [
+   rssSourceSchema
+ ]);
+ var xaiLanguageModelChatOptions = import_v4.z.object({
+-  reasoningEffort: import_v4.z.enum(["none", "low", "medium", "high"]).optional(),
++  reasoningEffort: import_v4.z.string().optional(),
+   logprobs: import_v4.z.boolean().optional(),
+   topLogprobs: import_v4.z.number().int().min(0).max(8).optional(),
+   /**
 @@ -1119,6 +1119,14 @@ async function convertToXaiResponsesInput({
                    type: "input_file",
                    file_url: block.data.toString()
@@ -41,6 +100,15 @@ index 717b74538f5c8f0d6ab1475ebb2a84a47ccd3950..dd7dbeb3bc307e0d355f4bb4939d06cc
                } else {
                  throw new import_provider4.UnsupportedFunctionalityError({
                    functionality: `file part media type ${block.mediaType} as inline data (xAI Responses requires a URL or a Files API reference for non-image files)`
+@@ -1746,7 +1754,7 @@ var xaiLanguageModelResponsesOptions = import_v47.z.object({
+    * tokens), `medium` and `high` (uses more reasoning tokens). Not all models
+    * support reasoning effort; see xAI's docs for the values each model accepts.
+    */
+-  reasoningEffort: import_v47.z.enum(["none", "low", "medium", "high"]).optional(),
++  reasoningEffort: import_v47.z.string().optional(),
+   logprobs: import_v47.z.boolean().optional(),
+   topLogprobs: import_v47.z.number().int().min(0).max(8).optional(),
+   /**
 @@ -1760,6 +1768,10 @@ var xaiLanguageModelResponsesOptions = import_v47.z.object({
     * The ID of the previous response from the model.
     */
@@ -63,9 +131,18 @@ index 717b74538f5c8f0d6ab1475ebb2a84a47ccd3950..dd7dbeb3bc307e0d355f4bb4939d06cc
      };
      if (xaiTools2 && xaiTools2.length > 0) {
 diff --git a/dist/index.mjs b/dist/index.mjs
-index a26af109585fc2bd3053b320142aa869c06d36f4..774adaf971b648544317a4fc65d0c56e488d4fc7 100644
+index a26af109585fc2bd3053b320142aa869c06d36f4..5faca56477b4e55a87f6f57850731c7d3e1721a5 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -230,7 +230,7 @@ var searchSourceSchema = z.discriminatedUnion("type", [
+   rssSourceSchema
+ ]);
+ var xaiLanguageModelChatOptions = z.object({
+-  reasoningEffort: z.enum(["none", "low", "medium", "high"]).optional(),
++  reasoningEffort: z.string().optional(),
+   logprobs: z.boolean().optional(),
+   topLogprobs: z.number().int().min(0).max(8).optional(),
+   /**
 @@ -1122,6 +1122,14 @@ async function convertToXaiResponsesInput({
                    type: "input_file",
                    file_url: block.data.toString()
@@ -81,6 +158,15 @@ index a26af109585fc2bd3053b320142aa869c06d36f4..774adaf971b648544317a4fc65d0c56e
                } else {
                  throw new UnsupportedFunctionalityError3({
                    functionality: `file part media type ${block.mediaType} as inline data (xAI Responses requires a URL or a Files API reference for non-image files)`
+@@ -1749,7 +1757,7 @@ var xaiLanguageModelResponsesOptions = z7.object({
+    * tokens), `medium` and `high` (uses more reasoning tokens). Not all models
+    * support reasoning effort; see xAI's docs for the values each model accepts.
+    */
+-  reasoningEffort: z7.enum(["none", "low", "medium", "high"]).optional(),
++  reasoningEffort: z7.string().optional(),
+   logprobs: z7.boolean().optional(),
+   topLogprobs: z7.number().int().min(0).max(8).optional(),
+   /**
 @@ -1763,6 +1771,10 @@ var xaiLanguageModelResponsesOptions = z7.object({
     * The ID of the previous response from the model.
     */
@@ -158,9 +244,18 @@ index f90df62eb9a30154388b1390e9f3acc3ccc022bf..00e61cba6cf048ae0045be692f33cb7e
  
      if (xaiTools && xaiTools.length > 0) {
 diff --git a/src/responses/xai-responses-options.ts b/src/responses/xai-responses-options.ts
-index f8e96c061bf8793a402ababb8cad65bb2ad6aead..15c168892c1e8755453c61d3061e958cfd51ac71 100644
+index f8e96c061bf8793a402ababb8cad65bb2ad6aead..2a39a36221ab23ea0000bff1d7854c5bce3f9d74 100644
 --- a/src/responses/xai-responses-options.ts
 +++ b/src/responses/xai-responses-options.ts
+@@ -18,7 +18,7 @@ export const xaiLanguageModelResponsesOptions = z.object({
+    * tokens), `medium` and `high` (uses more reasoning tokens). Not all models
+    * support reasoning effort; see xAI's docs for the values each model accepts.
+    */
+-  reasoningEffort: z.enum(['none', 'low', 'medium', 'high']).optional(),
++  reasoningEffort: z.string().optional(),
+   logprobs: z.boolean().optional(),
+   topLogprobs: z.number().int().min(0).max(8).optional(),
+   /**
 @@ -32,6 +32,10 @@ export const xaiLanguageModelResponsesOptions = z.object({
     * The ID of the previous response from the model.
     */
@@ -172,3 +267,16 @@ index f8e96c061bf8793a402ababb8cad65bb2ad6aead..15c168892c1e8755453c61d3061e958c
    /**
     * Specify additional output data to include in the model response.
     * Example values: 'file_search_call.results'.
+diff --git a/src/xai-chat-options.ts b/src/xai-chat-options.ts
+index d70a72a9fa01da2c711c291da5ce949efbde60b5..fd6b1ae025388b614f08b620244be553199479ca 100644
+--- a/src/xai-chat-options.ts
++++ b/src/xai-chat-options.ts
+@@ -51,7 +51,7 @@ const searchSourceSchema = z.discriminatedUnion('type', [
+ 
+ // xai-specific provider options
+ export const xaiLanguageModelChatOptions = z.object({
+-  reasoningEffort: z.enum(['none', 'low', 'medium', 'high']).optional(),
++  reasoningEffort: z.string().optional(),
+   logprobs: z.boolean().optional(),
+   topLogprobs: z.number().int().min(0).max(8).optional(),
+ 

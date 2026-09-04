@@ -457,6 +457,37 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    /models
    ```
 
+#### Microsoft Entra ID (Azure CLI)
+
+You can use your Azure CLI session instead of an API key. [Install the Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli), run `az login`, then run `/connect`, select **Azure**, and choose **Microsoft Entra ID (Azure CLI)**. Enter the Azure Resource name when prompted. Use `az login --tenant TENANT_ID` if the Resource belongs to a different tenant.
+
+Find the Resource name by opening your Azure OpenAI or Foundry Resource in the [Azure portal](https://portal.azure.com/) or [Microsoft Foundry](https://ai.azure.com/). It is also the first part of the endpoint: `my-models` in `https://my-models.openai.azure.com/` or `https://my-models.services.ai.azure.com/`. If your identity can list Resources, you can also find their names and Resource groups with:
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
+
+OpenCode does not query Azure management APIs or discover deployments. Select a model whose catalog name matches your deployment, or configure its deployment name explicitly:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "azure": {
+      "models": {
+        "gpt-5-mini": {
+          "id": "gpt-production"
+        }
+      }
+    }
+  }
+}
+```
+
+Assign your identity the inference role required by the deployment: **Cognitive Services OpenAI User** for Azure OpenAI models or **Cognitive Services User** for other Foundry models. OpenCode refreshes access tokens through the Azure CLI, including versions earlier than 2.54.0, so you only need to sign in again when the CLI session expires.
+
 ---
 
 ### Azure Cognitive Services
@@ -759,7 +790,7 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 ### DigitalOcean
 
-DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
+DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/) that route each request to the cheapest, fastest, or best-fit model for a task.
 
 OpenCode supports two authentication methods:
 
@@ -840,6 +871,54 @@ export DIGITALOCEAN_ACCESS_TOKEN=your-model-access-key
 Inference Routers let you define a routing policy across multiple models — picking the cheapest, fastest, or most appropriate model per request based on the task. After OAuth, OpenCode surfaces each router as `router:<router-name>` in the model picker.
 
 Selecting a router model is a drop-in replacement for any other model — OpenCode forwards your request and DigitalOcean picks the underlying model based on your router's policy. Learn more about [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/)
+
+---
+
+### Eden AI
+
+[Eden AI](https://www.edenai.co/) is an EU-based gateway that serves models from many vendors over a single OpenAI-compatible API, with a separate EU endpoint for teams that need inference to stay in the EU.
+
+1. Head over to the [Eden AI platform](https://app.edenai.run/user/register) to create an account and generate an API key.
+
+2. Run the `/connect` command and search for **Eden AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Eden AI API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _Mistral Large 3_ or _Claude Sonnet 5_.
+
+   ```txt
+   /models
+   ```
+
+   Eden AI model ids are themselves in `vendor/model` form, so a full reference has three segments, for example `edenai/anthropic/claude-sonnet-5`.
+
+5. To keep requests on Eden AI's EU gateway, set its base URL.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "edenai": {
+         "options": {
+           "baseURL": "https://api.eu.edenai.run/v3"
+         }
+       }
+     }
+   }
+   ```
+
+   The default is `https://api.edenai.run/v3`, so this swaps the global endpoint for the EU one. The EU endpoint serves the subset of the catalog that is available in the EU, so a model chosen in step 4 may not be reachable through it.
 
 ---
 
@@ -1718,6 +1797,10 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
    /models
    ```
 
+##### Compute residency
+
+For ChatGPT OAuth, OpenCode automatically applies a regional inference residency requirement when one is advertised by your workspace credentials. It forwards the compute residency value from the credential instead of maintaining a fixed list of regions. Data residency at rest does not imply regional inference.
+
 ##### Using API keys
 
 If you already have an API key, you can select **Manually enter API Key** and paste it in your terminal.
@@ -2093,6 +2176,35 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
 
 ---
 
+### SCX.ai
+
+[SCX.ai](https://scx.ai) is an Australian sovereign AI platform serving open models over an OpenAI-compatible API, hosted on renewable-powered infrastructure in Australia.
+
+1. Head over to the [SCX.ai platform](https://platform.scx.ai) to create an account and generate an API key.
+
+2. Run the `/connect` command and search for **SCX.ai**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your SCX.ai API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _MiniMax-M2.7_ or _GLM-5.2_.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Snowflake Cortex
 
 [Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api) gives you access to frontier models (Claude, OpenAI GPT-5, and more) via an OpenAI-compatible API. All inference runs within the Snowflake perimeter and is billed in Snowflake credits. For per-model rates, see the [Snowflake Service Consumption Table](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf).
@@ -2308,9 +2420,9 @@ Some useful routing options:
 
 ### xAI
 
-Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same SuperGrok subscription via a headless device-code flow (for VPS / SSH / Docker), or a pay-as-you-go API key from the xAI console.
+Two ways to authenticate: a SuperGrok subscription via device-code OAuth or a pay-as-you-go API key from the xAI console.
 
-#### Option A — SuperGrok OAuth (browser login)
+#### Option A — SuperGrok subscription
 
 1. Run the `/connect` command and search for **xAI**.
 
@@ -2318,9 +2430,11 @@ Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same
    /connect
    ```
 
-2. Select **xAI Grok OAuth (SuperGrok Subscription)**. OpenCode opens xAI's consent screen in your browser and waits for the callback on `http://127.0.0.1:56121/callback`.
+2. Select **SuperGrok Subscription**. OpenCode opens xAI's verification link with the user code pre-populated when supported.
 
-3. Run the `/models` command to select a Grok model.
+3. Approve the consent screen. If xAI asks for a code, enter the user code displayed by OpenCode. OpenCode polls xAI's token endpoint and stores the resulting OAuth tokens once you approve.
+
+4. Run the `/models` command to select a Grok model.
 
    ```txt
    /models
@@ -2328,25 +2442,7 @@ Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same
 
 OpenCode refreshes the OAuth access token automatically. Any Grok or X Premium plan that includes Grok API access works; you do not need a separate `XAI_API_KEY`.
 
-#### Option B — SuperGrok device-code (headless / remote server / VPS)
-
-Use this when OpenCode is running somewhere a browser can't reach the loopback redirect: a VPS, a remote dev box over SSH, inside Docker, in CI, etc. No callback port is opened on the host running OpenCode — instead xAI hands the CLI a short code that you type into a browser on any other device (laptop, phone, …).
-
-1. Run the `/connect` command on the remote host and search for **xAI**.
-
-   ```txt
-   /connect
-   ```
-
-2. Select **xAI Grok OAuth (Headless / Remote / VPS)**. OpenCode prints a verification URL and a short user code.
-
-   ```txt
-   Open https://x.ai/device on any device and enter code: ABCD-1234
-   ```
-
-3. Open the URL on a device that has a browser (your laptop or phone), enter the code, and approve the consent screen. OpenCode polls xAI's token endpoint and stores the resulting OAuth tokens once you approve. Token refresh works the same as Option A.
-
-#### Option C — API key
+#### Option B — API key
 
 1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
 
@@ -2503,7 +2599,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
-         "name": "My AI ProviderDisplay Name",
+         "name": "My AI Provider Display Name",
          "options": {
            "baseURL": "https://api.myprovider.com/v1"
          },
@@ -2541,7 +2637,7 @@ Here's an example setting the `apiKey`, `headers`, and model `limit` options.
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "My AI ProviderDisplay Name",
+      "name": "My AI Provider Display Name",
       "options": {
         "baseURL": "https://api.myprovider.com/v1",
         "apiKey": "{env:ANTHROPIC_API_KEY}",

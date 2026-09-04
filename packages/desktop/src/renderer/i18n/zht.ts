@@ -23,4 +23,6 @@ export const dict = {
   "desktop.cli.installed.message": "CLI 已安裝到 {{path}}\n\n重新啟動終端機即可使用 `opencode` 命令。",
   "desktop.cli.failed.title": "安裝失敗",
   "desktop.cli.failed.message": "無法安裝 CLI：{{error}}",
+
+  "desktop.error.dev.rootNotFound": "找不到根元素。你是不是忘了把它新增到 index.html？或者 id 屬性拼錯了？",
 }

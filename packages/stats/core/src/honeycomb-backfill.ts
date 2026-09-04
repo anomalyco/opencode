@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises"
 import path from "node:path"
 import { drizzle } from "drizzle-orm/planetscale-serverless"
 import { geoStat, modelStat, providerStat } from "./database/schema"
-import { statModel, statProvider } from "./domain/model-normalization"
+import { FREE_MODELS, statModel, statProvider } from "./domain/model-normalization"
 import {
   chunks,
   collapseRows,
@@ -25,7 +25,6 @@ import {
 const DAY_MS = 86_400_000
 const DEFAULT_UPSERT_CHUNK_SIZE = 100
 const DEFAULT_TIERS = ["Go", "Free", "Paid"]
-const FREE_MODELS = new Set(["gpt-5-nano", "grok-code", "big-pickle"])
 
 type Grain = "day" | "week"
 type MetricDimension = "model" | "provider" | "geo" | "geo-model"

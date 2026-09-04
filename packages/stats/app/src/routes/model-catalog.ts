@@ -1,3 +1,4 @@
+import { statModel } from "@opencode-ai/stats-core/domain/model-normalization"
 import { query } from "@solidjs/router"
 
 export const modelCatalogSourceUrl = "https://models.opencode.ai/catalog.json"
@@ -71,8 +72,11 @@ export const getModelCatalog = query(async () => {
 }, "getModelCatalog")
 
 export function findModelCatalogEntry(catalog: ModelCatalog, model: string, lab?: string) {
-  const normalizedId = lab ? `${catalogLabSlug(lab)}/${catalogSlug(model)}` : model.trim().toLowerCase()
-  const leaf = catalogSlug(model)
+  const canonicalModel = statModel(model, undefined)
+  const normalizedId = lab
+    ? `${catalogLabSlug(lab)}/${catalogSlug(canonicalModel)}`
+    : canonicalModel.trim().toLowerCase()
+  const leaf = catalogSlug(canonicalModel)
   return (
     catalog.models.find((entry) => entry.id.toLowerCase() === normalizedId) ??
     catalog.models.find((entry) => (lab ? entry.lab === catalogLabSlug(lab) : true) && entry.slug === leaf) ??
@@ -108,6 +112,16 @@ export function formatCatalogLabName(lab: string) {
     zhipuai: "Zhipu",
   }
   return known[catalogSlug(lab)] ?? lab.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+export function isProviderlessLab(lab: string | undefined) {
+  return !lab || catalogSlug(lab) === "unknown"
+}
+
+export function isKnownCatalogLab(lab: string | undefined, catalogLabs: readonly string[]) {
+  if (!lab || isProviderlessLab(lab)) return false
+  const key = catalogSlug(formatCatalogLabName(lab))
+  return catalogLabs.some((candidate) => catalogSlug(formatCatalogLabName(candidate)) === key)
 }
 
 export function catalogSlug(value: string) {

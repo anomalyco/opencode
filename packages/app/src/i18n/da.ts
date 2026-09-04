@@ -92,6 +92,9 @@ export const dict = {
   "command.session.unshare": "Stop deling af session",
   "command.session.unshare.description": "Stop med at dele denne session",
 
+  "command.session.export": "Eksportér session",
+  "command.session.export.description": "Eksportér hele sessionsudskriften som JSON",
+
   "palette.search.placeholder": "Søg i filer, kommandoer og sessioner",
   "palette.search.placeholder.home": "Søg i kommandoer og sessioner",
   "palette.empty": "Ingen resultater fundet",
@@ -446,6 +449,8 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Opstartsscript for arbejdsområde",
   "dialog.project.edit.worktree.startup.description": "Køres efter oprettelse af et nyt arbejdsområde (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
+  "dialog.usageExceeded.dontShowAgain": "Vis ikke igen",
+
   "context.breakdown.title": "Kontekstfordeling",
   "context.breakdown.note":
     'Omtrentlig fordeling af input-tokens. "Andre" inkluderer værktøjsdefinitioner og overhead.',
@@ -457,6 +462,8 @@ export const dict = {
 
   "context.systemPrompt.title": "Systemprompt",
   "context.rawMessages.title": "Rå beskeder",
+
+  "context.export.session": "Eksportér session",
 
   "context.stats.session": "Session",
   "context.stats.messages": "Beskeder",
@@ -534,6 +541,11 @@ export const dict = {
   "toast.session.unshare.success.description": "Deling af session blev stoppet!",
   "toast.session.unshare.failed.title": "Kunne ikke stoppe deling af session",
   "toast.session.unshare.failed.description": "Der opstod en fejl under stop af sessionsdeling",
+
+  "toast.session.export.success.title": "Session eksporteret",
+  "toast.session.export.success.description": "Sessionen blev gemt i {{filename}}",
+  "toast.session.export.failed.title": "Kunne ikke eksportere session",
+  "toast.session.export.failed.description": "Der opstod en fejl under eksport af sessionen",
 
   "toast.session.listFailed.title": "Kunne ikke indlæse sessioner for {{project}}",
 
@@ -733,6 +745,7 @@ export const dict = {
   "common.moreOptions": "Flere muligheder",
   "common.learnMore": "Lær mere",
   "common.rename": "Omdøb",
+  "common.export": "Eksportér",
   "common.reset": "Nulstil",
   "common.archive": "Arkivér",
   "common.delete": "Slet",

@@ -252,9 +252,8 @@ export const dict = {
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
-  "go.banner.text": "يحصل GPT 5.6 Luna على حدود استخدام مضاعفة لفترة محدودة",
-  "go.meta.description":
-    "يبدأ Go بسعر $5 للشهر الأول، ثم $10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
+  "go.banner.text": "يحصل GLM-5.3-Flash على حدود استخدام مضاعفة لفترة محدودة",
+  "go.meta.description": "يبلغ سعر Go ‏$10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
@@ -263,13 +262,13 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "اشترك في Go",
   "go.cta.price": "$10/شهر",
-  "go.cta.promo": "$5 للشهر الأول",
-  "go.pricing.body":
-    "استخدمه مع أي وكيل. $5 للشهر الأول، ثم $10/شهر. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
+  "go.pricing.body": "استخدمه مع أي وكيل. $10/شهر. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
   "go.graph.free": "مجاني",
   "go.graph.freePill": "Big Pickle ونماذج مجانية",
   "go.graph.go": "Go",
   "go.graph.label": "الطلبات كل 5 ساعات",
+  "go.graph.limitedRegions": "مناطق محدودة",
+  "go.graph.limitedTime": "لفترة محدودة",
   "go.graph.usageLimits": "حدود الاستخدام",
   "go.graph.aria": "الطلبات كل 5 ساعات: {{free}} مقابل {{go}}",
 
@@ -296,20 +295,20 @@ export const dict = {
   "go.testimonials.frank.quote": "أتمنى لو كنت لا أزال في Nvidia.",
   "go.problem.title": "ما المشكلة التي يحلها Go؟",
   "go.problem.body":
-    "نحن نركز على تقديم تجربة OpenCode لأكبر عدد ممكن من الناس. OpenCode Go هو اشتراك منخفض التكلفة: $5 للشهر الأول، ثم $10/شهر. يوفر حدودا سخية ووصولا موثوقا إلى نماذج المصدر المفتوح الأكثر قدرة.",
+    "نحن نركز على تقديم تجربة OpenCode لأكبر عدد ممكن من الناس. OpenCode Go هو اشتراك منخفض التكلفة بسعر $10/شهر. يوفر حدودا سخية ووصولا موثوقا إلى نماذج المصدر المفتوح الأكثر قدرة.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "أسعار اشتراك منخفضة التكلفة",
   "go.problem.item2": "حدود سخية ووصول موثوق",
   "go.problem.item3": "مصمم لأكبر عدد ممكن من المبرمجين",
   "go.problem.item4": "مجموعة منسقة من النماذج المختبرة للبرمجة الوكيلة",
   "go.how.title": "كيف يعمل Go",
-  "go.how.body": "يبدأ Go من $5 للشهر الأول، ثم $10/شهر. يمكنك استخدامه مع OpenCode أو أي وكيل.",
+  "go.how.body": "يبلغ سعر Go ‏$10/شهر. يمكنك استخدامه مع OpenCode أو أي وكيل.",
   "go.how.step1.title": "أنشئ حسابًا",
   "go.how.step1.beforeLink": "اتبع",
   "go.how.step1.link": "تعليمات الإعداد",
   "go.how.step2.title": "اشترك في Go",
-  "go.how.step2.link": "$5 للشهر الأول",
-  "go.how.step2.afterLink": "ثم $10/شهر مع حدود سخية",
+  "go.how.step2.link": "$10/شهر",
+  "go.how.step2.afterLink": "مع حدود سخية",
   "go.how.step3.title": "ابدأ البرمجة",
   "go.how.step3.body": "مع وصول موثوق لنماذج مفتوحة المصدر",
   "go.privacy.title": "خصوصيتك مهمة بالنسبة لنا",
@@ -325,11 +324,11 @@ export const dict = {
   "go.faq.a2": "يتضمن Go النماذج المدرجة أدناه، مع حدود سخية وإتاحة موثوقة.",
   "go.faq.q3": "هل Go هو نفسه Zen؟",
   "go.faq.a3":
-    "لا. يعتمد Zen على الدفع حسب الاستخدام، بينما يبدأ Go بسعر $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى مجموعة منسقة من النماذج.",
+    "لا. يعتمد Zen على الدفع حسب الاستخدام، بينما يبلغ سعر Go ‏$10/شهر، مع حدود سخية ووصول موثوق إلى مجموعة منسقة من النماذج.",
   "go.faq.q4": "كم تكلفة Go؟",
   "go.faq.a4.p1.beforePricing": "تكلفة Go",
-  "go.faq.a4.p1.pricingLink": "$5 للشهر الأول",
-  "go.faq.a4.p1.afterPricing": "ثم $10/شهر مع حدود سخية.",
+  "go.faq.a4.p1.pricingLink": "$10/شهر",
+  "go.faq.a4.p1.afterPricing": "مع حدود سخية.",
   "go.faq.a4.p2.beforeAccount": "يمكنك إدارة اشتراكك في",
   "go.faq.a4.p2.accountLink": "حسابك",
   "go.faq.a4.p3": "ألغِ في أي وقت.",
@@ -342,10 +341,13 @@ export const dict = {
   "go.faq.a5.used": "مستخدَمة",
   "go.faq.a5.notUsed": "غير مستخدَمة",
   "go.faq.a5.noAgreement": "لا توجد اتفاقية",
+  "go.faq.a5.notZdr": "ليست ZDR",
   "go.faq.a5.grokRetention":
     "تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API.",
   "go.faq.a5.gptRetention":
     "تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا.",
+  "go.faq.a5.museRetention":
+    "أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية.",
   "go.faq.a5.learnMore": "اعرف المزيد",
   "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أغسطس 2026.",
   "go.faq.a5.beforeExceptions":
@@ -360,7 +362,7 @@ export const dict = {
 
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
   "go.faq.a9":
-    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة قدرها 200 طلب/يوم. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، وأسبوعية، وشهرية)، تعادل تقريبًا $12 لكل 5 ساعات، و$30 في الأسبوع، و$60 في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة قدرها 200 طلب/يوم. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، وأسبوعية، وشهرية)، تعادل الحصص الأساسية فيها تقريبًا $12 لكل 5 ساعات و$30 في الأسبوع و$60 في الشهر؛ وقد تختلف الحصص حسب النموذج (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
 
   "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
   "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",
@@ -386,6 +388,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "النموذج معطل",
   "zen.api.error.regionNotAllowed":
     "لا يتوفر أحدث إصدار من هذا النموذج إلا مستضافًا في الصين، ويتطلب تفعيلًا صريحًا: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "هذا النموذج غير متاح في بلدك.",
+  "zen.api.error.trainingNotAllowed":
+    "يجمع هذا النموذج بيانات تُستخدم لتحسين جودته، ويتطلب موافقتك الصريحة: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "انتهى العرض المجاني لـ {{model}}. يمكنك مواصلة استخدام النموذج بالاشتراك في OpenCode Go - {{link}}",
 
@@ -656,23 +661,32 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "بضع ثوان",
   "workspace.lite.subscription.message": "أنت مشترك في OpenCode Go.",
   "workspace.lite.subscription.manage": "إدارة الاشتراك",
-  "workspace.lite.subscription.rollingUsage": "الاستخدام المتجدد",
+  "workspace.lite.subscription.rollingUsage": "الاستخدام خلال 5 ساعات",
+  "workspace.lite.subscription.rollingQuota": "الحصة خلال 5 ساعات",
   "workspace.lite.subscription.weeklyUsage": "الاستخدام الأسبوعي",
+  "workspace.lite.subscription.weeklyQuota": "الحصة الأسبوعية",
   "workspace.lite.subscription.monthlyUsage": "الاستخدام الشهري",
+  "workspace.lite.subscription.monthlyQuota": "الحصة الشهرية",
   "workspace.lite.subscription.resetsIn": "إعادة تعيين في",
+  "workspace.lite.subscription.showDetails": "إظهار التفاصيل",
+  "workspace.lite.subscription.hideDetails": "إخفاء التفاصيل",
+  "workspace.lite.subscription.model": "النموذج",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "الإجمالي",
   "workspace.lite.subscription.useBalance": "استخدم رصيدك المتوفر بعد الوصول إلى حدود الاستخدام",
   "workspace.lite.subscription.selectProvider":
     'اختر "OpenCode Go" كمزود في إعدادات opencode الخاصة بك لاستخدام نماذج Go.',
   "workspace.lite.providers.title": "المزودون",
   "workspace.lite.providers.description": "تحكم في المزودين المستخدمين للتوجيه.",
+  "workspace.lite.providers.allowTraining": "السماح بالنماذج التي تتدرب على بيانات الطلبات",
   "workspace.lite.providers.useChina": "تفعيل النماذج المستضافة في الصين",
   "workspace.lite.black.message":
     "أنت مشترك حاليًا في OpenCode Black أو في قائمة الانتظار. يرجى إلغاء الاشتراك أولاً إذا كنت ترغب في التبديل إلى Go.",
   "workspace.lite.other.message":
     "عضو آخر في مساحة العمل هذه مشترك بالفعل في OpenCode Go. يمكن لعضو واحد فقط لكل مساحة عمل الاشتراك.",
   "workspace.lite.promo.description":
-    "يبدأ OpenCode Go بسعر {{price}}، ثم $10/شهر، ويوفر وصولا موثوقا لنماذج البرمجة المفتوحة الشهيرة مع حدود استخدام سخية.",
-  "workspace.lite.promo.price": "$5 للشهر الأول",
+    "يبلغ سعر OpenCode Go {{price}}، ويوفر وصولا موثوقا لنماذج البرمجة المفتوحة الشهيرة مع حدود استخدام سخية.",
+  "workspace.lite.promo.price": "$10/شهر",
   "workspace.lite.promo.modelsTitle": "ما يتضمنه",
   "workspace.lite.promo.footer":
     "صُممت الخطة بشكل أساسي للمستخدمين الدوليين، وتوفر وصولًا عالميًا مستقرًا. قد تتغير الأسعار وحدود الاستخدام بينما نتعلم من الاستخدام المبكر والملاحظات.",

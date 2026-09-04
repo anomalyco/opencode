@@ -179,6 +179,9 @@ export const dict = {
   "command.session.share.description": "Dela den här sessionen och kopiera URL:en till urklipp",
   "command.session.unshare": "Sluta dela session",
   "command.session.unshare.description": "Sluta dela den här sessionen",
+  "command.session.export": "Exportera session",
+  "command.session.export.description": "Exportera hela sessionsutskriften som JSON",
+
   "palette.search.placeholder": "Sök efter filer, kommandon och sessioner",
   "palette.search.placeholder.home": "Sök bland kommandon och sessioner",
   "palette.empty": "Inga resultat hittades",
@@ -538,6 +541,8 @@ export const dict = {
   "dialog.releaseNotes.action.next": "Nästa",
   "dialog.releaseNotes.action.hideFuture": "Visa inte dessa i framtiden",
   "dialog.releaseNotes.media.alt": "Förhandsvisning av version",
+  "dialog.usageExceeded.dontShowAgain": "Visa inte igen",
+
   "context.breakdown.title": "Kontextfördelning",
   "context.breakdown.note":
     'Ungefärlig uppdelning av inmatningstokens. "Övrigt" inkluderar verktygsdefinitioner och overhead.',
@@ -548,6 +553,8 @@ export const dict = {
   "context.breakdown.other": "Övrigt",
   "context.systemPrompt.title": "Systemprompt",
   "context.rawMessages.title": "Råmeddelanden",
+  "context.export.session": "Exportera session",
+
   "context.stats.session": "Session",
   "context.stats.messages": "Meddelanden",
   "context.stats.provider": "Leverantör",
@@ -614,6 +621,11 @@ export const dict = {
   "toast.session.unshare.success.description": "Delningen av sessionen har avslutats!",
   "toast.session.unshare.failed.title": "Det gick inte att avsluta delningen",
   "toast.session.unshare.failed.description": "Ett fel uppstod när delningen skulle avslutas",
+  "toast.session.export.success.title": "Session exporterad",
+  "toast.session.export.success.description": "Sessionen sparades i {{filename}}",
+  "toast.session.export.failed.title": "Det gick inte att exportera sessionen",
+  "toast.session.export.failed.description": "Ett fel uppstod när sessionen exporterades",
+
   "toast.session.listFailed.title": "Det gick inte att läsa in sessioner för {{project}}",
   "toast.project.reloadFailed.title": "Det gick inte att ladda om {{project}}",
   "toast.update.title": "Uppdatering tillgänglig",
@@ -828,6 +840,7 @@ export const dict = {
   "common.moreOptions": "Fler alternativ",
   "common.learnMore": "Läs mer",
   "common.rename": "Byt namn",
+  "common.export": "Exportera",
   "common.reset": "Återställ",
   "common.archive": "Arkivera",
   "common.delete": "Radera",
