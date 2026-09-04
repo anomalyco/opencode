@@ -97,6 +97,34 @@ import { llmClient } from "../../effect/app-node-platform"
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
 
+export const lastAssistantText = (entries: ReadonlyArray<{ message: SessionMessage.Message }>): string => {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const message = entries[i].message
+    if (message.type !== "assistant") continue
+    const text = message.content
+      .filter(
+        (part): part is SessionMessage.AssistantText | SessionMessage.AssistantReasoning =>
+          part.type === "text" || part.type === "reasoning",
+      )
+      .map((part) => part.text)
+      .join(" ")
+    if (text.trim().length > 0) return text
+  }
+  return ""
+}
+
+export const isSettlementFailure = (settlement: ToolRegistry.Settlement): boolean => {
+  if (settlement.result.type === "error") return true
+  const failurePattern = /\b(error|fail|failed|failure|exception|fatal|unhandled)\b/i
+  if (typeof settlement.result.value === "string" && failurePattern.test(settlement.result.value)) return true
+  if (settlement.output?.content) {
+    return settlement.output.content.some(
+      (part) => part.type === "text" && failurePattern.test(part.text),
+    )
+  }
+  return false
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -180,18 +208,6 @@ const layer = Layer.effect(
     const continueAfterOverflowCompaction = (step: number) =>
       new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
 
-    const lastAssistantText = (entries: ReadonlyArray<{ message: SessionMessage.Message }>): string => {
-      for (let i = entries.length - 1; i >= 0; i--) {
-        const message = entries[i].message
-        if (message.type !== "assistant") continue
-        const text = message.content
-          .filter((part): part is SessionMessage.AssistantText => part.type === "text")
-          .map((part) => part.text)
-          .join(" ")
-        return text
-      }
-      return ""
-    }
 
     const readLastAssistantText = Effect.fn("SessionRunner.readLastAssistantText")(function* (
       sessionID: SessionSchema.ID,
@@ -318,7 +334,11 @@ const layer = Layer.effect(
         !ReflectionState.get(session.id).directionConfirmed
       ) {
         const recentMsgs = entries.slice(-6).map((e) => e.message)
-        const hasDecision = recentMsgs.some((m) => m.type === "assistant" && m.content.some((p) => p.type === "text"))
+        const hasDecision = recentMsgs.some(
+          (m) =>
+            m.type === "assistant" &&
+            m.content.some((p) => p.type === "text" || p.type === "reasoning"),
+        )
         if (hasDecision && entries.length >= 2) {
           const projectionModel = yield* models.resolveReflection(session).pipe(Effect.option)
           if (Option.isSome(projectionModel)) {
@@ -414,7 +434,9 @@ const layer = Layer.effect(
                       Effect.option,
                     )
                     if (Option.isNone(refreshed)) return
-                    if (!containsHedge(lastAssistantText(refreshed.value))) {
+                    const hasFailure = isSettlementFailure(settlement)
+                    const hasHedge = containsHedge(lastAssistantText(refreshed.value))
+                    if (!hasFailure && !hasHedge) {
                       yield* publishCycle("why", session.id, true, false)
                       return
                     }
@@ -623,7 +645,11 @@ const layer = Layer.effect(
         ).pipe(Effect.option)
         if (Option.isNone(currentEntries)) break
         const lastMsgs = currentEntries.value.slice(-6).map((e) => e.message)
-        const hasDecision = lastMsgs.some((m) => m.type === "assistant" && m.content.some((p) => p.type === "text"))
+        const hasDecision = lastMsgs.some(
+          (m) =>
+            m.type === "assistant" &&
+            m.content.some((p) => p.type === "text" || p.type === "reasoning"),
+        )
         if (!hasDecision || currentEntries.value.length < 2) break
         const projectionMsgs = [
           ...toLLMMessages(lastMsgs, model.value),
@@ -709,7 +735,11 @@ const layer = Layer.effect(
       if (Option.isNone(entries)) return converge(false, 0, "", 0)
       const initialHasDecision = entries.value
         .slice(-6)
-        .some((e) => e.message.type === "assistant" && e.message.content.some((p) => p.type === "text"))
+        .some(
+          (e) =>
+            e.message.type === "assistant" &&
+            e.message.content.some((p) => p.type === "text" || p.type === "reasoning"),
+        )
       if (!initialHasDecision || entries.value.length < 2) return converge(false, 0, "", 0)
       let iterates = 0
       let steered = false

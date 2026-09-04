@@ -94,7 +94,7 @@ const layer = Layer.effectDiscard(
                       tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
                     }).pipe(
                       Effect.map((answers) => ({ answers })),
-                      Effect.catchTag("QuestionV2.RejectedError", (e) => Effect.fail(new ToolFailure({ message: e.message }))),
+                      Effect.catchTag("QuestionV2.RejectedError", (e) => Effect.die(e)),
                     )
                   }),
                 ),

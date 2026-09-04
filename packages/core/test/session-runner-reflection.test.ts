@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test"
+import { DateTime } from "effect"
 import { SessionSchema } from "../src/session/schema"
+import { SessionMessage } from "../src/session/message"
 import { containsHedge } from "../src/session/runner/hedge"
 import {
   cofinality,
@@ -12,6 +14,15 @@ import {
 } from "../src/session/runner/reflection-metric"
 import { ReflectionState } from "../src/session/runner/reflection-state"
 import { EVI } from "../src/session/runner/evi"
+import { ModelV2 } from "../src/model"
+import { ProviderV2 } from "../src/provider"
+import { isSettlementFailure, lastAssistantText } from "../src/session/runner/llm"
+import { ToolOutput } from "@opencode-ai/llm"
+
+const testModel = {
+  id: ModelV2.ID.make("model"),
+  providerID: ProviderV2.ID.make("provider"),
+}
 
 describe("containsHedge", () => {
   it("detects standard epistemic hedges", () => {
@@ -281,3 +292,157 @@ describe("EVI", () => {
     expect(EVI.guidanceTextForEVI(lowEntropy)).toBeUndefined()
   })
 })
+
+describe("lastAssistantText", () => {
+  it("extracts text from standard text parts", () => {
+    const entries = [
+      {
+        message: SessionMessage.Assistant.make({
+          id: SessionMessage.ID.make("msg_1"),
+          type: "assistant",
+          agent: "build",
+          model: testModel,
+          content: [{ type: "text", id: "t1", text: "I have reviewed the files." }],
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+      },
+    ]
+    expect(lastAssistantText(entries)).toBe("I have reviewed the files.")
+  })
+
+  it("extracts reasoning text when thinking models emit reasoning without text parts", () => {
+    const entries = [
+      {
+        message: SessionMessage.Assistant.make({
+          id: SessionMessage.ID.make("msg_1"),
+          type: "assistant",
+          agent: "build",
+          model: testModel,
+          content: [
+            { type: "reasoning", id: "r1", text: "Maybe the database query failed because the table is missing." },
+          ],
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+      },
+    ]
+    const text = lastAssistantText(entries)
+    expect(text).toBe("Maybe the database query failed because the table is missing.")
+    expect(containsHedge(text)).toBe(true)
+  })
+
+  it("extracts combined text and reasoning parts", () => {
+    const entries = [
+      {
+        message: SessionMessage.Assistant.make({
+          id: SessionMessage.ID.make("msg_1"),
+          type: "assistant",
+          agent: "build",
+          model: testModel,
+          content: [
+            { type: "reasoning", id: "r1", text: "I suspect this is broken." },
+            { type: "text", id: "t1", text: "Running diagnostic tests now." },
+          ],
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+      },
+    ]
+    expect(lastAssistantText(entries)).toBe("I suspect this is broken. Running diagnostic tests now.")
+  })
+
+  it("returns the most recent assistant message text, skipping preceding turns", () => {
+    const entries = [
+      {
+        message: SessionMessage.Assistant.make({
+          id: SessionMessage.ID.make("msg_1"),
+          type: "assistant",
+          agent: "build",
+          model: testModel,
+          content: [{ type: "text", id: "t1", text: "First turn" }],
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+      },
+      {
+        message: SessionMessage.User.make({
+          id: SessionMessage.ID.make("msg_2"),
+          type: "user",
+          text: "Continue",
+          time: { created: DateTime.makeUnsafe(1) },
+        }),
+      },
+      {
+        message: SessionMessage.Assistant.make({
+          id: SessionMessage.ID.make("msg_3"),
+          type: "assistant",
+          agent: "build",
+          model: testModel,
+          content: [{ type: "reasoning", id: "r2", text: "Latest turn reasoning" }],
+          time: { created: DateTime.makeUnsafe(2) },
+        }),
+      },
+    ]
+    expect(lastAssistantText(entries)).toBe("Latest turn reasoning")
+  })
+
+  it("returns empty string when no assistant messages exist", () => {
+    const entries = [
+      {
+        message: SessionMessage.User.make({
+          id: SessionMessage.ID.make("msg_1"),
+          type: "user",
+          text: "Hello",
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+      },
+    ]
+    expect(lastAssistantText(entries)).toBe("")
+  })
+})
+
+describe("isSettlementFailure", () => {
+  it("detects settlement error result type", () => {
+    expect(isSettlementFailure({ result: { type: "error", value: "Command failed" } })).toBe(true)
+  })
+
+  it("detects failure keywords in text result value", () => {
+    expect(
+      isSettlementFailure({
+        result: { type: "text", value: "3 tests failed, 0 passed" },
+      }),
+    ).toBe(true)
+    expect(
+      isSettlementFailure({
+        result: { type: "text", value: "Unhandled exception in worker thread" },
+      }),
+    ).toBe(true)
+  })
+
+  it("detects failure keywords in structured output content parts", () => {
+    expect(
+      isSettlementFailure({
+        result: { type: "text", value: "execution complete" },
+        output: ToolOutput.make({}, [{ type: "text", text: "Fatal error: connection dropped" }]),
+      }),
+    ).toBe(true)
+    expect(
+      isSettlementFailure({
+        result: { type: "text", value: "execution complete" },
+        output: ToolOutput.make({}, [{ type: "text", text: "Compilation failed with 2 errors" }]),
+      }),
+    ).toBe(true)
+  })
+
+  it("returns false for successful tool settlements", () => {
+    expect(
+      isSettlementFailure({
+        result: { type: "text", value: "File content read successfully" },
+      }),
+    ).toBe(false)
+    expect(
+      isSettlementFailure({
+        result: { type: "json", value: { status: "ok", count: 42 } },
+        output: ToolOutput.make({ count: 42 }, [{ type: "text", text: "All 10 tests passed" }]),
+      }),
+    ).toBe(false)
+  })
+})
+
