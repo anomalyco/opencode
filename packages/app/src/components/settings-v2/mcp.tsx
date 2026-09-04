@@ -2,11 +2,15 @@ import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
-import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode-ai/ui/v2/dialog-v2"
-import { type Component, For, Show, createMemo, createResource, createSignal } from "solid-js"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode-ai/ui/v2/dialog-v2"
+import { Switch } from "@opencode-ai/ui/v2/switch-v2"
+import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { For, Show, createMemo, createResource, createSignal, type Component } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { showToast } from "@/utils/toast"
+import { buildAddInput, emptyForm, formFromConfig, storedToPayloadConfig, type McpFormState } from "./mcp-payload"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import "./settings-v2.css"
@@ -36,6 +40,7 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const language = useLanguage()
   const dialog = useDialog()
   const serverSdk = useServerSDK()
+  const serverSync = useServerSync()
 
   const [busy, setBusy] = createSignal<string | undefined>()
   const [loadError, setLoadError] = createSignal<string | undefined>()
@@ -63,11 +68,61 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
   const onError = (error: unknown) =>
     showToast({ variant: "error", description: error instanceof Error ? error.message : String(error) })
 
-  // TODO(mcp-task-3): opens the add dialog.
-  const onAdd = () => {}
+  const addServer = async (form: McpFormState, previous?: { name: string; wasConnected: boolean }) => {
+    const built = buildAddInput(form, { keepSecret: previous !== undefined })
+    if (!built.ok) throw new Error(built.error)
+    if (previous) {
+      if (previous.wasConnected) {
+        await serverSdk().api.mcp.disconnect({ server: previous.name, ...location() }).catch(() => undefined)
+      }
+      await serverSdk().api.mcp.remove({ server: previous.name, ...location() })
+    }
+    await serverSdk().api.mcp.add({ server: built.input.server, config: built.input.config, ...location() })
+  }
 
-  // TODO(mcp-task-3): opens the edit dialog for this server.
-  const onEdit = (_name: string) => {}
+  const openForm = (form: McpFormState, previous?: { name: string; wasConnected: boolean }) => {
+    void dialog.push(() => (
+      <Dialog fit>
+        <DialogHeader>
+          <DialogTitleGroup
+            title={language.t(previous ? "settings.mcp.form.title.edit" : "settings.mcp.form.title.add")}
+            description={language.t("settings.mcp.form.subtitle")}
+          />
+        </DialogHeader>
+        <DividerV2 />
+        <DialogBody class="flex w-full min-w-0 flex-1 flex-col gap-4 px-4 pt-4 pb-2">
+          <McpFormFields form={form} previous={previous} />
+        </DialogBody>
+        <DialogFooter>
+          <ButtonV2 variant="neutral" onClick={() => dialog.close()}>
+            {language.t("settings.mcp.form.cancel")}
+          </ButtonV2>
+          <McpFormSave
+            form={form}
+            previous={previous}
+            onSave={async () => {
+              await addServer(form, previous)
+              await serversActions.refetch()
+            }}
+            onClose={() => dialog.close()}
+          />
+        </DialogFooter>
+      </Dialog>
+    ))
+  }
+
+  const onAdd = () => openForm(emptyForm())
+
+  const onEdit = (name: string) => {
+    const existing = serverSync().data.config?.mcp?.[name]
+    if (!existing || !("type" in existing)) {
+      showToast({ variant: "error", description: language.t("settings.mcp.errors.noConfig", { name }) })
+      return
+    }
+    const config = storedToPayloadConfig(existing)
+    const status = (servers() ?? []).find((server) => server.name === name)?.status.status
+    openForm(formFromConfig(name, config), { name, wasConnected: status === "connected" })
+  }
 
   const connect = async (name: string) => {
     setBusy(name)
@@ -233,6 +288,264 @@ export const SettingsMcpV2: Component<{ directory?: string }> = (props) => {
           </For>
         </SettingsListV2>
       </Show>
+    </div>
+  )
+}
+const McpFormFields: Component<{
+  form: McpFormState
+  previous?: { name: string; wasConnected: boolean }
+}> = (props) => {
+  const language = useLanguage()
+
+  const label = "text-sm font-medium"
+  const field = "flex flex-col gap-1"
+
+  return (
+    <div class="flex flex-col gap-4">
+      <Show when={props.previous?.wasConnected}>
+        <div class="settings-v2-plugins-note">{language.t("settings.mcp.edit.warn")}</div>
+      </Show>
+      <div class={field}>
+        <label class={label}>{language.t("settings.mcp.form.name")}</label>
+        <TextInputV2
+          type="text"
+          value={props.form.name}
+          disabled={props.previous !== undefined}
+          onInput={(event) => (props.form.name = event.currentTarget.value)}
+        />
+      </div>
+      <div class="flex gap-2">
+        <ButtonV2
+          size="normal"
+          variant={props.form.kind === "local" ? "neutral" : "ghost-muted"}
+          onClick={() => (props.form.kind = "local")}
+        >
+          {language.t("settings.mcp.type.local")}
+        </ButtonV2>
+        <ButtonV2
+          size="normal"
+          variant={props.form.kind === "remote" ? "neutral" : "ghost-muted"}
+          onClick={() => (props.form.kind = "remote")}
+        >
+          {language.t("settings.mcp.type.remote")}
+        </ButtonV2>
+      </div>
+      <Show when={props.form.kind === "local"}>
+        <div class={field}>
+          <label class={label}>{language.t("settings.mcp.form.command")}</label>
+          <TextInputV2
+            type="text"
+            value={props.form.command.join(" ")}
+            placeholder={language.t("settings.mcp.form.command.hint")}
+            onInput={(event) => (props.form.command = event.currentTarget.value.split(" ").filter((part) => part !== ""))}
+          />
+        </div>
+        <div class={field}>
+          <label class={label}>{language.t("settings.mcp.form.cwd")}</label>
+          <TextInputV2 type="text" value={props.form.cwd} onInput={(event) => (props.form.cwd = event.currentTarget.value)} />
+        </div>
+        <KeyValueRows
+          label={language.t("settings.mcp.form.env")}
+          rows={() => props.form.environment}
+          onChange={(rows) => (props.form.environment = rows)}
+        />
+      </Show>
+      <Show when={props.form.kind === "remote"}>
+        <div class={field}>
+          <label class={label}>{language.t("settings.mcp.form.url")}</label>
+          <TextInputV2
+            type="text"
+            value={props.form.url}
+            placeholder="https://mcp.example.com/mcp"
+            onInput={(event) => (props.form.url = event.currentTarget.value)}
+          />
+        </div>
+        <KeyValueRows
+          label={language.t("settings.mcp.form.headers")}
+          rows={() => props.form.headers}
+          onChange={(rows) => (props.form.headers = rows)}
+        />
+        <div class="flex items-center gap-2">
+          <Switch
+            checked={props.form.oauthEnabled}
+            onChange={(value) => (props.form.oauthEnabled = value)}
+          />
+          <label class={label}>{language.t("settings.mcp.form.oauth")}</label>
+        </div>
+        <Show when={props.form.oauthEnabled}>
+          <div class="flex items-center gap-2">
+            <Switch
+              checked={props.form.oauthDisableAutodetect}
+              onChange={(value) => (props.form.oauthDisableAutodetect = value)}
+            />
+            <label class={label}>{language.t("settings.mcp.form.oauth.disableAutodetect")}</label>
+          </div>
+          <Show when={!props.form.oauthDisableAutodetect}>
+            <div class="flex flex-col gap-2">
+              <div class={field}>
+                <label class={label}>{language.t("settings.mcp.form.oauth.clientId")}</label>
+                <TextInputV2
+                  type="text"
+                  value={props.form.clientId}
+                  onInput={(event) => (props.form.clientId = event.currentTarget.value)}
+                />
+              </div>
+              <div class={field}>
+                <label class={label}>{language.t("settings.mcp.form.oauth.clientSecret")}</label>
+                <TextInputV2
+                  type="password"
+                  value={props.form.clientSecret}
+                  placeholder={
+                    props.form.clientSecretPlaceholder
+                      ? language.t("settings.mcp.form.oauth.clientSecret.keep")
+                      : undefined
+                  }
+                  onInput={(event) => (props.form.clientSecret = event.currentTarget.value)}
+                />
+              </div>
+              <div class={field}>
+                <label class={label}>{language.t("settings.mcp.form.oauth.scope")}</label>
+                <TextInputV2
+                  type="text"
+                  value={props.form.scope}
+                  onInput={(event) => (props.form.scope = event.currentTarget.value)}
+                />
+              </div>
+              <div class={field}>
+                <label class={label}>{language.t("settings.mcp.form.oauth.callbackPort")}</label>
+                <TextInputV2
+                  type="text"
+                  value={props.form.callbackPort}
+                  onInput={(event) => (props.form.callbackPort = event.currentTarget.value)}
+                />
+              </div>
+            </div>
+          </Show>
+        </Show>
+      </Show>
+      <div class="flex items-center gap-2">
+        <Switch checked={props.form.enabled} onChange={(value) => (props.form.enabled = value)} />
+        <label class={label}>{language.t("settings.mcp.form.enabled")}</label>
+      </div>
+      <div class={field}>
+        <label class={label}>{language.t("settings.mcp.form.timeout")}</label>
+        <TextInputV2
+          type="text"
+          value={props.form.timeout}
+          placeholder="5000"
+          onInput={(event) => (props.form.timeout = event.currentTarget.value)}
+        />
+      </div>
+    </div>
+  )
+}
+
+const KeyValueRows: Component<{
+  label: string
+  rows: () => { key: string; value: string }[]
+  onChange: (rows: { key: string; value: string }[]) => void
+}> = (props) => {
+  const language = useLanguage()
+  return (
+    <div class="flex flex-col gap-2">
+      <label class="text-sm font-medium">{props.label}</label>
+      <For each={props.rows()}>
+        {(row, index) => (
+          <div class="flex items-center gap-2">
+            <TextInputV2
+              type="text"
+              class="w-40"
+              value={row.key}
+              onInput={(event) => {
+                const next = [...props.rows()]
+                next[index()] = { ...next[index()], key: event.currentTarget.value }
+                props.onChange(next)
+              }}
+            />
+            <TextInputV2
+              type="text"
+              class="flex-1"
+              value={row.value}
+              onInput={(event) => {
+                const next = [...props.rows()]
+                next[index()] = { ...next[index()], value: event.currentTarget.value }
+                props.onChange(next)
+              }}
+            />
+            <ButtonV2
+              size="normal"
+              variant="ghost-muted"
+              onClick={() => props.onChange(props.rows().filter((_, i) => i !== index()))}
+            >
+              {language.t("settings.mcp.form.removeRow")}
+            </ButtonV2>
+          </div>
+        )}
+      </For>
+      <ButtonV2
+        size="normal"
+        variant="outline"
+        onClick={() => props.onChange([...props.rows(), { key: "", value: "" }])}
+      >
+        {language.t("settings.mcp.form.addRow")}
+      </ButtonV2>
+    </div>
+  )
+}
+
+const McpFormSave: Component<{
+  form: McpFormState
+  previous?: { name: string; wasConnected: boolean }
+  onSave: () => Promise<void>
+  onClose: () => void
+}> = (props) => {
+  const language = useLanguage()
+  const [saving, setSaving] = createSignal(false)
+  const [fieldError, setFieldError] = createSignal<string | undefined>()
+
+  const errorText = (field: string | undefined) => {
+    if (field === undefined) return undefined
+    if (field === "name" || field === "command" || field === "url") {
+      return language.t(`settings.mcp.form.error.${field}`)
+    }
+    if (field === "callbackPort" || field === "timeout") {
+      return language.t(`settings.mcp.form.error.${field}`)
+    }
+    return language.t("settings.mcp.errors.invalid")
+  }
+
+  const save = async () => {
+    const built = buildAddInput(props.form, { keepSecret: props.previous !== undefined })
+    if (!built.ok) {
+      setFieldError(built.error)
+      return
+    }
+    setSaving(true)
+    setFieldError(undefined)
+    try {
+      await props.onSave()
+      props.onClose()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message.includes("exist") || message.includes("duplicate")) {
+        setFieldError("name")
+        showToast({ variant: "error", description: language.t("settings.mcp.errors.duplicate") })
+      } else {
+        showToast({ variant: "error", description: message })
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div class="flex items-center gap-2">
+      <Show when={fieldError()}>
+        <span class="text-text-muted-base">{errorText(fieldError())}</span>
+      </Show>
+      <ButtonV2 variant="neutral" disabled={saving()} onClick={() => void save()}>
+        {language.t("settings.mcp.form.save")}
+      </ButtonV2>
     </div>
   )
 }
