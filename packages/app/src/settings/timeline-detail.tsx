@@ -86,13 +86,18 @@ export function TimelineDetailControl(props: { value: TimelineDetail; onChange: 
                       data-category={category}
                       data-field="placement"
                       aria-labelledby={`${id}-${category} ${id}-placement`}
-                      options={placements}
+                      options={category === "notices" ? placements.filter((value) => value !== "grouped") : placements}
                       current={props.value[category].placement}
                       label={(value) => language.t(`settings.timeline.placement.${value}`)}
-                      onSelect={(placement) =>
-                        placement &&
+                      onSelect={(placement) => {
+                        if (!placement) return
+                        if (category === "notices") {
+                          if (placement === "grouped") return
+                          props.onChange({ ...props.value, notices: { placement } })
+                          return
+                        }
                         props.onChange({ ...props.value, [category]: { ...props.value[category], placement } })
-                      }
+                      }}
                     />
                   </div>
                   <div data-slot="timeline-detail-expansion">

@@ -265,17 +265,7 @@ export namespace Timeline {
     ]
     return {
       activeMessageID,
-      rows: detail
-        ? groupMessages(
-            rows,
-            detail,
-            new Set(
-              messages
-                .filter((message) => message.type === "compaction" && timelineNoticeRequired(message))
-                .map((message) => message.id),
-            ),
-          )
-        : rows,
+      rows: detail ? groupMessages(rows, detail) : rows,
     }
   }
 
@@ -415,13 +405,11 @@ function shellFailed(message: SessionMessageShell) {
   )
 }
 
-function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, required: ReadonlySet<string>) {
+function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail) {
   return rows.reduce<TimelineRow.TimelineRow[]>((result, row) => {
     const previous = result.at(-1)
     const current =
-      ((row._tag === "Notice" && detail.notices.placement === "grouped") ||
-        (row._tag === "Shell" && detail.shell.placement === "grouped")) &&
-      !required.has(row.messageID)
+      row._tag === "Shell" && detail.shell.placement === "grouped"
         ? new TimelineRow.AssistantPart({
             userMessageID: row.userMessageID,
             previousAssistantPart: previous?._tag === "AssistantPart",

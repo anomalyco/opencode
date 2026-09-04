@@ -6,6 +6,7 @@ import type {
   SessionMessageInfo,
 } from "@opencode-ai/client/promise"
 import { createStore } from "solid-js/store"
+import { timelinePresets } from "./detail"
 import { createTimelineProjection, reuseTimelineRows, Timeline, TimelineRow, type PartGroup } from "./projection"
 
 const context = (key: string, partIDs: string[], identity: { userMessageID?: string; messageID?: string } = {}) =>
@@ -209,6 +210,63 @@ describe("reuseTimelineRows", () => {
 })
 
 describe("createTimelineProjection", () => {
+  test.each([...timelinePresets])("keeps notices out of Used groups in $id", (preset) => {
+    const result = createTimelineProjection({
+      status: { type: "idle" },
+      reasoningMode: "full",
+      timelineDetail: preset.value,
+      sessionMessages: [
+        { id: "user", type: "user", text: "Inspect the project", time: { created: 1 } },
+        {
+          id: "assistant",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [
+            {
+              id: "read",
+              type: "tool",
+              name: "read",
+              state: {
+                status: "completed",
+                input: {},
+                content: [{ type: "text", text: "file contents" }],
+                metadata: {},
+              },
+              time: { created: 2, completed: 3 },
+            },
+          ],
+          time: { created: 2, completed: 3 },
+        },
+        { id: "agent", type: "agent-switched", agent: "explore", time: { created: 4 } },
+        { id: "skill", type: "skill", skill: "review", name: "Review", text: "instructions", time: { created: 5 } },
+        {
+          id: "failed",
+          type: "synthetic",
+          text: "Background task failed",
+          metadata: { source: "subagent", state: "error" },
+          time: { created: 6 },
+        },
+        {
+          id: "shell",
+          type: "shell",
+          shellID: "shell-1",
+          command: "pwd",
+          status: "exited",
+          exit: 0,
+          time: { created: 7 },
+        },
+      ],
+    })
+    expect(result.rows.filter((row) => row._tag === "Notice").map((row) => row.messageID)).toEqual(
+      preset.value.notices.placement === "hidden" ? ["failed"] : ["agent", "skill", "failed"],
+    )
+    const grouped = result.rows.flatMap((row) =>
+      row._tag === "AssistantPart" && row.group.type === "context" ? row.group.refs.map((ref) => ref.partID) : [],
+    )
+    expect(grouped).toEqual(preset.id === "compact" ? ["read", "shell"] : preset.id === "detailed" ? ["read"] : [])
+  })
+
   test("builds current message, parent, context, and row indexes", () => {
     const selectedModel = { id: "selected", providerID: "provider" } satisfies ModelRef
     const assistantModel = { id: "assistant", providerID: "provider", variant: "fast" } satisfies ModelRef

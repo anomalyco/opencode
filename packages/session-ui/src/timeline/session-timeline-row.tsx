@@ -152,8 +152,6 @@ export function createSessionTimelineRowRenderer(input: {
           if (ref.messageID !== ref.partID || !message) return []
           if (message.type === "shell")
             return [{ type: "shell", id: ref.partID, render: () => <Shell messageID={ref.messageID} grouped /> }]
-          if (message.type !== "assistant" && message.type !== "user")
-            return [{ type: "notice", id: ref.partID, render: () => <Notice messageID={ref.messageID} grouped /> }]
           return []
         })
       })
@@ -356,8 +354,8 @@ export function createSessionTimelineRowRenderer(input: {
     </div>
   )
 
-  function Notice(props: { messageID: string; grouped?: boolean }) {
-    const inset = () => (props.grouped ? "" : padding())
+  function Notice(props: { messageID: string }) {
+    const inset = padding
     const message = createMemo(() => input.projection.messageByID().get(props.messageID))
     const compaction = createMemo(() => {
       const value = message()
@@ -412,7 +410,7 @@ export function createSessionTimelineRowRenderer(input: {
                       fallback={
                         <div
                           data-slot="session-timeline-notice"
-                          class={`w-full truncate ${props.grouped ? "py-1" : "pt-3 pb-1"} text-13-regular leading-text-compact text-text-weak ${inset()}`}
+                          class={`w-full truncate pt-3 pb-1 text-13-regular leading-text-compact text-text-weak ${inset()}`}
                         >
                           <bdi
                             dir="auto"
