@@ -45,12 +45,24 @@ export const compatible = (context: Info, target: Provenance | undefined) =>
   context.provenance.endpoint === target.endpoint
 
 /** Stores the canonical replacement, not a local summary or transport continuation.
- * AI's JSON codec normalizes binary media to its equivalent base64 string form.
+ * Provider and attachment metadata can contain optional undefined entries. Use JSON's
+ * omission semantics, while preserving canonical binary media as equivalent base64.
  */
 export const encode = (provenance: Provenance, replacement: ReadonlyArray<Message>): Info => ({
   version: 1,
   provenance,
-  messages: Schema.encodeSync(messages)(replacement),
+  messages: Schema.decodeSync(Schema.fromJsonString(Schema.Json))(
+    JSON.stringify(
+      replacement.map((message) => ({
+        ...message,
+        content: message.content.map((part) =>
+          part.type === "media" && part.data instanceof Uint8Array
+            ? { ...part, data: Buffer.from(part.data).toString("base64") }
+            : part,
+        ),
+      })),
+    ),
+  ),
 })
 
 export const decode = (context: Info) => Schema.decodeUnknownSync(messages)(context.messages)

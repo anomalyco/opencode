@@ -108,6 +108,19 @@ test("canonical provider context round-trips tools, opaque checkpoints and binar
   const decoded = SessionProviderContext.decode(stored)
   expect(decoded.slice(0, -1)).toEqual(messages.slice(0, -1))
   expect(decoded.at(-1)?.content).toEqual([{ type: "media", mediaType: "image/png", data: "AQID" }])
+  const optionalMetadata = SessionProviderContext.encode(providerContext.provenance, [
+    Message.make({
+      role: "user",
+      content: [
+        { type: "text", text: "attachment", metadata: { attachment: { name: undefined, source: { type: "inline" } } } },
+      ],
+      providerMetadata: { openai: { itemId: undefined, type: "message", status: undefined, phase: undefined } },
+    }),
+  ])
+  expect(SessionProviderContext.decode(optionalMetadata)[0]).toMatchObject({
+    providerMetadata: { openai: { type: "message" } },
+    content: [{ metadata: { attachment: { source: { type: "inline" } } } }],
+  })
   expect(() =>
     SessionProviderContext.decode({
       ...context,
