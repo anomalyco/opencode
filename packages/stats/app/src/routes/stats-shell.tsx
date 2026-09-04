@@ -241,7 +241,7 @@ export function Footer(props: {
     { href: "https://opencode.ai/discord", label: i18n.t("footer.community") },
     { href: "https://x.com/opencode", label: "X" },
     { href: githubLink.href, label: i18n.t("header.github") },
-    { href: "https://www.youtube.com/@anomaly-co", label: i18n.t("footer.youtube") },
+    { href: "https://www.youtube.com/@anomalyco", label: i18n.t("footer.youtube") },
   ]
   const bridge = () =>
     props.bridge === undefined

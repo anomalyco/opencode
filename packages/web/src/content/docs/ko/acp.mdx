@@ -25,12 +25,15 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 
 ### Zed
 
-[Zed](https://zed.dev) config(`~/.config/zed/settings.json`)에 다음을 추가하세요.
+명령 팔레트에서 `zed: acp registry`를 실행하여 [Zed ACP 레지스트리](https://zed.dev/docs/ai/external-agents#registry)에서 OpenCode를 설치하세요.
+
+대신 사용자 지정 OpenCode 실행 파일을 사용하려면 [Zed](https://zed.dev) 설정(`~/.config/zed/settings.json`)에 추가하세요.
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

@@ -77,7 +77,7 @@ export const dict: Record<string, string> = {
 
   "dialog.usageExceeded.freeTier.title": "Безкоштовний ліміт вичерпано",
   "dialog.usageExceeded.freeTier.description":
-    "Підпишіться на OpenCode Go для надійного доступу до найкращих моделей із відкритим кодом від $5 на місяць.",
+    "Підпишіться на OpenCode Go за $10 на місяць для надійного доступу до найкращих моделей із відкритим кодом.",
   "dialog.usageExceeded.freeTier.actionLabel": "Підписатися",
   "dialog.usageExceeded.accountRateLimit.title": "Ліміт Go вичерпано",
   "dialog.usageExceeded.accountRateLimit.description":

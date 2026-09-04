@@ -253,9 +253,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
 
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
-  "go.banner.text": "DeepSeek V4 Flash เพิ่มโควตาการใช้งานเป็น 2 เท่าในช่วงเวลาจำกัด",
+  "go.banner.text": "GLM-5.3-Flash เพิ่มโควตาการใช้งานเป็น 2 เท่าในช่วงเวลาจำกัด",
   "go.meta.description":
-    "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดการใช้งานที่เอื้อเฟื้อและการเข้าถึงโมเดลเขียนโค้ดชั้นนำอย่างเชื่อถือได้",
+    "Go มีราคา $10/เดือน พร้อมขีดจำกัดการใช้งานที่เอื้อเฟื้อและการเข้าถึงโมเดลเขียนโค้ดชั้นนำอย่างเชื่อถือได้",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
   "go.hero.body":
     "Go นำการเขียนโค้ดแบบเอเจนต์มาสู่นักเขียนโปรแกรมทั่วโลก เสนอขีดจำกัดที่กว้างขวางและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดได้อย่างน่าเชื่อถือ เพื่อให้คุณสามารถสร้างสรรค์ด้วยเอเจนต์ที่ทรงพลังโดยไม่ต้องกังวลเรื่องค่าใช้จ่ายหรือความพร้อมใช้งาน",
@@ -264,12 +264,13 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "สมัครสมาชิก Go",
   "go.cta.price": "$10/เดือน",
-  "go.cta.promo": "$5 เดือนแรก",
-  "go.pricing.body": "ใช้กับเอเจนต์ใดก็ได้ $5 ในเดือนแรก จากนั้น $10/เดือน เติมเครดิตหากจำเป็น ยกเลิกได้ตลอดเวลา",
+  "go.pricing.body": "ใช้กับเอเจนต์ใดก็ได้ $10/เดือน เติมเครดิตหากจำเป็น ยกเลิกได้ตลอดเวลา",
   "go.graph.free": "ฟรี",
   "go.graph.freePill": "Big Pickle และโมเดลฟรี",
   "go.graph.go": "Go",
   "go.graph.label": "คำขอต่อ 5 ชั่วโมง",
+  "go.graph.limitedRegions": "เฉพาะบางภูมิภาค",
+  "go.graph.limitedTime": "ช่วงเวลาจำกัด",
   "go.graph.usageLimits": "ขีดจำกัดการใช้งาน",
   "go.graph.aria": "คำขอต่อ 5 ชม.: {{free}} vs {{go}}",
 
@@ -296,20 +297,20 @@ export const dict = {
   "go.testimonials.frank.quote": "ผมหวังว่าผมจะยังอยู่ที่ Nvidia",
   "go.problem.title": "Go แก้ปัญหาอะไร?",
   "go.problem.body":
-    "เรามุ่งมั่นที่จะนำประสบการณ์ OpenCode ไปสู่ผู้คนให้ได้มากที่สุด OpenCode Go เป็นการสมัครสมาชิกราคาประหยัด: $5 สำหรับเดือนแรก จากนั้น $10/เดือน โดยมอบขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดอย่างเชื่อถือได้",
+    "เรามุ่งมั่นที่จะนำประสบการณ์ OpenCode ไปสู่ผู้คนให้ได้มากที่สุด OpenCode Go เป็นการสมัครสมาชิกราคาประหยัด $10/เดือน โดยมอบขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดอย่างเชื่อถือได้",
   "go.problem.subtitle": " ",
   "go.problem.item1": "ราคาการสมัครสมาชิกที่ต่ำ",
   "go.problem.item2": "ขีดจำกัดที่กว้างขวางและการเข้าถึงที่เชื่อถือได้",
   "go.problem.item3": "สร้างขึ้นเพื่อโปรแกรมเมอร์จำนวนมากที่สุดเท่าที่จะเป็นไปได้",
   "go.problem.item4": "ชุดโมเดลที่คัดสรรและผ่านการทดสอบสำหรับการเขียนโค้ดแบบเอเจนต์",
   "go.how.title": "Go ทำงานอย่างไร",
-  "go.how.body": "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน คุณสามารถใช้กับ OpenCode หรือเอเจนต์ใดก็ได้",
+  "go.how.body": "Go มีราคา $10/เดือน คุณสามารถใช้กับ OpenCode หรือเอเจนต์ใดก็ได้",
   "go.how.step1.title": "สร้างบัญชี",
   "go.how.step1.beforeLink": "ทำตาม",
   "go.how.step1.link": "คำแนะนำการตั้งค่า",
   "go.how.step2.title": "สมัครสมาชิก Go",
-  "go.how.step2.link": "$5 เดือนแรก",
-  "go.how.step2.afterLink": "จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อ",
+  "go.how.step2.link": "$10/เดือน",
+  "go.how.step2.afterLink": "พร้อมขีดจำกัดที่เอื้อเฟื้อ",
   "go.how.step3.title": "เริ่มเขียนโค้ด",
   "go.how.step3.body": "ด้วยการเข้าถึงโมเดลโอเพนซอร์สที่เชื่อถือได้",
   "go.privacy.title": "ความเป็นส่วนตัวของคุณสำคัญสำหรับเรา",
@@ -326,11 +327,11 @@ export const dict = {
   "go.faq.a2": "Go รวมโมเดลด้านล่างนี้ พร้อมขีดจำกัดที่มากและการเข้าถึงที่เชื่อถือได้",
   "go.faq.q3": "Go เหมือนกับ Zen หรือไม่?",
   "go.faq.a3":
-    "ไม่ Zen เป็นแบบจ่ายตามการใช้งาน ขณะที่ Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงชุดโมเดลที่คัดสรรอย่างเชื่อถือได้",
+    "ไม่ Zen เป็นแบบจ่ายตามการใช้งาน ขณะที่ Go มีราคา $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงชุดโมเดลที่คัดสรรอย่างเชื่อถือได้",
   "go.faq.q4": "Go ราคาเท่าไหร่?",
   "go.faq.a4.p1.beforePricing": "Go ราคา",
-  "go.faq.a4.p1.pricingLink": "$5 เดือนแรก",
-  "go.faq.a4.p1.afterPricing": "จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อ",
+  "go.faq.a4.p1.pricingLink": "$10/เดือน",
+  "go.faq.a4.p1.afterPricing": "พร้อมขีดจำกัดที่เอื้อเฟื้อ",
   "go.faq.a4.p2.beforeAccount": "คุณสามารถจัดการการสมัครสมาชิกของคุณได้ใน",
   "go.faq.a4.p2.accountLink": "บัญชีของคุณ",
   "go.faq.a4.p3": "ยกเลิกได้ตลอดเวลา",
@@ -343,10 +344,13 @@ export const dict = {
   "go.faq.a5.used": "นำไปใช้",
   "go.faq.a5.notUsed": "ไม่นำไปใช้",
   "go.faq.a5.noAgreement": "ไม่มีข้อตกลง",
+  "go.faq.a5.notZdr": "ไม่ใช่ ZDR",
   "go.faq.a5.grokRetention":
     "ZDR ปิดใช้งานฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ ซึ่งรวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API",
   "go.faq.a5.gptRetention":
     "ระบบจะสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับการใช้งานฟีเจอร์ API ทั้งหมด และเก็บรักษาไว้นานสูงสุด 30 วัน",
+  "go.faq.a5.museRetention":
+    "ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต",
   "go.faq.a5.learnMore": "ดูข้อมูลเพิ่มเติม",
   "go.faq.a5.deepseekRetention": "ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 31 สิงหาคม 2026",
 
@@ -388,6 +392,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "โมเดลถูกปิดใช้งาน",
   "zen.api.error.regionNotAllowed":
     "โมเดลเวอร์ชันล่าสุดนี้ให้บริการเฉพาะผ่านระบบที่โฮสต์ในประเทศจีน และต้องให้ความยินยอมอย่างชัดแจ้งก่อนใช้งาน: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "โมเดลนี้ไม่พร้อมให้บริการในประเทศของคุณ",
+  "zen.api.error.trainingNotAllowed":
+    "โมเดลนี้เก็บรวบรวมข้อมูลที่ใช้เพื่อปรับปรุงคุณภาพของโมเดล และต้องได้รับความยินยอมอย่างชัดแจ้งก่อนใช้งาน: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "โปรโมชันฟรีสำหรับ {{model}} สิ้นสุดแล้ว คุณสามารถใช้โมเดลต่อได้โดยสมัครสมาชิก OpenCode Go - {{link}}",
 
@@ -660,23 +667,32 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "ไม่กี่วินาที",
   "workspace.lite.subscription.message": "คุณได้สมัครสมาชิก OpenCode Go แล้ว",
   "workspace.lite.subscription.manage": "จัดการการสมัครสมาชิก",
-  "workspace.lite.subscription.rollingUsage": "การใช้งานแบบหมุนเวียน",
+  "workspace.lite.subscription.rollingUsage": "การใช้งานใน 5 ชั่วโมง",
+  "workspace.lite.subscription.rollingQuota": "โควตา 5 ชั่วโมง",
   "workspace.lite.subscription.weeklyUsage": "การใช้งานรายสัปดาห์",
+  "workspace.lite.subscription.weeklyQuota": "โควตารายสัปดาห์",
   "workspace.lite.subscription.monthlyUsage": "การใช้งานรายเดือน",
+  "workspace.lite.subscription.monthlyQuota": "โควตารายเดือน",
   "workspace.lite.subscription.resetsIn": "รีเซ็ตใน",
+  "workspace.lite.subscription.showDetails": "แสดงรายละเอียด",
+  "workspace.lite.subscription.hideDetails": "ซ่อนรายละเอียด",
+  "workspace.lite.subscription.model": "โมเดล",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "รวม",
   "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
   "workspace.lite.subscription.selectProvider":
     'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
   "workspace.lite.providers.title": "ผู้ให้บริการ",
   "workspace.lite.providers.description": "ควบคุมผู้ให้บริการที่ใช้สำหรับการกำหนดเส้นทาง",
+  "workspace.lite.providers.allowTraining": "อนุญาตโมเดลที่ฝึกด้วยข้อมูลคำขอ",
   "workspace.lite.providers.useChina": "เปิดใช้โมเดลที่โฮสต์ในจีน",
   "workspace.lite.black.message":
     "ขณะนี้คุณสมัครสมาชิก OpenCode Black หรืออยู่ในรายการรอ โปรดยกเลิกการสมัครก่อนหากต้องการเปลี่ยนไปใช้ Go",
   "workspace.lite.other.message":
     "สมาชิกคนอื่นใน Workspace นี้ได้สมัคร OpenCode Go แล้ว สามารถสมัครได้เพียงหนึ่งคนต่อหนึ่ง Workspace เท่านั้น",
   "workspace.lite.promo.description":
-    "OpenCode Go เริ่มต้นที่ {{price}} จากนั้น $10/เดือน และมอบการเข้าถึงโมเดลการเขียนโค้ดแบบเปิดยอดนิยมอย่างเสถียรพร้อมขีดจำกัดการใช้งานที่ให้มาอย่างเหลือเฟือ",
-  "workspace.lite.promo.price": "$5 สำหรับเดือนแรก",
+    "OpenCode Go ราคา {{price}} และมอบการเข้าถึงโมเดลการเขียนโค้ดแบบเปิดยอดนิยมอย่างเสถียรพร้อมขีดจำกัดการใช้งานที่ให้มาอย่างเหลือเฟือ",
+  "workspace.lite.promo.price": "$10/เดือน",
   "workspace.lite.promo.modelsTitle": "สิ่งที่รวมอยู่ด้วย",
   "workspace.lite.promo.footer":
     "แผนนี้ออกแบบมาสำหรับผู้ใช้งานต่างประเทศเป็นหลักและให้การเข้าถึงที่เสถียรทั่วโลก ราคาและขีดจำกัดการใช้งานอาจเปลี่ยนแปลงได้ตามสิ่งที่เราเรียนรู้จากการใช้งานและข้อเสนอแนะในช่วงแรก",

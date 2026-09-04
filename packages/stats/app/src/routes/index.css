@@ -1590,6 +1590,13 @@ body {
   white-space: nowrap;
 }
 
+[data-page="stats"] [data-component="chart-tooltip"] [data-slot="tooltip-name"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 [data-page="stats"] [data-component="chart-tooltip"] [data-slot="tooltip-divider"] {
   height: 1px;
   margin: 4px -16px 2px;
@@ -1677,7 +1684,7 @@ body {
 
 [data-page="stats"] :is([data-section="top-models"], [data-section="unique-users"]) [data-component="chart-tooltip"] p {
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
+  gap: 1ch;
   height: 16px;
   margin: 4px 0 0;
   padding: 0 8px;
@@ -1730,6 +1737,7 @@ body {
   :is(
     [data-section="leaderboard"],
     [data-section="unique-users"],
+    [data-section="retention"],
     [data-section="market-share"],
     [data-section="geo-breakdown"],
     [data-section="token-cost"],
@@ -1765,6 +1773,127 @@ body {
   text-decoration: none;
   transform: translate(-50%, -50%);
   white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="retention-chart"] {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 40px;
+}
+
+[data-page="stats"] [data-slot="retention-heading"],
+[data-page="stats"] [data-component="retention-chart"] a {
+  display: grid;
+  grid-template-columns: 40px minmax(160px, 260px) minmax(180px, 1fr) 64px 84px;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="retention-heading"] {
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 0 12px;
+  color: var(--stats-faint);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 14px;
+  text-transform: uppercase;
+}
+
+[data-page="stats"] [data-slot="retention-heading"] :is(strong, b, em, i) {
+  font: inherit;
+  font-style: normal;
+}
+
+[data-page="stats"] [data-slot="retention-heading"] :is(b, em) {
+  text-align: right;
+}
+
+[data-page="stats"] [data-component="retention-chart"] ol {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-page="stats"] [data-component="retention-chart"] a {
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--stats-line);
+  color: var(--stats-text);
+  background: var(--stats-layer);
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-component="retention-chart"] a:hover,
+[data-page="stats"] [data-component="retention-chart"] a:focus-visible,
+[data-page="stats"] [data-component="retention-chart"] a[data-active="true"] {
+  border-color: var(--stats-line-strong);
+  background: var(--stats-layer-2);
+  outline: none;
+}
+
+[data-page="stats"] [data-component="retention-chart"] a > span {
+  color: var(--stats-faint);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+[data-page="stats"] [data-component="retention-chart"] a > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+[data-page="stats"] [data-component="retention-chart"] a > b,
+[data-page="stats"] [data-component="retention-chart"] a > em {
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="retention-chart"] a > em {
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-component="retention-marker"] {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: center;
+  height: 16px;
+  background: linear-gradient(var(--stats-line-strong), var(--stats-line-strong)) center / 100% 1px no-repeat;
+}
+
+[data-page="stats"] [data-component="retention-marker"] > span {
+  justify-self: end;
+  width: 1px;
+  height: 8px;
+  background: var(--stats-line-strong);
+}
+
+[data-page="stats"] [data-component="retention-marker"] > em {
+  position: absolute;
+  top: 50%;
+  left: var(--retention-position);
+  width: 7px;
+  height: 16px;
+  background: var(--stats-muted);
+  transform: translate(-50%, -50%);
+}
+
+[data-page="stats"] [data-component="retention-marker"][data-active="true"] > em {
+  background: var(--stats-accent);
 }
 
 [data-page="stats"] [data-component="section-bridge"]:hover {
@@ -2066,6 +2195,7 @@ body {
 
 [data-page="stats"] [data-component="market-share"] {
   --market-gap: 12px;
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
@@ -2170,6 +2300,7 @@ body {
   font: inherit;
   font-size: 11px;
   line-height: 1;
+  text-align: left;
   cursor: pointer;
   outline: none;
   text-decoration: none;
@@ -2230,6 +2361,106 @@ body {
   font-weight: 500;
 }
 
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] {
+  top: 52px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 228px;
+  min-width: 228px;
+  padding: 0;
+  border: 0;
+  background: #fffffff2;
+  box-shadow:
+    0 0 0 0.5px #00000024,
+    0 8px 16px #0000000f,
+    0 4px 8px #00000014;
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"][data-placement="right"] {
+  right: auto;
+  left: calc(var(--market-tooltip-left) + 8px);
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"][data-placement="left"] {
+  right: calc(var(--market-tooltip-right) + 8px);
+  left: auto;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] strong,
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] > span {
+  display: block;
+  font-size: 11px;
+  line-height: 12px;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] strong {
+  padding: 8px 8px 0;
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] > span {
+  padding: 4px 8px 8px;
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] [data-slot="tooltip-divider"] {
+  height: 0.5px;
+  margin: 0;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] p {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  height: 16px;
+  margin: 4px 0 0;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 12px;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] p[data-muted="true"] {
+  opacity: 0.46;
+}
+
+[data-page="stats"]
+  [data-component="market-share"]
+  > [data-component="chart-tooltip"]
+  [data-slot="tooltip-divider"]
+  + p {
+  margin-top: 8px;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] p:last-child {
+  margin-bottom: 8px;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] [data-slot="tooltip-label"] {
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 4px;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] i {
+  width: 6px;
+  height: 6px;
+  justify-self: center;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] em,
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] b {
+  font-style: normal;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] em {
+  color: var(--stats-muted);
+}
+
 [data-page="stats"] [data-slot="market-footer"] {
   display: flex;
   align-items: center;
@@ -2254,121 +2485,6 @@ body {
   display: grid;
   gap: 16px;
   align-items: start;
-}
-
-[data-page="stats"] [data-slot="geo-map-panel"] {
-  position: relative;
-  min-width: 0;
-  overflow: hidden;
-  background: var(--stats-layer);
-  border: 1px solid var(--stats-line);
-}
-
-[data-page="stats"] [data-component="geo-world-map"] {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-[data-page="stats"] [data-slot="geo-countries"] path {
-  fill: var(--stats-layer-2);
-  stroke: var(--stats-bg);
-  stroke-width: 0.45px;
-  transition:
-    fill 140ms ease,
-    opacity 140ms ease;
-}
-
-[data-page="stats"] [data-slot="geo-countries"] path[data-has-data="true"] {
-  fill: var(--stats-accent);
-  opacity: var(--geo-country-opacity);
-  cursor: pointer;
-}
-
-[data-page="stats"] [data-slot="geo-countries"] path[data-active="true"] {
-  fill: color-mix(in srgb, var(--stats-accent) 70%, var(--stats-text));
-  opacity: var(--geo-country-opacity);
-}
-
-[data-page="stats"] [data-slot="geo-country-markers"] circle {
-  fill: var(--stats-accent);
-  stroke: var(--stats-bg);
-  stroke-width: 1.1px;
-  opacity: var(--geo-country-opacity);
-  cursor: pointer;
-  transition:
-    fill 140ms ease,
-    opacity 140ms ease,
-    r 140ms ease;
-}
-
-[data-page="stats"] [data-slot="geo-country-markers"] circle[data-active="true"] {
-  fill: color-mix(in srgb, var(--stats-accent) 70%, var(--stats-text));
-  opacity: var(--geo-country-opacity);
-}
-
-[data-page="stats"] [data-slot="geo-borders"] {
-  fill: none;
-  stroke: var(--stats-line-strong);
-  stroke-linejoin: round;
-  stroke-width: 0.6px;
-  pointer-events: none;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] {
-  position: absolute;
-  bottom: 16px;
-  left: 16px;
-  display: grid;
-  gap: 8px;
-  min-width: 168px;
-  max-width: calc(100% - 32px);
-  box-sizing: border-box;
-  padding: 12px;
-  background: color-mix(in srgb, var(--stats-bg) 92%, transparent);
-  box-shadow:
-    0 0 0 0.5px var(--stats-line-strong),
-    0 6px 16px #0000000d,
-    0 2px 6px #0000000f;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] span,
-[data-page="stats"] [data-slot="geo-active-country"] em {
-  color: var(--stats-faint);
-  font-style: normal;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] span {
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--stats-text);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] p {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--stats-muted);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] b {
-  color: var(--stats-accent-text);
-  font-weight: 600;
 }
 
 [data-page="stats"] [data-component="geo-country-list"] {
@@ -3628,7 +3744,7 @@ body {
 
 [data-page="stats"] [data-slot="model-momentum-metrics"] {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   min-width: 0;
 }
@@ -4722,7 +4838,7 @@ body {
 
 [data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] p {
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
+  gap: 1ch;
   height: 20px;
   margin: 8px 0;
   padding: 0 8px;
@@ -6111,6 +6227,7 @@ body {
   grid-template-columns: 6px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+  align-self: stretch;
   min-width: 0;
 }
 
@@ -6130,7 +6247,8 @@ body {
 [data-page="stats"] [data-slot="compare-radar-legend"] small {
   font-size: 13px;
   line-height: 18px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 [data-page="stats"] [data-slot="compare-radar-legend"] strong {
@@ -6778,6 +6896,57 @@ body {
   }
 }
 
+@media (max-width: 74rem) {
+  [data-page="stats"] [data-slot="retention-heading"],
+  [data-page="stats"] [data-component="retention-chart"] a {
+    grid-template-columns: 40px minmax(140px, 220px) minmax(140px, 1fr) 60px 76px;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 47.999rem) {
+  [data-page="stats"] [data-component="retention-chart"] {
+    margin-top: 28px;
+  }
+
+  [data-page="stats"] [data-slot="retention-heading"] {
+    display: none;
+  }
+
+  [data-page="stats"] [data-component="retention-chart"] a {
+    grid-template-columns: 28px minmax(0, 1fr) 58px 62px;
+    grid-template-rows: auto 16px;
+    gap: 8px 10px;
+    min-height: 68px;
+    padding: 10px;
+  }
+
+  [data-page="stats"] [data-component="retention-chart"] a > span {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  [data-page="stats"] [data-component="retention-chart"] a > strong {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  [data-page="stats"] [data-component="retention-marker"] {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+
+  [data-page="stats"] [data-component="retention-chart"] a > b {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  [data-page="stats"] [data-component="retention-chart"] a > em {
+    grid-column: 4;
+    grid-row: 1;
+  }
+}
+
 [data-page="stats"] [data-component="compare-model-modal-scrim"] {
   position: fixed;
   inset: 0;
@@ -7142,6 +7311,11 @@ body {
   [data-component="chart-tooltip"],
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
+  [data-component="market-share"]
+  > [data-component="chart-tooltip"],
+[data-page="stats"][data-theme="dark"] [data-component="market-share"] > [data-component="chart-tooltip"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
   :is([data-section="top-models"], [data-section="unique-users"])
   [data-component="chart-tooltip"] {
   background: #242424f2;
@@ -7475,6 +7649,7 @@ body {
   [data-page="stats"] [data-section="top-models"],
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="unique-users"],
+  [data-page="stats"] [data-section="retention"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="geo-breakdown"],
   [data-page="stats"] [data-section="token-cost"],
@@ -7636,6 +7811,10 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  [data-page="stats"] [data-component="model-momentum-metric"]:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
   [data-page="stats"] [data-component="model-metric-grid"],
   [data-page="stats"] [data-component="model-metric-grid"][data-variant="dense"],
   [data-page="stats"] [data-component="model-efficiency-grid"],
@@ -7775,6 +7954,7 @@ body {
   [data-page="stats"] [data-section="top-models"],
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="unique-users"],
+  [data-page="stats"] [data-section="retention"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="geo-breakdown"],
   [data-page="stats"] [data-section="token-cost"],
@@ -8378,13 +8558,6 @@ body {
     height: 400px;
   }
 
-  [data-page="stats"] [data-slot="geo-active-country"] {
-    position: static;
-    min-width: 0;
-    max-width: none;
-    margin: 0 12px 12px;
-  }
-
   [data-page="stats"] [data-component="geo-country-list"] button {
     grid-template-columns: 26px 8px minmax(0, 1fr) auto;
   }
@@ -8491,6 +8664,25 @@ body {
     max-height: min(320px, 48vh);
     overflow: auto;
     transform: none;
+  }
+
+  [data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    z-index: 40;
+    width: auto;
+    min-width: 0;
+    max-height: min(320px, 48vh);
+    overflow: auto;
+    transform: none;
+  }
+
+  [data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"][data-placement] {
+    right: 12px;
+    left: 12px;
   }
 
   [data-page="stats"]
