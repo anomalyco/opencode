@@ -2,6 +2,7 @@ import { createEffect, on, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createPromptInputV2Attachments, type PromptInputV2AttachmentConfig } from "./attachments"
+import { isLargePaste, normalizePaste } from "./paste"
 import { createPromptInputV2Store, type PromptInputV2StoreInput } from "./store"
 import type {
   PromptInputV2Attachment,
@@ -45,8 +46,16 @@ export type PromptInputV2ViewConfig = {
     onClose: () => void
   }
   onKeyDown?: (event: KeyboardEvent) => void
+  onLargePaste?: () => void
   onPaste?: (event: ClipboardEvent) => void
   onDrop?: (event: DragEvent) => void
+}
+
+export function rejectLargePromptPaste(event: Pick<ClipboardEvent, "preventDefault">, text: string, notify?: () => void) {
+  if (!isLargePaste(text)) return false
+  event.preventDefault()
+  notify?.()
+  return true
 }
 
 export function createPromptInputV2State() {
@@ -380,9 +389,10 @@ export function createPromptInputV2Controller(input: {
         void attachments.handlePaste(event)
         return
       }
+      const text = normalizePaste(clipboard?.getData("text/plain") ?? "")
+      if (rejectLargePromptPaste(event, text, input.view.onLargePaste)) return
       input.view.onPaste?.(event)
       if (event.defaultPrevented) return
-      const text = clipboard?.getData("text/plain")
       if (!text) return
       event.preventDefault()
       if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return

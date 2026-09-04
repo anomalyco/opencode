@@ -384,6 +384,11 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
     view: {
       placeholder: designPlaceholder,
+      onLargePaste: () =>
+        showToast({
+          title: language.t("prompt.toast.pasteUnsupported.title"),
+          description: language.t("prompt.toast.pasteUnsupported.description"),
+        }),
       get agent() {
         return props.controls.agents.visible && props.controls.agents.options.length > 0
           ? {
