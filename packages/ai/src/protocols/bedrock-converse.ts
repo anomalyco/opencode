@@ -415,10 +415,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
 
 // System prompts share the cache-point convention: emit the text block, then
 // optionally a positional `cachePoint` marker.
-const lowerSystem = (
-  breakpoints: BedrockCache.Breakpoints,
-  system: ReadonlyArray<LLMRequest["system"][number]>,
-) => {
+const lowerSystem = (breakpoints: BedrockCache.Breakpoints, system: ReadonlyArray<LLMRequest["system"][number]>) => {
   const content = system
     .filter((part) => part.text.length > 0)
     .flatMap((part) => textWithCache(breakpoints, part.text, part.cache))
@@ -508,7 +505,6 @@ const mapUsage = (usage: BedrockUsageSchema | undefined, providerMetadataKey: st
 interface ParserState {
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<number>
-  readonly finishedTools: ReadonlySet<number>
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). Hold both in state so `onHalt` can emit exactly
   // one finish after both chunks have had a chance to arrive.
@@ -620,16 +616,14 @@ const step = (state: ParserState, event: BedrockEvent) =>
     }
 
     if (event.contentBlockDelta?.delta?.toolUse) {
-      const index = event.contentBlockDelta.contentBlockIndex
-      if (state.finishedTools.has(index)) return [state, []] as const
-      const result = ToolStream.appendExisting(
-        ADAPTER,
+      // A delta for a block that is not open, whether it already stopped or never
+      // started, has nothing to attach to and is dropped.
+      const result = ToolStream.append(
         state.tools,
-        index,
+        event.contentBlockDelta.contentBlockIndex,
         event.contentBlockDelta.delta.toolUse.input,
-        "Bedrock Converse tool delta is missing its tool call",
       )
-      if (ToolStream.isError(result)) return yield* result
+      if (!result) return [state, []] as const
       const events: LLMEvent[] = []
       const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
       events.push(...result.events)
@@ -668,7 +662,6 @@ const step = (state: ParserState, event: BedrockEvent) =>
             state.hasToolCalls,
           lifecycle,
           tools: result.tools,
-          finishedTools: resultEvents.length > 0 ? new Set([...state.finishedTools, index]) : state.finishedTools,
           reasoningSignatures: Object.fromEntries(
             Object.entries(state.reasoningSignatures).filter(([key]) => key !== String(index)),
           ),
@@ -765,7 +758,6 @@ export const protocol = Protocol.make({
     initial: (request) => ({
       providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       tools: ToolStream.empty<number>(),
-      finishedTools: new Set<number>(),
       finishReason: undefined,
       usage: undefined,
       hasToolCalls: false,

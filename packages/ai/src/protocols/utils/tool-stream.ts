@@ -160,6 +160,17 @@ export const appendOrStart = <K extends StreamKey>(
 }
 
 /**
+ * Append argument text to a started tool. Returns `undefined` when no tool is
+ * open under `key`, for protocols that ignore deltas without a matching block.
+ */
+export const append = <K extends StreamKey>(tools: State<K>, key: K, text: string): AppendOutcome<K> | undefined => {
+  const current = tools[key]
+  if (!current) return undefined
+  if (text.length === 0) return { tools, tool: current, events: [] }
+  return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
+}
+
+/**
  * Append argument text to a tool that must already have been started. This keeps
  * protocols honest when their stream grammar promises a start event before any
  * argument delta.
@@ -170,12 +181,7 @@ export const appendExisting = <K extends StreamKey>(
   key: K,
   text: string,
   missingToolMessage: string,
-): AppendOutcome<K> | AIError => {
-  const current = tools[key]
-  if (!current) return eventError(route, missingToolMessage)
-  if (text.length === 0) return { tools, tool: current, events: [] }
-  return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
-}
+): AppendOutcome<K> | AIError => append(tools, key, text) ?? eventError(route, missingToolMessage)
 
 /**
  * Finalize one pending tool call: parse the accumulated raw JSON, remove it
