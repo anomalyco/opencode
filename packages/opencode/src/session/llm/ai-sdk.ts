@@ -106,6 +106,7 @@ export function toLLMEvents(
             index: state.step++,
             reason: finishReason(event.finishReason),
             usage: usage(event.usage),
+            responseModelID: event.response?.modelId,
             providerMetadata: metadata,
           }),
         ]
