@@ -106,7 +106,6 @@
   [data-slot="timeline-detail-advanced"] {
     margin-top: 4px;
     padding-top: 8px;
-    border-top: 0.5px solid var(--v2-border-border-base);
   }
 
   [data-slot="timeline-detail-advanced"] > [data-slot="collapsible-trigger"] {
