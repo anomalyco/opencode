@@ -1,7 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
-import { and, desc, eq, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
@@ -320,7 +320,28 @@ const layer = Layer.effect(
     const settleStaleToolCalls = Effect.fn("SessionRunner.settleStaleToolCalls")(function* (
       sessionID: SessionSchema.ID,
     ) {
-      for (const message of yield* store.context(sessionID)) {
+      // Recovery only needs unfinished tools, not every original message hidden by native checkpoints.
+      const boundary = yield* SessionHistory.latestCompaction(db, sessionID)
+      const rows = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(
+          and(
+            eq(SessionMessageTable.session_id, sessionID),
+            eq(SessionMessageTable.type, "assistant"),
+            boundary ? gt(SessionMessageTable.seq, boundary.seq) : undefined,
+            sql`exists (
+          select 1 from json_each(${SessionMessageTable.data}, '$.content') as part
+          where json_extract(part.value, '$.type') = 'tool'
+            and json_extract(part.value, '$.state.status') in ('streaming', 'running')
+        )`,
+          ),
+        )
+        .orderBy(asc(SessionMessageTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      for (const row of rows) {
+        const message = yield* SessionHistory.decodeMessageRow(row)
         if (message.type !== "assistant") continue
         for (const tool of message.content) {
           if (tool.type !== "tool" || (tool.state.status !== "streaming" && tool.state.status !== "running")) continue

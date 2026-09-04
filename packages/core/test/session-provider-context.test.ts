@@ -132,7 +132,7 @@ test("canonical provider context round-trips tools, opaque checkpoints and binar
 test("compatibility uses the actual deployment and endpoint rather than a catalog alias or variant", () => {
   expect(
     SessionProviderContext.compatible(
-      providerContext,
+      providerContext.provenance,
       SessionProviderContext.provenance({
         ...model,
         ref: { ...model.ref, id: Model.ID.make("alias"), variant: Model.VariantID.make("high") },
@@ -149,7 +149,9 @@ test("compatibility uses the actual deployment and endpoint rather than a catalo
     },
     { ...model, model: LanguageModel.update(model.model, { route: model.model.route.with({ id: "other-route" }) }) },
   ])
-    expect(SessionProviderContext.compatible(providerContext, SessionProviderContext.provenance(changed))).toBe(false)
+    expect(
+      SessionProviderContext.compatible(providerContext.provenance, SessionProviderContext.provenance(changed)),
+    ).toBe(false)
   const privateEndpoint = SessionProviderContext.provenance({
     ...model,
     model: LanguageModel.update(model.model, {
@@ -165,7 +167,7 @@ test("compatibility uses the actual deployment and endpoint rather than a catalo
       }),
     }),
   ).toBeUndefined()
-  expect(SessionProviderContext.compatible(providerContext, undefined)).toBe(false)
+  expect(SessionProviderContext.compatible(providerContext.provenance, undefined)).toBe(false)
 })
 
 it.effect(

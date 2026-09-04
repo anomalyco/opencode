@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, or, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { MessageDecodeError } from "./error.js"
@@ -18,30 +18,31 @@ export const latestCompaction = Effect.fnUntraced(function* (
   sessionID: SessionSchema.ID,
   target?: SessionProviderContext.Provenance,
 ) {
-  let before: number | undefined
-  while (true) {
-    const row = yield* db
-      .select()
-      .from(SessionMessageTable)
-      .where(
-        and(
-          eq(SessionMessageTable.session_id, sessionID),
-          eq(SessionMessageTable.type, "compaction"),
-          sql`json_extract(${SessionMessageTable.data}, '$.status') = 'completed'`,
-          before === undefined ? undefined : lt(SessionMessageTable.seq, before),
+  return yield* db
+    .select({ seq: SessionMessageTable.seq })
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        eq(SessionMessageTable.type, "compaction"),
+        sql`json_extract(${SessionMessageTable.data}, '$.status') = 'completed'`,
+        or(
+          sql`json_extract(${SessionMessageTable.data}, '$.providerContext') is null`,
+          target === undefined
+            ? undefined
+            : and(
+                ...Object.entries(target).map(
+                  ([key, value]) =>
+                    sql`json_extract(${SessionMessageTable.data}, ${`$.providerContext.provenance.${key}`}) = ${value}`,
+                ),
+              ),
         ),
-      )
-      .orderBy(desc(SessionMessageTable.seq))
-      .limit(1)
-      .get()
-      .pipe(Effect.orDie)
-    if (!row) return undefined
-    before = row.seq
-    const message = yield* decodeMessageRow(row)
-    if (message.type !== "compaction" || message.status !== "completed") continue
-    if (!message.providerContext || SessionProviderContext.compatible(message.providerContext, target))
-      return { seq: row.seq }
-  }
+      ),
+    )
+    .orderBy(desc(SessionMessageTable.seq))
+    .limit(1)
+    .get()
+    .pipe(Effect.orDie)
 })
 
 export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -105,7 +106,7 @@ const messageEntries = Effect.fnUntraced(function* (
       message.type !== "compaction" ||
       message.status !== "completed" ||
       !message.providerContext ||
-      SessionProviderContext.compatible(message.providerContext, target)
+      SessionProviderContext.compatible(message.providerContext.provenance, target)
     )
   })
 })

@@ -283,7 +283,7 @@ function toLLMMessage(
       // Explicit system updates inside a native replacement predate its completed
       // compaction epoch; the current epoch baseline supersedes those instructions.
       if (message.providerContext)
-        return SessionProviderContext.compatible(message.providerContext, target)
+        return SessionProviderContext.compatible(message.providerContext.provenance, target)
           ? SessionProviderContext.decode(message.providerContext).filter((message) => message.role !== "system")
           : []
       return [
