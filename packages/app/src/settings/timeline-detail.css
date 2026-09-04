@@ -1,4 +1,5 @@
 [data-component="timeline-detail-control"] {
+  position: relative;
   display: flex;
   min-width: 0;
   flex-direction: column;
