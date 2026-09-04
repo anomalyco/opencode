@@ -1,6 +1,16 @@
 export * as SessionCompaction from "./compaction.js"
 
-import { LLMClient, LLMEvent, LLMRequest, Message, type ContentPart } from "@opencode-ai/ai"
+import {
+  AIError,
+  InvalidProviderOutputError,
+  UnknownProviderError,
+  isContextOverflowFailure,
+  LLMClient,
+  LLMEvent,
+  LLMRequest,
+  Message,
+  type ContentPart,
+} from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/schema/agent"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
@@ -12,6 +22,7 @@ import type { SessionContext } from "./context.js"
 import type { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
 import type { SessionRunnerModel } from "./runner/model.js"
+import { SessionRunnerRetry } from "./runner/retry.js"
 import { SessionSchema } from "./schema.js"
 import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
@@ -40,7 +51,7 @@ const SUMMARY_TEMPLATE = `You MUST use this format for your response (you may om
 
 ## Work State
 ### Completed
-- [finished work, verified facts, or changes made; otherwise "(none)"]
+- [finished work or changes made; otherwise "(none)"]
 
 ### Active
 - [current work, partial changes, or investigation state; otherwise "(none)"]
@@ -385,6 +396,7 @@ export const layer = Layer.effect(
         messages: history.messages,
       })
       const prepared = yield* input.prepare({
+        kind: "compaction",
         scope: {
           session: context.session,
           agentID: Agent.ID.make("compaction"),
@@ -405,68 +417,105 @@ export const layer = Layer.effect(
           ],
         },
       })
-      // Ignored tool calls never enter the follow-up history or need fabricated results.
-      for (let attempt = 0; attempt < 2; attempt++) {
-        chunks.length = 0
-        providerState = undefined
-        yield* llm
-          .stream(
-            attempt === 0
-              ? prepared.request
-              : LLMRequest.update(prepared.request, {
-                  messages: [
-                    ...prepared.request.messages,
-                    Message.user(
-                      "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template.",
-                    ),
-                  ],
-                }),
-            prepared.options,
-          )
-          .pipe(
-            Stream.runForEach((event) => {
-              if (LLMEvent.is.providerError(event))
-                failure = {
-                  type: event.classification === "context-overflow" ? "provider.invalid-request" : "provider.error",
-                  message: event.message,
-                }
-              if (LLMEvent.is.textDelta(event)) {
-                chunks.push(event.text)
-                return bus.publish(SessionEvent.Compaction.Delta, {
-                  sessionID: context.session.id,
-                  text: event.text,
-                })
-              }
-              if (LLMEvent.is.stepFinish(event)) {
-                providerState =
-                  event.providerMetadata?.[
-                    context.model.model.route.providerMetadataKey ?? context.model.model.provider
-                  ]
-                const step = SessionUsage.record(event.usage, context.model.cost)
-                usage = usage ? SessionUsage.add(usage, step) : step
-              }
-              return Effect.void
-            }),
-            Effect.catchTag("AI.Error", (error) =>
-              Effect.sync(() => {
-                failure = toSessionError(error)
-              }),
+      const retry = yield* SessionRunnerRetry.policy(context.session.id)
+      // Both requests share the retry allowance; rejected output never enters the reminder request.
+      for (const request of [
+        prepared.request,
+        LLMRequest.update(prepared.request, {
+          messages: [
+            ...prepared.request.messages,
+            Message.user(
+              "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template.",
             ),
-            Effect.onInterrupt(() =>
-              recordUsage.pipe(
-                Effect.andThen(
-                  input.reason === "auto"
-                    ? failed({
-                        sessionID: context.session.id,
-                        reason: input.reason,
-                        error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
-                        inputID: input.inputID,
-                      }).pipe(Effect.asVoid)
-                    : Effect.void,
-                ),
+          ],
+        }),
+      ]) {
+        yield* Stream.suspend(() => {
+          chunks.length = 0
+          providerState = undefined
+          failure = undefined
+          return llm.stream(request, prepared.options)
+        }).pipe(
+          Stream.runForEach((event) => {
+            if (LLMEvent.is.providerError(event))
+              failure = {
+                type: event.classification === "context-overflow" ? "provider.invalid-request" : "provider.error",
+                message: event.message,
+              }
+            if (LLMEvent.is.textDelta(event)) {
+              chunks.push(event.text)
+              return bus.publish(SessionEvent.Compaction.Delta, {
+                sessionID: context.session.id,
+                text: event.text,
+              })
+            }
+            if (LLMEvent.is.stepFinish(event)) {
+              providerState =
+                event.providerMetadata?.[context.model.model.route.providerMetadataKey ?? context.model.model.provider]
+              const step = SessionUsage.record(event.usage, context.model.cost)
+              usage = usage ? SessionUsage.add(usage, step) : step
+            }
+            if (LLMEvent.is.finish(event)) {
+              if (event.reason.normalized === "length")
+                failure = { type: "compaction.failed", message: "Compaction summary reached the output token limit" }
+              if (event.reason.normalized === "content-filter")
+                failure = {
+                  type: "provider.content-filter",
+                  message: "Compaction summary was blocked by the provider",
+                }
+              if (event.reason.normalized === "unknown")
+                return Effect.fail(
+                  new AIError({
+                    reason: new InvalidProviderOutputError({
+                      message: "The provider response ended with an unknown finish reason.",
+                      classification: "incomplete-stream",
+                    }),
+                  }),
+                )
+              if (event.reason.normalized === "error")
+                return Effect.fail(
+                  new AIError({ reason: new UnknownProviderError({ message: "Compaction generation failed" }) }),
+                )
+            }
+            return Effect.void
+          }),
+          Effect.retry({
+            while: (cause) =>
+              Effect.gen(function* () {
+                if (isContextOverflowFailure(cause)) return false
+                const decision = yield* retry({
+                  cause,
+                  error: toSessionError(cause),
+                  agent: Agent.ID.make("compaction"),
+                  model: context.model.ref,
+                  hook: prepared.retry,
+                  retry: SessionRunnerRetry.isRetryable(cause),
+                })
+                if (!decision.retry) return false
+                yield* Effect.sleep(decision.delay)
+                return true
+              }),
+          }),
+          Effect.catchTag("AI.Error", (error) =>
+            Effect.sync(() => {
+              failure = toSessionError(error)
+            }),
+          ),
+          Effect.onInterrupt(() =>
+            recordUsage.pipe(
+              Effect.andThen(
+                input.reason === "auto"
+                  ? failed({
+                      sessionID: context.session.id,
+                      reason: input.reason,
+                      error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+                      inputID: input.inputID,
+                    }).pipe(Effect.asVoid)
+                  : Effect.void,
               ),
             ),
-          )
+          ),
+        )
         if (failure || hasSummarySection(chunks.join(""))) break
       }
       yield* recordUsage

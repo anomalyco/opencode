@@ -15,6 +15,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { MessageTimeline, SessionSummaryPanel } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
 import { projectForSession } from "@/shell/layout/helpers"
+import { ComposerDropzone } from "@/composer/dropzone"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
@@ -28,6 +29,7 @@ import { SessionContextTab } from "./files/session-context-tab"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
+import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 
 const SessionMobileFiles = lazy(async () => {
@@ -133,8 +135,8 @@ export function SessionScreen(props: { session: SessionModel }) {
     session,
     screen,
     timeline,
+    visible: conversationVisible,
   })
-
   useUsageExceededDialogs()
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
@@ -175,7 +177,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                           review.mobile.setTab("changes")
                           session.layout.view().terminal.close()
                         }}
-                        backgroundTasks={composer.region.state.background.tasks()}
+                        backgroundTasks={composer.requests.background.tasks()}
                       />
                     )}
                   </Show>
@@ -197,6 +199,11 @@ export function SessionScreen(props: { session: SessionModel }) {
 
   const sessionPanelContent = () => (
     <>
+      <ComposerDropzone
+        active={composer.drop.active()}
+        input={composer.drop.input()}
+        identity={session.layout.tabKey}
+      />
       <Show when={!isDesktop() && !!session.identity.params.id}>{mobileTabs()}</Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>
@@ -234,7 +241,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                 <MessageTimeline
                   hideHeader={!isDesktop()}
                   session={session}
-                  background={composer.region.state.background}
+                  background={composer.requests.background}
                   actions={composer.actions.timeline}
                   scroll={timeline.scroll}
                   onResumeScroll={timeline.actions.resume}
@@ -262,10 +269,8 @@ export function SessionScreen(props: { session: SessionModel }) {
         </Switch>
       </div>
 
-      <Show when={conversationVisible() ? session.identity.params.id : undefined} keyed>
-        {(_id) => (
-          <ActiveSessionComposerRegion model={composer} session={session} onResponseSubmit={timeline.actions.resume} />
-        )}
+      <Show when={composer.active()} keyed>
+        {(model) => <ActiveSessionComposerRegion model={model} />}
       </Show>
     </>
   )
@@ -274,10 +279,19 @@ export function SessionScreen(props: { session: SessionModel }) {
     <>
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
+          {/* Keep the control outside panel animations; the terminal's 52px header includes a 1px divider. */}
+          <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
+            <div
+              class="absolute end-3 top-0 z-30 flex items-center"
+              classList={{ "h-[51px]": sideTerminalVisible(), "h-12": !sideTerminalVisible() }}
+              data-slot="session-review-toggle"
+            >
+              <SessionReviewToggle />
+            </div>
+          </Show>
           <div
             classList={{
-              "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]":
-                true,
+              "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
               "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
                 !screen.size.active() && sidePresence.animate(),
               "transition-none": screen.size.active() || !sidePresence.animate(),
@@ -408,6 +422,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                             present={store.sideTerminalPresent}
                             animate={sidePresence.animate() || sideMotion().animateTerminal}
                             contentHeight={screen.side.terminal.contentHeight()}
+                            reserveReviewToggle={!screen.side.region.open()}
                           />
                         </div>
                       </div>

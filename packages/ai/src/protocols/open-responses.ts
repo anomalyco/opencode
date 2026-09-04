@@ -189,6 +189,7 @@ export const InputItem = Schema.Union([
     id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     name: Schema.String,
+    namespace: Schema.optional(Schema.String),
     arguments: Schema.String,
   }),
   Schema.Struct({
@@ -315,6 +316,7 @@ export const StreamItem = Schema.StructWithRest(
     id: Schema.optional(Schema.String),
     call_id: Schema.optional(Schema.String),
     name: Schema.optional(Schema.String),
+    namespace: Schema.optional(Schema.String),
     arguments: Schema.optional(Schema.String),
     encrypted_content: optionalNull(Schema.String),
   }),
@@ -433,7 +435,6 @@ export interface ParserState {
 type ReasoningSummaryStatus = "active" | "can-conclude" | "concluded"
 
 interface ReasoningStreamItem {
-  readonly open: boolean
   readonly encryptedContent: string | null | undefined
   // Keyed by the wire protocol's numeric `summary_index`. JS object keys coerce to
   // strings, but typing the map as `Record<number, ...>` documents intent
@@ -489,6 +490,7 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
     ...(id === undefined ? {} : { id }),
     call_id: part.id,
     name: part.name,
+    namespace: part.namespace,
     arguments: ProviderShared.encodeJson(part.input),
   }
 }
@@ -808,14 +810,15 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
+  const projected = ProviderShared.flattenToolRequest(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
-    ...(yield* lowerConversation(request, adapter)),
+    ...(yield* lowerConversation(projected.request, adapter)),
     ...lowerGeneration(request),
     tools:
-      request.tools.length === 0
+      projected.tools.length === 0
         ? undefined
-        : yield* Effect.forEach(request.tools, (tool) =>
+        : yield* Effect.forEach(projected.tools, (tool) =>
             lowerTool(
               adapter.name,
               tool,
@@ -920,7 +923,7 @@ const joinReasoningText = (parts: ReadonlyArray<string | undefined>) => {
   return parts.filter((part) => part !== undefined).join("\n\n")
 }
 
-const outputItemID = (state: ParserState, event: Event) =>
+const outputItemID = (state: Pick<ParserState, "outputItems">, event: Event) =>
   event.output_index === undefined ? event.item_id : (state.outputItems[event.output_index] ?? event.item_id)
 
 const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
@@ -932,7 +935,11 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
 
 // An item without an id adopts the id already open in its output slot,
 // otherwise it gets a locally minted one.
-const resolveItem = (state: ParserState, item: StreamItem, index: number | undefined): OutputItem => ({
+const resolveItem = (
+  state: Pick<ParserState, "outputItems">,
+  item: StreamItem,
+  index: number | undefined,
+): OutputItem => ({
   ...item,
   id:
     item.id ??
@@ -942,7 +949,7 @@ const resolveItem = (state: ParserState, item: StreamItem, index: number | undef
 
 // Registered output slots are authoritative for `item_id` routing, and items
 // are resolved here so everything downstream can rely on `item.id`.
-export const normalize = (state: ParserState, input: Event): NormalizedEvent => ({
+export const normalize = (state: Pick<ParserState, "outputItems">, input: Event): NormalizedEvent => ({
   ...input,
   item_id: input.item_id === undefined ? undefined : outputItemID(state, input),
   item: input.item ? resolveItem(state, input.item, input.output_index) : input.item,
@@ -950,7 +957,7 @@ export const normalize = (state: ParserState, input: Event): NormalizedEvent => 
 
 const startReasoningSummaryPart = (state: ParserState, itemID: string, index: number): StepResult => {
   const item = state.reasoningItems[itemID]
-  if (!item?.open || index === 0 || item.summaryParts[index] !== undefined) return [state, NO_EVENTS]
+  if (!item || index === 0 || item.summaryParts[index] !== undefined) return [state, NO_EVENTS]
 
   const events: LLMEvent[] = []
   const lifecycle = Object.entries(item.summaryParts)
@@ -990,7 +997,7 @@ const startReasoningSummaryPart = (state: ParserState, itemID: string, index: nu
 
 export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
-  if (!event.delta || !item?.open) return [state, NO_EVENTS]
+  if (!event.delta || !item) return [state, NO_EVENTS]
   const index = event.summary_index ?? 0
   if (item.summaryParts[index] === "concluded") return [state, NO_EVENTS]
   const [started, emitted] = startReasoningSummaryPart(state, itemID, index)
@@ -1015,7 +1022,7 @@ export const onReasoningDelta = (state: ParserState, event: Event, itemID: strin
 // as a single delta unless that summary index already streamed one.
 export const onReasoningDone = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
-  if (!item?.open || typeof event.text !== "string") return [state, NO_EVENTS]
+  if (!item || typeof event.text !== "string") return [state, NO_EVENTS]
   const index = event.summary_index ?? 0
   if (item.deltaIndexes.has(index)) return [state, NO_EVENTS]
   return onReasoningDelta(state, { ...event, delta: event.text }, itemID)
@@ -1074,7 +1081,6 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
         reasoningItems: {
           ...state.reasoningItems,
           [item.id]: {
-            open: true,
             encryptedContent: item.encrypted_content,
             summaryParts: { 0: "active" },
             deltaIndexes: new Set(),
@@ -1096,11 +1102,20 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
       tools: ToolStream.start(state.tools, item.id, {
         id: item.call_id,
         name: item.name ?? "",
+        namespace: item.namespace,
         input: item.arguments ?? "",
         providerMetadata: metadata,
       }),
     },
-    [...events, LLMEvent.toolInputStart({ id: item.call_id, name: item.name ?? "", providerMetadata: metadata })],
+    [
+      ...events,
+      LLMEvent.toolInputStart({
+        id: item.call_id,
+        name: item.name ?? "",
+        namespace: item.namespace,
+        providerMetadata: metadata,
+      }),
+    ],
   ]
 }
 
@@ -1112,7 +1127,7 @@ const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResu
 const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResult => {
   if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
   const item = state.reasoningItems[event.item_id]
-  if (!item?.open) return [state, NO_EVENTS]
+  if (!item) return [state, NO_EVENTS]
   if (item.summaryParts[event.summary_index] !== "active") return [state, NO_EVENTS]
   return [
     {
@@ -1219,7 +1234,12 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     const registered = state.tools[item.id] !== undefined
     const tools = registered
       ? state.tools
-      : ToolStream.start(state.tools, item.id, { id: item.call_id, name: item.name, providerMetadata: metadata })
+      : ToolStream.start(state.tools, item.id, {
+          id: item.call_id,
+          name: item.name,
+          namespace: item.namespace,
+          providerMetadata: metadata,
+        })
     const result =
       item.arguments === undefined
         ? yield* ToolStream.finish(state.id, tools, item.id)
@@ -1230,7 +1250,15 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     const resultEvents =
       registered || finished.length === 0
         ? finished
-        : [LLMEvent.toolInputStart({ id: item.call_id, name: item.name, providerMetadata: metadata }), ...finished]
+        : [
+            LLMEvent.toolInputStart({
+              id: item.call_id,
+              name: item.name,
+              namespace: item.namespace,
+              providerMetadata: metadata,
+            }),
+            ...finished,
+          ]
     const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
     events.push(...resultEvents)
     return [
@@ -1247,7 +1275,6 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   }
 
   if (item.type === "reasoning") {
-    if (state.reasoningItems[item.id]?.open === false) return [state, NO_EVENTS] satisfies StepResult
     const metadata = reasoningMetadata(state, item)
     const summaryParts: ReadonlyArray<unknown> = Array.isArray(item.summary) ? item.summary : []
     const summary: Array<string | undefined> = []
@@ -1274,53 +1301,14 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
         const finalText = fragments.length === 1 ? itemText : summary[Number(index)]
         lifecycle = Lifecycle.reasoningEnd(lifecycle, events, `${item.id}:${index}`, metadata, finalText || undefined)
       }
-      return [
-        {
-          ...state,
-          lifecycle,
-          reasoningItems: {
-            ...state.reasoningItems,
-            [item.id]: {
-              ...reasoningItem,
-              open: false,
-              encryptedContent: item.encrypted_content ?? reasoningItem.encryptedContent,
-            },
-          },
-        },
-        events,
-      ] satisfies StepResult
+      const reasoningItems = { ...state.reasoningItems }
+      delete reasoningItems[item.id]
+      return [{ ...state, lifecycle, reasoningItems }, events] satisfies StepResult
     }
-    if (!state.lifecycle.reasoning.has(item.id)) {
-      const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
-      events.push(LLMEvent.reasoningStart({ id: item.id, providerMetadata: metadata }))
-      events.push(
-        LLMEvent.reasoningEnd({
-          id: item.id,
-          providerMetadata: metadata,
-          text: itemText,
-        }),
-      )
-      return [
-        {
-          ...state,
-          lifecycle,
-          reasoningItems: {
-            ...state.reasoningItems,
-            [item.id]: {
-              open: false,
-              encryptedContent: item.encrypted_content,
-              summaryParts: { 0: "concluded" },
-              deltaIndexes: new Set(),
-            },
-          },
-        },
-        events,
-      ] satisfies StepResult
-    }
-    return [
-      { ...state, lifecycle: Lifecycle.reasoningEnd(state.lifecycle, events, item.id, metadata) },
-      events,
-    ] satisfies StepResult
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    events.push(LLMEvent.reasoningStart({ id: item.id, providerMetadata: metadata }))
+    events.push(LLMEvent.reasoningEnd({ id: item.id, providerMetadata: metadata, text: itemText }))
+    return [{ ...state, lifecycle }, events] satisfies StepResult
   }
 
   return [state, NO_EVENTS] satisfies StepResult

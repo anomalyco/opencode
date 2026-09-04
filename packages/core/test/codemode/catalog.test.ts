@@ -122,8 +122,8 @@ describe("CodeModeInstructions.render", () => {
     expect(instructions).toContain(`  - ${lookup.signature} // Look up an order by ID`)
     expect(instructions).not.toContain("## Search")
     expect(instructions).toContain("The Code Mode tool catalog below is complete.")
-    expect(instructions).toContain("This catalog is the complete set of tools available within Code Mode.")
-    expect(instructions).not.toContain("surrounding top-level agent tools")
+    expect(instructions).toContain("This catalog is the complete set of tools callable inside `execute`.")
+    expect(instructions).toContain("It does not affect tools exposed directly outside Code Mode.")
   })
 
   test("adds search guidance when the catalog exceeds the budget", () => {
@@ -133,9 +133,9 @@ describe("CodeModeInstructions.render", () => {
     expect(partial).toContain("## Search")
     expect(partial).toContain("The Code Mode tool catalog below is partial.")
     expect(partial).toContain(
-      "The Code Mode catalog and `search` results are the complete set of tools available within Code Mode.",
+      "The Code Mode catalog and `search` results are the complete set of tools callable inside `execute`.",
     )
-    expect(partial).not.toContain("surrounding top-level agent tools")
+    expect(partial).toContain("It does not affect tools exposed directly outside Code Mode.")
     expect(partial).toContain("- search(input: {")
     expect(partial).toContain("  /** @integer @exclusiveMinimum 0 */\n  limit?: number,")
     expect(partial).toContain("  /** @integer @minimum 0 */\n  offset?: number,")

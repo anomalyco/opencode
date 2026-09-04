@@ -48,7 +48,6 @@ import { useConnected } from "../use-connected"
 import { useToast } from "../../ui/toast"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
-import { useArgs } from "../../context/args"
 import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
 import { resolvePastedAttachments } from "./local-attachment"
@@ -190,7 +189,6 @@ export function Prompt(props: PromptProps) {
   const leader = Keymap.useLeaderActive()
   const muted = () => leader() || props.muted
   const local = useLocal()
-  const args = useArgs()
   const paths = useTuiPaths()
   const terminalEnvironment = useTuiTerminalEnvironment()
   const clipboard = useClipboard()
@@ -411,18 +409,6 @@ export function Prompt(props: PromptProps) {
       { defer: true },
     ),
   )
-
-  // Initialize agent/model/variant from the durable V2 Session state.
-  let syncedSessionID: string | undefined
-  createEffect(() => {
-    const sessionID = props.sessionID
-    if (!sessionID || sessionID === syncedSessionID || !local.model.ready) return
-    const session = data.session.get(sessionID)
-    if (!session) return
-    const agent = session.agent && local.agent.list().find((agent) => agent.id === session.agent)
-    if (agent && !args.agent) local.agent.set(agent.id)
-    syncedSessionID = sessionID
-  })
 
   const promptCommands = createMemo(() =>
     [
@@ -1265,6 +1251,23 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
+    const prepareAgent = async () => {
+      if (!session) {
+        await data.session.sync(target)
+        session = data.session.get(target)
+      }
+      if (session?.agent !== agent.id) {
+        await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
+      }
+    }
+    const commitModel = () => {
+      const model = { providerID: selection.providerID, id: selection.modelID, variant }
+      const cancelCommit = local.model.trackSessionCommit(target, model, agent.id)
+      return client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
+        cancelCommit()
+        throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
+      })
+    }
     history.append(entry)
     const dispatch = (send: () => Promise<unknown>) => {
       const setup = newSession
@@ -1276,8 +1279,12 @@ export function Prompt(props: PromptProps) {
       dispatch(() => client.api.session.shell({ sessionID: target, command: inputText }))
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
-      const send = () =>
-        client.api.session.command({
+      const send = async () => {
+        await prepareAgent()
+        // Commands inherit the composer selection; command-specific overrides
+        // remain server-owned and run after this preparation.
+        await commitModel()
+        return client.api.session.command({
           sessionID: target,
           command: slashHead.name,
           text: slashHead.arguments,
@@ -1286,6 +1293,7 @@ export function Prompt(props: PromptProps) {
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
         })
+      }
       const setup = newSession
       void (setup ? setup.gate.then(send) : send()).catch((error) => {
         if (setup) return setup.recover(error)
@@ -1298,19 +1306,12 @@ export function Prompt(props: PromptProps) {
     } else {
       move.startSubmit()
       try {
-        if (!session) {
-          await data.session.sync(target)
-          session = data.session.get(target)
-        }
-        if (session?.agent !== agent.id) {
-          await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
-        }
+        await prepareAgent()
       } catch (error) {
         toast.show({ title: "Failed to prepare session", message: errorMessage(error), variant: "error" })
         restoreEntry()
         return true
       }
-      const model = { providerID: selection.providerID, id: selection.modelID, variant }
       if (session?.revert) {
         const error = await client.api.session.revert.commit({ sessionID: target }).then(
           () => undefined,
@@ -1359,16 +1360,10 @@ export function Prompt(props: PromptProps) {
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
           gate: newSession?.gate,
-          prepare: () => {
-            // Commit the captured selection after earlier admissions, including
-            // compaction setup. Cached state may still precede their SSE echoes;
-            // the server makes an unchanged selection a no-op.
-            const cancelCommit = local.model.trackSessionCommit(target, model)
-            return client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
-              cancelCommit()
-              throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
-            })
-          },
+          // Commit the captured selection after earlier admissions, including
+          // compaction setup. Cached state may still precede their SSE echoes;
+          // the server makes an unchanged selection a no-op.
+          prepare: commitModel,
         })
         .catch((error) => {
           if (newSession) return newSession.recover(error)

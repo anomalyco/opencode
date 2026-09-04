@@ -38,6 +38,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       messages: history.messages,
     })
     const prepared = yield* context.prepare({
+      kind: "generate",
       scope: { session: selection.session, agentID: selection.agent.id, model, tools: selection.tools },
       transcript: {
         system: transcript.system,

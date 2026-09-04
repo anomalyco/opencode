@@ -591,7 +591,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
                     ? theme.background.action.primary.focused
                     : theme.background.action.primary.default
                 }
-                onMouseOver={() => setStore("selected", option)}
+                onMouseMove={() => setStore("selected", option)}
                 onMouseUp={() => {
                   setStore("selected", option)
                   props.onSelect(option)

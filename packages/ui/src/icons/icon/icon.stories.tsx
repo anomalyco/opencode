@@ -5,6 +5,7 @@ const names = [
   "archive",
   "arrow-left",
   "arrow-right",
+  "arrow-up-right",
   "branch",
   "check",
   "chevron-down",

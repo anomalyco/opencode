@@ -15,13 +15,7 @@ describe("tool history normalization", () => {
       Message.assistant(toolCall("trailing")),
     ])
 
-    expect(normalized.map((message) => message.role)).toEqual([
-      "assistant",
-      "tool",
-      "tool",
-      "user",
-      "assistant",
-    ])
+    expect(normalized.map((message) => message.role)).toEqual(["assistant", "tool", "tool", "user", "assistant"])
     expect(normalized[1]?.content[0]).toMatchObject({ type: "tool-result", id: "first", name: "first" })
     expect(normalized[2]?.content).toEqual([
       { type: "tool-result", id: "second", name: "second", result: { type: "error", value: "Tool result missing" } },
@@ -73,5 +67,14 @@ describe("tool history normalization", () => {
     const orphan = toolResult("orphan", "ignored", "orphan", "text")
 
     expect(normalizeToolHistory([orphan, hosted])).toEqual([orphan, hosted])
+  })
+
+  test("uses a matching call as the complete tool identity", () => {
+    const normalized = normalizeToolHistory([
+      Message.assistant(ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })),
+      Message.tool(ToolResultPart.make({ id: "call_1", name: "wrong", namespace: "stale", result: "done" })),
+    ])
+
+    expect(normalized[1]?.content[0]).toMatchObject({ name: "lookup", namespace: undefined })
   })
 })

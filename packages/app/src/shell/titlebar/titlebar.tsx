@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, Match, Show, Switch, untrack } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
-import { Portal } from "solid-js/web"
+import { Dynamic, Portal } from "solid-js/web"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -26,17 +26,20 @@ import "./titlebar.css"
 import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
 import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
 import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
-import { sessionLabel } from "@/session/title"
+import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 import { projectForSession } from "@/shell/layout/helpers"
 import { useSettingsDialog } from "@/settings/command"
+import devIcon from "../../../../desktop/icons/dev/64x64.png"
+import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
 const titlebarHeight = 36
 const windowsTitlebarHeight = 44 // Includes the content inset; matches the native Windows overlay.
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
-const macTrafficLightsBaseWidth = 84
+// Native controls: 14px left inset, two 20px button pitches, and a 14px button.
+const macTrafficLightsBaseWidth = 68
 const macTrafficLightsTopClearance = 28
 
 export type TitlebarUpdate = {
@@ -348,13 +351,19 @@ export function Titlebar(props: {
                   type="button"
                   data-action="vertical-tabs-home"
                   data-state={layout.route().type === "home" ? "pressed" : undefined}
-                  class="mb-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base"
+                  class="group mb-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base"
                   onClick={toggleHome}
                   aria-label={language.t("home.title")}
                   aria-pressed={layout.route().type === "home"}
                 >
                   <Icon name="grid-plus" />
-                  {language.t("home.title")}
+                  <span class="min-w-0 truncate">{language.t("home.title")}</span>
+                  <span
+                    class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                  >
+                    <bdi dir="ltr">{command.keybind("home.toggle")}</bdi>
+                  </span>
                 </button>
               </Show>
             )
@@ -413,9 +422,12 @@ export function Titlebar(props: {
             const currentTitle = () => {
               const tab = currentTab()
               if (!tab) return language.t("home.title")
-              if (tab.type === "draft") return language.t("command.session.new")
+              if (tab.type === "draft") return language.t("session.tab.session")
               const value = session()
-              return value ? sessionLabel(value) : (tabs.info[tabKey(tab)]?.title ?? language.t("command.session.new"))
+              return sessionTabTitle(
+                value ? value.title : tabs.info[tabKey(tab)]?.title,
+                language.t("session.tab.session"),
+              )
             }
             createEffect(() => {
               path()
@@ -425,16 +437,17 @@ export function Titlebar(props: {
 
             return (
               <div
-                class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pr-3"
+                class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pe-3"
                 classList={{
                   "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows(),
                   "pb-[max(0px,calc(8px-env(safe-area-inset-bottom,0px)))]": bottom(),
-                  "md:pl-2": macTrafficLights(),
-                  "md:pl-4": !macTrafficLights(),
+                  "pl-4": macTrafficLights(),
+                  // Center the 20px app icon over the sidebar's 16px icon column.
+                  "ps-3.5": windows(),
                 }}
               >
                 <Show when={!mobile() && (!props.verticalTabs || windows())}>
-                  <ChannelIndicator debugTools={props.debugTools} />
+                  <ChannelIndicator horizontal debugTools={props.debugTools} />
                 </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
@@ -497,7 +510,7 @@ export function Titlebar(props: {
                             </span>
                           )}
                         </Show>
-                        <span dir="auto" class="min-w-0 flex-1 truncate text-start">
+                        <span data-slot="mobile-tab-title" dir="auto" class="min-w-0 flex-1 truncate text-start">
                           {currentTitle()}
                         </span>
                         <span class="shrink-0 text-v2-text-text-muted">{tabsStore.length}</span>
@@ -625,33 +638,30 @@ export function Titlebar(props: {
                           >
                             <Show when={macVerticalTabs()}>
                               <div
-                                class="relative mb-2 w-full shrink-0"
+                                class="mb-4 min-h-7 w-full shrink-0"
                                 style={{ height: `${macTrafficLightsTopClearance / zoom()}px` }}
                                 data-tauri-drag-region
-                              >
-                                <div
-                                  class="absolute -top-0.5 bottom-0.5 flex items-center"
-                                  style={{
-                                    // Native traffic lights stay on the physical left; subtract the sidebar padding.
-                                    left: macTrafficLights()
-                                      ? `calc(${macTrafficLightsBaseWidth / zoom()}px - 0.625rem)`
-                                      : "0px",
-                                  }}
-                                >
-                                  <ChannelIndicator debugTools={props.debugTools} />
-                                </div>
-                              </div>
+                              />
+                            </Show>
+                            <Show when={!windows()}>
+                              <ChannelIndicator sidebar debugTools={props.debugTools} />
                             </Show>
                             {homeButton(true)}
                             <button
                               type="button"
                               data-action="vertical-tabs-new-session"
-                              class="flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
+                              class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
                               onClick={openNewTab}
                               aria-label={language.t("command.session.new")}
                             >
                               <Icon name="edit" />
-                              {language.t("command.session.new")}
+                              <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
+                              <span
+                                class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                                aria-hidden="true"
+                              >
+                                <bdi dir="ltr">{command.keybind("tab.new")}</bdi>
+                              </span>
                             </button>
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />
                             <div class="flex min-h-0 flex-1 flex-col gap-1">
@@ -670,14 +680,20 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <div
-                              data-slot="vertical-tabs-footer"
-                              class="mt-auto flex h-9 w-full shrink-0 items-center gap-1.5"
+                            <button
+                              type="button"
+                              data-action="vertical-tabs-settings"
+                              data-state={layout.route().type === "settings" ? "pressed" : undefined}
+                              class="mt-2 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02 [app-region:no-drag]"
+                              onClick={openSettings}
+                              aria-label={language.t("sidebar.settings")}
+                              aria-pressed={layout.route().type === "settings"}
                             >
+                              <Icon name="settings-gear" />
+                              {language.t("sidebar.settings")}
+                            </button>
+                            <div data-slot="vertical-tabs-footer" class="flex w-full shrink-0 items-center gap-1.5">
                               <TitlebarRightMount />
-                              <Show when={!macVerticalTabs() && !windows()}>
-                                <ChannelIndicator debugTools={props.debugTools} />
-                              </Show>
                             </div>
                           </Portal>
                         )}
@@ -753,45 +769,47 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   )
 }
 
-function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void } }) {
+function ChannelIndicator(props: {
+  horizontal?: boolean
+  sidebar?: boolean
+  debugTools?: { visible: boolean; toggle: () => void }
+}) {
+  const language = useLanguage()
   const platform = usePlatform()
-  const windows = () => platform.platform === "desktop" && platform.os === "windows"
-  const classes = () => ({
-    "px-2 rounded-sm": windows(),
-    "inline-flex h-4 shrink-0 items-center leading-4 px-1.5 rounded-full": !windows(),
-  })
-  const style = () => ({
-    "font-size": windows() ? undefined : platform.platform === "desktop" && platform.os === "macos" ? "9px" : "10px",
-  })
   const channel = import.meta.env.VITE_OPENCODE_CHANNEL
-  if (channel === "dev" && props.debugTools) {
-    return (
-      <button
-        type="button"
-        class="bg-icon-interactive-base text-[#FFF] font-medium uppercase font-mono cursor-pointer [app-region:no-drag]"
-        classList={classes()}
-        style={style()}
-        onClick={props.debugTools.toggle}
-        aria-label="Toggle debug tools"
-        aria-pressed={props.debugTools.visible}
-      >
-        DEV
-      </button>
-    )
-  }
+  if (!channel || channel === "prod") return null
 
-  const label = channel && ["local", "beta", "dev"].includes(channel) ? channel.toUpperCase() : undefined
+  const label = () => language.t(`titlebar.channel.${channel}`)
+  const debug = () => (channel === "dev" ? props.debugTools : undefined)
   return (
-    <Show when={label}>
-      {(value) => (
-        <div
-          class="bg-icon-interactive-base text-[#FFF] font-medium uppercase font-mono"
-          classList={classes()}
-          style={style()}
-        >
-          {value()}
-        </div>
-      )}
-    </Show>
+    <Tooltip
+      placement={props.sidebar ? "right" : "bottom"}
+      value={label()}
+      class={`shrink-0 [app-region:no-drag] ${props.sidebar ? "mb-4 ms-0.5 self-start" : ""} ${props.horizontal ? "me-1.5" : ""} ${props.horizontal && platform.platform === "web" ? "ps-2.5" : ""}`}
+    >
+      <Dynamic
+        component={debug() ? "button" : "div"}
+        type={debug() ? "button" : undefined}
+        data-slot="channel-indicator"
+        class="flex h-7 shrink-0 items-center rounded-[6px] [app-region:no-drag]"
+        classList={{
+          "w-6": props.sidebar,
+          "w-5": !props.sidebar,
+          "cursor-pointer hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02":
+            !!debug(),
+        }}
+        onClick={() => debug()?.toggle()}
+        aria-label={debug() ? language.t("titlebar.toggleDebugTools") : undefined}
+        aria-pressed={debug()?.visible}
+      >
+        <img
+          src={channel === "beta" ? betaIcon : devIcon}
+          alt={debug() ? "" : label()}
+          class="shrink-0 rounded-[4px] shadow-[var(--v2-elevation-raised)]"
+          classList={{ "size-6": props.sidebar, "size-5": !props.sidebar }}
+          draggable={false}
+        />
+      </Dynamic>
+    </Tooltip>
   )
 }

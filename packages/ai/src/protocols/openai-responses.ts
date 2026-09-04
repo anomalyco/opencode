@@ -5,7 +5,7 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import type { LLMRequest, JsonSchema, ToolDefinition } from "../schema/index.js"
+import { LLMRequest, mergeJsonRecords, type JsonSchema, type ToolDefinition, type ToolEntry } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
@@ -13,6 +13,7 @@ import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
 import { ResponsesCompaction } from "./utils/responses-compaction.js"
+import { ResponsesCheckpoint } from "./utils/responses-checkpoint.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -75,7 +76,18 @@ const OpenAIResponsesHostedToolItem = Schema.Union([
   ),
 ])
 
-const OpenAIResponsesTools = Schema.Union([OpenResponses.Tool, OpenAIResponsesImageGenerationTool])
+const OpenAIResponsesNamespace = Schema.Struct({
+  type: Schema.tag("namespace"),
+  name: Schema.String,
+  description: Schema.String,
+  tools: Schema.Array(OpenResponses.Tool),
+})
+
+const OpenAIResponsesTools = Schema.Union([
+  OpenResponses.Tool,
+  OpenAIResponsesNamespace,
+  OpenAIResponsesImageGenerationTool,
+])
 
 const OpenAIResponsesToolChoice = Schema.Union([
   OpenResponses.ToolChoice,
@@ -103,6 +115,18 @@ const OpenAIResponsesBody = Schema.Struct({
 })
 export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
+/** Request control, never conversation content. */
+export const CompactionTrigger = Schema.Struct({ type: Schema.Literal("compaction_trigger") })
+const CheckpointBody = Schema.Struct({
+  ...OpenAIResponsesBody.fields,
+  input: Schema.Array(Schema.Union([OpenResponses.InputItem, OpenAIResponsesHostedToolItem, CompactionTrigger])),
+  store: Schema.Literal(false),
+  prompt_cache_retention: optionalNull(Schema.String),
+  prompt_cache_options: optionalNull(
+    Schema.Struct({ mode: Schema.optional(Schema.String), ttl: Schema.optional(Schema.String) }),
+  ),
+})
+
 const adapter = {
   id: ADAPTER,
   name: NAME,
@@ -128,13 +152,33 @@ const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDe
   return yield* OpenResponses.lowerTool(NAME, tool, inputSchema)
 })
 
-const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolDefinition>) =>
+// Native namespaces hold only function tools, so deeper levels flatten into
+// the leaf names the same way non-native protocols flatten the whole tree.
+const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (
+  tool: ToolEntry,
+  compatibility: Parameters<typeof ToolSchemaProjection.modelCompatibility>[1],
+) {
+  if (tool.type === "tool")
+    return yield* lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility))
+  // OpenAI requires a namespace description; fall back to a generic one so a
+  // missing description never blocks the request.
+  return {
+    type: "namespace" as const,
+    name: tool.name,
+    description: tool.description ?? `Tools in the ${tool.name} namespace.`,
+    tools: yield* Effect.forEach(ProviderShared.flattenTools(tool.tools), (leaf) =>
+      OpenResponses.lowerTool(NAME, leaf, ToolSchemaProjection.modelCompatibility(leaf.inputSchema, compatibility)),
+    ),
+  }
+})
+
+const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolEntry>) =>
   ProviderShared.matchToolChoice(NAME, toolChoice, {
     auto: () => "auto" as const,
     none: () => "none" as const,
     required: () => "required" as const,
     tool: (name) =>
-      tools.some((tool) => tool.name === name && nativeImageTool(tool) !== undefined)
+      tools.some((tool) => tool.type === "tool" && tool.name === name && nativeImageTool(tool) !== undefined)
         ? ({ type: "image_generation" } as const)
         : { type: "function" as const, name },
   })
@@ -153,14 +197,41 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     tools:
       request.tools.length === 0
         ? undefined
-        : yield* Effect.forEach(request.tools, (tool) =>
-            lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
-          ),
+        : yield* Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, toolSchemaCompatibility)),
     tool_choice:
       OpenResponses.allowedToolChoice(request) ??
       (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
   })
 })
+
+const checkpointBody = {
+  schema: CheckpointBody,
+  from: Effect.fn("OpenAIResponses.checkpointBody")(function* (request: LLMRequest) {
+    const native = yield* fromRequest(LLMRequest.update(request, { toolChoice: undefined }))
+    const overlay = request.http?.body
+    // Complete history is required for stateless replay and SSE recovery. Raw input overrides bypass that contract.
+    if (
+      overlay?.input !== undefined ||
+      overlay?.previous_response_id !== undefined ||
+      overlay?.conversation !== undefined
+    )
+      return yield* ProviderShared.invalidRequest(
+        "Trigger compaction requires complete canonical history, not an input or continuation override",
+      )
+    return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(CheckpointBody))({
+      ...mergeJsonRecords(native, overlay),
+      input: [...native.input, { type: "compaction_trigger" }],
+      stream: true,
+      store: false,
+      parallel_tool_calls: true,
+      tool_choice: undefined,
+      context_management: undefined,
+      text: undefined,
+      max_output_tokens: undefined,
+      max_tool_calls: undefined,
+    })
+  }),
+}
 
 const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: ResponsesHostedTools.Item) {
   const isError = item.error !== undefined && item.error !== null
@@ -239,7 +310,7 @@ export const transport = channelTransport({
 })
 
 export const route = Route.make({
-  compact: ResponsesCompaction.make(adapter),
+  compact: { endpoint: ResponsesCompaction.make(adapter), trigger: ResponsesCheckpoint.make(checkpointBody) },
   id: ADAPTER,
   provider: "openai",
   providerMetadataKey: "openai",
