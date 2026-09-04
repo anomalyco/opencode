@@ -37,17 +37,11 @@ Manual compaction is available through session interfaces. See the generated [AP
 operation.
 
 A manual request is durably admitted and wakes the session runner. It can
-compact short histories that would not trigger automatic compaction.
-
-- By default, compaction takes priority over pending steering messages at the
-  next safe step boundary, even if those messages were submitted first. It never
-  interrupts an active model response or tool operation.
-- Pending steers remain outside the checkpoint and are delivered afterward in
-  their original order. Compaction does not cross an earlier session move in
-  the same delivery lane.
-- Explicit `delivery: "queue"` retains idle-boundary scheduling, after steers.
-- Repeated requests while one is pending coalesce into that request. Completed
-  or failed compaction settles the barrier so pending prompts can proceed.
+compact short histories that would not trigger automatic compaction. By default,
+compaction runs at the next safe step boundary before pending steered or queued
+prompts, even if they were submitted first. Repeated requests while one is pending
+coalesce into that pending request. Whether compaction completes or fails, the
+barrier is then settled so pending prompts can proceed.
 
 The server operation returns the admitted compaction input; it does not wait
 for summary generation. Clients can then wait for the session or follow the

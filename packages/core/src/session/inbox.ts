@@ -409,19 +409,17 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
   sessionID: SessionSchema.ID,
   promotable: Promotable,
 ) {
-  const next = (delivery: Delivery) =>
-    db
-      .select()
-      .from(SessionInboxTable)
-      .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, delivery)))
-      .orderBy(asc(SessionInboxTable.enqueued_seq))
-      .limit(1)
-      .get()
-      .pipe(Effect.orDie)
   const steer = (yield* pendingSteers(db, sessionID))[0]
   if (steer) return fromRow(steer)
   if (promotable !== "input") return undefined
-  const queued = yield* next("queue")
+  const queued = yield* db
+    .select()
+    .from(SessionInboxTable)
+    .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "queue")))
+    .orderBy(asc(SessionInboxTable.enqueued_seq))
+    .limit(1)
+    .get()
+    .pipe(Effect.orDie)
   return queued ? fromRow(queued) : undefined
 })
 
