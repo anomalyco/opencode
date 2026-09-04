@@ -103,7 +103,6 @@ export interface Strategy {
 export const Event = Worktree.Event
 
 interface StoredInput {
-  readonly projectID: ProjectSchema.ID
   readonly directory: AbsolutePath
   readonly strategy?: string
   readonly replace?: boolean
@@ -178,13 +177,13 @@ const layer = Layer.effect(
       }),
     })
 
-    const changed = Effect.fnUntraced(function* (projectID: ProjectSchema.ID, update: boolean) {
+    const changed = Effect.fnUntraced(function* (update: boolean) {
       if (update) yield* bus.publish(Event.Updated, { projectID })
     })
 
     const ops = {
       list: (projectID: ProjectSchema.ID) => list(projectID).pipe(Effect.provideService(Database.Service, database)),
-      find: Effect.fnUntraced(function* (projectID: ProjectSchema.ID, directory: AbsolutePath) {
+      find: Effect.fnUntraced(function* (directory: AbsolutePath) {
         const row = yield* db
           .select({ directory: WorktreeTable.directory, strategy: WorktreeTable.strategy })
           .from(WorktreeTable)
@@ -197,7 +196,7 @@ const layer = Layer.effect(
         (tx ?? db)
           .insert(WorktreeTable)
           .values({
-            project_id: input.projectID,
+            project_id: projectID,
             directory: input.directory,
             strategy: input.strategy,
           })
@@ -215,7 +214,7 @@ const layer = Layer.effect(
             Effect.orDie,
             Effect.map((row) => row !== undefined),
           ),
-      remove: (projectID: ProjectSchema.ID, directory: AbsolutePath, tx?: Transaction) =>
+      remove: (directory: AbsolutePath, tx?: Transaction) =>
         (tx ?? db)
           .delete(WorktreeTable)
           .where(and(eq(WorktreeTable.project_id, projectID), eq(WorktreeTable.directory, directory)))
@@ -230,7 +229,7 @@ const layer = Layer.effect(
     const source = Effect.fnUntraced(function* (input: AbsolutePath | undefined) {
       const sourceDirectory = input ?? location.project.directory
       const resolved = yield* canonical(fs, sourceDirectory)
-      if ((yield* ops.find(projectID, resolved)) === undefined)
+      if ((yield* ops.find(resolved)) === undefined)
         return yield* new SourceDirectoryNotFoundError({ projectID, directory: resolved })
       return resolved
     })
@@ -268,9 +267,7 @@ const layer = Layer.effect(
       if (result.directory !== (yield* canonical(fs, worktreeDirectory)))
         return yield* new InvalidDirectoryError({ directory: result.directory })
       yield* changed(
-        projectID,
         yield* ops.create({
-          projectID,
           directory: result.directory,
           strategy: selected.id,
           replace: true,
@@ -306,7 +303,7 @@ const layer = Layer.effect(
     const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
       yield* local
       const worktreeDirectory = yield* canonical(fs, input.directory)
-      const stored = yield* ops.find(projectID, worktreeDirectory)
+      const stored = yield* ops.find(worktreeDirectory)
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
       const strategy = yield* getStrategy(StrategyID.make(stored.strategy), state.get().strategies)
       yield* strategy
@@ -315,7 +312,7 @@ const layer = Layer.effect(
           force: input.force,
         })
         .pipe(Effect.mapError((error) => operationError(strategy.id, "remove", error)))
-      yield* changed(projectID, yield* ops.remove(projectID, worktreeDirectory))
+      yield* changed(yield* ops.remove(worktreeDirectory))
     })
 
     const refresh = Effect.fn("Worktree.refresh")(function* () {
@@ -341,7 +338,6 @@ const layer = Layer.effect(
             )
             if (!directory || discovered.has(directory)) continue
             discovered.set(directory, {
-              projectID,
               directory,
               strategy: entry.type === "worktree" ? strategy.id : undefined,
             })
@@ -355,11 +351,11 @@ const layer = Layer.effect(
             updated: Effect.filter(Array.from(discovered.values()), (item) => ops.create(item, tx)).pipe(
               Effect.map((items) => items.map((item) => item.directory)),
             ),
-            removed: Effect.filter(removed, (directory) => ops.remove(projectID, directory, tx)),
+            removed: Effect.filter(removed, (directory) => ops.remove(directory, tx)),
           }),
         )
         .pipe(Effect.orDie)
-      yield* changed(projectID, changes.updated.length > 0 || changes.removed.length > 0)
+      yield* changed(changes.updated.length > 0 || changes.removed.length > 0)
       return changes
     })
 
