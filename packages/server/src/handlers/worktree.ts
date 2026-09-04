@@ -4,7 +4,6 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Plugin } from "@opencode-ai/core/plugin"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { WorktreeError } from "@opencode-ai/protocol/groups/worktree"
 import { Effect } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
@@ -16,7 +15,6 @@ export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (han
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
     const database = yield* Database.Service
-    const fs = yield* FSUtil.Service
 
     const run = <A>(ref: Location.Ref, action: (service: Worktree.Interface) => Effect.Effect<A, Worktree.Error>) => {
       if (ref.workspaceID) return Effect.fail(new Worktree.UnsupportedLocationError({ directory: ref.directory }))
@@ -46,19 +44,9 @@ export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (han
         badRequest(
           Effect.gen(function* () {
             const request = yield* HttpServerRequest.HttpServerRequest
-            const input = { ...ctx.payload, projectID: ctx.params.projectID }
-            const explicit =
-              ctx.query.location?.directory ||
-              ctx.query.location?.workspace ||
-              request.headers["x-opencode-directory"] ||
-              request.headers["x-opencode-workspace"]
-            const ref = explicit
-              ? requestRef(request)
-              : yield* Worktree.removalLocation(input).pipe(
-                  Effect.provideService(Database.Service, database),
-                  Effect.provideService(FSUtil.Service, fs),
-                )
-            return yield* run(ref, (worktrees) => worktrees.remove(input))
+            return yield* run(requestRef(request), (worktrees) =>
+              worktrees.remove({ ...ctx.payload, projectID: ctx.params.projectID }),
+            )
           }),
         ).pipe(Effect.as(HttpApiSchema.NoContent.make())),
       )

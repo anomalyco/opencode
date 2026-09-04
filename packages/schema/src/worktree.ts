@@ -37,7 +37,6 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Directory = Schema.Struct({
   directory: AbsolutePath,
   strategy: optional(Schema.String),
-  configurationDirectory: optional(AbsolutePath),
 }).annotate({ identifier: "Worktree.Directory" })
 export interface Directory extends Schema.Schema.Type<typeof Directory> {}
 

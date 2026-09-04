@@ -15,7 +15,6 @@ import { Database } from "@opencode-ai/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
 import legacyCredentialsMigration from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
 import worktreeMigration from "@opencode-ai/core/database/migration/20260812213948_worktree"
-import worktreeConfigurationMigration from "@opencode-ai/core/database/migration/20260904183422_worktree_configuration"
 import previousV2Migration from "@opencode-ai/core/database/migration/20260804233008_loose_psylocke"
 import workspaceMigration from "@opencode-ai/core/database/migration/20260808023530_workspace_domain"
 import executionClaimsMigration from "@opencode-ai/core/database/migration/20260811161259_execution_claim_attempts"
@@ -427,29 +426,6 @@ describe("DatabaseMigration", () => {
           { directory: "/strategy", strategy: "git" },
         ])
         expect(yield* db.get(sql`SELECT count(*) AS count FROM project_directory`)).toEqual({ count: 4 })
-      }),
-    )
-  })
-
-  test("adds nullable worktree configuration provenance without changing existing owners", async () => {
-    await run(
-      Effect.gen(function* () {
-        const db = yield* makeDb
-        yield* db.run(
-          sql`CREATE TABLE worktree (project_id text NOT NULL, directory text NOT NULL, strategy text, time_created integer NOT NULL, PRIMARY KEY (project_id, directory))`,
-        )
-        yield* db.run(sql`INSERT INTO worktree VALUES ('project', '/repo', NULL, 1), ('project', '/copy', 'custom', 2)`)
-        yield* DatabaseMigration.applyOnly(db, [worktreeConfigurationMigration])
-        expect(yield* db.all(sql`SELECT * FROM worktree ORDER BY time_created`)).toEqual([
-          { project_id: "project", directory: "/repo", strategy: null, time_created: 1, configuration_directory: null },
-          {
-            project_id: "project",
-            directory: "/copy",
-            strategy: "custom",
-            time_created: 2,
-            configuration_directory: null,
-          },
-        ])
       }),
     )
   })

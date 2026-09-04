@@ -47,6 +47,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const paths = useTuiPaths()
   const shortcuts = Keymap.useShortcuts()
   const location = createMemo(() => sessionData.location.info(props.location))
+  const worktreeLocation = () => ({
+    directory: props.location?.directory ?? location()?.directory ?? paths.cwd,
+    workspace: props.location?.workspaceID ?? location()?.workspaceID,
+  })
   const [working, setWorking] = createSignal(Boolean(props.initialRemoving))
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
@@ -84,10 +88,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         await client.api.worktree
           .refresh({
             projectID,
-            location: {
-              directory: props.location?.directory ?? location()?.directory ?? paths.cwd,
-              workspace: props.location?.workspaceID ?? location()?.workspaceID,
-            },
+            location: worktreeLocation(),
           })
           .catch(() => undefined)
         const directories = await client.api.worktree.list({ projectID })
@@ -233,10 +234,14 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     setToDelete(undefined)
     setRemoving(selected.directory)
     setWorking(true)
+    const request = {
+      projectID: props.projectID,
+      directory: selected.directory,
+      location: worktreeLocation(),
+    }
     const error = await client.api.worktree
       .remove({
-        projectID: props.projectID,
-        directory: selected.directory,
+        ...request,
         force: false,
       })
       .then(
@@ -261,8 +266,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         reopen(selected.directory)
         const forcedError = await client.api.worktree
           .remove({
-            projectID: props.projectID,
-            directory: selected.directory,
+            ...request,
             force: true,
           })
           .then(

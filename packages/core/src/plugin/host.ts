@@ -31,8 +31,6 @@ import { Workspace } from "../workspace.js"
 import { Vcs } from "../vcs.js"
 import { WebSearch } from "../websearch.js"
 import { Worktree } from "../worktree.js"
-import { Database } from "../database/database.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
@@ -73,8 +71,6 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
   const worktrees = yield* Worktree.Service
-  const database = yield* Database.Service
-  const fs = yield* FSUtil.Service
   const locationInfo = () =>
     new Location.Info({
       directory: location.directory,
@@ -490,16 +486,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
       list: (input) => worktrees.list(input.projectID),
       create: (input) => atWorktree(locationRef(input), (service) => service.create(input)),
       refresh: (input) => atWorktree(locationRef(input), (service) => service.refresh(input)).pipe(Effect.asVoid),
-      remove: (input) =>
-        Effect.gen(function* () {
-          const ref =
-            locationRef(input) ??
-            (yield* Worktree.removalLocation(input).pipe(
-              Effect.provideService(Database.Service, database),
-              Effect.provideService(FSUtil.Service, fs),
-            ))
-          return yield* atWorktree(ref, (service) => service.remove(input))
-        }),
+      remove: (input) => atWorktree(locationRef(input), (service) => service.remove(input)),
       reload: worktrees.reload,
       transform: (callback) =>
         worktrees.transform((editor) =>
@@ -546,8 +533,6 @@ export const make = Effect.fn("PluginHost.make")(function* (
 })
 
 export const requirements = LayerNode.group([
-  Database.node,
-  FSUtil.node,
   App.node,
   Agent.node,
   AISDK.node,

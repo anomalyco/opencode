@@ -407,7 +407,7 @@ export type ReferenceGitSource = {
   hidden?: boolean
 }
 
-export type WorktreeDirectory = { directory: string; strategy?: string; configurationDirectory?: string }
+export type WorktreeDirectory = { directory: string; strategy?: string }
 
 export type WorktreeInfo = { directory: string }
 

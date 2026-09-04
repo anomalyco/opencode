@@ -727,7 +727,6 @@ describe("Worktree", () => {
       expect(yield* worktrees.list(input.projectID)).toContainEqual({
         directory: created.directory,
         strategy: "git",
-        configurationDirectory: input.sourceDirectory,
       })
       yield* registration.dispose
       const fallback = yield* worktrees.create({ projectID: input.projectID, name: "default" })
@@ -802,34 +801,6 @@ describe("Worktree", () => {
       const worktrees = yield* Worktree.Service
       const error = yield* worktrees.create({ projectID: Project.ID.make("different"), name: "nope" }).pipe(Effect.flip)
       expect(error).toBeInstanceOf(Worktree.ProjectMismatchError)
-    }),
-  )
-
-  it.live("keeps missing removal origins explicit and supports legacy rows without an origin", () =>
-    Effect.gen(function* () {
-      const input = yield* setup()
-      const worktrees = yield* Worktree.Service
-      const created = yield* worktrees.create({ projectID: input.projectID, name: "origin" })
-      const remove = { projectID: input.projectID, directory: created.directory, force: false }
-      expect((yield* Worktree.removalLocation(remove)).directory).toBe(input.sourceDirectory)
-      yield* input.db
-        .update(WorktreeTable)
-        .set({ configuration_directory: abs(path.join(input.root.path, "gone")) })
-        .where(eq(WorktreeTable.directory, created.directory))
-        .run()
-        .pipe(Effect.orDie)
-      expect(yield* Worktree.removalLocation(remove).pipe(Effect.flip)).toBeInstanceOf(
-        Worktree.DirectoryUnavailableError,
-      )
-      yield* input.db
-        .update(WorktreeTable)
-        .set({ configuration_directory: null })
-        .where(eq(WorktreeTable.directory, created.directory))
-        .run()
-        .pipe(Effect.orDie)
-      expect((yield* Worktree.removalLocation(remove)).directory).toBe(created.directory)
-      // An explicit location invokes its own service instead of consulting the old origin.
-      yield* worktrees.remove(remove)
     }),
   )
 

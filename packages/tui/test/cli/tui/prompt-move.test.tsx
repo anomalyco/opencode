@@ -83,6 +83,23 @@ test.each([
   }
 })
 
+test("removal uses the current configuration location, not the destination directory", async () => {
+  const fixture = await renderMove({ directory: clone, home: true })
+  try {
+    await fixture.move.open()
+    await fixture.app.waitForFrame((frame) => frame.includes("Move session") && frame.includes(linked))
+    await fixture.app.mockInput.typeText("linked")
+    await fixture.app.waitForFrame((frame) => frame.includes(linked) && !frame.includes(clone))
+    fixture.app.mockInput.pressKey("d", { ctrl: true })
+    await fixture.app.waitForFrame((frame) => frame.includes("again to confirm"))
+    fixture.app.mockInput.pressKey("d", { ctrl: true })
+    await fixture.app.waitFor(() => fixture.removals.length === 1)
+    expect(fixture.removals).toEqual([{ payload: { directory: linked, force: false }, directory: clone }])
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
 test.each([
   { name: "session", unavailable: "session" as const },
   { name: "location", unavailable: "location" as const },
@@ -112,6 +129,7 @@ async function renderMove(input: {
 }) {
   const launch = input.launch ?? (input.home ? input.directory : main)
   const requests: unknown[] = []
+  const removals: unknown[] = []
   const moves: unknown[] = []
   const reads = { session: 0, locations: [] as string[], worktrees: [] as string[] }
   const calls = createFetch(async (url, request) => {
@@ -169,6 +187,10 @@ async function renderMove(input: {
           workspace: url.searchParams.get("location[workspace]"),
         })
         return json({ directory: created })
+      }
+      if (request.method === "DELETE") {
+        removals.push({ payload: await request.json(), directory: url.searchParams.get("location[directory]") })
+        return new Response(null, { status: 204 })
       }
     }
     if (url.pathname === "/api/worktree/proj_launch/refresh" || url.pathname === "/api/worktree/proj_test/refresh")
@@ -231,6 +253,7 @@ async function renderMove(input: {
     toast,
     location,
     requests,
+    removals,
     moves,
     reads,
     async create() {

@@ -28,7 +28,7 @@ test("worktree creation can omit strategy and destination", () => {
   expect(Schema.encodeSync(Worktree.CreateInput)(value)).toEqual({ projectID: "project", name: "task" })
 })
 
-test("existing inventory rows do not require configuration provenance", () => {
+test("inventory contains only the directory and its owning strategy", () => {
   const value = Schema.decodeUnknownSync(Worktree.Directory)({ directory: "/repo/task", strategy: "git" })
   expect(Schema.encodeSync(Worktree.Directory)(value)).toEqual({ directory: "/repo/task", strategy: "git" })
 })

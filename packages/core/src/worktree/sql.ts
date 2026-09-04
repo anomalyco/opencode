@@ -12,7 +12,6 @@ export const WorktreeTable = sqliteTable(
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     directory: absoluteColumn().notNull(),
     strategy: text(),
-    configuration_directory: absoluteColumn(),
     time_created: integer()
       .notNull()
       .$default(() => Date.now()),

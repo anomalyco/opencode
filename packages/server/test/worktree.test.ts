@@ -50,7 +50,6 @@ it.live("lists, creates, and removes worktrees by project ID", () =>
     expect(listed).toContainEqual({
       directory: path.join(destination, "api"),
       strategy: "git",
-      configurationDirectory: project,
     })
 
     const removed = yield* Effect.promise(() =>
@@ -109,12 +108,23 @@ it.live(
         expect(rows).toContainEqual({
           directory: custom.directory,
           strategy: "test-copy",
-          configurationDirectory: nested,
         })
-        expect(rows).toContainEqual({ directory: builtin.directory, strategy: "git", configurationDirectory: second })
+        expect(rows).toContainEqual({ directory: builtin.directory, strategy: "git" })
 
         await Bun.write(path.join(custom.directory, "dirty.txt"), "keep me")
         const remove = new URL(`/api/worktree/${projectID}`, server.base)
+        remove.searchParams.set("location[directory]", second)
+        const unavailable = await fetch(remove, {
+          method: "DELETE",
+          headers: { ...server.headers, "content-type": "application/json" },
+          body: JSON.stringify({ directory: custom.directory, force: true }),
+        })
+        expect(unavailable.status).toBe(400)
+        expect(await unavailable.json()).toMatchObject({
+          data: { message: "Worktree strategy unavailable: test-copy" },
+        })
+        expect(await Bun.file(path.join(custom.directory, "dirty.txt")).text()).toBe("keep me")
+        remove.searchParams.set("location[directory]", nested)
         const failure = await fetch(remove, {
           method: "DELETE",
           headers: { ...server.headers, "content-type": "application/json" },
@@ -124,9 +134,18 @@ it.live(
         expect(await failure.json()).toMatchObject({ data: { forceRequired: true } })
         expect(await Bun.file(path.join(custom.directory, "dirty.txt")).text()).toBe("keep me")
 
-        // Neither caller supplies a location: removal must recover the nested plugin's origin.
-        await api.worktree.remove({ projectID, directory: custom.directory, force: true })
-        await api.worktree.remove({ projectID, directory: builtin.directory, force: false })
+        await api.worktree.remove({
+          projectID,
+          location: { directory: nested },
+          directory: custom.directory,
+          force: true,
+        })
+        await api.worktree.remove({
+          projectID,
+          location: { directory: second },
+          directory: builtin.directory,
+          force: false,
+        })
         expect((await api.worktree.list({ projectID })).filter((row) => row.strategy)).toEqual([])
       })
     }),
@@ -175,7 +194,6 @@ it.live(
         expect(await api.worktree.list({ projectID: location.project.id })).toContainEqual({
           directory: path.join(destination, "delegated"),
           strategy: "target-copy",
-          configurationDirectory: target,
         })
       })
     }),

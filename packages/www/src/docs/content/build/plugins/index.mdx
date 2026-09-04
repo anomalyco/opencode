@@ -987,7 +987,7 @@ Load the plugin through `plugins` and configure the common destination separatel
 
 #### Operations
 
-The plugin context exposes the same worktree operations as the client. Create and refresh use the plugin's current
+The plugin context exposes the same worktree operations as the client. Create, remove, and refresh use the plugin's current
 location unless overridden; `list` reads project-wide inventory without discovery.
 
 ```ts
@@ -1005,9 +1005,9 @@ Rift's native snapshot operation, for example, has no ref-selection option.
 Calls targeting another location wait for its plugins to activate. Calls in the current plugin's location during setup
 see registrations made so far and do not wait for their own activation; prefer lifecycle actions after setup completes.
 
-New inventory entries record `configurationDirectory`, so removal without a location can reload the plugin from the
-creating location even when the worktree lives elsewhere. If that directory is gone, supply another location that
-registers the recorded strategy. Older entries without provenance resolve removal from their own directory.
+Configuration is derived from the operation's location; no configuration directory is stored in the database.
+To remove a worktree through a checkout-local plugin, select a location where that plugin is configured.
+The worktree's destination can be elsewhere:
 
 ```ts
 await ctx.worktree.remove({

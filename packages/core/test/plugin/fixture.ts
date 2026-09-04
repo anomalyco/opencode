@@ -33,7 +33,6 @@ import { Tool } from "@opencode-ai/core/tool"
 import { Vcs } from "@opencode-ai/core/vcs"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { Worktree } from "@opencode-ai/core/worktree"
-import { Database } from "@opencode-ai/core/database/database"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 import { emptyMcpLayer } from "../fixture/mcp"
@@ -97,7 +96,6 @@ export const PluginTestLayer = AppNodeBuilder.build(
     Watcher.node,
     WebSearch.node,
     Worktree.node,
-    Database.node,
   ]),
   [
     Location.node.replace(tempLocationLayer),

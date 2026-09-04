@@ -117,7 +117,6 @@ interface StoredInput {
   readonly projectID: ProjectSchema.ID
   readonly directory: AbsolutePath
   readonly strategy?: string
-  readonly configurationDirectory?: AbsolutePath
   readonly replace?: boolean
 }
 
@@ -142,7 +141,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const list = Effect.fn("Worktree.list")(function* (projectID: ProjectSchema.ID) {
   const database = yield* Database.Service
   const rows = yield* database.db
-    .select()
+    .select({ directory: WorktreeTable.directory, strategy: WorktreeTable.strategy })
     .from(WorktreeTable)
     .where(eq(WorktreeTable.project_id, projectID))
     .orderBy(desc(WorktreeTable.time_created), asc(WorktreeTable.directory))
@@ -151,22 +150,7 @@ export const list = Effect.fn("Worktree.list")(function* (projectID: ProjectSche
   return rows.map((row) => ({
     directory: row.directory,
     strategy: row.strategy ?? undefined,
-    configurationDirectory: row.configuration_directory ?? undefined,
   }))
-})
-
-export const removalLocation = Effect.fn("Worktree.removalLocation")(function* (input: RemoveInput) {
-  const fs = yield* FSUtil.Service
-  const database = yield* Database.Service
-  const directory = yield* canonical(fs, input.directory)
-  const row = yield* database.db
-    .select({ configurationDirectory: WorktreeTable.configuration_directory })
-    .from(WorktreeTable)
-    .where(and(eq(WorktreeTable.project_id, input.projectID), eq(WorktreeTable.directory, directory)))
-    .get()
-    .pipe(Effect.orDie)
-  if (!row) return yield* new InvalidDirectoryError({ directory })
-  return Location.Ref.make({ directory: yield* canonical(fs, row.configurationDirectory ?? directory) })
 })
 
 const layer = Layer.effect(
@@ -228,13 +212,11 @@ const layer = Layer.effect(
             project_id: input.projectID,
             directory: input.directory,
             strategy: input.strategy,
-            configuration_directory: input.configurationDirectory,
           })
           .onConflictDoUpdate({
             target: [WorktreeTable.project_id, WorktreeTable.directory],
             set: {
               strategy: input.strategy ?? null,
-              configuration_directory: input.configurationDirectory ?? null,
             },
             // Discovery may claim an unowned row, but never replace another strategy's ownership.
             setWhere: input.replace ? undefined : input.strategy ? isNull(WorktreeTable.strategy) : sql`false`,
@@ -303,7 +285,6 @@ const layer = Layer.effect(
           projectID: input.projectID,
           directory: result.directory,
           strategy: selected.id,
-          configurationDirectory: location.directory,
           replace: true,
         }),
       )
@@ -375,7 +356,6 @@ const layer = Layer.effect(
               projectID: input.projectID,
               directory,
               strategy: entry.type === "worktree" ? strategy.id : undefined,
-              configurationDirectory: entry.type === "worktree" ? location.directory : undefined,
             })
           }
         }
