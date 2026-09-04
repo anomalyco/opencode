@@ -49,6 +49,7 @@ import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
+import { collectDeepLinkArgs } from "./deep-links"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -200,10 +201,16 @@ const main = Effect.gen(function* () {
     return
   }
 
+  const initialDeepLinks = collectDeepLinkArgs(process.argv)
+  if (initialDeepLinks.length) {
+    logger.log("deep link received via initial arguments", { urls: initialDeepLinks })
+    emitDeepLinks(initialDeepLinks)
+  }
+
   const shellEnv = preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
-    const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
+    const urls = collectDeepLinkArgs(argv)
     if (urls.length) {
       logger.log("deep link received via second-instance", { urls })
       emitDeepLinks(urls)

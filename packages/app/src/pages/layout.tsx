@@ -72,6 +72,11 @@ import {
   collectOpenProjectDeepLinks,
   deepLinkEvent,
   drainPendingDeepLinks,
+  enqueueDeepLink,
+  lastDeepLink,
+  parseDeepLink,
+  parseNewSessionDeepLink,
+  takePendingDeepLink,
 } from "./layout/deep-links"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
@@ -1249,11 +1254,11 @@ export default function LegacyLayout(props: ParentProps) {
     if (navigate) return navigateToProject(directory)
   }
 
-  const handleDeepLinks = (urls: string[]) => {
+  const handleDeepLinks = async (urls: string[]) => {
     if (!server.isLocal()) return
 
     for (const directory of collectOpenProjectDeepLinks(urls)) {
-      void openProject(directory)
+      await openProject(directory)
     }
 
     for (const link of collectNewSessionDeepLinks(urls)) {
@@ -1270,14 +1275,17 @@ export default function LegacyLayout(props: ParentProps) {
   }
 
   onMount(() => {
+    const take = (url: string) => !!parseDeepLink(url) || !!parseNewSessionDeepLink(url)
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ urls: string[] }>).detail
-      const urls = detail?.urls ?? []
-      if (urls.length === 0) return
-      handleDeepLinks(urls)
+      const selected = lastDeepLink(detail?.urls ?? [])
+      if (!selected || !take(selected)) return
+      drainPendingDeepLinks(window)
+      void enqueueDeepLink(() => handleDeepLinks([selected])).catch(() => {})
     }
 
-    handleDeepLinks(drainPendingDeepLinks(window))
+    const pending = takePendingDeepLink(window, take)
+    if (pending) void enqueueDeepLink(() => handleDeepLinks([pending])).catch(() => {})
     makeEventListener(window, deepLinkEvent, handler as EventListener)
   })
 
