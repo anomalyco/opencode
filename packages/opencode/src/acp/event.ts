@@ -92,6 +92,19 @@ export class Subscription {
 
   async handle(event: Event) {
     switch (event.type) {
+      case "todo.updated":
+        await this.input.connection.sessionUpdate({
+          sessionId: event.properties.sessionID,
+          update: {
+            sessionUpdate: "plan",
+            entries: event.properties.todos.map((todo) => ({
+              content: todo.content,
+              priority: planPriority(todo.priority),
+              status: planStatus(todo.status),
+            })),
+          },
+        })
+        return
       case "session.status":
         if (event.properties.status.type === "idle") this.idle(event.properties.sessionID)
         return
@@ -416,6 +429,19 @@ function signal() {
     resolve: () => state.resolve(),
     reject: (reason?: unknown) => state.reject(reason),
   }
+}
+
+function planPriority(value: string) {
+  if (value === "high") return "high"
+  if (value === "low") return "low"
+  return "medium"
+}
+
+function planStatus(value: string) {
+  if (value === "pending") return "pending"
+  if (value === "in_progress") return "in_progress"
+  if (value === "completed") return "completed"
+  return "pending"
 }
 
 export * as ACPEvent from "./event"
