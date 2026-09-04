@@ -432,6 +432,7 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
       const modality = mimeToModality(mime)
       if (!modality) return part
       if (model.capabilities.input[modality]) return part
+      if ((modality === "image" || modality === "pdf") && model.capabilities.attachment) return part
 
       const name = filename ? `"${filename}"` : modality
       return {
