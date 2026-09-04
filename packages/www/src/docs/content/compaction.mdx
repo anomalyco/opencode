@@ -18,18 +18,19 @@ the size of the final system prompt, messages, and advertised tools. It starts
 compaction when:
 
 ```text
-estimated tokens > context limit - max(requested output tokens, buffer)
+estimated tokens >= min(input limit - buffer, context limit - max(output reserve, buffer))
 ```
 
-The estimate is approximate: V2 JSON-serializes the request and assumes four
-characters per token. When compaction succeeds, V2 rebuilds the request from
-the new checkpoint and retries the step without promoting the input again.
+The estimate uses the latest model response's input usage plus output and newer
+content. Without usage, it estimates text, media, instructions, and tools locally.
+The output reserve is capped at 32,000 tokens; an absent input limit does not
+constrain the ceiling. Successful compaction rebuilds the request without promoting
+input again or spending another agent step.
 
 V2 also recognizes provider errors classified as context overflow. If an
 overflow occurs before the provider produces assistant output or other retry
 evidence, V2 can compact and retry that step once. This recovery is attempted
-even when `auto` is `false`; `auto` controls only the preflight size check. A
-second overflow after recovery is returned as an error.
+only when `auto` is enabled. A second overflow after recovery is returned as an error.
 
 ## Manual compaction
 
@@ -75,19 +76,20 @@ Add `compaction` to any [OpenCode configuration file](/config):
 preserves more recent detail but leaves less room for future work. Larger
 `buffer` triggers preflight compaction earlier.
 
-## Provider compaction (manual)
+## Provider compaction
 
 By default, compaction generates a local text summary. To use the selected
-provider's native compaction operation for manual requests, set a provider policy.
-An individual model's policy overrides it:
+provider's native compaction operation for automatic and manual requests, set a
+provider policy. An individual model's policy replaces the entire provider policy:
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "providers": {
     "openai": {
-      "compaction": { "mode": "provider" },
+      "compaction": { "mode": "provider", "threshold": 120000 },
       "models": {
+        "gpt-5.4-mini": { "compaction": { "mode": "provider" } },
         "gpt-4.1": { "compaction": { "mode": "local" } },
       },
     },
@@ -95,11 +97,25 @@ An individual model's policy overrides it:
 }
 ```
 
-- Automatic and overflow compaction still use local summaries. This policy only
-  changes manual compaction; it does not enable in-band provider context management.
+- `threshold` is an optional positive integer in provider mode. Omit it to use the
+  selected model's usable input ceiling above. A configured threshold is clamped
+  to that ceiling. In this example, `gpt-5.4-mini` uses its own ceiling, not 120,000.
+- With unknown context limits, a known input limit still supplies a ceiling. With
+  neither limit, automatic provider compaction requires an explicit threshold;
+  there is no universal token default. Manual compaction remains available.
+- Scheduling uses the normal safe session step boundaries, not in-band provider
+  context management. `compaction.auto: false` disables all new automatic work.
+- After installing a native checkpoint, automatic checks wait for a fresh model
+  usage anchor. Encrypted checkpoint bytes are not a meaningful token count.
 - OpenAI Responses uses a streamed compaction trigger when the route supports it.
   Endpoint-only routes use their standalone compaction endpoint. Deployment/model
-  support can vary; provider errors are returned without a retry or local fallback.
+  support can vary; native operations make one attempt without generic retries.
+- A known automatic context overflow uses local recovery over the durable original
+  history, re-expanding native checkpoints. This applies both to ordinary model
+  calls and native compaction rejection. If local recovery fails, the prior
+  checkpoint remains intact and the error surfaces. Authentication, rate limits,
+  cancellation, and other failures do not trigger local fallback. Manual native
+  compaction also surfaces errors without fallback.
 - Unsupported routes are rejected during model resolution. Configure custom
   endpoints through provider/model `settings.baseURL`, not a `model.request` hook;
   native compaction rejects endpoint rewrites by that hook.
@@ -156,7 +172,8 @@ read. See [Instructions](/instructions) for source ordering and update behavior.
 
 ## Current limitations
 
-- Compaction requires a resolvable model with a positive catalog context limit.
+- Compaction requires a resolvable model. Default local automatic scheduling needs
+  a positive catalog context limit; manual and overflow recovery do not.
   There is no separate compaction-model setting or fallback model.
 - Summary generation can fail if the summary prompt itself cannot fit beside
   its output allowance, the model returns no summary, or the provider fails.

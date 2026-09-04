@@ -17252,15 +17252,34 @@
         "additionalProperties": false
       },
       "Provider.Compaction": {
-        "type": "object",
-        "properties": {
-          "mode": {
-            "type": "string",
-            "enum": ["local", "provider"]
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["local"]
+              }
+            },
+            "required": ["mode"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["provider"]
+              },
+              "threshold": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["mode"],
+            "additionalProperties": false
           }
-        },
-        "required": ["mode"],
-        "additionalProperties": false
+        ]
       },
       "Provider.Info": {
         "type": "object",
