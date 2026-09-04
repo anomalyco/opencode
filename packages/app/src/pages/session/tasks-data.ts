@@ -158,6 +158,14 @@ export function createTasksData() {
           typeof input.subagent_type === "string" && input.subagent_type.length > 0
             ? input.subagent_type
             : undefined
+        // task.ts records the resolved model in the tool call metadata —
+        // authoritative even before the child transcript syncs any message.
+        const toolModel = meta.model as { modelID?: string; providerID?: string } | undefined
+        const stats = childId ? childStats(data, childId) : undefined
+        if (stats && !stats.model && toolModel?.modelID && toolModel?.providerID) {
+          const short = toolModel.modelID.replace(/^(anthropic|openai|google|opencode)-/i, "")
+          stats.model = `${toolModel.providerID}/${short}`
+        }
         const item: TasksItem = {
           key,
           kind: "agent",
@@ -170,7 +178,7 @@ export function createTasksData() {
           childId,
           sessionId: sid,
           nested: childId ? nested.get(childId) || undefined : undefined,
-          stats: childId ? childStats(data, childId) : undefined,
+          stats,
         }
         // A live child session outranks a stale completed part (resume via task_id reuses the id).
         if (childId && (st === "completed" || st === "error") && data.session_working(childId)) {
