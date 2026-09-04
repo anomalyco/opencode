@@ -171,3 +171,56 @@ function buildOauth(form: McpFormState) {
   if (port.value !== undefined) oauth.callback_port = port.value
   return oauth
 }
+/**
+ * Shape stored in the project config (`Config["mcp"]` entries): `enabled`
+ * instead of `disabled`, and a flat `timeout` number. The add payload uses
+ * `disabled` and a `{startup, catalog, execution}` timeout — these adapters
+ * convert losslessly in both directions (a single flat timeout maps to all
+ * three nested keys and back).
+ */
+export type StoredMcpConfig =
+  | { type: "local"; command: string[]; cwd?: string; environment?: Record<string, string>; enabled?: boolean; timeout?: number }
+  | {
+      type: "remote"
+      url: string
+      headers?: Record<string, string>
+      oauth?: { clientId?: string; clientSecret?: string; scope?: string; callbackPort?: number; redirectUri?: string } | false
+      enabled?: boolean
+      timeout?: number
+    }
+
+export function storedToPayloadConfig(stored: StoredMcpConfig): McpServerConfig {
+  const timeout = stored.timeout !== undefined ? { startup: stored.timeout, catalog: stored.timeout, execution: stored.timeout } : undefined
+  const disabled = stored.enabled === undefined ? undefined : !stored.enabled
+  if (stored.type === "local") {
+    return {
+      type: "local",
+      command: stored.command,
+      cwd: stored.cwd,
+      environment: stored.environment,
+      disabled,
+      timeout,
+    }
+  }
+  const storedOauth = stored.oauth
+  const oauth =
+    storedOauth === undefined
+      ? undefined
+      : storedOauth === false
+        ? false
+        : {
+            client_id: storedOauth.clientId,
+            client_secret: storedOauth.clientSecret,
+            scope: storedOauth.scope,
+            callback_port: storedOauth.callbackPort,
+            redirect_uri: storedOauth.redirectUri,
+          }
+  return {
+    type: "remote",
+    url: stored.url,
+    headers: stored.headers,
+    oauth,
+    disabled,
+    timeout,
+  }
+}
