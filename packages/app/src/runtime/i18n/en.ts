@@ -1045,8 +1045,8 @@ export const dict = {
   "settings.general.row.showTerminal.description": "Show the terminal button in the desktop title bar",
   "settings.general.row.showStatus.title": "Server status",
   "settings.general.row.showStatus.description": "Show the server status button in the title bar",
-  "settings.general.row.showProjectIcon.title": "Project icon",
-  "settings.general.row.showProjectIcon.description": "Show the project icon in the session header",
+  "settings.general.row.showProjectIcon.title": "Show project icon",
+  "settings.general.row.showProjectIcon.description": "Show project icon in session header",
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
   "settings.general.row.mobileTitlebarBottom.description": "Place the title bar at the bottom of the screen on mobile",
   "settings.general.row.mobileDiffWrap.description":
