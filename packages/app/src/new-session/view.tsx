@@ -1,7 +1,6 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Wordmark } from "@opencode-ai/ui/wordmark"
 import { Show, createMemo, createSignal } from "solid-js"
 import { Schema } from "effect"
 import createPresence from "solid-presence"
@@ -23,6 +22,7 @@ import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
+import { NewSessionWordmark } from "./wordmark"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
@@ -61,10 +61,7 @@ export function NewSessionView(props: {
         />
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <Wordmark
-              fade={false}
-              class="mx-auto h-auto w-full max-w-[720px] text-v2-background-bg-inverse opacity-60 [[data-color-scheme=dark]_&]:opacity-50"
-            />
+            <NewSessionWordmark />
             <div class="mt-8 flex flex-col gap-8">
               <Composer model={props.composer} />
               <Show when={props.project.empty()}>
