@@ -88,20 +88,20 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
 
     const open = (origin: "manual" | "notification") => {
       if (!props.updater) return
+      const current = notification()
+      const known = current && (current.source === "client" || !current.remote) ? current : undefined
+      if (origin === "notification" && !known) return
+      const active = state()
+      // The notification can predate an installation through /update.
+      if (known && active?.type !== "installing" && !(active?.type === "installed" && active.version === known.version))
+        setState({ type: known.type, version: known.version })
       // Manual checks hide the current notice without marking the version as seen.
       if (origin === "manual") setNotification(undefined)
-      if (origin === "notification") {
-        const current = notification()
-        if (!current || (current.source === "server" && current.remote)) return
-        const active = state()
-        // The notification can predate an installation through /update.
-        if (active?.type !== "installing" && !(active?.type === "installed" && active.version === current.version))
-          setState({ type: current.type, version: current.version })
-        dismiss()
-      }
+      if (origin === "notification") dismiss()
+      const status = state()?.type
       dialog.replace(() => (
         <DialogUpdate
-          check={origin === "manual" ? check : undefined}
+          check={status === undefined || status === "failed" ? check : undefined}
           state={state}
           install={install}
           restart={restart}
