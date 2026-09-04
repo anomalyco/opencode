@@ -53,7 +53,7 @@ export async function resolvePastedAttachments(text: string, platform: string) {
     return {
       type: "file" as const,
       uri: `data:${item.attachment.mime};base64,${Buffer.from(item.attachment.content).toString("base64")}`,
-      filename,
+      filename: item.filepath,
     }
   })
 }
