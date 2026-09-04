@@ -75,7 +75,7 @@ describe("buildRequestParts", () => {
     expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
   })
 
-  test("adds materialized text attachments as local file parts", () => {
+  test("adds prepared local text attachments as file parts", () => {
     const result = buildRequestParts({
       prompt: [],
       context: [],
@@ -91,7 +91,7 @@ describe("buildRequestParts", () => {
             lineCount: 2,
             blob: { id: "blob-1", url: "blob:blob-1" },
           },
-          path: "C:\\Users\\test\\AppData\\Local\\OpenCode\\pasted-text.txt",
+          url: "file:///C:/Users/test/AppData/Local/OpenCode/pasted-text.txt",
         },
       ],
       text: "",
@@ -108,6 +108,42 @@ describe("buildRequestParts", () => {
         url: "file:///C:/Users/test/AppData/Local/OpenCode/pasted-text.txt",
       }),
     ])
+  })
+
+  test("keeps remote text attachment references free of local paths", () => {
+    const result = buildRequestParts({
+      prompt: [],
+      context: [],
+      images: [],
+      textAttachments: [
+        {
+          attachment: {
+            type: "text-attachment",
+            id: "paste-remote",
+            filename: "pasted-text-remote.txt",
+            mime: "text/plain",
+            size: 140_000,
+            lineCount: 1400,
+            blob: { id: "blob-remote", url: "blob:blob-remote" },
+          },
+          url: "attachment://attachment_remote",
+        },
+      ],
+      text: "",
+      messageID: "msg_remote",
+      sessionID: "ses_remote",
+      sessionDirectory: "C:\\repo",
+    })
+
+    expect(result.requestParts).toEqual([
+      expect.objectContaining({
+        type: "file",
+        mime: "text/plain",
+        filename: "pasted-text-remote.txt",
+        url: "attachment://attachment_remote",
+      }),
+    ])
+    expect(JSON.stringify(result.requestParts)).not.toContain("C:\\")
   })
 
   test("preserves an external attachment source path for the model", () => {

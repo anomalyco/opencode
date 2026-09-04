@@ -156,7 +156,7 @@ The materialization operation must be exposed through the preload bridge and reg
 
 A local filesystem path must never be sent to a remote Server. The attachment must be uploaded through an explicit attachment/upload API and the request must reference the returned remote attachment ID or URL.
 
-If the existing protocol cannot represent uploaded text attachments, add the smallest protocol extension needed. After changing the public Protocol or Server `HttpApi`, regenerate the client output from `packages/client` using the repository's generation command; never edit generated files directly.
+The active desktop submission path uses the instance HTTP API in `packages/opencode`, so its upload endpoint belongs to that API and its generated JavaScript client lives in `packages/sdk/js`. Regenerate it with `bun ./script/build.ts` from `packages/sdk/js`; never edit generated files directly. If a later V2 Protocol or Server `HttpApi` change is also needed, regenerate `packages/client` from its package directory as well.
 
 The upload path should avoid creating a base64 data URL in the prompt state. Streaming or bounded chunked upload is preferred for future larger limits.
 
@@ -303,7 +303,7 @@ If a listed test file does not exist yet, create the appropriate focused test fi
 
 ### Phase 3 test script: Remote attachments
 
-Add an integration test that exercises the complete remote flow: create draft Blob, upload, receive attachment identity, submit a prompt, and verify that the remote Server can read the complete text. The test must explicitly assert that no local Windows path is sent to the remote Server.
+Add repeatable server and client tests for the remote flow: upload text, receive a session-bound attachment identity, consume it once in the matching session, and construct the submitted prompt with no local Windows path. A full provider-backed end-to-end run remains outside the focused test because it requires a configured model provider.
 
 Required checks:
 
@@ -314,6 +314,9 @@ packages/server:   bun typecheck
 packages/opencode: bun typecheck
 packages/app:      bun typecheck
 packages/app:      bun test test-browser/prompt-attachments.test.ts
+packages/opencode: bun run test:remote-attachment
+packages/app:      bun run test:remote-attachment
+packages/sdk/js:   bun ./script/build.ts && bun typecheck
 ```
 
 If the public Protocol or Server `HttpApi` changes, the phase test script must run `bun run generate` from `packages/client` and verify that generated output is clean. Generated files must not be edited directly.

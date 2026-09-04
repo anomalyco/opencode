@@ -15,6 +15,7 @@ import { createPersistedPromptInputHistory } from "@/components/prompt-input/his
 import { promptDesignPlaceholder, promptPlaceholder } from "@/components/prompt-input/placeholder"
 import { createPromptSubmit } from "@/components/prompt-input/submit"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
+import { encodeFilePath } from "@/context/file/path"
 import { useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -129,7 +130,9 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       .current()
       .map((part) => ("content" in part ? part.content : ""))
       .join("")
-    return text.trim().length === 0 && attachments().length === 0 && textAttachments().length === 0 && commentCount() === 0
+    return (
+      text.trim().length === 0 && attachments().length === 0 && textAttachments().length === 0 && commentCount() === 0
+    )
   })
   const stopping = createMemo(() => working() && blank())
   const placeholder = createMemo(() =>
@@ -224,13 +227,27 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
     model: props.controls.model.selection,
-    materializeTextAttachment: async (attachment) => {
-      if (!ServerConnection.local(sdk().server) || !platform.materializeDraftBlob) {
-        throw new Error(language.t("prompt.toast.pasteUnsupported.description"))
+    prepareTextAttachment: async (attachment, session) => {
+      if (ServerConnection.local(sdk().server) && platform.materializeDraftBlob) {
+        const materialized = await platform.materializeDraftBlob(attachment.blob.id)
+        return { id: materialized.id, url: `file://${encodeFilePath(materialized.path)}` }
       }
-      return platform.materializeDraftBlob(attachment.blob.id)
+      const content = await fetch(attachment.blob.url).then((response) => response.text())
+      const uploaded = await sdk()
+        .createClient({ directory: session.directory, throwOnError: true })
+        .session.attachment.upload({ sessionID: session.id, filename: attachment.filename, content })
+      if (!uploaded.data) throw new Error(language.t("prompt.toast.pasteUnsupported.description"))
+      return uploaded.data
     },
-    cleanupMaterializedTextAttachment: (id) => platform.cleanupMaterializedDraftBlob?.(id) ?? Promise.resolve(),
+    cleanupTextAttachment: async (id, session) => {
+      if (ServerConnection.local(sdk().server)) {
+        await (platform.cleanupMaterializedDraftBlob?.(id) ?? Promise.resolve())
+        return
+      }
+      await sdk()
+        .createClient({ directory: session.directory, throwOnError: true })
+        .session.attachment.remove({ sessionID: session.id, attachmentID: id })
+    },
   })
 
   const referenceDescription = (reference: ReferenceInfo) =>

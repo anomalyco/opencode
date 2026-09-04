@@ -10,8 +10,13 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import { type ContextItem, type ImageAttachmentPart, type Prompt, type TextAttachmentPart, type usePrompt } from "@/context/prompt"
-import { encodeFilePath } from "@/context/file/path"
+import {
+  type ContextItem,
+  type ImageAttachmentPart,
+  type Prompt,
+  type TextAttachmentPart,
+  type usePrompt,
+} from "@/context/prompt"
 import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
@@ -50,8 +55,11 @@ type FollowupSendInput = {
   messageID?: string
   optimisticBusy?: boolean
   before?: () => Promise<boolean> | boolean
-  materializeTextAttachment?: (attachment: TextAttachmentPart) => Promise<{ id: string; path: string }>
-  cleanupMaterializedTextAttachment?: (id: string) => Promise<void>
+  prepareTextAttachment?: (
+    attachment: TextAttachmentPart,
+    session: { id: string; directory: string },
+  ) => Promise<{ id: string; url: string }>
+  cleanupTextAttachment?: (id: string, session: { id: string; directory: string }) => Promise<void>
 }
 
 const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
@@ -91,9 +99,16 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       }
 
       const messageID = Identifier.ascending("message")
-      if (textAttachments.length > 0 && !input.materializeTextAttachment) throw new Error("Text attachments are unavailable")
-      const materializedTextAttachments = await Promise.all(
-        textAttachments.map(async (attachment) => ({ attachment, ...(await input.materializeTextAttachment!(attachment)) })),
+      if (textAttachments.length > 0 && !input.prepareTextAttachment)
+        throw new Error("Text attachments are unavailable")
+      const preparedTextAttachments = await Promise.all(
+        textAttachments.map(async (attachment) => ({
+          attachment,
+          ...(await input.prepareTextAttachment!(attachment, {
+            id: input.draft.sessionID,
+            directory: input.draft.sessionDirectory,
+          })),
+        })),
       )
       try {
         await input.api.command({
@@ -114,15 +129,20 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
                 name: attachment.filename,
               })),
             )),
-            ...materializedTextAttachments.map(({ attachment, path }) => ({
-              uri: `file://${encodeFilePath(path)}`,
+            ...preparedTextAttachments.map(({ attachment, url }) => ({
+              uri: url,
               name: attachment.filename,
             })),
           ],
         })
       } finally {
         await Promise.all(
-          materializedTextAttachments.map((attachment) => input.cleanupMaterializedTextAttachment?.(attachment.id)),
+          preparedTextAttachments.map((attachment) =>
+            input.cleanupTextAttachment?.(attachment.id, {
+              id: input.draft.sessionID,
+              directory: input.draft.sessionDirectory,
+            }),
+          ),
         )
       }
       return true
@@ -139,15 +159,21 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
     })),
   )
-  if (textAttachments.length > 0 && !input.materializeTextAttachment) throw new Error("Text attachments are unavailable")
-  const materializedTextAttachments = await Promise.all(
-    textAttachments.map(async (attachment) => ({ attachment, ...(await input.materializeTextAttachment!(attachment)) })),
+  if (textAttachments.length > 0 && !input.prepareTextAttachment) throw new Error("Text attachments are unavailable")
+  const preparedTextAttachments = await Promise.all(
+    textAttachments.map(async (attachment) => ({
+      attachment,
+      ...(await input.prepareTextAttachment!(attachment, {
+        id: input.draft.sessionID,
+        directory: input.draft.sessionDirectory,
+      })),
+    })),
   )
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
     images: encodedImages,
-    textAttachments: materializedTextAttachments,
+    textAttachments: preparedTextAttachments,
     text,
     sessionID: input.draft.sessionID,
     messageID,
@@ -233,7 +259,12 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     throw err
   } finally {
     await Promise.all(
-      materializedTextAttachments.map((attachment) => input.cleanupMaterializedTextAttachment?.(attachment.id)),
+      preparedTextAttachments.map((attachment) =>
+        input.cleanupTextAttachment?.(attachment.id, {
+          id: input.draft.sessionID,
+          directory: input.draft.sessionDirectory,
+        }),
+      ),
     )
   }
 }
@@ -261,8 +292,11 @@ type PromptSubmitInput = {
   onAbort?: () => void
   onSubmit?: () => void
   model?: ModelSelection
-  materializeTextAttachment?: (attachment: TextAttachmentPart) => Promise<{ id: string; path: string }>
-  cleanupMaterializedTextAttachment?: (id: string) => Promise<void>
+  prepareTextAttachment?: (
+    attachment: TextAttachmentPart,
+    session: { id: string; directory: string },
+  ) => Promise<{ id: string; url: string }>
+  cleanupTextAttachment?: (id: string, session: { id: string; directory: string }) => Promise<void>
 }
 
 export function createPromptSubmit(input: PromptSubmitInput) {
@@ -659,8 +693,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,
       before: waitForWorktree,
-      materializeTextAttachment: input.materializeTextAttachment,
-      cleanupMaterializedTextAttachment: input.cleanupMaterializedTextAttachment,
+      prepareTextAttachment: input.prepareTextAttachment,
+      cleanupTextAttachment: input.cleanupTextAttachment,
     }).catch((err) => {
       pending.delete(pendingKey(session.id))
       if (sessionDirectory === projectDirectory) {
