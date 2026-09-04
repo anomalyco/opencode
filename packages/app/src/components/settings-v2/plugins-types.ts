@@ -11,7 +11,7 @@ export type CatalogEntry = {
   updatedAt?: string
   repository?: string
   onNpm: boolean
-  source: "ecosystem" | "awesome"
+  source: "ecosystem" | "awesome" | "cafe"
 }
 
 export type CatalogResult = { entries: CatalogEntry[]; fetchedAt: number; stale: boolean }
