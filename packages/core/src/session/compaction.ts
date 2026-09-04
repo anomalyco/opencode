@@ -51,7 +51,7 @@ const SUMMARY_TEMPLATE = `You MUST use this format for your response (you may om
 
 ## Work State
 ### Completed
-- [finished work, verified facts, or changes made; otherwise "(none)"]
+- [finished work or changes made; otherwise "(none)"]
 
 ### Active
 - [current work, partial changes, or investigation state; otherwise "(none)"]
