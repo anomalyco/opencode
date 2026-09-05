@@ -11,6 +11,10 @@ import type {
   SessionsActiveOutput,
   SessionsGetInput,
   SessionsGetOutput,
+  SessionsChildrenInput,
+  SessionsChildrenOutput,
+  SessionsCostInput,
+  SessionsCostOutput,
   SessionsSwitchAgentInput,
   SessionsSwitchAgentOutput,
   SessionsSwitchModelInput,
@@ -337,6 +341,28 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      children: (input: SessionsChildrenInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsChildrenOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/children`,
+            successStatus: 200,
+            declaredStatuses: [400, 404, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      cost: (input: SessionsCostInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsCostOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/cost`,
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,

@@ -96,6 +96,7 @@ const providers = (context = 128_000): Record<ProviderV2.ID, Provider.Info> => {
 
 const fakeLayer = (input: {
   readonly messages?: Effect.Effect<readonly UsageService.SessionMessage[], unknown>
+  readonly cost?: number
   readonly providers?: (directory: string) => Effect.Effect<Record<ProviderV2.ID, Provider.Info>, unknown>
 }) =>
   LayerNode.compile(UsageService.node, [
@@ -105,6 +106,7 @@ const fakeLayer = (input: {
         UsageService.MessageLoader,
         UsageService.MessageLoader.of({
           messages: () => input.messages ?? Effect.succeed([]),
+          cost: () => Effect.succeed(input.cost ?? 0),
         }),
       ),
     ],
@@ -231,6 +233,7 @@ describe("acp usage", () => {
     }).pipe(
       Effect.provide(
         fakeLayer({
+          cost: 3,
           messages: Effect.succeed([
             assistant({ cost: 1 }),
             assistant({
