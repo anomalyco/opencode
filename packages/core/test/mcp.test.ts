@@ -35,6 +35,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { State } from "@opencode-ai/core/state"
+import { McpToolPlugin } from "@opencode-ai/core/tool/plugin/mcp"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { Tool } from "@opencode-ai/core/tool"
 import {
@@ -62,7 +63,14 @@ import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
-import { codeModeListings, executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
+import {
+  codeModeListings,
+  registerToolPlugin,
+  executeTool,
+  toolDefinitions,
+  toolIdentity,
+  waitForTool,
+} from "./lib/tool"
 
 let assertion: Deferred.Deferred<Permission.AssertInput> | undefined
 let decision: Effect.Effect<void, Permission.Error> = Effect.void
@@ -393,7 +401,7 @@ const permissions = Layer.mock(Permission.Service, {
 })
 const events = Layer.mock(Bus.Service, { subscribe: () => Stream.never })
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node]), [
+  AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Mcp.node, Permission.node, Bus.node]), [
     Mcp.node.replace(mcp),
     Permission.node.replace(permissions),
     Bus.node.replace(events),
@@ -1760,6 +1768,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
       const registry = yield* Tool.Service
       const registration = yield* McpTool.Service
       const bus = yield* Bus.Service
+      yield* registerToolPlugin(McpToolPlugin.Plugin)
       yield* registration.flush
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
         "demo_search",
@@ -1868,7 +1877,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
     }).pipe(
       Effect.provide(
         Layer.fresh(
-          AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+          AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Mcp.node, Permission.node, Bus.node]), [
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
                 tools: () => Ref.get(catalog),
@@ -1898,6 +1907,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
     const bus = yield* Bus.Service
+    yield* registerToolPlugin(McpToolPlugin.Plugin)
     yield* registration.flush
     expect(reads).toBe(1)
     expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_1", "execute"])
@@ -1912,7 +1922,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
     expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_3", "execute"])
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+      AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Mcp.node, Permission.node, Bus.node]), [
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
             tools: () =>
@@ -1937,6 +1947,7 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
+    yield* registerToolPlugin(McpToolPlugin.Plugin)
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
     const execute = toolSet.definitions.find((tool) => tool.name === "execute")
@@ -1961,6 +1972,7 @@ it.effect("forwards the invoking session through direct and Code Mode MCP tools"
     invocations = []
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
+    yield* registerToolPlugin(McpToolPlugin.Plugin)
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
 
@@ -2010,6 +2022,7 @@ it.effect("returns content-only MCP results through Code Mode", () =>
     decision = Effect.void
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
+    yield* registerToolPlugin(McpToolPlugin.Plugin)
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
 
@@ -2037,6 +2050,7 @@ it.effect("advertises MCP tools directly when Code Mode is disabled for the serv
   Effect.gen(function* () {
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
+    yield* registerToolPlugin(McpToolPlugin.Plugin)
     yield* registration.flush
     const definitions = yield* toolDefinitions(registry)
     const execute = definitions.find((tool) => tool.name === "execute")
@@ -2054,6 +2068,7 @@ it.effect("fails the call when MCP reports isError", () =>
     decision = Effect.void
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
+    yield* registerToolPlugin(McpToolPlugin.Plugin)
     yield* registration.flush
 
     const execution = yield* executeTool(registry, {
@@ -2073,6 +2088,7 @@ it.effect("preserves MCP text and media content for the model", () =>
     decision = Effect.void
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
+    yield* registerToolPlugin(McpToolPlugin.Plugin)
     yield* registration.flush
 
     const execution = yield* executeTool(registry, {
@@ -2097,6 +2113,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
     decision = Deferred.await(permission)
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
+    yield* registerToolPlugin(McpToolPlugin.Plugin)
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
     expect(codeModeListings(toolSet.codeModeCatalog!).some((tool) => tool.path === "demo.search")).toBe(true)
@@ -2141,6 +2158,7 @@ it.effect("does not call MCP when permission is blocked", () =>
     decision = Effect.fail(new Permission.BlockedError({ rules: [], permission: "demo_search", resources: ["*"] }))
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
+    yield* registerToolPlugin(McpToolPlugin.Plugin)
     yield* registration.flush
     const toolSet = yield* registry.snapshot()
     expect(codeModeListings(toolSet.codeModeCatalog!).some((tool) => tool.path === "demo.search")).toBe(true)
