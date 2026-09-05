@@ -202,37 +202,61 @@ it.live(
   10_000,
 )
 
-it.live("embedded client exposes plugin-backed web search", () =>
-  withEmbedded("opencode-embedded-websearch-", (fixture) =>
-    Effect.gen(function* () {
-      const opencode = yield* fixture.sdk.OpenCode.create()
-      const providerID = fixture.sdk.WebSearch.ID.make("embedded-websearch")
-      yield* opencode.plugin({
-        id: `embedded-websearch-${crypto.randomUUID()}`,
-        effect: (ctx) =>
-          ctx.websearch.transform((editor) => {
-            editor.add({
-              id: providerID,
-              name: "Embedded web search",
-              execute: (input) =>
-                Effect.succeed([{ url: "https://example.com", content: `Found ${input.query}`, time: {} }]),
-            })
-          }),
-      })
+for (const phase of ["startup", "reload"] as const) {
+  it.live(
+    `embedded web search waits for plugin activation during ${phase}`,
+    () =>
+      withEmbedded("opencode-embedded-websearch-", (fixture) =>
+        Effect.gen(function* () {
+          const opencode = yield* fixture.sdk.OpenCode.create({
+            config: { directory: fixture.directory, project: false, content: "{}" },
+            models: { fetch: false },
+            fs: { filewatcher: false },
+          })
+          if (phase === "reload") yield* opencode.plugin.awaitActivation({ location: location(fixture) })
+          const started = yield* Latch.make(false)
+          const release = yield* Latch.make(false)
+          yield* Effect.addFinalizer(() => release.open)
+          const providerID = fixture.sdk.WebSearch.ID.make("embedded-websearch")
+          yield* opencode.plugin({
+            id: `embedded-websearch-${crypto.randomUUID()}`,
+            effect: (ctx) =>
+              Effect.gen(function* () {
+                yield* started.open
+                yield* release.await
+                yield* ctx.websearch.transform((editor) => {
+                  editor.add({
+                    id: providerID,
+                    name: "Embedded web search",
+                    execute: (input) =>
+                      Effect.succeed([{ url: "https://example.com", content: `Found ${input.query}`, time: {} }]),
+                  })
+                })
+              }),
+          })
 
-      const result = yield* opencode.websearch.query({
-        query: "opencode",
-        providerID,
-        location: location(fixture),
-      })
+          const query = yield* opencode.websearch
+            .query({ query: "opencode", providerID, location: location(fixture) })
+            .pipe(Effect.forkScoped({ startImmediately: true }))
+          const providers = yield* opencode.websearch
+            .providers({ location: location(fixture) })
+            .pipe(Effect.forkScoped({ startImmediately: true }))
 
-      expect(result.data).toEqual({
-        providerID,
-        results: [{ url: "https://example.com", content: "Found opencode", time: {} }],
-      })
-    }),
-  ),
-)
+          yield* started.await
+          expect(query.pollUnsafe()).toBeUndefined()
+          expect(providers.pollUnsafe()).toBeUndefined()
+          yield* release.open
+
+          expect((yield* Fiber.join(query)).data).toEqual({
+            providerID,
+            results: [{ url: "https://example.com", content: "Found opencode", time: {} }],
+          })
+          expect((yield* Fiber.join(providers)).data).toContainEqual({ id: providerID, name: "Embedded web search" })
+        }),
+      ),
+    10_000,
+  )
+}
 
 it.live(
   "Location-owned runner events reach the ready global client",
