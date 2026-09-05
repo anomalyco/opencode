@@ -66,11 +66,32 @@ const mediaPart = (part: Record<string, unknown>) => {
 
 const toolResult = (part: Record<string, unknown>) => {
   const output = isRecord(part.output) ? part.output : { type: "json", value: part.output }
-  const type = output.type === "text" ? "text" : output.type === "error-text" ? "error" : "json"
+  const type =
+    output.type === "text" ? "text" : output.type === "error-text" ? "error" : output.type === "content" ? "content" : "json"
+  const result =
+    output.type === "content" && Array.isArray(output.value)
+      ? output.value.map((item) => {
+          if (!isRecord(item)) throw new Error("Native LLM request adapter only supports object tool content")
+          if (item.type === "text") return { type: "text" as const, text: typeof item.text === "string" ? item.text : "" }
+          if (item.type === "media") {
+            if (typeof item.data !== "string")
+              throw new Error("Native LLM request adapter only supports tool media content with string data")
+            const mime = typeof item.mediaType === "string" ? item.mediaType : "application/octet-stream"
+            return {
+              type: "file" as const,
+              uri: item.data.startsWith("data:") ? item.data : `data:${mime};base64,${item.data}`,
+              mime,
+            }
+          }
+          throw new Error(`Native LLM request adapter does not support ${String(item.type)} tool content`)
+        })
+      : "value" in output
+        ? output.value
+        : output
   return ToolResultPart.make({
     id: typeof part.toolCallId === "string" ? part.toolCallId : "",
     name: typeof part.toolName === "string" ? part.toolName : "",
-    result: "value" in output ? output.value : output,
+    result,
     resultType: type,
     providerExecuted: typeof part.providerExecuted === "boolean" ? part.providerExecuted : undefined,
     providerMetadata: partProviderMetadata(part),
