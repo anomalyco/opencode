@@ -377,9 +377,24 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   }
 
   const contextTokens = inputTokens
+  // a malformed tier is dropped rather than trusted: `tiers` that is not an array, a null entry or
+  // a missing `tier` each used to throw here. A tier whose shape+size are valid but whose pricing is
+  // not a finite number is also discarded, so it falls back to the base rates instead of zeroing cost.
+  const tiers = input.model.cost?.tiers
   const costInfo =
-    input.model.cost?.tiers
-      ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
+    (Array.isArray(tiers) ? tiers : [])
+      .filter((item) => {
+        if (item?.tier?.type !== "context") return false
+        // a tier whose shape+size are valid but whose pricing is not a finite number
+        // (missing/undefined/numeric-string) must be dropped, not selected: otherwise it
+        // wins the `??` and silently zeroes the cost instead of falling back to base rates.
+        if (!Number.isFinite(item.input) || !Number.isFinite(item.output)) return false
+        // `size` still goes through Number() because the old comparison coerced numeric strings
+        // and a hand-written config can produce one. A size that is unparseable or non-positive
+        // is dropped rather than coerced to 0, which would match every context instead of none.
+        const size = Number(item.tier.size)
+        return Number.isFinite(size) && size > 0 && contextTokens > size
+      })
       .sort((a, b) => b.tier.size - a.tier.size)[0] ??
     (input.model.cost?.experimentalOver200K && contextTokens > 200_000
       ? input.model.cost.experimentalOver200K
