@@ -14483,6 +14483,42 @@
         "required": ["package"],
         "additionalProperties": false
       },
+      "Config.Provider.OAuth": {
+        "type": "object",
+        "properties": {
+          "grantType": {
+            "type": "string",
+            "enum": ["client_credentials"]
+          },
+          "tokenUrl": {
+            "type": "string",
+            "minLength": 1
+          },
+          "clientId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "clientSecret": {
+            "type": "string",
+            "minLength": 1
+          },
+          "clientAuthMethod": {
+            "type": "string",
+            "enum": ["client_secret_basic", "client_secret_post"]
+          },
+          "scope": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          }
+        },
+        "required": ["grantType", "tokenUrl", "clientId", "clientSecret"],
+        "additionalProperties": false
+      },
       "Config.ProviderEncoded": {
         "type": "object",
         "properties": {
@@ -14500,6 +14536,9 @@
           },
           "package": {
             "type": "string"
+          },
+          "oauth": {
+            "$ref": "#/components/schemas/Config.Provider.OAuth"
           },
           "settings": {
             "type": "object"

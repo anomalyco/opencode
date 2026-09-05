@@ -432,6 +432,17 @@ export type WebSearchResult = { url: string; title?: string; content?: string; t
 
 export type ConfigWorktree = { directory: string }
 
+export type ConfigProviderOAuth = {
+  grantType: "client_credentials"
+  tokenUrl: string
+  clientId: string
+  clientSecret: string
+  clientAuthMethod?: "client_secret_basic" | "client_secret_post"
+  scope?: string
+  audience?: string
+  resource?: string
+}
+
 export type ProviderRequest = {
   settings: ProviderSettings
   headers: { [x: string]: string }
@@ -2003,6 +2014,7 @@ export type ConfigEntry =
             name?: string
             env?: Array<string>
             package?: string
+            oauth?: ConfigProviderOAuth
             settings?: { [x: string]: JsonValue }
             headers?: { [x: string]: string }
             body?: { [x: string]: JsonValue }

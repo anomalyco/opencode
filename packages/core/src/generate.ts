@@ -42,6 +42,7 @@ export const layer = Layer.effect(
             "SessionRunnerModel.VariantUnavailableError",
             "SessionRunnerModel.UnsupportedPackageError",
             "SessionRunnerModel.UnresolvedProviderVariablesError",
+            "ModelResolver.UnsupportedOAuthPackageError",
           ],
           (error) => {
             const mapped: Error = input.model
@@ -57,15 +58,17 @@ export const layer = Layer.effect(
             ? `Model unavailable: ${input.model.providerID}/${input.model.id}`
             : "No model specified and no supported model is available",
         })
-      const response = yield* llm.generate(LLM.request({ model: resolved.model, prompt: input.prompt })).pipe(
-        Effect.mapError(
-          (error: AIError) =>
-            new UnavailableError({
-              message: error.message,
-              service: resolved.ref.providerID,
-            }),
-        ),
-      )
+      const response = yield* llm
+        .generate(LLM.request({ model: resolved.model, prompt: input.prompt }), { http: resolved.http })
+        .pipe(
+          Effect.mapError(
+            (error: AIError) =>
+              new UnavailableError({
+                message: error.message,
+                service: resolved.ref.providerID,
+              }),
+          ),
+        )
       return response.text
     })
 

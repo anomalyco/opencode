@@ -34,9 +34,44 @@ The `providers` object is keyed by provider ID. Each provider accepts these fiel
 | `env`      | Ordered environment variable names that provide a connection.   |
 | `package`  | Runtime provider package.                                       |
 | `settings` | JSON settings passed to the runtime package, such as `baseURL`. |
+| `oauth`    | Non-interactive OAuth client credentials for a gateway.         |
 | `headers`  | String-valued HTTP headers added to requests.                   |
 | `body`     | JSON fields merged into request bodies.                         |
 | `models`   | Models to add or override, keyed by catalog model ID.           |
+
+## OAuth client credentials
+
+For an enterprise gateway that uses OAuth 2.0 client credentials, add `oauth` to the provider. No `/connect`, browser,
+or refresh token is required. Keep secrets in environment variables available to the OpenCode server.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "corporate": {
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://gateway.example.com/v1" },
+      "oauth": {
+        "grantType": "client_credentials",
+        "tokenUrl": "https://auth.example.com/oauth2/token",
+        "clientId": "{env:LLM_CLIENT_ID}",
+        "clientSecret": "{env:LLM_CLIENT_SECRET}",
+        "clientAuthMethod": "client_secret_basic",
+        "scope": "llm.invoke",
+      },
+      "models": { "corporate-model": {} },
+    },
+  },
+}
+```
+
+- `clientAuthMethod` defaults to `client_secret_basic`. Use `client_secret_post` to send the credentials in the form body.
+- `scope`, `audience`, and `resource` are optional token-request parameters.
+- Tokens stay in memory and are renewed shortly before `expires_in`. A token without an expiry is not reused across requests.
+- A `401` or an HTTP error with a Bearer `invalid_token` challenge triggers one token renewal and retry.
+- OAuth replaces saved connection credentials and API-key authentication for this provider. Other providers are unchanged.
+- This mode uses native HTTP provider packages. WebSockets are disabled; packages that require the fallback AI SDK runtime are not supported.
+- A higher-priority `oauth` block replaces the whole block. Changing it discards the previous cached token on the next model resolution.
 
 ## Azure OpenAI and Microsoft Foundry
 

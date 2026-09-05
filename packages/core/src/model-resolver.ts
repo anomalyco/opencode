@@ -2,7 +2,7 @@ export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LanguageModel } from "@opencode-ai/ai"
-import { Auth } from "@opencode-ai/ai/route"
+import { Auth, type RequestExecutor } from "@opencode-ai/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { AISDKNative } from "./aisdk-native.js"
@@ -12,6 +12,7 @@ import { Integration } from "./integration.js"
 import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode-ai/util/npm"
 import { Provider } from "./provider.js"
+import { ProviderOAuth } from "./provider-oauth.js"
 
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
@@ -52,13 +53,25 @@ export class UnresolvedProviderVariablesError extends Schema.TaggedError<Unresol
   }
 }
 
+export class UnsupportedOAuthPackageError extends Schema.TaggedError<UnsupportedOAuthPackageError>()(
+  "ModelResolver.UnsupportedOAuthPackageError",
+  { providerID: Provider.ID },
+) {
+  override get message() {
+    return `OAuth client credentials for ${this.providerID} require a native HTTP provider package`
+  }
+}
+
 export type Error =
   | VariantUnavailableError
   | UnsupportedPackageError
   | UnresolvedProviderVariablesError
   | Integration.AuthorizationError
+  | UnsupportedOAuthPackageError
 
 export interface Resolved {
+  /** Provider-owned authentication and recovery for outbound HTTP requests. */
+  readonly http?: RequestExecutor.HttpMiddleware
   /** Route-level model for provider requests; its id is the provider API model id, which may differ from the catalog id. */
   readonly model: LanguageModel
   /** Selected catalog identity. Durable records and displays must use this, never the API model id. */
@@ -268,26 +281,32 @@ export const layer = Layer.effect(
     const integrations = yield* Integration.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
+    const oauth = yield* ProviderOAuth.Service
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* catalog.provider.get(selected.providerID)
-      const connection = yield* integrations.connection.active(
-        provider?.integrationID ?? Integration.ID.make(selected.providerID),
-      )
+      const http = yield* oauth.get(selected.providerID)
+      const connection = http
+        ? undefined
+        : yield* integrations.connection.active(provider?.integrationID ?? Integration.ID.make(selected.providerID))
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const runtimeInfo = yield* withVariant(selected, variant)
       const model = yield* fromCatalogModel(runtimeInfo, credential, {
         loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
         loadAISDK: (model) => aisdk.model(model),
       })
+      if (http && model.route.protocol === "ai-sdk")
+        return yield* new UnsupportedOAuthPackageError({ providerID: selected.providerID })
       const runtime =
-        provider?.activation === "enabled" &&
-        credential === undefined &&
-        !hasConfiguredAuth(runtimeInfo) &&
-        usesAPIKeyAuth(runtimeInfo.package)
+        http ||
+        (provider?.activation === "enabled" &&
+          credential === undefined &&
+          !hasConfiguredAuth(runtimeInfo) &&
+          usesAPIKeyAuth(runtimeInfo.package))
           ? LanguageModel.update(model, { route: model.route.with({ auth: Auth.none }) })
           : model
       return {
         model: runtime,
+        ...(http ? { http } : {}),
         ref: Ref.make({
           id: selected.id,
           providerID: selected.providerID,
@@ -361,5 +380,5 @@ function usesAPIKeyAuth(packageName: string | undefined) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node],
+  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node, ProviderOAuth.node],
 })

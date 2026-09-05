@@ -3,11 +3,13 @@ import { LLM, LanguageModel, Message } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { ConfigProvider, Effect, Layer } from "effect"
-import { Headers } from "effect/unstable/http"
+import { FetchHttpClient, Headers } from "effect/unstable/http"
+import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { Compatibility, ID, Info, VariantID } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
+import { ProviderOAuth } from "@opencode-ai/core/provider-oauth"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AISDK } from "@opencode-ai/core/aisdk"
@@ -358,7 +360,8 @@ describe("ModelResolver", () => {
       },
       model: () => Effect.die("unused"),
     })
-    const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+    const oauth = ProviderOAuth.layer.pipe(Layer.provide(Layer.merge(Config.testLayer(), FetchHttpClient.layer)))
+    const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk, oauth)))
 
     return withConfigEnv({}, () =>
       Effect.gen(function* () {
