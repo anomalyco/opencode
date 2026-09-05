@@ -3,13 +3,13 @@ import { BackgroundJob } from "@/background/job"
 import { ShellID } from "./shell/id"
 import * as Tool from "./tool"
 
-const DESCRIPTION = `List, inspect, and cancel shell commands that were started with run_in_background=true.
+const DESCRIPTION = `List, inspect, and cancel background jobs: shell commands started with run_in_background=true, and subagents started with background=true.
 
 Actions:
-- list: show all background shell jobs with their id, status, command, and log file path. Use this when you need to recall what is running or find a job id.
-- kill: terminate a background command. Requires job_id. Use this to stop a command that is no longer needed, stuck, or occupying a port. The command and its whole process group are killed. Do not kill jobs that are about to finish on their own.
+- list: show all background jobs with their id, type, status, title, and log file path (shell commands) or child session id (subagents). Use this when you need to recall what is running or find a job id.
+- kill: terminate a background job. Requires job_id. Use this to stop a command or subagent that is no longer needed or stuck. Shell commands are killed with their whole process group; subagents are cancelled and their session stops. Do not kill jobs that are about to finish on their own.
 
-Live output is available by Reading or Grepping the job's log file path at any time; completion output is delivered automatically without polling.`
+Live output of background shell commands is available by Reading or Grepping the job's log file path at any time; completion output of both kinds is delivered automatically without polling.`
 
 type Parameters = Schema.Schema.Type<typeof Parameters>
 
@@ -30,10 +30,12 @@ type JobsMetadata = {
 }
 
 function renderList(jobs: BackgroundJob.Info[]) {
-  if (jobs.length === 0) return "No background shell jobs."
+  if (jobs.length === 0) return "No background jobs."
   const lines = jobs.map((job) => {
     const log = typeof job.metadata?.logPath === "string" ? job.metadata.logPath : undefined
-    return `- ${job.id} [${job.status}] ${job.title}${log ? ` (log: ${log})` : ""}`
+    const session = typeof job.metadata?.sessionId === "string" ? job.metadata.sessionId : undefined
+    const detail = log ? ` (log: ${log})` : session ? ` (session: ${session})` : ""
+    return `- ${job.id} [${job.type}] [${job.status}] ${job.title}${detail}`
   })
   return lines.join("\n")
 }
@@ -68,7 +70,7 @@ export const BashJobsTool = Tool.define(
             }
           }
 
-          const jobs = (yield* background.list()).filter((job) => job.type === ShellID.ToolID)
+          const jobs = (yield* background.list()).filter((job) => job.type === ShellID.ToolID || job.type === "task")
           return {
             title: "list background jobs",
             metadata: { action: "list", count: jobs.length },

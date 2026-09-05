@@ -36,6 +36,15 @@ describe("tool.bash_jobs", () => {
               return "done"
             }),
           })
+          const subagent = yield* jobs.start({
+            type: "task",
+            title: "inspect bug",
+            metadata: { sessionId: "ses_child", background: true },
+            run: Effect.gen(function* () {
+              yield* Effect.sleep("30 seconds")
+              return "done"
+            }),
+          })
           const def = yield* initJobsTool()
 
           const result = yield* def.execute(
@@ -52,13 +61,17 @@ describe("tool.bash_jobs", () => {
           )
 
           expect(result.metadata.action).toBe("list")
-          expect(result.metadata.count).toBeGreaterThan(0)
+          expect(result.metadata.count).toBe(2)
           expect(result.output).toContain(started.id)
-          expect(result.output).toContain("[running]")
+          expect(result.output).toContain("[bash] [running]")
           expect(result.output).toContain("sleep 30")
           expect(result.output).toContain("/tmp/fake-log.txt")
+          expect(result.output).toContain("[task] [running]")
+          expect(result.output).toContain("inspect bug")
+          expect(result.output).toContain("(session: ses_child)")
 
           yield* jobs.cancel(started.id)
+          yield* jobs.cancel(subagent.id)
         }),
       )
     }),
