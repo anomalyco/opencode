@@ -184,6 +184,32 @@ test("an update during an active list does not cancel it and start another backe
   client.clear()
 })
 
+test("an unopened inventory update waits until a view mounts, overriding the app's no-refetch default", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { refetchOnMount: false } } })
+  let calls = 0
+  const inventory = createWorktreeInventory({
+    scope: ServerScope.local,
+    queryClient: client,
+    api: () => ({
+      list: async () => {
+        calls++
+        return [{ directory: `/repo/feature-${calls}` }]
+      },
+    }),
+  })
+  await client.fetchQuery(inventory.query("/repo"))
+  await inventory.invalidate("/repo")
+  expect(calls).toBe(1)
+  const observer = new QueryObserver(client, inventory.query("/repo"))
+  const unsubscribe = observer.subscribe(() => {})
+  expect(calls).toBe(2)
+  await client.fetchQuery(inventory.query("/repo"))
+  expect(calls).toBe(2)
+  expect(observer.getCurrentResult().data).toEqual([{ directory: "/repo/feature-2" }])
+  unsubscribe()
+  client.clear()
+})
+
 test("cached inventory survives metadata updates and is partitioned by server", async () => {
   const client = new QueryClient()
   const api = () => ({ list: async () => [{ directory: "/repo/feature", strategy: "git" }] })

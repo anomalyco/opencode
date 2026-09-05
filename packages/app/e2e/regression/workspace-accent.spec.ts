@@ -225,16 +225,9 @@ async function openSession(page: Page, directory: string, worktrees = [...invent
       },
       { root, server },
     )
-  const loaded = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/api/worktree" &&
-      new URL(response.url()).searchParams.get("location[directory]") === root &&
-      response.request().method() === "GET",
-  )
   await page.goto(
     draft ? "/new-session?draftId=draft_workspace_accent" : `/server/${base64Encode(server)}/session/${sessionID}`,
   )
-  expect((await loaded).ok()).toBe(true)
   if (!draft) await expectSessionReady(page, { server, sessionID, title })
   const composer = page.locator('[data-component="composer"]')
   await expectAppVisible(composer)

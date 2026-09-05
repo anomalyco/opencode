@@ -36,6 +36,7 @@ export function createWorktreeInventory(input: {
       queryKey: worktreeInventoryKey(input.scope, directory),
       staleTime: 30_000,
       retry: false,
+      refetchOnMount: true,
       refetchOnWindowFocus: false,
       queryFn: ({ signal }) =>
         new Promise<WorktreeDirectory[]>((resolve, reject) => {
