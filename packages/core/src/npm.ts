@@ -42,6 +42,15 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Np
 
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
 
+// Matches npm's own fetch-timeout default so a slow registry fails like npm
+// itself would instead of hanging the awaiting session path forever.
+const DEFAULT_INSTALL_TIMEOUT = 300_000
+
+const installTimeout = () => {
+  const configured = Number(process.env.OPENCODE_NPM_INSTALL_TIMEOUT)
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_INSTALL_TIMEOUT
+}
+
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
@@ -105,7 +114,19 @@ const layer = Layer.effect(
               add,
               dir: input.dir,
             }),
-        }) as Effect.Effect<ArboristTree, InstallFailedError>
+        }).pipe(
+          Effect.timeout(installTimeout()),
+          Effect.catchTag("TimeoutError", () =>
+            new InstallFailedError({
+              add,
+              dir: input.dir,
+              cause: new Error(`npm install timed out after ${installTimeout()}ms`),
+            }),
+          ),
+          Effect.tapError((error) =>
+            Effect.logError("npm install failed", { add, dir: input.dir, error: error.message }),
+          ),
+        ) as Effect.Effect<ArboristTree, InstallFailedError>
       }).pipe(
         Effect.withSpan("Npm.reify", {
           attributes: input,
