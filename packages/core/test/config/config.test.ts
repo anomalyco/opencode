@@ -1342,6 +1342,7 @@ describe("Config", () => {
                   bash: "ask",
                   edit: { "*.md": "allow", "*": "deny" },
                   question: "deny",
+                  webfetch: { "*": "ask", "https://en.wikipedia.org/*": "allow" },
                 },
                 agent: {
                   reviewer: {
@@ -1420,6 +1421,8 @@ describe("Config", () => {
               { action: "edit", resource: "*.md", effect: "allow" },
               { action: "edit", resource: "*", effect: "deny" },
               { action: "question", resource: "*", effect: "deny" },
+              { action: "webfetch", resource: "*", effect: "ask" },
+              { action: "webfetch", resource: "https://en.wikipedia.org/*", effect: "allow" },
             ])
             expect(documents[0]?.info.agents?.reviewer).toMatchObject({
               system: "Review changes.",
