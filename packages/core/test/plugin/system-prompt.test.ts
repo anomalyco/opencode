@@ -54,7 +54,6 @@ describe("SystemPromptPlugin", () => {
   test("uses granular IDs with a common prefix", () => {
     expect(SystemPromptPlugin.Plugins.map((plugin) => plugin.id)).toEqual([
       "opencode.prompt.openai",
-      "opencode.prompt.anthropic",
       "opencode.prompt.kimi",
       "opencode.prompt.arcee",
       "opencode.prompt.meta",
@@ -67,19 +66,23 @@ describe("SystemPromptPlugin", () => {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) => {
-        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex"])
+        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6-astra"])
           editor.model.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
+        editor.model.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
+          model.name = "Muse Spark"
+        })
       })
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
         discard: true,
       })
       const cases = [
-        ["gpt-5", "# Response channels"],
-        ["gpt-4.1", "# Response channels"],
+        ["gpt-5", "# Delegation"],
+        ["gpt-4.1", "# Delegation"],
         ["o3", fallback],
-        ["gpt-5-codex", "# Response channels"],
+        ["gpt-5-codex", "# Delegation"],
+        ["gpt-6-astra", "Do not settle for a partial"],
         ["gemini-2.5-pro", fallback],
-        ["claude-sonnet-4", "# Professional objectivity"],
+        ["claude-sonnet-4", fallback],
         ["kimi-k2", "# Prompt and Tool Use"],
         ["trinity", "what command should I run to list files"],
         ["meta/muse-spark-1.1", "powered by Muse Spark"],
@@ -103,7 +106,7 @@ describe("SystemPromptPlugin", () => {
     }),
   )
 
-  it.effect("appends the OpenAI extension after the baseline", () =>
+  it.effect("renders the OpenAI prompt and preserves project instructions", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
@@ -113,26 +116,42 @@ describe("SystemPromptPlugin", () => {
       )
       yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
       const event = context("gpt-5")
+      event.system.push(SystemPart.make("Project instructions"))
+      event.tools.shell = { description: "Run a command", input: { type: "object" } }
 
       yield* hooks.trigger("session", "context", event)
 
-      expect(event.system.map((part) => part.text)).toEqual([fallback, expect.stringContaining("# Delegation")])
+      expect(event.system.map((part) => part.text)).toEqual([
+        expect.stringContaining("# Delegation"),
+        "Project instructions",
+      ])
+      expect(event.system[0]?.text).toStartWith("You are an AI agent powered by OpenCode")
+      expect(event.system[0]?.text).toContain("Prefer dedicated tools over shell commands")
+      expect(event.system[0]?.text).not.toContain("${OPENCODE_TOOL_GUIDANCE}")
     }),
   )
 
-  it.effect("selects the Meta prompt for Muse family model IDs", () =>
+  it.effect("uses catalog names in Meta prompts for Muse model IDs", () =>
     Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
+      const cases = [
+        ["meta/muse-spark-preview", "Muse Spark Preview"],
+        ["muse-spark-1.2", "Muse Spark 1.2"],
+        ["meta/muse-glimmer-30b", "Muse Glimmer 30B"],
+        ["muse-glimmer-30b", "Muse Glimmer"],
+      ] as const
+      yield* catalog.transform((editor) => {
+        for (const [id, name] of cases)
+          editor.model.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
+            model.name = name
+          })
+      })
       yield* SystemPromptPlugin.MetaPlugin.effect(pluginHost)
 
       yield* Effect.forEach(
-        [
-          ["meta/muse-spark-preview", "Muse Spark"],
-          ["muse-spark-1.2", "Muse Spark"],
-          ["meta/muse-glimmer-30b", "Muse Glimmer"],
-          ["muse-glimmer-30b", "Muse Glimmer"],
-        ] as const,
+        cases,
         ([id, name]) => {
           const event = context(id)
           return hooks.trigger("session", "context", event).pipe(
@@ -190,19 +209,19 @@ describe("SystemPromptPlugin", () => {
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* SystemPromptPlugin.AnthropicPlugin.effect(pluginHost)
+      yield* SystemPromptPlugin.KimiPlugin.effect(pluginHost)
       const gemini = context("gemini-2.5-pro")
-      const claude = context("claude-sonnet-4")
+      const kimi = context("kimi-k2")
 
       yield* hooks.trigger("session", "context", gemini)
-      yield* hooks.trigger("session", "context", claude)
+      yield* hooks.trigger("session", "context", kimi)
 
       expect(gemini.system[0]?.text).toBe(fallback)
-      expect(claude.system[0]?.text).toContain("# Professional objectivity")
+      expect(kimi.system[0]?.text).toContain("# Prompt and Tool Use")
     }),
   )
 
-  it.effect("selects against the catalog model ID instead of its alias", () =>
+  it.effect("selects against the catalog ID rather than the physical model ID or family", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
@@ -228,12 +247,9 @@ describe("SystemPromptPlugin", () => {
       yield* hooks.trigger("session", "context", physicalCustom)
       yield* hooks.trigger("session", "context", familyOpenAI)
 
-      expect(physicalOpenAI.system.map((part) => part.text)).toEqual([
-        fallback,
-        expect.stringContaining("# Delegation"),
-      ])
-      expect(physicalCustom.system.map((part) => part.text)).toEqual([fallback])
-      expect(familyOpenAI.system.map((part) => part.text)).toEqual([fallback, expect.stringContaining("# Delegation")])
+      expect(physicalOpenAI.system.map((part) => part.text)).toEqual([fallback])
+      expect(physicalCustom.system.map((part) => part.text)).toEqual([expect.stringContaining("# Delegation")])
+      expect(familyOpenAI.system.map((part) => part.text)).toEqual([fallback])
     }),
   )
 })
