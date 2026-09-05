@@ -10,5 +10,11 @@
     "name": "Local",
     "env": [],
     "models": {}
+  },
+  "cloudy": {
+    "id": "cloudy",
+    "name": "Cloudy",
+    "env": ["CLOUDY_ACCOUNT_ID", "CLOUDY_API_KEY"],
+    "models": {}
   }
 }

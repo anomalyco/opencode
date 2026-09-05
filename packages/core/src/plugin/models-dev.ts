@@ -10,6 +10,19 @@ function released(date: string) {
   return Number.isFinite(time) ? time : 0
 }
 
+const CREDENTIAL_ENV_SUFFIXES = ["_API_KEY", "_TOKEN", "_PAT"]
+
+// models.dev lists env vars in setup order, so account/host/region/project names
+// that configure a provider often precede the actual credential (e.g. Cloudflare's
+// `[CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_KEY]`). Connection resolution picks the
+// first set var, so an unfiltered list can hand a non-secret value out as the
+// bearer key. Narrow to credential-shaped names when any exist; otherwise fall
+// back to the full list rather than guess wrong for an unfamiliar naming scheme.
+function credentialEnvNames(names: readonly string[]) {
+  const credentials = names.filter((name) => CREDENTIAL_ENV_SUFFIXES.some((suffix) => name.endsWith(suffix)))
+  return credentials.length > 0 ? credentials : [...names]
+}
+
 function cost(input: ModelsDev.Model["cost"]): ModelV2Info["cost"] {
   const base = {
     input: input?.input ?? 0,
@@ -134,7 +147,7 @@ export const ModelsDevPlugin = define({
           })
           integrations.method.update({
             integrationID,
-            method: { type: "env", names: [...item.env] },
+            method: { type: "env", names: credentialEnvNames(item.env) },
           })
         }
       }),
