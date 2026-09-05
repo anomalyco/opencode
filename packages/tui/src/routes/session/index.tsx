@@ -24,7 +24,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import { BoxRenderable, type ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -151,7 +151,7 @@ const sessionGlobalBindingCommands = [
   "session.half.page.down",
 ] as const
 
-const sessionGlobalUnfocusedBindingCommands = ["session.first", "session.last"] as const
+const sessionGlobalUnfocusedBindingCommands = ["session.first_home", "session.last_home"] as const
 
 const context = createContext<{
   width: number
@@ -323,7 +323,7 @@ export function Session() {
     })
   })
 
-  let lastSwitch: string | undefined = undefined
+  let lastSwitch: string | undefined 
   event.on("message.part.updated", (evt) => {
     const part = evt.properties.part
     if (part.type !== "tool") return
@@ -829,6 +829,26 @@ export function Session() {
       },
     },
     {
+      title: "First message",
+      value: "session.first_home",
+      category: "Session",
+      hidden: true,
+      run: () => {
+        scroll.scrollTo(0)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Last message",
+      value: "session.last_home",
+      category: "Session",
+      hidden: true,
+      run: () => {
+        scroll.scrollTo(scroll.scrollHeight)
+        dialog.clear()
+      },
+    },
+    {
       title: "Jump to last user message",
       value: "session.messages_last_user",
       category: "Session",
@@ -1200,7 +1220,7 @@ export function Session() {
                   {(message, index) => (
                     <Switch>
                       <Match when={message.id === revert()?.messageID}>
-                        {(function () {
+                        {(() => {
                           const redoShortcut = useCommandShortcut("session.redo")
                           const [hover, setHover] = createSignal(false)
                           const dialog = useDialog()
@@ -2262,7 +2282,7 @@ function Task(props: ToolProps) {
   const content = createMemo(() => {
     const description = stringValue(props.input.description)
     if (!description) return ""
-    let content = [
+    const content = [
       formatSubagentTitle(
         Locale.titlecase(stringValue(props.input.subagent_type) ?? "General"),
         description,
