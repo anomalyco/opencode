@@ -190,7 +190,11 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         save: input.save,
-        metadata: input.metadata,
+        // Tools copy optional inputs straight into metadata; undefined values are not JSON and would
+        // fail the HttpApi response encoder when clients list pending requests.
+        metadata:
+          input.metadata &&
+          Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
         source: input.source,
         message,
       }
