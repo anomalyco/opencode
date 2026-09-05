@@ -2543,6 +2543,28 @@ export type ProviderAuthError1 = {
   }
 }
 
+export type DiscoverModelsPayload = {
+  baseURL: string
+  apiKey?: string
+  headers?: {
+    [key: string]: string
+  }
+  timeoutMs?: string
+}
+
+export type DiscoverModelsOk = {
+  ok: true
+  ids: Array<string>
+}
+
+export type DiscoverModelsError = {
+  ok: false
+  kind: "invalidUrl" | "unauthorized" | "invalidFormat" | "timeout" | "failed"
+  message?: string
+}
+
+export type DiscoverModelsResult = DiscoverModelsOk | DiscoverModelsError
+
 export type NotFoundError = {
   name: "NotFoundError"
   data: {
@@ -9438,6 +9460,34 @@ export type ProviderOauthCallbackResponses = {
 }
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
+
+export type ProviderDiscoverData = {
+  body?: DiscoverModelsPayload
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/discover"
+}
+
+export type ProviderDiscoverErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderDiscoverError = ProviderDiscoverErrors[keyof ProviderDiscoverErrors]
+
+export type ProviderDiscoverResponses = {
+  /**
+   * Discovered model IDs or error
+   */
+  200: DiscoverModelsResult
+}
+
+export type ProviderDiscoverResponse = ProviderDiscoverResponses[keyof ProviderDiscoverResponses]
 
 export type SessionListData = {
   body?: never

@@ -31,6 +31,33 @@ export class ProviderAuthApiError extends Schema.ErrorClass<ProviderAuthApiError
   { httpApiStatus: 400 },
 ) {}
 
+const DiscoverModelsErrorKind = Schema.Union([
+  Schema.Literal("invalidUrl"),
+  Schema.Literal("unauthorized"),
+  Schema.Literal("invalidFormat"),
+  Schema.Literal("timeout"),
+  Schema.Literal("failed"),
+])
+
+export const DiscoverModelsPayload = Schema.Struct({
+  baseURL: Schema.String,
+  apiKey: Schema.optionalKey(Schema.String),
+  headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  timeoutMs: Schema.optionalKey(Schema.NumberFromString),
+}).annotate({ identifier: "DiscoverModelsPayload" })
+
+export const DiscoverModelsResult = Schema.Union([
+  Schema.Struct({
+    ok: Schema.Literal(true),
+    ids: Schema.mutable(Schema.Array(Schema.String)),
+  }).annotate({ identifier: "DiscoverModelsOk" }),
+  Schema.Struct({
+    ok: Schema.Literal(false),
+    kind: DiscoverModelsErrorKind,
+    message: Schema.optionalKey(Schema.String),
+  }).annotate({ identifier: "DiscoverModelsError" }),
+]).annotate({ identifier: "DiscoverModelsResult" })
+
 export const ProviderApi = HttpApi.make("provider")
   .add(
     HttpApiGroup.make("provider")
@@ -79,6 +106,18 @@ export const ProviderApi = HttpApi.make("provider")
             identifier: "provider.oauth.callback",
             summary: "Handle OAuth callback",
             description: "Handle the OAuth callback from a provider after user authorization.",
+          }),
+        ),
+        HttpApiEndpoint.post("discover", `${root}/discover`, {
+          query: WorkspaceRoutingQuery,
+          payload: DiscoverModelsPayload,
+          success: described(DiscoverModelsResult, "Discovered model IDs or error"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "provider.discover",
+            summary: "Discover models from an OpenAI-compatible base URL",
+            description:
+              "Probe an OpenAI-compatible endpoint at `{baseURL}/v1/models` and return the list of model IDs. Resolves env-var API keys on the server. Bypasses browser CORS.",
           }),
         ),
       )

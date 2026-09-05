@@ -18,7 +18,7 @@ import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Effect, Layer, Context, Schema, Types, Duration, Schedule } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
@@ -26,6 +26,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
+import { ProviderDiscover } from "./discover"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
@@ -1258,6 +1259,36 @@ function cloudflareGatewayNpm(providerID: string, modelID: string) {
   return undefined
 }
 
+function compatibleDiscoveredModel(providerID: ProviderV2.ID, modelID: string): Model {
+  return {
+    id: ModelV2.ID.make(modelID),
+    providerID,
+    name: modelID,
+    family: "",
+    api: {
+      id: modelID,
+      url: "",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 0, output: 0 },
+    capabilities: {
+      temperature: false,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    release_date: "",
+    variants: {},
+  }
+}
+
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
     id: ModelV2.ID.make(model.id),
@@ -1650,19 +1681,55 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
-          yield* Effect.promise(async () => {
-            try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+        const DISCOVERY_INTERVAL = Duration.hours(24)
+
+        const runDiscovery = Effect.fn("Provider.discovery")(function* () {
+          const fresh = yield* config.get()
+          const freshDisabled = new Set(fresh.disabled_providers ?? [])
+          const freshEnabled = fresh.enabled_providers ? new Set(fresh.enabled_providers) : null
+          const allowed = (id: ProviderV2.ID) => !(freshEnabled && !freshEnabled.has(id)) && !freshDisabled.has(id)
+
+          const gitlab = ProviderV2.ID.make("gitlab")
+          if (discoveryLoaders[gitlab] && providers[gitlab] && allowed(gitlab)) {
+            yield* Effect.promise(async () => {
+              try {
+                const discovered = await discoveryLoaders[gitlab]!()
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (!providers[gitlab].models[modelID]) providers[gitlab].models[modelID] = model
                 }
-              }
-            } catch (e) {}
-          })
-        }
+              } catch {}
+            })
+          }
+
+          for (const [id, provider] of Object.entries(providers)) {
+            const providerID = ProviderV2.ID.make(id)
+            if (!allowed(providerID)) continue
+            const npm = modelsDev[providerID]?.npm
+            const configProvider = fresh.provider?.[providerID]
+            if (configProvider?.npm !== "@ai-sdk/openai-compatible" && npm !== "@ai-sdk/openai-compatible") continue
+            const baseURL = (provider.options?.baseURL as string | undefined)?.trim()
+            if (!baseURL) continue
+            const apiKey = provider.key
+            if (!apiKey) continue
+            yield* Effect.promise(async () => {
+              try {
+                const ids = await ProviderDiscover.discoverOpenAICompatibleModels({ baseURL, apiKey })
+                for (const modelID of ids) {
+                  if (!providers[providerID].models[modelID]) {
+                    providers[providerID].models[modelID] = compatibleDiscoveredModel(providerID, modelID)
+                  }
+                }
+              } catch {}
+            })
+          }
+        })
+
+        yield* runDiscovery()
+
+        yield* Effect.gen(function* () {
+          yield* Effect.sleep(DISCOVERY_INTERVAL)
+          yield* runDiscovery()
+        }).pipe(Effect.repeat(Schedule.forever), Effect.forkScoped)
 
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)
