@@ -38,12 +38,12 @@ describe("createPtyClient", () => {
     ).toBe(socket)
     expect(request?.method).toBe("POST")
     expect(request?.url).toBe(
-      "https://server.example/api/pty/pty_1/connect-token?location%5Bdirectory%5D=%2Frepo%2Fworktree&location%5Bworkspace%5D=workspace_1",
+      "https://server.example/base/api/pty/pty_1/connect-token?location%5Bdirectory%5D=%2Frepo%2Fworktree&location%5Bworkspace%5D=workspace_1",
     )
     expect(request?.headers.get("authorization")).toBe("Basic credential")
     expect(request?.headers.get("x-opencode-ticket")).toBe("1")
     expect(socketURL?.toString()).toBe(
-      "wss://server.example/api/pty/pty_1/connect?location%5Bdirectory%5D=%2Frepo%2Fworktree&location%5Bworkspace%5D=workspace_1&cursor=42&ticket=ticket-1",
+      "wss://server.example/base/api/pty/pty_1/connect?location%5Bdirectory%5D=%2Frepo%2Fworktree&location%5Bworkspace%5D=workspace_1&cursor=42&ticket=ticket-1",
     )
     expect(socket.binaryType).toBe("arraybuffer")
   })
@@ -90,11 +90,11 @@ describe("createPersistentPtyClient", () => {
 
     expect(await pty.connect({ ptyID: "pty_1", cursor: 42, attachmentID: "attachment_1", takeover: true })).toBe(socket)
     expect(request?.method).toBe("POST")
-    expect(request?.url).toBe("https://server.example/api/experimental/persistent-pty/pty_1/connect-token")
+    expect(request?.url).toBe("https://server.example/base/api/experimental/persistent-pty/pty_1/connect-token")
     expect(request?.headers.get("authorization")).toBe("Basic credential")
     expect(request?.headers.get("x-opencode-ticket")).toBe("1")
     expect(socketURL?.toString()).toBe(
-      "wss://server.example/api/experimental/persistent-pty/pty_1/connect?ticket=persistent-ticket&cursor=42&attachment_id=attachment_1&takeover=true&input_protocol=1",
+      "wss://server.example/base/api/experimental/persistent-pty/pty_1/connect?ticket=persistent-ticket&cursor=42&attachment_id=attachment_1&takeover=true&input_protocol=1",
     )
     expect(socket.binaryType).toBe("arraybuffer")
   })
