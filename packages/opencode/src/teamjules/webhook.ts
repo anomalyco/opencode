@@ -29,6 +29,10 @@ interface GitHubCommentPayload {
   comment?: {
     body?: string
   }
+  issue?: {
+    body?: string
+    title?: string
+  }
   repository?: {
     full_name?: string
     default_branch?: string
@@ -59,15 +63,24 @@ export function createWebhookServer(
         return
       }
 
-      if (body.action === "created" && body.comment?.body?.includes("/jules")) {
-        const prompt = body.comment.body.replace(/^[\s\S]*?\/jules\s*/i, "").trim()
+      const textToScan =
+        body.action === "created" && body.comment?.body
+          ? body.comment.body
+          : body.action === "opened" && body.issue?.body
+            ? body.issue.body
+            : undefined
+
+      if (textToScan && /\/(?:team)?jules\b/i.test(textToScan)) {
+        const prompt = textToScan.replace(/^[\s\S]*?\/(?:team)?jules\s*/i, "").trim()
         if (prompt && body.repository?.full_name) {
-          await Effect.runPromise(service.createTask({
-            type: "issue",
-            repo: body.repository.full_name,
-            branch: body.repository.default_branch || "main",
-            prompt,
-          }))
+          await Effect.runPromise(
+            service.createTask({
+              type: "issue",
+              repo: body.repository.full_name,
+              branch: body.repository.default_branch || "main",
+              prompt,
+            }),
+          )
           res.writeHead(200)
           res.end("Task created")
           return

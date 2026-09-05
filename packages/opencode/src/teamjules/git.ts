@@ -4,7 +4,7 @@ import { promisify } from "util"
 const exec = promisify(execFile)
 
 export interface GitClient {
-  clone(repo: string, dir: string): Promise<void>
+  clone(repo: string, dir: string, token?: string): Promise<void>
   fetch(dir: string, remote?: string): Promise<void>
   checkout(dir: string, branch: string): Promise<void>
   createBranch(dir: string, branch: string, base?: string): Promise<void>
@@ -22,8 +22,11 @@ async function run(dir: string, command: string, args: string[]): Promise<string
 
 export function createGitClient(): GitClient {
   return {
-    async clone(repo, dir) {
-      await run(dir, "git", ["clone", `https://github.com/${repo}.git`, "."])
+    async clone(repo, dir, token) {
+      const url = token
+        ? `https://x-access-token:${token}@github.com/${repo}.git`
+        : `https://github.com/${repo}.git`
+      await run(dir, "git", ["clone", url, "."])
     },
 
     async fetch(dir, remote = "origin") {

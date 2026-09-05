@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { TeamJules } from "@opencode-ai/core/teamjules"
-import { TeamJulesTaskTable } from "@opencode-ai/core/teamjules/sql"
+import { TeamJulesTaskTable, TeamJulesWorkerTable } from "@opencode-ai/core/teamjules/sql"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { eq } from "drizzle-orm"
@@ -194,6 +194,58 @@ describe("TeamJules", () => {
       const retried = yield* teamjules.getTask(task.id)
       expect(retried?.status).toBe("pending")
       expect(retried?.attempt_count).toBe(0)
+
+      yield* teamjules.deregisterWorker(worker.id)
+    }),
+  )
+
+  it.live("tracks worker busy/idle status transition on task claim, complete, and fail", () =>
+    Effect.gen(function* () {
+      const teamjules = yield* TeamJules.Service
+      const { db } = yield* Database.Service
+      const worker = yield* teamjules.registerWorker()
+
+      const getWorker = () =>
+        db
+          .select()
+          .from(TeamJulesWorkerTable)
+          .where(eq(TeamJulesWorkerTable.id, worker.id))
+          .get()
+          .pipe(Effect.orDie)
+
+      const initialWorker = yield* getWorker()
+      expect(initialWorker?.status).toBe("idle")
+
+      const task = yield* teamjules.createTask({
+        type: "manual",
+        repo: "anomalyco/opencode",
+        branch: "main",
+        prompt: "Worker status transition test",
+      })
+
+      // Claim sets worker to busy
+      const claimed = yield* teamjules.claimTask(worker.id)
+      expect(claimed?.id).toBe(task.id)
+      const busyWorker = yield* getWorker()
+      expect(busyWorker?.status).toBe("busy")
+
+      // Complete resets worker to idle
+      yield* teamjules.completeTask(task.id, { commit_sha: "test_sha" })
+      const idleWorker = yield* getWorker()
+      expect(idleWorker?.status).toBe("idle")
+
+      // Next task: Fail also resets worker to idle
+      const task2 = yield* teamjules.createTask({
+        type: "manual",
+        repo: "anomalyco/opencode",
+        branch: "main",
+        prompt: "Worker status fail test",
+      })
+      yield* teamjules.claimTask(worker.id)
+      expect((yield* getWorker())?.status).toBe("busy")
+
+      yield* teamjules.failTask(task2.id, "Fatal task error")
+      expect((yield* getWorker())?.status).toBe("idle")
 
       yield* teamjules.deregisterWorker(worker.id)
     }),

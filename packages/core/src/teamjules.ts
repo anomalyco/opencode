@@ -240,21 +240,47 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
 
+        if (claimed) {
+          yield* db
+            .update(TeamJulesWorkerTable)
+            .set({ status: "busy", time_updated: now })
+            .where(eq(TeamJulesWorkerTable.id, workerId))
+            .run()
+            .pipe(Effect.orDie)
+        }
+
         return claimed ? toTaskInfo(claimed) : undefined
       }),
 
       completeTask: Effect.fn("TeamJules.completeTask")(function* (id, result) {
+        const now = Date.now()
+        const task = yield* db
+          .select()
+          .from(TeamJulesTaskTable)
+          .where(eq(TeamJulesTaskTable.id, id))
+          .get()
+          .pipe(Effect.orDie)
+
         yield* db
           .update(TeamJulesTaskTable)
           .set({
             status: "completed",
             result,
             worker_id: null,
-            time_updated: Date.now(),
+            time_updated: now,
           })
           .where(eq(TeamJulesTaskTable.id, id))
           .run()
           .pipe(Effect.orDie)
+
+        if (task?.worker_id) {
+          yield* db
+            .update(TeamJulesWorkerTable)
+            .set({ status: "idle", time_updated: now })
+            .where(eq(TeamJulesWorkerTable.id, task.worker_id))
+            .run()
+            .pipe(Effect.orDie)
+        }
       }),
 
       failTask: Effect.fn("TeamJules.failTask")(function* (id, error) {
@@ -282,6 +308,15 @@ const layer = Layer.effect(
           .where(eq(TeamJulesTaskTable.id, id))
           .run()
           .pipe(Effect.orDie)
+
+        if (task.worker_id) {
+          yield* db
+            .update(TeamJulesWorkerTable)
+            .set({ status: "idle", time_updated: now })
+            .where(eq(TeamJulesWorkerTable.id, task.worker_id))
+            .run()
+            .pipe(Effect.orDie)
+        }
       }),
 
       heartbeat: Effect.fn("TeamJules.heartbeat")(function* (workerId) {

@@ -115,8 +115,22 @@ export const TeamJulesCommand = effectCmd({
           yargs
             .option("poll-interval", { type: "number", default: 2000, describe: "Poll interval in ms" })
             .option("work-dir", { type: "string", describe: "Working directory for git clones" })
-            .option("github-token", { type: "string", describe: "GitHub token for creating PRs" }),
+            .option("github-token", { type: "string", describe: "GitHub token for creating PRs" })
+            .option("model", {
+              type: "string",
+              describe: "Model in providerID/modelID format (e.g. anthropic/claude-3-5-sonnet)",
+            }),
         async (args) => {
+          let model: { providerID: string; modelID: string } | undefined
+          if (args.model) {
+            const slashIndex = args.model.indexOf("/")
+            if (slashIndex > 0) {
+              model = {
+                providerID: args.model.slice(0, slashIndex),
+                modelID: args.model.slice(slashIndex + 1),
+              }
+            }
+          }
           const { createWorker } = await import("@/teamjules/worker")
           const worker = await runEffect(
             Effect.gen(function* () {
@@ -125,6 +139,7 @@ export const TeamJulesCommand = effectCmd({
                 pollIntervalMs: args.pollInterval,
                 workDir: args.workDir,
                 githubToken: args.githubToken ?? process.env.GITHUB_TOKEN,
+                model,
               })
             }),
           )

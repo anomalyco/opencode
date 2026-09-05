@@ -97,8 +97,49 @@ describe("TeamJules Webhook", () => {
       })
       expect(otherRes.status).toBe(200)
       expect(await otherRes.text()).toBe("OK")
-      // No new task should be created
       expect(createdTasks.length).toBe(1)
+
+      // 5. Valid comment with /teamjules command
+      const teamjulesPayload = JSON.stringify({
+        action: "created",
+        comment: { body: "/teamjules refactor auth service" },
+        repository: { full_name: "test-owner/test-repo", default_branch: "main" },
+      })
+      const teamjulesSig = "sha256=" + createHmac("sha256", secret).update(teamjulesPayload).digest("hex")
+
+      const teamjulesRes = await fetch(`${baseUrl}/webhook/github`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-hub-signature-256": teamjulesSig,
+        },
+        body: teamjulesPayload,
+      })
+      expect(teamjulesRes.status).toBe(200)
+      expect(await teamjulesRes.text()).toBe("Task created")
+      expect(createdTasks.length).toBe(2)
+      expect(createdTasks[1].prompt).toBe("refactor auth service")
+
+      // 6. Issue opened with /jules in description
+      const issuePayload = JSON.stringify({
+        action: "opened",
+        issue: { body: "/jules add telemetry endpoints" },
+        repository: { full_name: "test-owner/test-repo", default_branch: "main" },
+      })
+      const issueSig = "sha256=" + createHmac("sha256", secret).update(issuePayload).digest("hex")
+
+      const issueRes = await fetch(`${baseUrl}/webhook/github`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-hub-signature-256": issueSig,
+        },
+        body: issuePayload,
+      })
+      expect(issueRes.status).toBe(200)
+      expect(await issueRes.text()).toBe("Task created")
+      expect(createdTasks.length).toBe(3)
+      expect(createdTasks[2].prompt).toBe("add telemetry endpoints")
     } finally {
       await server.close()
     }

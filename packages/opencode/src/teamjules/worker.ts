@@ -1,15 +1,17 @@
 import { TeamJules, type TaskInfo, type WorkerID } from "@opencode-ai/core/teamjules"
 import { Effect, Runtime } from "effect"
-import { createRunner, type RunnerConfig } from "./runner"
+import { createRunner, type Runner, type RunnerConfig } from "./runner"
 
 export interface WorkerConfig {
   pollIntervalMs?: number
+  heartbeatIntervalMs?: number
   workDir?: string
   githubToken?: string
   model?: { providerID: string; modelID: string }
   agent?: {
     prompt?: string
   }
+  runner?: Runner
 }
 
 export interface Worker {
@@ -18,10 +20,12 @@ export interface Worker {
 }
 
 export function createWorker(service: TeamJules.Interface, config: WorkerConfig = {}): Worker {
-  const runner = createRunner()
+  const runner = config.runner ?? createRunner()
   let running = false
   let pollTimer: ReturnType<typeof setTimeout> | null = null
   let workerId: WorkerID | null = null
+
+  let activeHeartbeat: ReturnType<typeof setInterval> | null = null
 
   async function poll() {
     if (!running || !workerId) return
@@ -44,6 +48,15 @@ export function createWorker(service: TeamJules.Interface, config: WorkerConfig 
   }
 
   async function processTask(task: TaskInfo) {
+    if (workerId) {
+      const currentWorkerId = workerId
+      activeHeartbeat = setInterval(() => {
+        Effect.runPromise(service.heartbeat(currentWorkerId)).catch((err) => {
+          console.error("[TeamJules] Task heartbeat error:", err)
+        })
+      }, config.heartbeatIntervalMs ?? 10_000)
+    }
+
     try {
       const result = await runner.run(task, {
         workDir: config.workDir,
@@ -60,6 +73,11 @@ export function createWorker(service: TeamJules.Interface, config: WorkerConfig 
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await Effect.runPromise(service.failTask(task.id, message))
+    } finally {
+      if (activeHeartbeat) {
+        clearInterval(activeHeartbeat)
+        activeHeartbeat = null
+      }
     }
   }
 
@@ -80,6 +98,10 @@ export function createWorker(service: TeamJules.Interface, config: WorkerConfig 
       if (pollTimer) {
         clearTimeout(pollTimer)
         pollTimer = null
+      }
+      if (activeHeartbeat) {
+        clearInterval(activeHeartbeat)
+        activeHeartbeat = null
       }
       if (workerId) {
         await Effect.runPromise(service.deregisterWorker(workerId))

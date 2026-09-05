@@ -46,7 +46,7 @@ export function createRunner(): Runner {
 
       try {
         // Clone the repository
-        await git.clone(task.repo, workDir)
+        await git.clone(task.repo, workDir, config.githubToken)
 
         // Create a branch for this task
         const branchName = `teamjules/${task.id}`
@@ -104,7 +104,12 @@ interface OpencodeServer {
 
 async function startOpencodeServer(cwd: string, port: number): Promise<OpencodeServer> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("opencode", ["serve", `--port=${port}`], {
+    const opencodeBin =
+      process.env.OPENCODE_BIN ||
+      (process.execPath.endsWith("/opencode") || process.execPath.endsWith("\\opencode.exe")
+        ? process.execPath
+        : "opencode")
+    const proc = spawn(opencodeBin, ["serve", `--port=${port}`], {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, NO_COLOR: "1" },
@@ -208,20 +213,52 @@ async function executeTask(
     throw new Error(`Failed to prompt session: ${promptResponse.status} ${errText}`)
   }
 
-  // Wait for completion (poll active session map via GET /api/session/active)
-  let running = true
-  while (running) {
-    await new Promise((r) => setTimeout(r, 2_000))
+  // Wait for session execution to be registered as active
+  let started = false
+  for (let i = 0; i < 20; i++) {
+    await new Promise((r) => setTimeout(r, 500))
     try {
       const activeResponse = await fetch(`${baseUrl}/api/session/active`)
       if (activeResponse.ok) {
         const activeData = (await activeResponse.json()) as { data?: Record<string, unknown> }
-        running = Boolean(activeData.data && activeData.data[sessionId])
-      } else {
+        if (activeData.data && activeData.data[sessionId]) {
+          started = true
+          break
+        }
+      }
+    } catch {}
+  }
+
+  if (started) {
+    // Session is running; poll until the active session drain completes
+    let running = true
+    while (running) {
+      await new Promise((r) => setTimeout(r, 1_000))
+      try {
+        const activeResponse = await fetch(`${baseUrl}/api/session/active`)
+        if (activeResponse.ok) {
+          const activeData = (await activeResponse.json()) as { data?: Record<string, unknown> }
+          running = Boolean(activeData.data && activeData.data[sessionId])
+        } else {
+          break
+        }
+      } catch {
         break
       }
-    } catch {
-      break
+    }
+  } else {
+    // If not observed in active map within 10s, poll until assistant message appears
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 1_000))
+      try {
+        const msgRes = await fetch(`${baseUrl}/api/session/${sessionId}/messages`)
+        if (msgRes.ok) {
+          const msgData = (await msgRes.json()) as { data?: Array<{ type: string }> }
+          if (msgData.data && msgData.data.some((m) => m.type === "assistant")) {
+            break
+          }
+        }
+      } catch {}
     }
   }
 }

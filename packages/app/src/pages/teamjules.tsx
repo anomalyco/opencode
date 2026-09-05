@@ -59,6 +59,16 @@ export function TeamJulesPage() {
     }
   }
 
+  const retryTask = async (id: string) => {
+    try {
+      const client = sdk().client
+      await client.v2.teamjules.retry({ taskID: id })
+      await fetchTasks()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to retry task")
+    }
+  }
+
   const statusColor = (status: string) => {
     switch (status) {
       case "completed":
@@ -173,8 +183,33 @@ export function TeamJulesPage() {
                         Cancel
                       </button>
                     </Show>
+                    <Show when={task.status === "failed"}>
+                      <button
+                        class="text-sm text-blue-600 hover:text-blue-800"
+                        onClick={() => retryTask(task.id)}
+                      >
+                        Retry
+                      </button>
+                    </Show>
                   </div>
                 </div>
+                <Show when={task.result?.pr_url}>
+                  <div class="mt-2">
+                    <a
+                      href={task.result.pr_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-sm text-blue-600 hover:underline"
+                    >
+                      View Pull Request &rarr;
+                    </a>
+                  </div>
+                </Show>
+                <Show when={task.result?.error}>
+                  <div class="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded">
+                    Error: {task.result.error}
+                  </div>
+                </Show>
               </div>
             )}
           </For>
