@@ -129,6 +129,7 @@ export const make = <A, E = never>(
             return [awaitDone(run.done), { _tag: "ShellThenRun", shell: st.shell, run }] as const
           }
           case "Idle": {
+            yield* onBusy
             const done = yield* Deferred.make<A, E | Cancelled>()
             const run = yield* startRun(work, done)
             return [awaitDone(done), { _tag: "Running", run }] as const

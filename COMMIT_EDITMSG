@@ -1,0 +1,39 @@
+feat(opencode): add /reload slash command with auto-resume
+
+Add a /reload slash command that hot-reloads all configuration, plugins,
+MCP servers, skills, and agents without restarting the TUI. After reload,
+the interrupted session is automatically resumed via SessionPrompt.loop().
+
+Closes #6719
+
+ConfigReload service:
+- Per-workspace state tracking with pending/executing/done lifecycle
+- Queues reload if sessions are active, executes when idle
+- Coalesces repeated reload requests during an active reload
+- Emits config.reload.pending/executing/done events for TUI sync
+- Bootstrap cycle tracking for TUI reconnection after instance reload
+- Auto-resume: after reload completes, calls SessionPrompt.loop() to
+  continue the interrupted session with fresh config
+
+Server endpoints:
+- POST /config/reload — triggers reload, returns immediate/queued status
+- GET /config/reload/status — poll-based status for non-TUI clients
+- POST /config/bootstrap-complete — TUI acknowledges reload completion
+
+reload_config tool:
+- Agent-callable tool that triggers reload and stops the current turn
+- stopAfterToolResult stops the processor loop cleanly
+- Session is auto-resumed after reload completes
+
+Session integration:
+- SessionRunState wires ConfigReload.start/finish into onBusy/onIdle
+- Runner.onBusy called on Idle→Running transition
+- Processor handles stopAfterToolResult via ctx.blocked
+
+Workspace routing:
+- URL-decode x-opencode-directory header for encoded paths
+
+Co-Authored-By: opencode <opencode@anomalyco>
+Agent: @feature-dev
+Model: glm/zai-glm-52
+Scope: #6719

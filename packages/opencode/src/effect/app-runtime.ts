@@ -7,6 +7,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Auth } from "@/auth"
 import { Account } from "@/account/account"
 import { Config } from "@/config/config"
+import { ConfigReload } from "@/config/reload"
 import { Git } from "@/git"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Storage } from "@/storage/storage"
@@ -63,6 +64,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     Auth.node,
     Account.node,
     Config.node,
+    ConfigReload.node,
     Git.node,
     Storage.node,
     Snapshot.node,

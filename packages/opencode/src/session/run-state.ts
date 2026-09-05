@@ -3,6 +3,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Runner } from "@/effect/runner"
 import { BackgroundJob } from "@/background/job"
+import { ConfigReload } from "@/config/reload"
 import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
@@ -31,6 +32,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const background = yield* BackgroundJob.Service
     const status = yield* SessionStatus.Service
+    const reload = yield* ConfigReload.Service
 
     const state = yield* InstanceState.make(
       Effect.fn("SessionRunState.state")(function* () {
@@ -60,8 +62,13 @@ const layer = Layer.effect(
         onIdle: Effect.gen(function* () {
           data.runners.delete(sessionID)
           yield* status.set(sessionID, { type: "idle" })
+          yield* reload.finish(sessionID)
+          yield* reload.check()
         }),
-        onBusy: status.set(sessionID, { type: "busy" }),
+        onBusy: Effect.gen(function* () {
+          yield* reload.start(sessionID)
+          yield* status.set(sessionID, { type: "busy" })
+        }),
         onInterrupt,
       })
       data.runners.set(sessionID, next)
@@ -80,6 +87,8 @@ const layer = Layer.effect(
       const existing = data.runners.get(sessionID)
       if (!existing) {
         yield* status.set(sessionID, { type: "idle" })
+        yield* reload.finish(sessionID)
+        yield* reload.check()
         return
       }
       yield* existing.cancel
@@ -146,6 +155,6 @@ function busyError(sessionID: SessionID) {
   return new Session.BusyError({ sessionID })
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [BackgroundJob.node, SessionStatus.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [BackgroundJob.node, SessionStatus.node, ConfigReload.node] })
 
 export * as SessionRunState from "./run-state"
