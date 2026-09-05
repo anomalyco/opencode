@@ -353,6 +353,7 @@ describe("ACP service sessions", () => {
     expect(categories(result)).toContain("mode")
     expect(updates).toHaveLength(1)
     expect(JSON.stringify(updates[0])).toContain("available_commands_update")
+    expect(JSON.stringify(updates[0])).toContain('"name":"compact"')
     expect(JSON.stringify(updates[0])).toContain("review-skill")
     expect(mcpAdds).toEqual(["tools"])
   })
