@@ -482,10 +482,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return available[Math.floor(Math.random() * available.length)]
     }
 
-    const enriched = createMemo(() =>
-      server.projects.list().map((project) => enrichProject({ project, data: serverSync() })),
-    )
-
     // Sandbox chain map keyed by pathKey so that drive roots (C:/) never resolve
     // through subdirectories (C:/foo) and vice versa. Each sandbox maps to its
     // parent worktree; the map must not contain drive roots as keys or values.
@@ -552,6 +548,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const enriched = createMemo(() =>
       server.projects.list().map((project) => enrichProject({ project, data: serverSync() })),
     )
+
     const list = createMemo(() => {
       const projects = enriched()
       return projects.map((project) => {
