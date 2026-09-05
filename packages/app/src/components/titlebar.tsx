@@ -618,16 +618,19 @@ function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
 
 function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   return (
-    <div class="group relative mr-3 h-5 w-5 shrink-0 rounded-full bg-v2-background-bg-deep transition-[width] duration-150 ease-out hover:z-30 hover:w-[68px] focus-within:z-30 focus-within:w-[68px] motion-reduce:transition-none">
+    <div
+      data-slot="titlebar-update-pill"
+      class="group relative mr-3 flex h-5 w-max max-w-5 shrink-0 justify-end overflow-hidden rounded-full bg-v2-background-bg-deep transition-[max-width] duration-150 ease-out hover:z-30 hover:max-w-48 focus-within:z-30 focus-within:max-w-48 motion-reduce:transition-none"
+    >
       <button
         type="button"
-        class="absolute right-0 top-0 z-10 flex h-5 w-5 items-center justify-end overflow-hidden rounded-full bg-v2-icon-icon-accent/20 text-v2-icon-icon-accent transition-[width,background-color] duration-150 ease-out group-hover:w-[68px] group-hover:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] group-focus-within:w-[68px] group-focus-within:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none"
+        class="z-10 flex h-5 w-max shrink-0 items-center justify-end rounded-full bg-v2-icon-icon-accent/20 text-v2-icon-icon-accent transition-[background-color] duration-150 ease-out group-hover:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] group-focus-within:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none"
         onClick={props.state.onInstall}
         disabled={props.state.installing}
         aria-busy={props.state.installing}
         aria-label={props.state.ariaLabel}
       >
-        <span class="shrink-0 ml-[8px] mr-px text-[11px] text-v2-text-text-accent [font-weight:530] opacity-0 translate-x-2 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 motion-reduce:translate-x-0">
+        <span class="ml-[8px] mr-px shrink-0 whitespace-nowrap text-[11px] text-v2-text-text-accent [font-weight:530] opacity-0 translate-x-2 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 motion-reduce:translate-x-0">
           {props.state.label}
         </span>
         <span class="flex size-5 shrink-0 items-center justify-center">
