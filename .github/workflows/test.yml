@@ -81,6 +81,33 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Find affected verification checks
+        id: checks
+        env:
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            for package in cli codemode sdk; do
+              echo "$package=true" >> "$GITHUB_OUTPUT"
+            done
+            exit 0
+          fi
+          bun turbo ls --affected --output=json > affected.json
+          bun -e '
+            const result = await Bun.file("affected.json").json()
+            const packages = new Set(result.packages.items.map((item) => item.name))
+            const affected = (name) => packages.has(`@opencode-ai/${name}`)
+            const checks = {
+              // CLI builds embed the web app outside the workspace dependency graph.
+              cli: affected("cli") || affected("app"),
+              // Codemode publishing imports the shared script package directly.
+              codemode: affected("codemode") || affected("script"),
+              sdk: affected("sdk"),
+            }
+            for (const [name, enabled] of Object.entries(checks)) console.log(`${name}=${enabled}`)
+          ' >> "$GITHUB_OUTPUT"
+
       - name: Test Effect simplification rules
         if: runner.os == 'Linux'
         run: bun run test:effect-simplification-rules
@@ -123,25 +150,17 @@ jobs:
           TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify published codemode package
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.checks.outputs.codemode == 'true'
         working-directory: packages/codemode
         run: bun run script/publish.ts --dry-run
 
       - name: Verify packed workerd SDK
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.checks.outputs.sdk == 'true'
         timeout-minutes: 15
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            bun turbo verify:package --filter=@opencode-ai/sdk
-            exit 0
-          fi
-          bun turbo verify:package --affected --filter=@opencode-ai/sdk
-        env:
-          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
-          TURBO_SCM_HEAD: ${{ github.sha }}
+        run: bun turbo verify:package --filter=@opencode-ai/sdk
 
       - name: Verify compiled service lifecycle
-        if: always()
+        if: steps.checks.outputs.cli == 'true'
         timeout-minutes: 10
         working-directory: packages/cli
         env:
@@ -151,13 +170,13 @@ jobs:
           bun run script/service-smoke.ts
 
       - name: Setup Node build runtime
-        if: always()
+        if: steps.checks.outputs.cli == 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "26.4.0"
 
       - name: Verify Node build
-        if: always()
+        if: steps.checks.outputs.cli == 'true'
         timeout-minutes: 15
         working-directory: packages/cli
         env:

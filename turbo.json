@@ -1,10 +1,12 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
   "globalDependencies": [
+    "package.json",
     "patches/**",
     "bunfig.toml",
     ".npmrc",
     ".github/actions/setup-bun/**",
+    ".github/TEAM_MEMBERS",
     ".github/workflows/test.yml"
   ],
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
