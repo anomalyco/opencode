@@ -2668,6 +2668,41 @@ Configuration details:
 
 The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
+###### Model capabilities
+
+Custom models also accept capability flags that tell OpenCode what the model supports:
+
+```json title="opencode.json" {12-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI Provider Display Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1"
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "attachment": true,
+          "modalities": {
+            "input": ["text", "image"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+- **attachment**: Whether the model can process file attachments such as images. Defaults to `false` for custom models.
+- **modalities.input**: The input types the model accepts (`text`, `image`, `audio`, `video`, `pdf`).
+
+:::warning
+If a custom model can see images but `attachment` is not set to `true`, pasted or attached images are replaced with a plain text placeholder (for example `[Attached image/png: file.png]`) before the request is sent. The model never receives the image and no warning is shown, which is easy to mistake for a provider problem. Set `attachment: true` (and `modalities.input`) on custom models that accept images.
+:::
+
 ---
 
 ## Troubleshooting
