@@ -827,6 +827,7 @@ export function createData(config: CreateDataInput) {
             existing.finish = undefined
             existing.rawFinish = undefined
             existing.providerState = undefined
+            if (event.data.started !== undefined) existing.time.created = event.data.started
             existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
@@ -845,7 +846,7 @@ export function createData(config: CreateDataInput) {
             metadata: event.metadata,
             content: [],
             snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
-            time: { created: event.created },
+            time: { created: event.data.started ?? event.created },
           })
         })
         return

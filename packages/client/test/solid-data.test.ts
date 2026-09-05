@@ -14,6 +14,59 @@ const session = (viewed: number): SessionInfo => ({
   location: { directory: "/project" },
 })
 
+test("projects request start timestamps and preserves legacy retry timing", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => Response.json({ data: [], cursor: {} }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const cases = [
+      { id: "legacy", started: undefined, expected: 2_690 },
+      { id: "legacy", started: undefined, expected: 2_690 },
+      { id: "current", started: 0, expected: 0 },
+      { id: "current", started: 5_000, expected: 5_000 },
+      { id: "current", started: undefined, expected: 5_000 },
+    ]
+    for (const [index, item] of cases.entries()) {
+      const event: OpenCodeEvent = {
+        id: `evt_started_${index}`,
+        created: 2_690 + index * 3_000,
+        type: "session.step.started",
+        durable: { aggregateID: "ses_refresh", seq: index + 1, version: 1 },
+        data: {
+          sessionID: "ses_refresh",
+          assistantMessageID: item.id,
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          ...(item.started === undefined ? {} : { started: item.started }),
+        },
+      }
+      listeners.forEach((listener) => listener({ name: event.type, details: event }))
+      expect(setup.data.session.message.get("ses_refresh", item.id)?.time.created).toBe(item.expected)
+    }
+    expect(setup.data.session.message.list("ses_refresh")).toHaveLength(2)
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates after an event overtakes an active session read", async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => (release = resolve))
