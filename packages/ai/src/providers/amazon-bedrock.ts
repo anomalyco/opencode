@@ -10,6 +10,8 @@ export const id = ProviderID.make("amazon-bedrock")
 export type Config = RouteDefaultsInput & {
   /** Bedrock API key. Falls back to `AWS_BEARER_TOKEN_BEDROCK`; bearer auth takes precedence over SigV4. */
   readonly apiKey?: string
+  /** `sigv4` ignores `apiKey` fallbacks from the environment; `bearer` requires a token. */
+  readonly auth?: "bearer" | "sigv4"
   readonly headers?: Record<string, string>
   /** Static SigV4 credentials. When omitted the AWS default credential chain resolves them per request. */
   readonly credentials?: BedrockCredentials
@@ -34,15 +36,18 @@ export const routes = [BedrockConverse.route]
 
 const bedrockBaseURL = (region: string) => `https://bedrock-runtime.${region}.amazonaws.com`
 
-const configuredRoute = (input: Config, mode?: BedrockAuth.ResolveAuthOptions["mode"]) => {
-  const { apiKey, credentials, profile, region, baseURL, ...rest } = input
+const configuredRoute = (input: Config) => {
+  const { apiKey, auth, credentials, profile, region, baseURL, ...rest } = input
+  if (auth === "bearer" && apiKey === undefined && process.env.AWS_BEARER_TOKEN_BEDROCK === undefined)
+    throw new Error("Amazon Bedrock bearer auth requires apiKey")
+  if (auth === "sigv4" && apiKey !== undefined) throw new Error("Amazon Bedrock SigV4 auth does not accept apiKey")
   const resolvedRegion = BedrockAuth.resolveRegion(input)
   return BedrockConverse.route.with({
     ...rest,
     provider: id,
     providerMetadataKey: "bedrock",
     endpoint: { baseURL: baseURL ?? bedrockBaseURL(resolvedRegion) },
-    auth: BedrockAuth.resolveAuth({ apiKey, credentials, profile }, resolvedRegion, { mode }),
+    auth: BedrockAuth.resolveAuth({ apiKey, credentials, profile }, resolvedRegion, { mode: auth }),
   })
 }
 
@@ -56,22 +61,15 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
-  if (settings.auth === "bearer" && settings.apiKey === undefined && process.env.AWS_BEARER_TOKEN_BEDROCK === undefined)
-    throw new Error("Amazon Bedrock bearer auth requires apiKey")
-  if (settings.auth === "sigv4" && settings.apiKey !== undefined)
-    throw new Error("Amazon Bedrock SigV4 auth does not accept apiKey")
-  return configuredRoute(
-    {
-      apiKey: settings.apiKey,
-      baseURL: settings.baseURL,
-      credentials: settings.credentials,
-      generation: settings.topP === undefined ? undefined : { topP: settings.topP },
-      headers: settings.headers === undefined ? undefined : { ...settings.headers },
-      http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-      profile: settings.profile,
-      region: settings.region,
-    },
-    settings.auth,
-  ).model({ id: modelID })
-}
+export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+  configure({
+    apiKey: settings.apiKey,
+    auth: settings.auth,
+    baseURL: settings.baseURL,
+    credentials: settings.credentials,
+    generation: settings.topP === undefined ? undefined : { topP: settings.topP },
+    headers: settings.headers === undefined ? undefined : { ...settings.headers },
+    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
+    profile: settings.profile,
+    region: settings.region,
+  }).model(modelID)

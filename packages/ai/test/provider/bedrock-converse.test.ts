@@ -1443,16 +1443,22 @@ describe("Bedrock Converse route", () => {
     ),
   )
 
-  it.effect("explicit sigv4 settings ignore an ambient bearer token", () =>
+  it.effect("auth: sigv4 ignores an ambient bearer token from configure and settings", () =>
     Effect.gen(function* () {
-      const signed = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
+      const configured = AmazonBedrock.configure({ auth: "sigv4", baseURL: "https://bedrock-runtime.test" }).model(
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      )
+      const fromSettings = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
         auth: "sigv4",
         baseURL: "https://bedrock-runtime.test",
       })
-      const headers = yield* captureHeaders(signed)
 
-      expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
-      expect(headers.get("authorization")).toContain("/ap-southeast-2/bedrock/aws4_request")
+      for (const target of [configured, fromSettings]) {
+        const headers = yield* captureHeaders(target)
+        expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
+        expect(headers.get("authorization")).toContain("/ap-southeast-2/bedrock/aws4_request")
+      }
+      expect(() => AmazonBedrock.configure({ auth: "sigv4", apiKey: "k" })).toThrow("does not accept apiKey")
     }).pipe(
       withProcessEnv({
         ...noAmbientAWS,
