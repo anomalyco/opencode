@@ -18,13 +18,19 @@ import path from "path"
 // bun process.
 const ORIGINAL_MODELS_PATH = Flag.OPENCODE_MODELS_PATH
 const ORIGINAL_DISABLE_FETCH = Flag.OPENCODE_DISABLE_MODELS_FETCH
+const ORIGINAL_CLIENT = process.env.OPENCODE_CLIENT
 beforeAll(() => {
   Flag.OPENCODE_MODELS_PATH = undefined
   Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+  // USER_AGENT embeds Flag.OPENCODE_CLIENT, which defaults to "cli" only when
+  // the env var is unset; a developer shell may export it (e.g. "desktop").
+  process.env.OPENCODE_CLIENT = "cli"
 })
 afterAll(() => {
   Flag.OPENCODE_MODELS_PATH = ORIGINAL_MODELS_PATH
   Flag.OPENCODE_DISABLE_MODELS_FETCH = ORIGINAL_DISABLE_FETCH
+  if (ORIGINAL_CLIENT === undefined) delete process.env.OPENCODE_CLIENT
+  else process.env.OPENCODE_CLIENT = ORIGINAL_CLIENT
 })
 
 const cacheFile = path.join(Global.Path.cache, "models.json")
