@@ -3,6 +3,7 @@ import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
   drainPendingDeepLinks,
+  handleDeepLinks,
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
@@ -109,6 +110,41 @@ describe("layout deep links", () => {
 
     expect(drainPendingDeepLinks(target)).toEqual(["opencode://open-project?directory=/a"])
     expect(drainPendingDeepLinks(target)).toEqual([])
+  })
+
+  test("dispatches project and new-session deep links", () => {
+    const projects: string[] = []
+    const sessions: Array<{ directory: string; prompt?: string }> = []
+
+    handleDeepLinks(
+      [
+        "opencode://open-project?directory=/a",
+        "opencode://new-session?directory=/b&prompt=ship%20it",
+        "opencode://other?directory=/c",
+      ],
+      {
+        canHandle: () => true,
+        openProject: (directory) => projects.push(directory),
+        openNewSession: (link) => sessions.push(link),
+      },
+    )
+
+    expect(projects).toEqual(["/a"])
+    expect(sessions).toEqual([{ directory: "/b", prompt: "ship it" }])
+  })
+
+  test("does not dispatch deep links when handler is disabled", () => {
+    const projects: string[] = []
+    const sessions: Array<{ directory: string; prompt?: string }> = []
+
+    handleDeepLinks(["opencode://open-project?directory=/a", "opencode://new-session?directory=/b"], {
+      canHandle: () => false,
+      openProject: (directory) => projects.push(directory),
+      openNewSession: (link) => sessions.push(link),
+    })
+
+    expect(projects).toEqual([])
+    expect(sessions).toEqual([])
   })
 })
 
