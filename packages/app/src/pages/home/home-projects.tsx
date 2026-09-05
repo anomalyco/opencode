@@ -9,6 +9,9 @@ export function HomeProjects(props: { projects: HomeProjectsController; scroll: 
       servers={props.projects.server.list}
       projects={props.projects.project.list}
       recentlyClosed={props.projects.project.recentlyClosed}
+      closedForServer={props.projects.project.closedForServer}
+      isHiddenClosed={props.projects.project.isHiddenClosed}
+      isArchivedClosed={props.projects.project.isArchivedClosed}
       selection={props.projects.selection.value}
       homedir={props.projects.project.homedir}
       serverHealth={props.projects.server.health}
@@ -33,6 +36,17 @@ export function HomeProjects(props: { projects: HomeProjectsController; scroll: 
       onRevealProject={props.projects.project.reveal}
       onClearNotifications={props.projects.project.clearNotifications}
       onCloseProject={props.projects.project.close}
+      onReopenClosed={props.projects.project.reopenClosed}
+      onArchiveClosed={props.projects.project.archiveClosed}
+      onUnarchiveClosed={props.projects.project.unarchiveClosed}
+      onHideClosed={props.projects.project.hideClosed}
+      onUnhideClosed={props.projects.project.unhideClosed}
+      onRemoveClosed={props.projects.project.removeClosed}
+      onMoveClosedTop={props.projects.project.moveClosedTop}
+      onBatchReopenClosed={props.projects.project.batchReopen}
+      onBatchArchiveClosed={props.projects.project.batchArchive}
+      onBatchHideClosed={props.projects.project.batchHide}
+      onBatchRemoveClosed={props.projects.project.batchRemove}
       onOpenSettings={props.projects.utility.settings}
       onOpenHelp={props.projects.utility.help}
     />
