@@ -127,7 +127,7 @@ export interface Interface {
   readonly references: (input: LocInput) => Effect.Effect<any[]>
   readonly implementation: (input: LocInput) => Effect.Effect<any[]>
   readonly documentSymbol: (uri: string) => Effect.Effect<(DocumentSymbol | Symbol)[]>
-  readonly workspaceSymbol: (query: string) => Effect.Effect<Symbol[]>
+  readonly workspaceSymbol: (query: string, file: string) => Effect.Effect<Symbol[]>
   readonly prepareCallHierarchy: (input: LocInput) => Effect.Effect<any[]>
   readonly incomingCalls: (input: LocInput) => Effect.Effect<any[]>
   readonly outgoingCalls: (input: LocInput) => Effect.Effect<any[]>
@@ -430,8 +430,8 @@ const layer = Layer.effect(
       return (results.flat() as (DocumentSymbol | Symbol)[]).filter(Boolean)
     })
 
-    const workspaceSymbol = Effect.fn("LSP.workspaceSymbol")(function* (query: string) {
-      const results = yield* runAll((client) =>
+    const workspaceSymbol = Effect.fn("LSP.workspaceSymbol")(function* (query: string, file: string) {
+      const results = yield* run(file, (client) =>
         client.connection
           .sendRequest<Symbol[]>("workspace/symbol", { query })
           .then((result) => result.filter((x) => kinds.includes(x.kind)).slice(0, 10))
