@@ -3,7 +3,7 @@ import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
 import { createMemo } from "solid-js"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import type { createServerSdkContext } from "./server-sdk"
-import type { createServerSyncContextInner } from "./server-sync"
+import type { createServerSyncContextInner, McpServerConfig } from "./server-sync"
 import type { State } from "./global-sync/types"
 import { normalizeSessionInfo } from "@/utils/session"
 
@@ -147,6 +147,9 @@ export const createDirSyncContext = (
     },
     mcp: {
       toggle: (name: string) => serverSync.mcp.toggle(directory, name),
+      test: (name: string, config: McpServerConfig) => serverSync.mcp.test(directory, name, config),
+      save: (name: string, config: McpServerConfig) => serverSync.mcp.save(directory, name, config),
+      remove: (name: string) => serverSync.mcp.remove(directory, name),
     },
     absolute,
     get directory() {

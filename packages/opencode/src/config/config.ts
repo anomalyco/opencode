@@ -128,6 +128,12 @@ export interface Interface {
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+  /**
+   * Add, replace, or remove a single MCP server entry (`mcp.<name>`) in the global
+   * config file, preserving comments/formatting. Pass `undefined` to remove the entry.
+   * Mirrors the CLI `opencode mcp add` write path so both interfaces stay consistent.
+   */
+  readonly updateGlobalMcp: (name: string, entry: unknown) => Effect.Effect<{ changed: boolean }>
   readonly invalidate: () => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -679,12 +685,30 @@ const layer = Layer.effect(
       return { info: next, changed }
     })
 
+    const updateGlobalMcp = Effect.fn("Config.updateGlobalMcp")(function* (name: string, entry: unknown) {
+      const file = globalConfigFile()
+      const before = (yield* readConfigFile(file)) ?? "{}"
+      // jsonc-parser `modify` replaces the whole `mcp.<name>` entry (or removes it when
+      // `entry` is undefined) while preserving surrounding comments and formatting.
+      const edits = modify(before, ["mcp", name], entry, {
+        formattingOptions: { insertSpaces: true, tabSize: 2 },
+      })
+      const updated = applyEdits(before, edits)
+      const changed = updated !== before
+      if (changed) {
+        yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+        yield* invalidate()
+      }
+      return { changed }
+    })
+
     return Service.of({
       get,
       getGlobal,
       getConsoleState,
       update,
       updateGlobal,
+      updateGlobalMcp,
       invalidate,
       directories,
       waitForDependencies,
