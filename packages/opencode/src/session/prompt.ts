@@ -115,8 +115,8 @@ export const parseReflectionModel = (
 
 export const resolveReflectionModelOverride = (
   session: SessionV1.SessionInfo | undefined,
-  configInfo: ConfigV1.Info | undefined,
-  flags: RuntimeFlags.Service,
+  configInfo: Config.Info | undefined,
+  flags: RuntimeFlags.Info,
 ): { providerID: string; modelID: string } | undefined => {
   if (session?.metadata && typeof session.metadata === "object") {
     const fromMeta = (session.metadata as Record<string, unknown>).reflection_model
