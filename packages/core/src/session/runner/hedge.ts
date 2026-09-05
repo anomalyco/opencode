@@ -30,7 +30,13 @@ const stripNonProse = (text: string) =>
     .replace(/`[^`]*`/g, " ")
     .replace(/^>.*$/gm, " ")
 
+const HEDGE_PATTERNS = HEDGES.map((phrase) => {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")
+  return new RegExp(`\\b${escaped}\\b`, "i")
+})
+
 export const containsHedge = (text: string): boolean => {
-  const prose = stripNonProse(text).toLowerCase()
-  return HEDGES.some((phrase) => prose.includes(phrase))
+  const prose = stripNonProse(text)
+  return HEDGE_PATTERNS.some((pattern) => pattern.test(prose))
 }
+

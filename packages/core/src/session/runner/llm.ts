@@ -698,6 +698,77 @@ const layer = Layer.effect(
       return converge(steered, iterates, projection, extensionsDetected)
     })
 
+    const parseHypotheses = (
+      raw: string,
+      evidence: string,
+    ): Array<{ description: string; probability: number; evidence: readonly string[] }> => {
+      const results: Array<{ description: string; probability: number; evidence: readonly string[] }> = []
+      const lines = raw.split(/\r?\n|\|/).map((l) => l.trim()).filter(Boolean)
+
+      for (const line of lines) {
+        if (/^none\b/i.test(line)) continue
+
+        let prob: number | undefined
+        let desc: string = line
+
+        const bracketMatch = line.match(/^\[([0-9.]+)%?\]\s*(.*)/)
+        if (bracketMatch) {
+          prob = parseFloat(bracketMatch[1])
+          if (bracketMatch[0].includes("%") || prob > 1) prob /= 100
+          desc = bracketMatch[2].trim()
+        }
+
+        if (prob === undefined) {
+          const parenMatch = line.match(/^\(?H?\d*[:.)]?\s*\(?([0-9.]+)%?\)?[:\-]\s*(.*)/i)
+          if (parenMatch) {
+            prob = parseFloat(parenMatch[1])
+            if (parenMatch[0].includes("%") || prob > 1) prob /= 100
+            desc = parenMatch[2].trim()
+          }
+        }
+
+        if (prob === undefined) {
+          const tailMatch = line.match(/^(.*?)\s*[\(\[]\s*(?:p(?:rob)?|conf(?:idence)?\s*[:=]\s*)?([0-9.]+)%?\s*[\)\]]$/i)
+          if (tailMatch) {
+            prob = parseFloat(tailMatch[2])
+            if (tailMatch[0].includes("%") || prob > 1) prob /= 100
+            desc = tailMatch[1].trim()
+          }
+        }
+
+        desc = desc.replace(/^[-*•]\s*/, "").replace(/^H\d+[:.]\s*/i, "").replace(/^\d+[:.)]\s*/, "").trim()
+
+        if (prob !== undefined && !isNaN(prob) && desc.length > 0) {
+          prob = Math.max(0.01, Math.min(1.0, prob))
+          results.push({ description: desc, probability: prob, evidence: [evidence] })
+        }
+      }
+
+      if (results.length === 0) {
+        const regex = /\[([0-9.]+)%?\]\s*([^|;\n]+)/g
+        let match: RegExpExecArray | null
+        while ((match = regex.exec(raw)) !== null) {
+          let prob = parseFloat(match[1])
+          if (match[0].includes("%") || prob > 1) prob /= 100
+          const desc = match[2].trim()
+          if (!isNaN(prob) && desc.length > 0) {
+            prob = Math.max(0.01, Math.min(1.0, prob))
+            results.push({ description: desc, probability: prob, evidence: [evidence] })
+          }
+        }
+      }
+
+      const total = results.reduce((sum, h) => sum + h.probability, 0)
+      if (total > 0 && results.length > 0) {
+        return results.map((h) => ({
+          ...h,
+          probability: Math.round((h.probability / total) * 1000) / 1000,
+        }))
+      }
+
+      return results
+    }
+
     const whyLoop = Effect.fn("SessionRunner.whyLoop")(function* (
       sessionID: SessionSchema.ID,
       modelOverride?: { providerID: string; modelID: string },
@@ -891,16 +962,7 @@ const layer = Layer.effect(
         }
 
         if (rawHypotheses && !rawHypotheses.toUpperCase().includes("NONE")) {
-          const parsedHypotheses: Array<{ description: string; probability: number; evidence: readonly string[] }> = []
-          const regex = /\[([0-9.]+)\]\s*([^|]+)/g
-          let match: RegExpExecArray | null
-          while ((match = regex.exec(rawHypotheses)) !== null) {
-            const prob = parseFloat(match[1])
-            const desc = match[2].trim()
-            if (!isNaN(prob) && desc.length > 0) {
-              parsedHypotheses.push({ description: desc, probability: prob, evidence: [reflection] })
-            }
-          }
+          const parsedHypotheses = parseHypotheses(rawHypotheses, reflection)
           if (parsedHypotheses.length > 0) {
             ReflectionState.setHypotheses(sessionID, parsedHypotheses)
             const hypSummary = parsedHypotheses.map((h) => `[${Math.round(h.probability * 100)}%] ${h.description}`).join("; ")
@@ -1017,10 +1079,12 @@ const layer = Layer.effect(
                 ReflectionState.hasSteers(input.sessionID)
           }
         }
-        shouldRun =
-          (yield* SessionInput.hasPending(db, input.sessionID, "queue")) ||
+        const hasPendingSteers =
+          (yield* SessionInput.hasPending(db, input.sessionID, "steer")) ||
           ReflectionState.hasSteers(input.sessionID)
-        promotion = shouldRun ? "queue" : undefined
+        const hasPendingQueue = yield* SessionInput.hasPending(db, input.sessionID, "queue")
+        shouldRun = hasPendingSteers || hasPendingQueue
+        promotion = hasPendingSteers ? "steer" : hasPendingQueue ? "queue" : undefined
       }
     })
 
