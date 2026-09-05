@@ -1904,6 +1904,7 @@ export type Config = {
   skills?: {
     paths?: Array<string>
     urls?: Array<string>
+    disabled?: Array<string>
   }
   references?: {
     [key: string]: string | ConfigV2ReferenceGit | ConfigV2ReferenceLocal
@@ -2370,6 +2371,12 @@ export type Agent = {
     [key: string]: unknown
   }
   steps?: number
+}
+
+export type SkillNotFoundError = {
+  _tag: "SkillNotFoundError"
+  name: string
+  message: string
 }
 
 export type LspStatus = {
@@ -8370,10 +8377,79 @@ export type AppSkillsResponses = {
     description?: string
     location: string
     content: string
+    enabled: boolean
   }>
 }
 
 export type AppSkillsResponse = AppSkillsResponses[keyof AppSkillsResponses]
+
+export type AppEnableSkillData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/skill/{name}/enable"
+}
+
+export type AppEnableSkillErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * SkillNotFoundError
+   */
+  404: SkillNotFoundError
+}
+
+export type AppEnableSkillError = AppEnableSkillErrors[keyof AppEnableSkillErrors]
+
+export type AppEnableSkillResponses = {
+  /**
+   * Skill enabled successfully
+   */
+  200: boolean
+}
+
+export type AppEnableSkillResponse = AppEnableSkillResponses[keyof AppEnableSkillResponses]
+
+export type AppDisableSkillData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/skill/{name}/disable"
+}
+
+export type AppDisableSkillErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * SkillNotFoundError
+   */
+  404: SkillNotFoundError
+}
+
+export type AppDisableSkillError = AppDisableSkillErrors[keyof AppDisableSkillErrors]
+
+export type AppDisableSkillResponses = {
+  /**
+   * Skill disabled successfully
+   */
+  200: boolean
+}
+
+export type AppDisableSkillResponse = AppDisableSkillResponses[keyof AppDisableSkillResponses]
 
 export type LspStatusData = {
   body?: never

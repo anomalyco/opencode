@@ -761,7 +761,7 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
     const commands = [
       ...commandsData,
       ...skills
-        .filter((skill) => !commandsData.some((command) => command.name === skill.name))
+        .filter((skill) => skill.enabled !== false && !commandsData.some((command) => command.name === skill.name))
         .map((skill) => ({
           name: skill.name,
           description: skill.description,
