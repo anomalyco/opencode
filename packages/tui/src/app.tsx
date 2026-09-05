@@ -45,6 +45,7 @@ import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogThemeList } from "./component/dialog-theme-list"
+import { DialogPreview } from "./component/dialog-preview"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
@@ -615,6 +616,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "workspaces",
         run: () => {
           dialog.replace(() => <DialogWorkspaceList />)
+        },
+      },
+      {
+        name: "preview.open",
+        title: "Preview file",
+        category: "Workspace",
+        slashName: "preview",
+        run: () => {
+          dialog.replace(() => <DialogPreview />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
