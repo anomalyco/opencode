@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { ZenModels } from "./zen-models"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -184,14 +185,19 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
+      const auth = yield* dep.auth(input.id)
+      const configApiKey = (yield* dep.config()).provider?.["opencode"]?.options?.apiKey
       const hasKey = iife(() => {
         if (input.env.some((item) => env[item])) return true
         return false
       })
-      const ok =
-        hasKey ||
-        Boolean(yield* dep.auth(input.id)) ||
-        Boolean((yield* dep.config()).provider?.["opencode"]?.options?.apiKey)
+      const ok = hasKey || Boolean(auth) || Boolean(configApiKey)
+      const apiKey = iife(() => {
+        const fromEnv = input.env.map((item) => env[item]).find(Boolean)
+        if (fromEnv) return fromEnv
+        if (auth?.type === "api") return auth.key
+        if (typeof configApiKey === "string") return configApiKey
+      })
 
       if (!ok) {
         for (const [key, value] of Object.entries(input.models)) {
@@ -203,6 +209,18 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: Object.keys(input.models).length > 0,
         options: ok ? {} : { apiKey: "public" },
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>, model?: Model) {
+          if (model?.api.npm === "@ai-sdk/openai" && sdk.responses) return sdk.responses(modelID)
+          return sdk.languageModel(modelID)
+        },
+        async discoverModels() {
+          if (!ok || !apiKey) return {}
+          const baseURL = iife(() => {
+            if (typeof input.options?.baseURL === "string" && input.options.baseURL) return input.options.baseURL
+            return Object.values(input.models)[0]?.api.url || "https://opencode.ai/zen/v1"
+          })
+          return ZenModels.get(baseURL, apiKey, input.models).catch(() => ({}))
+        },
       }
     }),
     openai: () =>
@@ -1493,6 +1511,8 @@ const layer = Layer.effect(
               model.provider?.npm ??
               provider.npm ??
               existingModel?.api.npm ??
+              modelsDev[providerID]?.models[apiID]?.provider?.npm ??
+              (providerID === ProviderV2.ID.opencode ? ZenModels.inferNpm(modelID, parsed.models) : undefined) ??
               // Config-defined gateway models bypass fromModelsDevModel, so resolve the
               // native passthrough npm here before falling back to the catalog default.
               cloudflareGatewayNpm(providerID, apiID) ??
@@ -1650,17 +1670,14 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+        for (const [id, discover] of Object.entries(discoveryLoaders)) {
+          const providerID = ProviderV2.ID.make(id)
+          if (!providers[providerID] || !isProviderAllowed(providerID)) continue
           yield* Effect.promise(async () => {
-            try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
-                }
-              }
-            } catch (e) {}
+            const discovered = await discover().catch(() => ({}))
+            for (const [modelID, model] of Object.entries(discovered)) {
+              providers[providerID].models[modelID] = model
+            }
           })
         }
 
