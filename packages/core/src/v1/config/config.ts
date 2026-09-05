@@ -146,6 +146,15 @@ export const Info = Schema.Struct({
     description:
       "Thresholds for truncating tool output. When output exceeds either limit, the full text is written to the truncation directory and a preview is returned.",
   }),
+  webfetch: Schema.optional(
+    Schema.Struct({
+      max_response_size: Schema.optional(PositiveInt).annotate({
+        description: "Maximum webfetch response size in bytes. Defaults to 5242880 (5MB).",
+      }),
+    }),
+  ).annotate({
+    description: "Webfetch tool limits",
+  }),
   compaction: Schema.optional(
     Schema.Struct({
       auto: Schema.optional(Schema.Boolean).annotate({
