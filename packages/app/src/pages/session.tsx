@@ -957,7 +957,7 @@ export default function Page() {
         ? (details.properties as Record<string, unknown>)
         : undefined
     const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
+    if (!file || file.replace(/\\/g, "/").startsWith(".git/")) return
     refreshVcs()
   })
   onCleanup(stopVcs)
