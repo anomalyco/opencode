@@ -11,6 +11,11 @@ import { ProviderShared } from "./shared"
 const eventCodec = new EventStreamCodec(toUtf8, fromUtf8)
 const utf8 = new TextDecoder()
 
+// AWS documents a 16 MiB maximum event-stream message. Reject frames that
+// declare a larger length to prevent unbounded buffer growth from malformed
+// or truncated responses.
+const MAX_EVENT_STREAM_MESSAGE_LENGTH = 16 * 1024 * 1024
+
 // Cursor-tracking buffer state. Bytes accumulate in `buffer`; `offset` is the
 // read position. Reading by `subarray` is zero-copy. We only allocate a fresh
 // buffer when a new network chunk arrives and we need to append.
@@ -39,6 +44,12 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
     while (cursor.buffer.length - cursor.offset >= 4) {
       const view = cursor.buffer.subarray(cursor.offset)
       const totalLength = new DataView(view.buffer, view.byteOffset, view.byteLength).getUint32(0, false)
+      if (totalLength > MAX_EVENT_STREAM_MESSAGE_LENGTH) {
+        return yield* ProviderShared.eventError(
+          route,
+          `Bedrock event-stream frame declares ${totalLength} bytes, exceeding the 16 MiB protocol maximum`,
+        )
+      }
       if (view.length < totalLength) break
 
       const decoded = yield* Effect.try({
