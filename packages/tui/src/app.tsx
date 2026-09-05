@@ -518,6 +518,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       } else {
         route.navigate({ type: "session", sessionID: match })
       }
+      return
+    }
+    // No matching session found. Once sync is fully complete, fall back to
+    // home instead of lingering on the placeholder "dummy" session route.
+    if (sync.status === "complete") {
+      continued = true
+      route.navigate({ type: "home" })
     }
   })
 
