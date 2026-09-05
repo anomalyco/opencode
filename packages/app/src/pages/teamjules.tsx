@@ -1,18 +1,9 @@
 import { createSignal, For, Show, onMount } from "solid-js"
 import { useSDK } from "@/context/sdk"
 
-interface Task {
-  id: string
-  status: string
-  repo: string
-  branch: string
-  prompt: string
-  created: string
-}
-
 export function TeamJulesPage() {
   const sdk = useSDK()
-  const [tasks, setTasks] = createSignal<Task[]>([])
+  const [tasks, setTasks] = createSignal<any[]>([])
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
 
@@ -26,8 +17,9 @@ export function TeamJulesPage() {
     setError(null)
     try {
       const client = sdk().client
-      const response = await client.teamjules.list({})
-      setTasks(response ?? [])
+      const response = await client.v2.teamjules.list({})
+      const data: any[] = Array.isArray(response) ? response : Array.isArray((response as any).data) ? (response as any).data : []
+      setTasks(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch tasks")
     } finally {
@@ -41,7 +33,7 @@ export function TeamJulesPage() {
     if (!repo() || !prompt()) return
     try {
       const client = sdk().client
-      await client.teamjules.create({
+      await client.v2.teamjules.create({
         repo: repo(),
         prompt: prompt(),
         branch: branch(),
@@ -60,7 +52,7 @@ export function TeamJulesPage() {
   const cancelTask = async (id: string) => {
     try {
       const client = sdk().client
-      await client.teamjules.cancel({ taskID: id })
+      await client.v2.teamjules.cancel({ taskID: id })
       await fetchTasks()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to cancel task")
@@ -166,9 +158,9 @@ export function TeamJulesPage() {
                 <div class="flex justify-between items-start">
                   <div>
                     <div class="font-mono text-sm text-gray-500">{task.id}</div>
-                    <div class="font-medium mt-1">{task.prompt.slice(0, 100)}</div>
+                    <div class="font-medium mt-1">{task.prompt?.slice(0, 100)}</div>
                     <div class="text-sm text-gray-600 mt-1">
-                      {task.repo} • {task.branch}
+                      {task.repo} &bull; {task.branch}
                     </div>
                   </div>
                   <div class="flex items-center gap-2">
