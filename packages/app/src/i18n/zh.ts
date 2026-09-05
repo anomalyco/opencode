@@ -1160,6 +1160,7 @@ export const dict = {
   "session.header.reveal.containingFolder": "打开所在文件夹",
   "session.header.open.fileManager": "文件管理器",
   "session.header.open.app.vscode": "VS Code",
+  "session.header.open.app.vscodeInsiders": "VS Code Insiders",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",
   "session.header.open.app.textmate": "TextMate",

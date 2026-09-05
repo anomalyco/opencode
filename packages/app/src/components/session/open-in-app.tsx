@@ -8,6 +8,7 @@ import { showToast } from "@/utils/toast"
 
 export const OPEN_APPS = [
   "vscode",
+  "vscode-insiders",
   "cursor",
   "zed",
   "textmate",
@@ -32,6 +33,12 @@ export const MAC_OPEN_APPS = [
     label: "session.header.open.app.vscode",
     icon: "vscode",
     openWith: "Visual Studio Code",
+  },
+  {
+    id: "vscode-insiders",
+    label: "session.header.open.app.vscodeInsiders",
+    icon: "vscode",
+    openWith: "Visual Studio Code Insiders",
   },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "Cursor" },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "Zed" },
@@ -63,7 +70,19 @@ export const MAC_OPEN_APPS = [
 
 export const WINDOWS_OPEN_APPS = [
   { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
+  {
+    id: "vscode-insiders",
+    label: "session.header.open.app.vscodeInsiders",
+    icon: "vscode",
+    openWith: "code-insiders",
+  },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
+  {
+    id: "antigravity",
+    label: "session.header.open.app.antigravity",
+    icon: "antigravity",
+    openWith: "antigravity-ide",
+  },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
     id: "powershell",
@@ -81,6 +100,12 @@ export const WINDOWS_OPEN_APPS = [
 
 export const LINUX_OPEN_APPS = [
   { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
+  {
+    id: "vscode-insiders",
+    label: "session.header.open.app.vscodeInsiders",
+    icon: "vscode",
+    openWith: "code-insiders",
+  },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
