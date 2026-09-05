@@ -1,5 +1,6 @@
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
+import type { SshServersPlatform } from "@opencode-ai/app/ssh/types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 export type {
@@ -15,6 +16,15 @@ export type {
   WslServersEvent,
   WslServersState,
 } from "@opencode-ai/app/wsl/types"
+export type {
+  SshHostProbe,
+  SshJob,
+  SshServerConfig,
+  SshServerItem,
+  SshServerRuntime,
+  SshServersEvent,
+  SshServersState,
+} from "@opencode-ai/app/ssh/types"
 
 export type ServerReadyData = {
   url: string
@@ -23,6 +33,7 @@ export type ServerReadyData = {
 }
 
 export type WslServersAPI = WslServersPlatform
+export type SshServersAPI = SshServersPlatform
 export type UpdaterAPI = {
   subscribe: (cb: (state: UpdaterState) => void) => Promise<() => void>
   check: () => Promise<UpdaterState>
@@ -47,6 +58,7 @@ export type ElectronAPI = {
   installCli: () => Promise<string>
   awaitInitialization: () => Promise<ServerReadyData>
   wslServers: WslServersAPI
+  sshServers: SshServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks: () => Promise<string[]>
   getDefaultServerUrl: () => Promise<string | null>

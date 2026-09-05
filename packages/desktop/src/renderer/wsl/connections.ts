@@ -19,10 +19,3 @@ export function readyWslConnections(state?: WslServersState, label = "WSL") {
     ]
   })
 }
-
-export function availableStartupServer(defaultServer: string | null | undefined, state?: WslServersState) {
-  const key = defaultServer ?? "sidecar"
-  if (!key.startsWith("wsl:")) return key
-  if (state?.servers.some((item) => item.config.id === key && item.runtime.kind === "ready")) return key
-  return "sidecar"
-}

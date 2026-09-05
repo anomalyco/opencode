@@ -1,4 +1,3 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
@@ -13,7 +12,6 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { ServerConnection } from "@/context/server"
 import { showToast } from "@/utils/toast"
-import { DialogAddWslServer } from "./dialog-add-server"
 import { useWslServers } from "./context"
 import { wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
 
@@ -21,37 +19,6 @@ type Controller = ReturnType<typeof useServerManagementController>
 
 export function isWslServer(server: ServerConnection.Any) {
   return server.type === "sidecar" && server.variant === "wsl"
-}
-
-export function AddServerMenu(props: { onAddServer: () => void }) {
-  const platform = usePlatform()
-  const dialog = useDialog()
-  const language = useLanguage()
-  const openAddWsl = () => {
-    dialog.push(() => <DialogAddWslServer />)
-  }
-  return (
-    <Show
-      when={platform.wslServers}
-      fallback={
-        <ButtonV2 variant="ghost-muted" icon="plus" onClick={props.onAddServer}>
-          {language.t("dialog.server.add.button")}
-        </ButtonV2>
-      }
-    >
-      <MenuV2 gutter={4} modal={false} placement="bottom-end">
-        <MenuV2.Trigger as={ButtonV2} variant="ghost-muted" icon="plus">
-          {language.t("dialog.server.add.button")}
-        </MenuV2.Trigger>
-        <MenuV2.Portal>
-          <MenuV2.Content>
-            <MenuV2.Item onSelect={props.onAddServer}>{language.t("dialog.server.add.button")}</MenuV2.Item>
-            <MenuV2.Item onSelect={openAddWsl}>{language.t("wsl.server.add")}</MenuV2.Item>
-          </MenuV2.Content>
-        </MenuV2.Portal>
-      </MenuV2>
-    </Show>
-  )
 }
 
 export function useFilteredWslServers(filter: Accessor<string>) {
