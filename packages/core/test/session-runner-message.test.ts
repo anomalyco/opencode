@@ -431,7 +431,7 @@ Recent work
     ])
   })
 
-  test("uses materialized image and PDF data as provider media", () => {
+  test.each([undefined, "", "clipboard", "image.png"])("does not invent a source path for %s", (name) => {
     const data = Base64.make("AAECAw==")
     const messages = toLLMMessages(
       [
@@ -440,7 +440,7 @@ Recent work
           type: "user",
           text: "Inspect this image",
           files: [
-            FileAttachment.make({ data, mime: "image/png", source: { type: "inline" }, name: "image.png" }),
+            FileAttachment.make({ data, mime: "image/png", source: { type: "inline" }, name }),
             FileAttachment.make({
               data: Base64.make("JVBERg=="),
               mime: "application/pdf",
@@ -456,7 +456,7 @@ Recent work
 
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Inspect this image" },
-      { type: "media", mediaType: "image/png", data, filename: "image.png" },
+      { type: "media", mediaType: "image/png", data, ...(name === undefined ? {} : { filename: name }) },
       { type: "media", mediaType: "application/pdf", data: "JVBERg==", filename: "document.pdf" },
     ])
   })
@@ -490,6 +490,65 @@ Recent work
       { type: "media", mediaType: "image/png", data, filename: "IMG_3480.JPG" },
     ])
   })
+
+  test.each([
+    ["image/png", "/home/user/image.png"],
+    ["image/jpeg", "/home/user/image.jpeg"],
+    ["image/gif", "/home/user/image.gif"],
+    ["image/webp", "/home/user/image.webp"],
+    ["application/pdf", "/home/user/document.pdf"],
+    ["image/png", "C:\\Users\\user\\Downloads\\image.png"],
+    ["application/pdf", "\\\\server\\share\\document.pdf"],
+  ])("exposes inline %s source paths in model context (%s)", (mime, location) => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-inline-image-path"),
+          type: "user",
+          text: "Use this file",
+          files: [FileAttachment.make({ data, mime, source: { type: "inline" }, name: location })],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Use this file" },
+      { type: "text", text: `Attached file: ${location}` },
+      { type: "media", mediaType: mime, data, filename: location },
+    ])
+  })
+
+  test.each(["image/avif", "application/octet-stream", "audio/mpeg"])(
+    "retains the source path when %s cannot be sent as media",
+    (mime) => {
+      const data = Base64.make("AAECAw==")
+      const location = path.resolve("/project/attachment")
+      const messages = toLLMMessages(
+        [
+          SessionMessage.User.make({
+            id: id("user-unsupported-media"),
+            type: "user",
+            text: "Use these files",
+            files: [
+              FileAttachment.make({ data, mime, source: { type: "inline" }, name: location }),
+              FileAttachment.make({ data, mime, source: { type: "uri", uri: pathToFileURL(location).href } }),
+            ],
+            time: { created },
+          }),
+        ],
+        model,
+      )
+
+      expect(messages[0]?.content).toEqual([
+        { type: "text", text: "Use these files" },
+        { type: "text", text: `Attached file: ${location}` },
+        { type: "text", text: `Attached file: ${location}` },
+      ])
+    },
+  )
 
   test("falls back to attachment names for invalid local source paths", () => {
     const data = Base64.make("AAECAw==")
