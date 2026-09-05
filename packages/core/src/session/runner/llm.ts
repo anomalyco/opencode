@@ -40,6 +40,21 @@ import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 
+function toolResultFiles(value: unknown): string[] {
+  if (typeof value !== "object" || value === null) return []
+  const record = value as { readonly files?: unknown; readonly resource?: unknown }
+  if (Array.isArray(record.files)) {
+    const files: string[] = []
+    for (const item of record.files) {
+      if (typeof item !== "object" || item === null) continue
+      const file = (item as { readonly file?: unknown }).file
+      if (typeof file === "string") files.push(file)
+    }
+    return files
+  }
+  return typeof record.resource === "string" ? [record.resource] : []
+}
+
 /**
  * Runs one durable coding-agent Session until it settles.
  *
@@ -222,6 +237,7 @@ const layer = Layer.effect(
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
         return yield* Effect.die(continueAfterCompaction(currentStep))
       const startSnapshot = yield* snapshots.capture()
+      const touched = new Set<string>()
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
@@ -263,8 +279,9 @@ const layer = Layer.effect(
                   call: event,
                 }),
               ).pipe(
-                Effect.flatMap((settlement) =>
-                  publish(
+                Effect.flatMap((settlement) => {
+                  for (const file of toolResultFiles(settlement.output?.structured)) touched.add(file)
+                  return publish(
                     LLMEvent.toolResult({
                       id: event.id,
                       name: event.name,
@@ -272,8 +289,8 @@ const layer = Layer.effect(
                       output: settlement.output,
                     }),
                     settlement.outputPaths ?? [],
-                  ),
-                ),
+                  )
+                }),
               ),
             ).pipe(FiberSet.run(toolFibers))
           }),
@@ -324,11 +341,11 @@ const layer = Layer.effect(
           if (stepSettlement && !publisher.hasProviderError()) {
             const endSnapshot = yield* snapshots.capture()
             const files =
-              startSnapshot && endSnapshot
+              startSnapshot && endSnapshot && touched.size > 0
                 ? yield* snapshots
-                    .files({ from: startSnapshot, to: endSnapshot })
-                    .pipe(Effect.catch(() => Effect.succeed(undefined)))
-                : undefined
+                    .files({ from: startSnapshot, to: endSnapshot, paths: Array.from(touched) })
+                    .pipe(Effect.catch(() => Effect.succeed([])))
+                : []
             yield* withPublication(
               events.publish(SessionEvent.Step.Ended, {
                 sessionID: session.id,
