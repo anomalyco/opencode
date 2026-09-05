@@ -85,6 +85,7 @@ The current list of models includes:
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 The list of models may change as we test and add new ones.
 
@@ -100,15 +101,18 @@ Traffic is monitored for abusive traffic that degrades the experience for other 
 To ensure your account does not get flagged, make sure the tool you're using
 
 1\. does not generate abusive traffic  
-2\. properly identifies itself (no broad user agents)
+2\. properly identifies itself (no broad user agents)<br />
+3\. includes the `x-opencode-session` header so we can optimize prompt caching
 
 ## Usage limits
 
-OpenCode Go includes the following limits:
+OpenCode Go includes the following base limits:
 
 - **5 hour limit** — $12 of usage
 - **Weekly limit** — $30 of usage
 - **Monthly limit** — $60 of usage
+
+Effective allowance varies by model; see the table below.
 
 Limits are defined in dollar value. This means your actual request count depends on the model you use. Cheaper models like MiMo-V2.5 allow for more requests, while higher-cost models like GLM-5.2 allow for fewer.
 
@@ -142,8 +146,9 @@ The table below provides an estimated request count based on typical Go usage pa
 | DeepSeek V4 Flash Vision Exp | 3,800               | 9,450             | 18,900             |
 | Hy4 preview                  | 1,350               | 3,380             | 6,770              |
 | Hy3                          | 4,300               | 10,750            | 21,500             |
+| Omen Alpha                   | 11,600              | 29,000            | 57,900             |
 
-The estimates are based on observed request patterns:
+The estimates use the following token counts per request; actual usage varies.
 
 - Grok 4.6 — 390 input, 32,500 cached, 120 output tokens per request
 - GLM-5.3-Flash — 1,000 input, 55,000 cached, 200 output tokens per request
@@ -168,6 +173,7 @@ The estimates are based on observed request patterns:
 - Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
 - Hy4 preview — 830 input, 71,500 cached, 295 output tokens per request
 - Hy3 — 830 input, 71,500 cached, 295 output tokens per request
+- Omen Alpha — 300 input, 40,000 cached, 100 output tokens per request
 
 The estimates are also based on the following prices per 1M tokens and the monthly usage included with each model:
 
@@ -207,6 +213,7 @@ The estimates are also based on the following prices per 1M tokens and the month
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15   |
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30   |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
+| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | $100  |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday; all other hours, including weekends, are Off-Peak. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -232,7 +239,7 @@ after you've reached your usage limits instead of blocking requests.
 
 ### Why some models have lower usage
 
-With Go, you pay $10/month and we aim to give you 6x that in usage.
+With Go, you pay $10/month and, for most models, we aim to give you 6x that in usage.
 
 For most models, we make this work through bulk discounts and reserved GPU capacity. We then pass those savings on to you through the 6x multiplier.
 
@@ -275,6 +282,7 @@ You can also access Go models through the following API endpoints.
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 The [model id](/docs/config/#models) in your OpenCode config
 uses the format `opencode-go/<model-id>`. For example, for Kimi K3, you would
@@ -322,12 +330,13 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | Not used       | 0 days\*       |
 | Hy4 preview                  | Not used       | 0 days         |
 | Hy3                          | Not used       | 0 days         |
+| Omen Alpha                   | Not used       | 0 days         |
 
 - **Grok 4.6:** ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API. [Learn more](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days. [Learn more](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 - **Muse Spark 1.3 Contributor:** Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models. Availability is limited to regions permitted by Meta's [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy). [Learn more](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models. Availability is limited to regions permitted by Meta's [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy). [Learn more](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
-- **DeepSeek:** ZDR agreement is renewed monthly. The current agreement is valid through August 31, 2026.
+- **DeepSeek:** ZDR agreement is renewed monthly. The current agreement is valid through September 30, 2026.
 
 ---
 

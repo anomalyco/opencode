@@ -359,7 +359,7 @@ export const dict = {
     "Des tarifs de tokens fortement réduits en échange de l’autorisation d’utiliser vos prompts et vos complétions pour entraîner de futurs modèles Meta.",
   "go.faq.a5.learnMore": "En savoir plus",
   "go.faq.a5.deepseekRetention":
-    "L’accord ZDR est renouvelé chaque mois. L’accord actuel est valable jusqu’au 31 août 2026.",
+    "L’accord ZDR est renouvelé chaque mois. L’accord actuel est valable jusqu’au 30 septembre 2026.",
 
   "go.faq.a5.beforeExceptions":
     "Les modèles Go sont hébergés aux États-Unis. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
@@ -373,7 +373,7 @@ export const dict = {
     "Oui, vous pouvez utiliser Go avec n'importe quel agent. Suivez les instructions de configuration dans votre agent de code préféré.",
   "go.faq.q9": "Quelle est la différence entre les modèles gratuits et Go ?",
   "go.faq.a9":
-    "Les modèles gratuits incluent Big Pickle ainsi que les modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go propose une sélection de modèles avec des quotas de requêtes plus élevés appliqués sur des fenêtres glissantes (5 heures, hebdomadaire et mensuelle), à peu près équivalents à 12 $ par 5 heures, 30 $ par semaine et 60 $ par mois (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
+    "Les modèles gratuits incluent Big Pickle ainsi que les modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go propose une sélection de modèles avec des quotas de requêtes plus élevés appliqués sur des fenêtres glissantes (5 heures, hebdomadaire et mensuelle), à peu près équivalents à des quotas de base de 12 $ par 5 heures, 30 $ par semaine et 60 $ par mois ; les quotas propres à chaque modèle peuvent varier (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
 
   "zen.api.error.rateLimitExceeded": "Limite de débit dépassée. Veuillez réessayer plus tard.",
   "zen.api.error.modelNotSupported": "Modèle {{model}} non pris en charge",

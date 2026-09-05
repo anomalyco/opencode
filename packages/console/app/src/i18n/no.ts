@@ -352,7 +352,7 @@ export const dict = {
     "Logger for overvåking av misbruk genereres for all bruk av API-funksjoner og oppbevares i opptil 30 dager.",
   "go.faq.a5.learnMore": "Les mer",
   "go.faq.a5.deepseekRetention":
-    "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 31. august 2026.",
+    "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 30. september 2026.",
   "go.faq.a5.museRetention":
     "Kraftig rabatterte tokenpriser i bytte mot tillatelse til å bruke ledetekstene og fullføringene dine til å trene fremtidige Meta-modeller.",
 
@@ -369,7 +369,7 @@ export const dict = {
 
   "go.faq.q9": "Hva er forskjellen mellom gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller som er tilgjengelige på det tidspunktet, med en kvote på 200 forespørsler/dag. Go tilbyr et kuratert modellutvalg med høyere forespørselskvoter som håndheves over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende $12 per 5 timer, $30 per uke og $60 per måned (faktiske forespørselsantall varierer etter modell og bruk).",
+    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller som er tilgjengelige på det tidspunktet, med en kvote på 200 forespørsler/dag. Go tilbyr et kuratert modellutvalg med høyere forespørselskvoter som håndheves over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende basiskvoter på $12 per 5 timer, $30 per uke og $60 per måned; modellspesifikke kvoter kan variere (faktiske forespørselsantall varierer etter modell og bruk).",
 
   "zen.api.error.rateLimitExceeded": "Rate limit overskredet. Vennligst prøv igjen senere.",
   "zen.api.error.modelNotSupported": "Modell {{model}} støttes ikke",
