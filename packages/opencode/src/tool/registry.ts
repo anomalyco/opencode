@@ -16,6 +16,7 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { CronAddTool, CronListTool, CronDeleteTool } from "./cron"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -114,6 +115,9 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const cronAdd = yield* CronAddTool
+    const cronList = yield* CronListTool
+    const cronDelete = yield* CronDeleteTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -223,6 +227,9 @@ const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          cronAdd: Tool.init(cronAdd),
+          cronList: Tool.init(cronList),
+          cronDelete: Tool.init(cronDelete),
           ...(codeModeTool ? { execute: Tool.init(codeModeTool) } : {}),
         })
 
@@ -243,6 +250,9 @@ const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
+            tool.cronAdd,
+            tool.cronList,
+            tool.cronDelete,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
@@ -437,6 +447,7 @@ export const node = LayerNode.make({
     Session.node,
     BackgroundJob.node,
     Provider.node,
+
     LSP.node,
     Instruction.node,
     FSUtil.node,
