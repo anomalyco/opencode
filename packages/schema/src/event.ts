@@ -20,6 +20,8 @@ export type Definition<
   readonly durable?: {
     readonly version: number
     readonly aggregate: string
+    /** JSON path into data identifying the entity this event snapshots; older snapshots of the same entity are compacted away. */
+    readonly compact?: string
   }
   readonly data: DataSchema
 }
@@ -47,6 +49,7 @@ export function define<
   readonly durable?: {
     readonly version: number
     readonly aggregate: string
+    readonly compact?: string
   }
   readonly schema: Fields
 }) {
