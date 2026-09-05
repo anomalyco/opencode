@@ -208,6 +208,30 @@ describe("acp permissions", () => {
     })
   })
 
+  it("withholds a task's subagent prompt from the client", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_a")
+
+    harness.subscription.handle(
+      permissionAsked("ses_a", "perm_task", {
+        permission: "task",
+        metadata: {
+          description: "Review the auth module",
+          subagent_type: "general",
+          prompt: "Read packages/core/src/secret.ts and summarize the credentials it loads",
+        },
+        tool: { messageID: "msg_1", callID: "call_1" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "task permission was never replied")
+
+    const rawInput = harness.requests[0]?.toolCall?.rawInput as Record<string, unknown> | undefined
+    // The classifier reads the prompt in-process; the client only needs to identify the request.
+    expect(rawInput).toEqual({ description: "Review the auth module", subagent_type: "general" })
+    expect(JSON.stringify(harness.requests[0])).not.toContain("secret.ts")
+  })
+
   it("includes a diff content block for edit permission metadata", async () => {
     const filepath = await tempFile("file.ts", "before\n")
     const harness = createHarness()

@@ -694,7 +694,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "agent.cycle",
-        title: "Agent cycle",
+        title: "Cycle modes and agents",
         category: "Agent",
         hidden: true,
         run: () => {
@@ -728,7 +728,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "agent.cycle.reverse",
-        title: "Agent cycle reverse",
+        title: "Cycle modes and agents in reverse",
         category: "Agent",
         hidden: true,
         run: () => {
@@ -946,7 +946,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       {
         name: "permission.mode",
         title:
-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
+          local.permission.mode === "auto"
+            ? "Disable auto-approve permissions"
+            : local.permission.mode === "review"
+              ? "Disable model-gated auto-approve permissions"
+              : "Enable auto-approve permissions",
         category: "System",
         run: () => {
           local.permission.toggle()

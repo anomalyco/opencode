@@ -144,6 +144,11 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
         return sync.data.question[sessionID] ?? []
       },
     },
+    permission: {
+      onVisible(handler) {
+        return sync.permission.onVisible(handler)
+      },
+    },
     part(messageID) {
       return sync.data.part[messageID] ?? []
     },

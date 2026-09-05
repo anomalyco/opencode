@@ -49,7 +49,7 @@ export const LspTool = Tool.define(
           yield* assertExternalDirectoryEffect(ctx, file)
           const meta =
             args.operation === "workspaceSymbol"
-              ? { operation: args.operation }
+              ? { operation: args.operation, query: args.query ?? "" }
               : args.operation === "documentSymbol"
                 ? { operation: args.operation, filePath: file }
                 : { operation: args.operation, filePath: file, line: args.line, character: args.character }

@@ -46,10 +46,12 @@ const tui: TuiPlugin = async (api) => {
     questions.delete(event.properties.requestID)
   })
 
-  api.event.on("permission.asked", (event) => {
-    if (permissions.has(event.properties.id)) return
-    permissions.add(event.properties.id)
-    notify(api, event.properties.sessionID, "Permission needs input", "permission")
+  // a permission request is not necessarily shown when it is asked: auto-approve mode
+  // holds it back while a model reviews it, and --auto replies without ever showing it
+  api.state.permission.onVisible((request) => {
+    if (permissions.has(request.id)) return
+    permissions.add(request.id)
+    notify(api, request.sessionID, "Permission needs input", "permission")
   })
 
   api.event.on("permission.replied", (event) => {

@@ -58,6 +58,18 @@ export const ReplyInput = Schema.Struct({ requestID: ID, ...ReplyBody.fields }).
 })
 export type ReplyInput = typeof ReplyInput.Type
 
+export const ClassificationDetails = Schema.Struct({
+  input: Schema.String,
+  output: Schema.String,
+}).annotate({ identifier: "PermissionClassificationDetails" })
+export type ClassificationDetails = typeof ClassificationDetails.Type
+
+export const ClassificationResult = Schema.Struct({
+  approved: Schema.Boolean,
+  details: Schema.optional(ClassificationDetails),
+}).annotate({ identifier: "PermissionClassificationResult" })
+export type ClassificationResult = typeof ClassificationResult.Type
+
 const Asked = define({ type: "permission.asked", schema: Request.fields })
 const Replied = define({
   type: "permission.replied",
