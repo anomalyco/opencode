@@ -16,6 +16,19 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Lo
 
 export const node = LayerNode.unbound(Service, tags.values.location)
 
+// Location services retain their boot snapshot. Read metadata must follow project
+// adoption after git init, the first commit, or adding a remote in that directory.
+export const current = Effect.gen(function* () {
+  const location = yield* Service
+  const project = yield* Project.Service
+  const resolved = yield* project.resolve(location.directory)
+  return new Info({
+    directory: location.directory,
+    workspaceID: location.workspaceID,
+    project: { id: resolved.id, directory: resolved.directory, canonical: resolved.canonical },
+  })
+})
+
 const layer = (ref: Ref, options?: { readonly discovery?: boolean }) =>
   Layer.effect(
     Service,
