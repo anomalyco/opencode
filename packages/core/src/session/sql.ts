@@ -94,6 +94,21 @@ export const SessionMessageTable = sqliteTable(
     index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
     index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
     index("session_message_time_created_idx").on(table.time_created),
+    // Cover usage statistics without loading message bodies or tool output.
+    index("session_message_stats_idx").on(
+      table.time_created,
+      table.session_id,
+      table.type,
+      sql`json_extract(${table.data}, '$.model.providerID')`,
+      sql`json_extract(${table.data}, '$.model.id')`,
+      sql`json_extract(${table.data}, '$.model.variant')`,
+      sql`json_extract(${table.data}, '$.tokens.input')`,
+      sql`json_extract(${table.data}, '$.tokens.output')`,
+      sql`json_extract(${table.data}, '$.tokens.reasoning')`,
+      sql`json_extract(${table.data}, '$.tokens.cache.read')`,
+      sql`json_extract(${table.data}, '$.tokens.cache.write')`,
+      sql`json_extract(${table.data}, '$.cost')`,
+    ),
   ],
 )
 
