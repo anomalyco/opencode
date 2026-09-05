@@ -16,6 +16,8 @@ import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql
 import { SessionStats } from "@opencode-ai/core/session/stats"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { DateTime, Effect, Schema } from "effect"
+import { eq } from "drizzle-orm"
+import { Statement } from "effect/unstable/sql"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(Database.node))
@@ -30,6 +32,199 @@ const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const encodeUsage = Schema.encodeSync(SessionEvent.UsageRecorded.data)
 
 describe("SessionStats", () => {
+  it.effect("covers the production usage query without loading message payloads", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const queries: ReturnType<Statement.Statement<unknown>["compile"]>[] = []
+      yield* SessionStats.get({ from: 0, to: 2 * 24 * 60 * 60 * 1_000, tools: "none" }).pipe(
+        Effect.provideService(Statement.CurrentTransformer, (statement) =>
+          Effect.sync(() => {
+            queries.push(statement.compile())
+            return statement
+          }),
+        ),
+      )
+      const messages = queries.filter((query) => query[0].includes("json_extract(message.data, '$.tokens.input')"))
+      expect(messages).toHaveLength(2)
+      yield* Effect.forEach(messages, (query) =>
+        Effect.gen(function* () {
+          const plan = yield* database.db.$client.unsafe<{ detail: string }>(`EXPLAIN QUERY PLAN ${query[0]}`, query[1])
+          expect(plan.some((row) => row.detail.includes("USING COVERING INDEX session_message_stats_idx"))).toBe(true)
+        }),
+      )
+    }),
+  )
+  ;[
+    {
+      name: "spring DST",
+      timezone: "America/New_York",
+      times: [
+        "2026-03-08T04:59:59.999Z",
+        "2026-03-08T05:00:00Z",
+        "2026-03-08T06:59:59Z",
+        "2026-03-08T07:00:00Z",
+        "2026-03-09T03:59:59.999Z",
+        "2026-03-09T04:00:00Z",
+      ],
+      activity: [
+        { date: "2026-03-07", steps: 1 },
+        { date: "2026-03-08", steps: 4 },
+        { date: "2026-03-09", steps: 1 },
+      ],
+    },
+    {
+      name: "fall DST",
+      timezone: "America/New_York",
+      times: [
+        "2026-11-01T03:59:59.999Z",
+        "2026-11-01T04:00:00Z",
+        "2026-11-01T05:30:00Z",
+        "2026-11-01T06:30:00Z",
+        "2026-11-02T04:59:59.999Z",
+        "2026-11-02T05:00:00Z",
+      ],
+      activity: [
+        { date: "2026-10-31", steps: 1 },
+        { date: "2026-11-01", steps: 4 },
+        { date: "2026-11-02", steps: 1 },
+      ],
+    },
+    {
+      name: "quarter-hour offset",
+      timezone: "Asia/Kathmandu",
+      times: ["2026-01-01T18:14:59.999Z", "2026-01-01T18:15:00Z", "2026-01-02T18:14:59.999Z", "2026-01-02T18:15:00Z"],
+      activity: [
+        { date: "2026-01-01", steps: 1 },
+        { date: "2026-01-02", steps: 2 },
+        { date: "2026-01-03", steps: 1 },
+      ],
+    },
+  ].forEach((fixture) => {
+    it.effect(`groups activity by local calendar day across ${fixture.name}`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        yield* database.db
+          .insert(ProjectTable)
+          .values({ id: projectID, worktree: AbsolutePath.make("/stats"), sandboxes: [] })
+          .run()
+        yield* database.db
+          .insert(SessionTable)
+          .values({ id: sessionID, project_id: projectID, slug: "root", directory: "/stats", version: "test" })
+          .run()
+        yield* database.db
+          .insert(SessionMessageTable)
+          .values(
+            fixture.times.map((time, index) =>
+              messageRow(sessionID, index + 1, assistant(`msg_stats_zone_${index}`, Date.parse(time), [])),
+            ),
+          )
+          .run()
+        const stats = yield* SessionStats.get({
+          from: Date.parse(fixture.times[0]),
+          to: Date.parse(fixture.times[fixture.times.length - 1]) + 1,
+          timezone: fixture.timezone,
+          tools: "none",
+        })
+        expect(stats.activity).toEqual(fixture.activity)
+        expect(stats.activeDays).toBe(3)
+        expect(stats.streak).toBe(3)
+      }),
+    )
+  })
+
+  it.effect("preserves usage across windows and local dates with large message bodies", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const db = database.db
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: projectID, worktree: AbsolutePath.make("/stats"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({ id: sessionID, project_id: projectID, slug: "root", directory: "/stats", version: "test" })
+        .run()
+        .pipe(Effect.orDie)
+      const from = Date.UTC(2026, 0, 1)
+      const boundary = from + 31 * 24 * 60 * 60 * 1_000
+      const to = Date.UTC(2026, 1, 3)
+      yield* db
+        .insert(SessionMessageTable)
+        .values([
+          messageRow(
+            sessionID,
+            1,
+            SessionMessage.User.make({
+              id: SessionMessage.ID.make("msg_stats_large_user"),
+              type: "user",
+              text: "prompt ".repeat(100_000),
+              time: { created: DateTime.makeUnsafe(from) },
+            }),
+          ),
+          ...[boundary - 1, boundary, to].map((created, index) =>
+            messageRow(
+              sessionID,
+              index + 2,
+              SessionMessage.Assistant.make({
+                ...assistant(`msg_stats_large_${index}`, created, [
+                  SessionMessage.AssistantText.make({ type: "text", text: "content ".repeat(100_000) }),
+                ]),
+                model: {
+                  providerID: Provider.ID.make("example"),
+                  id: Model.ID.make("model-a"),
+                  variant: Model.VariantID.make("high"),
+                },
+                cost: Money.USD.make(0.0123456789),
+              }),
+            ),
+          ),
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      const stats = yield* SessionStats.get({ from, to, projectID, timezone: "America/New_York", tools: "none" })
+      expect(stats.sessions).toBe(1)
+      expect(stats.prompts).toBe(1)
+      expect(stats.steps).toBe(2)
+      expect(stats.tokens).toEqual({ input: 20, output: 10, reasoning: 4, cache: { read: 8, write: 2 } })
+      expect(stats.cost).toBe(Money.USD.make(0.0123456789 * 2))
+      expect(stats.activity).toEqual([{ date: "2026-01-31", steps: 2 }])
+      expect(stats.models).toEqual([
+        {
+          model: {
+            providerID: Provider.ID.make("example"),
+            id: Model.ID.make("model-a"),
+            variant: Model.VariantID.make("high"),
+          },
+          steps: 2,
+          tokens: stats.tokens,
+          cost: stats.cost,
+        },
+      ])
+
+      yield* db
+        .update(SessionMessageTable)
+        .set({
+          data: messageRow(sessionID, 3, assistant("msg_stats_large_1", boundary, [], "model-b", 3)).data,
+        })
+        .where(eq(SessionMessageTable.id, SessionMessage.ID.make("msg_stats_large_1")))
+        .run()
+      const updated = yield* SessionStats.get({ from, to, tools: "none" })
+      expect(updated.tokens.input).toBe(40)
+      expect(updated.models[0].model.id).toBe(Model.ID.make("model-b"))
+      expect(updated.cost).toBe(Money.USD.make(0.0123456789 + 4.5))
+
+      yield* db
+        .delete(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, SessionMessage.ID.make("msg_stats_large_1")))
+        .run()
+      const removed = yield* SessionStats.get({ from, to, tools: "none" })
+      expect(removed.steps).toBe(1)
+      expect(removed.tokens.input).toBe(10)
+    }),
+  )
+
   it.effect("aggregates activity and tool reliability without reading message payloads outside the range", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db

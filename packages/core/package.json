@@ -21,6 +21,8 @@
     "fix-node-pty": "bun run script/fix-node-pty.ts",
     "benchmark:location": "bun run script/benchmark-location.ts",
     "benchmark:location-memory": "bun run script/benchmark-location-memory.ts",
+    "benchmark:stats": "bun run script/benchmark-stats.ts",
+    "benchmark:stats-writes": "bun run script/benchmark-stats-writes.ts",
     "build": "bun run script/build.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
     "test": "bun run script/test.ts",
