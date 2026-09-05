@@ -226,6 +226,24 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+const splitReasoningLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.reasoningStart({ id: "reasoning-1" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-1", text: "The" }),
+        LLMEvent.reasoningEnd({ id: "reasoning-1" }),
+        LLMEvent.reasoningStart({ id: "reasoning-2" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-2", text: " user" }),
+        LLMEvent.reasoningEnd({ id: "reasoning-2" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ),
+  }),
+)
+const splitReasoningEnv = LayerNode.compile(root, [...replacements, [LLM.node, splitReasoningLLM]])
+const splitReasoningIt = testEffect(splitReasoningEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -464,6 +482,51 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         expect(text?.text).toBe("done")
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+splitReasoningIt.live("session.processor effect tests merge adjacent reasoning cycles", () =>
+  provideTmpdirServer(
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const reasoning = parts.filter((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
+
+        expect(value).toBe("continue")
+        expect(reasoning).toHaveLength(1)
+        expect(reasoning[0]?.text).toBe("The user")
+        expect(reasoning[0]?.time.end).toBeDefined()
+      }),
+    { git: true, config: (url) => providerCfg(url) },
   ),
 )
 
