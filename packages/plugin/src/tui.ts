@@ -517,7 +517,15 @@ export type TuiSlots = {
 }
 
 export type TuiEventBus = {
-  on: <Type extends Event["type"]>(type: Type, handler: (event: Extract<Event, { type: Type }>) => void) => () => void
+  on: <Type extends Event["type"]>(
+    type: Type,
+    handler: (event: Extract<Event, { type: Type }>, metadata: TuiEventMetadata) => void,
+  ) => () => void
+}
+
+export type TuiEventMetadata = {
+  directory: string
+  workspace: string | undefined
 }
 
 export type TuiDispose = () => void | Promise<void>

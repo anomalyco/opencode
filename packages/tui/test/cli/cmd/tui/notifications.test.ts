@@ -4,9 +4,14 @@ import type { Event, PermissionRequest, QuestionRequest, Session } from "@openco
 import type { TuiAttentionNotifyInput } from "@opencode-ai/plugin/tui"
 import { createTuiPluginApi } from "../../../fixture/tui-plugin"
 
-async function setup() {
+async function setup(input: { auto?: boolean } = {}) {
   const notifications: TuiAttentionNotifyInput[] = []
-  const handlers = new Map<Event["type"], ((event: Event) => void)[]>()
+  const handlers = new Map<
+    Event["type"],
+    ((event: Event, metadata: { directory: string; workspace: string | undefined }) => void)[]
+  >()
+  const permissions: Record<string, PermissionRequest[]> = {}
+  const questions: Record<string, QuestionRequest[]> = {}
   const session = (id: string, title: string, parentID?: string): Session => ({
     id,
     title,
@@ -33,9 +38,18 @@ async function setup() {
         },
       },
       event: {
-        on: <Type extends Event["type"]>(type: Type, handler: (event: Extract<Event, { type: Type }>) => void) => {
+        on: <Type extends Event["type"]>(
+          type: Type,
+          handler: (
+            event: Extract<Event, { type: Type }>,
+            metadata: { directory: string; workspace: string | undefined },
+          ) => void,
+        ) => {
           const list = handlers.get(type) ?? []
-          const wrapped = handler as (event: Event) => void
+          const wrapped = handler as (
+            event: Event,
+            metadata: { directory: string; workspace: string | undefined },
+          ) => void
           list.push(wrapped)
           handlers.set(type, list)
           return () => {
@@ -49,6 +63,8 @@ async function setup() {
       state: {
         session: {
           get: (sessionID: string) => sessions[sessionID],
+          permission: (sessionID: string) => permissions[sessionID] ?? [],
+          question: (sessionID: string) => questions[sessionID] ?? [],
         },
       },
     }),
@@ -58,8 +74,30 @@ async function setup() {
 
   return {
     notifications,
-    emit(event: Event) {
-      for (const handler of handlers.get(event.type) ?? []) handler(event)
+    emit(event: Event, metadata = { directory: "/workspace", workspace: undefined as string | undefined }) {
+      if (event.type === "permission.asked" && !input.auto) {
+        permissions[event.properties.sessionID] = [
+          ...(permissions[event.properties.sessionID] ?? []).filter((item) => item.id !== event.properties.id),
+          event.properties,
+        ]
+      }
+      if (event.type === "permission.replied") {
+        permissions[event.properties.sessionID] = (permissions[event.properties.sessionID] ?? []).filter(
+          (item) => item.id !== event.properties.requestID,
+        )
+      }
+      if (event.type === "question.asked") {
+        questions[event.properties.sessionID] = [
+          ...(questions[event.properties.sessionID] ?? []).filter((item) => item.id !== event.properties.id),
+          event.properties,
+        ]
+      }
+      if (event.type === "question.replied" || event.type === "question.rejected") {
+        questions[event.properties.sessionID] = (questions[event.properties.sessionID] ?? []).filter(
+          (item) => item.id !== event.properties.requestID,
+        )
+      }
+      for (const handler of handlers.get(event.type) ?? []) handler(event, metadata)
     },
   }
 }
@@ -134,6 +172,52 @@ describe("internal notifications TUI plugin", () => {
       permissionNotification,
       permissionNotification,
     ])
+  })
+
+  test("suppresses auto-approved permission requests", async () => {
+    const harness = await setup({ auto: true })
+
+    harness.emit({ id: "event-1", type: "permission.asked", properties: permission("permission-1") })
+
+    expect(harness.notifications).toEqual([])
+  })
+
+  test("ignores events outside the session location", async () => {
+    const harness = await setup()
+    const foreign = { directory: "/other", workspace: undefined }
+
+    harness.emit({ id: "event-1", type: "question.asked", properties: question("question-1") }, foreign)
+    harness.emit({ id: "event-2", type: "permission.asked", properties: permission("permission-1") }, foreign)
+    harness.emit(
+      { id: "event-2b", type: "permission.asked", properties: permission("permission-2") },
+      { directory: "/workspace", workspace: "other-workspace" },
+    )
+    harness.emit(
+      {
+        id: "event-3",
+        type: "session.status",
+        properties: { sessionID: "session", status: { type: "busy" } },
+      },
+      foreign,
+    )
+    harness.emit(
+      {
+        id: "event-4",
+        type: "session.error",
+        properties: { sessionID: "session", error: { name: "UnknownError", data: { message: "boom" } } },
+      },
+      foreign,
+    )
+    harness.emit(
+      {
+        id: "event-5",
+        type: "session.status",
+        properties: { sessionID: "session", status: { type: "idle" } },
+      },
+      foreign,
+    )
+
+    expect(harness.notifications).toEqual([])
   })
 
   test("notifies when an active session becomes idle and suppresses no-op idle", async () => {
