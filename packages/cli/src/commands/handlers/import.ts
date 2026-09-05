@@ -39,7 +39,7 @@ export default Runtime.handler(
       }),
     )
     const response = yield* Effect.promise(() =>
-      fetch(new URL("/api/session/import", server.endpoint.url), {
+      fetch(ServerConnection.requestUrl(server.endpoint, "/api/session/import"), {
         method: "POST",
         headers: { ...Service.headers(server.endpoint), "content-type": "application/json" },
         body: JSON.stringify({

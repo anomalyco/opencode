@@ -36,7 +36,7 @@ export default Runtime.handler(
     if (body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
 
     const response = yield* Effect.tryPromise(() =>
-      fetch(new URL(request.path, endpoint.url), {
+      fetch(ServerConnection.requestUrl(endpoint, request.path), {
         method: request.method,
         headers,
         body,
@@ -67,7 +67,9 @@ function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Re
   if (raw) return Effect.succeed(raw)
   if (input.length !== 1) return Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
   return Effect.tryPromise(async () => {
-    const response = await fetch(new URL("/openapi.json", endpoint.url), { headers: Service.headers(endpoint) })
+    const response = await fetch(ServerConnection.requestUrl(endpoint, "/openapi.json"), {
+      headers: Service.headers(endpoint),
+    })
     if (!response.ok) throw new Error(`Failed to load OpenAPI document: HTTP ${response.status}`)
     return resolveOperation((await response.json()) as OpenApi, input[0], params)
   })

@@ -148,7 +148,8 @@ test("export reports a missing session without a stack trace", async () => {
   }
 })
 
-test("import validates a file and sends it to the resolved location", async () => {
+test.each(["", "/proxy", "/proxy/"])("import validates a file and preserves server base path %j", async (prefix) => {
+  const base = prefix.replace(/\/$/, "")
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-import-"))
   const file = path.join(root, "session.json")
   await fs.writeFile(file, JSON.stringify(transfer))
@@ -157,14 +158,14 @@ test("import validates a file and sends it to the resolved location", async () =
     port: 0,
     async fetch(request) {
       const url = new URL(request.url)
-      if (url.pathname === "/api/health") return health()
-      if (url.pathname === "/api/location") {
+      if (url.pathname === `${base}/api/health`) return health()
+      if (url.pathname === `${base}/api/location`) {
         return Response.json({
           directory: root,
           project: { id: "global", directory: root, canonical: root },
         })
       }
-      if (url.pathname === "/api/session/import") {
+      if (url.pathname === `${base}/api/session/import`) {
         imported = await request.json()
         return Response.json({ data: { ...info, location: { directory: root } } })
       }
@@ -173,7 +174,14 @@ test("import validates a file and sends it to the resolved location", async () =
   })
 
   try {
-    const [stdout, , exitCode] = await run(["import", file, "--directory", root, "--server", server.url.toString()])
+    const [stdout, , exitCode] = await run([
+      "import",
+      file,
+      "--directory",
+      root,
+      "--server",
+      server.url.origin + prefix,
+    ])
 
     expect(exitCode).toBe(0)
     expect(stdout).toBe(`Imported session: ${info.id}${os.EOL}`)
