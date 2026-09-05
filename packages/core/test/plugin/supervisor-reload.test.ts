@@ -17,6 +17,7 @@ import { Instance } from "@opencode-ai/core/instance"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { Plugin } from "@opencode-ai/core/plugin"
+import { Rpc } from "@opencode-ai/core/rpc"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tempGlobalLayer } from "../fixture/global"
@@ -110,6 +111,86 @@ const failed = (plugins: Plugin.Interface) =>
   )
 
 describe("PluginSupervisor reload", () => {
+  ;(
+    [
+      { name: "on a helper-only save", helper: "nested/helper.ts", touchEntry: false },
+      { name: "when the entrypoint also changes", helper: "nested/helper.ts", touchEntry: true },
+      { name: "outside the configured plugin directory", helper: "../shared/helper.ts", touchEntry: false },
+    ] as const
+  ).forEach((scenario) => {
+    it.live(`reloads helper-defined RPC methods ${scenario.name}`, () =>
+      Effect.gen(function* () {
+        const directory = yield* tmpdirScoped()
+        const root = path.join(directory.path, "external/greeter")
+        const file = path.join(root, "index.ts")
+        const helper = path.join(root, scenario.helper)
+        const entry = `export { default } from ${JSON.stringify("./" + scenario.helper)}`
+        const source = (version: number) => `import { Schema } from ${JSON.stringify(import.meta.resolve("effect"))}
+          export default {
+            id: "greeter",
+            async setup(ctx) {
+              await ctx.rpc.register({ id: "greeter", methods: {
+                status: { input: Schema.Unknown, output: Schema.Number },
+                ${version > 1 ? "info: { input: Schema.Unknown, output: Schema.Number }," : ""}
+              }, events: {} }, {
+                status: async () => ${version},
+                ${version > 1 ? `info: async () => ${version},` : ""}
+              })
+              await ctx.command.transform(editor => editor.add({ name: "greet-v${version}", execute: async () => {} }))
+            }
+          }`
+        yield* Effect.promise(async () => {
+          await Bun.write(file, entry)
+          await Bun.write(helper, source(1))
+          await Bun.write(path.join(directory.path, ".opencode/opencode.json"), JSON.stringify({ plugins: [root] }))
+        })
+        const watcher = yield* Watcher.Test
+        const locations = yield* LocationServiceMap.Service
+        yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          const rpc = yield* Rpc.Service
+          const commands = yield* Command.Service
+          yield* plugins.awaitActivation
+          expect(yield* rpc.call("greeter", "status", {})).toBe(1)
+          expect(yield* rpc.call("greeter", "info", {}).pipe(Effect.flip)).toMatchObject({
+            type: "rpc.method_not_found",
+          })
+
+          yield* Effect.promise(async () => {
+            await Bun.write(helper, source(2))
+            if (scenario.touchEntry) {
+              await Bun.write(file, entry + "; // updated entry")
+              await fs.utimes(file, new Date(), new Date(Date.now() + 1000))
+            }
+          })
+          yield* watcher.emit({ path: scenario.touchEntry ? file : helper, type: "update" })
+          yield* rpc
+            .call("greeter", "info", {})
+            .pipe(Effect.retry({ times: 80, schedule: Schedule.spaced("25 millis") }))
+          expect(yield* rpc.call("greeter", "info", {})).toBe(2)
+          expect(yield* commands.get("greet-v1")).toBeUndefined()
+          expect(yield* commands.get("greet-v2")).toBeDefined()
+
+          // Failed helper evaluations retain the active registration and recover on the next save.
+          yield* Effect.promise(() => Bun.write(helper, 'throw new Error("broken helper"); export default {}'))
+          yield* watcher.emit({ path: helper, type: "update" })
+          yield* failed(plugins)
+          expect(yield* rpc.call("greeter", "info", {})).toBe(2)
+          yield* Effect.promise(() => Bun.write(helper, source(3)))
+          yield* watcher.emit({ path: helper, type: "update" })
+          yield* commands.get("greet-v3").pipe(
+            Effect.flatMap((command) => (command ? Effect.void : Effect.fail("activation pending"))),
+            Effect.retry({ times: 80, schedule: Schedule.spaced("25 millis") }),
+          )
+          expect(yield* rpc.call("greeter", "info", {})).toBe(3)
+          expect(yield* commands.get("greet-v2")).toBeUndefined()
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }),
+    )
+  })
   ;(["discovered", "configured"] as const).forEach((mode) => {
     it.effect(`retains a ${mode} plugin change during initial activation`, () =>
       Effect.gen(function* () {
