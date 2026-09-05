@@ -3073,6 +3073,12 @@ export type AutomationPromptConflictError = {
   messageID: string
 }
 
+export type TeamJulesNotFoundError = {
+  _tag: "TeamJulesNotFoundError"
+  taskID: string
+  message: string
+}
+
 export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
 }
@@ -14674,6 +14680,10 @@ export type V2TeamjulesGetErrors = {
    * UnauthorizedError
    */
   401: UnauthorizedError
+  /**
+   * TeamJulesNotFoundError
+   */
+  404: TeamJulesNotFoundError
 }
 
 export type V2TeamjulesGetError = V2TeamjulesGetErrors[keyof V2TeamjulesGetErrors]

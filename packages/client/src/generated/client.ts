@@ -1180,7 +1180,7 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/teamjules/tasks/${encodeURIComponent(input.taskID)}`,
             successStatus: 200,
-            declaredStatuses: [401, 400],
+            declaredStatuses: [404, 401, 400],
             empty: false,
           },
           requestOptions,

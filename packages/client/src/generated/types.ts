@@ -125,6 +125,14 @@ export type AutomationPromptConflictError = {
 export const isAutomationPromptConflictError = (value: unknown): value is AutomationPromptConflictError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AutomationPromptConflictError"
 
+export type TeamJulesNotFoundError = {
+  readonly _tag: "TeamJulesNotFoundError"
+  readonly taskID: string
+  readonly message: string
+}
+export const isTeamJulesNotFoundError = (value: unknown): value is TeamJulesNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "TeamJulesNotFoundError"
+
 export type HealthGetOutput = { readonly healthy: true }
 
 export type LocationGetInput = {
