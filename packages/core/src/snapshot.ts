@@ -95,7 +95,8 @@ const layer = Layer.effect(
     const worktree = source
       ? AbsolutePath.make(yield* fs.realPath(source.worktree).pipe(Effect.orDie))
       : location.project.directory
-    const gitDirectory = AbsolutePath.make(path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)))
+    const snapshotDirectory = AbsolutePath.make(path.join(global.data, "snapshot"))
+    const gitDirectory = AbsolutePath.make(path.join(snapshotDirectory, location.project.id, Hash.fast(worktree)))
 
     const scope = Effect.fnUntraced(function* () {
       const relative = path.relative(worktree, location.directory)
@@ -135,6 +136,7 @@ const layer = Layer.effect(
             repository: repo,
             scopes: [yield* scope()],
             ignores: source,
+            repairIndex: source ? { root: snapshotDirectory, source } : undefined,
             maximumUntrackedFileBytes: 2 * 1024 * 1024,
           }),
         )
@@ -195,6 +197,7 @@ const layer = Layer.effect(
           repository: repo,
           scopes: Array.from(files.keys()),
           ignores: source,
+          repairIndex: source ? { root: snapshotDirectory, source } : undefined,
           maximumUntrackedFileBytes: 2 * 1024 * 1024,
         })
         .pipe(Effect.mapError((cause) => failure("preview", cause)))

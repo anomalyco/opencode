@@ -83,6 +83,61 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("recovers a corrupt snapshot index without losing captured trees", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await $`git init`.cwd(project).quiet()
+            await $`git config core.fsmonitor false`.cwd(project).quiet()
+            await $`git config commit.gpgsign false`.cwd(project).quiet()
+            await $`git config user.email test@opencode.test`.cwd(project).quiet()
+            await $`git config user.name Test`.cwd(project).quiet()
+            await $`git add .`.cwd(project).quiet()
+            await $`git commit -m initial`.cwd(project).quiet()
+          })
+
+          const projectID = yield* Effect.gen(function* () {
+            return (yield* Location.Service).project.id
+          }).pipe(
+            Effect.provide(
+              AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+            ),
+          )
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const before = yield* snapshot.capture()
+            expect(before).toBeDefined()
+            if (!before) return
+
+            const gitDirectory = path.join(tmp.path, "snapshot", projectID, Hash.fast(project))
+            const sourceIndex = path.join(project, ".git", "index")
+            const sourceBefore = yield* Effect.promise(() => fs.readFile(sourceIndex))
+            yield* Effect.promise(async () => {
+              await fs.writeFile(path.join(project, "tracked.txt"), "changed\n")
+              await fs.writeFile(path.join(gitDirectory, "index"), new Uint8Array(4))
+            })
+
+            const [first, second] = yield* Effect.all([snapshot.capture(), snapshot.capture()], { concurrency: 2 })
+            expect(first).toBeDefined()
+            expect(second).toBe(first)
+            if (!first) return
+            expect(yield* snapshot.files({ from: before, to: first })).toEqual([RelativePath.make("tracked.txt")])
+            expect(yield* Effect.promise(() => fs.readFile(sourceIndex))).toEqual(sourceBefore)
+
+            yield* snapshot.restore({ files: new Map([[RelativePath.make("tracked.txt"), before]]) })
+            expect(yield* read(path.join(project, "tracked.txt"))).toBe("one\n")
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("isolates snapshot indexes by canonical Git worktree", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
