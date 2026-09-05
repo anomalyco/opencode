@@ -1,10 +1,9 @@
 import { readFileSync, readdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { Hash } from "@opencode-ai/util/hash"
-import { Host } from "@opencode-ai/plugin/host"
 
-// Keep source identity and runtime module identity together. A new entrypoint
-// alone is not a new plugin: its local imports must use the same generation.
+// Keep source fingerprints and import attempts together. Filesystem events
+// should reload changed local graphs, not repeat unchanged evaluations.
 export function createPluginSources(watch: (file: string) => Promise<void>) {
   const sources = new Map<string, Source>()
   const cleanups: Array<() => void> = []
@@ -25,11 +24,14 @@ export function createPluginSources(watch: (file: string) => Promise<void>) {
       }
       track(fileURLToPath(entrypoint))
       const { prepareSource } = await import("#plugin-source")
-      const prepared = await prepareSource(entrypoint, track)
-      cleanups.push(prepared.dispose)
+      const prepared: { version: string; load: () => Promise<unknown>; dispose?: () => void } = await prepareSource(
+        entrypoint,
+        track,
+      )
+      if (prepared.dispose) cleanups.push(prepared.dispose)
       // Cache the attempt before evaluating it: unchanged failing modules must
       // not repeat import-time effects on every filesystem notification.
-      const loaded = Host.load(prepared.version).then((module) => ({ version: prepared.version, module }))
+      const loaded = prepared.load().then((module) => ({ version: prepared.version, module }))
       sources.set(entrypoint, { loaded, files })
       return loaded.finally(() => Promise.all(watching))
     },

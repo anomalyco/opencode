@@ -2,6 +2,7 @@ import { registerHooks } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { localSource } from "./discovery"
+import { Host } from "@opencode-ai/plugin/host"
 
 let generation = Date.now()
 
@@ -27,5 +28,6 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
       return { ...resolved, url: `${resolved.url}?mtime=${version}` }
     },
   })
-  return { version: `${entrypoint}?mtime=${version}`, dispose: () => hook.deregister() }
+  const specifier = `${entrypoint}?mtime=${version}`
+  return { version: specifier, load: () => Host.load(specifier), dispose: () => hook.deregister() }
 }
