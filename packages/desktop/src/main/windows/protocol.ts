@@ -4,11 +4,10 @@ import { pathToFileURL } from "node:url"
 import { Effect, Path } from "effect"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
+import { addDocumentHeaders } from "./document-headers"
 
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
-const documentPolicyHeader = "Document-Policy"
-const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -58,7 +57,7 @@ export const registerRendererProtocol = Effect.fn("Window.registerRendererProtoc
           ),
         )
       }
-      return addDocumentPolicy(response, file)
+      return addDocumentHeaders(response, file)
     } catch (error) {
       runFork(scoped("protocol", Effect.logError("fetch error", { url: request.url, file, error })))
       return new Response("Not found", { status: 404 })
@@ -88,17 +87,10 @@ export function isRendererUrl(value?: string, html = false) {
 export function addRendererHeaders(value: string, headers: object) {
   upsertHeader(headers, "Access-Control-Allow-Origin", ["*"])
   upsertHeader(headers, "Access-Control-Allow-Headers", ["*"])
-  if (isRendererUrl(value, true)) upsertHeader(headers, documentPolicyHeader, [jsCallStacksDocumentPolicy])
+  if (isRendererUrl(value, true)) upsertHeader(headers, "Document-Policy", ["include-js-call-stacks-in-crash-reports"])
 }
 
 export function upsertHeader(headers: object, key: string, value: string | string[]) {
   const current = Object.keys(headers).find((header) => header.toLowerCase() === key.toLowerCase())
   Reflect.set(headers, current ?? key, value)
-}
-
-function addDocumentPolicy(response: Response, file: string) {
-  if (!file.toLowerCase().endsWith(".html")) return response
-  const headers = new Headers(response.headers)
-  headers.set(documentPolicyHeader, jsCallStacksDocumentPolicy)
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
