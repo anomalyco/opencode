@@ -3,7 +3,7 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
-import { tool, type ModelMessage } from "ai"
+import { jsonSchema, tool, type ModelMessage } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -1375,6 +1375,154 @@ describe("session.llm.stream", () => {
       }),
     { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
   )
+
+  for (const serviceTier of ["priority", "default"]) {
+    it.instance(
+      `preserves Astra ${serviceTier} tier with max reasoning and stateless tool replay`,
+      () =>
+        Effect.gen(function* () {
+          const request = waitRequest(
+            "/responses",
+            createEventResponse([
+              {
+                type: "response.created",
+                response: { id: "resp-astra", created_at: 0, model: "gpt-6-astra" },
+              },
+              {
+                type: "response.completed",
+                response: {
+                  incomplete_details: null,
+                  usage: { input_tokens: 1, output_tokens: 1 },
+                },
+              },
+            ]),
+          )
+          const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ModelV2.ID.make("astra"))
+          const sessionID = SessionID.make("session-astra")
+          const agent = {
+            name: "test",
+            mode: "primary",
+            options: {},
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          } satisfies Agent.Info
+
+          yield* drain({
+            user: {
+              id: MessageID.make("msg_user-astra"),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: agent.name,
+              model: { providerID: ProviderV2.ID.openai, modelID: resolved.id, variant: "max" },
+            },
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [
+              { role: "user", content: "Look up a value" },
+              {
+                role: "assistant",
+                content: [
+                  {
+                    type: "reasoning",
+                    text: "",
+                    providerOptions: { openai: { itemId: "rs_previous", reasoningEncryptedContent: "encrypted-test" } },
+                  },
+                  {
+                    type: "tool-call",
+                    toolCallId: "call_lookup",
+                    toolName: "lookup",
+                    input: { query: "value" },
+                    providerOptions: { openai: { itemId: "fc_previous" } },
+                  },
+                ],
+              },
+              {
+                role: "tool",
+                content: [
+                  {
+                    type: "tool-result",
+                    toolCallId: "call_lookup",
+                    toolName: "lookup",
+                    output: { type: "text", value: "Found" },
+                  },
+                ],
+              },
+              { role: "user", content: "Continue" },
+            ],
+            tools: {
+              lookup: tool({
+                description: "Look up a value",
+                strict: true,
+                inputSchema: jsonSchema(
+                  ProviderTransform.schema(resolved, {
+                    type: "object",
+                    properties: { query: true, limit: { type: "integer", minimum: 1 } },
+                    required: ["query"],
+                    additionalProperties: false,
+                  }),
+                ),
+              }),
+            },
+          })
+
+          const capture = yield* Effect.promise(() => request)
+          expect(resolved.api.npm).toBe("@ai-sdk/openai")
+          expect(capture.url.pathname).toBe("/v1/responses")
+          expect(capture.headers.get("Authorization")).toBe("Bearer test-openai-key")
+          expect(capture.body.model).toBe("gpt-6-astra")
+          expect(capture.body.stream).toBe(true)
+          expect(capture.body.reasoning).toEqual({ effort: "max", summary: "detailed" })
+          expect(capture.body.store).toBe(false)
+          expect(capture.body.include).toContain("reasoning.encrypted_content")
+          const input = capture.body.input as Array<Record<string, unknown>>
+          expect(input).toContainEqual({ type: "reasoning", encrypted_content: "encrypted-test", summary: [] })
+          expect(input).toContainEqual({
+            type: "function_call",
+            call_id: "call_lookup",
+            name: "lookup",
+            arguments: '{"query":"value"}',
+          })
+          expect(input).toContainEqual({ type: "function_call_output", call_id: "call_lookup", output: "Found" })
+          expect(input.some((item) => "id" in item || item.type === "item_reference")).toBe(false)
+          expect(capture.body.tools).toEqual([
+            {
+              type: "function",
+              name: "lookup",
+              description: "Look up a value",
+              parameters: {
+                type: "object",
+                properties: { query: { type: "string" }, limit: { type: "integer" } },
+                required: ["query"],
+                additionalProperties: false,
+              },
+              strict: false,
+            },
+          ])
+          expect(capture.body.service_tier).toBe(serviceTier)
+        }),
+      {
+        config: () => ({
+          enabled_providers: ["openai"],
+          provider: {
+            openai: {
+              npm: "@ai-sdk/openai",
+              options: { apiKey: "test-openai-key", baseURL: `${state.server!.url.origin}/v1` },
+              models: {
+                astra: {
+                  id: "gpt-6-astra",
+                  reasoning: true,
+                  options: { serviceTier },
+                  variants: { max: { reasoningEffort: "max", reasoningSummary: "detailed" } },
+                },
+              },
+            },
+          },
+        }),
+      },
+    )
+  }
 
   it.instance(
     "keeps supported OpenAI models on AI SDK path when native flag is off",
