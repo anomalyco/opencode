@@ -26,10 +26,10 @@ describe("prompt input v2 interaction machine", () => {
     expect(mid.state.popover).toEqual({ type: "command-inline", query: "re" })
   })
 
-  test("does not open on file paths or urls", () => {
+  test("does not open on in-word paths or urls", () => {
     const state = createPromptInputV2InteractionState()
-    const path = transitionPromptInputV2(state, { type: "input.changed", value: "see /usr/local/bin" }, persisted())
-    const url = transitionPromptInputV2(state, { type: "input.changed", value: "open https://x.com" }, persisted())
+    const path = transitionPromptInputV2(state, { type: "input.changed", value: "edit src/app.tsx" }, persisted("edit src/app.tsx"))
+    const url = transitionPromptInputV2(state, { type: "input.changed", value: "open https://x.com" }, persisted("open https://x.com"))
 
     expect(path.state.popover).toEqual({ type: "closed" })
     expect(url.state.popover).toEqual({ type: "closed" })
