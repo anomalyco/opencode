@@ -53,6 +53,8 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
+import { DialogPreviewFile } from "./dialog-preview-file"
+import { PreviewPanel } from "./preview"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
@@ -122,6 +124,8 @@ const sessionBindingCommands = [
   "session.undo",
   "session.redo",
   "session.sidebar.toggle",
+  "session.preview.toggle",
+  "session.preview.close",
   "session.toggle.conceal",
   "session.toggle.timestamps",
   "session.toggle.thinking",
@@ -274,8 +278,16 @@ export function Session() {
     if (sidebar() === "auto" && wide()) return true
     return false
   })
+  const [previewFile, setPreviewFile] = createSignal<string>()
+  const previewVisible = createMemo(() => previewFile() !== undefined)
+  const previewInline = createMemo(() => previewVisible() && wide())
+  const previewWidth = createMemo(() =>
+    Math.min(dimensions().width - 6, Math.max(40, Math.floor(dimensions().width * 0.4))),
+  )
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(
+    () => dimensions().width - (sidebarVisible() ? 42 : 0) - (previewInline() ? previewWidth() : 0) - 4,
+  )
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
@@ -680,6 +692,38 @@ export function Session() {
           setSidebarOpen(!isVisible)
         })
         dialog.clear()
+      },
+    },
+    {
+      title: previewVisible() ? "Close markdown preview" : "Preview markdown file",
+      value: "session.preview.toggle",
+      category: "Session",
+      slash: {
+        name: "preview",
+      },
+      run: () => {
+        if (previewVisible()) {
+          setPreviewFile(undefined)
+          dialog.clear()
+          return
+        }
+        dialog.replace(() => (
+          <DialogPreviewFile
+            directory={session()?.directory}
+            workspace={session()?.workspaceID}
+            onSelect={(file) => setPreviewFile(file)}
+          />
+        ))
+      },
+    },
+    {
+      title: "Close markdown preview",
+      value: "session.preview.close",
+      category: "Session",
+      hidden: true,
+      enabled: previewVisible(),
+      run: () => {
+        setPreviewFile(undefined)
       },
     },
     {
@@ -1354,6 +1398,33 @@ export function Session() {
                 </box>
               </Match>
             </Switch>
+          </Show>
+          <Show when={previewFile()}>
+            {(file) => (
+              <Switch>
+                <Match when={wide()}>
+                  <PreviewPanel file={() => file()} directory={() => session()?.directory} width={previewWidth} />
+                </Match>
+                <Match when={!wide()}>
+                  <box
+                    position="absolute"
+                    top={0}
+                    left={0}
+                    right={0}
+                    bottom={0}
+                    alignItems="flex-end"
+                    backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+                  >
+                    <PreviewPanel
+                      file={() => file()}
+                      directory={() => session()?.directory}
+                      width={previewWidth}
+                      overlay
+                    />
+                  </box>
+                </Match>
+              </Switch>
+            )}
           </Show>
         </box>
       </context.Provider>

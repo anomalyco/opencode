@@ -80,6 +80,8 @@ export const Definitions = {
   theme_mode_lock: keybind("none", "Lock or unlock theme mode"),
   sidebar_toggle: keybind("<leader>b", "Toggle sidebar"),
   scrollbar_toggle: keybind("none", "Toggle session scrollbar"),
+  preview_toggle: keybind("none", "Toggle markdown preview"),
+  preview_close: keybind("none", "Close markdown preview"),
   status_view: keybind("<leader>s", "View status"),
   debug_view: keybind("none", "View debug info"),
 
@@ -288,6 +290,8 @@ export const CommandMap = {
   theme_mode_lock: "theme.mode.lock",
   sidebar_toggle: "session.sidebar.toggle",
   scrollbar_toggle: "session.toggle.scrollbar",
+  preview_toggle: "session.preview.toggle",
+  preview_close: "session.preview.close",
   status_view: "opencode.status",
   debug_view: "opencode.debug",
   session_export: "session.export",
