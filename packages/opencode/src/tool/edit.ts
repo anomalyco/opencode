@@ -340,6 +340,9 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
         const searchLine = searchLines[j].trim()
         const maxLen = Math.max(originalLine.length, searchLine.length)
         if (maxLen === 0) {
+          // Both lines are blank, which is an exact match. Skipping here would leave
+          // the pair counted in linesToCheck while contributing nothing to the score.
+          similarity += 1 / linesToCheck
           continue
         }
         const distance = levenshtein(originalLine, searchLine)
@@ -389,6 +392,8 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
         const searchLine = searchLines[j].trim()
         const maxLen = Math.max(originalLine.length, searchLine.length)
         if (maxLen === 0) {
+          // Both lines are blank, which is an exact match. See the single-candidate branch.
+          similarity += 1
           continue
         }
         const distance = levenshtein(originalLine, searchLine)
