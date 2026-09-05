@@ -816,3 +816,68 @@ it.instance(
     }),
   { config: {} },
 )
+
+// loop-eternal-by-default
+it.instance(
+  "a completed prompt-mode loop continues into backlog work instead of stopping",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      writeChange(dir, "eternal-fixture-change", "- [ ] 1.1 something still planned\n")
+      const loop = yield* Loop.Service
+
+      // Iteration 1: the loop's own prompt completes.
+      yield* llm.text("done with the requested task <promise>COMPLETE</promise>")
+      // Transition: queue-mode implement turns that never touch the fixture's
+      // tasks.md, so the change quarantines after 3 consecutive failures
+      // (same shape as the "sick-change" quarantine test above) — the queue
+      // then drains with nothing else eligible, giving a deterministic
+      // terminal state to assert on.
+      yield* llm.text("I looked around but did not change anything")
+      yield* llm.text("I looked around but did not change anything")
+      yield* llm.text("I looked around but did not change anything")
+
+      const info = yield* loop.create({ prompt: "finish the quick task", maxIterations: 10, interval: 0 })
+      expect(info.mode).toBe("prompt")
+      expect(info.eternal).toBe(true)
+
+      const final = yield* waitForTerminal(info.id, 30)
+
+      // Not "completed" after one iteration and stopped — the backlog had
+      // planned work, so the loop kept going as a queue run.
+      expect(final.mode).toBe("queue")
+      expect(final.status).toBe("completed")
+      expect(final.report).toContain("eternal-fixture-change: quarantined")
+    }),
+  { config: {} },
+)
+
+it.instance(
+  "eternal: false stops a completed prompt-mode loop even with backlog work pending",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      writeChange(dir, "ignored-fixture-change", "- [ ] 1.1 something still planned\n")
+      const loop = yield* Loop.Service
+
+      yield* llm.text("done with the requested task <promise>COMPLETE</promise>")
+
+      const info = yield* loop.create({
+        prompt: "finish the quick task",
+        maxIterations: 10,
+        interval: 0,
+        eternal: false,
+      })
+      const final = yield* waitForTerminal(info.id, 15)
+
+      expect(final.mode).toBe("prompt")
+      expect(final.status).toBe("completed")
+      // No queue turn was ever attempted — exactly the one canned response.
+      expect(yield* llm.hits).toHaveLength(1)
+    }),
+  { config: {} },
+)

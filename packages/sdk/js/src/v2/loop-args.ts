@@ -25,6 +25,8 @@ export interface ParsedLoopArgs {
   sync: boolean
   /** false when --no-push was passed (queue mode: push completed branches) */
   push: boolean
+  /** false when --no-eternal was passed (prompt mode: continue into backlog work on completion) */
+  eternal: boolean
   /** queue mode: standing instruction repeated on every iteration */
   guidance?: string
   /** queue mode gate overrides; unset falls back to experimental.queue_gate */
@@ -61,6 +63,7 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
   let queue = false
   let sync = false
   let push = true
+  let eternal = true
   let guidance: string | undefined
   let gateCwd: string | undefined
   let testCommand: string | undefined
@@ -87,6 +90,10 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
     }
     if (token === "--no-push") {
       push = false
+      continue
+    }
+    if (token === "--no-eternal") {
+      eternal = false
       continue
     }
     // Guidance is prose, and the TUI's single-line form has no quoting, so it
@@ -135,6 +142,7 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
   return {
     prompt: promptParts.join(" ").trim(),
     push,
+    eternal,
     guidance,
     interval,
     max,

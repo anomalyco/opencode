@@ -740,6 +740,7 @@ export type Loop = {
   interval?: number
   noProgressLimit: number
   completionToken: string
+  eternal: boolean
   iteration: number
   iterations: Array<{
     iteration: number
@@ -9039,6 +9040,7 @@ export type LoopCreateData = {
     interval?: number
     noProgressLimit?: number
     completionToken?: string
+    eternal?: boolean
     mode?: "prompt" | "queue"
     queue?: Array<string>
     queueGuidance?: string

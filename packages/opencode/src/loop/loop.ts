@@ -130,6 +130,11 @@ export const Info = Schema.Struct({
   interval: Schema.optional(Schema.Finite),
   noProgressLimit: Schema.Int,
   completionToken: Schema.String,
+  // loop-eternal-by-default: when true (the default) a plain-mode loop that
+  // completes checks the openspec backlog before finalizing, and continues as
+  // a queue run if planned work remains instead of stopping. false restores
+  // the pre-existing stop-on-completion behavior exactly.
+  eternal: Schema.Boolean,
   iteration: Schema.Int,
   iterations: Schema.Array(IterationInfo),
   // The most recent iteration's child session. Iterations run in fresh child
@@ -156,6 +161,10 @@ export const CreateInput = Schema.Struct({
   interval: Schema.optional(Schema.Finite),
   noProgressLimit: Schema.optional(Schema.Int),
   completionToken: Schema.optional(Schema.String),
+  // Prompt mode only: continue into openspec backlog work on completion
+  // instead of stopping (default: true). Ignored in queue mode, which is
+  // already relentless by construction.
+  eternal: Schema.optional(Schema.Boolean),
   // Queue mode (loop-spec-queue): the unit of work is an openspec change,
   // not the prompt string. `queue` restricts and orders the changes; empty
   // means every eligible change under openspec/changes/.
@@ -282,6 +291,11 @@ type Record_ = {
   // Present while paused. The run fiber blocks on it at zero cost instead of
   // polling; resume (or cancel) resolves it to wake the fiber immediately.
   pauseGate?: Deferred.Deferred<void>
+  // loop-eternal-by-default: set once a prompt-mode loop has used its single
+  // bounded reprieve on hitting the no-progress streak limit. Prevents an
+  // unbounded retry — one extra, harder-worded iteration per loop lifetime,
+  // never more.
+  stallReprieve?: "pending" | "used"
 }
 
 export const layer = Layer.effect(
@@ -536,7 +550,29 @@ export const layer = Layer.effect(
             return
           }
 
-          const result = yield* runIteration(record)
+          // loop-eternal-by-default: consume a pending stall reprieve for
+          // exactly this one iteration. Flipped to "used" immediately so a
+          // productive reprieve iteration does not leave the override text
+          // applying to every iteration after it.
+          const usingReprieve = record.stallReprieve === "pending"
+          if (usingReprieve) {
+            yield* patch(id, (current) => ({ ...current, stallReprieve: "used" }))
+          }
+          const result = yield* runIteration(
+            record,
+            usingReprieve
+              ? {
+                  promptText: [
+                    "You appear stuck — no measurable progress for several iterations in a row.",
+                    "Reassess from scratch: either make concrete, verifiable progress this turn, or",
+                    "explain exactly what is blocking you. This is the last iteration before this",
+                    "run gives up and reports stalled.",
+                    "",
+                    record.info.prompt,
+                  ].join("\n"),
+                }
+              : undefined,
+          )
 
           if (result.skipped) {
             // Foreign-turn guard tripped: the target session was busy with a
@@ -627,6 +663,15 @@ export const layer = Layer.effect(
           }))
 
           if (limit > 0 && streak >= limit) {
+            // loop-eternal-by-default: one bounded reprieve before giving up,
+            // unless this loop already used it or opted out with eternal:false.
+            // Never more than one per loop lifetime — stallReprieve only ever
+            // moves pending -> used, and this branch requires "undefined".
+            if (updated.info.eternal && record.stallReprieve === undefined) {
+              yield* patch(id, (current) => ({ ...current, stallReprieve: "pending", noProgressStreak: 0 }))
+              yield* waitBetween(id, (updated.info.interval ?? DefaultIntervalSeconds) * 1000)
+              continue
+            }
             yield* finalize(id, "stalled")
             return
           }
@@ -1412,6 +1457,87 @@ export const layer = Layer.effect(
         }
       })
 
+    // loop-eternal-by-default: default queue state for a prompt-mode loop
+    // transitioning into queue continuation on completion. Mirrors the
+    // defaults `create` applies to a loop started directly in queue mode.
+    const defaultQueueState = (): QueueState => ({
+      only: undefined,
+      guidance: undefined,
+      sync: false,
+      gatesPassed: new Set<Gate>(),
+      options: undefined,
+      push: true,
+      syncs: [],
+      pushes: [],
+      outcomes: [],
+      consecutiveQuarantines: 0,
+      anyGatePassed: false,
+    })
+
+    // Runs a prompt-mode loop; on completion, checks the openspec backlog
+    // before finalizing (design: loop-eternal-by-default). If planned work
+    // remains and the loop opted in (the default), the loop does not stop —
+    // it transitions into queue-style continuation instead, picking up the
+    // same relentless, quarantine-don't-halt driver `/backlog` already uses.
+    //
+    // The transition applies the SAME authority ceiling `create` applies to a
+    // loop started directly in queue mode (QueueDenyRules: no push/tag/deploy
+    // from the model) — an eternal plain loop must never end up with MORE
+    // authority than a queue loop has today just because it started as a
+    // single prompt.
+    const runPromptThenMaybeQueue = (id: LoopID): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        yield* run(id)
+        const record = (yield* Ref.get(state)).get(id)
+        if (!record) return
+        if (record.info.status !== "completed") return
+        if (!record.info.eternal) return
+
+        const resolved = resolveQueue(record.info.directory, undefined)
+        if (resolved.eligible.length === 0) return
+
+        // Two queue-shaped drivers over one directory would fight over the
+        // same derived cursor and working tree (the exact conflict
+        // QueueActiveError exists to prevent at creation time) — the same
+        // guard applies here since this transition makes this loop
+        // queue-shaped too.
+        const activeQueue = Array.from((yield* Ref.get(state)).values()).find(
+          (other) =>
+            other.info.id !== id &&
+            other.info.mode === "queue" &&
+            other.info.directory === record.info.directory &&
+            !isTerminal(other.info.status),
+        )
+        if (activeQueue) {
+          yield* Effect.logInfo(
+            "loop completed with backlog work remaining, but another queue run is already active in this directory — not transitioning",
+            { "loop.id": id, "active.loop.id": activeQueue.info.id },
+          )
+          return
+        }
+
+        yield* Effect.logInfo("loop completed with backlog work remaining — continuing as a queue run", {
+          "loop.id": id,
+          "queue.next": resolved.eligible[0]?.slug,
+        })
+
+        const sessionID = record.info.sessionID
+        const priorPermission =
+          (yield* session.get(sessionID).pipe(Effect.orElseSucceed(() => undefined)))?.permission ?? []
+
+        yield* patch(id, (current) => ({
+          ...current,
+          queue: defaultQueueState(),
+          info: { ...current.info, status: "running", mode: "queue", finishedAt: undefined },
+        }))
+        yield* emit(id)
+
+        yield* session.setPermission({ sessionID, permission: [...priorPermission, ...QueueDenyRules] }).pipe(Effect.ignore)
+        yield* runQueue(id).pipe(
+          Effect.ensuring(session.setPermission({ sessionID, permission: priorPermission }).pipe(Effect.ignore)),
+        )
+      })
+
     const create = (input: CreateInput) =>
       Effect.gen(function* () {
         const prompt = input.prompt.trim()
@@ -1470,6 +1596,9 @@ export const layer = Layer.effect(
           interval: input.interval,
           noProgressLimit: input.noProgressLimit ?? DefaultNoProgressLimit,
           completionToken,
+          // Only meaningful in prompt mode; queue mode is already relentless
+          // by construction (it drains the whole backlog before stopping).
+          eternal: mode === "prompt" ? (input.eternal ?? true) : false,
           mode,
           iteration: 0,
           iterations: [],
@@ -1523,7 +1652,7 @@ export const layer = Layer.effect(
             .pipe(Effect.ignore)
         }
 
-        const driver = mode === "queue" ? runQueue(id) : run(id)
+        const driver = mode === "queue" ? runQueue(id) : runPromptThenMaybeQueue(id)
         yield* driver
           .pipe(
             Effect.catchCause((cause) =>

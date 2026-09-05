@@ -295,11 +295,48 @@ it.instance(
         maxIterations: 10,
         interval: 0,
         noProgressLimit: 3,
+        // loop-eternal-by-default grants one bounded reprieve before
+        // finalizing as stalled (see the dedicated reprieve test below) —
+        // disabled here so this test isolates bare stall detection.
+        eternal: false,
       })
       const final = yield* waitForTerminal(info.id)
 
       expect(final.status).toBe("stalled")
       expect(final.iterations).toHaveLength(3)
+    }),
+  { config: {} },
+)
+
+it.instance(
+  "grants one bounded reprieve before stalling when eternal (default)",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      const loop = yield* Loop.Service
+
+      yield* llm.text("nothing new to report here")
+      yield* llm.text("nothing new to report here")
+      yield* llm.text("nothing new to report here")
+      yield* llm.text("nothing new to report here")
+      yield* llm.text("nothing new to report here")
+      yield* llm.text("nothing new to report here")
+
+      const info = yield* loop.create({
+        prompt: "watch for changes",
+        maxIterations: 10,
+        interval: 0,
+        noProgressLimit: 3,
+      })
+      const final = yield* waitForTerminal(info.id)
+
+      expect(final.status).toBe("stalled")
+      // 3 iterations to first hit the streak limit, then the streak counter
+      // resets for exactly one reprieve iteration, then 3 more to hit the
+      // limit again — 2x the configured limit, never unbounded.
+      expect(final.iterations).toHaveLength(6)
     }),
   { config: {} },
 )

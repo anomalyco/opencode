@@ -116,6 +116,14 @@ export const LoopCommand = effectCmd({
           "queue mode: push each completed change's branch to origin (default: on). --no-push leaves the commits local. " +
           "The default branch is never pushed, and the model still cannot run a push itself — the driver does it.",
       })
+      .option("eternal", {
+        type: "boolean",
+        default: true,
+        describe:
+          "prompt mode: on completion, continue automatically into openspec backlog work if any exists " +
+          "(default: on). --no-eternal stops on completion exactly as before this flag existed. " +
+          "Ignored in --queue mode, which is already relentless by construction.",
+      })
       .option("guidance", {
         type: "string",
         describe:
@@ -165,6 +173,7 @@ export const LoopCommand = effectCmd({
         noProgressLimit: args["stall-limit"],
         completionToken: args["completion-token"],
         mode: queueMode ? "queue" : undefined,
+        eternal: !queueMode && args.eternal === false ? false : undefined,
         queue: queueMode && args.queue && args.queue.length > 0 ? args.queue : undefined,
         queueSync: queueMode && args.sync ? true : undefined,
         queuePush: queueMode && args.push === false ? false : undefined,

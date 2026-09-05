@@ -2707,6 +2707,7 @@ export class Loop extends HeyApiClient {
       interval?: number
       noProgressLimit?: number
       completionToken?: string
+      eternal?: boolean
       mode?: "prompt" | "queue"
       queue?: Array<string>
       queueGuidance?: string
@@ -2734,6 +2735,7 @@ export class Loop extends HeyApiClient {
             { in: "body", key: "interval" },
             { in: "body", key: "noProgressLimit" },
             { in: "body", key: "completionToken" },
+            { in: "body", key: "eternal" },
             { in: "body", key: "mode" },
             { in: "body", key: "queue" },
             { in: "body", key: "queueGuidance" },

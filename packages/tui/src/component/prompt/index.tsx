@@ -1277,6 +1277,7 @@ function isRunControlInput(input: string): boolean {
               noProgressLimit: parsed.noProgressLimit,
               completionToken: parsed.completionToken,
               mode: parsed.queue ? "queue" : undefined,
+              eternal: !parsed.queue && !parsed.eternal ? false : undefined,
               queue: parsed.queue && parsed.prompt ? parsed.prompt.split(/\s+/) : undefined,
               queueSync: parsed.queue && parsed.sync ? true : undefined,
               queuePush: parsed.queue && !parsed.push ? false : undefined,
@@ -1295,7 +1296,8 @@ function isRunControlInput(input: string): boolean {
                 variant: "success",
                 message: parsed.queue
                   ? `Backlog started (${result.data.id}) — works planned tasks until none are left, pushing each completed branch${parsed.push ? "" : " (push disabled)"}`
-                  : `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations, stops on ${result.data.completionToken})`,
+                  : `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations, stops on ${result.data.completionToken}` +
+                    `${parsed.eternal ? "; continues into backlog work on completion if any is planned" : ""})`,
               })
             })
             .catch((error) => {

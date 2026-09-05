@@ -73,10 +73,11 @@ export function DialogLoopList() {
       skipFilter={true}
       emptyView={
         <text>
-          Nothing has run yet. /loop &lt;prompt&gt; keeps working on that prompt until it is done. /backlog works
+          Nothing has run yet. /loop &lt;prompt&gt; keeps working on that prompt until it is done, then continues
+          into planned openspec work if any exists (--no-eternal to stop instead). /backlog works
           the planned tasks itself — change by change, implement, test, verify, commit — and stops when none
-          are left. Neither ever pushes. Set experimental.queue_gate so the test and verify commands run in
-          the right directory for this repo.
+          are left. Neither ever pushes from the model directly. Set experimental.queue_gate so the test and
+          verify commands run in the right directory for this repo.
         </text>
       }
       onSelect={(option) => {
