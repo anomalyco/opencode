@@ -81,6 +81,7 @@ export const Plugin = {
           description: DESCRIPTION,
           input: Input,
           output: Output,
+          freeform: { input: "patchText", name: "apply_patch" },
           execute: (input, context) => {
             const applied: Array<typeof Applied.Type> = []
             const parsed = Patch.parse(input.patchText)
