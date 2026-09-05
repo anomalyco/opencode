@@ -1,6 +1,8 @@
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Show } from "solid-js"
+import { usePlatform } from "@/runtime/platform/platform"
+import { HomeConnect } from "./connect"
 import { createHomeController } from "./model"
 import { createHomeProjectsController } from "./projects/controller"
 import { HomeUtilityNav } from "./projects/view"
@@ -11,6 +13,7 @@ import { createHomeSessionsController } from "./sessions/controller"
 import { HomeSessions } from "./sessions/region"
 
 export function Home() {
+  const platform = usePlatform()
   const mobile = createMediaQuery("(max-width: 767px)")
   const home = createHomeController()
   const projects = createHomeProjectsController(home)
@@ -24,7 +27,7 @@ export function Home() {
         bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]
       `}
     >
-      <Show when={mobile()}>
+      <Show when={mobile() && home.server.list().length > 0}>
         <div class="relative z-40 -mb-3 shrink-0 px-3 pt-3">
           <HomeProjects projects={projects} scroll={scroll} dropdown />
         </div>
@@ -46,7 +49,17 @@ export function Home() {
           <Show when={!mobile()}>
             <HomeProjects projects={projects} scroll={scroll} />
           </Show>
-          <HomeSessions sessions={sessions} search={search} scroll={scroll} />
+          {/* A disabled session query is pending, not loading. Keep loaded sessions mounted during reconnects. */}
+          <Show
+            when={
+              platform.platform !== "web" ||
+              !sessions.data.loading() ||
+              home.server.focusedContext()?.sdk.connection.status() === "connected"
+            }
+            fallback={<HomeConnect home={home} />}
+          >
+            <HomeSessions sessions={sessions} search={search} scroll={scroll} />
+          </Show>
         </div>
       </ScrollView>
       <div class="hidden shrink-0 px-3 py-2 md:block lg:hidden">
