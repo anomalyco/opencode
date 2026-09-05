@@ -118,7 +118,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
         class="group/composer relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
         classList={{
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
-          "border border-v2-icon-icon-info border-dashed": state.drag === "active",
         }}
         onSubmit={(event) => {
           event.preventDefault()
@@ -129,12 +128,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
         onDragLeave={props.controller.onDragLeave}
         onDrop={props.controller.onDrop}
       >
-        <Show when={state.drag === "active"}>
-          <div class="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-xl bg-v2-background-bg-base/90 text-v2-text-text-base">
-            {i18n.t("ui.promptInput.dropFiles")}
-          </div>
-        </Show>
-
         <Show when={state.mode === "normal"}>
           <ComposerAttachments
             attachments={props.controller.attachments()}
@@ -270,6 +263,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                       title={i18n.t("ui.promptInput.chooseVariant")}
                       keybind={["Shift", "Mod", "D"]}
                       control={control}
+                      class={control.current() === "default" ? "composer-variant-default" : undefined}
                     />
                   </Show>
                 )}
@@ -603,12 +597,14 @@ function ComposerEditorConfiguredSelect(props: {
   keybind?: string[]
   control: ComposerSelectControl
   model?: boolean
+  class?: string
 }) {
   const current = () => props.control.current()
   const providerID = () => props.control.options().find((option) => option.id === current())?.providerID
   return (
     <ComposerEditorSelect
       title={props.title}
+      class={props.class}
       keybind={props.control.keybind?.() ?? props.keybind}
       options={props.control.options()}
       current={current()}

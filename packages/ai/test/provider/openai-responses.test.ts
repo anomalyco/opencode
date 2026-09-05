@@ -12,6 +12,7 @@ import {
   LanguageModel,
   ToolCallPart,
   ToolDefinition,
+  ToolNamespace,
   ToolResultPart,
   TransportError,
   Usage,
@@ -140,6 +141,94 @@ describe("OpenAI Responses route", () => {
         { type: "image_generation", action: "generate", quality: "high", size: "1024x1024" },
       ])
       expect(prepared.body.tool_choice).toEqual({ type: "image_generation" })
+    }),
+  )
+
+  it.effect("lowers tool namespaces without flattening leaf names", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Find a customer and their orders.",
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              description: "Customer management",
+              tools: [
+                ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} }),
+                ToolDefinition.make({ name: "orders", description: "List customer orders", inputSchema: {} }),
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "namespace",
+          name: "crm",
+          description: "Customer management",
+          tools: [
+            { type: "function", name: "lookup", description: "Look up a customer", parameters: {}, strict: false },
+            { type: "function", name: "orders", description: "List customer orders", parameters: {}, strict: false },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("flattens nested levels within a native tool namespace", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              type: "namespace",
+              name: "crm",
+              description: "Customer management",
+              tools: [
+                {
+                  type: "namespace",
+                  name: "orders",
+                  description: "Order management",
+                  tools: [ToolDefinition.make({ name: "list", description: "List orders", inputSchema: {} })],
+                },
+              ],
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "namespace",
+          name: "crm",
+          description: "Customer management",
+          tools: [{ type: "function", name: "orders_list", description: "List orders", parameters: {}, strict: false }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("defaults tool namespace descriptions", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              type: "namespace",
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        expect.objectContaining({ type: "namespace", name: "crm", description: "Tools in the crm namespace." }),
+      ])
     }),
   )
 
@@ -437,7 +526,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("tolerates keepalive frames before response.created", () =>
+  it.effect("tolerates keepalive and provider notifications before response.created", () =>
     Effect.gen(function* () {
       const webSocket = WebSocketTransport.makeDirect({
         open: () =>
@@ -445,6 +534,7 @@ describe("OpenAI Responses route", () => {
             sendText: () => Effect.void,
             messages: Stream.fromArray([
               ProviderShared.encodeJson({ type: "keepalive", sequence_number: 0 }),
+              ProviderShared.encodeJson({ type: "codex.rate_limits" }),
               ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_alive" } }),
               ProviderShared.encodeJson({
                 type: "response.completed",
@@ -568,7 +658,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues a promoted steer after the completed assistant output", () =>
+  it.effect("continues a promoted steer after assistant output with response-only text metadata", () =>
     Effect.gen(function* () {
       const firstInput = [{ role: "user", content: [{ type: "input_text", text: "First" }] }]
       const first = continuationDriver({ type: "response.create", model: "gpt-5.2", store: false, input: firstInput })
@@ -582,7 +672,7 @@ describe("OpenAI Responses route", () => {
             id: "msg_1",
             status: "completed",
             role: "assistant",
-            content: [{ type: "output_text", text: "Hello" }],
+            content: [{ type: "output_text", text: "Hello", annotations: [], logprobs: [] }],
           },
         }),
       )
@@ -610,42 +700,37 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues store-false reasoning while retaining the output item ID", () =>
+  it.effect("continues streamed reasoning when completion re-encrypts the same item", () =>
     Effect.gen(function* () {
       const firstInput = [{ role: "user", content: [{ type: "input_text", text: "Think" }] }]
       const request = { type: "response.create", model: "gpt-5.2", store: false, input: firstInput }
+      const reasoning = {
+        type: "reasoning",
+        id: "rs_1",
+        summary: [{ type: "summary_text", text: "Thought" }],
+        encrypted_content: "encrypted",
+      }
       const first = continuationDriver(request)
       const create = yield* first.create(undefined)
       yield* first.observe(
         create,
         ProviderShared.encodeJson({
           type: "response.output_item.done",
-          item: {
-            type: "reasoning",
-            id: "rs_1",
-            summary: [{ type: "summary_text", text: "Thought" }],
-            encrypted_content: "encrypted",
-          },
+          item: reasoning,
         }),
       )
       const saved = checkpoint(
         yield* first.observe(
           create,
-          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+          ProviderShared.encodeJson({
+            type: "response.completed",
+            response: { id: "resp_1", output: [{ ...reasoning, encrypted_content: "terminal-encrypted" }] },
+          }),
         ),
       )
       const next = continuationDriver({
         ...request,
-        input: [
-          ...firstInput,
-          {
-            type: "reasoning",
-            id: "rs_1",
-            summary: [{ type: "summary_text", text: "Thought" }],
-            encrypted_content: "encrypted",
-          },
-          { role: "user", content: [{ type: "input_text", text: "Continue" }] },
-        ],
+        input: [...firstInput, reasoning, { role: "user", content: [{ type: "input_text", text: "Continue" }] }],
       })
 
       const continued = yield* next.create(saved)
@@ -655,6 +740,11 @@ describe("OpenAI Responses route", () => {
         previous_response_id: "resp_1",
         input: [{ role: "user", content: [{ type: "input_text", text: "Continue" }] }],
       })
+      const edited = yield* continuationDriver({
+        ...request,
+        input: [...firstInput, { ...reasoning, encrypted_content: "edited" }, { role: "user", content: "Continue" }],
+      }).create(saved)
+      expect(edited.mode).toBe("full")
     }),
   )
 
@@ -2130,6 +2220,71 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("preserves tool namespaces through streaming and history replay", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "function_call",
+        id: "fc_1",
+        call_id: "call_1",
+        namespace: "crm",
+        name: "lookup",
+        arguments: "",
+      }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item },
+              {
+                type: "response.function_call_arguments.delta",
+                output_index: 0,
+                item_id: "fc_1",
+                delta: '{"id":"123"}',
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: { ...item, arguments: '{"id":"123"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      const toolEvents = response.events.filter((event) => event.type.startsWith("tool-"))
+      expect(toolEvents).toEqual([
+        expect.objectContaining({ type: "tool-input-start", name: "lookup", namespace: "crm" }),
+        expect.objectContaining({ type: "tool-input-delta", name: "lookup", namespace: "crm" }),
+        expect.objectContaining({ type: "tool-input-end", name: "lookup", namespace: "crm" }),
+        expect.objectContaining({ type: "tool-call", name: "lookup", namespace: "crm", input: { id: "123" } }),
+      ])
+      expect(response.message.content).toEqual([
+        expect.objectContaining({ type: "tool-call", name: "lookup", namespace: "crm", input: { id: "123" } }),
+      ])
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            response.message,
+            Message.tool({ id: "call_1", name: "lookup", namespace: "crm", result: { customer: "Ada" } }),
+          ],
+        }),
+      )
+      expect(prepared.body.input).toEqual([
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          namespace: "crm",
+          name: "lookup",
+          arguments: '{"id":"123"}',
+        },
+        { type: "function_call_output", call_id: "call_1", output: '{"customer":"Ada"}' },
+      ])
+    }),
+  )
   it.effect("routes reasoning summary events by output index", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

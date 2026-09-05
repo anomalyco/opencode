@@ -65,7 +65,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
       Promise.all(
         (await serverSDK.api.project.list()).map(async (project) => {
           const worktrees = await serverSDK.api.worktree
-            .list({ projectID: project.id })
+            .list({ location: { directory: project.canonical } })
             .catch(() => [{ directory: project.canonical }, ...project.sandboxes.map((directory) => ({ directory }))])
           return normalizeProjectInfo({ ...project, worktrees })
         }),
@@ -180,7 +180,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
     }
     const removed = await context.sdk.api.worktree
       .remove({
-        projectID: workspace.project.id,
+        location: { directory: workspace.project.worktree },
         directory: workspace.directory,
         force,
       })

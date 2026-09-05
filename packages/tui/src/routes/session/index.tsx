@@ -87,7 +87,6 @@ import { useLocation } from "../../context/location"
 import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
 import {
-  backgroundToolRowIndex,
   cacheReuseDrop,
   createSessionRows,
   messageBoundaryIDs,
@@ -95,7 +94,6 @@ import {
   sessionRowID,
   turnDuration,
   turnTokensPerSecond,
-  type BackgroundToolTarget,
   type CacheUsage,
   type PartRef,
   type SessionRow,
@@ -113,7 +111,6 @@ import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
-import { useSessionTerminals } from "../../context/session-terminals"
 
 addDefaultParsers(parsers.parsers)
 
@@ -145,7 +142,6 @@ const context = createContext<{
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
   pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
-  jumpToBackgroundTool: (target: BackgroundToolTarget, beforeMessageID: string) => void
 }>()
 
 function use() {
@@ -161,6 +157,7 @@ export function Session(props: {
   sidebarVisible: boolean
   onToggleSidebar: () => void
   visibleTerminalID?: string
+  onTerminalPicker?: (show: (() => void) | undefined) => void
   width?: number
 }) {
   const setEpilogue = useEpilogue()
@@ -234,6 +231,8 @@ export function Session(props: {
     open: false,
     tab: undefined as string | undefined,
   })
+  props.onTerminalPicker?.(() => setComposer({ open: true, tab: "terminals" }))
+  onCleanup(() => props.onTerminalPicker?.(undefined))
   createEffect(() => {
     if (props.promptMuted && composer.open) setComposer("open", false)
   })
@@ -260,7 +259,6 @@ export function Session(props: {
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
-  const terminalError = () => toast.show({ variant: "error", message: "Unable to load terminal" })
   const client = useClient()
   const autoApproved = new Set<string>()
   createEffect(() => {
@@ -295,7 +293,6 @@ export function Session(props: {
   const [firstJump, setFirstJump] = createSignal<() => void>()
   const [synced, setSynced] = createSignal(false)
   const sessionTabs = useSessionTabs()
-  const terminals = useSessionTerminals()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
@@ -503,6 +500,8 @@ export function Session(props: {
     })
   }
   function saveScrollAnchor() {
+    // Initial layout must not overwrite the saved position before synchronization restores it.
+    if (!restored) return
     if (!isAwayFromBottom()) {
       sessionTabs.setScrollAnchor(sessionID, undefined)
       return
@@ -670,25 +669,6 @@ export function Session(props: {
       const message = data.session.message.get(route.sessionID, messageID)
       alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
-
-  const jumpToBackgroundTool = (target: BackgroundToolTarget, beforeMessageID: string) => {
-    if (firstJump()) clearMessageNavigation()
-    const jump = () => {
-      const index = backgroundToolRowIndex(rows, messages(), target, beforeMessageID)
-      if (index === -1) {
-        if (data.session.message.more(route.sessionID)) prependHistory(0, jump)
-        return
-      }
-      const id = sessionRowID(rows[index]!, boundaries()[index])
-      if (!id) return
-      ensureAllRows(() => {
-        const child = scroll.getRenderable(id)
-        if (!child) return
-        alignMessage(id, Math.max(0, scroll.scrollTop + child.y - scroll.viewport.y - 1))
-      })
-    }
-    jump()
-  }
 
   function toBottom() {
     clearMessageNavigation()
@@ -949,13 +929,21 @@ export function Session(props: {
           dialog.clear()
           return
         }
-        void client.api.session.revert
-          .stage({ sessionID: route.sessionID, messageID: message.id })
-          .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
-        prompt()?.set({
-          ...projectedPromptInput(message),
-          pasted: [],
-        })
+        const sessionID = route.sessionID
+        const target = prompt()
+        void (async () => {
+          if (pendingDeliveries().has(message.id)) {
+            if (!(await mutatePending("cancel", message.id))) return
+          } else {
+            await client.api.session.interrupt({ sessionID })
+            await client.api.session.wait({ sessionID })
+            await client.api.session.revert.stage({ sessionID, messageID: message.id })
+          }
+          target?.set({
+            ...projectedPromptInput(message),
+            pasted: [],
+          })
+        })().catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
         dialog.clear()
       },
     },
@@ -976,73 +964,6 @@ export function Session(props: {
         })()
       },
     },
-    {
-      title: props.sidebarVisible ? "Hide sidebar" : "Show sidebar",
-      id: "session.sidebar.toggle",
-      group: "Session",
-      run: () => {
-        props.onToggleSidebar()
-        dialog.clear()
-      },
-    },
-    ...(config.session.terminal
-      ? [
-          {
-            title: props.visibleTerminalID ? "Hide terminal pane" : "Show terminal pane",
-            id: "terminal.toggle",
-            group: "Session",
-            run: () => {
-              const sessionID = route.sessionID
-              if (props.visibleTerminalID) {
-                promptRef.current?.focus()
-                void terminals.selectTerminal(sessionID, null).catch(toast.error)
-              } else {
-                void terminals
-                  .refresh(sessionID)
-                  .then(async () => {
-                    const terminal = terminals.get(sessionID).terminals.at(-1)
-                    if (terminal) return terminals.selectTerminal(sessionID, terminal.id)
-                    await terminals.newTerminal(sessionID)
-                  })
-                  .catch(terminalError)
-              }
-              dialog.clear()
-            },
-          },
-          {
-            title: "Select terminal",
-            id: "terminal.select",
-            group: "Session",
-            run: () => {
-              promptRef.current?.focus()
-              setComposer({ open: true, tab: "terminals" })
-              void terminals.refresh(route.sessionID).catch(terminalError)
-              dialog.clear()
-            },
-          },
-          {
-            title: "Close terminal pane",
-            id: "terminal.close",
-            group: "Session",
-            enabled: props.visibleTerminalID !== undefined,
-            run: () => {
-              promptRef.current?.focus()
-              void terminals.selectTerminal(route.sessionID, null).catch(toast.error)
-              dialog.clear()
-            },
-          },
-          {
-            title: "New terminal",
-            id: "session.terminal",
-            group: "Session",
-            slash: { name: "terminal" },
-            run: async () => {
-              dialog.clear()
-              await terminals.newTerminal(route.sessionID).catch(terminalError)
-            },
-          },
-        ]
-      : []),
     {
       title: (() => {
         const next = nextThinkingMode(thinkingMode())
@@ -1369,7 +1290,6 @@ export function Session(props: {
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
-        jumpToBackgroundTool,
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1507,7 +1427,6 @@ export function Session(props: {
                   <Prompt
                     visible={true}
                     ref={bind}
-                    disabled={false}
                     muted={props.promptMuted}
                     onSubmit={() => {
                       toBottom()
@@ -2117,15 +2036,8 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
 function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const ctx = use()
   const theme = useTheme()
-  const renderer = useRenderer()
-  const [hover, setHover] = createSignal(false)
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
-  const target = createMemo<BackgroundToolTarget | undefined>(() => {
-    if (source() !== "shell") return
-    const id = stringValue(metadata()?.shellID) ?? stringValue(metadata()?.jobID)
-    return id ? { source: "shell", id } : undefined
-  })
   const completion = () => source() === "subagent" || source() === "shell"
   const state = () => stringValue(metadata()?.state)
   const actor = () => (source() === "shell" ? "Shell" : Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent"))
@@ -2143,7 +2055,6 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const heading = () => `${state() === "completed" ? "↳" : "!"} ${actor()} ${status()}`
   const suffix = () => Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - stringWidth(heading())))
   const color = () => {
-    if (hover()) return theme.text.action.secondary.hovered
     if (state() === "error") return theme.text.feedback.error.default
     if (state() === "cancelled") return theme.text.feedback.warning.default
     return theme.text.feedback.info.default
@@ -2157,19 +2068,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
         </InlineToolRow>
       }
     >
-      <box
-        id={target() ? `${target()!.source}-completion:${target()!.id}` : undefined}
-        marginLeft={3}
-        onMouseOver={() => {
-          if (target()) setHover(true)
-        }}
-        onMouseOut={() => setHover(false)}
-        onMouseUp={() => {
-          const item = target()
-          if (!item || renderer.getSelection()?.getSelectedText()) return
-          ctx.jumpToBackgroundTool(item, props.message.id)
-        }}
-      >
+      <box marginLeft={3}>
         <text wrapMode="none">
           <span style={{ fg: color() }}>{heading()}</span>
           <span style={{ fg: theme.text.subdued }}>{suffix()}</span>
@@ -2522,12 +2421,24 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
 
 function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
   const theme = useTheme()
+  const [seconds, setSeconds] = createSignal(0)
+  createEffect(() => {
+    const at = props.retry?.at
+    if (at === undefined) return
+    const update = () => setSeconds(Math.max(0, Math.ceil((at - Date.now()) / 1_000)))
+    if (update() === 0) return
+    const timer = setInterval(() => {
+      if (update() === 0) clearInterval(timer)
+    }, 1_000)
+    onCleanup(() => clearInterval(timer))
+  })
   return (
     <Show when={props.retry}>
       {(retry) => (
         <box paddingLeft={3}>
           <text fg={theme.text.feedback.warning.default}>
-            ⚠ Retry attempt {retry().attempt} scheduled: {retry().error.message}
+            ⚠ {seconds() > 0 ? `Retrying in ${seconds()}s` : "Retry due"} · attempt {retry().attempt} ·{" "}
+            {retry().error.message}
           </text>
         </box>
       )}
@@ -2926,6 +2837,7 @@ function InlineTool(props: {
   pending: string
   failure?: string
   spinner?: boolean
+  running?: boolean
   status?: JSX.Element
   children: JSX.Element
   part: SessionMessageAssistantTool
@@ -2937,7 +2849,9 @@ function InlineTool(props: {
   const [errorExpanded, setErrorExpanded] = createSignal(false)
   const permission = useToolPermission(() => props.part)
 
-  const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error.message : undefined))
+  const error = createMemo(() =>
+    !props.running && props.part.state.status === "error" ? props.part.state.error.message : undefined,
+  )
 
   const denied = createMemo(
     () =>
@@ -3482,6 +3396,7 @@ function Subagent(props: ToolProps) {
     <InlineTool
       icon={continuation() ? "↳" : isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
       spinner={!continuation() && isRunning()}
+      running={isRunning()}
       complete={description()}
       pending="Delegating…"
       part={props.part}

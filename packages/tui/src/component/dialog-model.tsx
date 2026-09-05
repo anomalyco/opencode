@@ -99,11 +99,15 @@ export function DialogModel(props: { providerID?: string }) {
             return false
           return true
         }),
+      connected(),
     )
 
     if (needle) {
       return prioritizeFavorites(
-        fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
+        sortModelOptions(
+          fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
+          false,
+        ),
         favoritePriority,
       )
     }
@@ -179,14 +183,23 @@ export function prioritizeFavorites<T extends { value: { providerID: string; mod
 }
 
 export function sortModelOptions<
-  T extends { providerID?: string; providerName?: string; releaseDate: string | number; title: string },
->(options: T[]) {
+  T extends {
+    providerID?: string
+    providerName?: string
+    releaseDate: string | number
+    title: string
+    footer?: string
+  },
+>(options: T[], grouped = true) {
   return options.toSorted((a, b) => {
-    const provider = Number(a.providerID !== "opencode") - Number(b.providerID !== "opencode")
+    const provider = grouped ? Number(a.providerID !== "opencode") - Number(b.providerID !== "opencode") : 0
     if (provider !== 0) return provider
 
-    const name = (a.providerName ?? "").localeCompare(b.providerName ?? "")
+    const name = grouped ? (a.providerName ?? "").localeCompare(b.providerName ?? "") : 0
     if (name !== 0) return name
+
+    const free = Number(b.footer === "Free") - Number(a.footer === "Free")
+    if (free !== 0) return free
 
     const release = Number(b.releaseDate) - Number(a.releaseDate)
     if (release !== 0) return release

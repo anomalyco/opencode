@@ -15,8 +15,7 @@ import { cmp, normalizeProjectInfo } from "./utils"
 import { formatServerError } from "@/runtime/server/errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import type { ServerScope } from "@/runtime/server/scope"
-import type { ServerApi } from "@/runtime/server/api"
-import { sameDirectory } from "@/workspaces/paths"
+import { withWorktreeInventory, worktreeInventoryKey } from "@/workspaces/inventory"
 
 type GlobalStore = {
   path: Path
@@ -64,42 +63,21 @@ type ProjectApi = {
   readonly list: () => Promise<ProjectListOutput>
   readonly current: (input?: ProjectCurrentInput) => Promise<ProjectCurrentOutput>
 }
-type WorktreeApi = Pick<ServerApi["worktree"], "list">
 type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<LocationGetOutput> }
 
-export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, worktrees: WorktreeApi) =>
+// Metadata only. Worktree inventories load per project when a view shows it (see workspaces/inventory).
+export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi) =>
   queryOptions({
     queryKey: [scope, "project"],
     queryFn: () =>
       retry(() =>
-        projects.list().then(async (items) => {
-          return (
-            await Promise.all(
-              items
-                .filter((project) => !!project?.id)
-                .map(async (project) => {
-                  const directories = await worktrees
-                    .list({ projectID: project.id })
-                    .catch(() => [
-                      { directory: project.canonical },
-                      ...(project.sandboxes ?? [])
-                        .filter((directory) => !sameDirectory(project.canonical, directory))
-                        .map((directory) => ({ directory })),
-                    ])
-                  return normalizeProjectInfo({
-                    ...project,
-                    sandboxes: directories
-                      .map((item) => item.directory)
-                      .filter((directory) => !sameDirectory(project.canonical, directory)),
-                    worktrees: directories,
-                  })
-                }),
-            )
-          )
+        projects.list().then((items) =>
+          items
+            .filter((project) => !!project?.id)
+            .map(normalizeProjectInfo)
             .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
-            .slice()
-            .sort((a, b) => cmp(a.id, b.id))
-        }),
+            .sort((a, b) => cmp(a.id, b.id)),
+        ),
       ),
   })
 
@@ -107,7 +85,6 @@ export async function bootstrapGlobal(input: {
   serverAPI: {
     readonly location: LocationApi
     readonly project: ProjectApi
-    readonly worktree: WorktreeApi
   }
   scope: ServerScope
   setGlobalStore: SetStoreFunction<GlobalStore>
@@ -117,9 +94,17 @@ export async function bootstrapGlobal(input: {
     () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope)),
     () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location)),
     () =>
-      input.queryClient
-        .fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project, input.serverAPI.worktree))
-        .then((data) => input.setGlobalStore("project", data)),
+      input.queryClient.fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project)).then((data) =>
+        input.setGlobalStore(
+          "project",
+          data.map((project) =>
+            withWorktreeInventory(
+              project,
+              input.queryClient.getQueryData(worktreeInventoryKey(input.scope, project.worktree)),
+            ),
+          ),
+        ),
+      ),
   ]
   await runAll(slow)
 }

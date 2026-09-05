@@ -64,6 +64,7 @@ export const layer = Layer.effect(
           : Effect.void,
       )
       const prepared = yield* context.prepare({
+        kind: "title",
         scope: { session: input.session, agentID: input.agent.id, model: input.model },
         transcript: {
           system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],

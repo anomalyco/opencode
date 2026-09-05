@@ -245,7 +245,8 @@ export const connect = Effect.fnUntraced(function* (
 
     return yield* open(url).pipe(
       Effect.catch((error) => {
-        if (!addedCodemode || !(error instanceof StreamableHTTPError) || error.code !== 404) return Effect.fail(error)
+        if (!addedCodemode || !(error instanceof StreamableHTTPError) || (error.code !== 400 && error.code !== 404))
+          return Effect.fail(error)
         // Some servers reject unknown query params. Retry once with the user's original URL.
         return open(new URL(config.url))
       }),

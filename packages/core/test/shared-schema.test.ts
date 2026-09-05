@@ -114,7 +114,6 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreWorktree.CreateInput, Worktree.CreateInput],
     [coreWorktree.RemoveInput, Worktree.RemoveInput],
     [coreWorktree.Info, Worktree.Info],
-    [coreWorktree.ListInput, Worktree.ListInput],
     [coreWorktree.List, Worktree.List],
     [coreWorktree.Event, Worktree.Event],
     [corePty.Info, Pty.Info],

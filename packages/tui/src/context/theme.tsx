@@ -23,7 +23,7 @@ import {
 } from "../theme"
 import { generateSystem, terminalMode } from "../theme/system"
 import { discoverThemes } from "../theme/discovery"
-import { createComponentTheme, type ComponentTheme } from "../theme/component"
+import { createComponentTheme, createComponentThemeView, type ComponentTheme } from "../theme/component"
 import { createEffect, createMemo, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -379,12 +379,15 @@ export function useTheme(context?: ContextName) {
 }
 export const ThemeProvider = themeContext.provider
 
-export function ThemeContextProvider(props: ParentProps<{ context: ContextName }>) {
+/** Switches context without remounting children; undefined inherits the enclosing view. */
+export function ThemeContextProvider(props: ParentProps<{ context: ContextName | undefined }>) {
   const value = themeContext.use()
+  const current = createComponentThemeView(() => {
+    const name = props.context
+    return name ? value.themes.currentTokens().contextual[name] : value.current
+  }, value.themes.mode)
   return (
-    <themeContext.context.Provider
-      value={{ current: value.themes.current.contextual[props.context], themes: value.themes, ready: value.ready }}
-    >
+    <themeContext.context.Provider value={{ current, themes: value.themes, ready: value.ready }}>
       {props.children}
     </themeContext.context.Provider>
   )

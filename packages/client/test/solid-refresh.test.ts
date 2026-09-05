@@ -3,6 +3,56 @@ import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInfo } from "../src/promise"
 
+test("config reads and update refreshes are opt-in", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const requests: string[] = []
+  const location = { directory: "/project" }
+  let model = "provider/first"
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      requests.push(url.pathname)
+      if (url.pathname === "/api/location") return Response.json(location)
+      if (url.pathname === "/api/config") return Response.json([{ type: "document", info: { model } }])
+      if (url.pathname === "/api/mcp/resource")
+        return Response.json({ location, data: { resources: [], templates: [] } })
+      return Response.json({ location, data: [] })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: location.directory,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  const event: OpenCodeEvent = { id: "evt_config", created: 1, type: "config.updated", location, data: {} }
+  try {
+    await setup.data.location.sync()
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    expect(requests).not.toContain("/api/config")
+
+    await setup.data.location.config.sync()
+    expect(requests.filter((path) => path === "/api/config")).toHaveLength(1)
+    model = "provider/second"
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    await setup.data.location.config.sync()
+    expect(requests.filter((path) => path === "/api/config")).toHaveLength(2)
+    expect(setup.data.location.config.list()).toEqual([{ type: "document", info: { model } }])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("event refreshes report failures, remain retryable, and preserve explicit read errors", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const reported = Promise.withResolvers<unknown>()

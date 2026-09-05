@@ -3,11 +3,9 @@ import { useLocation } from "@solidjs/router"
 import { ComposerEditor } from "@/composer/editor/editor"
 import { setCursorPosition } from "@/composer/editor/dom"
 import { createComposerEditor } from "@/composer/editor/interaction"
-import { useLanguage } from "@/runtime/i18n/language"
 import type { PendingSession } from "@/shell/tabs/tabs"
 
 export function PreparingComposer(props: { pending: PendingSession }) {
-  const language = useLanguage()
   const location = useLocation()
   let element: HTMLElement | undefined
   const editor = createComposerEditor({
@@ -20,7 +18,6 @@ export function PreparingComposer(props: { pending: PendingSession }) {
     },
     view: {
       draftOnly: true,
-      placeholder: () => language.t("session.new.worktree.draftPlaceholder"),
       submit: { stopping: () => false, onSubmit() {}, onStop() {} },
     },
   })

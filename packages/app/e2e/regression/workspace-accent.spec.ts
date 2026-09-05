@@ -97,7 +97,9 @@ for (const theme of ["light", "dark"] as const) {
 
       const refreshed = page.waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === `/api/worktree/${projectID}` && response.request().method() === "GET",
+          new URL(response.url()).pathname === "/api/worktree" &&
+          new URL(response.url()).searchParams.get("location[directory]") === root &&
+          response.request().method() === "GET",
       )
       view.worktrees.push({ directory: workspace, strategy: "git" })
       view.events.push({
@@ -199,10 +201,13 @@ async function openSession(page: Page, directory: string, worktrees = [...invent
     events: () => events.splice(0),
   })
   // Keep authoritative inventory independent of the raw project's empty sandboxes.
-  await page.route(`**/api/worktree/${projectID}`, (route) => {
-    if (route.request().method() !== "GET") return route.fallback()
-    return route.fulfill({ json: worktrees, headers: { "access-control-allow-origin": "*" } })
-  })
+  await page.route(
+    (url) => url.pathname === "/api/worktree",
+    (route) => {
+      if (route.request().method() !== "GET") return route.fallback()
+      return route.fulfill({ json: worktrees, headers: { "access-control-allow-origin": "*" } })
+    },
+  )
   if (draft)
     await page.addInitScript(
       ({ root, server }) => {
@@ -222,7 +227,9 @@ async function openSession(page: Page, directory: string, worktrees = [...invent
     )
   const loaded = page.waitForResponse(
     (response) =>
-      new URL(response.url()).pathname === `/api/worktree/${projectID}` && response.request().method() === "GET",
+      new URL(response.url()).pathname === "/api/worktree" &&
+      new URL(response.url()).searchParams.get("location[directory]") === root &&
+      response.request().method() === "GET",
   )
   await page.goto(
     draft ? "/new-session?draftId=draft_workspace_accent" : `/server/${base64Encode(server)}/session/${sessionID}`,

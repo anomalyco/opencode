@@ -147,7 +147,7 @@ const layer = Layer.effect(
               }
               if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer")))
                 return DrainResult.Complete()
-              return yield* restore(
+              const ready = yield* restore(
                 Effect.gen(function* () {
                   const selected = yield* prepareContext(sessionID)
                   const promoted = yield* SessionInbox.promote(
@@ -156,6 +156,8 @@ const layer = Layer.effect(
                     sessionID,
                     entering && !continuing ? promotable : "steer",
                   )
+                  // A control admitted during context preparation owns this boundary.
+                  if (promoted === undefined) return undefined
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
@@ -164,6 +166,7 @@ const layer = Layer.effect(
                   return { _tag: "Ready" as const, context: yield* context.load(selected) }
                 }),
               )
+              if (ready) return ready
             }
           }),
         ),
@@ -217,6 +220,7 @@ const layer = Layer.effect(
           messages: loaded.messages,
         })
         const prepared = yield* context.prepare({
+          kind: "primary",
           scope: { session: loaded.session, agentID: loaded.agent.id, model: loaded.model, tools: loaded.tools },
           transcript: {
             system: transcript.system,

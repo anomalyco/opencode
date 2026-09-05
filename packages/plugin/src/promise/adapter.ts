@@ -234,6 +234,7 @@ export function fromPromise(plugin: Plugin) {
         const SkillEndpoints = ClientApi.groups["server.skill"].endpoints
         const VcsEndpoints = ClientApi.groups["server.vcs"].endpoints
         const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
+        const WorktreeEndpoints = ClientApi.groups["server.worktree"].endpoints
         const context = yield* Effect.context<Scope.Scope>()
         const streams = yield* makeStreams()
 
@@ -536,6 +537,27 @@ export function fromPromise(plugin: Plugin) {
                     default: editor.default,
                   })
                 }),
+              ),
+          },
+          worktree: {
+            list: adaptApiMethod(WorktreeEndpoints["worktree.list"], host.worktree.list),
+            create: adaptApiMethod(WorktreeEndpoints["worktree.create"], host.worktree.create),
+            remove: adaptApiMethod(WorktreeEndpoints["worktree.remove"], host.worktree.remove),
+            refresh: adaptApiMethod(WorktreeEndpoints["worktree.refresh"], host.worktree.refresh),
+            reload: () => run(host.worktree.reload()),
+            transform: (callback) =>
+              register(
+                host.worktree.transform((editor) =>
+                  callback({
+                    add: (definition) =>
+                      editor.add({
+                        id: definition.id,
+                        create: (input) => attempt((signal) => definition.create(input, { signal })),
+                        remove: (input) => attempt((signal) => definition.remove(input, { signal })),
+                        list: (directory) => attempt((signal) => definition.list(directory, { signal })),
+                      }),
+                  }),
+                ),
               ),
           },
           session: {

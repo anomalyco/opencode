@@ -189,6 +189,7 @@ export const InputItem = Schema.Union([
     id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     name: Schema.String,
+    namespace: Schema.optional(Schema.String),
     arguments: Schema.String,
   }),
   Schema.Struct({
@@ -315,6 +316,7 @@ export const StreamItem = Schema.StructWithRest(
     id: Schema.optional(Schema.String),
     call_id: Schema.optional(Schema.String),
     name: Schema.optional(Schema.String),
+    namespace: Schema.optional(Schema.String),
     arguments: Schema.optional(Schema.String),
     encrypted_content: optionalNull(Schema.String),
   }),
@@ -488,6 +490,7 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
     ...(id === undefined ? {} : { id }),
     call_id: part.id,
     name: part.name,
+    namespace: part.namespace,
     arguments: ProviderShared.encodeJson(part.input),
   }
 }
@@ -807,14 +810,15 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
+  const projected = ProviderShared.flattenToolRequest(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
-    ...(yield* lowerConversation(request, adapter)),
+    ...(yield* lowerConversation(projected.request, adapter)),
     ...lowerGeneration(request),
     tools:
-      request.tools.length === 0
+      projected.tools.length === 0
         ? undefined
-        : yield* Effect.forEach(request.tools, (tool) =>
+        : yield* Effect.forEach(projected.tools, (tool) =>
             lowerTool(
               adapter.name,
               tool,
@@ -919,7 +923,7 @@ const joinReasoningText = (parts: ReadonlyArray<string | undefined>) => {
   return parts.filter((part) => part !== undefined).join("\n\n")
 }
 
-const outputItemID = (state: ParserState, event: Event) =>
+const outputItemID = (state: Pick<ParserState, "outputItems">, event: Event) =>
   event.output_index === undefined ? event.item_id : (state.outputItems[event.output_index] ?? event.item_id)
 
 const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
@@ -931,7 +935,11 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
 
 // An item without an id adopts the id already open in its output slot,
 // otherwise it gets a locally minted one.
-const resolveItem = (state: ParserState, item: StreamItem, index: number | undefined): OutputItem => ({
+const resolveItem = (
+  state: Pick<ParserState, "outputItems">,
+  item: StreamItem,
+  index: number | undefined,
+): OutputItem => ({
   ...item,
   id:
     item.id ??
@@ -941,7 +949,7 @@ const resolveItem = (state: ParserState, item: StreamItem, index: number | undef
 
 // Registered output slots are authoritative for `item_id` routing, and items
 // are resolved here so everything downstream can rely on `item.id`.
-export const normalize = (state: ParserState, input: Event): NormalizedEvent => ({
+export const normalize = (state: Pick<ParserState, "outputItems">, input: Event): NormalizedEvent => ({
   ...input,
   item_id: input.item_id === undefined ? undefined : outputItemID(state, input),
   item: input.item ? resolveItem(state, input.item, input.output_index) : input.item,
@@ -1094,11 +1102,20 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
       tools: ToolStream.start(state.tools, item.id, {
         id: item.call_id,
         name: item.name ?? "",
+        namespace: item.namespace,
         input: item.arguments ?? "",
         providerMetadata: metadata,
       }),
     },
-    [...events, LLMEvent.toolInputStart({ id: item.call_id, name: item.name ?? "", providerMetadata: metadata })],
+    [
+      ...events,
+      LLMEvent.toolInputStart({
+        id: item.call_id,
+        name: item.name ?? "",
+        namespace: item.namespace,
+        providerMetadata: metadata,
+      }),
+    ],
   ]
 }
 
@@ -1217,7 +1234,12 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     const registered = state.tools[item.id] !== undefined
     const tools = registered
       ? state.tools
-      : ToolStream.start(state.tools, item.id, { id: item.call_id, name: item.name, providerMetadata: metadata })
+      : ToolStream.start(state.tools, item.id, {
+          id: item.call_id,
+          name: item.name,
+          namespace: item.namespace,
+          providerMetadata: metadata,
+        })
     const result =
       item.arguments === undefined
         ? yield* ToolStream.finish(state.id, tools, item.id)
@@ -1228,7 +1250,15 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     const resultEvents =
       registered || finished.length === 0
         ? finished
-        : [LLMEvent.toolInputStart({ id: item.call_id, name: item.name, providerMetadata: metadata }), ...finished]
+        : [
+            LLMEvent.toolInputStart({
+              id: item.call_id,
+              name: item.name,
+              namespace: item.namespace,
+              providerMetadata: metadata,
+            }),
+            ...finished,
+          ]
     const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
     events.push(...resultEvents)
     return [

@@ -336,7 +336,7 @@ test("file.read returns binary content from the public HTTP contract", async () 
   )
 })
 
-test("worktree methods use the global project contract", async () => {
+test("all worktree operations use location-based routes without a project parameter", async () => {
   const requests: Request[] = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -350,27 +350,25 @@ test("worktree methods use the global project contract", async () => {
     },
   })
 
-  expect(await client.worktree.list({ projectID: "proj_test" })).toEqual([{ directory: "/tmp/project" }])
+  expect(await client.worktree.list()).toEqual([{ directory: "/tmp/project" }])
   expect(
     await client.worktree.create({
-      projectID: "proj_test",
       strategy: "git",
       directory: "/tmp/worktrees",
       name: "api",
     }),
   ).toEqual({ directory: "/tmp/worktrees/api" })
   await client.worktree.remove({
-    projectID: "proj_test",
     directory: "/tmp/worktrees/api",
     force: false,
   })
-  await client.worktree.refresh({ projectID: "proj_test" })
+  await client.worktree.refresh()
 
   expect(requests.map((request) => [request.method, request.url])).toEqual([
-    ["GET", "http://localhost:3000/api/worktree/proj_test"],
-    ["POST", "http://localhost:3000/api/worktree/proj_test"],
-    ["DELETE", "http://localhost:3000/api/worktree/proj_test"],
-    ["POST", "http://localhost:3000/api/worktree/proj_test/refresh"],
+    ["GET", "http://localhost:3000/api/worktree"],
+    ["POST", "http://localhost:3000/api/worktree"],
+    ["DELETE", "http://localhost:3000/api/worktree"],
+    ["POST", "http://localhost:3000/api/worktree/refresh"],
   ])
   expect(await requests[1]?.json()).toEqual({
     strategy: "git",
@@ -378,6 +376,39 @@ test("worktree methods use the global project contract", async () => {
     name: "api",
   })
   expect(await requests[2]?.json()).toEqual({ directory: "/tmp/worktrees/api", force: false })
+})
+
+test("worktree operations send the configuration location separately from their payload", async () => {
+  const requests: Request[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      requests.push(request)
+      if (request.method === "GET") return Response.json([{ directory: "/configured/task", strategy: "git" }])
+      if (request.method === "DELETE" || new URL(request.url).pathname.endsWith("/refresh"))
+        return new Response(null, { status: 204 })
+      return Response.json({ directory: "/configured/task" })
+    },
+  })
+  expect(await client.worktree.create({ location: { directory: "/repo/nested" }, name: "task" })).toEqual({
+    directory: "/configured/task",
+  })
+  expect(requests[0]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
+  expect(await requests[0]?.json()).toEqual({ name: "task" })
+  await client.worktree.remove({
+    location: { directory: "/repo/nested" },
+    directory: "/configured/task",
+    force: true,
+  })
+  await client.worktree.refresh({ location: { directory: "/repo/nested" } })
+  expect(requests[1]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
+  expect(await requests[1]?.json()).toEqual({ directory: "/configured/task", force: true })
+  expect(requests[2]?.url).toBe("http://localhost:3000/api/worktree/refresh?location%5Bdirectory%5D=%2Frepo%2Fnested")
+  expect(await client.worktree.list({ location: { directory: "/repo/nested" } })).toEqual([
+    { directory: "/configured/task", strategy: "git" },
+  ])
+  expect(requests[3]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
 })
 
 test("workspace.destroy returns the transition result", async () => {

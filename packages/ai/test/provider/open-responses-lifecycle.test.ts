@@ -326,7 +326,6 @@ describe("Open Responses basic-item lifecycles", () => {
       ])
     }),
   )
-
   it.effect("mints an id for a done-only tool that never had one", () =>
     Effect.gen(function* () {
       const events = yield* collect(
@@ -357,9 +356,16 @@ describe("Open Responses basic-item lifecycles", () => {
       const events = yield* collect({ type: "response.output_item.done", item }, completed)
       const providerMetadata = { "openai-compatible": { itemId: "fc_1" } }
       expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
-        { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata },
-        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata },
+        { type: "tool-input-start", id: "call_1", name: "lookup", namespace: undefined, providerMetadata },
+        { type: "tool-input-end", id: "call_1", name: "lookup", namespace: undefined, providerMetadata },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          namespace: undefined,
+          input: { query: "weather" },
+          providerMetadata,
+        },
       ])
       expect(events.filter(LLMEvent.is.finish)).toEqual([
         {

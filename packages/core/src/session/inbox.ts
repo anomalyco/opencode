@@ -409,19 +409,17 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
   sessionID: SessionSchema.ID,
   promotable: Promotable,
 ) {
-  const next = (delivery: Delivery) =>
-    db
-      .select()
-      .from(SessionInboxTable)
-      .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, delivery)))
-      .orderBy(asc(SessionInboxTable.enqueued_seq))
-      .limit(1)
-      .get()
-      .pipe(Effect.orDie)
-  const steer = yield* next("steer")
+  const steer = (yield* pendingSteers(db, sessionID))[0]
   if (steer) return fromRow(steer)
   if (promotable !== "input") return undefined
-  const queued = yield* next("queue")
+  const queued = yield* db
+    .select()
+    .from(SessionInboxTable)
+    .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "queue")))
+    .orderBy(asc(SessionInboxTable.enqueued_seq))
+    .limit(1)
+    .get()
+    .pipe(Effect.orDie)
   return queued ? fromRow(queued) : undefined
 })
 
@@ -490,9 +488,10 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
 })
 
 /**
- * Promotes pending input into visible messages and returns the promoted count.
- * Steers always go first; only the "input" scope may fall through to one queued
- * input, and it then collects steers that arrived during promotion.
+ * Promotes pending input into visible messages and returns the promoted count,
+ * or undefined when the runner must first handle a pending control.
+ * Steered compaction takes priority over pending prompts, without crossing a move.
+ * Only the "input" scope may fall through to one queued input.
  */
 export const promote = Effect.fn("SessionInbox.promote")(function* (
   db: DatabaseService,
@@ -506,6 +505,7 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
       const steers = yield* pendingSteers(db, sessionID)
       if (steers.length > 0 || scope === "steer") {
         const control = steers.findIndex((row) => row.type === "compaction" || row.type === "move")
+        if (control === 0) return undefined
         return yield* publish(db, bus, sessionID, control === -1 ? steers : steers.slice(0, control))
       }
 
@@ -518,6 +518,7 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
         .get()
         .pipe(Effect.orDie)
       if (!queued) return 0
+      if (queued.type === "compaction" || queued.type === "move") return undefined
       const promoted = yield* publish(db, bus, sessionID, [queued])
       const arrivedSteers = yield* pendingSteers(db, sessionID)
       const control = arrivedSteers.findIndex((row) => row.type === "compaction" || row.type === "move")
@@ -536,4 +537,14 @@ const pendingSteers = (db: DatabaseService, sessionID: SessionSchema.ID) =>
     .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "steer")))
     .orderBy(asc(SessionInboxTable.enqueued_seq))
     .all()
-    .pipe(Effect.orDie)
+    .pipe(
+      Effect.orDie,
+      Effect.map((rows) => {
+        // A move changes the context's Location: never pull compaction across it.
+        // Within that boundary, compact before promoting even earlier steers so
+        // their text stays verbatim after the checkpoint, not inside its summary.
+        const control = rows.findIndex((row) => row.type === "compaction" || row.type === "move")
+        if (control > 0 && rows[control].type === "compaction") rows.unshift(...rows.splice(control, 1))
+        return rows
+      }),
+    )

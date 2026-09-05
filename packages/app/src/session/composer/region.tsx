@@ -4,9 +4,8 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode-ai/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, on, onMount } from "solid-js"
+import { createEffect, createMemo, on, onMount, type Accessor } from "solid-js"
 import { Composer } from "@/composer/composer"
-import { createComposerModel, type ComposerModel } from "@/composer/model"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls } from "@/composer/selection"
 import { setCursorPosition } from "@/composer/editor/dom"
@@ -25,18 +24,16 @@ import { restorePromptModel, syncPromptModel, syncSessionModel } from "../sessio
 import type { SessionTimelineInteraction } from "../timeline/interaction"
 import { createSessionRevert } from "../revert"
 import { SessionComposerRegion } from "./session-composer-region"
-import { createSessionComposerRegionController } from "./session-composer-region-controller"
-import { createActiveComposerAdapter } from "./adapter"
-import { createSessionQueue } from "./queue"
+import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
-import { useSettings } from "@/settings/model"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
   screen: SessionScreenLayout
   timeline: SessionTimelineInteraction
+  visible: Accessor<boolean>
 }) {
   const command = useCommand()
   const dialog = useDialog()
@@ -180,7 +177,30 @@ export function createActiveSessionRegion(input: {
     },
   ])
 
+  const dock = {
+    state,
+    parentID: input.session.data.parentID,
+    centered: input.screen.centered,
+    onResponseSubmit: input.timeline.actions.resume,
+    openParent,
+    setPromptRef: (element: HTMLDivElement) => {
+      promptRef = element
+    },
+    setDockRef: input.timeline.view.setDockRef,
+  }
+  const active = createMemo(
+    on(
+      () => (input.visible() ? input.session.identity.sessionID() : undefined),
+      (sessionID) => (sessionID ? createSessionComposerController({ sessionID, controls, dock }) : undefined),
+    ),
+  )
+
   return {
+    active,
+    drop: {
+      active: () => active()?.drop.active() ?? false,
+      input: () => active()?.drop.input(),
+    },
     actions: {
       timeline: {
         get revert() {
@@ -190,76 +210,25 @@ export function createActiveSessionRegion(input: {
         openAttachment,
       } satisfies SessionUserActions,
     },
-    region: {
-      centered: input.screen.centered,
-      openParent,
-      prompt,
-      setDockRef: input.timeline.view.setDockRef,
-      setPromptRef: (element: HTMLDivElement) => {
-        promptRef = element
-      },
-      state,
-    },
-    input: {
-      controls,
-      setPromptRef: (element: HTMLDivElement) => {
-        promptRef = element
-      },
-    },
-    submitted: () => input.timeline.actions.resume(),
+    requests: state,
     workspaceMoveEligible: () => true,
   }
 }
 
 export type ActiveSessionRegionModel = ReturnType<typeof createActiveSessionRegion>
 
-export function ActiveSessionComposerRegion(props: {
-  model: ActiveSessionRegionModel
-  session: SessionModel
-  onResponseSubmit: () => void
-}) {
-  const settings = useSettings()
-  const region = createSessionComposerRegionController({
-    state: props.model.region.state,
-    parentID: props.session.data.parentID,
-    centered: props.model.region.centered,
-    onResponseSubmit: props.onResponseSubmit,
-    openParent: props.model.region.openParent,
-    setPromptRef: props.model.region.setPromptRef,
-    setDockRef: props.model.region.setDockRef,
-  })
-  const adapter = createActiveComposerAdapter({
-    session: props.session,
-    controls: props.model.input.controls,
-    submitted: props.model.submitted,
-    setEditor: props.model.input.setPromptRef,
-  })
-  let composer: ComposerModel | undefined
-  const queue = createSessionQueue({
-    sessionID: requireSessionID(props.session),
-    draft: adapter.state,
-    working: adapter.working,
-    behavior: settings.general.followUpBehavior,
-    composer: () => composer,
-  })
-  composer = createComposerModel(adapter, { queue })
+export function ActiveSessionComposerRegion(props: { model: SessionComposerController }) {
   return (
     <SessionComposerRegion
-      controller={region}
+      controller={props.model.region}
       composer={
         <div class="relative">
-          <SessionQueuePanel queue={queue} />
+          <SessionQueuePanel queue={props.model.queue} />
           <div class="relative z-10">
-            <Composer model={composer} borderUnderlay />
+            <Composer model={props.model.composer} borderUnderlay />
           </div>
         </div>
       }
     />
   )
-}
-
-function requireSessionID(session: SessionModel) {
-  const id = session.identity.params.id
-  if (!id) throw new Error("Active Composer requires a Session ID")
-  return id
 }

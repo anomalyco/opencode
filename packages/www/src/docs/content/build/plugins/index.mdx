@@ -950,6 +950,112 @@ interface VcsEditor {
 }
 ```
 
+### Worktrees
+
+Register a local worktree strategy using the normal plugin lifecycle. The implementation module in this example owns
+option validation and the backend's `create`, `remove`, and `list` operations.
+
+```ts title="plugins/worktrees/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+import { makeStrategy } from "./strategy"
+
+export default Plugin.define({
+  id: "company.worktrees",
+  async setup(ctx) {
+    const strategy = makeStrategy(ctx.options)
+    await ctx.worktree.transform((editor) => {
+      editor.add(strategy)
+    })
+  },
+})
+```
+
+Load the plugin through `plugins` and configure the common destination separately:
+
+```jsonc title="opencode.jsonc"
+{
+  "worktree": { "directory": "../worktrees" },
+  "plugins": [{ "package": "./plugins/worktrees", "options": {} }],
+}
+```
+
+- Adding a strategy selects it automatically. The last active registration wins; no strategy-selection config is needed.
+- Disposing its registration or unloading the plugin restores the previous implementation, ultimately the bundled Git strategy.
+- `reload()` replays transforms after captured inputs change; it does not rerun plugin setup.
+- Creation failures do not retry through Git. Existing worktrees retain their recorded owner even when the default changes.
+- Strategies manage local directories. Remote workspace provisioning is not part of this interface.
+
+#### Operations
+
+The plugin context exposes the same worktree operations as the client. Every operation uses the plugin's current
+location unless overridden. `list` discovers worktrees through that location's strategies and returns the full inventory
+for the resolved project, including known worktrees from other checkouts of the same project.
+
+```ts
+const created = await ctx.worktree.create({ name: "task" })
+const inventory = await ctx.worktree.list()
+await ctx.worktree.refresh()
+await ctx.worktree.remove({ directory: created.directory, force: false })
+```
+
+Create accepts optional explicit `strategy`, destination `directory`, source `from`, and starting `branch` overrides.
+All worktree operations derive the project from their location; none takes a `projectID`.
+The source defaults to the location's checkout, and a `from` override must belong to that project.
+A supplied starting ref must be supported by the selected strategy;
+Rift's native snapshot operation, for example, has no ref-selection option.
+
+Calls targeting another location wait for its plugins to activate. Calls in the current plugin's location during setup
+see registrations made so far and do not wait for their own activation; prefer lifecycle actions after setup completes.
+
+Configuration is derived from the operation's location; no configuration directory is stored in the database.
+To remove a worktree through a checkout-local plugin, select a location where that plugin is configured.
+The worktree's destination can be elsewhere:
+
+```ts
+await ctx.worktree.remove({
+  directory: "/worktrees/task",
+  location: { directory: "/repos/app" },
+  force: false,
+})
+```
+
+Missing owners fail removal rather than falling back to Git. A strategy can throw `new Worktree.OperationError({
+message: "Uncommitted changes", forceRequired: true })`, importing `Worktree` from `@opencode-ai/plugin`, to request
+force confirmation without depending on Core or Git errors.
+
+#### Reference
+
+Implementations receive the final destination after naming and collision handling. Return that directory from `create`;
+`list` must report only directories the strategy owns, plus any repository roots. Core owns inventory and startup commands.
+
+```ts
+interface WorktreeDefinition {
+  readonly id: string
+  create(
+    input: { sourceDirectory: string; directory: string; branch?: string },
+    context: { signal: AbortSignal },
+  ): Promise<{ directory: string }>
+  remove(input: { directory: string; force: boolean }, context: { signal: AbortSignal }): Promise<void>
+  list(
+    sourceDirectory: string,
+    context: { signal: AbortSignal },
+  ): Promise<readonly { directory: string; type: "root" | "worktree" }[]>
+}
+
+interface WorktreeEditor {
+  add(definition: WorktreeDefinition): void
+}
+
+interface WorktreeDomain extends WorktreeApi {
+  transform(callback: (editor: WorktreeEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+```
+
+Promise callbacks must cooperate with `signal` cancellation. Effect callbacks return Effects and use Effect interruption
+instead. Registration and defaults are location-scoped; core configuration adapters feed the directory setting into
+Worktree's state without giving the Worktree service a Config dependency.
+
 ### Websearch
 
 List websearch providers or run a query through the selected provider.
@@ -1139,7 +1245,8 @@ Generation options depend on the selected protocol and model:
 
 #### Model request
 
-Modify model request settings and optionally scope the hook to one provider.
+Modify model request settings and optionally scope the hook to one provider. The event carries the same `kind`
+as the HTTP hooks below.
 
 ```ts
 await ctx.session.hook(
@@ -1156,9 +1263,14 @@ await ctx.session.hook(
 Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
 it.
 
+Both hooks run for every request a session issues. `event.kind` says which flow issued it: `"primary"` for the agent
+loop, `"compaction"` for checkpoint summaries, `"title"` for title generation, and `"generate"` for transient
+`ctx.session.generate` calls. Use it instead of the agent ID to tell auxiliary requests apart.
+
 ```ts
 await ctx.session.hook("http.request", (event) => {
   event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
 })
 
 await ctx.session.hook("http.response", (event) => {

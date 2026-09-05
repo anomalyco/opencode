@@ -134,7 +134,7 @@ for (const viewport of [
       await expect(page).toHaveURL(pending.url)
       await expect(pending.message).toHaveAttribute("data-timeline-part-id", `${pending.messageID}:text:0`)
       await expect(pending.shimmer).toHaveAttribute("data-active", "true")
-      await expect(pending.title).toHaveText("New session")
+      await expect(pending.title).toHaveText("Session")
       await expect(editor).toHaveText(followUp)
       expect(mock.calls).toEqual(["worktree"])
 
@@ -238,7 +238,7 @@ for (const direction of ["ltr", "rtl"]) {
           !frame.message ||
           !frame.spinner ||
           frame.draft !== followUp ||
-          !["New session", "Created workspace session"].includes(frame.title ?? ""),
+          !["Session", "Created workspace session"].includes(frame.title ?? ""),
       ),
     ).toEqual([])
     const after = await title.boundingBox()
@@ -490,20 +490,24 @@ async function openDraft(
   page.on("request", (request) => {
     if (request.method() !== "POST") return
     const path = new URL(request.url()).pathname
-    if (path === `/api/worktree/${projectID}`) {
+    if (path === "/api/worktree") {
+      expect(new URL(request.url()).searchParams.get("location[directory]")).toBe(directory)
       calls.push("worktree")
       worktreeRequests.push(request.postDataJSON())
     }
     if (path === "/api/session") calls.push("session")
     if (/^\/api\/session\/[^/]+\/prompt$/.test(path)) calls.push("prompt")
   })
-  await page.route(`**/api/worktree/${projectID}`, async (route) => {
-    if (route.request().method() !== "POST") return route.fallback()
-    // Keep the real HTTP response pending until the test has checked the preview.
-    const response = await worktree.promise
-    if (response.status === 200) project.sandboxes.push(workspace)
-    await route.fulfill({ ...response, headers })
-  })
+  await page.route(
+    (url) => url.pathname === "/api/worktree",
+    async (route) => {
+      if (route.request().method() !== "POST") return route.fallback()
+      // Keep the real HTTP response pending until the test has checked the preview.
+      const response = await worktree.promise
+      if (response.status === 200) project.sandboxes.push(workspace)
+      await route.fulfill({ ...response, headers })
+    },
+  )
   await page.route("**/api/session", async (route) => {
     if (route.request().method() !== "POST") return route.fallback()
     const body: Record<string, unknown> = route.request().postDataJSON()
@@ -598,7 +602,7 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDra
   const shimmer = preparing.getByRole("status").locator('[data-component="text-shimmer"]')
   const title = preparing.getByRole("heading", { level: 1 })
   await expect(preparing).toBeVisible()
-  await expect(title).toHaveText("New session")
+  await expect(title).toHaveText("Session")
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   await expect(page.locator('[data-action="composer-submit"]')).toBeDisabled()
   await expect(preparing.locator('[data-component="user-message"]')).toHaveCount(1)

@@ -4,16 +4,14 @@ import { useComposerState } from "@/composer/persistence"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import type { SessionModel } from "../model"
 
 export function createActiveComposerAdapter(input: {
-  session: SessionModel
+  sessionID: string
   controls: Accessor<ComposerControls>
   submitted: () => void
   setEditor: (element: HTMLDivElement) => void
 }) {
-  const id = input.session.identity.params.id
-  if (!id) throw new Error("Active Composer requires a Session ID")
+  const id = input.sessionID
 
   const prompt = useComposerState()
   prompt.current()

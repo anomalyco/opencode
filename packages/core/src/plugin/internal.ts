@@ -27,6 +27,8 @@ import { ConfigSnapshotPlugin } from "../config/plugin/snapshot.js"
 import { ConfigSkillPlugin } from "../config/plugin/skill.js"
 import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
+import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
+import { Worktree } from "../worktree.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
 import { FileMutation } from "../file-mutation.js"
@@ -135,6 +137,7 @@ const services = [
   ToolOutput.Service,
   Watcher.Service,
   WellKnown.Service,
+  Worktree.Service,
 ] as const
 
 export type Requirements = Context.Service.Identifier<(typeof services)[number]>
@@ -183,6 +186,7 @@ export const requirements = LayerNode.group([
   ToolOutput.node,
   Watcher.node,
   WellKnown.node,
+  Worktree.node,
 ])
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
@@ -232,6 +236,7 @@ const post = [
   ConfigSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   ConfigWebSearchPlugin.Plugin,
+  ConfigWorktreePlugin.Plugin,
   VariantPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]

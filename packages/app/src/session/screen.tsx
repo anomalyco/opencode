@@ -15,6 +15,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { MessageTimeline, SessionSummaryPanel } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
 import { projectForSession } from "@/shell/layout/helpers"
+import { ComposerDropzone } from "@/composer/dropzone"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
@@ -134,8 +135,8 @@ export function SessionScreen(props: { session: SessionModel }) {
     session,
     screen,
     timeline,
+    visible: conversationVisible,
   })
-
   useUsageExceededDialogs()
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
@@ -176,7 +177,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                           review.mobile.setTab("changes")
                           session.layout.view().terminal.close()
                         }}
-                        backgroundTasks={composer.region.state.background.tasks()}
+                        backgroundTasks={composer.requests.background.tasks()}
                       />
                     )}
                   </Show>
@@ -198,6 +199,11 @@ export function SessionScreen(props: { session: SessionModel }) {
 
   const sessionPanelContent = () => (
     <>
+      <ComposerDropzone
+        active={composer.drop.active()}
+        input={composer.drop.input()}
+        identity={session.layout.tabKey}
+      />
       <Show when={!isDesktop() && !!session.identity.params.id}>{mobileTabs()}</Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>
@@ -235,7 +241,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                 <MessageTimeline
                   hideHeader={!isDesktop()}
                   session={session}
-                  background={composer.region.state.background}
+                  background={composer.requests.background}
                   actions={composer.actions.timeline}
                   scroll={timeline.scroll}
                   onResumeScroll={timeline.actions.resume}
@@ -263,10 +269,8 @@ export function SessionScreen(props: { session: SessionModel }) {
         </Switch>
       </div>
 
-      <Show when={conversationVisible() ? session.identity.params.id : undefined} keyed>
-        {(_id) => (
-          <ActiveSessionComposerRegion model={composer} session={session} onResponseSubmit={timeline.actions.resume} />
-        )}
+      <Show when={composer.active()} keyed>
+        {(model) => <ActiveSessionComposerRegion model={model} />}
       </Show>
     </>
   )

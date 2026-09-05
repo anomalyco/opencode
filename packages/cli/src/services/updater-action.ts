@@ -1,5 +1,5 @@
-export type Policy = "disable" | "notify"
-export type Action = "none" | "notify"
+export type Policy = "disable" | "notify" | "auto"
+export type Action = "none" | "notify" | "auto"
 
 const maximumComponent = "9007199254740991"
 const versionPattern =
@@ -10,7 +10,7 @@ export function action(current: string, latest: string, policy: Policy): Action 
   const currentVersion = parseReleaseVersion(current)
   const latestVersion = parseReleaseVersion(latest)
   if (!currentVersion || !latestVersion || sameRelease(currentVersion, latestVersion)) return "none"
-  return "notify"
+  return policy
 }
 
 export function parseReleaseVersion(input: string) {

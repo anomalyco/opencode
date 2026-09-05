@@ -430,6 +430,8 @@ export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
 
+export type ConfigWorktree = { directory: string }
+
 export type ProviderRequest = {
   settings: ProviderSettings
   headers: { [x: string]: string }
@@ -1892,7 +1894,7 @@ export type ConfigEntry =
         shell?: string
         model?: string | { providerID: string; model: string; variant?: string }
         default_agent?: string
-        update?: "disable" | "notify"
+        update?: "disable" | "notify" | "auto"
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
@@ -1993,6 +1995,7 @@ export type ConfigEntry =
         }
         websearch?: false | { provider: "random" | (string & {}) }
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
+        worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {
           [x: string]: {
@@ -6077,45 +6080,51 @@ export type ReferenceListOutput = {
   data: Array<ReferenceInfo>
 }
 
-export type WorktreeListInput = { readonly projectID: { readonly projectID: string }["projectID"] }
+export type WorktreeListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
 
 export type WorktreeListOutput = WorktreeList
 
 export type WorktreeCreateInput = {
-  readonly projectID: { readonly projectID: string }["projectID"]
-  readonly strategy: {
-    readonly strategy: string
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly strategy?: {
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
-    readonly directory: string
+    readonly directory?: string
     readonly name?: string
   }["strategy"]
   readonly from?: {
-    readonly strategy: string
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
-    readonly directory: string
+    readonly directory?: string
     readonly name?: string
   }["from"]
   readonly branch?: {
-    readonly strategy: string
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
-    readonly directory: string
+    readonly directory?: string
     readonly name?: string
   }["branch"]
-  readonly directory: {
-    readonly strategy: string
+  readonly directory?: {
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
-    readonly directory: string
+    readonly directory?: string
     readonly name?: string
   }["directory"]
   readonly name?: {
-    readonly strategy: string
+    readonly strategy?: string
     readonly from?: string
     readonly branch?: string
-    readonly directory: string
+    readonly directory?: string
     readonly name?: string
   }["name"]
 }
@@ -6123,14 +6132,20 @@ export type WorktreeCreateInput = {
 export type WorktreeCreateOutput = WorktreeInfo
 
 export type WorktreeRemoveInput = {
-  readonly projectID: { readonly projectID: string }["projectID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
   readonly directory: { readonly directory: string; readonly force: boolean }["directory"]
   readonly force: { readonly directory: string; readonly force: boolean }["force"]
 }
 
 export type WorktreeRemoveOutput = void
 
-export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: string }["projectID"] }
+export type WorktreeRefreshInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
 
 export type WorktreeRefreshOutput = void
 

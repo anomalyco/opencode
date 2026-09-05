@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode-ai/client"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
-  backgroundToolRowIndex,
   cacheReuseDrop,
   messageBoundaryIDs,
   reduceSessionRows,
@@ -257,63 +256,6 @@ test("assigns stable IDs to tool rows for direct navigation", () => {
     "session-part:assistant-1:shell-1",
     "assistant-2",
   ])
-})
-
-test("finds background tool launch rows for completion navigation", () => {
-  const messages: SessionMessageInfo[] = [
-    assistant("assistant-1", [
-      {
-        type: "tool",
-        id: "shell-1",
-        name: "shell",
-        state: completed({ shellID: "sh_first", status: "running" }),
-        time: { created: 1 },
-      },
-    ]),
-    assistant("assistant-2", [
-      {
-        type: "tool",
-        id: "subagent-1",
-        name: "subagent",
-        state: completed({ sessionID: "child-1", status: "running" }),
-        time: { created: 2 },
-      },
-    ]),
-    {
-      type: "synthetic",
-      id: "completion-1",
-      text: "First background run completed",
-      description: "First run",
-      time: { created: 3 },
-    },
-    assistant("assistant-3", [
-      {
-        type: "tool",
-        id: "subagent-2",
-        name: "subagent",
-        state: completed({ sessionID: "child-1", status: "running" }),
-        time: { created: 4 },
-      },
-      {
-        type: "tool",
-        id: "subagent-foreground",
-        name: "subagent",
-        state: completed({ sessionID: "child-1", status: "completed" }),
-        time: { created: 5 },
-      },
-    ]),
-    {
-      type: "synthetic",
-      id: "completion-2",
-      text: "Second background run completed",
-      description: "Second run",
-      time: { created: 6 },
-    },
-  ]
-  const rows = reduceSessionRows(messages)
-
-  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "shell-1" }, "completion-2")).toBe(0)
-  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_first" }, "completion-2")).toBe(0)
 })
 
 test("groups exploration parts across assistant messages until a delimiter", () => {
@@ -619,15 +561,4 @@ function assistant(id: string, content: SessionMessageAssistant["content"]): Ses
 
 function pending() {
   return { status: "streaming" as const, input: "" }
-}
-
-function completed(
-  metadata: Record<string, string>,
-): Extract<SessionMessageAssistantTool["state"], { status: "completed" }> {
-  return {
-    status: "completed",
-    input: {},
-    content: [{ type: "text", text: "Background" }],
-    metadata,
-  }
 }

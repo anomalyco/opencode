@@ -1590,7 +1590,6 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
-      defaultSystem,
       expect.stringContaining("# Delegation"),
       "Initial context",
     ])
@@ -1611,7 +1610,6 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
-      defaultSystem,
       expect.stringContaining("# Delegation"),
       "Initial context",
     ])
@@ -1923,6 +1921,185 @@ describe("SessionRunnerLLM", () => {
     expect(
       (yield* s.session.context(fork.id)).flatMap((message) => (message.type === "system" ? [message.text] : [])),
     ).toEqual(["Replacement context"])
+  })
+
+  for (const order of ["before", "between", "after"] as const) {
+    scenario(`prioritizes manual compaction admitted ${order} two steers at the safe boundary`, function* (s) {
+      s.currentModel = recoveryModel
+      yield* s.llm.push(
+        TestLLM.text("Active complete", "active"),
+        TestLLM.text("## Objective\n- Active work checkpoint", "summary"),
+        TestLLM.text("Steers complete", "steers"),
+      )
+      yield* s.admit("Active work")
+      const active = yield* s.resumePaused
+      const compactID = SessionMessage.ID.create()
+      if (order === "before") yield* s.session.compact({ sessionID, id: compactID })
+      const first = yield* s.admit("STEER_A")
+      if (order === "between") yield* s.session.compact({ sessionID, id: compactID })
+      const second = yield* s.admit("STEER_B")
+      if (order === "after") yield* s.session.compact({ sessionID, id: compactID })
+      expect((yield* s.session.compact({ sessionID })).id).toBe(compactID)
+
+      expect(s.requests).toHaveLength(1)
+      expect(yield* s.inbox).toHaveLength(3)
+      expect((yield* s.messages).some((message) => message.type === "compaction")).toBe(false)
+      yield* active.finish
+
+      expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only the history shown")
+      expect(s.requests).toHaveLength(3)
+      expect(userTexts(s.requests[1])).not.toContain("STEER_A")
+      expect(userTexts(s.requests[1])).not.toContain("STEER_B")
+      expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+      expect(yield* s.inbox).toEqual([])
+      expect((yield* s.messages).filter((message) => message.id === compactID)).toMatchObject([
+        { type: "compaction", status: "completed" },
+      ])
+      expect((yield* s.context).filter((message) => message.type === "user").map((message) => message.id)).toEqual([
+        first.id,
+        second.id,
+      ])
+      // An advisory drain must not redeliver either steer or rerun compaction.
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false })
+      expect(s.requests).toHaveLength(3)
+    })
+  }
+
+  scenario("waits for active tools before prioritizing compaction over pending steers", function* (s) {
+    yield* s.llm.push(
+      TestLLM.tool("call-active", "echo", { text: "active" }),
+      TestLLM.text("## Objective\n- Tool work checkpoint", "summary"),
+      TestLLM.text("Steers complete", "steers"),
+    )
+    yield* s.admit("Active work")
+    const tools = yield* s.blockTools()
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* tools.started
+    yield* s.admit("STEER_A")
+    yield* s.admit("STEER_B")
+    const compact = yield* s.session.compact({ sessionID })
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.messages).some((message) => message.id === compact.id)).toBe(false)
+    yield* tools.release
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only the history shown")
+    expect(s.requests[1].messages.some((message) => message.role === "tool")).toBe(true)
+    expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  scenario("rechecks compaction admitted during boundary context preparation", function* (s) {
+    yield* s.runPrompt("Earlier work")
+    yield* s.admit("STEER_A")
+    yield* s.admit("STEER_B")
+    const preparing = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    s.systemLoadHook = Deferred.succeed(preparing, undefined).pipe(Effect.andThen(Deferred.await(release)))
+    yield* s.llm.push(
+      TestLLM.text("## Objective\n- Earlier work checkpoint", "summary"),
+      TestLLM.text("Steers complete", "steers"),
+    )
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Deferred.await(preparing)
+    yield* s.session.compact({ sessionID })
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(run)
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only the history shown")
+    expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  for (const outcome of ["cancelled", "failed"] as const) {
+    scenario(`preserves both earlier steers when prioritized compaction is ${outcome}`, function* (s) {
+      yield* s.llm.push(TestLLM.text("Active complete", "active"))
+      yield* s.admit("Active work")
+      const active = yield* s.resumePaused
+      const first = yield* s.admit("STEER_A")
+      const second = yield* s.admit("STEER_B")
+      const compact = yield* s.session.compact({ sessionID })
+      if (outcome === "cancelled") yield* s.session.cancelInbox({ sessionID, inboxID: compact.id })
+      if (outcome === "failed") yield* s.llm.push([LLMEvent.providerError({ message: "summary unavailable" })])
+      yield* s.llm.push(TestLLM.text("Steers complete", "steers"))
+      yield* active.finish
+
+      expect(s.requests).toHaveLength(outcome === "cancelled" ? 2 : 3)
+      if (outcome === "failed") {
+        expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only the history shown")
+        expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject({
+          status: "failed",
+          error: { type: "provider.error", message: "summary unavailable" },
+        })
+      }
+      if (outcome === "cancelled") expect((yield* s.messages).some((message) => message.id === compact.id)).toBe(false)
+      expect(userTexts(s.requests[s.requests.length - 1]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+      expect(
+        (yield* s.context)
+          .filter((message) => message.id === first.id || message.id === second.id)
+          .map((message) => message.id),
+      ).toEqual([first.id, second.id])
+      expect(yield* s.inbox).toEqual([])
+    })
+  }
+
+  scenario("keeps steers durable across interrupted priority compaction and replay", function* (s) {
+    yield* s.runPrompt("Earlier work")
+    const first = yield* s.admit("STEER_A")
+    const second = yield* s.admit("STEER_B")
+    yield* s.llm.push(TestLLM.text("## Objective\n- Interrupted checkpoint", "summary"))
+    const summary = yield* s.llm.gate
+    const compact = yield* s.session.compact({ sessionID })
+    yield* summary.started
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only the history shown")
+    expect((yield* s.inbox).map((item) => item.id)).toEqual([first.id, second.id])
+    yield* s.session.interrupt(sessionID)
+    yield* s.session.wait(sessionID)
+    yield* summary.release
+    expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject({ status: "failed" })
+    yield* replaySessionProjection(sessionID)
+    expect((yield* s.inbox).map((item) => item.id)).toEqual([first.id, second.id])
+
+    yield* s.llm.push(TestLLM.text("Recovered steers", "steers"))
+    yield* s.resume
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  scenario("does not pull compaction across an earlier move", function* (s) {
+    yield* s.admit("STEER_A")
+    yield* s.sessionInbox.admit({
+      id: SessionMessage.ID.create(),
+      sessionID,
+      item: {
+        type: "move",
+        payload: {
+          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          projectID: Project.ID.global,
+        },
+        delivery: "steer",
+      },
+    })
+    yield* s.admit("STEER_B")
+    yield* s.sessionInbox.admitCompaction({ id: SessionMessage.ID.create(), sessionID, delivery: "steer" })
+    yield* s.llm.push(
+      TestLLM.text("First steer complete", "first"),
+      TestLLM.text("## Objective\n- Source work checkpoint", "summary"),
+      TestLLM.text("Second steer complete", "second"),
+    )
+    yield* s.resume
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[0])).toEqual(["STEER_A"])
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only the history shown")
+    expect(userTexts(s.requests[2]).at(-1)).toBe("STEER_B")
+    expect(
+      (yield* recordedEventTypes(sessionID)).filter(
+        (type) => type === "session.moved.1" || type === "session.compaction.started.1",
+      ),
+    ).toEqual(["session.moved.1", "session.compaction.started.1"])
   })
 
   scenario("runs steers before queued compaction and later queued input", function* (s) {

@@ -64,7 +64,7 @@ export default function Layout(props: ParentProps) {
             <aside
               ref={(element) => setState("tabsMount", element)}
               data-slot="vertical-tabs-sidebar"
-              class="relative flex h-full min-h-0 shrink-0 flex-col bg-v2-background-bg-deep px-2.5 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
+              class="relative flex h-full min-h-0 shrink-0 flex-col bg-v2-background-bg-deep pe-0.5 ps-2.5 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
               style={{
                 width: `${state.tabsWidth}px`,
                 "padding-bottom": "max(10px, env(safe-area-inset-bottom, 0px))",
@@ -74,7 +74,7 @@ export default function Layout(props: ParentProps) {
                 class="-end-2"
                 direction="horizontal"
                 size={state.tabsWidth}
-                min={130}
+                min={140}
                 max={520}
                 onResize={(width) => setState("tabsWidth", width)}
               />

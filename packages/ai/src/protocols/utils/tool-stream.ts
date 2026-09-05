@@ -55,6 +55,7 @@ const inputStart = (tool: PendingTool) =>
   LLMEvent.toolInputStart({
     id: tool.id,
     name: tool.name,
+    namespace: tool.namespace,
     providerExecuted: tool.providerExecuted ? true : undefined,
     providerMetadata: tool.providerMetadata,
   })
@@ -63,6 +64,7 @@ const inputDelta = (tool: PendingTool, text: string) =>
   LLMEvent.toolInputDelta({
     id: tool.id,
     name: tool.name,
+    namespace: tool.namespace,
     text,
     input: Option.getOrElse(parsePartialInput(tool.input), () => ({})),
   })
@@ -85,6 +87,7 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
         LLMEvent.toolCall({
           id: tool.id,
           name: tool.name,
+          namespace: tool.namespace,
           input,
           providerExecuted: tool.providerExecuted ? true : undefined,
           providerMetadata: tool.providerMetadata,
@@ -94,7 +97,12 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
 }
 
 const finishEvents = (tool: PendingTool, event: ToolCall): ReadonlyArray<LLMEvent> => [
-  LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
+  LLMEvent.toolInputEnd({
+    id: tool.id,
+    name: tool.name,
+    namespace: tool.namespace,
+    providerMetadata: tool.providerMetadata,
+  }),
   event,
 ]
 
@@ -150,6 +158,7 @@ export const appendOrStart = <K extends StreamKey>(
   const tool = {
     id,
     name,
+    namespace: current?.namespace,
     input: `${current?.input ?? ""}${delta.text}`,
     providerExecuted: current?.providerExecuted,
     providerMetadata: current?.providerMetadata,

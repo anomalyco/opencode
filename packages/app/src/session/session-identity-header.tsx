@@ -242,7 +242,7 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   )
   const title = createMemo(() =>
     pending()
-      ? language.t("command.session.new")
+      ? language.t("session.tab.session")
       : sessionTitle(props.session?.title ?? (parentID() ? undefined : info()?.title)),
   )
   const project = createMemo(() => {

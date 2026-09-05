@@ -1,4 +1,5 @@
 import { createData } from "@opencode-ai/client/solid"
+import type { LocationRef } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -21,6 +22,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})
     return {
       ...data,
+      location: {
+        ...data.location,
+        async sync(ref?: LocationRef) {
+          await data.location.syncInfo(ref)
+          await Promise.all([data.location.sync(ref), data.location.config.sync(ref)])
+        },
+      },
       session: {
         ...data.session,
         title: {

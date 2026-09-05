@@ -1,11 +1,11 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { Catalog } from "../../catalog.js"
 import { Credential } from "../../credential.js"
 import { Bus } from "../../bus.js"
 import { CopilotModels } from "../../github-copilot/models.js"
 import { App } from "../../app.js"
-import { Agent } from "../../agent.js"
 import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
 import { define } from "@opencode-ai/plugin/effect/plugin"
@@ -259,7 +259,7 @@ export const GithubCopilotPlugin = define({
           const session = yield* ctx.session
             .get({ sessionID: evt.sessionID })
             .pipe(Effect.orElseSucceed(() => undefined))
-          const interaction = interactionType(evt.agent, session?.parentID !== undefined)
+          const interaction = interactionType(evt.kind, session?.parentID !== undefined)
           evt.headers["X-Interaction-Type"] = interaction
           evt.headers["X-Interaction-Id"] = evt.sessionID
           if (interaction !== "conversation-agent") evt.headers["x-initiator"] = "agent"
@@ -392,9 +392,9 @@ function applyHeaders(
 
 // Mirrors the Copilot client's X-Interaction-Type vocabulary: the agent loop is the default,
 // nested sessions are subagents, and title/compaction are the two utility overrides.
-export function interactionType(agent: Agent.ID, child: boolean) {
-  if (agent === Agent.ID.make("title")) return "conversation-background"
-  if (agent === Agent.ID.make("compaction")) return "conversation-compaction"
+export function interactionType(kind: SessionRequestKind, child: boolean) {
+  if (kind === "title") return "conversation-background"
+  if (kind === "compaction") return "conversation-compaction"
   if (child) return "conversation-subagent"
   return "conversation-agent"
 }

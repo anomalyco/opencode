@@ -2,42 +2,50 @@ export * as SystemPromptPlugin from "./system-prompt.js"
 
 import { SystemPart } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Model } from "@opencode-ai/schema/model"
 import { Effect } from "effect"
+import { SessionSystemPrompt } from "../session/system-prompt.js"
 
-import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
-import PROMPT_GPT from "./system-prompt/gpt-extension.txt"
+import PROMPT_GPT from "./system-prompt/gpt.txt"
+import PROMPT_ASTRA from "./system-prompt/gpt-astra.txt"
 import PROMPT_KIMI from "./system-prompt/kimi.txt"
 import PROMPT_META from "./system-prompt/meta.txt"
 import PROMPT_TRINITY from "./system-prompt/trinity.txt"
 
-export const OpenAIPlugin = make("openai", (id) => (id.includes("gpt") ? PROMPT_GPT : undefined), {
-  operation: "append",
-})
+export const OpenAIPlugin = make(
+  "openai",
+  (model) => {
+    if (!model.id.toLowerCase().includes("gpt")) return
 
-export const AnthropicPlugin = make("anthropic", (id) => (id.includes("claude") ? PROMPT_ANTHROPIC : undefined), {
-  operation: "replace",
-})
-export const KimiPlugin = make("kimi", (id) => (id.includes("kimi") ? PROMPT_KIMI : undefined), {
-  operation: "replace",
-})
-export const ArceePlugin = make("arcee", (id) => (id.includes("trinity") ? PROMPT_TRINITY : undefined), {
-  operation: "replace",
-})
-export const MetaPlugin = make(
-  "meta",
-  (id) => {
-    if (!id.includes("muse")) return
-    const name = id.includes("muse-glimmer") ? "Muse Glimmer" : "Muse Spark"
-    return PROMPT_META.replaceAll("{{MODEL_NAME}}", name)
+    if (model.id.toLowerCase().includes("gpt-6")) return PROMPT_ASTRA
+
+    return PROMPT_GPT
   },
   { operation: "replace" },
 )
 
-export const Plugins = [OpenAIPlugin, AnthropicPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
+export const KimiPlugin = make("kimi", (model) => (model.id.toLowerCase().includes("kimi") ? PROMPT_KIMI : undefined), {
+  operation: "replace",
+})
+export const ArceePlugin = make(
+  "arcee",
+  (model) => (model.id.toLowerCase().includes("trinity") ? PROMPT_TRINITY : undefined),
+  { operation: "replace" },
+)
+export const MetaPlugin = make(
+  "meta",
+  (model) => {
+    if (!model.id.toLowerCase().includes("muse")) return
+    return PROMPT_META.replaceAll("{{MODEL_NAME}}", model.name)
+  },
+  { operation: "replace" },
+)
+
+export const Plugins = [OpenAIPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
 
 function make(
   id: string,
-  getPrompt: (modelID: string) => string | undefined,
+  getPrompt: (model: Model.Info) => string | undefined,
   options: { operation: "replace" | "append" },
 ) {
   return define({
@@ -51,8 +59,9 @@ function make(
           const model = (yield* ctx.catalog.model.list()).data.find(
             (model) => model.providerID === event.model.providerID && model.id === event.model.id,
           )
-          const prompt = getPrompt(`${model?.modelID ?? event.model.id} ${model?.family ?? ""}`.toLowerCase())
-          if (!prompt) return
+          const template = getPrompt(model ?? Model.Info.default(event.model.providerID, event.model.id))
+          if (!template) return
+          const prompt = SessionSystemPrompt.render(template, Object.keys(event.tools))
           if (options.operation === "append") {
             event.system.splice(1, 0, SystemPart.make(prompt))
             return

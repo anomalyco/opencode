@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMRequest, Message } from "../../src/index.js"
+import { LLM, LLMRequest, Message, ToolDefinition } from "../../src/index.js"
 import { LLMClient, Route } from "../../src/route/client.js"
 import { Auth } from "../../src/route/auth.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -134,7 +134,12 @@ for (const model of [
         [
           LLMRequest.update(request, {
             tools: [
-              { name: "unsupported", description: "Generation only", inputSchema: {}, native: { unsupported: {} } },
+              ToolDefinition.make({
+                name: "unsupported",
+                description: "Generation only",
+                inputSchema: {},
+                native: { unsupported: {} },
+              }),
             ],
           }),
           "InvalidRequest",
