@@ -314,11 +314,40 @@ describe("session.llm.ai-sdk adapter", () => {
     ])
 
     expect(events).toMatchObject([
+      { type: "text-start", id: "text-0" },
       { type: "text-delta", id: "text-0", text: "implicit text" },
       { type: "text-end", id: "text-0" },
+      { type: "reasoning-start", id: "reasoning-0" },
       { type: "reasoning-delta", id: "reasoning-0", text: "implicit reasoning" },
       { type: "reasoning-end", id: "reasoning-0" },
     ])
+  })
+
+  test("repairs orphan stream parts without hiding provider errors", async () => {
+    const metadata = { openai: { itemID: "rs_abc" } }
+    const events = await adapt([
+      uncheckedAdapterEvent({
+        type: "reasoning-delta",
+        id: "rs_abc:0",
+        text: "thinking",
+        providerMetadata: metadata,
+      }),
+      uncheckedAdapterEvent({ type: "reasoning-end", id: "rs_abc:0" }),
+      uncheckedAdapterEvent({ type: "error", error: "reasoning part rs_abc:0 not found" }),
+    ])
+
+    expect(events).toMatchObject([
+      { type: "reasoning-start", id: "rs_abc:0", providerMetadata: metadata },
+      { type: "reasoning-delta", id: "rs_abc:0", text: "thinking", providerMetadata: metadata },
+      { type: "reasoning-end", id: "rs_abc:0" },
+    ])
+    const failure = await Effect.runPromiseExit(
+      LLMAISDK.toLLMEvents(
+        LLMAISDK.adapterState(),
+        uncheckedAdapterEvent({ type: "error", error: "rate limit exceeded" }),
+      ),
+    )
+    expect(Exit.isFailure(failure)).toBe(true)
   })
 
   test("explicitly ignores non-session-visible AI SDK chunks", async () => {
@@ -442,8 +471,10 @@ describe("session.llm.ai-sdk adapter", () => {
 
     expect(secondStream).toMatchObject([
       { type: "step-start", index: 0 },
+      { type: "text-start", id: "text-0" },
       { type: "text-delta", id: "text-0", text: "second" },
       { type: "text-end", id: "text-0" },
+      { type: "reasoning-start", id: "reasoning-0" },
       { type: "reasoning-delta", id: "reasoning-0", text: "second reasoning" },
       { type: "reasoning-end", id: "reasoning-0" },
     ])

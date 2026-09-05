@@ -14,6 +14,8 @@ export function adapterState() {
     reasoning: 0,
     currentTextID: undefined as string | undefined,
     currentReasoningID: undefined as string | undefined,
+    startedText: {} as Record<string, boolean>,
+    startedReasoning: {} as Record<string, boolean>,
     toolNames: {} as Record<string, string>,
     copilotTotalNanoAiu: undefined as number | undefined,
   }
@@ -74,6 +76,18 @@ function currentReasoningID(state: ReturnType<typeof adapterState>, id: string |
   return state.currentReasoningID
 }
 
+// AI SDK reports missing stream starts in-band, then continues streaming.
+function isOrphanStreamStateError(error: unknown) {
+  const message = errorMessage(error).trim()
+  return message.endsWith(" not found") && (message.startsWith("reasoning part ") || message.startsWith("text part "))
+}
+
+function synthesizeStart(started: Record<string, boolean>, id: string, make: () => LLMEvent): LLMEvent[] {
+  if (started[id]) return []
+  started[id] = true
+  return [make()]
+}
+
 export function toLLMEvents(
   state: ReturnType<typeof adapterState>,
   event: AISDKEvent,
@@ -129,6 +143,7 @@ export function toLLMEvents(
     case "text-start":
       return Effect.sync(() => {
         state.currentTextID = currentTextID(state, event.id)
+        state.startedText[state.currentTextID] = true
         return [
           LLMEvent.textStart({
             id: state.currentTextID,
@@ -138,19 +153,28 @@ export function toLLMEvents(
       })
 
     case "text-delta":
-      return Effect.succeed([
-        LLMEvent.textDelta({
-          id: currentTextID(state, event.id),
-          text: event.text,
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+      return Effect.sync(() => {
+        const id = currentTextID(state, event.id)
+        return [
+          ...synthesizeStart(state.startedText, id, () =>
+            LLMEvent.textStart({ id, providerMetadata: providerMetadata(event.providerMetadata) }),
+          ),
+          LLMEvent.textDelta({
+            id,
+            text: event.text,
+            providerMetadata: providerMetadata(event.providerMetadata),
+          }),
+        ]
+      })
 
     case "text-end":
       return Effect.sync(() => {
         const id = currentTextID(state, event.id)
         state.currentTextID = undefined
         return [
+          ...synthesizeStart(state.startedText, id, () =>
+            LLMEvent.textStart({ id, providerMetadata: providerMetadata(event.providerMetadata) }),
+          ),
           LLMEvent.textEnd({
             id,
             providerMetadata: providerMetadata(event.providerMetadata),
@@ -161,6 +185,7 @@ export function toLLMEvents(
     case "reasoning-start":
       return Effect.sync(() => {
         state.currentReasoningID = currentReasoningID(state, event.id)
+        state.startedReasoning[state.currentReasoningID] = true
         return [
           LLMEvent.reasoningStart({
             id: state.currentReasoningID,
@@ -170,19 +195,28 @@ export function toLLMEvents(
       })
 
     case "reasoning-delta":
-      return Effect.succeed([
-        LLMEvent.reasoningDelta({
-          id: currentReasoningID(state, event.id),
-          text: event.text,
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+      return Effect.sync(() => {
+        const id = currentReasoningID(state, event.id)
+        return [
+          ...synthesizeStart(state.startedReasoning, id, () =>
+            LLMEvent.reasoningStart({ id, providerMetadata: providerMetadata(event.providerMetadata) }),
+          ),
+          LLMEvent.reasoningDelta({
+            id,
+            text: event.text,
+            providerMetadata: providerMetadata(event.providerMetadata),
+          }),
+        ]
+      })
 
     case "reasoning-end":
       return Effect.sync(() => {
         const id = currentReasoningID(state, event.id)
         state.currentReasoningID = undefined
         return [
+          ...synthesizeStart(state.startedReasoning, id, () =>
+            LLMEvent.reasoningStart({ id, providerMetadata: providerMetadata(event.providerMetadata) }),
+          ),
           LLMEvent.reasoningEnd({
             id,
             providerMetadata: providerMetadata(event.providerMetadata),
@@ -265,6 +299,10 @@ export function toLLMEvents(
       })
 
     case "error":
+      if (isOrphanStreamStateError(event.error))
+        return Effect.logDebug("dropping orphan reasoning/text stream part", {
+          detail: errorMessage(event.error),
+        }).pipe(Effect.as<LLMEvent[]>([]))
       return Effect.fail(event.error)
 
     case "abort":
