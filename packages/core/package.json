@@ -9,7 +9,8 @@
     "db": "bun drizzle-kit",
     "migration": "bun run script/migration.ts",
     "fix-node-pty": "bun run script/fix-node-pty.ts",
-    "test": "bun test --only-failures",
+    "test": "bun test --only-failures && bun run test:node-npm",
+    "test:node-npm": "node --conditions=fixture-provider --test test/npm.node.ts",
     "typecheck": "tsgo --noEmit"
   },
   "bin": {
@@ -23,6 +24,11 @@
     "./*": "./src/*.ts"
   },
   "imports": {
+    "#npm-resolve": {
+      "bun": "./src/npm/resolve.bun.ts",
+      "node": "./src/npm/resolve.node.ts",
+      "default": "./src/npm/resolve.bun.ts"
+    },
     "#sqlite": {
       "bun": "./src/database/sqlite.bun.ts",
       "node": "./src/database/sqlite.node.ts",
@@ -119,6 +125,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
+    "resolve.exports": "2.0.3",
     "semver": "^7.6.3",
     "turndown": "7.2.0",
     "venice-ai-sdk-provider": "2.1.1",
