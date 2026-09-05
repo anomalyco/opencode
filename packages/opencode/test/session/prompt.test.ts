@@ -8,7 +8,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
@@ -2467,4 +2467,114 @@ noLLMServer.instance(
       }
     }),
   30_000,
+)
+
+// Plugin that keeps the loop alive once through experimental.session.stopping.
+// `withMessage: false` proves that `continue` alone is not enough to re-enter.
+const stoppingPlugin = Effect.fn("test.stoppingPlugin")(function* (input: { withMessage: boolean }) {
+  const { directory: dir } = yield* TestInstance
+  const file = path.join(dir, "stopping.ts")
+  yield* writeText(
+    file,
+    [
+      "let fired = 0",
+      "export default async () => ({",
+      '  "experimental.session.stopping": async (_input, output) => {',
+      "    fired += 1",
+      "    if (fired > 1) return",
+      "    output.continue = true",
+      input.withMessage ? '    output.message = "check failed, keep going"' : "",
+      "  },",
+      "})",
+      "",
+    ].join("\n"),
+  )
+  return pathToFileURL(file).href
+})
+
+it.instance(
+  "loop runs another step when a plugin continues from session.stopping",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* stoppingPlugin({ withMessage: true })
+      const { llm } = yield* useServerConfig((url) => ({ ...providerCfg(url), plugin: [plugin] }))
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      yield* llm.push(reply().text("first").stop(), reply().text("second").stop())
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const users = messages.filter((m) => m.info.role === "user")
+      const assistants = messages.filter((m) => m.info.role === "assistant")
+      const hits = yield* llm.hits
+
+      expect(hits).toHaveLength(2)
+      expect(JSON.stringify(hits[1].body)).toContain("check failed, keep going")
+      expect(users).toHaveLength(2)
+      expect(users[1].parts).toEqual([
+        expect.objectContaining({ type: "text", text: "check failed, keep going", synthetic: true }),
+      ])
+      expect(assistants).toHaveLength(2)
+      expect(assistants[1].info.role === "assistant" && assistants[1].info.parentID).toBe(users[1].info.id)
+      expect(result.parts).toEqual(expect.arrayContaining([expect.objectContaining({ type: "text", text: "second" })]))
+    }),
+  30_000,
+)
+
+it.instance(
+  "loop stops when session.stopping continues without a message",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* stoppingPlugin({ withMessage: false })
+      const { llm } = yield* useServerConfig((url) => ({ ...providerCfg(url), plugin: [plugin] }))
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      yield* llm.push(reply().text("first").stop())
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* prompt.loop({ sessionID: chat.id })
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+
+      expect(yield* llm.hits).toHaveLength(1)
+      expect(messages.filter((m) => m.info.role === "user")).toHaveLength(1)
+      expect(messages.filter((m) => m.info.role === "assistant")).toHaveLength(1)
+    }),
+  30_000,
+)
+
+it.instance("loop stops after one step without a session.stopping plugin", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* llm.push(reply().text("first").stop())
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+
+    expect(yield* llm.hits).toHaveLength(1)
+    expect(messages.filter((m) => m.info.role === "user")).toHaveLength(1)
+    expect(messages.filter((m) => m.info.role === "assistant")).toHaveLength(1)
+    expect(result.parts).toEqual(expect.arrayContaining([expect.objectContaining({ type: "text", text: "first" })]))
+  }),
 )
