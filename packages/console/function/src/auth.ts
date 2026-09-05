@@ -18,6 +18,7 @@ import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { AuthTable } from "@opencode-ai/console-core/schema/auth.sql.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
 import { isAllowedAuthorizationRedirect } from "./auth-redirect.js"
+import { getTurnstileProvider, getTurnstileProviderRequest, renderTurnstilePage, verifyTurnstile } from "./turnstile.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -43,6 +44,15 @@ const MY_THEME: Theme = {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const requestURL = new URL(request.url)
+    const turnstile =
+      requestURL.pathname === "/turnstile" && request.method === "POST" ? await handleTurnstile(request) : undefined
+    if (turnstile instanceof Response) return turnstile
+    const turnstileProvider = getTurnstileProvider(requestURL.pathname)
+    if (turnstileProvider) {
+      return renderTurnstilePage(Resource.ConsoleTurnstile.siteKey, [turnstileProvider])
+    }
+    const authRequest = turnstile ?? request
+
     if (requestURL.pathname === "/authorize") {
       const redirectURI = requestURL.searchParams.get("redirect_uri")
       if (
@@ -114,6 +124,14 @@ export default {
         namespace: env.AuthStorage,
       }),
       subjects,
+      select(providers) {
+        return Promise.resolve(
+          renderTurnstilePage(
+            Resource.ConsoleTurnstile.siteKey,
+            Object.keys(providers).filter((provider) => provider === "github" || provider === "google"),
+          ),
+        )
+      },
       allow: ({ clientID, redirectURI }) => Promise.resolve(isAllowedAuthorizationRedirect(clientID, redirectURI)),
       async success(ctx, response) {
         console.log(response)
@@ -233,7 +251,35 @@ export default {
         })
         return ctx.subject("account", accountID, { accountID, email, newAccount })
       },
-    }).fetch(request, env, ctx)
+    }).fetch(authRequest, env, ctx)
     return result
   },
+}
+
+async function handleTurnstile(request: Request) {
+  const form = await request.formData().catch(() => new FormData())
+  const provider = form.get("provider")
+  const token = form.get("cf-turnstile-response")
+  if ((provider !== "github" && provider !== "google") || typeof token !== "string") {
+    return renderTurnstilePage(
+      Resource.ConsoleTurnstile.siteKey,
+      undefined,
+      "Complete the security check and try again",
+    )
+  }
+  const verified = await verifyTurnstile({
+    token,
+    secret: Resource.ConsoleTurnstile.secret,
+    hostname: new URL(request.url).hostname,
+    remoteIP: request.headers.get("CF-Connecting-IP") ?? undefined,
+  })
+  if (!verified) {
+    console.warn("Turnstile auth challenge rejected", { provider })
+    return renderTurnstilePage(
+      Resource.ConsoleTurnstile.siteKey,
+      undefined,
+      "Complete the security check and try again",
+    )
+  }
+  return getTurnstileProviderRequest(request, provider)
 }
