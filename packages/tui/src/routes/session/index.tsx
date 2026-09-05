@@ -162,6 +162,7 @@ const context = createContext<{
   showTimestamps: () => boolean
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
+  focusView: () => boolean
   diffWrapMode: () => "word" | "none"
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
@@ -210,6 +211,35 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  // A "turn" is the set of assistant messages that share the same parent
+  // user message (multi-step replies produce several assistant messages
+  // per turn, e.g. a tool-calls round then a final text round).
+  const assistantTurns = createMemo(() => {
+    const turns = new Map<string, AssistantMessage[]>()
+    for (const message of messages()) {
+      if (message.role !== "assistant") continue
+      const assistant = message as AssistantMessage
+      const key = assistant.parentID ?? assistant.id
+      const group = turns.get(key)
+      if (group) group.push(assistant)
+      else turns.set(key, [assistant])
+    }
+    for (const group of turns.values()) {
+      group.sort((a, b) => a.time.created - b.time.created)
+    }
+    return turns
+  })
+  const isTurnLast = (message: AssistantMessage) => {
+    const key = message.parentID ?? message.id
+    const group = assistantTurns().get(key)
+    return group ? group.at(-1)?.id === message.id : true
+  }
+  const turnParts = (message: AssistantMessage) => {
+    const key = message.parentID ?? message.id
+    const group = assistantTurns().get(key)
+    if (!group) return sync.data.part[message.id] ?? []
+    return group.flatMap((x) => sync.data.part[x.id] ?? [])
+  }
   const messagesBeforeRevert = () => {
     const messageID = session()?.revert?.messageID
     if (!messageID) return messages()
@@ -266,6 +296,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [focusView, setFocusView] = kv.signal("focus_view", false)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -731,6 +762,19 @@ export function Session() {
       },
     },
     {
+      title: focusView() ? "Exit focus view" : "Enter focus view",
+      value: "session.toggle.focus",
+      category: "Session",
+      slash: {
+        name: "focus",
+        aliases: ["toggle-focus"],
+      },
+      run: () => {
+        setFocusView((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
       title: "Toggle session scrollbar",
       value: "session.toggle.scrollbar",
       category: "Session",
@@ -1168,6 +1212,7 @@ export function Session() {
           showTimestamps,
           showDetails,
           showGenericToolOutput,
+          focusView,
           diffWrapMode,
           providers,
           sync,
@@ -1285,6 +1330,8 @@ export function Session() {
                       <Match when={message.role === "assistant"}>
                         <AssistantMessage
                           last={lastAssistant()?.id === message.id}
+                          turnLast={isTurnLast(message as AssistantMessage)}
+                          turnParts={turnParts(message as AssistantMessage)}
                           message={message as AssistantMessage}
                           parts={sync.data.part[message.id] ?? []}
                         />
@@ -1466,7 +1513,13 @@ function UserMessage(props: {
   )
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
+function AssistantMessage(props: {
+  message: AssistantMessage
+  parts: Part[]
+  last: boolean
+  turnLast: boolean
+  turnParts: Part[]
+}) {
   const ctx = use()
   const local = useLocal()
   const { theme } = useTheme()
@@ -1476,6 +1529,50 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
+  })
+
+  // In focus view a whole turn collapses into a single block rendered on the
+  // turn's last assistant message: text of the final message, a one-line
+  // summary of every tool call across the turn, and a hidden count.
+  // Non-last messages of the turn are hidden entirely; new messages update
+  // the block in place because turnLast flips as the turn grows.
+  const focusHidden = createMemo(() => {
+    if (!ctx.focusView()) return false
+    if (props.turnLast) return false
+    return true
+  })
+
+  const focusCollapsed = createMemo(() => {
+    if (!ctx.focusView()) return false
+    if (!props.turnLast) return false
+    if (!final()) return false
+    return true
+  })
+
+  const allTools = createMemo(() =>
+    props.turnParts.filter((part): part is ToolPart => part.type === "tool"),
+  )
+
+  const textParts = createMemo(() => props.parts.filter((part): part is TextPart => part.type === "text"))
+
+  const toolSummary = createMemo(() => {
+    const tools = allTools()
+    if (tools.length === 0) return undefined
+    const counts = new Map<string, number>()
+    for (const part of tools) {
+      const display = toolDisplay(part.tool)
+      counts.set(display, (counts.get(display) ?? 0) + 1)
+    }
+    const kinds = [...counts.entries()].map(([kind, count]) => (count > 1 ? `${count} ${kind}s` : `1 ${kind}`))
+    return kinds.join(", ")
+  })
+
+  const hiddenCount = createMemo(() => {
+    const tools = allTools()
+    const reasoning = props.turnParts.filter(
+      (part): part is ReasoningPart => part.type === "reasoning" && part.time.end !== undefined,
+    ).length
+    return tools.length + reasoning
   })
 
   const duration = createMemo(() => {
@@ -1490,22 +1587,47 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const backgroundShortcut = useCommandShortcut("session.background")
 
   return (
-    <>
-      <For each={props.parts}>
-        {(part, index) => {
-          const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-          return (
-            <Show when={component()}>
-              <Dynamic
-                last={index() === props.parts.length - 1}
-                component={component()}
-                part={part as any}
-                message={props.message}
-              />
+    <Show when={!focusHidden()}>
+      <Show
+        when={!focusCollapsed()}
+        fallback={
+          <box paddingLeft={3} paddingTop={1} flexShrink={0}>
+            <Show when={toolSummary()}>
+              <box paddingLeft={1} marginTop={1} flexShrink={0}>
+                <text fg={theme.textMuted}>
+                  <span style={{ fg: theme.text }}>  ↳ </span>
+                  {toolSummary()}
+                  <Show when={hiddenCount() > 0}>
+                    <span style={{ fg: theme.textMuted }}>
+                      {" · "}
+                      {hiddenCount()} message{hiddenCount() > 1 ? "s" : ""} hidden (toggle /focus to show)
+                    </span>
+                  </Show>
+                </text>
+              </box>
             </Show>
-          )
-        }}
-      </For>
+            <For each={textParts()}>
+              {(part) => <TextPart last={false} part={part} message={props.message} />}
+            </For>
+          </box>
+        }
+      >
+        <For each={props.parts}>
+          {(part, index) => {
+            const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+            return (
+              <Show when={component()}>
+                <Dynamic
+                  last={index() === props.parts.length - 1}
+                  component={component()}
+                  part={part as any}
+                  message={props.message}
+                />
+              </Show>
+            )
+          }}
+        </For>
+      </Show>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
@@ -1571,7 +1693,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           </box>
         </Match>
       </Switch>
-    </>
+    </Show>
   )
 }
 
