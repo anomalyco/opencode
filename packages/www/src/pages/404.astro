@@ -1,0 +1,124 @@
+---
+import "../docs/styles/global.css"
+
+export const prerender = false
+
+const base = import.meta.env.BASE_URL
+
+Astro.response.status = 404
+Astro.response.headers.set("Cache-Control", "no-store")
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <title>404 - Page Not Found | OpenCode</title>
+  </head>
+  <body>
+    <main class="not-found">
+      <div class="not-found-box">
+        <section class="not-found-top">
+          <a href={base} aria-label="OpenCode home">
+            <img src={`${base}assets/logo-dark.svg`} alt="OpenCode" />
+          </a>
+          <h1>404 - Page Not Found</h1>
+        </section>
+        <nav class="not-found-actions" aria-label="Helpful links">
+          <a href="/">Home</a>
+          <a href={`${base}docs/`}>Docs</a>
+          <a href="https://github.com/anomalyco/opencode">GitHub</a>
+          <a href="/discord">Discord</a>
+        </nav>
+      </div>
+    </main>
+  </body>
+</html>
+
+<style>
+  .not-found {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .not-found-box {
+    width: 100%;
+    max-width: 40rem;
+    border: 1px solid var(--border);
+  }
+
+  .not-found-top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem;
+    text-align: center;
+  }
+
+  .not-found-top img {
+    height: auto;
+    width: clamp(160px, 60vw, 320px);
+  }
+
+  .not-found-top h1 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .not-found-actions {
+    display: flex;
+    border-top: 1px solid var(--border);
+  }
+
+  .not-found-actions a {
+    flex: 1;
+    padding: 1rem;
+    text-align: center;
+    text-transform: uppercase;
+    color: var(--foreground);
+    text-decoration: underline;
+    text-underline-offset: 0.25em;
+    text-decoration-thickness: 1px;
+  }
+
+  .not-found-actions a + a {
+    border-left: 1px solid var(--border);
+  }
+
+  .not-found-actions a:hover {
+    background: var(--surface-hover);
+  }
+
+  @media (max-width: 30rem) {
+    .not-found-top {
+      padding: 1.5rem;
+    }
+
+    .not-found-actions {
+      flex-wrap: wrap;
+    }
+
+    .not-found-actions a {
+      flex-basis: 50%;
+    }
+
+    .not-found-actions a:nth-child(3) {
+      border-left: none;
+    }
+
+    .not-found-actions a:nth-child(n + 3) {
+      border-top: 1px solid var(--border);
+    }
+  }
+</style>
