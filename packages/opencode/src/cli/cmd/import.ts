@@ -1,8 +1,6 @@
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Session } from "@/session/session"
-import { MessageV2 } from "../../session/message-v2"
-import { CliError, effectCmd } from "../effect-cmd"
+import { CliError, effectCmd, fail } from "../effect-cmd"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionTable, MessageTable, PartTable } from "@opencode-ai/core/session/sql"
 import { InstanceRef } from "@/effect/instance-ref"
@@ -10,11 +8,14 @@ import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
 import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
+import { inArray } from "drizzle-orm"
+import { SessionTransferFile } from "./session-transfer"
 
-const decodeMessageInfo = Schema.decodeUnknownSync(SessionV1.Info)
-const decodePart = Schema.decodeUnknownSync(SessionV1.Part)
+function sessionTransferSessions(file: SessionTransferFile) {
+  return "sessions" in file ? file.sessions : [file]
+}
 
 /** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
@@ -89,8 +90,6 @@ export function transformShareData(shareData: ShareData[]): {
   }
 }
 
-type ExportData = { info: SDKSession; messages: Array<{ info: Message; parts: Part[] }> }
-
 export const ImportCommand = effectCmd({
   command: "import <file>",
   describe: "import session data from JSON file or URL",
@@ -110,9 +109,8 @@ export const ImportCommand = effectCmd({
 const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: InstanceContext) {
   const share = yield* ShareNext.Service
   const fs = yield* FSUtil.Service
-  const { db } = yield* Database.Service
 
-  let exportData: ExportData | undefined
+  let raw: unknown
 
   const isUrl = file.startsWith("http://") || file.startsWith("https://")
 
@@ -163,68 +161,139 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
       return
     }
 
-    exportData = transformed
+    raw = transformed
   } else {
-    exportData = (yield* fs
+    raw = yield* fs
       .readJson(file)
-      .pipe(Effect.mapError((error) => new CliError({ message: formatImportFileError(file, error) })))) as ExportData
+      .pipe(Effect.mapError((error) => new CliError({ message: formatImportFileError(file, error) })))
   }
 
-  if (!exportData) {
+  if (!raw) {
     process.stdout.write(`Failed to read session data`)
     process.stdout.write(EOL)
     return
   }
 
-  const info = Schema.decodeUnknownSync(Session.Info)({
-    ...exportData.info,
-    projectID: ctx.project.id,
-    directory: ctx.directory,
-    path: path.relative(path.resolve(ctx.worktree), ctx.directory).replaceAll("\\", "/"),
-  }) as Session.Info
-  const row = Session.toRow(info)
-  yield* db
-    .insert(SessionTable)
-    .values(row)
-    .onConflictDoUpdate({
-      target: SessionTable.id,
-      set: { project_id: row.project_id, directory: row.directory, path: row.path },
-    })
-    .run()
-    .pipe(Effect.orDie)
+  const decoded = Schema.decodeUnknownExit(SessionTransferFile)(raw)
+  if (Exit.isFailure(decoded)) {
+    return yield* fail(`Invalid session data: ${String(Cause.squash(decoded.cause))}`)
+  }
+  const transfer = decoded.value as SessionTransferFile
+  yield* importSessionTransfer(transfer, ctx)
 
-  for (const msg of exportData.messages) {
-    const msgInfo = decodeMessageInfo(msg.info) as SessionV1.Info
-    const { id, sessionID: _, ...msgData } = msgInfo
-    yield* db
-      .insert(MessageTable)
-      .values({
-        id,
-        session_id: row.id,
-        time_created: msgInfo.time?.created ?? Date.now(),
-        data: msgData as never,
-      })
-      .onConflictDoNothing()
-      .run()
-      .pipe(Effect.orDie)
+  process.stdout.write(`Imported session: ${"sessions" in transfer ? transfer.rootSessionID : transfer.info.id}`)
+  process.stdout.write(EOL)
+})
 
-    for (const part of msg.parts) {
-      const partInfo = decodePart(part) as SessionV1.Part
-      const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
-      yield* db
-        .insert(PartTable)
-        .values({
-          id: partId,
-          message_id: messageID,
-          session_id: row.id,
-          data: partData,
-        })
-        .onConflictDoNothing()
-        .run()
-        .pipe(Effect.orDie)
-    }
+export const importSessionTransfer = Effect.fn("Cli.import.transfer")(function* (
+  transfer: SessionTransferFile,
+  ctx: InstanceContext,
+) {
+  if ("sessions" in transfer && !transfer.sessions.some((session) => session.info.id === transfer.rootSessionID)) {
+    yield* fail(`Archive root Session is missing: ${transfer.rootSessionID}`)
   }
 
-  process.stdout.write(`Imported session: ${exportData.info.id}`)
-  process.stdout.write(EOL)
+  const targetPath = path.relative(path.resolve(ctx.worktree), ctx.directory).replaceAll("\\", "/")
+  const records = sessionTransferSessions(transfer).map((data) => ({
+    data,
+    row: Session.toRow({
+      ...data.info,
+      projectID: ctx.project.id,
+      directory: ctx.directory,
+      path: targetPath,
+    }),
+  }))
+  const included = new Set(records.map((record) => record.row.id))
+  const { db } = yield* Database.Service
+
+  yield* db
+    .transaction(
+      (tx) =>
+        Effect.gen(function* () {
+          const existing = yield* tx
+            .select({
+              id: SessionTable.id,
+              projectID: SessionTable.project_id,
+              directory: SessionTable.directory,
+              path: SessionTable.path,
+            })
+            .from(SessionTable)
+            .where(inArray(SessionTable.id, [...included]))
+            .all()
+            .pipe(Effect.orDie)
+          const moving = existing
+            .filter(
+              (session) =>
+                session.projectID !== ctx.project.id ||
+                session.directory !== ctx.directory ||
+                (session.path ?? undefined) !== targetPath,
+            )
+            .map((session) => session.id)
+          if (moving.length > 0) {
+            const children = yield* tx
+              .select({ id: SessionTable.id, parentID: SessionTable.parent_id })
+              .from(SessionTable)
+              .where(inArray(SessionTable.parent_id, moving))
+              .all()
+              .pipe(Effect.orDie)
+            const omitted = children.find((child) => !included.has(child.id))
+            if (omitted) {
+              yield* fail(
+                `Cannot move Session ${omitted.parentID} because subagent Session ${omitted.id} would remain in the current project`,
+              )
+            }
+          }
+
+          yield* Effect.forEach(
+            records,
+            (record) =>
+              Effect.gen(function* () {
+                yield* tx
+                  .insert(SessionTable)
+                  .values(record.row)
+                  .onConflictDoUpdate({
+                    target: SessionTable.id,
+                    set: {
+                      project_id: record.row.project_id,
+                      directory: record.row.directory,
+                      path: record.row.path,
+                    },
+                  })
+                  .run()
+                  .pipe(Effect.orDie)
+
+                const messages = record.data.messages.map((message) => {
+                  const { id, sessionID: _, ...data } = message.info
+                  return {
+                    id,
+                    session_id: record.row.id,
+                    time_created: message.info.time.created,
+                    data: data as never,
+                  }
+                })
+                if (messages.length > 0) {
+                  yield* tx.insert(MessageTable).values(messages).onConflictDoNothing().run().pipe(Effect.orDie)
+                }
+
+                const parts = record.data.messages.flatMap((message) =>
+                  message.parts.map((part) => {
+                    const { id, sessionID: _, messageID, ...data } = part
+                    return {
+                      id,
+                      message_id: messageID,
+                      session_id: record.row.id,
+                      data,
+                    }
+                  }),
+                )
+                if (parts.length > 0) {
+                  yield* tx.insert(PartTable).values(parts).onConflictDoNothing().run().pipe(Effect.orDie)
+                }
+              }),
+            { discard: true },
+          )
+        }),
+      { behavior: "immediate" },
+    )
+    .pipe(Effect.catchTag("SqlError", (error) => Effect.die(error)))
 })
