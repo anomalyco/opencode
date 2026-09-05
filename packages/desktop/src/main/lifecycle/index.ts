@@ -34,9 +34,9 @@ const runtime = Layer.effect(
     const prepareToRestart = shutdown.run.pipe(Effect.ensuring(Effect.sync(() => (shutdownReady = true))))
     const emitDeepLinks = (urls: string[]) => {
       if (!urls.length) return
-      pendingDeepLinks.push(...urls)
       const win = getLastFocusedWindow()
-      if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
+      if (win && emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))) return
+      pendingDeepLinks.push(...urls)
     }
     const relaunch = () => {
       setAppQuitting()
