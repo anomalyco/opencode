@@ -32,9 +32,14 @@ const sanitizeNode = (schema: unknown): unknown => {
   const result: Record<string, unknown> = Object.fromEntries(
     Object.entries(schema).map(([key, value]) => [
       key,
-      key === "enum" && Array.isArray(value) ? value.map(String) : sanitizeNode(value),
+      // Gemini rejects any enum member that stringifies to "" ("enum[0]: cannot be empty").
+      // MCP tools sometimes model an "unset"/"clear" option as a literal "" enum member;
+      // drop it from the constraint rather than sending Gemini a value it rejects outright.
+      key === "enum" && Array.isArray(value) ? value.map(String).filter((entry) => entry !== "") : sanitizeNode(value),
     ]),
   )
+
+  if (Array.isArray(result.enum) && result.enum.length === 0) delete result.enum
 
   if (Array.isArray(result.enum) && (result.type === "integer" || result.type === "number")) result.type = "string"
 
