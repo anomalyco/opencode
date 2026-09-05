@@ -7,7 +7,20 @@ import {
   decodePasteBytes,
   type KeyEvent,
 } from "@opentui/core"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
+import {
+  batch,
+  createEffect,
+  createMemo,
+  onMount,
+  createSignal,
+  onCleanup,
+  on,
+  Show,
+  Switch,
+  Match,
+  For,
+  untrack,
+} from "solid-js"
 import path from "path"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
@@ -31,7 +44,7 @@ import { parseSlashHead } from "../../prompt/parse"
 import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
-import { saveDraft, takeDraft } from "./draft-stash"
+import { failedDrafts, saveDraft, saveFailedDraft, takeDraft, takeFailedDraft } from "./draft-stash"
 import { Skill } from "@opencode-ai/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
@@ -670,7 +683,7 @@ export function Prompt(props: PromptProps) {
       return !disabled() && input.focused
     },
     get current() {
-      return store.prompt
+      return { ...store.prompt, mode: store.mode }
     },
     focus() {
       if (disabled()) return
@@ -680,10 +693,12 @@ export function Prompt(props: PromptProps) {
       input.blur()
     },
     set(prompt) {
-      input.setText(prompt.text)
-      setStore("prompt", prompt)
-      restoreExtmarksFromPrompt(prompt)
-      input.gotoBufferEnd()
+      batch(() => {
+        input.setText(prompt.text)
+        setStore("prompt", prompt)
+        restoreExtmarksFromPrompt(prompt)
+        input.gotoBufferEnd()
+      })
     },
     reset() {
       resetComposer()
@@ -694,32 +709,60 @@ export function Prompt(props: PromptProps) {
   }
 
   function resetComposer() {
-    input.extmarks.clear()
-    setStore("prompt", emptyPrompt())
-    setStore("extmarkToPart", new Map())
-    input.clear()
+    batch(() => {
+      input.extmarks.clear()
+      setStore("prompt", emptyPrompt())
+      setStore("extmarkToPart", new Map())
+      input.clear()
+    })
+  }
+
+  function restorePrompt(prompt: PromptInfo, cursor?: number) {
+    batch(() => {
+      input.setText(prompt.text)
+      setStore("prompt", prompt)
+      setStore("mode", prompt.mode ?? "normal")
+      restoreExtmarksFromPrompt(prompt)
+      input.gotoBufferEnd()
+      if (cursor !== undefined) input.cursorOffset = cursor
+    })
   }
 
   // Captured once: the session route is keyed by sessionID, so this Prompt
   // instance belongs to exactly one tab. Reading props.sessionID lazily would
   // observe the *next* route during onCleanup and stash under the wrong tab.
   const stashSessionID = props.sessionID
+  const failed = () => failedDrafts(stashSessionID)
+  const hasDraft = () =>
+    !!store.prompt.text ||
+    [store.prompt.files, store.prompt.agents, store.prompt.skills, store.prompt.pasted].some((parts) => parts?.length)
+
+  function restoreFailedDraft() {
+    batch(() => {
+      const entry = takeFailedDraft(stashSessionID)
+      if (!entry) return
+      if (hasDraft()) stash.push({ prompt: { ...store.prompt, mode: store.mode } })
+      restorePrompt(entry.prompt, entry.cursor)
+    })
+  }
 
   onMount(() => {
     const saved = takeDraft(stashSessionID)
     if (store.prompt.text) return
-    if (saved && saved.prompt.text) {
-      input.setText(saved.prompt.text)
-      setStore("prompt", saved.prompt)
-      restoreExtmarksFromPrompt(saved.prompt)
-      input.cursorOffset = saved.cursor
-    }
+    if (saved && saved.prompt.text) restorePrompt(saved.prompt, saved.cursor)
+  })
+
+  // The submitted Prompt may have unmounted before rejection. Recovery belongs
+  // to the tab, and waits rather than overwriting text typed after submission.
+  createEffect(() => {
+    if (!inputTarget() || disposed || hasDraft() || !failed().length) return
+    untrack(restoreFailedDraft)
   })
 
   onCleanup(() => {
     disposed = true
     if (store.prompt.text) {
-      saveDraft(stashSessionID, { prompt: unwrap(store.prompt), cursor: input.cursorOffset })
+      saveDraft(stashSessionID, { prompt: { ...unwrap(store.prompt), mode: store.mode }, cursor: input.cursorOffset })
     }
     setInputTarget(undefined)
     props.ref?.(undefined)
@@ -870,13 +913,23 @@ export function Prompt(props: PromptProps) {
   const stashCommands = createMemo(() =>
     [
       {
+        title: "Restore failed prompt",
+        name: "prompt.restore_failed",
+        category: "Prompt",
+        enabled: failed().length > 0,
+        run: () => {
+          restoreFailedDraft()
+          dialog.clear()
+        },
+      },
+      {
         title: "Stash prompt",
         name: "prompt.stash",
         category: "Prompt",
         enabled: !!store.prompt.text,
         run: () => {
           if (!store.prompt.text) return
-          stash.push({ prompt: store.prompt })
+          stash.push({ prompt: { ...store.prompt, mode: store.mode } })
           resetComposer()
           dialog.clear()
         },
@@ -888,12 +941,7 @@ export function Prompt(props: PromptProps) {
         enabled: stash.list().length > 0,
         run: () => {
           const entry = stash.pop()
-          if (entry) {
-            input.setText(entry.prompt.text)
-            setStore("prompt", entry.prompt)
-            restoreExtmarksFromPrompt(entry.prompt)
-            input.gotoBufferEnd()
-          }
+          if (entry) restorePrompt(entry.prompt)
           dialog.clear()
         },
       },
@@ -903,16 +951,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         enabled: stash.list().length > 0,
         run: () => {
-          dialog.replace(() => (
-            <DialogStash
-              onSelect={(entry) => {
-                input.setText(entry.prompt.text)
-                setStore("prompt", entry.prompt)
-                restoreExtmarksFromPrompt(entry.prompt)
-                input.gotoBufferEnd()
-              }}
-            />
-          ))
+          dialog.replace(() => <DialogStash onSelect={(entry) => restorePrompt(entry.prompt)} />)
         },
       },
     ].map(
@@ -1032,11 +1071,7 @@ export function Prompt(props: PromptProps) {
 
             const item = history.move(-1, input.plainText)
             if (!item) return false
-            input.setText(item.text)
-            setStore("prompt", item)
-            setStore("mode", item.mode ?? "normal")
-            restoreExtmarksFromPrompt(item)
-            input.cursorOffset = 0
+            restorePrompt(item, 0)
           },
         },
       ],
@@ -1071,11 +1106,7 @@ export function Prompt(props: PromptProps) {
 
             const item = history.move(1, input.plainText)
             if (!item) return false
-            input.setText(item.text)
-            setStore("prompt", item)
-            setStore("mode", item.mode ?? "normal")
-            restoreExtmarksFromPrompt(item)
-            input.cursorOffset = input.plainText.length
+            restorePrompt(item, item.text.length)
           },
         },
       ],
@@ -1184,19 +1215,14 @@ export function Prompt(props: PromptProps) {
     // Everything below reads the snapshot: text typed while a request is in
     // flight lands in the already-empty composer and survives, and prompt
     // history records exactly what was submitted instead of the live store
-    // (which may have absorbed mid-flight typing). Failure paths restore the
-    // snapshot unless the user has started typing something new.
+    // (which may have absorbed mid-flight typing). Failure recovery is tab-owned
+    // so navigation and newer input cannot discard the submitted snapshot.
     const currentMode = store.mode
     const entry = { ...store.prompt, mode: currentMode }
     resetComposer()
     props.onSubmit?.()
     const restoreEntry = () => {
-      if (disposed || input.isDestroyed || input.plainText !== "") return
-      input.setText(entry.text)
-      setStore("prompt", entry)
-      setStore("mode", entry.mode ?? "normal")
-      restoreExtmarksFromPrompt(entry)
-      input.cursorOffset = entry.text.length
+      saveFailedDraft(stashSessionID, { prompt: entry, cursor: entry.text.length })
     }
 
     const variant = selection.variant
@@ -1360,8 +1386,7 @@ export function Prompt(props: PromptProps) {
       }
       // The data layer admits optimistically: the prompt renders immediately
       // and rolls back if the server rejects it, so submission does not wait
-      // on the network. On rejection the row is already rolled back; restore
-      // the composer unless the user has started typing something new.
+      // on the network. On rejection retain the submitted snapshot for recovery.
       data.session
         .prompt({
           sessionID: target,
@@ -1689,6 +1714,27 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
             width="100%"
           >
+            <Show when={failed()[0]}>
+              {(entry) => (
+                <box flexDirection="row" gap={1} paddingBottom={1}>
+                  <text fg={theme.text.feedback.error.default} flexGrow={1} wrapMode="none" truncate>
+                    Failed to send: {entry().prompt.text.replace(/\s+/g, " ")}
+                    {failed().length > 1 ? ` (+${failed().length - 1} more)` : ""}
+                  </text>
+                  <text
+                    fg={theme.text.action.primary.default}
+                    flexShrink={0}
+                    onMouseUp={(event: MouseEvent) => {
+                      if (event.button !== 0) return
+                      event.stopPropagation()
+                      restoreFailedDraft()
+                    }}
+                  >
+                    restore
+                  </text>
+                </box>
+              )}
+            </Show>
             <Show when={config.prompt?.image_preview && visibleImageAttachments().length > 0}>
               <box
                 width="100%"
