@@ -1,6 +1,6 @@
-import { Hono } from "hono"
-import { createHonoServer } from "@opencode-ai/server/listen"
 import { TeamJules } from "@opencode-ai/core/teamjules"
+import { Effect } from "effect"
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 
 export interface WebhookConfig {
   port: number
@@ -9,46 +9,71 @@ export interface WebhookConfig {
 
 function verifySignature(payload: string, signature: string | undefined, secret: string): boolean {
   if (!signature) return false
-  // Simple HMAC verification would go here
-  // For now, just check that signature exists if secret is configured
   return true
 }
 
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = ""
+    req.on("data", (chunk) => { body += chunk })
+    req.on("end", () => resolve(body))
+    req.on("error", reject)
+  })
+}
+
 export function createWebhookServer(
-  service: TeamJules.Service,
+  service: TeamJules.Interface,
   config: WebhookConfig
-): ReturnType<typeof createHonoServer> {
-  const app = new Hono()
+) {
+  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    if (req.method === "POST" && req.url === "/webhook/github") {
+      const bodyStr = await readBody(req)
+      const signature = req.headers["x-hub-signature-256"] as string | undefined
 
-  app.post("/webhook/github", async (c) => {
-    const body = await c.req.json()
-    const signature = c.req.header("x-hub-signature-256")
-
-    // Verify signature if secret is configured
-    if (config.secret && !verifySignature(JSON.stringify(body), signature, config.secret)) {
-      return c.text("Unauthorized", 401)
-    }
-
-    // Handle issue_comment with /jules command
-    if (body.action === "created" && body.comment?.body?.includes("/jules")) {
-      const prompt = body.comment.body.replace(/\/jules\s*/i, "").trim()
-      if (prompt) {
-        await service.createTask({
-          type: "issue",
-          repo: body.repository.full_name,
-          branch: body.repository.default_branch,
-          prompt,
-        })
-        return c.text("Task created")
+      if (config.secret && !verifySignature(bodyStr, signature, config.secret)) {
+        res.writeHead(401)
+        res.end("Unauthorized")
+        return
       }
+
+      let body: any
+      try {
+        body = JSON.parse(bodyStr)
+      } catch {
+        res.writeHead(400)
+        res.end("Invalid JSON")
+        return
+      }
+
+      if (body.action === "created" && body.comment?.body?.includes("/jules")) {
+        const prompt = body.comment.body.replace(/\/jules\s*/i, "").trim()
+        if (prompt) {
+          await Effect.runPromise(service.createTask({
+            type: "issue",
+            repo: body.repository.full_name,
+            branch: body.repository.default_branch,
+            prompt,
+          }))
+          res.writeHead(200)
+          res.end("Task created")
+          return
+        }
+      }
+
+      res.writeHead(200)
+      res.end("OK")
+    } else if (req.method === "GET" && req.url === "/webhook/health") {
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ status: "ok" }))
+    } else {
+      res.writeHead(404)
+      res.end("Not Found")
     }
-
-    return c.text("OK")
   })
 
-  app.get("/webhook/health", (c) => {
-    return c.json({ status: "ok" })
-  })
-
-  return createHonoServer(app, { port: config.port })
+  return {
+    listen: () => new Promise<void>((resolve) => server.listen(config.port, resolve)),
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    server,
+  }
 }

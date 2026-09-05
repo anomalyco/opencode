@@ -2,6 +2,11 @@ import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { TeamJules } from "@opencode-ai/core/teamjules"
 
+async function runEffect<A>(effect: Effect.Effect<A, any, any>): Promise<A> {
+  const { AppRuntime } = await import("@/effect/app-runtime")
+  return AppRuntime.runPromise(effect as any)
+}
+
 export const TeamJulesCommand = effectCmd({
   command: "teamjules <action>",
   builder: (yargs) =>
@@ -16,13 +21,17 @@ export const TeamJulesCommand = effectCmd({
             .option("prompt", { type: "string", demandOption: true, describe: "Task prompt" })
             .option("type", { type: "string", default: "manual", choices: ["issue", "pr", "manual"] }),
         async (args) => {
-          const service = (await import("@opencode-ai/core/teamjules")).TeamJules.Service
-          const task = await service.createTask({
-            type: args.type as any,
-            repo: args.repo,
-            branch: args.branch,
-            prompt: args.prompt,
-          })
+          const task = await runEffect(
+            Effect.gen(function* () {
+              const service = yield* TeamJules.Service
+              return yield* service.createTask({
+                type: args.type as any,
+                repo: args.repo,
+                branch: args.branch,
+                prompt: args.prompt,
+              })
+            })
+          )
           console.log(`Task created: ${task.id}`)
         }
       )
@@ -35,12 +44,16 @@ export const TeamJulesCommand = effectCmd({
             .option("repo", { type: "string", describe: "Filter by repo" })
             .option("limit", { type: "number", default: 20 }),
         async (args) => {
-          const service = (await import("@opencode-ai/core/teamjules")).TeamJules.Service
-          const tasks = await service.listTasks({
-            status: args.status as any,
-            repo: args.repo,
-            limit: args.limit,
-          })
+          const tasks = await runEffect(
+            Effect.gen(function* () {
+              const service = yield* TeamJules.Service
+              return yield* service.listTasks({
+                status: args.status as any,
+                repo: args.repo,
+                limit: args.limit,
+              })
+            })
+          )
           console.table(tasks.map((t) => ({
             id: t.id,
             status: t.status,
@@ -54,8 +67,12 @@ export const TeamJulesCommand = effectCmd({
         "Get task status",
         (yargs) => yargs.positional("taskID", { type: "string", demandOption: true }),
         async (args) => {
-          const service = (await import("@opencode-ai/core/teamjules")).TeamJules.Service
-          const task = await service.getTask(args.taskID as any)
+          const task = await runEffect(
+            Effect.gen(function* () {
+              const service = yield* TeamJules.Service
+              return yield* service.getTask(args.taskID as any)
+            })
+          )
           if (!task) {
             console.log("Task not found")
             return
@@ -68,8 +85,12 @@ export const TeamJulesCommand = effectCmd({
         "Cancel a task",
         (yargs) => yargs.positional("taskID", { type: "string", demandOption: true }),
         async (args) => {
-          const service = (await import("@opencode-ai/core/teamjules")).TeamJules.Service
-          await service.cancelTask(args.taskID as any)
+          await runEffect(
+            Effect.gen(function* () {
+              const service = yield* TeamJules.Service
+              yield* service.cancelTask(args.taskID as any)
+            })
+          )
           console.log("Task cancelled")
         }
       )
@@ -78,8 +99,12 @@ export const TeamJulesCommand = effectCmd({
         "Retry a failed task",
         (yargs) => yargs.positional("taskID", { type: "string", demandOption: true }),
         async (args) => {
-          const service = (await import("@opencode-ai/core/teamjules")).TeamJules.Service
-          await service.retryTask(args.taskID as any)
+          await runEffect(
+            Effect.gen(function* () {
+              const service = yield* TeamJules.Service
+              yield* service.retryTask(args.taskID as any)
+            })
+          )
           console.log("Task queued for retry")
         }
       )

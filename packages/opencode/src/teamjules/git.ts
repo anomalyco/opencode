@@ -11,6 +11,7 @@ export interface GitClient {
   commitAll(dir: string, message: string): Promise<void>
   push(dir: string, branch: string, remote?: string): Promise<void>
   getRemoteUrl(dir: string, remote?: string): Promise<string>
+  getRev(dir: string): Promise<string>
   hasChanges(dir: string): Promise<boolean>
 }
 
@@ -47,7 +48,11 @@ export function createGitClient(): GitClient {
     },
 
     async getRemoteUrl(dir, remote = "origin") {
-      return run(dir, "git", ["remote", ["get-url", remote]])
+      return run(dir, "git", ["remote", "get-url", remote])
+    },
+
+    async getRev(dir) {
+      return run(dir, "git", ["rev-parse", "HEAD"])
     },
 
     async hasChanges(dir) {

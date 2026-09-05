@@ -17,7 +17,7 @@ export interface Worker {
   stop(): Promise<void>
 }
 
-export function createWorker(service: TeamJules.Service, config: WorkerConfig = {}): Worker {
+export function createWorker(service: TeamJules.Interface, config: WorkerConfig = {}): Worker {
   const runner = createRunner()
   let running = false
   let pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -27,11 +27,9 @@ export function createWorker(service: TeamJules.Service, config: WorkerConfig = 
     if (!running || !workerId) return
 
     try {
-      // Heartbeat
-      await service.heartbeat(workerId)
+      await Effect.runPromise(service.heartbeat(workerId))
 
-      // Try to claim a task
-      const task = await service.claimTask(workerId)
+      const task = await Effect.runPromise(service.claimTask(workerId))
       if (task) {
         console.log(`[TeamJules] Processing task ${task.id}`)
         await processTask(task)
@@ -55,13 +53,13 @@ export function createWorker(service: TeamJules.Service, config: WorkerConfig = 
       })
 
       if (result.error) {
-        await service.failTask(task.id, result.error)
+        await Effect.runPromise(service.failTask(task.id, result.error))
       } else {
-        await service.completeTask(task.id, result)
+        await Effect.runPromise(service.completeTask(task.id, result))
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      await service.failTask(task.id, message)
+      await Effect.runPromise(service.failTask(task.id, message))
     }
   }
 
@@ -69,12 +67,11 @@ export function createWorker(service: TeamJules.Service, config: WorkerConfig = 
     async start() {
       if (running) return
 
-      const worker = await service.registerWorker()
+      const worker = await Effect.runPromise(service.registerWorker())
       workerId = worker.id
       running = true
       console.log(`[TeamJules] Worker ${workerId} started`)
 
-      // Start polling
       poll()
     },
 
@@ -85,7 +82,7 @@ export function createWorker(service: TeamJules.Service, config: WorkerConfig = 
         pollTimer = null
       }
       if (workerId) {
-        await service.deregisterWorker(workerId)
+        await Effect.runPromise(service.deregisterWorker(workerId))
         console.log(`[TeamJules] Worker ${workerId} stopped`)
         workerId = null
       }
