@@ -163,6 +163,10 @@ export const transport = <Body>(options: Options): Transport<Body, Prepared, str
                     request: create.request,
                     message: create.message,
                     base,
+                    steering:
+                      options.id === "openai-responses" &&
+                      typeof create.request.model === "string" &&
+                      /^gpt-6-astra(?:-|$)/.test(create.request.model),
                   }),
                 }
               })

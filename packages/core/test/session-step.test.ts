@@ -12,6 +12,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStep } from "@opencode-ai/core/session/runner/step"
@@ -26,9 +27,10 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   Layer.merge(
-    AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node]), [
-      Bus.node.replace(Bus.configured({ persist: true })),
-    ]),
+    AppNodeBuilder.build(
+      LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node, SessionModelTransport.node]),
+      [Bus.node.replace(Bus.configured({ persist: true }))],
+    ),
     TestLLM.testLayer(),
   ),
 )
