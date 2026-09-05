@@ -32,6 +32,7 @@ test("validates config constraints", () => {
       scroll_speed: 0.001,
       diff_style: "stacked",
       cursor: { blinking: false },
+      kitty_keyboard: { events: true },
       plugin: ["example-plugin"],
     }),
   ).toMatchObject({
@@ -39,6 +40,7 @@ test("validates config constraints", () => {
     attention: { volume: 1 },
     diff_style: "stacked",
     cursor: { blinking: false },
+    kitty_keyboard: { events: true },
   })
   expect(() => decodeInfo({ leader_timeout: 0 })).toThrow()
   expect(() => decodeInfo({ attention: { volume: 1.1 } })).toThrow()
@@ -64,6 +66,7 @@ test("resolves host-neutral defaults", () => {
   expect(config.keybinds.has("terminal.suspend")).toBe(true)
   expect(config.keybinds.has("session.list")).toBe(true)
   expect(config.cursor).toBeUndefined()
+  expect(config.kitty_keyboard).toEqual({ events: false })
 })
 
 test("resolves overrides without mutating input", () => {
@@ -81,6 +84,7 @@ test("resolves overrides without mutating input", () => {
     },
     keybinds: { session_list: "ctrl+l" },
     cursor: { blinking: false },
+    kitty_keyboard: { events: true },
   }
   const config = resolve(input, { terminalSuspend: true })
 
@@ -90,6 +94,7 @@ test("resolves overrides without mutating input", () => {
     leader_timeout: 750,
     attention: input.attention,
     cursor: { style: "block", blinking: false },
+    kitty_keyboard: { events: true },
   })
   expect(config.keybinds.get("session.list")).toHaveLength(1)
   expect(input.keybinds).toEqual({ session_list: "ctrl+l" })
