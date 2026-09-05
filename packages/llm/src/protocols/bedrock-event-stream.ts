@@ -11,6 +11,13 @@ import { ProviderShared } from "./shared"
 const eventCodec = new EventStreamCodec(toUtf8, fromUtf8)
 const utf8 = new TextDecoder()
 
+// AWS caps a single event-stream message at 16 MiB, but the prelude carries
+// `total_length` as a 32-bit field, so a malformed or truncated response can
+// announce a frame of up to 4 GiB. Nothing else bounds the buffer: every byte
+// that arrives after such a prelude is appended (and the whole accumulated
+// window re-copied) while waiting for a frame that never completes.
+const MAX_FRAME_BYTES = 16 * 1024 * 1024
+
 // Cursor-tracking buffer state. Bytes accumulate in `buffer`; `offset` is the
 // read position. Reading by `subarray` is zero-copy. We only allocate a fresh
 // buffer when a new network chunk arrives and we need to append.
@@ -39,6 +46,11 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
     while (cursor.buffer.length - cursor.offset >= 4) {
       const view = cursor.buffer.subarray(cursor.offset)
       const totalLength = new DataView(view.buffer, view.byteOffset, view.byteLength).getUint32(0, false)
+      if (totalLength > MAX_FRAME_BYTES)
+        return yield* ProviderShared.eventError(
+          route,
+          `Bedrock Converse event-stream frame declares ${totalLength} bytes, above the ${MAX_FRAME_BYTES} byte maximum`,
+        )
       if (view.length < totalLength) break
 
       const decoded = yield* Effect.try({
