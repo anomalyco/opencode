@@ -23,6 +23,8 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean
   }) => Effect.Effect<void, RunError>
+  /** Summarizes recorded history into a compaction row without running a provider turn. */
+  readonly compact: (input: { readonly sessionID: SessionSchema.ID }) => Effect.Effect<void, RunError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunner") {}

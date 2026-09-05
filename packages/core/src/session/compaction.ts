@@ -77,6 +77,10 @@ type Input = {
   readonly sessionID: SessionSchema.ID
   readonly entries: readonly Entry[]
   readonly model: Model
+}
+
+/** A compaction evaluated against the budget of an assembled provider turn. */
+type TurnInput = Input & {
   readonly request: LLMRequest
 }
 
@@ -175,25 +179,31 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
 
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
-  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
+  const summarize = Effect.fn("SessionCompaction.summarize")(function* (
+    input: Input & { readonly reason: "auto" | "manual"; readonly output: number },
+  ) {
     const context = input.model.route.defaults.limits?.context
-    if (context === undefined || context <= 0) return false
-    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    const selected = select(input.entries, config.tokens)
+    // Budget-driven compaction is meaningless without a declared context limit, while an
+    // explicit request should still summarize on models that declare none.
+    const budget = context !== undefined && context > 0 ? context : undefined
+    if (budget === undefined && input.reason !== "manual") return false
+    // Automatic compaction retains a recent verbatim tail because it only needs to free
+    // enough budget to continue. An explicit request means compress everything.
+    const selected = select(input.entries, input.reason === "manual" ? 0 : config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
     const summaryPrompt = buildPrompt({
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
     })
-    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
-    if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
+    const summaryOutput = Math.min(input.output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+    if (budget !== undefined && Token.estimate(summaryPrompt) > budget - summaryOutput) return false
     const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: input.sessionID,
       messageID,
       timestamp: yield* DateTime.now,
-      reason: "auto",
+      reason: input.reason,
     })
 
     const chunks: string[] = []
@@ -223,26 +233,35 @@ export const make = (dependencies: Dependencies) => {
       sessionID: input.sessionID,
       messageID,
       timestamp: yield* DateTime.now,
-      reason: "auto",
+      reason: input.reason,
       text: summary,
       recent: selected.recent,
     })
     return true
   })
-  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
+  const turnOutput = (input: TurnInput) =>
+    input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")((input: TurnInput) =>
+    summarize({ ...input, reason: "auto", output: turnOutput(input) }),
+  )
+  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: TurnInput) {
     if (!config.auto) return false
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
-    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
     if (
       estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
+      context - Math.max(turnOutput(input), config.buffer)
     )
       return false
     return yield* compactAfterOverflow(input)
   })
+  /** Compacts on explicit request, independent of the request budget. */
+  const compactNow = Effect.fn("SessionCompaction.compactNow")((input: Input) =>
+    summarize({ ...input, reason: "manual", output: input.model.route.defaults.limits?.output ?? 0 }),
+  )
   return {
     compactIfNeeded,
     compactAfterOverflow,
+    compactNow,
   }
 }

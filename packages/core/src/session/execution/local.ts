@@ -13,19 +13,27 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const inLocation = Effect.fnUntraced(function* <A>(
+      sessionID: SessionSchema.ID,
+      failure: string,
+      use: (runner: SessionRunner.Interface) => Effect.Effect<A, SessionRunner.RunError>,
+    ) {
+      const session = yield* store.get(sessionID)
+      if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
+      return yield* SessionRunner.Service.use(use).pipe(
+        Effect.provide(locations.get(session.location)),
+        Effect.tapCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logError(failure, cause).pipe(Effect.annotateLogs({ sessionID })),
+        ),
+      )
+    })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError>({
-      drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, force) {
-        const session = yield* store.get(sessionID)
-        if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
-        return yield* SessionRunner.Service.use((runner) => runner.run({ sessionID, force })).pipe(
-          Effect.provide(locations.get(session.location)),
-          Effect.tapCause((cause) =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.void
-              : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
-          ),
-        )
-      }),
+      drain: (sessionID, force) =>
+        inLocation(sessionID, "Failed to drain Session", (runner) => runner.run({ sessionID, force })),
+      aside: (sessionID) =>
+        inLocation(sessionID, "Failed to compact Session", (runner) => runner.compact({ sessionID })),
     })
 
     return SessionExecution.Service.of({
@@ -33,6 +41,7 @@ const layer = Layer.effect(
       interrupt: coordinator.interrupt,
       resume: coordinator.run,
       wake: coordinator.wake,
+      compact: coordinator.runAside,
     })
   }),
 )

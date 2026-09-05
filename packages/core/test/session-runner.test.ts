@@ -242,12 +242,14 @@ const execution = Layer.effect(
     const sessionRunner = yield* SessionRunner.Service
     const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
       drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
+      aside: (sessionID) => sessionRunner.compact({ sessionID }),
     })
     return SessionExecution.Service.of({
       active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
       interrupt: coordinator.interrupt,
+      compact: coordinator.runAside,
     })
   }),
 ).pipe(Layer.provide(runnerLayer))
@@ -1331,6 +1333,96 @@ describe("SessionRunnerLLM", () => {
       streamGate = undefined
       expect(requests).toHaveLength(2)
       expect((yield* session.context(sessionID)).some((message) => message.type === "compaction")).toBe(false)
+    }),
+  )
+
+  it.effect("compacts on explicit request without running a provider turn", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      response = fragmentFixture("text", "text-first", ["Earlier answer"]).completeEvents
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Earlier question" }), resume: false })
+      yield* session.resume(sessionID)
+
+      requests.length = 0
+      responses = [fragmentFixture("text", "text-summary", ["## Objective\n- Preserve the task"]).completeEvents]
+      yield* session.compact({ sessionID })
+
+      // One summarization request and no follow-up turn.
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0])[0]).toContain("## Objective")
+      expect(requests[0].tools).toEqual([])
+
+      const context = yield* (yield* SessionStore.Service).context(sessionID)
+      expect(context.map((message) => message.type)).toEqual(["compaction"])
+      expect(context[0]).toMatchObject({
+        type: "compaction",
+        reason: "manual",
+        summary: "## Objective\n- Preserve the task",
+      })
+    }),
+  )
+
+  it.effect("compacts on explicit request while the request budget has room", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      response = fragmentFixture("text", "text-first", ["Earlier answer"]).completeEvents
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Short" }), resume: false })
+      yield* session.resume(sessionID)
+
+      // The default model has ample context, so automatic compaction would decline here.
+      requests.length = 0
+      responses = [fragmentFixture("text", "text-summary", ["## Objective\n- Still compacted"]).completeEvents]
+      yield* session.compact({ sessionID })
+
+      expect(requests).toHaveLength(1)
+      expect((yield* (yield* SessionStore.Service).context(sessionID))[0]).toMatchObject({
+        type: "compaction",
+        reason: "manual",
+      })
+    }),
+  )
+
+  it.effect("leaves history unchanged when explicit compaction has nothing to summarize", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      requests.length = 0
+      yield* session.compact({ sessionID })
+
+      expect(requests).toHaveLength(0)
+      expect(yield* (yield* SessionStore.Service).context(sessionID)).toEqual([])
+    }),
+  )
+
+  it.effect("keeps explicit compaction out of an active provider turn", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const gate = yield* Deferred.make<void>()
+      const started = yield* Deferred.make<void>()
+      streamGate = gate
+      streamStarted = started
+      response = fragmentFixture("text", "text-first", ["Answer"]).completeEvents
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Question" }), resume: false })
+      const draining = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+
+      // Compaction must wait for the in-flight turn rather than interleaving with it.
+      const compacting = yield* session.compact({ sessionID }).pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+      expect(requests).toHaveLength(1)
+
+      responses = [fragmentFixture("text", "text-summary", ["## Objective\n- Serialized"]).completeEvents]
+      streamGate = undefined
+      yield* Deferred.succeed(gate, undefined)
+      yield* Fiber.join(draining)
+      yield* Fiber.join(compacting)
+
+      expect(requests).toHaveLength(2)
+      const context = yield* (yield* SessionStore.Service).context(sessionID)
+      expect(context.map((message) => message.type)).toEqual(["compaction"])
     }),
   )
 

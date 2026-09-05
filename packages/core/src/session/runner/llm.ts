@@ -412,8 +412,27 @@ const layer = Layer.effect(
       }
     })
 
+    /**
+     * Summarizes recorded history on explicit request. This is not a provider turn: no
+     * inbox input is promoted, no tools are materialized, and no assistant reply is
+     * produced. The compaction row it writes becomes the history cutoff for later turns.
+     */
+    const compact = Effect.fn("SessionRunner.compact")(function* (input: { readonly sessionID: SessionSchema.ID }) {
+      const session = yield* getSession(input.sessionID)
+      if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
+        return yield* Effect.interrupt
+      const agent = yield* agents.select(session.agent)
+      const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
+      const system =
+        initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
+      const model = yield* models.resolve(session)
+      const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
+      yield* compaction.compactNow({ sessionID: session.id, entries, model })
+    })
+
     return Service.of({
       run,
+      compact,
     })
   }),
 )

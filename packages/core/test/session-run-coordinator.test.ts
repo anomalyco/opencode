@@ -392,6 +392,116 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("runs an aside only after the active drain settles", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const order: string[] = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never>({
+          drain: () =>
+            Effect.sync(() => order.push("drain:start")).pipe(
+              Effect.andThen(Deferred.succeed(started, undefined)),
+              Effect.andThen(Deferred.await(gate)),
+              Effect.andThen(Effect.sync(() => order.push("drain:end"))),
+            ),
+          aside: () => Effect.sync(() => order.push("aside")),
+        })
+
+        const draining = yield* coordinator.run("session").pipe(Effect.forkChild)
+        yield* Deferred.await(started)
+        const aside = yield* coordinator.runAside("session").pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        expect(order).toEqual(["drain:start"])
+
+        yield* Deferred.succeed(gate, undefined)
+        yield* Effect.all([Fiber.join(draining), Fiber.join(aside)])
+        expect(order).toEqual(["drain:start", "drain:end", "aside"])
+      }),
+    ),
+  )
+
+  it.effect("runs each aside instead of coalescing them", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let asides = 0
+        const coordinator = yield* SessionRunCoordinator.make<string, never>({
+          drain: () => Effect.void,
+          aside: () => Effect.sync(() => asides++),
+        })
+
+        yield* coordinator.runAside("session")
+        yield* coordinator.runAside("session")
+
+        expect(asides).toBe(2)
+      }),
+    ),
+  )
+
+  it.effect("serializes an aside against a concurrent aside for the same key", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        let active = 0
+        let peak = 0
+        const coordinator = yield* SessionRunCoordinator.make<string, never>({
+          drain: () => Effect.void,
+          aside: () =>
+            Effect.sync(() => {
+              active++
+              peak = Math.max(peak, active)
+            }).pipe(
+              Effect.andThen(Deferred.succeed(entered, undefined)),
+              Effect.andThen(Deferred.await(gate)),
+              Effect.andThen(Effect.sync(() => active--)),
+            ),
+        })
+
+        const first = yield* coordinator.runAside("session").pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        const second = yield* coordinator.runAside("session").pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* Deferred.succeed(gate, undefined)
+        yield* Effect.all([Fiber.join(first), Fiber.join(second)])
+
+        expect(peak).toBe(1)
+      }),
+    ),
+  )
+
+  it.effect("lets asides for different keys run concurrently", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        let active = 0
+        let peak = 0
+        const coordinator = yield* SessionRunCoordinator.make<string, never>({
+          drain: () => Effect.void,
+          aside: () =>
+            Effect.sync(() => {
+              active++
+              peak = Math.max(peak, active)
+            }).pipe(
+              Effect.andThen(Deferred.succeed(entered, undefined)),
+              Effect.andThen(Deferred.await(gate)),
+              Effect.andThen(Effect.sync(() => active--)),
+            ),
+        })
+
+        const first = yield* coordinator.runAside("a").pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        const second = yield* coordinator.runAside("b").pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* Deferred.succeed(gate, undefined)
+        yield* Effect.all([Fiber.join(first), Fiber.join(second)])
+
+        expect(peak).toBe(2)
+      }),
+    ),
+  )
+
   it.effect("trampolines synchronous self-waking execution", () =>
     Effect.scoped(
       Effect.gen(function* () {
