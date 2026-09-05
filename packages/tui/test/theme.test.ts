@@ -37,6 +37,11 @@ test("hasTheme checks theme presence", () => {
   expect(hasTheme(name)).toBe(true)
 })
 
+test("resolveTheme does not crash when theme colors are missing", () => {
+  const resolved = resolveTheme({} as (typeof DEFAULT_THEMES)["opencode"], "dark")
+  expect(resolved.thinkingOpacity).toBe(0.6)
+})
+
 test("resolveTheme rejects circular color refs", () => {
   const item = structuredClone(DEFAULT_THEMES.opencode)
   item.defs = { ...item.defs, one: "two", two: "one" }
