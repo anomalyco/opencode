@@ -5,7 +5,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.4.1",
+  "packageManager": "bun@1.4.2",
   "scripts": {
     "dev": "bun run --cwd packages/cli --conditions=browser src/index.ts",
     "dev:live": "sh -c 'OPENCODE_TUI_CHANNEL=dev OPENCODE_PASSWORD=\"$(opencode2 service get password)\" exec bun run dev \"$@\" --server \"$(opencode2 service status)\"' --",
@@ -159,7 +159,7 @@
     "@effect/platform-node-shared": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "bun-types": "1.4.1",
+    "bun-types": "1.4.2",
     "effect": "catalog:",
     "solid-js": "catalog:"
   },
