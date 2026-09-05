@@ -370,9 +370,11 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 
 ---
 
-### 工具
+### 工具（已弃用）
 
-使用 `tools` 配置控制代理中可用的工具。您可以通过将特定工具设置为 `true` 或 `false` 来启用或禁用它们。
+`tools` 配置已 **弃用**。对于新配置和配置更新，请优先使用代理的 [`permission`](#权限) 字段，它还支持更细粒度的控制。
+
+使用 `tools` 配置可以控制代理中可用的工具。您可以通过将特定工具设置为 `true` 或 `false` 来启用或禁用它们。在代理的 `tools` 配置中，`true` 等同于 `{"*": "allow"}` 权限，`false` 等同于 `{"*": "deny"}` 权限。
 
 ```json title="opencode.json" {3-6,9-12}
 {
@@ -396,7 +398,7 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 代理级配置会覆盖全局配置。
 :::
 
-您还可以使用通配符同时控制多个工具。例如，要禁用 MCP 服务器中的所有工具：
+您还可以在旧版 `tools` 配置项中使用通配符，同时控制多个工具。例如，要禁用 MCP 服务器中的所有工具：
 
 ```json title="opencode.json"
 {
@@ -419,11 +421,37 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 
 ### 权限
 
-您可以配置权限来管理代理可以执行的操作。目前，`edit`、`bash` 和 `webfetch` 工具的权限可以配置为：
+您可以配置权限来管理代理可以执行的操作。每个权限键都可以设置为：
 
 - `"ask"` — 运行工具前提示审批
 - `"allow"` — 允许所有操作，无需审批
 - `"deny"` — 禁用该工具
+
+可用的权限键如下：
+
+| 权限键               | 控制的工具或操作                       |
+| -------------------- | -------------------------------------- |
+| `read`               | `read`                                 |
+| `edit`               | `write`、`edit`、`apply_patch`         |
+| `glob`               | `glob`                                 |
+| `grep`               | `grep`                                 |
+| `list`               | `list`                                 |
+| `bash`               | `bash`                                 |
+| `task`               | `task`                                 |
+| `external_directory` | 读取或写入项目工作树之外文件的任何工具 |
+| `todowrite`          | `todowrite`、`todoread`                |
+| `webfetch`           | `webfetch`                             |
+| `websearch`          | `websearch`                            |
+| `lsp`                | `lsp`                                  |
+| `skill`              | `skill`                                |
+| `question`           | `question`                             |
+| `doom_loop`          | 代理疑似陷入循环时显示的恢复提示       |
+
+`read`、`edit`、`glob`、`grep`、`list`、`bash`、`task`、`external_directory`、`lsp` 和 `skill` 既可以使用简写操作（`"allow" | "ask" | "deny"`），也可以使用 glob/模式到操作的对象，以进行细粒度控制。其余权限键仅支持简写操作。
+
+:::note
+权限键会作为通配符模式与底层工具名称匹配，因此同一套语法适用于内置工具、自定义工具和 MCP 工具。例如，`"mymcp_*": "deny"` 会拒绝某个 MCP 服务器的所有工具，而 `"mymcp_search": "ask"` 只会针对其中一个工具请求确认。
+:::
 
 ```json title="opencode.json"
 {
