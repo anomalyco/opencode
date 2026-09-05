@@ -22,6 +22,8 @@ export function createPluginSources(watch: (file: string) => Promise<void>) {
         files.set(file, { digest: digest(file, directory), directory })
         const pending = watch(file).finally(() => watching.delete(pending))
         watching.add(pending)
+        // Watch setup can be interrupted while module evaluation is still pending.
+        void pending.catch(() => {})
       }
       track(fileURLToPath(entrypoint))
       const { prepareSource } = await import("#plugin-source")

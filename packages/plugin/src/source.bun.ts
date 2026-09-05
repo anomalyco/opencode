@@ -8,9 +8,10 @@ import { localSource } from "./source.js"
 let generation = Date.now()
 
 export async function prepareSource(entrypoint: string, track: (file: string, directory?: boolean) => void) {
+  const root = fileURLToPath(entrypoint)
   const files = new Set<string>()
   const visit = (file: string, search = "") => {
-    if (file.split(path.sep).includes("node_modules")) return
+    if (file !== root && file.split(path.sep).includes("node_modules")) return
     if (search) delete require.cache[file + search]
     if (files.has(file)) return
     files.add(file)
@@ -54,6 +55,6 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
       }
     }
   }
-  visit(fileURLToPath(entrypoint))
+  visit(root)
   return { version: String(++generation), load: () => Host.load(entrypoint) }
 }

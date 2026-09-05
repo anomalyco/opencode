@@ -2,7 +2,7 @@ import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Duration, Effect, Fiber, Layer, LayerMap, Schedule } from "effect"
-import { TestClock } from "effect/testing"
+import { TestClock, TestConsole } from "effect/testing"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -152,6 +152,10 @@ describe("PluginSupervisor reload", () => {
           const rpc = yield* Rpc.Service
           const commands = yield* Command.Service
           yield* plugins.awaitActivation
+          const inventory = yield* plugins.list()
+          if (!inventory.some((plugin) => plugin.id === "greeter" && plugin.state.status === "active")) {
+            console.error("[DEBUG-reload-ci]", inventory, yield* TestConsole.logLines)
+          }
           expect(yield* rpc.call("greeter", "status", {})).toBe(1)
           expect(yield* rpc.call("greeter", "info", {}).pipe(Effect.flip)).toMatchObject({
             type: "rpc.method_not_found",

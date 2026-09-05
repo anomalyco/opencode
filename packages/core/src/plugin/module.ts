@@ -4,7 +4,7 @@ import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
 import { Host } from "@opencode-ai/plugin/host"
 import { createPluginSources } from "@opencode-ai/plugin/source"
 import { Npm } from "@opencode-ai/util/npm"
-import { Deferred, Effect, PubSub, Schema, Stream } from "effect"
+import { Deferred, Effect, FiberSet, PubSub, Schema, Stream } from "effect"
 import path from "path"
 import { stat } from "node:fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
@@ -16,23 +16,15 @@ import { Watcher } from "../filesystem/watcher.js"
 export const make = Effect.fn("PluginModule.make")(function* () {
   const watcher = yield* Watcher.Service
   const scope = yield* Effect.scope
-  const runPromise = Effect.runPromiseWith(yield* Effect.context())
+  const runPromise = yield* FiberSet.makeRuntimePromise()
   const changes = yield* PubSub.unbounded<void>()
   const watched = new Set<string>()
   const watch = Effect.fn("PluginModule.watch")(function* (file: string) {
     if (watched.has(file)) return
     watched.add(file)
     const ready = yield* Deferred.make<void>()
-    const directory = yield* Effect.promise(() =>
-      stat(file).then(
-        (info) => info.isDirectory(),
-        () => false,
-      ),
-    )
-    const updates = yield* watcher.subscribe(
-      { path: file, type: directory ? "directory" : "file" },
-      Deferred.succeed(ready, undefined),
-    )
+    const target = yield* Effect.promise(() => watchTarget(file))
+    const updates = yield* watcher.subscribe(target, Deferred.succeed(ready, undefined))
     yield* updates.pipe(
       Stream.runForEach(() => PubSub.publish(changes, undefined)),
       Effect.ensuring(Deferred.succeed(ready, undefined)),
@@ -52,6 +44,18 @@ export const make = Effect.fn("PluginModule.make")(function* () {
     changes: () => Stream.fromPubSub(changes),
   }
 })
+
+// A missing dependency may have missing parents too. Watch the nearest existing
+// ancestor recursively so creating the rest of the path can trigger recovery.
+function watchTarget(file: string): Promise<Watcher.WatchInput> {
+  return stat(file).then(
+    (info) => ({ path: file, type: info.isDirectory() ? "directory" : "file" }),
+    (cause) => {
+      if (path.dirname(file) === file) throw cause
+      return watchTarget(path.dirname(file))
+    },
+  )
+}
 
 const Module = Schema.Struct({
   default: Schema.Union([
