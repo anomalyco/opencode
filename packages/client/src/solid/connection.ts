@@ -18,6 +18,7 @@ export type ClientConnectionOptions = {
   readonly onEvent: (event: OpenCodeEvent) => void
   readonly flushInterval?: number
   readonly pageLifecycle?: boolean
+  readonly reconnectDelayMs?: number
   readonly log?: {
     readonly debug?: (message: string, data?: Readonly<Record<string, unknown>>) => void
     readonly info?: (message: string, data?: Readonly<Record<string, unknown>>) => void
@@ -26,6 +27,16 @@ export type ClientConnectionOptions = {
 
 const connectTimeout = 2_000
 const reconnectDelay = 1_000
+const maxReconnectBackoff = 30_000
+
+/**
+ * Delay before the next reconnect attempt. Streams that never connected
+ * successfully (bad credentials, server still booting) scale the delay up so a
+ * failing endpoint is not hammered every second; streams that connected and
+ * later dropped reset the attempt counter and keep the base delay.
+ */
+export const reconnectBackoffDelay = (attempt: number, baseDelay: number) =>
+  Math.min(baseDelay * Math.max(attempt, 1), maxReconnectBackoff)
 const connectionHistoryLimit = 50
 
 export function createClientConnection(initialApi: OpenCodeClient, options: ClientConnectionOptions) {
@@ -140,7 +151,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
           if (attempt === 1) continue
         }
       }
-      await wait(reconnectDelay, controller.signal)
+      await wait(reconnectBackoffDelay(attempt, options.reconnectDelayMs ?? reconnectDelay), controller.signal)
     }
   }
 
@@ -190,6 +201,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   })
 
   return {
+    start,
     status: () => connection.status,
     attempt: () => connection.attempt,
     error: () => connection.error,
