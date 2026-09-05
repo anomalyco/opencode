@@ -86,6 +86,8 @@ export const dict = {
   "command.model.variant.cycle.description": "Switch to the next effort level",
   "command.prompt.mode.shell": "Shell",
   "command.prompt.mode.normal": "Prompt",
+  "command.prompt.submit": "Submit prompt",
+  "command.prompt.newline": "Insert newline in prompt",
   "command.permissions.autoaccept.enable": "Auto-accept permissions",
   "command.permissions.autoaccept.disable": "Stop auto-accepting permissions",
   "command.workspace.toggle": "Toggle worktrees",
