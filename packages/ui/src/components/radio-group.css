@@ -167,7 +167,7 @@
     --radio-group-padding: 2px;
 
     [data-slot="radio-group-item-label"] {
-      font-size: 12px;
+      font-size: var(--font-size-x-small);
     }
 
     [data-slot="radio-group-item-control"] {

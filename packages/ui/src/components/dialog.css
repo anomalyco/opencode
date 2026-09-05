@@ -89,7 +89,7 @@
 
         /* text-14-regular */
         font-family: var(--font-family-sans);
-        font-size: 14px;
+        font-size: var(--font-size-base);
         font-style: normal;
         font-weight: var(--font-weight-regular);
         line-height: var(--line-height-large); /* 142.857% */

@@ -755,8 +755,20 @@ export const dict = {
   "settings.general.row.terminalFont.title": "Terminalschriftart",
   "settings.general.row.terminalFont.description": "Die im Terminal verwendete Schriftart anpassen",
   "settings.general.row.uiFont.title": "UI-Schriftart",
+<<<<<<< HEAD
   "settings.general.row.uiFont.description": "Die in der gesamten Benutzeroberfläche verwendete Schriftart anpassen",
   "settings.general.row.followup.title": "Verhalten bei Folgeeingaben",
+||||||| parent of 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
+  "settings.general.row.uiFont.description": "Die im gesamten Interface verwendete Schriftart anpassen",
+  "settings.general.row.followup.title": "Verhalten bei Folgefragen",
+=======
+  "settings.general.row.uiFont.description": "Die im gesamten Interface verwendete Schriftart anpassen",
+  "settings.general.row.fontSize.title": "Schriftgröße",
+  "settings.general.row.fontSize.description": "Die im gesamten App verwendete Basisschriftgröße anpassen",
+  "settings.general.row.lineHeight.title": "Zeilenhöhe",
+  "settings.general.row.lineHeight.description": "Die Zeilenhöhe für gut lesbaren Text und Code anpassen",
+  "settings.general.row.followup.title": "Verhalten bei Folgefragen",
+>>>>>>> 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
   "settings.general.row.followup.description":
     "Wählen Sie, ob Folgeeingaben die laufende Sitzung sofort steuern oder in einer Warteschlange warten",
   "settings.general.row.followup.option.queue": "Warteschlange",
