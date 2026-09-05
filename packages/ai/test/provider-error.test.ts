@@ -3,6 +3,14 @@ import { isContextOverflow } from "../src/index.js"
 import { classifyProviderFailure } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
+  test("recognizes misalignment stops by code with and without an HTTP status", () => {
+    for (const status of [undefined, 403]) {
+      const body = JSON.stringify({ error: { code: "misalignment_policy_violation", message: "Review required" } })
+      const reason = classifyProviderFailure({ status, message: "Review required", rawBody: body })
+      expect(reason._tag).toBe("ContentPolicy")
+      expect(reason.body).toBe(body)
+    }
+  })
   test("classifies provider token limit messages as context overflow", () => {
     const messages = [
       "tokens in request more than max tokens allowed",

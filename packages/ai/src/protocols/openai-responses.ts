@@ -80,11 +80,11 @@ const OpenAIResponsesNamespace = Schema.Struct({
   type: Schema.tag("namespace"),
   name: Schema.String,
   description: Schema.String,
-  tools: Schema.Array(OpenResponses.Tool),
+  tools: Schema.Array(Schema.Struct({ ...OpenResponses.Tool.fields, async: Schema.optional(Schema.Boolean) })),
 })
 
 const OpenAIResponsesTools = Schema.Union([
-  OpenResponses.Tool,
+  Schema.Struct({ ...OpenResponses.Tool.fields, async: Schema.optional(Schema.Boolean) }),
   OpenAIResponsesNamespace,
   OpenAIResponsesImageGenerationTool,
 ])
@@ -186,11 +186,17 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesBody))
 
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
+  const asyncTools = yield* ProviderShared.validateWith(
+    Schema.decodeUnknownEffect(Schema.UndefinedOr(Schema.Array(Schema.String))),
+  )(request.providerOptions?.asyncTools)
+  const astra = request.model.id === "gpt-6-astra" || request.model.id.startsWith("gpt-6-astra-")
+  if (asyncTools?.length && !astra)
+    return yield* ProviderShared.invalidRequest("Async tool calling requires GPT-6 Astra")
   const management = yield* ProviderShared.validateWith(
     Schema.decodeUnknownEffect(Schema.UndefinedOr(ContextManagement)),
   )(request.providerOptions?.contextManagement)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
-  return yield* decodeBody({
+  const body = yield* decodeBody({
     ...(yield* OpenResponses.lowerConversation(request, adapter)),
     ...OpenResponses.lowerGeneration(request),
     context_management: management?.map((edit) => ({ type: edit.type, compact_threshold: edit.compactThreshold })),
@@ -202,6 +208,30 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
       OpenResponses.allowedToolChoice(request) ??
       (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
   })
+  if (astra && (body.reasoning?.effort === "none" || body.reasoning?.effort === "minimal"))
+    return yield* ProviderShared.invalidRequest("GPT-6 Astra requires reasoning effort low or higher")
+  if (
+    astra &&
+    (body.temperature !== undefined ||
+      body.top_p !== undefined ||
+      body.top_logprobs !== undefined ||
+      body.include?.includes("message.output_text.logprobs"))
+  )
+    return yield* ProviderShared.invalidRequest("GPT-6 Astra does not support temperature, top_p, or logprobs")
+  if (asyncTools?.length) {
+    const enabled = new Set(asyncTools)
+    return {
+      ...body,
+      tools: body.tools?.map((tool) =>
+        tool.type === "namespace"
+          ? { ...tool, tools: tool.tools.map((leaf) => ({ ...leaf, async: enabled.has(leaf.name) || undefined })) }
+          : tool.type === "function"
+            ? { ...tool, async: enabled.has(tool.name) || undefined }
+            : tool,
+      ),
+    }
+  }
+  return body
 })
 
 const checkpointBody = {

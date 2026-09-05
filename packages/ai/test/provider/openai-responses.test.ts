@@ -109,6 +109,63 @@ const expectToolOutput = (body: OpenAIResponses.OpenAIResponsesBody): OpenAITool
 }
 
 describe("OpenAI Responses route", () => {
+  it.effect("prepares Astra async functions while keeping question tools synchronous", () =>
+    Effect.gen(function* () {
+      const astra = OpenAI.configure({ apiKey: "test" }).responses("gpt-6-astra")
+      const tools = [
+        ToolNamespace.make({
+          name: "tools",
+          tools: [
+            ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: {} }),
+            ToolDefinition.make({ name: "question", description: "Ask", inputSchema: {} }),
+          ],
+        }),
+      ]
+      const prepared = yield* compileRequest(
+        LLM.request({ model: astra, prompt: "Start", tools, providerOptions: { asyncTools: ["lookup"] } }),
+      )
+      expect(prepared.body.reasoning).toEqual({ effort: "low", summary: "auto" })
+      expect(prepared.body.tools).toMatchObject([
+        {
+          type: "namespace",
+          tools: [
+            { type: "function", name: "lookup", async: true },
+            { type: "function", name: "question", async: undefined },
+          ],
+        },
+      ])
+      const incompatible = yield* compileRequest(
+        LLM.request({ model, prompt: "Start", tools, providerOptions: { asyncTools: ["lookup"] } }),
+      ).pipe(Effect.flip)
+      expect(incompatible.reason._tag).toBe("InvalidRequest")
+    }),
+  )
+
+  it.effect("rejects unsupported Astra parameters before sending a request", () =>
+    Effect.gen(function* () {
+      const astra = OpenAI.configure({ apiKey: "test" }).responses("gpt-6-astra")
+      for (const overrides of [
+        { providerOptions: { reasoningEffort: "none" } },
+        { providerOptions: { reasoningEffort: "minimal" } },
+        { generation: { temperature: 0 } },
+        { providerOptions: { include: ["message.output_text.logprobs"] } },
+      ]) {
+        const error = yield* compileRequest(LLM.request({ model: astra, prompt: "Start", ...overrides })).pipe(
+          Effect.flip,
+        )
+        expect(error.reason._tag).toBe("InvalidRequest")
+      }
+      const error = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "test" }).chat("gpt-6-astra"),
+          prompt: "Start",
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: {} }],
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("Responses API")
+    }),
+  )
+
   it.effect("prepares OpenAI Responses target", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)

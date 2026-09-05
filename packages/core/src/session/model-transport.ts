@@ -9,6 +9,7 @@ import {
   type WebSocketChannelExecutor,
   type WebSocketConnection,
   type WebSocketConnector,
+  type WebSocketChannelDriver,
 } from "@opencode-ai/ai/route"
 import { AIError, AIErrorReason, TransportError, type TransportOperation } from "@opencode-ai/ai"
 import { Hash } from "@opencode-ai/util/hash"
@@ -31,6 +32,7 @@ const metric = (event: string, attributes: Record<string, string> = {}) =>
 interface Active {
   readonly queue: Queue.Queue<string, AIError>
   delivery: "send-attempted" | "provider-observed" | "terminal"
+  driver: WebSocketChannelDriver
 }
 
 interface Channel {
@@ -42,6 +44,7 @@ interface Channel {
   checkpoint?: ChannelCheckpoint
   pending?: { readonly token: object; readonly checkpoint: ChannelCheckpoint }
   reader?: Fiber.Fiber<unknown, unknown>
+  continuation?: string
 }
 
 interface State {
@@ -55,6 +58,8 @@ export interface Interface {
   readonly bind: (sessionID: SessionSchema.ID) => WebSocketChannelExecutor
   readonly close: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   readonly closeAll: Effect.Effect<void>
+  readonly steer: (sessionID: SessionSchema.ID, text: string, admit: Effect.Effect<void>) => Effect.Effect<boolean>
+  readonly hasPendingInput: (sessionID: SessionSchema.ID) => boolean
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionModelTransport") {}
@@ -92,12 +97,14 @@ const affinity = (exchange: WebSocketChannelExchange) =>
   `${exchange.connect.url}:${Hash.sha256(JSON.stringify(Object.entries(exchange.connect.headers).sort(([a], [b]) => a.localeCompare(b))))}`
 
 const observationFrame = (observation: ChannelObservation) => {
+  if (observation.type === "ignore") return Effect.die("Ignored channel event reached the parser")
   if (observation.type === "frame" || observation.type === "completed" || observation.type === "incomplete")
     return Effect.succeed(observation.frame)
   return Effect.fail(observation.error)
 }
 
-const observationTerminal = (observation: ChannelObservation) => observation.type !== "frame"
+const observationTerminal = (observation: ChannelObservation) =>
+  observation.type !== "frame" && observation.type !== "ignore"
 
 export const makeLayer = (connector: WebSocketConnector) =>
   Layer.effect(
@@ -316,12 +323,21 @@ export const makeLayer = (connector: WebSocketConnector) =>
           Effect.onInterrupt(() => closeChannel(owner, channel)),
         )
         if (create.mode === "full") channel.checkpoint = undefined
-        const active: Active = {
-          queue: yield* Queue.bounded<string, AIError>(INBOUND_CAPACITY),
-          delivery: "send-attempted",
-        }
+        const carried = channel.continuation
+        const active: Active =
+          create.mode === "automatic" && channel.active
+            ? channel.active
+            : {
+                queue: yield* Queue.bounded<string, AIError>(INBOUND_CAPACITY),
+                delivery: "send-attempted",
+                driver: exchange.driver,
+              }
+        active.driver = exchange.driver
         channel.active = active
-        const sent = yield* channel.connection.sendText(create.message).pipe(
+        channel.continuation = undefined
+        const sent = yield* (
+          create.mode === "automatic" ? Effect.void : channel.connection.sendText(create.message)
+        ).pipe(
           Effect.withSpan("SessionModelTransport.send"),
           Effect.onInterrupt(() => closeChannel(owner, channel)),
           Effect.result,
@@ -348,7 +364,11 @@ export const makeLayer = (connector: WebSocketConnector) =>
 
         let terminal: ChannelObservation | undefined
         const token = {}
-        const frames = Stream.fromQueue(active.queue).pipe(
+        // Pull one frame at a time: a chunk may also contain the automatic successor.
+        const inbound = Stream.fromEffectRepeat(Queue.take(active.queue))
+        const frames = (
+          create.mode === "automatic" && carried ? Stream.concat(Stream.succeed(carried), inbound) : inbound
+        ).pipe(
           Stream.timeoutOrElse({
             duration: IDLE_TIMEOUT,
             orElse: () =>
@@ -368,15 +388,22 @@ export const makeLayer = (connector: WebSocketConnector) =>
               if (!observationTerminal(observation)) return
               terminal = observation
               active.delivery = "terminal"
-              const staged = observation.type === "completed" ? observation.checkpoint : undefined
+              const staged =
+                observation.type === "completed" || observation.type === "incomplete"
+                  ? observation.checkpoint
+                  : undefined
               if (staged) channel.pending = { token, checkpoint: staged }
-              if (observation.type !== "completed" || !staged) channel.checkpoint = undefined
+              if (!staged) channel.checkpoint = undefined
+              if (observation.type === "completed" || observation.type === "incomplete")
+                channel.continuation = observation.continuation
             }),
           ),
           Stream.takeUntil(observationTerminal),
+          Stream.filter((observation) => observation.type !== "ignore"),
           Stream.mapEffect(observationFrame),
           Stream.ensuring(
             Effect.gen(function* () {
+              if (channel.continuation) return
               if (channel.active === active) channel.active = undefined
               const pending = yield* Queue.size(active.queue)
               yield* Queue.shutdown(active.queue)
@@ -481,8 +508,38 @@ export const makeLayer = (connector: WebSocketConnector) =>
         )
       })
 
+      const steer = Effect.fn("SessionModelTransport.steer")(function* (
+        sessionID: SessionSchema.ID,
+        text: string,
+        admit: Effect.Effect<void>,
+      ) {
+        const owner = states.get(sessionID)
+        const channel = owner?.channel
+        const active = channel?.active
+        if (!owner || !channel || channel.closing || !active?.driver.steer) return false
+        return yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const message = yield* active.driver.steer!(text).pipe(Effect.orElseSucceed(() => undefined))
+            if (!message) return false
+            // Persist before sending: a disconnect must never lose the user's update.
+            yield* admit
+            yield* restore(channel.connection.sendText(message)).pipe(
+              Effect.catch((error) => poison(owner, channel, error)),
+              Effect.onInterrupt(() => closeChannel(owner, channel)),
+            )
+            return true
+          }),
+        )
+      })
+
       yield* Effect.addFinalizer(() => closeAll)
-      return Service.of({ bind, close, closeAll })
+      return Service.of({
+        bind,
+        close,
+        closeAll,
+        steer,
+        hasPendingInput: (sessionID) => states.get(sessionID)?.channel?.checkpoint?.pendingInput === true,
+      })
     }),
   )
 
