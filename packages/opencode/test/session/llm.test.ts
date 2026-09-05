@@ -977,6 +977,7 @@ describe("session.llm.stream", () => {
           new Response(createChatStream("Hello"), {
             status: 200,
             headers: { "Content-Type": "text/event-stream" },
+
           }),
         )
 
@@ -1034,6 +1035,77 @@ describe("session.llm.stream", () => {
         provider: {
           [cerebrasFixture.providerID]: {
             options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "sends agent temperature for config-defined custom openai-compatible models by default",
+    () =>
+      Effect.gen(function* () {
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        const providerID = ProviderV2.ID.make("custom-openai")
+        const resolved = yield* Provider.use.getModel(providerID, ModelV2.ID.make("custom-model"))
+        const sessionID = SessionID.make("session-test-custom-temp")
+        const agent = {
+          name: "build",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 1,
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-custom-temp"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID, modelID: resolved.id, variant: "high" },
+        } satisfies SessionV1.User
+
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        expect(capture.body.model).toBe(resolved.api.id)
+        expect(capture.body.temperature).toBe(1)
+      }),
+    {
+      config: () => ({
+        enabled_providers: ["custom-openai"],
+        provider: {
+          "custom-openai": {
+            name: "Custom OpenAI",
+            npm: "@ai-sdk/openai-compatible",
+            env: [],
+            api: `${state.server!.url.origin}/v1`,
+            options: {
+              apiKey: "test-key",
+              baseURL: `${state.server!.url.origin}/v1`,
+            },
+            models: {
+              "custom-model": {
+                name: "Custom Model",
+                limit: { context: 32000, output: 8000 },
+                tool_call: true,
+              },
+            },
           },
         },
       }),
