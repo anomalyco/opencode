@@ -1503,6 +1503,11 @@ const layer = Layer.effect(
               if (model.id && model.id !== modelID) return modelID
               return existingModel?.name ?? modelID
             })
+            const modelCost = (() => {
+              if (!model?.cost) return undefined
+              if (Array.isArray(model.cost)) return model.cost[0]
+              return model.cost
+            })()
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {
@@ -1543,11 +1548,11 @@ const layer = Layer.effect(
                     : false),
               },
               cost: {
-                input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
-                output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
+                input: modelCost?.input ?? existingModel?.cost?.input ?? 0,
+                output: modelCost?.output ?? existingModel?.cost?.output ?? 0,
                 cache: {
-                  read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
-                  write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
+                  read: modelCost?.cache?.read ?? modelCost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
+                  write: modelCost?.cache?.write ?? modelCost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
                 },
               },
               options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
