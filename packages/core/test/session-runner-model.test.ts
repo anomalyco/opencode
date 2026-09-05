@@ -329,6 +329,51 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("routes an unmapped AI SDK package through the provider's OpenAI-compatible profile", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@ai-sdk/groq" }),
+          providerID: ProviderV2.ID.make("groq"),
+        }),
+      )
+
+      expect(resolved.route).toMatchObject({
+        id: "openai-compatible-chat",
+        endpoint: { baseURL: "https://api.groq.com/openai/v1" },
+      })
+    }),
+  )
+
+  it.effect("keeps the catalog URL when the profile only supplies a fallback", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@ai-sdk/groq", url: "https://groq.example/v1" }),
+          providerID: ProviderV2.ID.make("groq"),
+        }),
+      )
+
+      expect(resolved.route).toMatchObject({ endpoint: { baseURL: "https://groq.example/v1" } })
+    }),
+  )
+
+  it.effect("routes OpenRouter through its own chat route", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@openrouter/ai-sdk-provider" }),
+          providerID: ProviderV2.ID.make("openrouter"),
+        }),
+      )
+
+      expect(resolved.route).toMatchObject({
+        id: "openrouter",
+        endpoint: { baseURL: "https://openrouter.ai/api/v1" },
+      })
+    }),
+  )
+
   it.effect("reports whether a catalog model has a supported native route", () =>
     Effect.sync(() => {
       expect(
@@ -342,6 +387,14 @@ describe("SessionRunnerModel", () => {
         ),
       ).toBe(false)
       expect(SessionRunnerModel.supported(model({ type: "native", settings: {} }))).toBe(false)
+      expect(
+        SessionRunnerModel.supported(
+          ModelV2.Info.make({
+            ...model({ type: "aisdk", package: "@ai-sdk/groq" }),
+            providerID: ProviderV2.ID.make("groq"),
+          }),
+        ),
+      ).toBe(true)
     }),
   )
 })
