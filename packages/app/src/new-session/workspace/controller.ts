@@ -10,13 +10,7 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { ServerConnection } from "@/runtime/server/registry"
 import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
 import { withWorktreeInventory } from "@/workspaces/inventory"
-import {
-  isWorkspaceDirectory,
-  isWorkspaceSelection,
-  workspaceDefaultSelection,
-  workspaceDirectories,
-  workspaceSelectionDestination,
-} from "@/workspaces/paths"
+import { workspaceDefaultSelection, workspaceDirectories, workspaceSelectionDestination } from "@/workspaces/paths"
 
 export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: string; fallback?: string }) {
   if (!input.enabled) return "main"
@@ -74,13 +68,6 @@ export function createNewSessionWorkspaceController(input: {
       branch: data.location.vcs.info({ directory: sdk().directory })?.branch.current,
     }),
   )
-  const selected = createMemo(() => {
-    const project = currentProject()
-    const worktree = input.selectedWorktree()
-    if (!project || !worktree) return
-    // A restored explicit choice is not disproved by metadata alone.
-    return !inventory.data || isWorkspaceSelection(project, worktree) ? worktree : undefined
-  })
   const fallback = createMemo(() => {
     const project = currentProject()
     if (!project) return "main"
@@ -92,7 +79,8 @@ export function createNewSessionWorkspaceController(input: {
   const value = createMemo(() =>
     resolveNewSessionWorktree({
       enabled: visible(),
-      selected: selected(),
+      // Inventory can predate a just-created worktree. Never replace an explicit destination with a fallback.
+      selected: input.selectedWorktree(),
       fallback: fallback(),
     }),
   )
@@ -136,7 +124,9 @@ export function createNewSessionWorkspaceController(input: {
       workspace: createMemo(() => {
         const project = currentProject()
         const current = value()
-        return current === "create" || (!!project && isWorkspaceDirectory(project, current))
+        return (
+          current === "create" || (!!project && workspaceSelectionDestination(current, project.worktree) !== "main")
+        )
       }),
       reset: () => {
         input.setSelectedWorktree(undefined)
